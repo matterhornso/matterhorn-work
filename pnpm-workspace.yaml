@@ -1,10 +1,8 @@
 minimumReleaseAge: 4320
 
 packages:
-  - "apps/*"
-  - "packages/*"
-  - "ee/apps/*"
-  - "ee/packages/*"
+
+  
 
 catalog:
   react: 19.2.4

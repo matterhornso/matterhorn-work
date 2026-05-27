@@ -1,5 +1,5 @@
 {
-  "name": "@openwork/email",
+  "name": "@matterhorn-work/email",
   "private": true,
   "type": "module",
   "exports": {

@@ -1,11 +1,11 @@
 {
-  "name": "@openwork/desktop",
+  "name": "@matterhorn-work/desktop",
   "private": true,
   "version": "0.13.12",
-  "description": "OpenWork desktop shell",
+  "description": "Matterhorn Work desktop shell",
   "author": {
-    "name": "OpenWork",
-    "email": "support@openworklabs.com"
+    "name": "Matterhorn",
+    "email": "support@matterhorn.so"
   },
   "main": "electron/main.mjs",
   "type": "module",

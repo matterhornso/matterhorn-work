@@ -1,24 +1,25 @@
 # AGENTS.md
 
-OpenWork helps users run agents, skills, and MCP. It is an open-source alternative to Claude Cowork/Codex as a desktop app.
+Matterhorn Work is a Web3-native agentic workspace — Cowork for Web3. It is a fork of [different-ai/openwork](https://github.com/different-ai/openwork).
 
-## What OpenWork Is
+## What Matterhorn Work Is
 
-OpenWork is a practical control surface for agentic work:
+Matterhorn Work is a practical control surface for agentic work, with crypto-native capabilities:
 
 * Run local and remote agent workflows from one place.
-* Use OpenCode capabilities directly through OpenWork.
+* Use OpenCode capabilities directly through Matterhorn Work.
 * Compose desktop app, server, and messaging connectors without lock-in.
-* Treat the OpenWork app as a client of the OpenWork server API surface.
-* Connect to hosted workers through a simple user flow: `Add a worker` -> `Connect remote`.
+* Treat the Matterhorn Work app as a client of the server API surface.
+* Connect to hosted workers through a simple user flow: `Add a worker` → `Connect remote`.
+* Every session carries wallet + chain context for on-chain actions.
 
 ## Core Philosophy
 
-* **Local-first, cloud-ready**: OpenWork runs on your machine in one click and can connect to cloud workflows when needed.
-* **Server-consumption first**: the app should consume OpenWork server surfaces (self-hosted or hosted), not invent parallel behavior.
-* **Composable**: use the desktop app, WhatsApp/Slack/Telegram connectors, or server mode based on the task.
-* **Ejectable**: OpenWork is powered by OpenCode, so anything OpenCode can do is available in OpenWork, even before a dedicated UI exists.
-* **Sharing is caring**: start solo, then share quickly; one CLI or desktop command can spin up an instantly shareable instance.
+* **Local-first, cloud-ready**: Matterhorn Work runs on your machine in one click and can connect to cloud workflows when needed.
+* **Server-consumption first**: the app should consume server surfaces (self-hosted or hosted), not invent parallel behavior.
+* **Composable**: use the desktop app, messaging connectors, or server mode based on the task.
+* **Ejectable**: Matterhorn Work is powered by OpenCode, so anything OpenCode can do is available, even before a dedicated UI exists.
+* **Crypto-native**: wallet is a first-class citizen, not a plugin. Agents propose on-chain actions; user approves in-workspace.
 
 
 ## Pull Request Expectations (Fast Merge)
@@ -47,11 +48,12 @@ If you cannot run tests or capture the video, say so explicitly and explain why,
 
 - Use components from @/components when possible.
 - When creating new components, we prefer using shadcn/ui with (Base UI).
-- Assume most end users of OpenWork are non-technical.
+- Assume most end users of Matterhorn Work are non-technical.
+- Use Matterhorn brand colors: background `#0a0a0f`, accent violet-500 (`#7c3aed`).
 
 ### Tech Stack Preferences
 
-When uncertain, prefer: Tailwind, TypeScript, React, shadcn/ui (Base UI), TanStack Query, Zustand, Zod, Drizzle, Better-Auth.
+When uncertain, prefer: Tailwind, TypeScript, React, shadcn/ui (Base UI), TanStack Query, Zustand, Zod, Drizzle, Better-Auth, wagmi, viem.
 
 ### Code Style
 

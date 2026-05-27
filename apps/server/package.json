@@ -1,10 +1,10 @@
 {
-  "name": "openwork-server",
+  "name": "matterhorn-work-server",
   "version": "0.13.12",
-  "description": "Filesystem-backed API for OpenWork remote clients",
+  "description": "Filesystem-backed API for Matterhorn Work remote clients",
   "type": "module",
   "bin": {
-    "openwork-server": "bin/openwork-server.mjs"
+    "matterhorn-work-server": "bin/openwork-server.mjs"
   },
   "scripts": {
     "dev": "OPENWORK_DEV_MODE=1 bun src/cli.ts",

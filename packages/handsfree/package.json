@@ -1,12 +1,12 @@
 {
-  "name": "@openwork/handsfree",
+  "name": "@matterhorn-work/handsfree",
   "private": true,
   "version": "0.1.0",
-  "description": "macOS semantic AX and background computer-use runtime for OpenWork",
+  "description": "macOS semantic AX and background computer-use runtime for Matterhorn Work",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "openwork-handsfree-computer-use": "bin/openwork-handsfree-computer-use.mjs"
+    "matterhorn-work-handsfree-computer-use": "bin/openwork-handsfree-computer-use.mjs"
   },
   "scripts": {
     "check": "pnpm run check:js && pnpm run check:native",

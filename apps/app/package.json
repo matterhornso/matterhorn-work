@@ -1,5 +1,5 @@
 {
-  "name": "@openwork/app",
+  "name": "@matterhorn-work/app",
   "private": true,
   "version": "0.13.12",
   "type": "module",

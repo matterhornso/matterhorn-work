@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <rect width="256" height="256" rx="32" fill="#0a0a0f"/>
+  <path d="M128 40 L196 96 L196 160 L128 216 L60 160 L60 96 Z" stroke="#7c3aed" stroke-width="8" fill="none"/>
+  <path d="M128 72 L168 96 L168 136 L128 160 L88 136 L88 96 Z" fill="#7c3aed" opacity="0.6"/>
+  <text x="128" y="200" text-anchor="middle" fill="#7c3aed" font-family="monospace" font-size="16" font-weight="bold">MATTERHORN</text>
+</svg>
