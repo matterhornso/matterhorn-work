@@ -109,27 +109,36 @@ apps/app/public/
 - **Never use `any`, typecasts, or `as`** unless 100% necessary
 - **Keep diffs minimal** — smallest possible change to accomplish the task
 
-## Testing Infrastructure (CRITICAL — read before coding)
+## Testing — ONE COMMAND
 
-You MUST verify your work after every task. These rule files contain exact test commands:
+Forget all the rule files. There is exactly ONE way to verify everything:
 
-| Rule File | What It Covers |
-|-----------|---------------|
-| `.claude/rules/build-and-test.md` | Build commands, typecheck, MCP smoke tests |
-| `.claude/rules/vitest-testing.md` | How to run tests, mock patterns |
-| `.claude/rules/wagmi-testing.md` | Mocking wagmi hooks for unit tests |
-| `.claude/rules/mcp-testing.md` | Testing MCP stdio servers with echo/printf |
-| `.claude/rules/contract-interaction.md` | viem encodeFunctionData, ERC-20 transfers, gas estimation |
+```bash
+bash scripts/verify-crypto.sh
+```
 
-**Verification loop for every coding task:**
-1. Write the file
-2. `ls <filepath>` — confirm it exists
-3. `pnpm --filter @matterhorn-work/app typecheck` — no new errors
-4. For MCP: `echo '{jsonrpc...}' \| timeout 5 node <path>` — valid JSON response
-5. For tests: `pnpm --filter @matterhorn-work/app exec vitest run <test>` — all pass
-6. If any step fails: fix → re-verify → continue
+This single script checks:
+- All files exist (chains.ts, contracts.ts, wallet-store.ts, all UI components, MCP server)
+- wagmi + viem installed in package.json
+- ESM imports work on chains.ts and contracts.ts
+- Wallet store factory exports + starts in disconnected state
+- MCP server starts, responds to initialize, lists all 4 wallet tools
+- Web3 skill files exist (count check + INDEX.md + usdc-transfer.md)
+- Marketplace files exist + agent-blueprints exports array
+- TypeScript typecheck passes
+- Vite build passes
 
-**DO NOT skip verification. Claude Code sessions that skip verification produce 0 working code.**
+Exit 0 = everything green. Exit 1 = something broken — read the FAIL lines.
+
+Run it after EVERY task. If it was green before and red after, you broke something. Fix it before continuing.
+
+## Importing pre-built test mocks
+
+```typescript
+import { mockWagmiConnected, mockWagmiDisconnected, clearWagmiMocks, makeTx } from "../../test-helpers";
+```
+
+`apps/app/src/test-helpers.ts` has pre-built mocks. `mockWagmiConnected("0x...", chainId)` gives you a connected wallet. `mockWagmiDisconnected()` gives you disconnected. `makeTx()` creates a TxRecord. No need to write wagmi mocks from scratch.
 
 ## Available Slash Commands
 
