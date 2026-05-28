@@ -1,11 +1,79 @@
-Read `.claude/rules/session-context.md` completely first. Then execute ALL 4 tasks IN ORDER:
+# Build Command — Session Context
 
-1. Create `apps/app/src/react-app/domains/wallet/SessionContextProvider.tsx` — reads wallet store, exposes chain context via React context
+**IMPORTANT: After EVERY task, run the verification step. Do NOT skip. If verification fails, STOP — fix — re-verify — continue.**
 
-2. Search the codebase for system prompt injection patterns. Look in `apps/app/src/`, `apps/server/src/`, and `apps/desktop/` for "system prompt", "system_prompt", "appendSystemPrompt", or similar patterns. Read the relevant files to understand how prompts are composed. Inject wallet+chain context when wallet is connected.
+**PREREQUISITE CHECK:**
+```bash
+ls apps/app/src/react-app/domains/wallet/state/wallet-store.ts 2>/dev/null && echo "PREREQ OK: wallet store exists" || echo "PREREQ FAIL: wallet store missing — Feature 1 must be merged first"
+```
+**STOP if prerequisite fails.**
 
-3. Manually verify (describe the verification steps — you cannot actually run the UI, but trace through the code to confirm the injection path is correct)
+---
 
-4. Run `git checkout -b feat/session-context && git add -A && git commit -m "feat: chain-aware session context — wallet address + chain injected into agent prompt" && git push origin feat/session-context`
+## Task 2.1: Create SessionContextProvider
 
-IMPORTANT: This feature depends on Feature 1 (wallet extension). If wal-store.ts does not exist yet in the repo, stop and explain — Feature 1 must be merged first.
+Create `apps/app/src/react-app/domains/wallet/SessionContextProvider.tsx`.
+
+Reads wallet store → exposes chain context via React context. Follow the pattern from `.claude/rules/session-context.md`.
+
+**VERIFY:**
+```bash
+ls apps/app/src/react-app/domains/wallet/SessionContextProvider.tsx
+# Expected: file exists
+
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | grep -i "SessionContext" | head -5
+# Expected: no type errors
+```
+
+---
+
+## Task 2.2: Inject wallet context into agent prompts
+
+Search the codebase for prompt injection points:
+```bash
+grep -rl "system.prompt\|systemPrompt\|appendSystemPrompt\|system_prompt" apps/ --include="*.ts" --include="*.tsx" --include="*.mjs" 2>/dev/null | head -10
+```
+
+Read the relevant files. Find where the agent's system prompt is assembled. Inject wallet+chain context when wallet is connected. Inject nothing when disconnected.
+
+**VERIFY:**
+```bash
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | head -20
+# Expected: no type errors
+
+# Trace verification: find the injection point and confirm the code path
+grep -rn "wallet\|chainId\|USDC" apps/ --include="*.ts" --include="*.tsx" 2>/dev/null | grep -v node_modules | grep -v ".git" | head -10
+# Expected: shows the wallet context injection points in the prompt assembly code
+```
+
+---
+
+## Task 2.3: Full build check
+
+```bash
+pnpm --filter @matterhorn-work/app typecheck
+# Expected: no errors
+
+pnpm --filter @matterhorn-work/app build
+# Expected: build succeeds
+```
+
+**STOP if build fails.**
+
+---
+
+## Task 2.4: Commit and push
+
+```bash
+git checkout dev && git pull origin dev
+git checkout -b feat/session-context
+git add -A
+git commit -m "feat: chain-aware session context — wallet address + chain injected into agent prompt"
+git push origin feat/session-context
+```
+
+**VERIFY:**
+```bash
+git log --oneline -1
+# Expected: shows the feat commit
+```

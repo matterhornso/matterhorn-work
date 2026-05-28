@@ -108,3 +108,35 @@ apps/app/public/
 - **Wallet MCP is stdio** — runs locally as a child process, talks to the browser wallet via window.ethereum
 - **Never use `any`, typecasts, or `as`** unless 100% necessary
 - **Keep diffs minimal** — smallest possible change to accomplish the task
+
+## Testing Infrastructure (CRITICAL — read before coding)
+
+You MUST verify your work after every task. These rule files contain exact test commands:
+
+| Rule File | What It Covers |
+|-----------|---------------|
+| `.claude/rules/build-and-test.md` | Build commands, typecheck, MCP smoke tests |
+| `.claude/rules/vitest-testing.md` | How to run tests, mock patterns |
+| `.claude/rules/wagmi-testing.md` | Mocking wagmi hooks for unit tests |
+| `.claude/rules/mcp-testing.md` | Testing MCP stdio servers with echo/printf |
+| `.claude/rules/contract-interaction.md` | viem encodeFunctionData, ERC-20 transfers, gas estimation |
+
+**Verification loop for every coding task:**
+1. Write the file
+2. `ls <filepath>` — confirm it exists
+3. `pnpm --filter @matterhorn-work/app typecheck` — no new errors
+4. For MCP: `echo '{jsonrpc...}' \| timeout 5 node <path>` — valid JSON response
+5. For tests: `pnpm --filter @matterhorn-work/app exec vitest run <test>` — all pass
+6. If any step fails: fix → re-verify → continue
+
+**DO NOT skip verification. Claude Code sessions that skip verification produce 0 working code.**
+
+## Available Slash Commands
+
+Each command has verification gates after every task:
+- `/build-wallet` — Feature 1: Wallet Extension (11 tasks)
+- `/build-session-context` — Feature 2: Session Context (4 tasks)
+- `/build-tx-pipeline` — Feature 3: TX Pipeline (5 tasks)
+- `/build-web3-skills` — Feature 4: Web3 Skills (4 tasks)
+- `/build-marketplace` — Feature 5: Agent Marketplace (7 tasks)
+- `/build-all` — Full pipeline with phase gates

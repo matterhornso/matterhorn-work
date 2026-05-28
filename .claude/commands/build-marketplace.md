@@ -1,20 +1,81 @@
-Read `.claude/rules/agent-marketplace.md` completely first. Then execute ALL 7 tasks IN ORDER:
+# Build Command — Agent Marketplace
 
-1. Create `apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx` — settings page with Browse/My Agents/Deploy tabs, following existing page patterns (general-view.tsx, skills-view.tsx). Use lucide-react icons.
+**PREREQUISITE CHECK:**
+```bash
+ls apps/app/src/react-app/domains/wallet/WalletConnect.tsx 2>/dev/null && echo "PREREQ OK: wallet extension exists" || echo "PREREQ FAIL — Feature 1 must be merged first"
+```
+**STOP if prerequisite fails.**
 
-2. Create `apps/app/src/react-app/domains/settings/state/marketplace-store.ts` — Zustand store following extensions-store.ts pattern with agents[], myAgents[], filters, and browse/hire/deploy/pause actions.
+---
 
-3. Create `apps/app/src/react-app/domains/settings/data/agent-blueprints.ts` — port all 16 blueprints. Each has: id, name, description, category, skills, dailyCost, reputation, emoji. Make the data realistic.
+## Task 5.1: Create marketplace settings page
 
-4. Implement deploy agent flow in marketplace-view.tsx:
-   - Select blueprint → configure (DePIN provider dropdown, max daily budget) → review → mock deployment log → success
-   - Show ERC-8004 passport minting step (mock TX hash)
+Create `apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx`.
+Follow the pattern from `general-view.tsx` and `skills-view.tsx`. Tabs: Browse Agents, My Agents, Deploy.
 
-5. Implement hire agent flow in marketplace-view.tsx:
-   - Click Hire → wallet gate → review agent details → confirm → success with mock TX hash
+**VERIFY:**
+```bash
+ls apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx && echo "EXISTS" || echo "MISSING"
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | grep -i "marketplace" | head -5
+# Expected: no type errors
+```
 
-6. Verify: trace through each flow in the code to confirm it's wired correctly (no UI testing possible, describe the verification)
+---
 
-7. Run `git checkout -b feat/agent-marketplace && git add -A && git commit -m "feat: agent marketplace — browse, deploy, hire agents with wallet gate" && git push origin feat/agent-marketplace`
+## Task 5.2: Create marketplace Zustand store
 
-IMPORTANT: Feature 1 (wallet extension) must be merged first. If wallet-store.ts and WalletConnect.tsx don't exist, stop.
+Create `apps/app/src/react-app/domains/settings/state/marketplace-store.ts`.
+Follow extensions-store.ts pattern. Actions: browseAgents, hireAgent, deployAgent, pauseAgent.
+
+**VERIFY:**
+```bash
+ls apps/app/src/react-app/domains/settings/state/marketplace-store.ts && echo "EXISTS" || echo "MISSING"
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | grep -i "marketplace-store" | head -5
+# Expected: no type errors
+```
+
+---
+
+## Task 5.3: Port agent blueprints
+
+Create `apps/app/src/react-app/domains/settings/data/agent-blueprints.ts`.
+Port all 16 from `.claude/rules/agent-marketplace.md`. Each has id, name, description, category, skills, dailyCost, reputation, emoji.
+
+**VERIFY:**
+```bash
+node -e "import('./apps/app/src/react-app/domains/settings/data/agent-blueprints.ts').then(m => console.log('BLUEPRINTS:', Array.isArray(m.agentBlueprints) ? m.agentBlueprints.length : 'NOT ARRAY'))" 2>&1
+# Expected: BLUEPRINTS: 16
+```
+
+---
+
+## Task 5.4-5.5: Implement deploy and hire flows
+
+Wire deploy flow (select blueprint → configure → mock deploy → success) and hire flow (Hire → wallet gate → confirm → success) into marketplace-view.tsx.
+
+**VERIFY:**
+```bash
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | grep -iE "marketplace|deploy|hire" | head -10
+# Expected: no type errors
+```
+
+---
+
+## Task 5.6: Full build
+
+```bash
+pnpm --filter @matterhorn-work/app typecheck && pnpm --filter @matterhorn-work/app build
+# Expected: both succeed
+```
+
+---
+
+## Task 5.7: Commit and push
+
+```bash
+git checkout dev && git pull origin dev
+git checkout -b feat/agent-marketplace
+git add -A
+git commit -m "feat: agent marketplace — browse, deploy, hire agents with wallet gate"
+git push origin feat/agent-marketplace
+```

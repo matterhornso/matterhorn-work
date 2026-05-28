@@ -1,19 +1,74 @@
-Read `.claude/rules/tx-pipeline.md` completely first. Then execute ALL 5 tasks IN ORDER:
+# Build Command — TX Pipeline
 
-1. Wire the full TX pipeline:
-   - Modify TransactionApproval.tsx to listen for `matterhorn:tx-approval-request` CustomEvent
-   - Modify the wallet MCP server (`packages/matterhorn-work-wallet-mcp/index.mjs`) to emit approval events and wait for UI response
-   - Implement the complete flow: agent proposes TX → MCP emits event → modal renders → user approves/rejects → MCP returns result to agent
+**IMPORTANT: After EVERY task, run the verification step. No skipping.**
 
-2. Add TX history to wallet-store.ts:
-   - Add TxRecord type { hash, to, value, status, timestamp, chainId }
-   - Add transactions[] array to store snapshot
-   - Add addTransaction, updateTransaction, getRecentTransactions actions
+**PREREQUISITE CHECK:**
+```bash
+ls apps/app/src/react-app/domains/wallet/state/wallet-store.ts apps/app/src/react-app/domains/wallet/SessionContextProvider.tsx 2>/dev/null && echo "PREREQ OK" || echo "PREREQ FAIL — Features 1 and 2 must be merged first"
+```
+**STOP if prerequisite fails.**
 
-3. Create `.opencode/skills/web3/usdc-transfer.md` — USDC transfer skill following the template in the rules file
+---
 
-4. Verify the pipeline by tracing through code paths (describe each step of the flow)
+## Task 3.1: Wire TX approval pipeline
 
-5. Run `git checkout -b feat/tx-pipeline && git add -A && git commit -m "feat: on-chain TX pipeline — agent proposes, user approves, TX broadcast" && git push origin feat/tx-pipeline`
+Modify `TransactionApproval.tsx` to listen for `matterhorn:tx-approval-request` CustomEvent.
+Modify `packages/matterhorn-work-wallet-mcp/index.mjs` to emit approval events and wait for UI response.
 
-IMPORTANT: Features 1 AND 2 must be merged first. If wallet-store.ts or SessionContextProvider.tsx don't exist yet, stop.
+Follow the pattern in `.claude/rules/tx-pipeline.md`.
+
+**VERIFY:**
+```bash
+pnpm --filter @matterhorn-work/app typecheck 2>&1 | grep -iE "TransactionApproval|tx-approval" | head -5
+# Expected: no type errors
+
+# Test MCP still works after modifications
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"0.1.0","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | timeout 5 node packages/matterhorn-work-wallet-mcp/index.mjs 2>&1 | head -1
+# Expected: valid JSON response
+```
+
+---
+
+## Task 3.2: Add TX history to wallet store
+
+Add `TxRecord` type and `transactions[]` array to `wallet-store.ts`.
+Add `addTransaction`, `updateTransaction`, `getRecentTransactions` actions.
+
+**VERIFY:**
+```bash
+pnpm --filter @matterhorn-work/app exec vitest run apps/app/src/react-app/domains/wallet/state/wallet-store.test.ts 2>&1 | tail -5
+# Expected: all tests pass
+```
+
+---
+
+## Task 3.3: Create USDC transfer skill
+
+Create `.opencode/skills/web3/usdc-transfer.md` following the template in `.claude/rules/tx-pipeline.md`.
+
+**VERIFY:**
+```bash
+ls .opencode/skills/web3/usdc-transfer.md && cat .opencode/skills/web3/usdc-transfer.md | head -5
+# Expected: file exists, has title "USDC Transfer"
+```
+
+---
+
+## Task 3.4: Full build check
+
+```bash
+pnpm --filter @matterhorn-work/app typecheck && pnpm --filter @matterhorn-work/app build
+# Expected: both succeed
+```
+
+---
+
+## Task 3.5: Commit and push
+
+```bash
+git checkout dev && git pull origin dev
+git checkout -b feat/tx-pipeline
+git add -A
+git commit -m "feat: on-chain TX pipeline — agent proposes, user approves, TX broadcast"
+git push origin feat/tx-pipeline
+```
