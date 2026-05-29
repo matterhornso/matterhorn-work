@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { desktopPolicyKeys } from "@openwork/types/den/desktop-policies";
+import { desktopPolicyKeys } from "@matterhorn-work/types/den/desktop-policies";
 
 import {
   checkDesktopAppRestriction,

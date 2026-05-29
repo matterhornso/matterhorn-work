@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useMemo } from "react";
-import { PaperGrainGradient } from "@openwork/ui/react";
+import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 
 export type WorkspaceIconProps = {
   /** Workspace name used to seed the gradient. Changes when renamed. */

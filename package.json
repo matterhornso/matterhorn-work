@@ -39,6 +39,7 @@
     "release:ship:watch": "node scripts/release/ship.mjs --watch"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "turbo": "^2.5.5"
   },
   "pnpm": {
@@ -49,9 +50,7 @@
       "esbuild",
       "protobufjs"
     ],
-    "patchedDependencies": {
-      "@solidjs/router@0.15.4": "patches/@solidjs__router@0.15.4.patch"
-    }
+    "patchedDependencies": {}
   },
   "packageManager": "pnpm@10.27.0"
 }

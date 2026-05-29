@@ -33,7 +33,7 @@ import { useControlAction, type OpenworkControlAction } from "../../../shell/con
 import { ReactSessionComposer } from "./composer/composer";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
-import { PaperGrainGradient } from "@openwork/ui/react";
+import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useShellConfig } from "../../../shell/shell-config";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";

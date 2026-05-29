@@ -18,6 +18,7 @@ import {
   Store,
   Terminal,
   UserCircle,
+  Wallet,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -89,6 +90,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
       return ShieldCheck;
     case "debug":
       return Bug;
+    case "wallet":
+      return Wallet;
     default:
       return Cog;
   }
@@ -128,6 +131,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
       return t("settings.tab_recovery");
     case "debug":
       return t("settings.tab_debug");
+    case "wallet":
+      return "Wallet";
     case "general":
       return "Settings";
     default:
@@ -169,6 +174,8 @@ export function getSettingsTabDescription(tab: SettingsTab) {
       return t("settings.tab_description_recovery");
     case "debug":
       return t("settings.tab_description_debug");
+    case "wallet":
+      return "Connect your wallet, view balances, and manage transactions.";
     case "general":
       return "Overview of all settings";
     default:
@@ -177,7 +184,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
 }
 
 export function getWorkspaceSettingsTabs(): SettingsTab[] {
-  return ["preferences", "permissions", "extensions", "advanced"];
+  return ["preferences", "permissions", "wallet", "extensions", "advanced"];
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {

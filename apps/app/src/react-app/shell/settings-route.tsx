@@ -64,6 +64,8 @@ import { McpView } from "../domains/settings/pages/mcp-view";
 import { RecoveryView } from "../domains/settings/pages/recovery-view";
 import { MessagingView } from "../domains/settings/pages/messaging-view";
 import { SkillsView } from "../domains/settings/pages/skills-view";
+import { WalletSettingsView } from "../domains/settings/pages/wallet-view";
+import { createWalletStore } from "../domains/wallet/state/wallet-store";
 import { UpdatesView } from "../domains/settings/pages/updates-view";
 import { useDebugViewModel } from "../domains/settings/state/debug-view-model";
 import { useMessagingViewProps } from "../domains/settings/state/messaging-view-state";
@@ -363,6 +365,8 @@ function parseSettingsPath(pathname: string): {
     case "recovery":
     case "debug":
       return { tab: head, redirectPath: null };
+    case "wallet":
+      return { tab: head, redirectPath: null };
     case "cloud-account":
     case "cloud-marketplaces":
     case "cloud-workers":
@@ -486,6 +490,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const pollMcpServersAfterReloadRef = useRef<(() => void | Promise<void>) | null>(null);
   const remoteWorkspaceCheckRunRef = useRef<Record<string, string>>({});
   const remoteWorkspaceCheckRunCounterRef = useRef(0);
+  const walletStoreRef = useRef(createWalletStore());
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
   const [providerDefaults, setProviderDefaults] = useState<Record<string, string>>({});
   const [providerConnectedIds, setProviderConnectedIds] = useState<string[]>([]);
@@ -2350,6 +2355,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         );
       case "debug":
         return <DebugView {...debugViewProps} />;
+      case "wallet":
+        return (
+          <WalletSettingsView
+            store={walletStoreRef.current}
+            onTxApprove={() => {}}
+            onTxReject={() => {}}
+          />
+        );
       default:
         return null;
     }

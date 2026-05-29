@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import type { ReactNode } from "react";
 import { ShareIcon, UserGroupIcon } from "@heroicons/react/24/solid";
-import { PaperGrainGradient } from "@openwork/ui/react";
+import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 
 import { t } from "../../../i18n";
 import {
