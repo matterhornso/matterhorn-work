@@ -21,7 +21,7 @@ Run these before shipping changes that touch:
 
 1. Start the dev app (CDP auto-exposes on port 9223):
    ```bash
-   pnpm --filter @openwork/desktop dev
+   pnpm --filter @matterhorn-work/desktop dev
    ```
 2. Wait ~20s, then verify CDP:
    ```

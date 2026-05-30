@@ -17,7 +17,7 @@
 #   restart         alias for reset
 #
 # Variant (OPENWORK_DEV_VARIANT):
-#   electron   (default) pnpm --filter @openwork/desktop dev:electron
+#   electron   (default) pnpm --filter @matterhorn-work/desktop dev:electron
 #              Electron shell + CDP on 127.0.0.1:9823 for chrome-devtools MCP.
 #              Sidecars run from apps/desktop/src-tauri/sidecars/*.
 #   tauri      legacy: pnpm dev (Tauri dev webview, no CDP).
@@ -506,7 +506,7 @@ start() {
     electron)
       log "starting pnpm dev:electron (variant=electron, log sink: $DEV_LOG_FILE, CDP: 127.0.0.1:9823)"
       env OPENWORK_DEV_LOG_FILE="$DEV_LOG_FILE" \
-        nohup pnpm --filter @openwork/desktop dev:electron >"$PNPM_DEV_LOG" 2>&1 &
+        nohup pnpm --filter @matterhorn-work/desktop dev:electron >"$PNPM_DEV_LOG" 2>&1 &
       pid=$!
       ;;
     tauri)

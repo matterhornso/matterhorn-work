@@ -1,24 +1,22 @@
 # Matterhorn Work
 
-> **Cowork for Web3.** A fork of [different-ai/openwork](https://github.com/different-ai/openwork) by [Matterhorn](https://matterhorn.so).
+> **Cowork for Web3.** Matterhorn Work is a fork of [different-ai/openwork](https://github.com/different-ai/openwork) (MIT license), built by [Matterhorn](https://matterhorn.so).
 
 [![Fork of OpenWork](https://img.shields.io/badge/fork%20of-different--ai%2Fopenwork-brightgreen)](https://github.com/different-ai/openwork)
 
-Matterhorn Work is the agentic workspace reimagined for Web3. Same desktop experience as OpenWork — local-first, composable, session-based — with crypto-native additions: wallet-connected actions, on-chain transaction approval, DePIN agent deployment, and a Web3 skill marketplace.
+Matterhorn Work is a desktop agentic workspace with native wallet support, on-chain actions, and Web3 skills. It wraps the OpenCode agent runtime in an Electron shell, adds wallet connect, transaction approval, chain-aware sessions, and a DePIN agent marketplace — all in a dark-only theme with violet-500 (`#7c3aed`) accents on a `#0a0a0f` background.
 
 ---
 
 ## What we kept
 
-| Component | What it is | Why we kept it |
-|-----------|-----------|----------------|
-| Desktop shell | Electron app with session management | Proven multi-platform packaging |
-| OpenCode integration | Agent loop with tool execution | Battle-tested agent runtime |
-| Permission system | Allow-once / always / deny gating | Critical for autonomous on-chain actions |
-| Server mode | Headless API for remote clients | Enables headless agents and team sharing |
-| Session streaming | SSE-based real-time updates | Users need to watch agent execution live |
-| Template workflows | Saved, repeatable task patterns | Reusable agent workflows save time |
-| Extension system | Installable modules for new capabilities | Wallet is an extension, not a bolt-on |
+OpenWork's battle-tested core, intact:
+
+- **Local-first agentic workspace** — sessions, tool execution, streaming
+- **Desktop + server mode** — Electron shell for interactive use, headless API for remote clients
+- **MCP extensions** — installable modules for new capabilities, registered via `opencode.jsonc`
+- **OpenCode integration** — agent loop with tool execution, permission gating, template workflows
+- **Session streaming** — SSE-based real-time updates so users can watch agent execution live
 
 ## What we changed
 
@@ -26,23 +24,18 @@ Matterhorn Work is the agentic workspace reimagined for Web3. Same desktop exper
 |-------------------|------|
 | OpenWork EE (cloud sync, den-api, den-web) | Stripped — Matterhorn brings its own infra |
 | OpenWork branding (logos, colors, name) | Matterhorn dark theme + brand system |
-| Generic skills | 24 Web3 MCP skills (DeFi protocols, bridges, DEXes) |
-| `@openwork/*` package namespace | `@matterhorn-work/*` |
+| `@matterhorn-work/*` package namespace | `@matterhorn-work/*` |
 | `openwork-ui-mcp` | `matterhorn-work-ui-mcp` |
 
 ## What we added
 
-```
-packages/
-  matterhorn-work-ui-mcp/         ← MCP server for Matterhorn Work UI control
-```
-
-Phase 2 additions (in progress):
-- Wallet panel extension (wagmi + viem, EVM + Solana)
-- `send_transaction` agent tool (routed through connected wallet)
-- Agent marketplace (deploy agents to DePIN, list for hire)
-- ERC-8004 passport credentialing for deployed agents
-- Chain-aware session context (every session knows wallet + chain)
+| Feature | Description |
+|---------|-------------|
+| **Wallet connect** | Connect MetaMask, Coinbase Wallet, or any injected provider via wagmi v2 + viem |
+| **On-chain transactions** | Agent proposes a TX → user approves in-workspace → TX broadcasts to Base or Base Sepolia |
+| **Chain context** | Every agent session inherits the connected wallet's address and chain (Base 8453 / Base Sepolia 84532) |
+| **Web3 skill pack** | 24 MCP skills covering DeFi protocols (Uniswap, Aave, Pendle), bridges (deBridge), DePIN (Akash, Helium, Render), and payments (x402, RBF Protocol) |
+| **Agent marketplace** | Browse, hire, and deploy agents to DePIN compute — credentialled with ERC-8004 passports |
 
 ---
 
@@ -61,9 +54,20 @@ Requires pnpm 10+. The desktop app launches with an Electron shell connected to 
 
 ## Architecture
 
-Matterhorn Work inherits OpenWork's architecture: an Electron desktop app (`apps/desktop`) that wraps a React UI (`apps/app`), which consumes an OpenCode agent server. The server can run locally or connect to a remote worker.
+```
+apps/
+  app/          React 19 UI (Vite SPA, Tailwind, shadcn/ui)
+  desktop/      Electron shell
+  server/       OpenCode agent server
+packages/
+  matterhorn-work-wallet-mcp/   Wallet MCP server (stdio transport)
+  matterhorn-work-ui-mcp/       UI control MCP server
+  ui/                           Shared component library
+.opencode/
+  skills/web3/                 24 Web3 skill definitions
+```
 
-What's different: every session carries wallet context. The agent can propose on-chain actions, and the wallet panel surfaces them for user approval — no extension popups, no copy-pasting addresses.
+Every session carries wallet context. The agent can propose on-chain actions, and the wallet panel surfaces them for user approval — no extension popups, no copy-pasting addresses.
 
 ---
 

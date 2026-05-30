@@ -164,7 +164,7 @@ services:
         export HOST="0.0.0.0"
         export PORT="5173"
 
-        exec pnpm --filter @openwork/app exec vite \
+        exec pnpm --filter @matterhorn-work/app exec vite \
           --host 0.0.0.0 \
           --port 5173 \
           --strictPort

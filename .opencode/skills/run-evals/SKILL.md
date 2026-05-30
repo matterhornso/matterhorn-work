@@ -125,8 +125,8 @@ Always include a local fallback in the result. Use it when Daytona is down, quot
 
 ```bash
 pnpm install
-pnpm --filter @openwork/app typecheck
-pnpm --filter @openwork/app build
+pnpm --filter @matterhorn-work/app typecheck
+pnpm --filter @matterhorn-work/app build
 ```
 
 For UI flow verification, start the local app and attach browser tools to the local Electron CDP endpoint, then run the same eval steps from `evals/`.

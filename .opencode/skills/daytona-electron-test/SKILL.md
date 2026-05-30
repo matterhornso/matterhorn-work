@@ -335,9 +335,9 @@ bash .devcontainer/test-server-on-daytona.sh <branch-or-commit>
 
 2. Seed the server sandbox with demo org, marketplace, and plugin data. The seed
 must use the same encryption key as `.devcontainer/start-daytona-server.sh`, and
-`@openwork/email` must be built before the seed imports Den email helpers:
+`@matterhorn-work/email` must be built before the seed imports Den email helpers:
 ```bash
-daytona exec <server-sandbox> -- 'cd /workspace && pnpm --filter @openwork/email build && cd /workspace/ee/apps/den-api && OPENWORK_DEV_MODE=1 DATABASE_URL=mysql://root:password@127.0.0.1:3306/openwork_den DEN_DB_ENCRYPTION_KEY=daytona-den-db-encryption-key-please-change-1234567890 BETTER_AUTH_SECRET=local-dev-secret-not-for-production-use!! BETTER_AUTH_URL=http://localhost:3005 pnpm exec tsx scripts/seed-demo-org.ts --reset'
+daytona exec <server-sandbox> -- 'cd /workspace && pnpm --filter @matterhorn-work/email build && cd /workspace/ee/apps/den-api && OPENWORK_DEV_MODE=1 DATABASE_URL=mysql://root:password@127.0.0.1:3306/openwork_den DEN_DB_ENCRYPTION_KEY=daytona-den-db-encryption-key-please-change-1234567890 BETTER_AUTH_SECRET=local-dev-secret-not-for-production-use!! BETTER_AUTH_URL=http://localhost:3005 pnpm exec tsx scripts/seed-demo-org.ts --reset'
 ```
 
 3. Start Electron against the printed Den Web/API URLs:

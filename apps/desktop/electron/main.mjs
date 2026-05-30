@@ -79,7 +79,7 @@ function getComputerUseMcpCommand() {
   if (process.env.OPENWORK_DEV_MODE === "1") {
     return ["node", path.resolve(__dirname, "../../..", "packages/handsfree/bin/openwork-handsfree-computer-use.mjs"), "mcp"];
   }
-  return ["npx", "-y", "@openwork/handsfree", "mcp"];
+  return ["npx", "-y", "@matterhorn-work/handsfree", "mcp"];
 }
 
 // ---------------------------------------------------------------------------

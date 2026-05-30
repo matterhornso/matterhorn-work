@@ -49,4 +49,4 @@ export OPENWORK_REACT_DEVTOOLS="${OPENWORK_REACT_DEVTOOLS:-0}"
 export OPENWORK_DEV_MODE="${OPENWORK_DEV_MODE:-1}"
 export OPENWORK_ELECTRON_REMOTE_DEBUG_PORT="${OPENWORK_ELECTRON_REMOTE_DEBUG_PORT:-9825}"
 
-exec pnpm --filter @openwork/desktop dev:electron
+exec pnpm --filter @matterhorn-work/desktop dev:electron

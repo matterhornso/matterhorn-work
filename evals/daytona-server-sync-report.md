@@ -84,4 +84,4 @@ Observation: the API allows adding a plugin to a marketplace, and the desktop ma
 - `bash -n .devcontainer/test-server-on-daytona.sh`
 - `bash -n .devcontainer/start-daytona-server.sh`
 - `bash -n .devcontainer/create-daytona-openwork-server-snapshot.sh`
-- `pnpm --filter @openwork/app typecheck`
+- `pnpm --filter @matterhorn-work/app typecheck`

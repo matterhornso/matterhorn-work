@@ -270,7 +270,7 @@ const webProcess = spawnLogged(
   "pnpm",
   [
     "--filter",
-    "@openwork/app",
+    "@matterhorn-work/app",
     "exec",
     "vite",
     "--host",

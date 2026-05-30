@@ -150,7 +150,7 @@ jobs:
         shell: bash
         env:
           TARGET: aarch64-apple-darwin
-        run: pnpm --filter @openwork/desktop build:electron
+        run: pnpm --filter @matterhorn-work/desktop build:electron
 
       - name: Package Electron alpha (macOS, signed + notarized)
         if: env.MACOS_NOTARIZE == 'true'
