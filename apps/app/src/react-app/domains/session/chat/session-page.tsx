@@ -48,6 +48,8 @@ import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
 import { WalletPanel } from "../../wallet/WalletPanel";
+import { TransactionApproval } from "../../wallet/TransactionApproval";
+import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
@@ -223,6 +225,7 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 export function SessionPage(props: SessionPageProps) {
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
+  const sessionWallet = useSessionWallet(wallet.store);
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (
@@ -1064,6 +1067,13 @@ export function SessionPage(props: SessionPageProps) {
       ) : null}
 
       {props.shareWorkspaceModal ? <ShareWorkspaceModal {...props.shareWorkspaceModal} /> : null}
+
+      {/* Feature 3: TX Pipeline — modal overlay for transaction approval */}
+      <TransactionApproval
+        store={wallet.store}
+        onApprove={() => { void sessionWallet.approveTx(); }}
+        onReject={sessionWallet.rejectTx}
+      />
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
     </div>
