@@ -250,6 +250,7 @@ export function SessionPage(props: SessionPageProps) {
   const artifactRailActive = activeSidePanel === "artifacts";
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
+  const walletRailActive = activeSidePanel === "wallet";
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -390,6 +391,9 @@ export function SessionPage(props: SessionPageProps) {
   }, [toggleCurrentSidePanel]);
   const openVoiceRailPane = useCallback(() => {
     toggleCurrentSidePanel("voice");
+  }, [toggleCurrentSidePanel]);
+  const openWalletRailPane = useCallback(() => {
+    toggleCurrentSidePanel("wallet");
   }, [toggleCurrentSidePanel]);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
@@ -928,6 +932,8 @@ export function SessionPage(props: SessionPageProps) {
                       onSelectTarget={openTarget}
                       onClose={closeRightPane}
                     />
+                  ) : activeSidePanel === "wallet" ? (
+                    <WalletPanel store={wallet.store} />
                   ) : (
                     <BrowserPanel onClose={closeRightPane} />
                   )}
@@ -1001,6 +1007,20 @@ export function SessionPage(props: SessionPageProps) {
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                walletRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+              )}
+              onClick={openWalletRailPane}
+              title="Wallet"
+              aria-label="Wallet"
+              aria-pressed={walletRailActive}
+            >
+              <WalletIcon size={17} />
             </Button>
           </aside>
           </div>
