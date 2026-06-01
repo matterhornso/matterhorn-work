@@ -2046,7 +2046,12 @@ export function SessionRoute() {
           ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
           : "";
 
-        const systemContext = [envSystemContext, walletContext].filter(Boolean).join("\n") || undefined;
+        // Crypto reasoning rules (V1 engine)
+        const cryptoPrompt = wallet.snapshot.isConnected
+          ? `\n\n## Crypto Strategy Rules\nWhen the user asks about crypto or DeFi:\n1. Call wallet_getBalance to know what they have.\n2. Call crypto_searchCoins or crypto_getPrices for current prices.\n3. Compare options. Explain your thinking in chat.\n4. If proposing a swap, call crypto_buildSwap first, then crypto_simulate to verify.\n5. If simulation fails, warn user. Do NOT show Approve button.\n6. Always wait for user approval before spending money.`
+          : "";
+
+        const systemContext = [envSystemContext, walletContext, cryptoPrompt].filter(Boolean).join("\n") || undefined;
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,

@@ -67,6 +67,33 @@ check "  WalletPanel.tsx exists"        "test -f apps/app/src/react-app/domains/
 check "  TransactionApproval.tsx"       "test -f apps/app/src/react-app/domains/wallet/TransactionApproval.tsx"
 echo ""
 
+# ── V1 ENGINE ────────────────────────────────────────────────
+echo "[V1] Core engine (Phase A, B, C)"
+
+SV="apps/server/src"
+check "  server chain-client.ts exists"    "test -f $SV/infra/chain-client.ts"
+check "  server token-registry.ts exists"  "test -f $SV/infra/token-registry.ts"
+check "  server chain-tools.ts exists"     "test -f $SV/tools/chain-tools.ts"
+check "  server api-client.ts exists"      "test -f $SV/tools/api-client.ts"
+check "  server coingecko.ts exists"       "test -f $SV/tools/coingecko.ts"
+check "  server defillama.ts exists"       "test -f $SV/tools/defillama.ts"
+check "  server swap-builder.ts exists"    "test -f $SV/tools/swap-builder.ts"
+check "  server transaction-simulation.ts exists" "test -f $SV/tools/transaction-simulation.ts"
+check "  viem in server deps"              "node -e \"const p=require('./apps/server/package.json');process.exit(p.dependencies?.viem?0:1)\""
+check "  chain-client fetches real block"  "node -e \"import('./apps/server/dist/infra/chain-client.js').then(m=>m.baseClient.getBlockNumber().then(n=>process.exit(n>0n?0:1)))\""
+check "  token-registry resolves USDC"     "node -e \"import('./apps/server/dist/infra/token-registry.js').then(m=>process.exit(m.tokensForChain(8453)?.USDC?.decimals===6?0:1))\""
+check "  coingecko search works"           "node -e \"import('./apps/server/dist/tools/coingecko.js').then(async m=>{const r=await m.searchCoins('ethereum');process.exit(r.length>0?0:1)})\""
+check "  defillama yields work"            "node -e \"import('./apps/server/dist/tools/defillama.js').then(async m=>{const r=await m.getYields('Base');process.exit(r.length>0?0:1)})\""
+echo ""
+
+# ── V2 ENGINE ────────────────────────────────────────────────
+echo "[V2] Advanced research (Hyperliquid + Polymarket)"
+
+check "  server hyperliquid-research.ts"   "test -f $SV/tools/hyperliquid-research.ts"
+check "  server hyperliquid-execution.ts"  "test -f $SV/tools/hyperliquid-execution.ts"
+check "  server polymarket-research.ts"  "test -f $SV/tools/polymarket-research.ts"
+echo ""
+
 # ── F1: WALLET MCP ────────────────────────────────────────────
 echo "[F1] Wallet MCP server"
 
