@@ -12,4 +12,9 @@ export const CHAIN_NAMES: Record<number, string> = {
   [base.id]: "Base",
 };
 
+export const CHAIN_LIST = [
+  { id: baseSepolia.id, name: "Base Sepolia" },
+  { id: base.id, name: "Base" },
+];
+
 export const DEFAULT_CHAIN = baseSepolia;

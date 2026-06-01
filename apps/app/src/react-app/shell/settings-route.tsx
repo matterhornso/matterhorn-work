@@ -65,7 +65,7 @@ import { RecoveryView } from "../domains/settings/pages/recovery-view";
 import { MessagingView } from "../domains/settings/pages/messaging-view";
 import { SkillsView } from "../domains/settings/pages/skills-view";
 import { WalletSettingsView } from "../domains/settings/pages/wallet-view";
-import { createWalletStore } from "../domains/wallet/state/wallet-store";
+import { useWallet } from "../domains/wallet/WalletProvider";
 import { UpdatesView } from "../domains/settings/pages/updates-view";
 import { useDebugViewModel } from "../domains/settings/state/debug-view-model";
 import { useMessagingViewProps } from "../domains/settings/state/messaging-view-state";
@@ -450,6 +450,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const restrictionNotice = useRestrictionNotice();
   const desktopConfig = useDesktopConfig();
   const reloadCoordinator = useReloadCoordinator();
+  const walletProvider = useWallet();
   const [embeddedPath, setEmbeddedPath] = useState(props.initialPath ?? "general");
   const route = props.embedded ? parseSettingsPath(`/settings/${embeddedPath}`) : parseSettingsPath(location.pathname);
   const navigationWorkspaceId = readNavigationWorkspaceId(location.state);
@@ -490,7 +491,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const pollMcpServersAfterReloadRef = useRef<(() => void | Promise<void>) | null>(null);
   const remoteWorkspaceCheckRunRef = useRef<Record<string, string>>({});
   const remoteWorkspaceCheckRunCounterRef = useRef(0);
-  const walletStoreRef = useRef(createWalletStore());
+  
   const [providers, setProviders] = useState<ProviderListItem[]>([]);
   const [providerDefaults, setProviderDefaults] = useState<Record<string, string>>({});
   const [providerConnectedIds, setProviderConnectedIds] = useState<string[]>([]);
@@ -2358,7 +2359,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "wallet":
         return (
           <WalletSettingsView
-            store={walletStoreRef.current}
+            store={walletProvider.store}
             onTxApprove={() => {}}
             onTxReject={() => {}}
           />

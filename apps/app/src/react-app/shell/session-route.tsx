@@ -126,6 +126,7 @@ import {
 import { saveSessionDraft } from "../domains/session/sync/draft-store";
 import { useControlAction, type MatterhornControlAction } from "./control/control-provider";
 import { useReactRenderWatchdog } from "./react-render-watchdog";
+import { useWallet } from "../domains/wallet/WalletProvider";
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -471,6 +472,7 @@ export function SessionRoute() {
   const { showToast } = useStatusToasts();
   const checkDesktopRestriction = useCheckDesktopRestriction();
   const restrictionNotice = useRestrictionNotice();
+  const wallet = useWallet();
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
@@ -2038,13 +2040,21 @@ export function SessionRoute() {
           cacheKey: selectedSessionId,
           runtimeKey: envRuntimeKey,
         });
+
+        // Build wallet session context (Feature 2)
+        const walletContext = wallet.snapshot.isConnected
+          ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
+          : "";
+
+        const systemContext = [envSystemContext, walletContext].filter(Boolean).join("\n") || undefined;
+
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,
           parts,
           model: local.prefs.defaultModel ?? undefined,
           agent: selectedAgent ?? undefined,
           ...(modelVariantValue ? { variant: modelVariantValue } : {}),
-          ...(envSystemContext ? { system: envSystemContext } : {}),
+          ...(systemContext ? { system: systemContext } : {}),
         });
         if (result.error) {
           throw new Error(serializeSDKError(result.error));
