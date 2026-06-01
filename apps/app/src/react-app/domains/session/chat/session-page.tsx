@@ -2,7 +2,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { FileText, Globe, Mic2, Settings2, Zap } from "lucide-react";
+import { FileText, Globe, Mic2, Settings2, Wallet as WalletIcon, Zap } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
@@ -47,6 +47,8 @@ import { BrowserPanel } from "../browser/browser-panel";
 import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
+import { WalletPanel } from "../../wallet/WalletPanel";
+import { useWallet } from "../../wallet/WalletProvider";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
@@ -220,6 +222,7 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 
 export function SessionPage(props: SessionPageProps) {
   const { config: shellConfig } = useShellConfig();
+  const wallet = useWallet();
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (

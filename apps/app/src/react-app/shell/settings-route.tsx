@@ -55,6 +55,7 @@ import { AdvancedView } from "../domains/settings/pages/advanced-view";
 import { AppearanceView } from "../domains/settings/pages/appearance-view";
 import { CloudAccountView } from "../domains/settings/pages/cloud-account-view";
 import { CloudMarketplacesView } from "../domains/settings/pages/cloud-marketplaces-view";
+import MarketplaceView from "../domains/settings/pages/marketplace-view";
 import { CloudProvidersView } from "../domains/settings/pages/cloud-providers-view";
 import { CloudWorkersView } from "../domains/settings/pages/cloud-workers-view";
 import { DebugView } from "../domains/settings/pages/debug-view";
@@ -366,6 +367,8 @@ function parseSettingsPath(pathname: string): {
     case "debug":
       return { tab: head, redirectPath: null };
     case "wallet":
+      return { tab: head, redirectPath: null };
+    case "marketplace":
       return { tab: head, redirectPath: null };
     case "cloud-account":
     case "cloud-marketplaces":
@@ -2364,6 +2367,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             onTxReject={() => {}}
           />
         );
+      case "marketplace":
+        return <MarketplaceView />;
       default:
         return null;
     }

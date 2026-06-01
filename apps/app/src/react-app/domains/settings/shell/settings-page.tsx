@@ -11,6 +11,7 @@ import {
   Layout,
   Paintbrush,
   Puzzle,
+  Bot,
   RefreshCcw,
   ShieldCheck,
   SlidersHorizontal,
@@ -92,6 +93,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
       return Bug;
     case "wallet":
       return Wallet;
+    case "marketplace":
+      return Bot;
     default:
       return Cog;
   }
@@ -133,6 +136,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
       return t("settings.tab_debug");
     case "wallet":
       return "Wallet";
+    case "marketplace":
+      return "Agent Marketplace";
     case "general":
       return "Settings";
     default:
@@ -176,6 +181,8 @@ export function getSettingsTabDescription(tab: SettingsTab) {
       return t("settings.tab_description_debug");
     case "wallet":
       return "Connect your wallet, view balances, and manage transactions.";
+    case "marketplace":
+      return "Browse and deploy autonomous Web3 agents.";
     case "general":
       return "Overview of all settings";
     default:
@@ -184,7 +191,7 @@ export function getSettingsTabDescription(tab: SettingsTab) {
 }
 
 export function getWorkspaceSettingsTabs(): SettingsTab[] {
-  return ["preferences", "permissions", "wallet", "extensions", "advanced"];
+  return ["preferences", "permissions", "wallet", "marketplace", "extensions", "advanced"];
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {

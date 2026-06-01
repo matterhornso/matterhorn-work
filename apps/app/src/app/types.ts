@@ -190,7 +190,8 @@ export type SettingsTab =
   | "updates"
   | "recovery"
   | "debug"
-  | "wallet";
+  | "wallet"
+  | "marketplace";
 
 export type WorkspacePreset = "starter" | "automation" | "minimal";
 
