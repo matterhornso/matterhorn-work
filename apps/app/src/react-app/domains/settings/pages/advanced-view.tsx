@@ -4,7 +4,7 @@ import { useReducer } from "react";
 import { Separator } from "@/components/ui/separator";
 
 import type { OpencodeConnectStatus } from "@/app/types";
-import type { OpenworkServerStatus } from "@/app/lib/openwork-server";
+import type { MatterhornServerStatus } from "@/app/lib/matterhorn-server";
 import type { EngineInfo } from "@/app/lib/desktop-types";
 import { t } from "@/i18n";
 import { LayoutStack } from "../settings-layout";
@@ -25,9 +25,9 @@ export type AdvancedViewProps = {
   headerStatus: string;
   clientConnected: boolean;
   opencodeConnectStatus: OpencodeConnectStatus | null;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerUrl: string;
-  openworkReconnectBusy: boolean;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerUrl: string;
+  matterhornReconnectBusy: boolean;
   reconnectOpenworkServer: () => Promise<boolean>;
   engineInfo: EngineInfo | null;
   restartLocalServer: () => Promise<boolean>;
@@ -76,8 +76,8 @@ export function AdvancedView(props: AdvancedViewProps) {
     return props.clientConnected ? "ready" : "neutral";
   })();
 
-  const openworkStatusLabel = (() => {
-    switch (props.openworkServerStatus) {
+  const matterhornStatusLabel = (() => {
+    switch (props.matterhornServerStatus) {
       case "connected":
         return t("config.status_connected");
       case "limited":
@@ -88,7 +88,7 @@ export function AdvancedView(props: AdvancedViewProps) {
   })();
 
   const openworkTone: AdvancedStatusTone = (() => {
-    switch (props.openworkServerStatus) {
+    switch (props.matterhornServerStatus) {
       case "connected":
         return "ready";
       case "limited":
@@ -101,7 +101,7 @@ export function AdvancedView(props: AdvancedViewProps) {
   const isLocalEngineRunning = Boolean(props.engineInfo?.running);
 
   const handleReconnectOpenworkServer = async () => {
-    if (props.busy || props.openworkReconnectBusy || !props.openworkServerUrl.trim()) return;
+    if (props.busy || props.matterhornReconnectBusy || !props.matterhornServerUrl.trim()) return;
     dispatchLocal({ type: "reconnectStart" });
     try {
       const ok = await props.reconnectOpenworkServer();
@@ -161,7 +161,7 @@ export function AdvancedView(props: AdvancedViewProps) {
         engineInfo={props.engineInfo}
         clientStatusLabel={clientStatusLabel}
         clientTone={clientTone}
-        openworkStatusLabel={openworkStatusLabel}
+        matterhornStatusLabel={matterhornStatusLabel}
         openworkTone={openworkTone}
       />
 
@@ -197,9 +197,9 @@ export function AdvancedView(props: AdvancedViewProps) {
         busy={props.busy}
         headerStatus={props.headerStatus}
         baseUrl={props.baseUrl}
-        openworkServerUrl={props.openworkServerUrl}
-        openworkServerStatus={props.openworkServerStatus}
-        openworkReconnectBusy={props.openworkReconnectBusy}
+        matterhornServerUrl={props.matterhornServerUrl}
+        matterhornServerStatus={props.matterhornServerStatus}
+        matterhornReconnectBusy={props.matterhornReconnectBusy}
         isLocalEngineRunning={isLocalEngineRunning}
         restartBusy={openworkRestartBusy}
         reconnectStatus={openworkReconnectStatus}

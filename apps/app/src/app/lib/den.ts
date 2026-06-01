@@ -10,7 +10,7 @@ import {
 export type { SharedDesktopConfig };
 export { normalizeDesktopConfig };
 
-import { isDesktopDeployment } from "./openwork-deployment";
+import { isDesktopDeployment } from "./matterhorn-deployment";
 import {
   dispatchDenSettingsChanged,
 } from "./den-session-events";
@@ -23,15 +23,15 @@ import {
 import { isDesktopRuntime } from "../utils";
 import type { DenOrgSkillCard, ReloadReason } from "../types";
 import type {
-  OpenWorkExtensionContribution,
-  OpenWorkExtensionContributionType,
-  OpenWorkExtensionLifecycle,
-  OpenWorkExtensionManifest,
-  OpenWorkExtensionResource,
-  OpenWorkExtensionResourceType,
-  OpenWorkExtensionSetup,
-  OpenWorkExtensionSource,
-  OpenWorkExtensionSourceFormat,
+  MatterhornExtensionContribution,
+  MatterhornExtensionContributionType,
+  MatterhornExtensionLifecycle,
+  MatterhornExtensionManifest,
+  MatterhornExtensionResource,
+  MatterhornExtensionResourceType,
+  MatterhornExtensionSetup,
+  MatterhornExtensionSource,
+  MatterhornExtensionSourceFormat,
 } from "../extensions";
 
 const STORAGE_BASE_URL = "openwork.den.baseUrl";
@@ -43,7 +43,7 @@ const STORAGE_ACTIVE_ORG_NAME = "openwork.den.activeOrgName";
 const ORG_PROXY_HEADER = "x-openwork-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
-export const DEFAULT_DEN_AUTH_NAME = "OpenWork User";
+export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Work User";
 const BUILD_DEN_BASE_URL =
   (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_BASE_URL === "string"
     ? import.meta.env.VITE_DEN_BASE_URL
@@ -107,7 +107,7 @@ export type DenWorkerTokens = {
   clientToken: string | null;
   ownerToken: string | null;
   hostToken: string | null;
-  openworkUrl: string | null;
+  matterhornUrl: string | null;
   workspaceId: string | null;
 };
 
@@ -168,8 +168,8 @@ export type DenOrgExtensionProjection = {
   id: string;
   name: string;
   description: string | null;
-  sourceFormat: OpenWorkExtensionSourceFormat;
-  manifest: OpenWorkExtensionManifest | null;
+  sourceFormat: MatterhornExtensionSourceFormat;
+  manifest: MatterhornExtensionManifest | null;
 };
 
 export type DenOrgPlugin = {
@@ -180,7 +180,7 @@ export type DenOrgPlugin = {
   memberCount: number;
   updatedAt: string | null;
   componentCounts: Record<string, number>;
-  /** Preferred Den surface: plugins are normalized into OpenWork extensions. */
+  /** Preferred Den surface: plugins are normalized into Matterhorn Work extensions. */
   extension?: DenOrgExtensionProjection | null;
 };
 
@@ -820,7 +820,7 @@ function getWorkerTokens(payload: unknown): DenWorkerTokens | null {
     clientToken: typeof tokens.client === "string" ? tokens.client : null,
     ownerToken: typeof tokens.owner === "string" ? tokens.owner : null,
     hostToken: typeof tokens.host === "string" ? tokens.host : null,
-    openworkUrl: connect && typeof connect.openworkUrl === "string" ? connect.openworkUrl : null,
+    matterhornUrl: connect && typeof connect.matterhornUrl === "string" ? connect.matterhornUrl : null,
     workspaceId: connect && typeof connect.workspaceId === "string" ? connect.workspaceId : null,
   };
 }
@@ -985,7 +985,7 @@ function parsePluginConfigObject(value: unknown): DenPluginConfigObject | null {
   };
 }
 
-function parseExtensionSourceFormat(value: unknown): OpenWorkExtensionSourceFormat | null {
+function parseExtensionSourceFormat(value: unknown): MatterhornExtensionSourceFormat | null {
   switch (value) {
     case "openwork-builtin":
     case "openwork-extension-manifest":
@@ -999,7 +999,7 @@ function parseExtensionSourceFormat(value: unknown): OpenWorkExtensionSourceForm
   }
 }
 
-function parseExtensionSourceOrigin(value: unknown): OpenWorkExtensionSource["origin"] | undefined {
+function parseExtensionSourceOrigin(value: unknown): MatterhornExtensionSource["origin"] | undefined {
   switch (value) {
     case "builtin":
     case "den":
@@ -1011,7 +1011,7 @@ function parseExtensionSourceOrigin(value: unknown): OpenWorkExtensionSource["or
   }
 }
 
-function parseExtensionSource(value: unknown): OpenWorkExtensionSource | null {
+function parseExtensionSource(value: unknown): MatterhornExtensionSource | null {
   if (!isRecord(value) || typeof value.trusted !== "boolean") return null;
   const format = parseExtensionSourceFormat(value.format);
   if (!format) return null;
@@ -1029,7 +1029,7 @@ function parseStringList(value: unknown): string[] | undefined {
   return value;
 }
 
-function parseExtensionResourceType(value: unknown): OpenWorkExtensionResourceType | null {
+function parseExtensionResourceType(value: unknown): MatterhornExtensionResourceType | null {
   switch (value) {
     case "skill":
     case "agent":
@@ -1050,7 +1050,7 @@ function parseExtensionResourceType(value: unknown): OpenWorkExtensionResourceTy
   }
 }
 
-function parseExtensionLocalCommandRef(value: unknown): OpenWorkExtensionResource["localCommandRef"] | undefined {
+function parseExtensionLocalCommandRef(value: unknown): MatterhornExtensionResource["localCommandRef"] | undefined {
   switch (value) {
     case "openwork.computerUseMcp":
     case "openwork.uiMcp":
@@ -1060,7 +1060,7 @@ function parseExtensionLocalCommandRef(value: unknown): OpenWorkExtensionResourc
   }
 }
 
-function parseExtensionResource(value: unknown): OpenWorkExtensionResource | null {
+function parseExtensionResource(value: unknown): MatterhornExtensionResource | null {
   if (!isRecord(value) || typeof value.id !== "string") return null;
   const type = parseExtensionResourceType(value.type);
   if (!type) return null;
@@ -1082,7 +1082,7 @@ function parseExtensionResource(value: unknown): OpenWorkExtensionResource | nul
   };
 }
 
-function parseExtensionContributionType(value: unknown): OpenWorkExtensionContributionType | null {
+function parseExtensionContributionType(value: unknown): MatterhornExtensionContributionType | null {
   switch (value) {
     case "settings-panel":
     case "setup-instructions":
@@ -1099,7 +1099,7 @@ function parseExtensionContributionType(value: unknown): OpenWorkExtensionContri
   }
 }
 
-function parseExtensionContributionLocation(value: unknown): OpenWorkExtensionContribution["location"] | undefined {
+function parseExtensionContributionLocation(value: unknown): MatterhornExtensionContribution["location"] | undefined {
   switch (value) {
     case "settings-detail":
     case "composer":
@@ -1113,7 +1113,7 @@ function parseExtensionContributionLocation(value: unknown): OpenWorkExtensionCo
   }
 }
 
-function parseExtensionContribution(value: unknown): OpenWorkExtensionContribution | null {
+function parseExtensionContribution(value: unknown): MatterhornExtensionContribution | null {
   if (!isRecord(value)) return null;
   const type = parseExtensionContributionType(value.type);
   if (!type) return null;
@@ -1128,7 +1128,7 @@ function parseExtensionContribution(value: unknown): OpenWorkExtensionContributi
   };
 }
 
-function parseExtensionSetup(value: unknown): OpenWorkExtensionSetup | undefined {
+function parseExtensionSetup(value: unknown): MatterhornExtensionSetup | undefined {
   if (!isRecord(value)) return undefined;
   const requiredEnv = parseStringList(value.requiredEnv);
   return {
@@ -1163,7 +1163,7 @@ function parseReloadReasons(value: unknown): ReloadReason[] | undefined {
   return reasons.length === value.length ? reasons : undefined;
 }
 
-function parseExtensionLifecycle(value: unknown): OpenWorkExtensionLifecycle | undefined {
+function parseExtensionLifecycle(value: unknown): MatterhornExtensionLifecycle | undefined {
   if (!isRecord(value)) return undefined;
   const reload = parseReloadReasons(value.reload);
   const detection = parseStringList(value.detection);
@@ -1173,7 +1173,7 @@ function parseExtensionLifecycle(value: unknown): OpenWorkExtensionLifecycle | u
   };
 }
 
-function parseExtensionPlatform(value: unknown): OpenWorkExtensionManifest["platform"] | undefined {
+function parseExtensionPlatform(value: unknown): MatterhornExtensionManifest["platform"] | undefined {
   if (!Array.isArray(value)) return undefined;
   const platforms = value.flatMap((item) => {
     switch (item) {
@@ -1189,7 +1189,7 @@ function parseExtensionPlatform(value: unknown): OpenWorkExtensionManifest["plat
   return platforms.length === value.length ? platforms : undefined;
 }
 
-function parseOpenWorkExtensionManifest(value: unknown): OpenWorkExtensionManifest | null {
+function parseMatterhornExtensionManifest(value: unknown): MatterhornExtensionManifest | null {
   if (
     !isRecord(value) ||
     value.schemaVersion !== 1 ||
@@ -1250,7 +1250,7 @@ function parseDenExtensionProjection(value: unknown): DenOrgExtensionProjection 
     name: value.name,
     description: typeof value.description === "string" ? value.description : null,
     sourceFormat,
-    manifest: parseOpenWorkExtensionManifest(value.manifest),
+    manifest: parseMatterhornExtensionManifest(value.manifest),
   };
 }
 

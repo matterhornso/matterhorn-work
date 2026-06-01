@@ -18,8 +18,8 @@ import { createClient, unwrap } from "../../app/lib/opencode";
 import { useLocal } from "../kernel/local-provider";
 import { WelcomePage } from "../domains/onboarding/welcome-page";
 import { CreateWorkspaceModal } from "../domains/workspace/create-workspace-modal";
-import { resolveOpenworkConnection } from "./openwork-connection";
-import { buildOpenworkWorkspaceBaseUrl, createOpenworkServerClient } from "../../app/lib/openwork-server";
+import { resolveMatterhornConnection } from "./matterhorn-connection";
+import { buildMatterhornWorkspaceBaseUrl, createMatterhornServerClient } from "../../app/lib/matterhorn-server";
 import { writeActiveWorkspaceId, writeLastSessionFor } from "./session-memory";
 import { workspaceSessionRoute } from "./workspace-routes";
 
@@ -132,14 +132,14 @@ export function WelcomeRoute() {
         // Register with the running openwork-server if available.
         try {
           const { normalizedBaseUrl, resolvedToken, resolvedHostToken } =
-            await resolveOpenworkConnection();
+            await resolveMatterhornConnection();
           if (normalizedBaseUrl && resolvedToken) {
-            const openworkClient = createOpenworkServerClient({
+            const matterhornClient = createMatterhornServerClient({
               baseUrl: normalizedBaseUrl,
               token: resolvedToken,
               hostToken: resolvedHostToken || undefined,
             });
-            const serverList = await openworkClient
+            const serverList = await matterhornClient
               .createLocalWorkspace({
                 folderPath: folder,
                 name: workspaceName,
@@ -153,7 +153,7 @@ export function WelcomeRoute() {
             if (targetWorkspaceId) {
               const workspacePath = targetWorkspace?.path?.trim() || folder;
               const session = unwrap(await createClient(
-                `${(buildOpenworkWorkspaceBaseUrl(normalizedBaseUrl, targetWorkspaceId) ?? normalizedBaseUrl).replace(/\/+$/, "")}/opencode`,
+                `${(buildMatterhornWorkspaceBaseUrl(normalizedBaseUrl, targetWorkspaceId) ?? normalizedBaseUrl).replace(/\/+$/, "")}/opencode`,
                 workspacePath || undefined,
                 { token: resolvedToken, mode: "openwork" },
               ).session.create({ directory: workspacePath || undefined }));
@@ -185,19 +185,19 @@ export function WelcomeRoute() {
 
   const handleCreateRemote = useCallback(
     async (input: {
-      openworkHostUrl?: string | null;
-      openworkToken?: string | null;
+      matterhornHostUrl?: string | null;
+      matterhornToken?: string | null;
       directory?: string | null;
       displayName?: string | null;
     }) => {
-      const baseUrlValue = input.openworkHostUrl?.trim() ?? "";
+      const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
       if (!baseUrlValue) return false;
       dispatch({ type: "remote:start" });
       try {
       const list = await workspaceCreateRemote({
         baseUrl: baseUrlValue,
-        openworkHostUrl: baseUrlValue,
-        openworkToken: input.openworkToken?.trim() || null,
+        matterhornHostUrl: baseUrlValue,
+        matterhornToken: input.matterhornToken?.trim() || null,
         displayName: input.displayName?.trim() || null,
         directory: input.directory?.trim() || null,
         remoteType: "openwork",

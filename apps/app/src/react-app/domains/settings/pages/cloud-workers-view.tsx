@@ -11,8 +11,8 @@ import { SettingsNotice, SettingsStack } from "../settings-section";
 
 export type CloudWorkersViewProps = {
   connectRemoteWorkspace: (input: {
-    openworkHostUrl?: string | null;
-    openworkToken?: string | null;
+    matterhornHostUrl?: string | null;
+    matterhornToken?: string | null;
     directory?: string | null;
     displayName?: string | null;
   }) => Promise<boolean>;
@@ -83,15 +83,15 @@ export function CloudWorkersView({
 
       try {
         const tokens = await client.getWorkerTokens(workerId, activeOrgId);
-        const openworkUrl = tokens.openworkUrl?.trim() ?? "";
+        const matterhornUrl = tokens.matterhornUrl?.trim() ?? "";
         const accessToken = tokens.ownerToken?.trim() || tokens.clientToken?.trim() || "";
-        if (!openworkUrl || !accessToken) {
+        if (!matterhornUrl || !accessToken) {
           throw new Error(t("den.error_worker_not_ready"));
         }
 
         const ok = await connectRemoteWorkspace({
-          openworkHostUrl: openworkUrl,
-          openworkToken: accessToken,
+          matterhornHostUrl: matterhornUrl,
+          matterhornToken: accessToken,
           directory: null,
           displayName: workerName,
         });

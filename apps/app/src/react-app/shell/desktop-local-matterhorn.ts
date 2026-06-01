@@ -1,11 +1,11 @@
 import {
   engineInfo,
   engineStart,
-  openworkServerInfo,
+  matterhornServerInfo,
   type EngineInfo,
-  type OpenworkServerInfo,
+  type MatterhornServerInfo,
 } from "../../app/lib/desktop";
-import { readOpenworkServerSettings, writeOpenworkServerSettings } from "../../app/lib/openwork-server";
+import { readMatterhornServerSettings, writeMatterhornServerSettings } from "../../app/lib/matterhorn-server";
 import { safeStringify } from "../../app/utils";
 import { recordInspectorEvent } from "./app-inspector";
 
@@ -37,7 +37,7 @@ function describeError(error: unknown) {
   return serialized && serialized !== "{}" ? serialized : "Unknown error";
 }
 
-export async function ensureDesktopLocalOpenworkConnection(
+export async function ensureDesktopLocalMatterhornConnection(
   options: EnsureDesktopLocalOpenworkOptions,
 ) {
   const workspace = options.workspace;
@@ -70,16 +70,16 @@ export async function ensureDesktopLocalOpenworkConnection(
       await engineStart(workspaceRoot, {
         runtime: "direct",
         workspacePaths,
-        openworkRemoteAccess: readOpenworkServerSettings().remoteAccessEnabled === true,
+        openworkRemoteAccess: readMatterhornServerSettings().remoteAccessEnabled === true,
       });
     }
 
-    const info = await openworkServerInfo() as OpenworkServerInfo | null;
+    const info = await matterhornServerInfo() as MatterhornServerInfo | null;
     if (!info?.baseUrl) {
-      throw new Error("OpenWork server did not report a base URL after activation.");
+      throw new Error("Matterhorn Work server did not report a base URL after activation.");
     }
 
-    writeOpenworkServerSettings({
+    writeMatterhornServerSettings({
       urlOverride: info.baseUrl,
       token: info.ownerToken?.trim() || info.clientToken?.trim() || undefined,
       hostToken: info.hostToken?.trim() || undefined,

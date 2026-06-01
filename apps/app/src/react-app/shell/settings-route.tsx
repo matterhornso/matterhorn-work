@@ -6,15 +6,15 @@ import { SUGGESTED_PLUGINS } from "../../app/constants";
 import type { EnablementContext } from "../../app/enablement";
 import { createClient } from "../../app/lib/opencode";
 import {
-  createOpenworkServerClient,
+  createMatterhornServerClient,
   isLoopbackOpenworkServerUrl,
-  readOpenworkServerSettings,
-  type OpenworkServerCapabilities,
-  type OpenworkServerClient,
-  type OpenworkWorkspaceInfo,
-} from "../../app/lib/openwork-server";
+  readMatterhornServerSettings,
+  type MatterhornServerCapabilities,
+  type MatterhornServerClient,
+  type MatterhornWorkspaceInfo,
+} from "../../app/lib/matterhorn-server";
 import { resolveWorkspaceEndpoint } from "../../app/lib/workspace-endpoint";
-import { buildOpenworkEnvRuntimeKey } from "../../app/lib/openwork-env-runtime";
+import { buildMatterhornEnvRuntimeKey } from "../../app/lib/matterhorn-env-runtime";
 import {
   getInitialThemeMode,
   setThemeMode as setAppThemeMode,
@@ -32,7 +32,7 @@ import type {
 import { getWorkspaceTaskLoadErrorDisplay, isSandboxWorkspace } from "../../app/utils";
 import { currentLocale, t, setLocale, type Language } from "../../i18n";
 import { createConnectionsStore, useConnectionsStoreSnapshot } from "../domains/connections/store";
-import { createOpenworkServerStore, useOpenworkServerStoreSnapshot } from "../domains/connections/openwork-server-store";
+import { createMatterhornServerStore, useMatterhornServerStoreSnapshot } from "../domains/connections/matterhorn-server-store";
 import { createProviderAuthStore, useProviderAuthStoreSnapshot } from "../domains/connections/provider-auth/store";
 import ProviderAuthModal from "../domains/connections/provider-auth/provider-auth-modal";
 import ConnectionsModals from "../domains/connections/modals";
@@ -42,10 +42,10 @@ import "../domains/settings/openai-image-gen-config";
 import "../domains/settings/ollama-config";
 import "../domains/settings/computer-use-config";
 import "../domains/settings/browser-extension-config";
-import "../domains/settings/openwork-voice-config";
+import "../domains/settings/matterhorn-voice-config";
 import "../domains/settings/google-workspace-config";
 import { getExtensionConfigSlot, getExtensionConnected, type ExtensionConfigContext } from "../domains/settings/extension-registry";
-import { isOpenWorkExtensionEnabled } from "../domains/settings/extension-state";
+import { isMatterhornExtensionEnabled } from "../domains/settings/extension-state";
 import { PreferencesView } from "../domains/settings/pages/preferences-view";
 import { ShellCustomizationView } from "../domains/settings/pages/shell-view";
 import { GeneralSettingsView } from "../domains/settings/pages/general-view";
@@ -79,8 +79,8 @@ import { usePlatform } from "../kernel/platform";
 import { useLocal } from "../kernel/local-provider";
 import {
   desktopFetch,
-  openworkServerInfo,
-  openworkServerRestart,
+  matterhornServerInfo,
+  matterhornServerRestart,
   engineStart,
   pickDirectory,
   resolveWorkspaceListSelectedId,
@@ -124,8 +124,8 @@ import { ModelPickerModal } from "../domains/session/modals/model-picker-modal";
 import type { ModelOption, ModelRef } from "../../app/types";
 import { workspaceSwatchColor } from "../domains/session/sidebar/utils";
 import { recordInspectorEvent } from "./app-inspector";
-import { ensureDesktopLocalOpenworkConnection } from "./desktop-local-openwork";
-import { resolveOpenworkConnection } from "./openwork-connection";
+import { ensureDesktopLocalMatterhornConnection } from "./desktop-local-matterhorn";
+import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { abortSessionSafe } from "../../app/lib/opencode-session";
 import { useReloadCoordinator } from "./reload-coordinator";
 import { buildFeedbackUrl } from "../../app/lib/feedback";
@@ -145,11 +145,11 @@ import {
 } from "../domains/settings/openai-image-extension";
 import { OLLAMA_PROVIDER_CONFIG, type LocalProviderInstallInput } from "../domains/settings/openai-image-extension";
 
-type RouteWorkspace = OpenworkWorkspaceInfo & {
+type RouteWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved: string;
 };
 
-const ROUTE_OPENWORK_CAPABILITIES: OpenworkServerCapabilities = {
+const ROUTE_OPENWORK_CAPABILITIES: MatterhornServerCapabilities = {
   skills: { read: true, write: true, source: "openwork" },
   plugins: { read: true, write: true },
   mcp: { read: true, write: true },
@@ -220,7 +220,7 @@ async function requestOpenAiImage(input: { apiKey: string; prompt: string }) {
 }
 
 function mergeRouteWorkspaces(
-  serverWorkspaces: OpenworkWorkspaceInfo[],
+  serverWorkspaces: MatterhornWorkspaceInfo[],
   desktopWorkspaces: RouteWorkspace[],
 ): RouteWorkspace[] {
   const desktopById = new Map(desktopWorkspaces.map((workspace) => [workspace.id, workspace]));
@@ -307,10 +307,10 @@ const SETTINGS_HIDE_TITLEBAR_KEY = "openwork.react.settings.hide-titlebar";
 const SETTINGS_UPDATE_AUTO_CHECK_KEY = "openwork.react.settings.update-auto-check";
 const SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY = "openwork.react.settings.update-auto-download";
 
-function workspaceLabel(workspace: OpenworkWorkspaceInfo) {
+function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
   return (
     workspace.displayName?.trim() ||
-    workspace.openworkWorkspaceName?.trim() ||
+    workspace.matterhornWorkspaceName?.trim() ||
     workspace.name?.trim() ||
     workspace.path?.trim() ||
     t("session.workspace_fallback")
@@ -477,7 +477,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, [navigate, props.embedded, selectedWorkspaceId]);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
-  const [openworkClient, setOpenworkClient] = useState<OpenworkServerClient | null>(null);
+  const [matterhornClient, setOpenworkClient] = useState<MatterhornServerClient | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
@@ -558,9 +558,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     selectedWorkspaceRoot: "",
     selectedWorkspaceType: "local" as "local" | "remote",
     runtimeWorkspaceId: null as string | null,
-    openworkServerClient: null as OpenworkServerClient | null,
-    openworkServerStatus: "disconnected" as "connected" | "disconnected",
-    openworkServerCapabilities: null as OpenworkServerCapabilities | null,
+    matterhornServerClient: null as MatterhornServerClient | null,
+    matterhornServerStatus: "disconnected" as "connected" | "disconnected",
+    matterhornServerCapabilities: null as MatterhornServerCapabilities | null,
     selectedWorkspaceDisplay: emptyWorkspaceDisplay as WorkspaceDisplay,
     providerItems: [] as ProviderListItem[],
     providerDefaults: {} as Record<string, string>,
@@ -598,7 +598,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             preset: "starter",
             workspaceType: selectedWorkspace.workspaceType ?? "local",
             displayName: selectedWorkspace.displayNameResolved,
-            openworkWorkspaceName: selectedWorkspace.openworkWorkspaceName,
+            matterhornWorkspaceName: selectedWorkspace.matterhornWorkspaceName,
           }
         : emptyWorkspaceDisplay,
     [emptyWorkspaceDisplay, selectedWorkspace],
@@ -610,9 +610,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     selectedWorkspaceRoot,
     selectedWorkspaceType: selectedWorkspace?.workspaceType ?? "local",
     runtimeWorkspaceId: selectedWorkspace?.id ?? null,
-    openworkServerClient: openworkClient,
-    openworkServerStatus: openworkClient ? "connected" : "disconnected",
-    openworkServerCapabilities: openworkClient ? ROUTE_OPENWORK_CAPABILITIES : null,
+    matterhornServerClient: matterhornClient,
+    matterhornServerStatus: matterhornClient ? "connected" : "disconnected",
+    matterhornServerCapabilities: matterhornClient ? ROUTE_OPENWORK_CAPABILITIES : null,
     selectedWorkspaceDisplay,
     providerItems: providers,
     providerDefaults,
@@ -641,12 +641,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const reloadWorkspaceEngineFromUi = useCallback(async () => {
     const workspaceId = routeStateRef.current.runtimeWorkspaceId?.trim() || selectedWorkspaceId.trim();
-    if (!openworkClient || !workspaceId) {
+    if (!matterhornClient || !workspaceId) {
       setRouteError(t("app.error_connect_first"));
       return false;
     }
 
-    await openworkClient.reloadEngine(workspaceId);
+    await matterhornClient.reloadEngine(workspaceId);
     await refreshProviderListQueries(getReactQueryClient());
 
     try {
@@ -660,11 +660,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     void pollMcpServersAfterReloadRef.current?.();
 
     return true;
-  }, [openworkClient, selectedWorkspaceId]);
+  }, [matterhornClient, selectedWorkspaceId]);
 
   useEffect(() => {
     return reloadCoordinator.registerWorkspaceReloadControls({
-      canReloadWorkspaceEngine: () => Boolean(openworkClient && (selectedWorkspace?.id || selectedWorkspaceId)),
+      canReloadWorkspaceEngine: () => Boolean(matterhornClient && (selectedWorkspace?.id || selectedWorkspaceId)),
       reloadWorkspaceEngine: reloadWorkspaceEngineFromUi,
       activeSessions: () => activeReloadBlockingSessions,
       stopSession: async (sessionId) => {
@@ -675,22 +675,22 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, [
     activeClient,
     activeReloadBlockingSessions,
-    openworkClient,
+    matterhornClient,
     reloadCoordinator,
     reloadWorkspaceEngineFromUi,
     selectedWorkspace?.id,
     selectedWorkspaceId,
   ]);
 
-  const openworkServerStore = useMemo(
+  const matterhornServerStore = useMemo(
     () =>
-      createOpenworkServerStore({
+      createMatterhornServerStore({
         startupPreference: () => {
           // In desktop mode, loopback URLs are ephemeral local runtime details.
           // Only non-loopback stored URLs indicate an explicit remote/manual
           // server connection preference.
           if (!isDesktopRuntime()) return "server";
-          const stored = readOpenworkServerSettings();
+          const stored = readMatterhornServerSettings();
           const storedUrl = stored.urlOverride?.trim() ?? "";
           return storedUrl && !isLoopbackOpenworkServerUrl(storedUrl) ? "server" : "local";
         },
@@ -702,9 +702,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         restartLocalServer: async () => {
           if (!isDesktopRuntime()) return false;
           try {
-            await openworkServerRestart({
+            await matterhornServerRestart({
               remoteAccessEnabled:
-                readOpenworkServerSettings().remoteAccessEnabled === true,
+                readMatterhornServerSettings().remoteAccessEnabled === true,
             });
             return true;
           } catch {
@@ -724,12 +724,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceId: () => routeStateRef.current.selectedWorkspaceId,
         selectedWorkspaceRoot: () => routeStateRef.current.selectedWorkspaceRoot,
         workspaceType: () => routeStateRef.current.selectedWorkspaceType,
-        openworkServer: openworkServerStore,
+        matterhornServer: matterhornServerStore,
         runtimeWorkspaceId: () => routeStateRef.current.runtimeWorkspaceId,
         developerMode: () => routeStateRef.current.developerMode,
         markReloadRequired: reloadCoordinator.markReloadRequired,
       }),
-    [openworkServerStore, reloadCoordinator.markReloadRequired],
+    [matterhornServerStore, reloadCoordinator.markReloadRequired],
   );
   refreshMcpServersRef.current = connectionsStore.refreshMcpServers;
   notifyMcpReloadingRef.current = connectionsStore.notifyMcpReloading;
@@ -746,7 +746,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceDisplay: () => routeStateRef.current.selectedWorkspaceDisplay,
         selectedWorkspaceRoot: () => routeStateRef.current.selectedWorkspaceRoot,
         runtimeWorkspaceId: () => routeStateRef.current.runtimeWorkspaceId,
-        openworkServer: openworkServerStore,
+        matterhornServer: matterhornServerStore,
         setProviders,
         setProviderDefaults,
         setProviderConnectedIds,
@@ -760,7 +760,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           });
         },
       }),
-    [checkDesktopRestriction, openworkServerStore, reloadCoordinator.markReloadRequired],
+    [checkDesktopRestriction, matterhornServerStore, reloadCoordinator.markReloadRequired],
   );
   const extensionsStore = useMemo(
     () =>
@@ -770,11 +770,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceId: () => routeStateRef.current.selectedWorkspaceId,
         selectedWorkspaceRoot: () => routeStateRef.current.selectedWorkspaceRoot,
         workspaceType: () => routeStateRef.current.selectedWorkspaceType,
-        openworkServer: openworkServerStore,
-        openworkServerConnection: () => ({
-          openworkServerClient: routeStateRef.current.openworkServerClient,
-          openworkServerStatus: routeStateRef.current.openworkServerStatus,
-          openworkServerCapabilities: routeStateRef.current.openworkServerCapabilities,
+        matterhornServer: matterhornServerStore,
+        matterhornServerConnection: () => ({
+          matterhornServerClient: routeStateRef.current.matterhornServerClient,
+          matterhornServerStatus: routeStateRef.current.matterhornServerStatus,
+          matterhornServerCapabilities: routeStateRef.current.matterhornServerCapabilities,
         }),
         runtimeWorkspaceId: () => routeStateRef.current.runtimeWorkspaceId,
         setBusy,
@@ -783,9 +783,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         setError: setRouteError,
         markReloadRequired: reloadCoordinator.markReloadRequired,
       }),
-    [openworkServerStore, reloadCoordinator.markReloadRequired],
+    [matterhornServerStore, reloadCoordinator.markReloadRequired],
   );
-  const openworkServerSnapshot = useOpenworkServerStoreSnapshot(openworkServerStore);
+  const matterhornServerSnapshot = useMatterhornServerStoreSnapshot(matterhornServerStore);
   const connectionsSnapshot = useConnectionsStoreSnapshot(connectionsStore);
   const providerAuthSnapshot = useProviderAuthStoreSnapshot(providerAuthStore);
   useExtensionsStoreSnapshot(extensionsStore);
@@ -842,8 +842,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const shareWorkspaceState = useShareWorkspaceState({
     workspaces,
-    openworkServerHostInfo: openworkServerSnapshot.openworkServerHostInfo,
-    openworkServerSettings: openworkServerSnapshot.openworkServerSettings,
+    matterhornServerHostInfo: matterhornServerSnapshot.matterhornServerHostInfo,
+    matterhornServerSettings: matterhornServerSnapshot.matterhornServerSettings,
     engineInfo: null,
     exportWorkspaceBusy,
     openLink: (url) => platform.openLink(url),
@@ -852,8 +852,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const debugViewProps = useDebugViewModel({
     developerMode,
-    openworkServerStore,
-    openworkServerSnapshot,
+    matterhornServerStore,
+    matterhornServerSnapshot,
     runtimeWorkspaceId: selectedWorkspace?.id ?? null,
     selectedWorkspaceRoot,
     setRouteError,
@@ -903,7 +903,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, [opencodeClient]);
 
   useEffect(() => {
-    const client = selectedWorkspaceEndpoint?.client ?? openworkClient;
+    const client = selectedWorkspaceEndpoint?.client ?? matterhornClient;
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     if (!client || !workspaceId) {
       setImageExtensionInstalled(false);
@@ -928,10 +928,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [openworkClient, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
+  }, [matterhornClient, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
 
   useEffect(() => {
-    const client = selectedWorkspaceEndpoint?.client ?? openworkClient;
+    const client = selectedWorkspaceEndpoint?.client ?? matterhornClient;
     if (!client) {
       setGoogleWorkspaceConnected(false);
       return;
@@ -949,26 +949,26 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [openworkClient, selectedWorkspaceEndpoint]);
+  }, [matterhornClient, selectedWorkspaceEndpoint]);
 
   useEffect(() => {
-    if (!openworkClient) {
+    if (!matterhornClient) {
       setUserEnvKeys([]);
       return;
     }
     let cancelled = false;
-    void openworkClient.listUserEnvKeys()
+    void matterhornClient.listUserEnvKeys()
       .then((response) => { if (!cancelled) setUserEnvKeys(response.keys); })
       .catch(() => { if (!cancelled) setUserEnvKeys([]); });
     return () => { cancelled = true; };
-  }, [openworkClient]);
+  }, [matterhornClient]);
 
   const installOpenAiImageExtension = useCallback(async (apiKey: string) => {
-    const workspaceClient = selectedWorkspaceEndpoint?.client ?? openworkClient;
+    const workspaceClient = selectedWorkspaceEndpoint?.client ?? matterhornClient;
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const resolvedApiKey = apiKey.trim();
     if (!workspaceClient || !workspaceId) {
-      setImageExtensionError("OpenWork server is not connected for this workspace.");
+      setImageExtensionError("Matterhorn Work server is not connected for this workspace.");
       return;
     }
     if (!resolvedApiKey) {
@@ -1003,28 +1003,28 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         data: encoder.encode(JSON.stringify({ dependencies: { "@opencode-ai/plugin": "1.14.38" } }, null, 2)).buffer,
         force: true,
       });
-      // upsertUserEnv requires the host token; use openworkClient which carries it.
-      if (openworkClient) {
-        await openworkClient.upsertUserEnv([{ key: "OPENAI_API_KEY", value: resolvedApiKey }]);
+      // upsertUserEnv requires the host token; use matterhornClient which carries it.
+      if (matterhornClient) {
+        await matterhornClient.upsertUserEnv([{ key: "OPENAI_API_KEY", value: resolvedApiKey }]);
         setUserEnvKeys((current) => Array.from(new Set([...current, "OPENAI_API_KEY"])));
       }
       reloadCoordinator.markReloadRequired("plugins", { type: "plugin", name: "openwork-image-generation", action: "added" });
       setImageExtensionInstalled(true);
-      setImageExtensionStatus("Installed OpenAI image_generate and saved OPENAI_API_KEY through OpenWork environment variables.");
+      setImageExtensionStatus("Installed OpenAI image_generate and saved OPENAI_API_KEY through Matterhorn Work environment variables.");
     } catch (error) {
       setImageExtensionError(describeRouteError(error));
     } finally {
       setImageExtensionBusy(false);
     }
-  }, [openworkClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
+  }, [matterhornClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
 
   const generateOpenAiTestImage = useCallback(async (input: { apiKey: string; prompt: string }) => {
-    const client = selectedWorkspaceEndpoint?.client ?? openworkClient;
+    const client = selectedWorkspaceEndpoint?.client ?? matterhornClient;
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const apiKey = input.apiKey.trim();
     const prompt = input.prompt.trim();
     if (!client || !workspaceId) {
-      setImageGenerationError("OpenWork server is not connected for this workspace.");
+      setImageGenerationError("Matterhorn Work server is not connected for this workspace.");
       return;
     }
     if (!apiKey) {
@@ -1050,11 +1050,11 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     } finally {
       setImageGenerationBusy(false);
     }
-  }, [openworkClient, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
+  }, [matterhornClient, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
 
   const saveVoiceApiKey = useCallback(async (apiKey: string) => {
     const resolvedApiKey = apiKey.trim();
-    if (!openworkClient || !resolvedApiKey) {
+    if (!matterhornClient || !resolvedApiKey) {
       setVoiceError("OpenAI API key is required.");
       return;
     }
@@ -1062,7 +1062,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     setVoiceStatus(null);
     setVoiceError(null);
     try {
-      await openworkClient.upsertUserEnv([{ key: "OPENAI_API_KEY", value: resolvedApiKey }]);
+      await matterhornClient.upsertUserEnv([{ key: "OPENAI_API_KEY", value: resolvedApiKey }]);
       setUserEnvKeys((current) => Array.from(new Set([...current, "OPENAI_API_KEY"])));
       setVoiceStatus("Saved OPENAI_API_KEY for Voice Mode.");
     } catch (error) {
@@ -1070,32 +1070,32 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     } finally {
       setVoiceBusy(false);
     }
-  }, [openworkClient]);
+  }, [matterhornClient]);
 
   const testVoiceSession = useCallback(async () => {
-    if (!openworkClient) {
-      setVoiceError("OpenWork server is not connected.");
+    if (!matterhornClient) {
+      setVoiceError("Matterhorn Work server is not connected.");
       return;
     }
     setVoiceBusy(true);
     setVoiceStatus(null);
     setVoiceError(null);
     try {
-      const session = await openworkClient.createVoiceRealtimeSession();
+      const session = await matterhornClient.createVoiceRealtimeSession();
       setVoiceStatus(`Realtime ready with ${session.model} (${session.tools.length} OpenWork tools).`);
     } catch (error) {
       setVoiceError(describeRouteError(error));
     } finally {
       setVoiceBusy(false);
     }
-  }, [openworkClient]);
+  }, [matterhornClient]);
 
   const installLocalProvider = useCallback(async (input: LocalProviderInstallInput) => {
-    const client = selectedWorkspaceEndpoint?.client ?? openworkClient;
+    const client = selectedWorkspaceEndpoint?.client ?? matterhornClient;
     const workspaceId = runtimeWorkspaceId?.trim() ?? "";
     const modelId = input.modelId.trim();
     if (!client || !workspaceId) {
-      setLocalProviderError("OpenWork server is not connected for this workspace.");
+      setLocalProviderError("Matterhorn Work server is not connected for this workspace.");
       return;
     }
     if (!modelId) {
@@ -1144,7 +1144,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     } finally {
       setLocalProviderBusy(false);
     }
-  }, [local, openworkClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
+  }, [local, matterhornClient, reloadCoordinator, runtimeWorkspaceId, selectedWorkspaceEndpoint]);
 
   useEffect(() => {
     const openFromPending = (raw: string | null) => {
@@ -1274,7 +1274,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           desktopWorkspaces = workspacesRef.current;
         }
       }
-      const { normalizedBaseUrl, resolvedToken, resolvedHostToken } = await resolveOpenworkConnection();
+      const { normalizedBaseUrl, resolvedToken, resolvedHostToken } = await resolveMatterhornConnection();
 
       if (!normalizedBaseUrl || !resolvedToken) {
         setOpenworkClient(null);
@@ -1291,7 +1291,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         return;
       }
 
-      const client = createOpenworkServerClient({
+      const client = createMatterhornServerClient({
         baseUrl: normalizedBaseUrl,
         token: resolvedToken,
         hostToken: resolvedHostToken || undefined,
@@ -1490,7 +1490,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   useEffect(() => {
     if (!isDesktopRuntime()) return;
     if (loading) return;
-    if (openworkClient) {
+    if (matterhornClient) {
       reconnectAttemptedWorkspaceIdRef.current = "";
       return;
     }
@@ -1499,7 +1499,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     if (!workspaceId || reconnectAttemptedWorkspaceIdRef.current === workspaceId) return;
     reconnectAttemptedWorkspaceIdRef.current = workspaceId;
 
-    void ensureDesktopLocalOpenworkConnection({
+    void ensureDesktopLocalMatterhornConnection({
       route: "settings",
       workspace: selectedWorkspace,
       allWorkspaces: workspaces,
@@ -1507,7 +1507,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       const message = error instanceof Error ? error.message : describeRouteError(error);
       setRouteError(message);
     });
-  }, [loading, openworkClient, selectedWorkspace, workspaces]);
+  }, [loading, matterhornClient, selectedWorkspace, workspaces]);
 
   useEffect(() => {
     void refreshRouteState();
@@ -1522,12 +1522,12 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   // Load auto-compaction state from OpenCode config on workspace change.
   useEffect(() => {
-    if (!openworkClient || !selectedWorkspaceId) return;
+    if (!matterhornClient || !selectedWorkspaceId) return;
     const workspaceId = routeStateRef.current.runtimeWorkspaceId?.trim() || selectedWorkspaceId;
     let cancelled = false;
     (async () => {
       try {
-        const config = await openworkClient.getConfig(workspaceId);
+        const config = await matterhornClient.getConfig(workspaceId);
         if (cancelled) return;
         const compaction = config.opencode?.compaction;
         const auto = compaction && typeof compaction === "object" && "auto" in compaction
@@ -1540,17 +1540,17 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
     })();
     return () => { cancelled = true; };
-  }, [openworkClient, selectedWorkspaceId]);
+  }, [matterhornClient, selectedWorkspaceId]);
 
   const toggleAutoCompactContext = useCallback(async () => {
     if (autoCompactContextBusy) return;
     const workspaceId = routeStateRef.current.runtimeWorkspaceId?.trim() || selectedWorkspaceId;
-    if (!openworkClient || !workspaceId) return;
+    if (!matterhornClient || !workspaceId) return;
     const next = !autoCompactContext;
     setAutoCompactContext(next);
     setAutoCompactContextBusy(true);
     try {
-      await openworkClient.patchConfig(workspaceId, {
+      await matterhornClient.patchConfig(workspaceId, {
         opencode: { compaction: { auto: next } },
       });
       reloadCoordinator.markReloadRequired("config", {
@@ -1563,10 +1563,10 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     } finally {
       setAutoCompactContextBusy(false);
     }
-  }, [autoCompactContext, autoCompactContextBusy, openworkClient, reloadCoordinator, selectedWorkspaceId]);
+  }, [autoCompactContext, autoCompactContextBusy, matterhornClient, reloadCoordinator, selectedWorkspaceId]);
 
   useEffect(() => {
-    openworkServerStore.start();
+    matterhornServerStore.start();
     connectionsStore.start();
     providerAuthStore.start();
     extensionsStore.start();
@@ -1575,9 +1575,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       extensionsStore.dispose();
       providerAuthStore.dispose();
       connectionsStore.dispose();
-      openworkServerStore.dispose();
+      matterhornServerStore.dispose();
     };
-  }, [connectionsStore, extensionsStore, openworkServerStore, providerAuthStore]);
+  }, [connectionsStore, extensionsStore, matterhornServerStore, providerAuthStore]);
 
   // Periodically reconcile workspace-imported cloud providers from Den while
   // signed in (dev #1509 "auto-sync cloud providers"). Mounted here because
@@ -1590,7 +1590,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   }, [providerAuthStore, route.tab]);
 
   useEffect(() => {
-    openworkServerStore.syncFromOptions();
+    matterhornServerStore.syncFromOptions();
     connectionsStore.syncFromOptions();
     providerAuthStore.syncFromOptions();
     extensionsStore.syncFromOptions();
@@ -1598,7 +1598,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     activeClient,
     connectionsStore,
     extensionsStore,
-    openworkServerStore,
+    matterhornServerStore,
     providerAuthStore,
     selectedWorkspace?.id,
     selectedWorkspace?.workspaceType,
@@ -1627,9 +1627,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const workspaceType = selectedWorkspace?.workspaceType ?? "local";
   const isRemoteWorkspace = workspaceType === "remote";
   const canWriteWorkspaceSkills =
-    !isRemoteWorkspace || openworkServerSnapshot.openworkServerCanWriteSkills;
+    !isRemoteWorkspace || matterhornServerSnapshot.matterhornServerCanWriteSkills;
   const canWriteWorkspacePlugins =
-    !isRemoteWorkspace || openworkServerSnapshot.openworkServerCanWritePlugins;
+    !isRemoteWorkspace || matterhornServerSnapshot.matterhornServerCanWritePlugins;
   const skillsAccessHint =
     isRemoteWorkspace && !canWriteWorkspaceSkills ? t("app.skills_hint_readonly") : null;
   const pluginsAccessHint =
@@ -1691,21 +1691,21 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       isToggleEnabled: (ref: string) => {
         const catalog = connectionsStore.quickConnect;
         const match = catalog.find((e: { id?: string; serverName?: string }) => (e.id ?? e.serverName) === ref);
-        return match ? isOpenWorkExtensionEnabled(match) : false;
+        return match ? isMatterhornExtensionEnabled(match) : false;
       },
     };
   }, [connectionsSnapshot, providerConnectedIds, userEnvKeys, imageExtensionInstalled]);
-  const routeOpenworkStatus = openworkClient ? "connected" : "disconnected";
+  const routeOpenworkStatus = matterhornClient ? "connected" : "disconnected";
   const notFoundRouteError = !loading && routeWorkspaceId && !selectedWorkspace
     ? "Workspace was not found. Select a new workspace from the sidebar."
     : null;
-  const routeOpenworkCapabilities: OpenworkServerCapabilities | null = openworkClient
+  const routeOpenworkCapabilities: MatterhornServerCapabilities | null = matterhornClient
     ? ROUTE_OPENWORK_CAPABILITIES
     : null;
-  const environmentRuntimeKey = buildOpenworkEnvRuntimeKey({
-    baseUrl: openworkServerSnapshot.openworkServerBaseUrl || openworkServerSnapshot.openworkServerUrl,
-    pid: openworkServerSnapshot.openworkServerHostInfo?.pid ?? null,
-    port: openworkServerSnapshot.openworkServerHostInfo?.port ?? null,
+  const environmentRuntimeKey = buildMatterhornEnvRuntimeKey({
+    baseUrl: matterhornServerSnapshot.matterhornServerBaseUrl || matterhornServerSnapshot.matterhornServerUrl,
+    pid: matterhornServerSnapshot.matterhornServerHostInfo?.pid ?? null,
+    port: matterhornServerSnapshot.matterhornServerHostInfo?.port ?? null,
   });
 
   const handleApplyEnvironmentChanges = async () => {
@@ -1734,9 +1734,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       preferSidecar: true,
       runtime: "direct",
       workspacePaths,
-      openworkRemoteAccess: openworkServerSnapshot.openworkServerSettings.remoteAccessEnabled === true,
+      openworkRemoteAccess: matterhornServerSnapshot.matterhornServerSettings.remoteAccessEnabled === true,
     });
-    const reconnected = await openworkServerStore.reconnectOpenworkServer();
+    const reconnected = await matterhornServerStore.reconnectOpenworkServer();
     if (!reconnected) {
       await refreshRouteState().catch(() => {});
       return { statusMessage: t("settings.environment.apply_refresh_failed") };
@@ -1791,8 +1791,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           displayName: trimmed,
         }).catch(() => undefined);
       }
-      if (openworkClient) {
-        await openworkClient
+      if (matterhornClient) {
+        await matterhornClient
           .updateWorkspaceDisplayName(renameWorkspaceId, trimmed)
           .catch(() => undefined);
       }
@@ -1802,7 +1802,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     } finally {
       setRenameWorkspaceBusy(false);
     }
-  }, [openworkClient, refreshRouteState, renameWorkspaceId, renameWorkspaceTitle]);
+  }, [matterhornClient, refreshRouteState, renameWorkspaceId, renameWorkspaceTitle]);
 
   const handleRevealWorkspace = useCallback(async (workspaceId: string) => {
     const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -1837,8 +1837,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     if (isDesktopRuntime()) {
       await workspaceForget(workspaceId).catch(() => undefined);
     }
-    if (openworkClient) {
-      await openworkClient.deleteWorkspace(workspaceId).catch(() => undefined);
+    if (matterhornClient) {
+      await matterhornClient.deleteWorkspace(workspaceId).catch(() => undefined);
     }
     if (selectedWorkspaceId === workspaceId) {
       const nextWorkspace = workspaces.find((workspace) => workspace.id !== workspaceId);
@@ -1849,7 +1849,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       }
     }
     await refreshRouteState();
-  }, [openworkClient, refreshRouteState, selectedWorkspaceId, workspaces]);
+  }, [matterhornClient, refreshRouteState, selectedWorkspaceId, workspaces]);
 
   const handleCreateWorkspace = async (preset: WorkspacePreset, folder: string | null) => {
     if (!folder) return;
@@ -1872,8 +1872,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       // picks up the new workspace after an app restart (because the server
       // is launched with a fixed --workspace list at boot and the bridge
       // write only updates desktop-side state).
-      if (openworkClient) {
-        await openworkClient
+      if (matterhornClient) {
+        await matterhornClient
           .createLocalWorkspace({ folderPath: folder, name: workspaceName, preset })
           .catch(() => undefined);
       }
@@ -1887,20 +1887,20 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   };
 
   const handleCreateRemoteWorkspace = async (input: {
-    openworkHostUrl?: string | null;
-    openworkToken?: string | null;
+    matterhornHostUrl?: string | null;
+    matterhornToken?: string | null;
     directory?: string | null;
     displayName?: string | null;
   }) => {
-    const baseUrlValue = input.openworkHostUrl?.trim() ?? "";
+    const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
     if (!baseUrlValue) return false;
     setCreateWorkspaceRemoteBusy(true);
     setCreateWorkspaceRemoteError(null);
     try {
       const list = await workspaceCreateRemote({
         baseUrl: baseUrlValue,
-        openworkHostUrl: baseUrlValue,
-        openworkToken: input.openworkToken?.trim() || null,
+        matterhornHostUrl: baseUrlValue,
+        matterhornToken: input.matterhornToken?.trim() || null,
         displayName: input.displayName?.trim() || null,
         directory: input.directory?.trim() || null,
         remoteType: "openwork",
@@ -1922,38 +1922,38 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   };
 
   const handleReconnectMessagingServer = useCallback(async () => {
-    const ok = await openworkServerStore.reconnectOpenworkServer();
+    const ok = await matterhornServerStore.reconnectOpenworkServer();
     if (ok) {
       await refreshRouteState();
     }
     return ok;
-  }, [openworkServerStore, refreshRouteState]);
+  }, [matterhornServerStore, refreshRouteState]);
 
   const restartOpenworkServerAndRefresh = useCallback(async () => {
     if (!isDesktopRuntime()) return false;
     try {
-      await openworkServerRestart({
+      await matterhornServerRestart({
         remoteAccessEnabled:
-          readOpenworkServerSettings().remoteAccessEnabled === true,
+          readMatterhornServerSettings().remoteAccessEnabled === true,
       });
-      await openworkServerStore.reconnectOpenworkServer();
+      await matterhornServerStore.reconnectOpenworkServer();
       await refreshRouteState();
       return true;
     } catch {
       return false;
     }
-  }, [openworkServerStore, refreshRouteState]);
+  }, [matterhornServerStore, refreshRouteState]);
 
   const handleRestartLocalServer = restartOpenworkServerAndRefresh;
   const handleRestartMessagingWorker = restartOpenworkServerAndRefresh;
 
   const messagingViewProps = useMessagingViewProps({
     busy,
-    openworkServerStatus: openworkServerSnapshot.openworkServerStatus,
-    openworkServerUrl: openworkServerSnapshot.openworkServerUrl,
-    openworkServerClient:
-      openworkClient ?? openworkServerSnapshot.openworkServerClient,
-    openworkReconnectBusy: openworkServerSnapshot.openworkReconnectBusy,
+    matterhornServerStatus: matterhornServerSnapshot.matterhornServerStatus,
+    matterhornServerUrl: matterhornServerSnapshot.matterhornServerUrl,
+    matterhornServerClient:
+      matterhornClient ?? matterhornServerSnapshot.matterhornServerClient,
+    matterhornReconnectBusy: matterhornServerSnapshot.matterhornReconnectBusy,
     reconnectOpenworkServer: handleReconnectMessagingServer,
     restartMessagingWorker: handleRestartMessagingWorker,
     workspaceId: runtimeWorkspaceId,
@@ -1991,9 +1991,9 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         return (
           <SettingsStack>
             <AuthorizedFoldersPanel
-              openworkServerClient={openworkClient}
-              openworkServerStatus={routeOpenworkStatus}
-              openworkServerCapabilities={routeOpenworkCapabilities}
+              matterhornServerClient={matterhornClient}
+              matterhornServerStatus={routeOpenworkStatus}
+              matterhornServerCapabilities={routeOpenworkCapabilities}
               runtimeWorkspaceId={runtimeWorkspaceId}
               selectedWorkspaceRoot={selectedWorkspaceRoot}
               activeWorkspaceType={workspaceType}
@@ -2115,7 +2115,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                   void connectionsStore.connectMcp(entry);
                 }}
                 configSlotForEntry={(entry) => getExtensionConfigSlot(entry, {
-                  openworkServerClient: selectedWorkspaceEndpoint?.client ?? openworkClient,
+                  matterhornServerClient: selectedWorkspaceEndpoint?.client ?? matterhornClient,
                   extensionConnections: {
                     "google-workspace": googleWorkspaceConnected,
                   },
@@ -2157,7 +2157,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 })}
                 isExtensionConnected={(entry) => {
                   const runtimeConnected = getExtensionConnected(entry, {
-                    openworkServerClient: selectedWorkspaceEndpoint?.client ?? openworkClient,
+                    matterhornServerClient: selectedWorkspaceEndpoint?.client ?? matterhornClient,
                     extensionConnections: {
                       "google-workspace": googleWorkspaceConnected,
                     },
@@ -2239,13 +2239,13 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           <AdvancedView
             busy={busy}
             baseUrl={opencodeBaseUrl}
-            headerStatus={openworkServerSnapshot.openworkServerStatus}
+            headerStatus={matterhornServerSnapshot.matterhornServerStatus}
             clientConnected={Boolean(opencodeClient)}
             opencodeConnectStatus={null}
-            openworkServerStatus={openworkServerSnapshot.openworkServerStatus}
-            openworkServerUrl={openworkServerSnapshot.openworkServerUrl}
-            openworkReconnectBusy={openworkServerSnapshot.openworkReconnectBusy}
-            reconnectOpenworkServer={openworkServerStore.reconnectOpenworkServer}
+            matterhornServerStatus={matterhornServerSnapshot.matterhornServerStatus}
+            matterhornServerUrl={matterhornServerSnapshot.matterhornServerUrl}
+            matterhornReconnectBusy={matterhornServerSnapshot.matterhornReconnectBusy}
+            reconnectOpenworkServer={matterhornServerStore.reconnectOpenworkServer}
             engineInfo={null}
             restartLocalServer={handleRestartLocalServer}
             stopHost={() => {}}
@@ -2273,14 +2273,14 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
               busy,
               clientConnected: Boolean(opencodeClient),
               anyActiveRuns: false,
-              openworkServerStatus: openworkServerSnapshot.openworkServerStatus,
-              openworkServerUrl: openworkServerSnapshot.openworkServerUrl,
-              openworkServerSettings: openworkServerSnapshot.openworkServerSettings,
-              openworkServerHostInfo: openworkServerSnapshot.openworkServerHostInfo,
+              matterhornServerStatus: matterhornServerSnapshot.matterhornServerStatus,
+              matterhornServerUrl: matterhornServerSnapshot.matterhornServerUrl,
+              matterhornServerSettings: matterhornServerSnapshot.matterhornServerSettings,
+              matterhornServerHostInfo: matterhornServerSnapshot.matterhornServerHostInfo,
               runtimeWorkspaceId,
-              updateOpenworkServerSettings: openworkServerStore.updateOpenworkServerSettings,
-              resetOpenworkServerSettings: openworkServerStore.resetOpenworkServerSettings,
-              testOpenworkServerConnection: openworkServerStore.testOpenworkServerConnection,
+              updateMatterhornServerSettings: matterhornServerStore.updateMatterhornServerSettings,
+              resetMatterhornServerSettings: matterhornServerStore.resetMatterhornServerSettings,
+              testMatterhornServerConnection: matterhornServerStore.testMatterhornServerConnection,
               canReloadWorkspace: reloadCoordinator.canReloadWorkspaceEngine,
               reloadWorkspaceEngine: reloadCoordinator.reloadWorkspaceEngine,
               reloadBusy: false,
@@ -2341,7 +2341,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "environment":
         return (
           <EnvironmentView
-            client={openworkServerSnapshot.openworkServerClient}
+            client={matterhornServerSnapshot.matterhornServerClient}
             isRemoteWorkspace={isRemoteWorkspace}
             onApplyChanges={isDesktopRuntime() && !isRemoteWorkspace ? handleApplyEnvironmentChanges : undefined}
             applyBlocked={activeReloadBlockingSessions.length > 0}

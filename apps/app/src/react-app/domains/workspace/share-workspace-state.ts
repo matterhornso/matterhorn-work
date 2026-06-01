@@ -2,16 +2,16 @@
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
 import {
-  buildOpenworkWorkspaceBaseUrl,
-  createOpenworkServerClient,
+  buildMatterhornWorkspaceBaseUrl,
+  createMatterhornServerClient,
   parseOpenworkWorkspaceIdFromUrl,
-} from "../../../app/lib/openwork-server";
+} from "../../../app/lib/matterhorn-server";
 import type {
   EngineInfo,
-  OpenworkServerInfo,
+  MatterhornServerInfo,
   WorkspaceInfo,
 } from "../../../app/lib/desktop";
-import type { OpenworkServerSettings } from "../../../app/lib/openwork-server";
+import type { MatterhornServerSettings } from "../../../app/lib/matterhorn-server";
 import { t } from "../../../i18n";
 import { isDesktopRuntime, normalizeDirectoryPath } from "../../../app/utils";
 
@@ -19,8 +19,8 @@ export type ShareWorkspaceState = ReturnType<typeof useShareWorkspaceState>;
 
 type UseShareWorkspaceStateOptions = {
   workspaces: WorkspaceInfo[];
-  openworkServerHostInfo: OpenworkServerInfo | null;
-  openworkServerSettings: OpenworkServerSettings;
+  matterhornServerHostInfo: MatterhornServerInfo | null;
+  matterhornServerSettings: MatterhornServerSettings;
   engineInfo: EngineInfo | null;
   exportWorkspaceBusy: boolean;
   openLink: (url: string) => void;
@@ -85,10 +85,10 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
     if (!workspace) return "";
     if (workspace.workspaceType === "remote") {
       if (workspace.remoteType === "openwork") {
-        const hostUrl = workspace.openworkHostUrl?.trim() || workspace.baseUrl?.trim() || "";
-        const mounted = buildOpenworkWorkspaceBaseUrl(
+        const hostUrl = workspace.matterhornHostUrl?.trim() || workspace.baseUrl?.trim() || "";
+        const mounted = buildMatterhornWorkspaceBaseUrl(
           hostUrl,
-          workspace.openworkWorkspaceId,
+          workspace.matterhornWorkspaceId,
         );
         return mounted || hostUrl;
       }
@@ -103,10 +103,10 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
 
   useEffect(() => {
     const workspace = shareWorkspace;
-    const baseUrl = options.openworkServerHostInfo?.baseUrl?.trim() ?? "";
+    const baseUrl = options.matterhornServerHostInfo?.baseUrl?.trim() ?? "";
     const token =
-      options.openworkServerHostInfo?.ownerToken?.trim() ||
-      options.openworkServerHostInfo?.clientToken?.trim() ||
+      options.matterhornServerHostInfo?.ownerToken?.trim() ||
+      options.matterhornServerHostInfo?.clientToken?.trim() ||
       "";
     const workspacePath = workspace?.workspaceType === "local" ? (workspace.path?.trim() ?? "") : "";
 
@@ -126,7 +126,7 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
 
     void (async () => {
       try {
-        const client = createOpenworkServerClient({ baseUrl, token });
+        const client = createMatterhornServerClient({ baseUrl, token });
         const response = await client.listWorkspaces();
         if (cancelled) return;
         const items = Array.isArray(response.items) ? response.items : [];
@@ -145,7 +145,7 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
     return () => {
       cancelled = true;
     };
-  }, [options.openworkServerHostInfo, shareWorkspace]);
+  }, [options.matterhornServerHostInfo, shareWorkspace]);
 
   const shareFields = useMemo(() => {
     const workspace = shareWorkspace;
@@ -160,22 +160,22 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
     }
 
     if (workspace.workspaceType !== "remote") {
-      if (options.openworkServerHostInfo?.remoteAccessEnabled !== true) {
+      if (options.matterhornServerHostInfo?.remoteAccessEnabled !== true) {
         return [];
       }
       const hostUrl =
-        options.openworkServerHostInfo?.connectUrl?.trim() ||
-        options.openworkServerHostInfo?.lanUrl?.trim() ||
-        options.openworkServerHostInfo?.mdnsUrl?.trim() ||
-        options.openworkServerHostInfo?.baseUrl?.trim() ||
+        options.matterhornServerHostInfo?.connectUrl?.trim() ||
+        options.matterhornServerHostInfo?.lanUrl?.trim() ||
+        options.matterhornServerHostInfo?.mdnsUrl?.trim() ||
+        options.matterhornServerHostInfo?.baseUrl?.trim() ||
         "";
       const mountedUrl = shareLocalOpenworkWorkspaceId
-        ? buildOpenworkWorkspaceBaseUrl(hostUrl, shareLocalOpenworkWorkspaceId)
+        ? buildMatterhornWorkspaceBaseUrl(hostUrl, shareLocalOpenworkWorkspaceId)
         : null;
       const url = mountedUrl || hostUrl;
-      const collaboratorToken = options.openworkServerHostInfo?.clientToken?.trim() || "";
+      const collaboratorToken = options.matterhornServerHostInfo?.clientToken?.trim() || "";
       const ownerToken =
-        collaboratorToken || options.openworkServerHostInfo?.ownerToken?.trim() || "";
+        collaboratorToken || options.matterhornServerHostInfo?.ownerToken?.trim() || "";
       return [
         {
           label: t("session.share_worker_url"),
@@ -211,13 +211,13 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
     }
 
     if (workspace.remoteType === "openwork") {
-      const hostUrl = workspace.openworkHostUrl?.trim() || workspace.baseUrl?.trim() || "";
+      const hostUrl = workspace.matterhornHostUrl?.trim() || workspace.baseUrl?.trim() || "";
       const url =
-        buildOpenworkWorkspaceBaseUrl(hostUrl, workspace.openworkWorkspaceId) ||
+        buildMatterhornWorkspaceBaseUrl(hostUrl, workspace.matterhornWorkspaceId) ||
         hostUrl;
       const token =
-        workspace.openworkToken?.trim() ||
-        options.openworkServerSettings.token?.trim() ||
+        workspace.matterhornToken?.trim() ||
+        options.matterhornServerSettings.token?.trim() ||
         "";
       return [
         {
@@ -248,8 +248,8 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
       },
     ];
   }, [
-    options.openworkServerHostInfo,
-    options.openworkServerSettings,
+    options.matterhornServerHostInfo,
+    options.matterhornServerSettings,
     shareLocalOpenworkWorkspaceId,
     shareWorkspace,
   ]);
@@ -270,25 +270,25 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
       return t("session.share_openwork_workers_only");
     }
     if (workspace.workspaceType !== "remote") {
-      const baseUrl = options.openworkServerHostInfo?.baseUrl?.trim() ?? "";
+      const baseUrl = options.matterhornServerHostInfo?.baseUrl?.trim() ?? "";
       const token =
-        options.openworkServerHostInfo?.ownerToken?.trim() ||
-        options.openworkServerHostInfo?.clientToken?.trim() ||
+        options.matterhornServerHostInfo?.ownerToken?.trim() ||
+        options.matterhornServerHostInfo?.clientToken?.trim() ||
         "";
       if (!baseUrl || !token) {
         return t("session.share_local_host_not_ready");
       }
     } else {
-      const hostUrl = workspace.openworkHostUrl?.trim() || workspace.baseUrl?.trim() || "";
+      const hostUrl = workspace.matterhornHostUrl?.trim() || workspace.baseUrl?.trim() || "";
       const token =
-        workspace.openworkToken?.trim() ||
-        options.openworkServerSettings.token?.trim() ||
+        workspace.matterhornToken?.trim() ||
+        options.matterhornServerSettings.token?.trim() ||
         "";
       if (!hostUrl) return t("session.share_missing_host_url");
       if (!token) return t("session.share_missing_token");
     }
     return null;
-  }, [options.openworkServerHostInfo, options.openworkServerSettings, shareWorkspace]);
+  }, [options.matterhornServerHostInfo, options.matterhornServerSettings, shareWorkspace]);
 
   const exportDisabledReason = useMemo(() => {
     const workspace = shareWorkspace;

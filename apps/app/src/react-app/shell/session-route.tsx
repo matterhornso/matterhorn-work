@@ -19,18 +19,18 @@ import type {
 import { createClient, unwrap } from "../../app/lib/opencode";
 import { forkSession, listCommands, revertSession, shellInSession } from "../../app/lib/opencode-session";
 import {
-  buildOpenworkWorkspaceBaseUrl,
-  createOpenworkServerClient,
-  readOpenworkServerSettings,
-  type OpenworkServerClient,
-  type OpenworkWorkspaceInfo,
-} from "../../app/lib/openwork-server";
+  buildMatterhornWorkspaceBaseUrl,
+  createMatterhornServerClient,
+  readMatterhornServerSettings,
+  type MatterhornServerClient,
+  type MatterhornWorkspaceInfo,
+} from "../../app/lib/matterhorn-server";
 import {
   resolveWorkspaceEndpoint,
   workspaceServerId,
   type ResolvedWorkspaceEndpoint,
 } from "../../app/lib/workspace-endpoint";
-import { buildOpenworkEnvRuntimeKey } from "../../app/lib/openwork-env-runtime";
+import { buildMatterhornEnvRuntimeKey } from "../../app/lib/matterhorn-env-runtime";
 import {
   engineInfo,
   revealDesktopItemInDir,
@@ -45,7 +45,7 @@ import {
   workspaceSetSelected,
   workspaceUpdateDisplayName,
   type EngineInfo,
-  type OpenworkServerInfo,
+  type MatterhornServerInfo,
   type WorkspaceInfo,
   type WorkspaceList,
 } from "../../app/lib/desktop";
@@ -124,7 +124,7 @@ import {
   recordInspectorEvent,
 } from "./app-inspector";
 import { saveSessionDraft } from "../domains/session/sync/draft-store";
-import { useControlAction, type OpenworkControlAction } from "./control/control-provider";
+import { useControlAction, type MatterhornControlAction } from "./control/control-provider";
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 
 import { readDenSettings } from "../../app/lib/den";
@@ -133,8 +133,8 @@ import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
 import { openModelPickerEvent, pendingModelPickerProviderIdsKey } from "./new-providers-toast";
 import { getModelBehaviorSummary } from "../../app/lib/model-behavior";
 import { filterProviderList } from "../../app/utils/providers";
-import { ensureDesktopLocalOpenworkConnection } from "./desktop-local-openwork";
-import { resolveOpenworkConnection } from "./openwork-connection";
+import { ensureDesktopLocalMatterhornConnection } from "./desktop-local-matterhorn";
+import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { useReloadCoordinator } from "./reload-coordinator";
 import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
@@ -151,7 +151,7 @@ import {
   useProviderListQuery,
 } from "../domains/connections/provider-list-query";
 
-type RouteWorkspace = OpenworkWorkspaceInfo & {
+type RouteWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved: string;
 };
 
@@ -202,10 +202,10 @@ function isTransientStartupError(message: string | null | undefined) {
   );
 }
 
-function workspaceLabel(workspace: OpenworkWorkspaceInfo) {
+function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
   return (
     workspace.displayName?.trim() ||
-    workspace.openworkWorkspaceName?.trim() ||
+    workspace.matterhornWorkspaceName?.trim() ||
     workspace.name?.trim() ||
     workspace.path?.trim() ||
     t("session.workspace_fallback")
@@ -255,7 +255,7 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("internal_error") ||
     lower.includes("unexpected server error")
   ) {
-    return "OpenCode is unavailable for this workspace. Retry once it restarts, or restart OpenWork if the problem continues.";
+    return "OpenCode is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Work if the problem continues.";
   }
   return message;
 }
@@ -281,7 +281,7 @@ function useQueryCacheState<T>(queryKey: readonly unknown[] | null, fallback: T)
 }
 
 function mergeRouteWorkspaces(
-  serverWorkspaces: OpenworkWorkspaceInfo[],
+  serverWorkspaces: MatterhornWorkspaceInfo[],
   desktopWorkspaces: RouteWorkspace[],
 ): RouteWorkspace[] {
   const desktopById = new Map(desktopWorkspaces.map((workspace) => [workspace.id, workspace]));
@@ -293,7 +293,7 @@ function mergeRouteWorkspaces(
   );
 
   // If a server workspace's id matches a desktop workspace marked as remote,
-  // skip the server's view entirely. The local OpenWork server may have stale
+  // skip the server's view entirely. The local Matterhorn Work server may have stale
   // registrations from earlier (buggy) activate calls that show up here as
   // `workspaceType: "local"`, which would otherwise clobber the desktop's
   // remote routing fields and send workspace-scoped requests back to the
@@ -485,7 +485,7 @@ export function SessionRoute() {
 
   const { markRouteReady: markBootRouteReady } = useBootState();
   const [loading, setLoading] = useState(true);
-  const [client, setClient] = useState<OpenworkServerClient | null>(null);
+  const [client, setClient] = useState<MatterhornServerClient | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
   const [workspaces, setWorkspaces] = useState<RouteWorkspace[]>([]);
@@ -609,7 +609,7 @@ export function SessionRoute() {
   // options for whichever model is currently selected so the composer's
   // behavior pill actually shows its options (bug: was empty before).
   const [providerCatalog, setProviderCatalog] = useState<Record<string, Record<string, any>>>({});
-  const [openworkServerHostInfoState, setOpenworkServerHostInfoState] = useState<OpenworkServerInfo | null>(null);
+  const [matterhornServerHostInfoState, setOpenworkServerHostInfoState] = useState<MatterhornServerInfo | null>(null);
   useReactRenderWatchdog("SessionRoute", {
     selectedSessionId,
     selectedWorkspaceId,
@@ -619,20 +619,20 @@ export function SessionRoute() {
     commandPaletteOpen,
     modelPickerOpen,
   });
-  const [openworkServerSettingsVersion, setOpenworkServerSettingsVersion] = useState(0);
+  const [matterhornServerSettingsVersion, setOpenworkServerSettingsVersion] = useState(0);
   const [engineReloadVersion, setEngineReloadVersion] = useState(0);
   const [routeEngineInfo, setRouteEngineInfo] = useState<EngineInfo | null>(null);
   const reconnectAttemptedWorkspaceIdRef = useRef("");
 
-  const openworkServerSettings = useMemo(
-    () => readOpenworkServerSettings(),
-    [openworkServerSettingsVersion],
+  const matterhornServerSettings = useMemo(
+    () => readMatterhornServerSettings(),
+    [matterhornServerSettingsVersion],
   );
 
   const shareWorkspaceState = useShareWorkspaceState({
     workspaces,
-    openworkServerHostInfo: openworkServerHostInfoState,
-    openworkServerSettings,
+    matterhornServerHostInfo: matterhornServerHostInfoState,
+    matterhornServerSettings,
     engineInfo: routeEngineInfo,
     exportWorkspaceBusy: false,
     openLink: (url) => platform.openLink(url),
@@ -869,7 +869,7 @@ export function SessionRoute() {
         }
       }
 
-      const { normalizedBaseUrl, resolvedToken, resolvedHostToken, hostInfo } = await resolveOpenworkConnection();
+      const { normalizedBaseUrl, resolvedToken, resolvedHostToken, hostInfo } = await resolveMatterhornConnection();
       setOpenworkServerHostInfoState(hostInfo);
       if (!normalizedBaseUrl || !resolvedToken) {
         // Keep `localServerRef` in lockstep with the disconnected state.
@@ -898,12 +898,12 @@ export function SessionRoute() {
       // local workspaces => sidebar gets stuck in "loading" forever.
       localServerRef.current = { baseUrl: normalizedBaseUrl, token: resolvedToken };
 
-      const openworkClient = createOpenworkServerClient({
+      const matterhornClient = createMatterhornServerClient({
         baseUrl: normalizedBaseUrl,
         token: resolvedToken,
         hostToken: resolvedHostToken || undefined,
       });
-      const list = await openworkClient.listWorkspaces();
+      const list = await matterhornClient.listWorkspaces();
       const nextWorkspaces = orderRouteWorkspaces(
         mergeRouteWorkspaces(list.items, desktopWorkspaces),
         workspaceOrderIdsRef.current,
@@ -938,7 +938,7 @@ export function SessionRoute() {
         if (match?.workspaceId) nextWorkspaceId = match.workspaceId;
       }
 
-      setClient(openworkClient);
+      setClient(matterhornClient);
       setBaseUrl(normalizedBaseUrl);
       setToken(resolvedToken);
       setWorkspaces(nextWorkspaces);
@@ -1023,7 +1023,7 @@ export function SessionRoute() {
   }, [loadWorkspaceSessionsInBackground, markBootRouteReady, routeWorkspaceId, selectedSessionId]);
 
   const remoteAccessRestart = useRemoteAccessRestart({
-    isEnabled: () => openworkServerSettings.remoteAccessEnabled === true,
+    isEnabled: () => matterhornServerSettings.remoteAccessEnabled === true,
     onHostInfo: setOpenworkServerHostInfoState,
     onSettingsChanged: () => setOpenworkServerSettingsVersion((value) => value + 1),
   });
@@ -1419,7 +1419,7 @@ export function SessionRoute() {
     if (!workspaceId || reconnectAttemptedWorkspaceIdRef.current === workspaceId) return;
     reconnectAttemptedWorkspaceIdRef.current = workspaceId;
 
-    void ensureDesktopLocalOpenworkConnection({
+    void ensureDesktopLocalMatterhornConnection({
       route: "session",
       workspace: selectedWorkspace,
       allWorkspaces: workspaces,
@@ -1432,7 +1432,7 @@ export function SessionRoute() {
   const selectedWorkspaceRoot = selectedWorkspace?.path?.trim() || "";
   // Single source of truth for the selected workspace's server URL/token/id.
   // For remote workspaces this is the worker that owns the workspace; for
-  // local workspaces it's the user's local OpenWork server.
+  // local workspaces it's the user's local Matterhorn Work server.
   const selectedWorkspaceEndpoint = useMemo(
     () => resolveWorkspaceEndpoint(selectedWorkspace, { baseUrl, token }),
     [baseUrl, selectedWorkspace, token],
@@ -1536,11 +1536,11 @@ export function SessionRoute() {
             : emptyWorkspaceDisplay,
         selectedWorkspaceRoot: () => sessionProviderAuthStateRef.current.selectedWorkspaceRoot,
         runtimeWorkspaceId: () => sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint?.workspaceId ?? null,
-        openworkServer: {
+        matterhornServer: {
           getSnapshot: () => ({
-            openworkServerStatus: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint ? "connected" : "disconnected",
-            openworkServerClient: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint?.client ?? null,
-            openworkServerCapabilities: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint
+            matterhornServerStatus: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint ? "connected" : "disconnected",
+            matterhornServerClient: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint?.client ?? null,
+            matterhornServerCapabilities: sessionProviderAuthStateRef.current.selectedWorkspaceEndpoint
               ? {
                   config: { read: true, write: true },
                 }
@@ -1975,7 +1975,7 @@ export function SessionRoute() {
     }
 
     // Note: do NOT include `client`, `workspaceId`, `sessionId`,
-    // `opencodeBaseUrl`, or `openworkToken` here. SessionPage forwards those
+    // `opencodeBaseUrl`, or `matterhornToken` here. SessionPage forwards those
     // explicitly to SessionSurface from the per-workspace endpoint resolved
     // by `resolveWorkspaceEndpoint`. If we leak them in here, the spread of
     // `surfaceProps` in SessionPage overrides those correct values with the
@@ -2029,10 +2029,10 @@ export function SessionRoute() {
         }
 
         const parts = await draftToParts(draft, selectedWorkspaceRoot);
-        const envRuntimeKey = buildOpenworkEnvRuntimeKey({
+        const envRuntimeKey = buildMatterhornEnvRuntimeKey({
           baseUrl: client?.baseUrl ?? null,
-          pid: openworkServerHostInfoState?.pid ?? null,
-          port: openworkServerHostInfoState?.port ?? null,
+          pid: matterhornServerHostInfoState?.pid ?? null,
+          port: matterhornServerHostInfoState?.port ?? null,
         });
         const envSystemContext = await buildOpenworkEnvSystemContext(client, {
           cacheKey: selectedSessionId,
@@ -2462,7 +2462,7 @@ export function SessionRoute() {
     selectedWorkspaceRoot,
     selectedSessionId,
     canCreateTask,
-    openworkClient: client,
+    matterhornClient: client,
     opencodeClient,
     navigateToSession: navigateToSessionForControl,
     navigateToSessionRoot: navigateToSessionRootForControl,
@@ -2471,7 +2471,7 @@ export function SessionRoute() {
     refreshRouteState,
   });
 
-  const commandPaletteControlAction = useMemo<OpenworkControlAction>(() => ({
+  const commandPaletteControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "command_palette.open",
     label: "Open the command palette",
     description: "Open the in-app command palette so the next choice is visible.",
@@ -2582,7 +2582,7 @@ export function SessionRoute() {
         const workspacePath = targetWorkspace?.path?.trim() || folder;
         const session = baseUrl && token
           ? unwrap(await createClient(
-              `${(buildOpenworkWorkspaceBaseUrl(baseUrl, targetWorkspaceId) ?? baseUrl).replace(/\/+$/, "")}/opencode`,
+              `${(buildMatterhornWorkspaceBaseUrl(baseUrl, targetWorkspaceId) ?? baseUrl).replace(/\/+$/, "")}/opencode`,
               workspacePath || undefined,
               { token, mode: "openwork" },
             ).session.create({ directory: workspacePath || undefined }))
@@ -2612,20 +2612,20 @@ export function SessionRoute() {
   }, [client, local, navigateToWorkspaceSession, refreshRouteState, rememberPendingCreatedSession]);
 
   const handleCreateRemoteWorkspace = useCallback(async (input: {
-    openworkHostUrl?: string | null;
-    openworkToken?: string | null;
+    matterhornHostUrl?: string | null;
+    matterhornToken?: string | null;
     directory?: string | null;
     displayName?: string | null;
   }) => {
-    const baseUrlValue = input.openworkHostUrl?.trim() ?? "";
+    const baseUrlValue = input.matterhornHostUrl?.trim() ?? "";
     if (!baseUrlValue) return false;
     setCreateWorkspaceRemoteBusy(true);
     setCreateWorkspaceRemoteError(null);
     try {
       const list = await workspaceCreateRemote({
         baseUrl: baseUrlValue,
-        openworkHostUrl: baseUrlValue,
-        openworkToken: input.openworkToken?.trim() || null,
+        matterhornHostUrl: baseUrlValue,
+        matterhornToken: input.matterhornToken?.trim() || null,
         displayName: input.displayName?.trim() || null,
         directory: input.directory?.trim() || null,
         remoteType: "openwork",
@@ -2664,7 +2664,7 @@ export function SessionRoute() {
         sessionId={selectedSessionId}
         activeSessionIds={activeSelectedWorkspaceSessionIds}
         opencodeBaseUrl={opencodeBaseUrl}
-        openworkToken={selectedWorkspaceServerToken}
+        matterhornToken={selectedWorkspaceServerToken}
         onSessionUpdated={handleRuntimeSessionUpdated}
       />
     ) : null}
@@ -2683,9 +2683,9 @@ export function SessionRoute() {
       opencodeBaseUrl={opencodeBaseUrl}
       workspaces={workspaces}
       clientConnected={canCreateTask}
-      openworkServerStatus={client ? "connected" : "disconnected"}
-      openworkServerClient={selectedWorkspaceEndpoint?.client ?? client}
-      openworkServerToken={selectedWorkspaceServerToken}
+      matterhornServerStatus={client ? "connected" : "disconnected"}
+      matterhornServerClient={selectedWorkspaceEndpoint?.client ?? client}
+      matterhornServerToken={selectedWorkspaceServerToken}
       developerMode={typeof window !== "undefined" && window.localStorage.getItem("openwork.developerMode") === "1"}
       headerStatus={canCreateTask ? t("status.connected") : t("session.loading_detail")}
       busyHint={effectiveLoading ? t("session.loading_detail") : null}
@@ -2765,7 +2765,7 @@ export function SessionRoute() {
             void workspaceSetSelected(workspaceId).catch(() => undefined);
             void workspaceSetRuntimeActive(workspaceId).catch(() => undefined);
           }
-          // Tell the OpenWork server this workspace is now active so it can
+          // Tell the Matterhorn Work server this workspace is now active so it can
           // emit a config reload event that the OpenCode engine picks up.
           // Without this, the permissions from opencode.jsonc are never
           // applied on the workspace the user is already on at launch. See
@@ -2864,7 +2864,7 @@ export function SessionRoute() {
               remoteAccess:
                 isDesktopRuntime() && shareWorkspaceState.shareWorkspace?.workspaceType === "local"
                   ? {
-                      enabled: openworkServerSettings.remoteAccessEnabled === true,
+                      enabled: matterhornServerSettings.remoteAccessEnabled === true,
                       busy: remoteAccessRestart.busy,
                       error: remoteAccessRestart.error,
                       status: remoteAccessRestart.status,

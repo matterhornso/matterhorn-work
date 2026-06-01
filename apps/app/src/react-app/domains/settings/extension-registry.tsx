@@ -2,14 +2,14 @@
 import type { ReactNode } from "react";
 import type { McpDirectoryInfo } from "../../../app/constants";
 import { extensionContribution } from "../../../app/extensions";
-import type { OpenworkServerClient } from "../../../app/lib/openwork-server";
+import type { MatterhornServerClient } from "../../../app/lib/matterhorn-server";
 
 /**
  * Context bag that the settings route passes to extension config factories.
  * Each extension picks what it needs; unused fields are ignored.
  */
 export type ExtensionConfigContext = {
-  openworkServerClient?: OpenworkServerClient | null;
+  matterhornServerClient?: MatterhornServerClient | null;
   extensionConnections?: Record<string, boolean>;
   onExtensionConnectionChange?: (extensionId: string, connected: boolean) => void;
   computerUse?: {
@@ -53,10 +53,10 @@ export type ExtensionConfigFactory = (ctx: ExtensionConfigContext) => ReactNode;
 
 export type ExtensionRuntimeContext = Pick<
   ExtensionConfigContext,
-  "openworkServerClient" | "extensionConnections" | "onExtensionConnectionChange"
+  "matterhornServerClient" | "extensionConnections" | "onExtensionConnectionChange"
 >;
 
-export type OpenWorkExtensionRuntime = {
+export type MatterhornExtensionRuntime = {
   id: string;
   settingsPanel?: ExtensionConfigFactory;
   settingsPanelRefs?: string[];
@@ -64,13 +64,13 @@ export type OpenWorkExtensionRuntime = {
 };
 
 const registry = new Map<string, ExtensionConfigFactory>();
-const runtimeRegistry = new Map<string, OpenWorkExtensionRuntime>();
+const runtimeRegistry = new Map<string, MatterhornExtensionRuntime>();
 
 export function registerExtensionConfig(id: string, factory: ExtensionConfigFactory) {
   registry.set(id, factory);
 }
 
-export function registerExtensionRuntime(runtime: OpenWorkExtensionRuntime) {
+export function registerExtensionRuntime(runtime: MatterhornExtensionRuntime) {
   runtimeRegistry.set(runtime.id, runtime);
   if (runtime.settingsPanel) {
     registerExtensionConfig(runtime.id, runtime.settingsPanel);

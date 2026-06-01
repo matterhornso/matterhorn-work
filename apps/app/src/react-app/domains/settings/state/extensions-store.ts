@@ -32,18 +32,18 @@ import {
   readOpencodeConfig,
   revealDesktopItemInDir,
   uninstallSkill as uninstallSkillCommand,
-  workspaceOpenworkRead,
-  workspaceOpenworkWrite,
+  workspaceMatterhornRead,
+  workspaceMatterhornWrite,
   writeLocalSkill,
   writeOpencodeConfig,
   type OpencodeConfigFile,
 } from "../../../../app/lib/desktop";
 import type {
-  OpenworkHubRepo,
-  OpenworkServerCapabilities,
-  OpenworkServerClient,
-  OpenworkServerStatus,
-} from "../../../../app/lib/openwork-server";
+  MatterhornHubRepo,
+  MatterhornServerCapabilities,
+  MatterhornServerClient,
+  MatterhornServerStatus,
+} from "../../../../app/lib/matterhorn-server";
 import {
   createDenClient,
   fetchDenOrgSkillsCatalog,
@@ -61,17 +61,17 @@ import {
   type CloudImportedSkill,
   type CloudImportedSkillHub,
 } from "../../../../app/cloud/import-state";
-import type { OpenworkServerStore } from "../../connections/openwork-server-store";
+import type { MatterhornServerStore } from "../../connections/matterhorn-server-store";
 
 const OPENCODE_SKILL_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const OPENCODE_MCP_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 const OPENCODE_MCP_IMPORT_PATH_PREFIX = "opencode.jsonc#mcp.";
 const DEFAULT_HUB_REPO: HubSkillRepo = {
   owner: "different-ai",
-  repo: "openwork-hub",
+  repo: "matterhorn-hub",
   ref: "main",
 };
-const HUB_REPOS_STORAGE_KEY = "openwork.skills.hubRepos.v1";
+const MATTERHORN_HUB_REPOS_STORAGE_KEY = "matterhorn.skills.hubRepos.v1";
 
 type SetStateAction<T> = T | ((current: T) => T);
 
@@ -265,11 +265,11 @@ export function createExtensionsStore(options: {
   selectedWorkspaceId: () => string;
   selectedWorkspaceRoot: () => string;
   workspaceType: () => "local" | "remote";
-  openworkServer: OpenworkServerStore;
-  openworkServerConnection?: () => {
-    openworkServerClient: OpenworkServerClient | null;
-    openworkServerStatus: OpenworkServerStatus;
-    openworkServerCapabilities: OpenworkServerCapabilities | null;
+  matterhornServer: MatterhornServerStore;
+  matterhornServerConnection?: () => {
+    matterhornServerClient: MatterhornServerClient | null;
+    matterhornServerStatus: MatterhornServerStatus;
+    matterhornServerCapabilities: MatterhornServerCapabilities | null;
   };
   runtimeWorkspaceId: () => string | null;
   setBusy: (value: boolean) => void;
@@ -282,7 +282,7 @@ export function createExtensionsStore(options: {
 
   let disposed = false;
   let started = false;
-  let stopOpenworkSubscription: (() => void) | null = null;
+  let stopMatterhornSubscription: (() => void) | null = null;
   let stopDenSessionListener: (() => void) | null = null;
   let lastWorkspaceContextKey = "";
   let snapshot: ExtensionsStoreSnapshot;
@@ -356,15 +356,15 @@ export function createExtensionsStore(options: {
     return `${workspaceType}:${workspaceId}:${root}:${runtimeWorkspaceId}`;
   };
 
-  const getOpenworkServerSnapshot = () => {
-    const snapshot = options.openworkServer.getSnapshot();
-    const connection = options.openworkServerConnection?.();
-    if (!connection?.openworkServerClient) return snapshot;
+  const getMatterhornServerSnapshot = () => {
+    const snapshot = options.matterhornServer.getSnapshot();
+    const connection = options.matterhornServerConnection?.();
+    if (!connection?.matterhornServerClient) return snapshot;
     return {
       ...snapshot,
-      openworkServerClient: connection.openworkServerClient,
-      openworkServerStatus: connection.openworkServerStatus,
-      openworkServerCapabilities: connection.openworkServerCapabilities,
+      matterhornServerClient: connection.matterhornServerClient,
+      matterhornServerStatus: connection.matterhornServerStatus,
+      matterhornServerCapabilities: connection.matterhornServerCapabilities,
     };
   };
 
@@ -450,49 +450,49 @@ export function createExtensionsStore(options: {
     return next;
   };
 
-  const readWorkspaceOpenworkConfigRecord = async (): Promise<Record<string, unknown>> => {
+  const readWorkspaceMatterhornConfigRecord = async (): Promise<Record<string, unknown>> => {
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.config?.read;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.config?.read;
 
-    if (canUseOpenworkServer) {
-      const config = await openworkClient.getConfig(openworkWorkspaceId);
+    if (canUseMatterhornServer) {
+      const config = await matterhornClient.getConfig(matterhornWorkspaceId);
       return config.openwork ?? {};
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
-      return await workspaceOpenworkRead({ workspacePath: root }) as unknown as Record<string, unknown>;
+      return await workspaceMatterhornRead({ workspacePath: root }) as unknown as Record<string, unknown>;
     }
 
     return {};
   };
 
-  const writeWorkspaceOpenworkConfigRecord = async (config: Record<string, unknown>) => {
+  const writeWorkspaceMatterhornConfigRecord = async (config: Record<string, unknown>) => {
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.config?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.config?.write;
 
-    if (canUseOpenworkServer) {
-      await openworkClient.patchConfig(openworkWorkspaceId, { openwork: config });
+    if (canUseMatterhornServer) {
+      await matterhornClient.patchConfig(matterhornWorkspaceId, { openwork: config });
       return true;
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
-      const result = (await workspaceOpenworkWrite({
+      const result = (await workspaceMatterhornWrite({
         workspacePath: root,
         config: config as never,
       })) as { ok: boolean; stderr?: string; stdout?: string };
@@ -507,7 +507,7 @@ export function createExtensionsStore(options: {
 
   const refreshImportedCloudSkillHubs = async () => {
     try {
-      const config = await readWorkspaceOpenworkConfigRecord();
+      const config = await readWorkspaceMatterhornConfigRecord();
       const cloudImports = readWorkspaceCloudImports(config);
       setStateField("importedCloudSkillHubs", cloudImports.skillHubs);
       return cloudImports.skillHubs;
@@ -519,7 +519,7 @@ export function createExtensionsStore(options: {
 
   const refreshImportedCloudSkills = async () => {
     try {
-      const config = await readWorkspaceOpenworkConfigRecord();
+      const config = await readWorkspaceMatterhornConfigRecord();
       const cloudImports = readWorkspaceCloudImports(config);
       setStateField("importedCloudSkills", cloudImports.skills);
       return cloudImports.skills;
@@ -531,7 +531,7 @@ export function createExtensionsStore(options: {
 
   const refreshImportedCloudPlugins = async () => {
     try {
-      const config = await readWorkspaceOpenworkConfigRecord();
+      const config = await readWorkspaceMatterhornConfigRecord();
       const cloudImports = readWorkspaceCloudImports(config);
       setStateField("importedCloudPlugins", cloudImports.plugins);
       return cloudImports.plugins;
@@ -542,43 +542,43 @@ export function createExtensionsStore(options: {
   };
 
   const persistImportedCloudSkillHubs = async (nextSkillHubs: Record<string, CloudImportedSkillHub>) => {
-    const config = await readWorkspaceOpenworkConfigRecord();
+    const config = await readWorkspaceMatterhornConfigRecord();
     const cloudImports = readWorkspaceCloudImports(config);
     const nextConfig = withWorkspaceCloudImports(config, {
       ...cloudImports,
       skillHubs: nextSkillHubs,
     });
-    const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
+    const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud skill hubs.");
+      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud skill hubs.");
     }
     setStateField("importedCloudSkillHubs", nextSkillHubs);
   };
 
   const persistImportedCloudSkills = async (nextSkills: Record<string, CloudImportedSkill>) => {
-    const config = await readWorkspaceOpenworkConfigRecord();
+    const config = await readWorkspaceMatterhornConfigRecord();
     const cloudImports = readWorkspaceCloudImports(config);
     const nextConfig = withWorkspaceCloudImports(config, {
       ...cloudImports,
       skills: nextSkills,
     });
-    const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
+    const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud skills.");
+      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud skills.");
     }
     setStateField("importedCloudSkills", nextSkills);
   };
 
   const persistImportedCloudPlugins = async (nextPlugins: Record<string, CloudImportedPlugin>) => {
-    const config = await readWorkspaceOpenworkConfigRecord();
+    const config = await readWorkspaceMatterhornConfigRecord();
     const cloudImports = readWorkspaceCloudImports(config);
     const nextConfig = withWorkspaceCloudImports(config, {
       ...cloudImports,
       plugins: nextPlugins,
     });
-    const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
+    const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
-      throw new Error("OpenWork server unavailable. Connect to manage imported cloud plugins.");
+      throw new Error("Matterhorn Work server unavailable. Connect to manage imported cloud plugins.");
     }
     setStateField("importedCloudPlugins", nextPlugins);
   };
@@ -605,17 +605,17 @@ export function createExtensionsStore(options: {
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
     const root = options.selectedWorkspaceRoot().trim();
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.write;
 
-    if (canUseOpenworkServer) {
-      await openworkClient.upsertSkill(openworkWorkspaceId, {
+    if (canUseMatterhornServer) {
+      await matterhornClient.upsertSkill(matterhornWorkspaceId, {
         name,
         content,
         description,
@@ -624,7 +624,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("OpenWork server unavailable. Connect to import skills.");
+      throw new Error("Matterhorn Work server unavailable. Connect to import skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -679,22 +679,22 @@ export function createExtensionsStore(options: {
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
     const root = options.selectedWorkspaceRoot().trim();
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.write;
 
-    if (canUseOpenworkServer) {
-      await openworkClient.deleteSkill(openworkWorkspaceId, name);
+    if (canUseMatterhornServer) {
+      await matterhornClient.deleteSkill(matterhornWorkspaceId, name);
       return;
     }
 
     if (isRemoteWorkspace) {
-      throw new Error("OpenWork server unavailable. Connect to remove skills.");
+      throw new Error("Matterhorn Work server unavailable. Connect to remove skills.");
     }
 
     if (!isDesktopRuntime()) {
@@ -902,35 +902,35 @@ export function createExtensionsStore(options: {
   };
 
   const upsertPluginMcpConfig = async (name: string, config: Record<string, unknown>) => {
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
     if (
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.mcp?.write
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.mcp?.write
     ) {
-      await openworkClient.addMcp(openworkWorkspaceId, { name, config });
+      await matterhornClient.addMcp(matterhornWorkspaceId, { name, config });
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to import MCP servers into this workspace.");
+    throw new Error("Matterhorn Work server unavailable. Connect to import MCP servers into this workspace.");
   };
 
   const deletePluginMcpConfig = async (name: string) => {
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
     if (
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.mcp?.write
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.mcp?.write
     ) {
-      await openworkClient.removeMcp(openworkWorkspaceId, name);
+      await matterhornClient.removeMcp(matterhornWorkspaceId, name);
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to remove imported MCP servers from this workspace.");
+    throw new Error("Matterhorn Work server unavailable. Connect to remove imported MCP servers from this workspace.");
   };
 
   const pluginReloadReason = (objectType: string): ReloadReason => {
@@ -949,19 +949,19 @@ export function createExtensionsStore(options: {
   };
 
   const writePluginWorkspaceFile = async (path: string, content: string) => {
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
     if (
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      typeof openworkClient.writeWorkspaceFile === "function"
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      typeof matterhornClient.writeWorkspaceFile === "function"
     ) {
-      await openworkClient.writeWorkspaceFile(openworkWorkspaceId, { path, content, force: true });
+      await matterhornClient.writeWorkspaceFile(matterhornWorkspaceId, { path, content, force: true });
       return;
     }
-    throw new Error("OpenWork server unavailable. Connect to import plugin files into this workspace.");
+    throw new Error("Matterhorn Work server unavailable. Connect to import plugin files into this workspace.");
   };
 
   const applyCloudOrgPluginImport = async (
@@ -1057,7 +1057,7 @@ export function createExtensionsStore(options: {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem(
-        HUB_REPOS_STORAGE_KEY,
+        MATTERHORN_HUB_REPOS_STORAGE_KEY,
         JSON.stringify({ selected: state.hubRepo, repos: state.hubRepos }),
       );
     } catch {
@@ -1092,12 +1092,12 @@ export function createExtensionsStore(options: {
     const root = options.selectedWorkspaceRoot().trim();
     const repo = snapshot.hubRepo;
     const loadKey = `${root}::${repo ? hubRepoKey(repo) : "none"}`;
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkSnapshot.openworkServerCapabilities?.hub?.skills?.read;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornSnapshot.matterhornServerCapabilities?.hub?.skills?.read;
 
     if (loadKey !== hubSkillsLoadKey) {
       hubSkillsLoaded = false;
@@ -1123,8 +1123,8 @@ export function createExtensionsStore(options: {
         return;
       }
 
-      if (canUseOpenworkServer) {
-        const response = await openworkClient.listHubSkills({
+      if (canUseMatterhornServer) {
+        const response = await matterhornClient.listHubSkills({
           repo: {
             owner: repo.owner,
             repo: repo.repo,
@@ -1413,7 +1413,7 @@ export function createExtensionsStore(options: {
       const settings = readDenSettings();
       const token = settings.authToken?.trim() ?? "";
       const orgId = settings.activeOrgId?.trim() ?? "";
-      if (!token || !orgId) throw new Error("Sign in to OpenWork Cloud and choose an organization first.");
+      if (!token || !orgId) throw new Error("Sign in to Matterhorn Cloud and choose an organization first.");
       const client = createDenClient({ baseUrl: settings.baseUrl, apiBaseUrl: settings.apiBaseUrl, token });
       const resolved = await client.getOrgPluginResolved(orgId, plugin);
       const files = await applyCloudOrgPluginImport(marketplaceId, resolved);
@@ -1605,18 +1605,18 @@ export function createExtensionsStore(options: {
     if (!repo) return { ok: false, message: "Select a hub repo before installing skills." };
 
     const isRemoteWorkspace = options.workspaceType() === "remote";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.hub?.skills?.install;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.hub?.skills?.install;
 
-    if (!canUseOpenworkServer) {
-      if (isRemoteWorkspace) return { ok: false, message: "OpenWork server unavailable. Connect to install skills." };
-      return { ok: false, message: "Hub install requires OpenWork server." };
+    if (!canUseMatterhornServer) {
+      if (isRemoteWorkspace) return { ok: false, message: "Matterhorn Work server unavailable. Connect to install skills." };
+      return { ok: false, message: "Hub install requires Matterhorn Work server." };
     }
 
     options.setBusy(true);
@@ -1624,8 +1624,8 @@ export function createExtensionsStore(options: {
     setStateField("skillsStatus", null);
 
     try {
-      const repoOverride: OpenworkHubRepo = { owner: repo.owner, repo: repo.repo, ref: repo.ref };
-      const result = await openworkClient.installHubSkill(openworkWorkspaceId, trimmed, { repo: repoOverride });
+      const repoOverride: MatterhornHubRepo = { owner: repo.owner, repo: repo.repo, ref: repo.ref };
+      const result = await matterhornClient.installHubSkill(matterhornWorkspaceId, trimmed, { repo: repoOverride });
       await Promise.all([refreshSkills({ force: true }), refreshHubSkills({ force: true })]);
       if (!result?.ok) return { ok: false, message: "Install failed." };
       return { ok: true, message: `Installed ${trimmed}.` };
@@ -1735,14 +1735,14 @@ export function createExtensionsStore(options: {
     const root = options.selectedWorkspaceRoot().trim();
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.read;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.read;
 
     if (!root) {
       mutateState((current) => ({
@@ -1753,7 +1753,7 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (canUseOpenworkServer) {
+    if (canUseMatterhornServer) {
       if (root !== skillsRoot) skillsLoaded = false;
       if (!optionsOverride?.force && skillsLoaded) return;
       if (refreshSkillsInFlight) return;
@@ -1762,7 +1762,7 @@ export function createExtensionsStore(options: {
       refreshSkillsAborted = false;
       try {
         setStateField("skillsStatus", null);
-        const response = await openworkClient.listSkills(openworkWorkspaceId, { includeGlobal: isLocalWorkspace });
+        const response = await matterhornClient.listSkills(matterhornWorkspaceId, { includeGlobal: isLocalWorkspace });
         if (refreshSkillsAborted) return;
         const next: SkillCard[] = Array.isArray(response.items)
           ? response.items.map((entry) => ({
@@ -1838,7 +1838,7 @@ export function createExtensionsStore(options: {
       mutateState((current) => ({
         ...current,
         skills: [],
-        skillsStatus: "OpenWork server unavailable. Connect to load skills.",
+        skillsStatus: "Matterhorn Work server unavailable. Connect to load skills.",
       }));
       return;
     }
@@ -1893,14 +1893,14 @@ export function createExtensionsStore(options: {
   async function refreshPlugins(scopeOverride?: PluginScope) {
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.plugins?.read;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.plugins?.read;
 
     if (refreshPluginsInFlight) return;
     refreshPluginsInFlight = true;
@@ -1921,7 +1921,7 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (scope === "project" && canUseOpenworkServer) {
+    if (scope === "project" && canUseMatterhornServer) {
       mutateState((current) => ({
         ...current,
         pluginConfig: null,
@@ -1931,7 +1931,7 @@ export function createExtensionsStore(options: {
       try {
         mutateState((current) => ({ ...current, pluginStatus: null, sidebarPluginStatus: null }));
         if (refreshPluginsAborted) return;
-        const result = await openworkClient.listPlugins(openworkWorkspaceId, { includeGlobal: false });
+        const result = await matterhornClient.listPlugins(matterhornWorkspaceId, { includeGlobal: false });
         if (refreshPluginsAborted) return;
         const projectItems = result.items.filter((item) => item.scope === "project");
         const list = toProjectPluginListEntries(projectItems);
@@ -1970,12 +1970,12 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (!isLocalWorkspace && !canUseOpenworkServer) {
+    if (!isLocalWorkspace && !canUseMatterhornServer) {
       mutateState((current) => ({
         ...current,
-        pluginStatus: "OpenWork server unavailable. Connect to manage plugins.",
+        pluginStatus: "Matterhorn Work server unavailable. Connect to manage plugins.",
         pluginList: [],
-        sidebarPluginStatus: "Connect an OpenWork server to load plugins.",
+        sidebarPluginStatus: "Connect an Matterhorn Work server to load plugins.",
         sidebarPluginList: [],
       }));
       refreshPluginsInFlight = false;
@@ -2064,14 +2064,14 @@ export function createExtensionsStore(options: {
 
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.plugins?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.plugins?.write;
 
     if (!pluginName) {
       if (isManualInput) setStateField("pluginStatus", t("skills.enter_plugin_name"));
@@ -2083,10 +2083,10 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (snapshot.pluginScope === "project" && canUseOpenworkServer) {
+    if (snapshot.pluginScope === "project" && canUseMatterhornServer) {
       try {
         setStateField("pluginStatus", null);
-        await openworkClient.addPlugin(openworkWorkspaceId, pluginName);
+        await matterhornClient.addPlugin(matterhornWorkspaceId, pluginName);
         options.markReloadRequired?.("plugins", { type: "plugin", name: triggerName, action: "added" });
         if (isManualInput) setStateField("pluginInput", "");
         await refreshPlugins("project");
@@ -2101,8 +2101,8 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (!isLocalWorkspace && !canUseOpenworkServer) {
-      setStateField("pluginStatus", "OpenWork server unavailable. Connect to manage plugins.");
+    if (!isLocalWorkspace && !canUseMatterhornServer) {
+      setStateField("pluginStatus", "Matterhorn Work server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2158,24 +2158,24 @@ export function createExtensionsStore(options: {
     }
 
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.plugins?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.plugins?.write;
 
     if (snapshot.pluginScope !== "project" && !isLocalWorkspace) {
       setStateField("pluginStatus", "Global plugins are only available for local workers.");
       return;
     }
 
-    if (snapshot.pluginScope === "project" && canUseOpenworkServer) {
+    if (snapshot.pluginScope === "project" && canUseMatterhornServer) {
       try {
         setStateField("pluginStatus", null);
-        await openworkClient.removePlugin(openworkWorkspaceId, name);
+        await matterhornClient.removePlugin(matterhornWorkspaceId, name);
         options.markReloadRequired?.("plugins", { type: "plugin", name: triggerName, action: "removed" });
         await refreshPlugins("project");
       } catch (error) {
@@ -2189,8 +2189,8 @@ export function createExtensionsStore(options: {
       return;
     }
 
-    if (!isLocalWorkspace && !canUseOpenworkServer) {
-      setStateField("pluginStatus", "OpenWork server unavailable. Connect to manage plugins.");
+    if (!isLocalWorkspace && !canUseMatterhornServer) {
+      setStateField("pluginStatus", "Matterhorn Work server unavailable. Connect to manage plugins.");
       return;
     }
 
@@ -2271,21 +2271,21 @@ export function createExtensionsStore(options: {
   async function installSkillCreator(): Promise<{ ok: boolean; message: string }> {
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.write;
 
-    if (canUseOpenworkServer) {
+    if (canUseMatterhornServer) {
       options.setBusy(true);
       options.setError(null);
       setStateField("skillsStatus", t("skills.installing_skill_creator"));
       try {
-        await openworkClient.upsertSkill(openworkWorkspaceId, { name: "skill-creator", content: skillCreatorTemplate });
+        await matterhornClient.upsertSkill(matterhornWorkspaceId, { name: "skill-creator", content: skillCreatorTemplate });
         const message = t("skills.skill_creator_installed");
         setStateField("skillsStatus", message);
         options.markReloadRequired?.("skills", { type: "skill", name: "skill-creator", action: "added" });
@@ -2303,7 +2303,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      const message = "OpenWork server unavailable. Connect to install skills.";
+      const message = "Matterhorn Work server unavailable. Connect to install skills.";
       setStateField("skillsStatus", message);
       return { ok: false, message };
     }
@@ -2430,19 +2430,19 @@ export function createExtensionsStore(options: {
 
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.read;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.read;
 
-    if (canUseOpenworkServer) {
+    if (canUseMatterhornServer) {
       try {
         setStateField("skillsStatus", null);
-        const result = await openworkClient.getSkill(openworkWorkspaceId, trimmed, { includeGlobal: isLocalWorkspace });
+        const result = await matterhornClient.getSkill(matterhornWorkspaceId, trimmed, { includeGlobal: isLocalWorkspace });
         return { name: result.item.name, path: result.item.path, content: result.content };
       } catch (error) {
         setStateField("skillsStatus", error instanceof Error ? error.message : t("skills.failed_to_load"));
@@ -2451,7 +2451,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "OpenWork server unavailable. Connect to view skills.");
+      setStateField("skillsStatus", "Matterhorn Work server unavailable. Connect to view skills.");
       return null;
     }
     if (!isDesktopRuntime()) {
@@ -2484,21 +2484,21 @@ export function createExtensionsStore(options: {
 
     const isRemoteWorkspace = options.workspaceType() === "remote";
     const isLocalWorkspace = options.workspaceType() === "local";
-    const openworkSnapshot = getOpenworkServerSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkSnapshot.openworkServerCapabilities?.skills?.write;
+    const matterhornSnapshot = getMatterhornServerSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornSnapshot.matterhornServerCapabilities?.skills?.write;
 
-    if (canUseOpenworkServer) {
+    if (canUseMatterhornServer) {
       options.setBusy(true);
       options.setError(null);
       setStateField("skillsStatus", null);
       try {
-        await openworkClient.upsertSkill(openworkWorkspaceId, {
+        await matterhornClient.upsertSkill(matterhornWorkspaceId, {
           name: trimmed,
           content: input.content,
           description: input.description,
@@ -2516,7 +2516,7 @@ export function createExtensionsStore(options: {
     }
 
     if (isRemoteWorkspace) {
-      setStateField("skillsStatus", "OpenWork server unavailable. Connect to edit skills.");
+      setStateField("skillsStatus", "Matterhorn Work server unavailable. Connect to edit skills.");
       return;
     }
     if (!isDesktopRuntime()) {
@@ -2636,7 +2636,7 @@ export function createExtensionsStore(options: {
 
     if (typeof window !== "undefined") {
       try {
-        const raw = window.localStorage.getItem(HUB_REPOS_STORAGE_KEY);
+        const raw = window.localStorage.getItem(MATTERHORN_HUB_REPOS_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw) as { selected?: unknown; repos?: unknown[]; custom?: unknown[] };
           const storedRepos = Array.isArray(parsed?.repos)
@@ -2670,7 +2670,7 @@ export function createExtensionsStore(options: {
       stopDenSessionListener = () => window.removeEventListener("openwork-den-session-updated", onDenSessionUpdated);
     }
 
-    stopOpenworkSubscription = options.openworkServer.subscribe(() => {
+    stopMatterhornSubscription = options.matterhornServer.subscribe(() => {
       syncFromOptions();
     });
 
@@ -2682,8 +2682,8 @@ export function createExtensionsStore(options: {
     disposed = true;
     started = false;
     abortRefreshes();
-    stopOpenworkSubscription?.();
-    stopOpenworkSubscription = null;
+    stopMatterhornSubscription?.();
+    stopMatterhornSubscription = null;
     stopDenSessionListener?.();
     stopDenSessionListener = null;
     listeners.clear();

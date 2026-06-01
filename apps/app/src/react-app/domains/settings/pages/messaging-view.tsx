@@ -3,11 +3,11 @@ import { ArrowRight, ChevronRight, Copy, Link, RefreshCcw, Shield } from "lucide
 
 import { t } from "../../../../i18n";
 import type {
-  OpenworkOpenCodeRouterHealthSnapshot,
-  OpenworkOpenCodeRouterIdentityItem,
-  OpenworkOpenCodeRouterSendResult,
-  OpenworkServerStatus,
-} from "../../../../app/lib/openwork-server";
+  MatterhornOpenCodeRouterHealthSnapshot,
+  MatterhornOpenCodeRouterIdentityItem,
+  MatterhornOpenCodeRouterSendResult,
+  MatterhornServerStatus,
+} from "../../../../app/lib/matterhorn-server";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import { TextInput } from "../../../design-system/text-input";
@@ -21,16 +21,16 @@ export type MessagingViewExpandedChannel = MessagingChannel | null;
 export type MessagingViewProps = {
   busy: boolean;
   showHeader?: boolean;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerUrl: string;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerUrl: string;
   scopedOpenworkBaseUrl?: string;
   workspaceId: string | null;
   selectedWorkspaceRoot: string;
   refreshing: boolean;
-  openworkReconnectBusy: boolean;
+  matterhornReconnectBusy: boolean;
   reconnectStatus: string | null;
   reconnectError: string | null;
-  health: OpenworkOpenCodeRouterHealthSnapshot | null;
+  health: MatterhornOpenCodeRouterHealthSnapshot | null;
   healthError: string | null;
   messagingEnabled: boolean;
   messagingSaving: boolean;
@@ -41,7 +41,7 @@ export type MessagingViewProps = {
   activeTab: MessagingViewTab;
   expandedChannel: MessagingViewExpandedChannel;
   telegram: {
-    identities: OpenworkOpenCodeRouterIdentityItem[];
+    identities: MatterhornOpenCodeRouterIdentityItem[];
     identitiesError: string | null;
     token: string;
     enabled: boolean;
@@ -52,7 +52,7 @@ export type MessagingViewProps = {
     pairingCode: string | null;
   };
   slack: {
-    identities: OpenworkOpenCodeRouterIdentityItem[];
+    identities: MatterhornOpenCodeRouterIdentityItem[];
     identitiesError: string | null;
     botToken: string;
     appToken: string;
@@ -79,7 +79,7 @@ export type MessagingViewProps = {
     busy: boolean;
     status: string | null;
     error: string | null;
-    result: OpenworkOpenCodeRouterSendResult | null;
+    result: MatterhornOpenCodeRouterSendResult | null;
   };
   modals: {
     messagingRiskOpen: boolean;
@@ -175,10 +175,10 @@ function formatLastActivityLabel(timestamp?: number | null) {
 }
 
 export function MessagingView(props: MessagingViewProps) {
-  const serverReady = props.openworkServerStatus === "connected";
+  const serverReady = props.matterhornServerStatus === "connected";
   const scopedWorkspaceReady = Boolean(props.workspaceId?.trim());
   const workspaceScopeLabel =
-    props.scopedOpenworkBaseUrl?.trim() || props.openworkServerUrl.trim() || t("identities.not_set");
+    props.scopedOpenworkBaseUrl?.trim() || props.matterhornServerUrl.trim() || t("identities.not_set");
   const defaultRoutingDirectory = props.selectedWorkspaceRoot.trim() || t("identities.not_set");
   const telegramBotLink = props.telegram.botUsername?.trim()
     ? `https://t.me/${props.telegram.botUsername.trim().replace(/^@+/, "")}`
@@ -215,9 +215,9 @@ export function MessagingView(props: MessagingViewProps) {
               variant="outline"
               size="sm"
               onClick={() => void props.onRepairAndReconnect()}
-              disabled={props.busy || props.openworkReconnectBusy}
+              disabled={props.busy || props.matterhornReconnectBusy}
             >
-              <RefreshCcw size={14} className={props.openworkReconnectBusy ? "animate-spin" : ""} />
+              <RefreshCcw size={14} className={props.matterhornReconnectBusy ? "animate-spin" : ""} />
               <span className="ml-1.5">{t("identities.repair_reconnect")}</span>
             </Button>
             <Button

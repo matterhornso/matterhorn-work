@@ -1,19 +1,19 @@
 import {
   isLoopbackOpenworkServerUrl,
-  normalizeOpenworkServerUrl,
-  readOpenworkServerSettings,
-} from "../../app/lib/openwork-server";
-import { openworkServerInfo, type OpenworkServerInfo } from "../../app/lib/desktop";
+  normalizeMatterhornServerUrl,
+  readMatterhornServerSettings,
+} from "../../app/lib/matterhorn-server";
+import { matterhornServerInfo, type MatterhornServerInfo } from "../../app/lib/desktop";
 import { isDesktopRuntime } from "../../app/utils";
 
-export type OpenworkConnectionSource = "desktop-runtime" | "stored-settings" | "empty";
+export type MatterhornConnectionSource = "desktop-runtime" | "stored-settings" | "empty";
 
-export type ResolvedOpenworkConnection = {
+export type ResolvedMatterhornConnection = {
   normalizedBaseUrl: string;
   resolvedToken: string;
   resolvedHostToken: string;
-  hostInfo: OpenworkServerInfo | null;
-  source: OpenworkConnectionSource;
+  hostInfo: MatterhornServerInfo | null;
+  source: MatterhornConnectionSource;
 };
 
 function hasUsableConnection(url: string, token: string) {
@@ -21,21 +21,21 @@ function hasUsableConnection(url: string, token: string) {
 }
 
 /**
- * Resolve the OpenWork server connection for routes that consume the server API.
+ * Resolve the Matterhorn Work server connection for routes that consume the server API.
  *
  * Local desktop-hosted servers expose ephemeral loopback ports and freshly
  * minted tokens on every boot, so live runtime info is the source of truth
  * there. Stored settings remain the fallback for remote/manual server
  * connections and for desktop cases where the runtime bridge is unavailable.
  */
-export async function resolveOpenworkConnection(): Promise<ResolvedOpenworkConnection> {
+export async function resolveMatterhornConnection(): Promise<ResolvedMatterhornConnection> {
   let staleDesktopRuntimeBaseUrl = "";
 
   if (isDesktopRuntime()) {
     try {
-      const info = await openworkServerInfo() as OpenworkServerInfo;
+      const info = await matterhornServerInfo() as MatterhornServerInfo;
       const normalizedBaseUrl =
-        normalizeOpenworkServerUrl(info.baseUrl ?? info.connectUrl ?? info.lanUrl ?? info.mdnsUrl ?? "") ??
+        normalizeMatterhornServerUrl(info.baseUrl ?? info.connectUrl ?? info.lanUrl ?? info.mdnsUrl ?? "") ??
         "";
       const resolvedToken = info.ownerToken?.trim() || info.clientToken?.trim() || "";
       if (info.running === true && hasUsableConnection(normalizedBaseUrl, resolvedToken)) {
@@ -53,8 +53,8 @@ export async function resolveOpenworkConnection(): Promise<ResolvedOpenworkConne
     }
   }
 
-  const settings = readOpenworkServerSettings();
-  const normalizedBaseUrl = normalizeOpenworkServerUrl(settings.urlOverride ?? "") ?? "";
+  const settings = readMatterhornServerSettings();
+  const normalizedBaseUrl = normalizeMatterhornServerUrl(settings.urlOverride ?? "") ?? "";
   const resolvedToken = settings.token?.trim() ?? "";
   const resolvedHostToken =
     normalizedBaseUrl && isLoopbackOpenworkServerUrl(normalizedBaseUrl)

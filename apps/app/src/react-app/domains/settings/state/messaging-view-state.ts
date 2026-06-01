@@ -2,15 +2,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  buildOpenworkWorkspaceBaseUrl,
-  OpenworkServerError,
-  type OpenworkOpenCodeRouterHealthSnapshot,
-  type OpenworkOpenCodeRouterIdentityItem,
-  type OpenworkOpenCodeRouterSendResult,
-  type OpenworkServerClient,
-  type OpenworkServerStatus,
-  type OpenworkWorkspaceFileContent,
-} from "../../../../app/lib/openwork-server";
+  buildMatterhornWorkspaceBaseUrl,
+  MatterhornServerError,
+  type MatterhornOpenCodeRouterHealthSnapshot,
+  type MatterhornOpenCodeRouterIdentityItem,
+  type MatterhornOpenCodeRouterSendResult,
+  type MatterhornServerClient,
+  type MatterhornServerStatus,
+  type MatterhornWorkspaceFileContent,
+} from "../../../../app/lib/matterhorn-server";
 import { t } from "../../../../i18n";
 import type {
   MessagingChannel,
@@ -34,7 +34,7 @@ Examples:
 `;
 
 function formatRequestError(error: unknown): string {
-  if (error instanceof OpenworkServerError) {
+  if (error instanceof MatterhornServerError) {
     return `${error.message} (${error.status})`;
   }
   return error instanceof Error ? error.message : String(error);
@@ -42,7 +42,7 @@ function formatRequestError(error: unknown): string {
 
 function isOpenCodeRouterSnapshot(
   value: unknown,
-): value is OpenworkOpenCodeRouterHealthSnapshot {
+): value is MatterhornOpenCodeRouterHealthSnapshot {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return (
@@ -55,7 +55,7 @@ function isOpenCodeRouterSnapshot(
 
 function isOpenCodeRouterIdentities(
   value: unknown,
-): value is { ok: boolean; items: OpenworkOpenCodeRouterIdentityItem[] } {
+): value is { ok: boolean; items: MatterhornOpenCodeRouterIdentityItem[] } {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return typeof record.ok === "boolean" && Array.isArray(record.items);
@@ -84,10 +84,10 @@ function readMessagingEnabledFromOpenworkConfig(value: unknown): boolean {
 
 type UseMessagingViewPropsOptions = {
   busy: boolean;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerUrl: string;
-  openworkServerClient: OpenworkServerClient | null;
-  openworkReconnectBusy: boolean;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerUrl: string;
+  matterhornServerClient: MatterhornServerClient | null;
+  matterhornReconnectBusy: boolean;
   reconnectOpenworkServer: () => Promise<boolean>;
   restartMessagingWorker: () => Promise<boolean>;
   workspaceId: string | null;
@@ -98,11 +98,11 @@ export function useMessagingViewProps(
   options: UseMessagingViewPropsOptions,
 ): MessagingViewProps {
   const [refreshing, setRefreshing] = useState(false);
-  const [health, setHealth] = useState<OpenworkOpenCodeRouterHealthSnapshot | null>(null);
+  const [health, setHealth] = useState<MatterhornOpenCodeRouterHealthSnapshot | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
-  const [telegramIdentities, setTelegramIdentities] = useState<OpenworkOpenCodeRouterIdentityItem[]>([]);
+  const [telegramIdentities, setTelegramIdentities] = useState<MatterhornOpenCodeRouterIdentityItem[]>([]);
   const [telegramIdentitiesError, setTelegramIdentitiesError] = useState<string | null>(null);
-  const [slackIdentities, setSlackIdentities] = useState<OpenworkOpenCodeRouterIdentityItem[]>([]);
+  const [slackIdentities, setSlackIdentities] = useState<MatterhornOpenCodeRouterIdentityItem[]>([]);
   const [slackIdentitiesError, setSlackIdentitiesError] = useState<string | null>(null);
 
   const [telegramToken, setTelegramToken] = useState("");
@@ -144,7 +144,7 @@ export function useMessagingViewProps(
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [sendResult, setSendResult] =
-    useState<OpenworkOpenCodeRouterSendResult | null>(null);
+    useState<MatterhornOpenCodeRouterSendResult | null>(null);
 
   const [reconnectStatus, setReconnectStatus] = useState<string | null>(null);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
@@ -165,13 +165,13 @@ export function useMessagingViewProps(
 
   const workspaceId = options.workspaceId?.trim() || null;
   const scopedOpenworkBaseUrl = useMemo(() => {
-    const baseUrl = options.openworkServerUrl.trim();
+    const baseUrl = options.matterhornServerUrl.trim();
     if (!baseUrl) return "";
-    return buildOpenworkWorkspaceBaseUrl(baseUrl, workspaceId) ?? baseUrl;
-  }, [options.openworkServerUrl, workspaceId]);
+    return buildMatterhornWorkspaceBaseUrl(baseUrl, workspaceId) ?? baseUrl;
+  }, [options.matterhornServerUrl, workspaceId]);
   const serverReady =
-    options.openworkServerStatus === "connected" &&
-    Boolean(options.openworkServerClient);
+    options.matterhornServerStatus === "connected" &&
+    Boolean(options.matterhornServerClient);
   const agentDirty = agentDraft !== agentContent;
 
   const resetAgentState = useCallback(() => {
@@ -195,7 +195,7 @@ export function useMessagingViewProps(
       setAgentError(t("identities.agent_worker_scope_unavailable"));
       return;
     }
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     setAgentLoading(true);
@@ -204,7 +204,7 @@ export function useMessagingViewProps(
       const result = (await client.readWorkspaceFile(
         id,
         OPENCODE_ROUTER_AGENT_FILE_PATH,
-      )) as OpenworkWorkspaceFileContent;
+      )) as MatterhornWorkspaceFileContent;
       const nextContent = result.content ?? "";
       setAgentExists(true);
       setAgentContent(nextContent);
@@ -213,7 +213,7 @@ export function useMessagingViewProps(
         typeof result.updatedAt === "number" ? result.updatedAt : null,
       );
     } catch (error) {
-      if (error instanceof OpenworkServerError && error.status === 404) {
+      if (error instanceof MatterhornServerError && error.status === 404) {
         setAgentExists(false);
         setAgentContent("");
         setAgentDraft("");
@@ -224,14 +224,14 @@ export function useMessagingViewProps(
     } finally {
       setAgentLoading(false);
     }
-  }, [agentLoading, options.openworkServerClient, resetAgentState, serverReady, workspaceId]);
+  }, [agentLoading, options.matterhornServerClient, resetAgentState, serverReady, workspaceId]);
 
   const createDefaultAgentFile = useCallback(async () => {
     if (agentSaving) return;
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     setAgentSaving(true);
@@ -254,7 +254,7 @@ export function useMessagingViewProps(
     } finally {
       setAgentSaving(false);
     }
-  }, [agentSaving, options.openworkServerClient, serverReady, workspaceId]);
+  }, [agentSaving, options.matterhornServerClient, serverReady, workspaceId]);
 
   useEffect(() => {
     if (!messagingEnabled) return;
@@ -281,7 +281,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     setAgentSaving(true);
@@ -300,7 +300,7 @@ export function useMessagingViewProps(
       );
       setAgentStatus(t("identities.agent_saved"));
     } catch (error) {
-      if (error instanceof OpenworkServerError && error.status === 409) {
+      if (error instanceof MatterhornServerError && error.status === 409) {
         setAgentError(t("identities.agent_file_changed"));
       } else {
         setAgentError(formatRequestError(error));
@@ -308,14 +308,14 @@ export function useMessagingViewProps(
     } finally {
       setAgentSaving(false);
     }
-  }, [agentBaseUpdatedAt, agentDraft, agentSaving, options.openworkServerClient, serverReady, workspaceId]);
+  }, [agentBaseUpdatedAt, agentDraft, agentSaving, options.matterhornServerClient, serverReady, workspaceId]);
 
   const sendTestMessage = useCallback(async () => {
     if (sendBusy) return;
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
     const text = sendText.trim();
     if (!text) return;
@@ -331,7 +331,7 @@ export function useMessagingViewProps(
         ...(sendDirectory.trim() ? { directory: sendDirectory.trim() } : {}),
         ...(sendPeerId.trim() ? { peerId: sendPeerId.trim() } : {}),
         ...(sendAutoBind ? { autoBind: true } : {}),
-      })) as OpenworkOpenCodeRouterSendResult;
+      })) as MatterhornOpenCodeRouterSendResult;
       setSendResult(result);
       const base = t("identities.dispatched_messages", undefined, {
         sent: result.sent,
@@ -346,7 +346,7 @@ export function useMessagingViewProps(
       setSendBusy(false);
     }
   }, [
-    options.openworkServerClient,
+    options.matterhornServerClient,
     sendAutoBind,
     sendBusy,
     sendChannel,
@@ -360,7 +360,7 @@ export function useMessagingViewProps(
   const refreshAll = useCallback(async (nextOptions?: { force?: boolean }) => {
     if (refreshing && !nextOptions?.force) return;
     if (!serverReady) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
     const id = workspaceId;
 
@@ -474,7 +474,7 @@ export function useMessagingViewProps(
     agentSaving,
     loadAgentFile,
     messagingEnabled,
-    options.openworkServerClient,
+    options.matterhornServerClient,
     refreshing,
     resetAgentState,
     serverReady,
@@ -488,7 +488,7 @@ export function useMessagingViewProps(
   }, [refreshAll]);
 
   const repairAndReconnect = useCallback(async () => {
-    if (options.openworkReconnectBusy) return;
+    if (options.matterhornReconnectBusy) return;
     setReconnectStatus(null);
     setReconnectError(null);
 
@@ -508,7 +508,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     setMessagingSaving(true);
@@ -534,14 +534,14 @@ export function useMessagingViewProps(
     } finally {
       setMessagingSaving(false);
     }
-  }, [messagingSaving, options.openworkServerClient, refreshAll, serverReady, workspaceId]);
+  }, [messagingSaving, options.matterhornServerClient, refreshAll, serverReady, workspaceId]);
 
   const disableMessagingModule = useCallback(async () => {
     if (messagingSaving) return;
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     setMessagingSaving(true);
@@ -567,7 +567,7 @@ export function useMessagingViewProps(
     } finally {
       setMessagingSaving(false);
     }
-  }, [messagingSaving, options.openworkServerClient, refreshAll, serverReady, workspaceId]);
+  }, [messagingSaving, options.matterhornServerClient, refreshAll, serverReady, workspaceId]);
 
   const restartMessagingWorker = useCallback(async () => {
     if (messagingRestartBusy) return;
@@ -597,7 +597,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     const token = telegramToken.trim();
@@ -659,7 +659,7 @@ export function useMessagingViewProps(
       setTelegramSaving(false);
     }
   }, [
-    options.openworkServerClient,
+    options.matterhornServerClient,
     refreshAll,
     serverReady,
     telegramEnabled,
@@ -673,7 +673,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
     if (!identityId.trim()) return;
 
@@ -702,7 +702,7 @@ export function useMessagingViewProps(
     } finally {
       setTelegramSaving(false);
     }
-  }, [options.openworkServerClient, refreshAll, serverReady, telegramSaving, workspaceId]);
+  }, [options.matterhornServerClient, refreshAll, serverReady, telegramSaving, workspaceId]);
 
   const copyTelegramPairingCode = useCallback(async () => {
     if (!telegramPairingCode) return;
@@ -719,7 +719,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
 
     const botToken = slackBotToken.trim();
@@ -756,7 +756,7 @@ export function useMessagingViewProps(
       setSlackSaving(false);
     }
   }, [
-    options.openworkServerClient,
+    options.matterhornServerClient,
     refreshAll,
     serverReady,
     slackAppToken,
@@ -771,7 +771,7 @@ export function useMessagingViewProps(
     if (!serverReady) return;
     const id = workspaceId;
     if (!id) return;
-    const client = options.openworkServerClient;
+    const client = options.matterhornServerClient;
     if (!client) return;
     if (!identityId.trim()) return;
 
@@ -798,7 +798,7 @@ export function useMessagingViewProps(
     } finally {
       setSlackSaving(false);
     }
-  }, [options.openworkServerClient, refreshAll, serverReady, slackSaving, workspaceId]);
+  }, [options.matterhornServerClient, refreshAll, serverReady, slackSaving, workspaceId]);
 
   useEffect(() => {
     setHealth(null);
@@ -840,13 +840,13 @@ export function useMessagingViewProps(
   return {
     busy: options.busy,
     showHeader: false,
-    openworkServerStatus: options.openworkServerStatus,
-    openworkServerUrl: options.openworkServerUrl,
+    matterhornServerStatus: options.matterhornServerStatus,
+    matterhornServerUrl: options.matterhornServerUrl,
     scopedOpenworkBaseUrl,
     workspaceId,
     selectedWorkspaceRoot: options.selectedWorkspaceRoot,
     refreshing,
-    openworkReconnectBusy: options.openworkReconnectBusy,
+    matterhornReconnectBusy: options.matterhornReconnectBusy,
     reconnectStatus,
     reconnectError,
     health,

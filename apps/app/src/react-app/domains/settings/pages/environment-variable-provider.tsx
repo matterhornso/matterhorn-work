@@ -1,11 +1,11 @@
 import { createContext, use, useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient, type UseMutateFunction } from "@tanstack/react-query";
 
-import type { OpenworkServerClient } from "@/app/lib/openwork-server";
+import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import {
-  readOpenworkEnvPendingChanges,
+  readMatterhornEnvPendingChanges,
   writeOpenworkEnvPendingChanges,
-} from "@/app/lib/openwork-env-runtime";
+} from "@/app/lib/matterhorn-env-runtime";
 import { t } from "@/i18n";
 import { useStatusToasts } from "../../shell-feedback/status-toasts";
 import { clearOpenworkEnvSystemContextCache } from "../../session/sync/env-context";
@@ -37,7 +37,7 @@ function validateKey(key: string): string | null {
 }
 
 type UseEnvironmentVariableListOptions = {
-  client: OpenworkServerClient | null;
+  client: MatterhornServerClient | null;
   isRemoteWorkspace: boolean;
   runtimeKey?: string | null;
 };
@@ -86,7 +86,7 @@ const EnvironmentVariableContext = createContext<EnvironmentVariableContextValue
 
 interface EnvironmentVariableProviderProps {
   children: React.ReactNode;
-  client: OpenworkServerClient | null;
+  client: MatterhornServerClient | null;
   runtimeKey?: string | null;
   onApplyChanges?: () => Promise<ApplyEnvironmentChangesResult>;
 }
@@ -97,7 +97,7 @@ export function EnvironmentVariableProvider({ children, client, runtimeKey, onAp
 
   const { data } = useQuery({
     queryKey: ["settings", "environment", "pending-changes", runtimeKey],
-    queryFn: () => readOpenworkEnvPendingChanges(runtimeKey),
+    queryFn: () => readMatterhornEnvPendingChanges(runtimeKey),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });

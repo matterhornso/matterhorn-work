@@ -1,9 +1,9 @@
 import { DEFAULT_DEN_BASE_URL, normalizeDenBaseUrl } from "./den";
-import { normalizeOpenworkServerUrl } from "./openwork-server";
+import { normalizeMatterhornServerUrl } from "./matterhorn-server";
 
 export type RemoteWorkspaceDefaults = {
-  openworkHostUrl?: string | null;
-  openworkToken?: string | null;
+  matterhornHostUrl?: string | null;
+  matterhornToken?: string | null;
   directory?: string | null;
   displayName?: string | null;
   autoConnect?: boolean;
@@ -40,9 +40,9 @@ export function parseRemoteConnectDeepLink(rawUrl: string): RemoteWorkspaceDefau
     return null;
   }
 
-  const hostUrlRaw = url.searchParams.get("openworkHostUrl") ?? url.searchParams.get("openworkUrl") ?? "";
-  const tokenRaw = url.searchParams.get("openworkToken") ?? url.searchParams.get("accessToken") ?? "";
-  const normalizedHostUrl = normalizeOpenworkServerUrl(hostUrlRaw);
+  const hostUrlRaw = url.searchParams.get("matterhornHostUrl") ?? url.searchParams.get("matterhornUrl") ?? "";
+  const tokenRaw = url.searchParams.get("matterhornToken") ?? url.searchParams.get("accessToken") ?? "";
+  const normalizedHostUrl = normalizeMatterhornServerUrl(hostUrlRaw);
   const token = tokenRaw.trim();
   if (!normalizedHostUrl || !token) {
     return null;
@@ -59,8 +59,8 @@ export function parseRemoteConnectDeepLink(rawUrl: string): RemoteWorkspaceDefau
   const autoConnect = ["1", "true", "yes", "on"].includes(autoConnectRaw.trim().toLowerCase());
 
   return {
-    openworkHostUrl: normalizedHostUrl,
-    openworkToken: token,
+    matterhornHostUrl: normalizedHostUrl,
+    matterhornToken: token,
     directory: null,
     displayName: displayName || null,
     autoConnect,
@@ -77,9 +77,9 @@ export function stripRemoteConnectQuery(rawUrl: string): string | null {
 
   let changed = false;
   for (const key of [
-    "openworkHostUrl",
-    "openworkUrl",
-    "openworkToken",
+    "matterhornHostUrl",
+    "matterhornUrl",
+    "matterhornToken",
     "accessToken",
     "workerId",
     "workerName",

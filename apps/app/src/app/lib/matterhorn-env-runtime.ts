@@ -30,7 +30,7 @@ function parsePendingChangesState(raw: string | null): PendingChangesState {
   }
 }
 
-export function buildOpenworkEnvRuntimeKey(input: {
+export function buildMatterhornEnvRuntimeKey(input: {
   baseUrl?: string | null;
   pid?: number | null;
   port?: number | null;
@@ -47,7 +47,7 @@ export function buildOpenworkEnvRuntimeKey(input: {
   return `${baseUrl || "openwork"}::${runtime || "runtime"}`;
 }
 
-export function readOpenworkEnvPendingChanges(runtimeKey?: string | null): boolean {
+export function readMatterhornEnvPendingChanges(runtimeKey?: string | null): boolean {
   const localStorage = getStorage("localStorage");
   const sessionStorage = getStorage("sessionStorage");
   const state = parsePendingChangesState(localStorage?.getItem(PENDING_CHANGES_KEY) ?? null);

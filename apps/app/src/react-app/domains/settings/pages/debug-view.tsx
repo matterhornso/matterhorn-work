@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 
 import type {
-  OpenworkAuditEntry,
-  OpenworkServerCapabilities,
-  OpenworkServerDiagnostics,
-} from "../../../../app/lib/openwork-server";
+  MatterhornAuditEntry,
+  MatterhornServerCapabilities,
+  MatterhornServerDiagnostics,
+} from "../../../../app/lib/matterhorn-server";
 import type { SandboxDebugProbeResult } from "../../../../app/lib/desktop";
 import type {
   OpencodeConnectStatus,
@@ -41,7 +41,7 @@ type RuntimeSummary = {
   appVersionLabel: string;
   appCommitLabel: string;
   opencodeVersionLabel: string;
-  openworkServerVersionLabel: string;
+  matterhornServerVersionLabel: string;
 };
 
 type StatusPill = {
@@ -120,11 +120,11 @@ export type DebugViewProps = {
   resetModalBusy: boolean;
   resetStatus: string | null;
   opencodeRestarting: boolean;
-  openworkServerRestarting: boolean;
+  matterhornServerRestarting: boolean;
   opencodeServiceStatus: ServiceStatus;
   openworkServiceStatus: ServiceStatus;
   opencodeLogStatus: string | null;
-  openworkLogStatus: string | null;
+  matterhornLogStatus: string | null;
   onCopyOpencodeLogs: () => void | Promise<void>;
   onExportOpencodeLogs: () => void | Promise<void>;
   onCopyOpenworkLogs: () => void | Promise<void>;
@@ -135,18 +135,18 @@ export type DebugViewProps = {
   engineCard: RuntimeServiceCard;
   opencodeConnectCard: OpenCodeConnectDebugCard;
   openworkCard: RuntimeServiceCard;
-  openworkServerDiagnostics: OpenworkServerDiagnostics | null;
+  matterhornServerDiagnostics: MatterhornServerDiagnostics | null;
   runtimeWorkspaceId: string | null;
-  openworkServerCapabilities: OpenworkServerCapabilities | null;
+  matterhornServerCapabilities: MatterhornServerCapabilities | null;
   pendingPermissions: unknown;
   events: unknown;
   workspaceDebugEvents: unknown;
   workspaceDebugEventsStatus: string | null;
   safeStringify: (value: unknown) => string;
   onClearWorkspaceDebugEvents: () => void | Promise<void>;
-  openworkAuditEntries: OpenworkAuditEntry[];
-  openworkAuditStatus: StatusPill;
-  openworkAuditError: string | null;
+  matterhornAuditEntries: MatterhornAuditEntry[];
+  matterhornAuditStatus: StatusPill;
+  matterhornAuditError: string | null;
   opencodeConnectStatus: OpencodeConnectStatus | null;
   opencodeDevModeEnabled: boolean;
   nukeConfigBusy: boolean;
@@ -154,7 +154,7 @@ export type DebugViewProps = {
   onNukeOpenworkAndOpencodeConfig: () => void | Promise<void>;
 };
 
-function formatActor(entry: OpenworkAuditEntry) {
+function formatActor(entry: MatterhornAuditEntry) {
   if (entry.actor.type === "host") return t("settings.audit_actor_host");
   if (entry.actor.clientId) return entry.actor.clientId;
   if (entry.actor.tokenHash) return entry.actor.tokenHash;
@@ -352,7 +352,7 @@ export function DebugView(props: DebugViewProps) {
           </div>
           <div>
             {t("settings.debug_openwork_server_version", {
-              version: props.runtimeSummary.openworkServerVersionLabel,
+              version: props.runtimeSummary.matterhornServerVersionLabel,
             })}
           </div>
         </div>
@@ -381,11 +381,11 @@ export function DebugView(props: DebugViewProps) {
             stdout={props.openworkCard.stdout ?? null}
             stderr={props.openworkCard.stderr ?? null}
             error={props.openworkCard.error ?? null}
-            restarting={props.openworkServerRestarting}
+            restarting={props.matterhornServerRestarting}
             restartLabel={t("settings.restart_openwork_server")}
             onRestart={props.onRestartOpenworkServer}
             serviceStatus={props.openworkServiceStatus}
-            logStatus={props.openworkLogStatus}
+            logStatus={props.matterhornLogStatus}
             onCopyLogs={props.onCopyOpenworkLogs}
             onExportLogs={props.onExportOpenworkLogs}
             isDesktop={isDesktop}
@@ -449,49 +449,49 @@ export function DebugView(props: DebugViewProps) {
           <div className={sectionTitleClass}>{t("settings.openwork_diagnostics_title")}</div>
           <div className={sectionDescClass}>
             <span className="font-mono text-[11px] text-dls-secondary">
-              {props.openworkServerDiagnostics?.version ?? "—"}
+              {props.matterhornServerDiagnostics?.version ?? "—"}
             </span>
           </div>
         </div>
 
-        {props.openworkServerDiagnostics ? (
+        {props.matterhornServerDiagnostics ? (
           <div className="grid gap-2 text-[12px] text-dls-secondary md:grid-cols-2">
-            <div>{t("settings.diag_started", { time: formatUptime(props.openworkServerDiagnostics.uptimeMs) })}</div>
+            <div>{t("settings.diag_started", { time: formatUptime(props.matterhornServerDiagnostics.uptimeMs) })}</div>
             <div>
               {t("settings.diag_read_only", {
-                value: props.openworkServerDiagnostics.readOnly ? "true" : "false",
+                value: props.matterhornServerDiagnostics.readOnly ? "true" : "false",
               })}
             </div>
             <div>
               {t("settings.diag_approval", {
-                mode: props.openworkServerDiagnostics.approval.mode,
-                ms: String(props.openworkServerDiagnostics.approval.timeoutMs),
+                mode: props.matterhornServerDiagnostics.approval.mode,
+                ms: String(props.matterhornServerDiagnostics.approval.timeoutMs),
               })}
             </div>
-            <div>{t("settings.diag_workspaces", { count: String(props.openworkServerDiagnostics.workspaceCount) })}</div>
+            <div>{t("settings.diag_workspaces", { count: String(props.matterhornServerDiagnostics.workspaceCount) })}</div>
             <div>
               {t("settings.diag_selected_workspace", {
-                id: props.openworkServerDiagnostics.selectedWorkspaceId ?? "—",
+                id: props.matterhornServerDiagnostics.selectedWorkspaceId ?? "—",
               })}
             </div>
             <div>
               {t("settings.diag_runtime_workspace", {
-                id: props.openworkServerDiagnostics.activeWorkspaceId ?? "—",
+                id: props.matterhornServerDiagnostics.activeWorkspaceId ?? "—",
               })}
             </div>
             <div>
               {t("settings.diag_config_path", {
-                path: props.openworkServerDiagnostics.server.configPath ?? t("settings.diag_default"),
+                path: props.matterhornServerDiagnostics.server.configPath ?? t("settings.diag_default"),
               })}
             </div>
             <div>
               {t("settings.diag_token_source", {
-                source: props.openworkServerDiagnostics.tokenSource.client,
+                source: props.matterhornServerDiagnostics.tokenSource.client,
               })}
             </div>
             <div>
               {t("settings.diag_host_token_source", {
-                source: props.openworkServerDiagnostics.tokenSource.host,
+                source: props.matterhornServerDiagnostics.tokenSource.host,
               })}
             </div>
           </div>
@@ -510,17 +510,17 @@ export function DebugView(props: DebugViewProps) {
                 : t("settings.worker_unresolved")}
             </div>
           </div>
-          {props.openworkServerCapabilities ? (
+          {props.matterhornServerCapabilities ? (
             <div className="grid gap-2 text-[12px] text-dls-secondary md:grid-cols-2">
-              <div>{t("settings.cap_skills", { value: formatCapability(props.openworkServerCapabilities.skills) })}</div>
-              <div>{t("settings.cap_plugins", { value: formatCapability(props.openworkServerCapabilities.plugins) })}</div>
-              <div>{t("settings.cap_mcp", { value: formatCapability(props.openworkServerCapabilities.mcp) })}</div>
-              <div>{t("settings.cap_commands", { value: formatCapability(props.openworkServerCapabilities.commands) })}</div>
-              <div>{t("settings.cap_config", { value: formatCapability(props.openworkServerCapabilities.config) })}</div>
+              <div>{t("settings.cap_skills", { value: formatCapability(props.matterhornServerCapabilities.skills) })}</div>
+              <div>{t("settings.cap_plugins", { value: formatCapability(props.matterhornServerCapabilities.plugins) })}</div>
+              <div>{t("settings.cap_mcp", { value: formatCapability(props.matterhornServerCapabilities.mcp) })}</div>
+              <div>{t("settings.cap_commands", { value: formatCapability(props.matterhornServerCapabilities.commands) })}</div>
+              <div>{t("settings.cap_config", { value: formatCapability(props.matterhornServerCapabilities.config) })}</div>
               <div>
                 {t("settings.cap_browser_tools", {
                   value: (() => {
-                    const browser = props.openworkServerCapabilities.toolProviders?.browser;
+                    const browser = props.matterhornServerCapabilities.toolProviders?.browser;
                     if (!browser?.enabled) return t("settings.disabled");
                     return `${browser.mode} · ${browser.placement}`;
                   })(),
@@ -529,7 +529,7 @@ export function DebugView(props: DebugViewProps) {
               <div>
                 {t("settings.cap_file_tools", {
                   value: (() => {
-                    const files = props.openworkServerCapabilities.toolProviders?.files;
+                    const files = props.matterhornServerCapabilities.toolProviders?.files;
                     if (!files) return t("config.unavailable");
                     return [
                       files.injection ? t("settings.cap_inbox_on") : t("settings.cap_inbox_off"),
@@ -540,8 +540,8 @@ export function DebugView(props: DebugViewProps) {
               </div>
               <div>
                 {t("settings.cap_sandbox", {
-                  value: props.openworkServerCapabilities.sandbox
-                    ? `${props.openworkServerCapabilities.sandbox.backend} (${props.openworkServerCapabilities.sandbox.enabled ? t("settings.on") : t("settings.off")})`
+                  value: props.matterhornServerCapabilities.sandbox
+                    ? `${props.matterhornServerCapabilities.sandbox.backend} (${props.matterhornServerCapabilities.sandbox.enabled ? t("settings.on") : t("settings.off")})`
                     : t("config.unavailable"),
                 })}
               </div>
@@ -564,14 +564,14 @@ export function DebugView(props: DebugViewProps) {
             <div className="text-sm font-semibold tracking-[-0.1px] text-dls-text">
               {t("settings.audit_log_title")}
             </div>
-            <div className={`rounded-full border px-2 py-1 text-[11px] font-medium ${props.openworkAuditStatus.className}`}>
-              {props.openworkAuditStatus.label}
+            <div className={`rounded-full border px-2 py-1 text-[11px] font-medium ${props.matterhornAuditStatus.className}`}>
+              {props.matterhornAuditStatus.label}
             </div>
           </div>
-          {props.openworkAuditError ? <StatusBanner tone="error" message={props.openworkAuditError} /> : null}
-          {props.openworkAuditEntries.length > 0 ? (
+          {props.matterhornAuditError ? <StatusBanner tone="error" message={props.matterhornAuditError} /> : null}
+          {props.matterhornAuditEntries.length > 0 ? (
             <div className="divide-y divide-dls-border/60">
-              {props.openworkAuditEntries.map((entry) => (
+              {props.matterhornAuditEntries.map((entry) => (
                 <div key={entry.id} className="flex items-start justify-between gap-4 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-sm text-dls-text">{entry.summary}</div>
@@ -884,7 +884,7 @@ export function DebugView(props: DebugViewProps) {
           <div className="rounded-xl border border-green-7/25 bg-green-3/10 px-3 py-2 text-[12px] leading-relaxed text-green-11">
             Safe default: use <strong>Prepare migration data</strong> first. It writes the Electron snapshot only and does
             not replace, quit, or delete the Tauri app. The install handoff keeps rollback backup at{" "}
-            <code className="font-mono">OpenWork.app.migrate-bak</code>.
+            <code className="font-mono">Matterhorn Work.app.migrate-bak</code>.
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -955,7 +955,7 @@ export function DebugView(props: DebugViewProps) {
               size="sm"
               onClick={() => void props.onInstallElectronPreviewFromTauri()}
               disabled={props.electronMigrationBusy || !props.electronMigrationUrl.trim()}
-              title="Requires a trusted artifact URL. macOS keeps OpenWork.app.migrate-bak for rollback."
+              title="Requires a trusted artifact URL. macOS keeps Matterhorn Work.app.migrate-bak for rollback."
             >
               Start install handoff…
             </Button>

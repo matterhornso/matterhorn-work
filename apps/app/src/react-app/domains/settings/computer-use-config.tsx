@@ -83,7 +83,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   // Spawn --check → fresh TCC read. Works whether or not the GUI is open.
   const verify = useCallback(async () => {
     if (!hasDesktopBridge()) {
-      setError("Computer Use setup requires the OpenWork desktop app on macOS.");
+      setError("Computer Use setup requires the Matterhorn Work desktop app on macOS.");
       return;
     }
     setBusy(true);
@@ -106,7 +106,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   // Open the setup GUI then immediately re-verify.
   const grant = async () => {
     if (!hasDesktopBridge()) {
-      setError("OpenWork desktop is required.");
+      setError("Matterhorn Work desktop is required.");
       return;
     }
     setBusy(true);
@@ -168,7 +168,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
         {/* Step 2 — Permissions */}
         <SetupRow
           title="2. Grant macOS permissions"
-          description="Opens the OpenWork Computer Use helper. Grant both permissions there, then click Verify below."
+          description="Opens the Matterhorn Computer Use helper. Grant both permissions there, then click Verify below."
           complete={allGranted}
         >
           <div className="flex w-full min-w-0 flex-col gap-3">

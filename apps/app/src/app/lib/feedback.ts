@@ -8,7 +8,7 @@ type FeedbackUrlOptions = {
   entrypoint: string;
   deployment?: string | null;
   appVersion?: string | null;
-  openworkServerVersion?: string | null;
+  matterhornServerVersion?: string | null;
   opencodeVersion?: string | null;
   orchestratorVersion?: string | null;
 };
@@ -91,7 +91,7 @@ export function buildFeedbackUrl(options: FeedbackUrlOptions): string {
   const entries = {
     deployment: options.deployment?.trim() ?? "",
     appVersion: options.appVersion?.trim() || ENV_APP_VERSION,
-    openworkServerVersion: options.openworkServerVersion?.trim() ?? "",
+    matterhornServerVersion: options.matterhornServerVersion?.trim() ?? "",
     opencodeVersion: options.opencodeVersion?.trim() ?? "",
     orchestratorVersion: options.orchestratorVersion?.trim() ?? "",
     osName: osContext.osName?.trim() ?? "",

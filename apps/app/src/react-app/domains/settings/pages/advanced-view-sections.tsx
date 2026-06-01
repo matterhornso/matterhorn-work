@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import type { OpenworkServerStatus } from "@/app/lib/openwork-server";
+import type { MatterhornServerStatus } from "@/app/lib/matterhorn-server";
 import type { EngineInfo } from "@/app/lib/desktop-types";
 import { isDesktopRuntime } from "@/app/utils";
 import { t } from "@/i18n";
@@ -77,7 +77,7 @@ interface AdvancedRuntimeSectionProps {
   engineInfo: EngineInfo | null;
   clientStatusLabel: string;
   clientTone: SettingsTone;
-  openworkStatusLabel: string;
+  matterhornStatusLabel: string;
   openworkTone: SettingsTone;
 }
 
@@ -106,7 +106,7 @@ export function AdvancedRuntimeSection(props: AdvancedRuntimeSectionProps) {
           icon={<Server size={18} />}
           title={t("settings.openwork_server_label")}
           description={t("settings.openwork_server_desc")}
-          statusLabel={props.openworkStatusLabel}
+          statusLabel={props.matterhornStatusLabel}
           tone={props.openworkTone}
         />
       </div>
@@ -278,9 +278,9 @@ interface AdvancedConnectionSectionProps {
   busy: boolean;
   headerStatus: string;
   baseUrl: string;
-  openworkServerUrl: string;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkReconnectBusy: boolean;
+  matterhornServerUrl: string;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornReconnectBusy: boolean;
   isLocalEngineRunning: boolean;
   restartBusy: boolean;
   reconnectStatus: string | null;
@@ -308,10 +308,10 @@ export function AdvancedConnectionSection(props: AdvancedConnectionSectionProps)
             variant="outline"
             size="sm"
             onClick={() => void props.onReconnect()}
-            disabled={props.busy || props.openworkReconnectBusy || !props.openworkServerUrl.trim()}
+            disabled={props.busy || props.matterhornReconnectBusy || !props.matterhornServerUrl.trim()}
           >
-            <RefreshCcw size={14} className={props.openworkReconnectBusy ? "animate-spin" : ""} />
-            {props.openworkReconnectBusy ? t("settings.reconnecting") : t("settings.reconnect_server")}
+            <RefreshCcw size={14} className={props.matterhornReconnectBusy ? "animate-spin" : ""} />
+            {props.matterhornReconnectBusy ? t("settings.reconnecting") : t("settings.reconnect_server")}
           </Button>
 
           {props.isLocalEngineRunning ? (
@@ -340,7 +340,7 @@ export function AdvancedConnectionSection(props: AdvancedConnectionSectionProps)
             </Button>
           ) : null}
 
-          {!props.isLocalEngineRunning && props.openworkServerStatus === "connected" ? (
+          {!props.isLocalEngineRunning && props.matterhornServerStatus === "connected" ? (
             <Button
               type="button"
               variant="outline"

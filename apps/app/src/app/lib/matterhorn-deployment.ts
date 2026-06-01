@@ -1,13 +1,13 @@
-export const OPENWORK_DEPLOYMENT_ENV_VAR = "VITE_OPENWORK_DEPLOYMENT";
+export const MATTERHORN_DEPLOYMENT_ENV_VAR = "VITE_OPENWORK_DEPLOYMENT";
 
-export type OpenWorkDeployment = "desktop" | "web";
+export type MatterhornDeployment = "desktop" | "web";
 
-function normalizeDeployment(value: string | undefined): OpenWorkDeployment {
+function normalizeDeployment(value: string | undefined): MatterhornDeployment {
   const normalized = value?.trim().toLowerCase();
   return normalized === "web" ? "web" : "desktop";
 }
 
-export function getOpenWorkDeployment(): OpenWorkDeployment {
+export function getMatterhornDeployment(): MatterhornDeployment {
   const envValue =
     typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_OPENWORK_DEPLOYMENT === "string"
       ? import.meta.env.VITE_OPENWORK_DEPLOYMENT
@@ -17,9 +17,9 @@ export function getOpenWorkDeployment(): OpenWorkDeployment {
 }
 
 export function isWebDeployment(): boolean {
-  return getOpenWorkDeployment() === "web";
+  return getMatterhornDeployment() === "web";
 }
 
 export function isDesktopDeployment(): boolean {
-  return getOpenWorkDeployment() === "desktop";
+  return getMatterhornDeployment() === "desktop";
 }

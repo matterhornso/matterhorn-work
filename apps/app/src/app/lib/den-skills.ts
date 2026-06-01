@@ -1,6 +1,6 @@
 import { createDenClient, readDenSettings, writeDenSettings } from "./den";
 
-export async function saveInstalledSkillToOpenWorkOrg(input: {
+export async function saveInstalledSkillToMatterhornOrg(input: {
   skillText: string;
   shared?: "org" | "public" | null;
   skillHubId?: string | null;
@@ -8,7 +8,7 @@ export async function saveInstalledSkillToOpenWorkOrg(input: {
   const settings = readDenSettings();
   const token = settings.authToken?.trim() ?? "";
   if (!token) {
-    throw new Error("Sign in to OpenWork Cloud in Settings to share with your team.");
+    throw new Error("Sign in to Matterhorn Cloud in Settings to share with your team.");
   }
 
   const cloudClient = createDenClient({ baseUrl: settings.baseUrl, apiBaseUrl: settings.apiBaseUrl, token });

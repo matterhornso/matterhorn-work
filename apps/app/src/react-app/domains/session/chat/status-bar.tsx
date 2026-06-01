@@ -9,9 +9,9 @@ import { t } from "@/i18n";
 import { buildDenAuthUrl, readDenBootstrapConfig } from "@/app/lib/den";
 import { usePlatform } from "../../../kernel/platform";
 import { useDenAuth } from "../../cloud/den-auth-provider";
-import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
+import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { useShellConfig } from "../../../shell/shell-config";
-import type { OpenworkServerStatus } from "../../../../app/lib/openwork-server";
+import type { MatterhornServerStatus } from "../../../../app/lib/matterhorn-server";
 
 const DOCS_URL = "https://openworklabs.com/docs";
 const STATUS_BAR_BOOT_STARTED_AT = Date.now();
@@ -46,7 +46,7 @@ function StatusDot({ variant }: StatusDotProps) {
 
 type StatusIndicatorProps = {
   clientConnected: boolean;
-  openworkServerStatus: OpenworkServerStatus;
+  matterhornServerStatus: MatterhornServerStatus;
   developerMode: boolean;
   mcpConnectedCount: number;
   loading?: boolean;
@@ -54,7 +54,7 @@ type StatusIndicatorProps = {
 };
 
 function StatusIndicator(props: StatusIndicatorProps) {
-  if (props.loading || (props.openworkServerStatus === "disconnected" && props.initializing)) {
+  if (props.loading || (props.matterhornServerStatus === "disconnected" && props.initializing)) {
     return (
       <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot variant="loading" />
@@ -91,7 +91,7 @@ function StatusIndicator(props: StatusIndicatorProps) {
     );
   }
 
-  if (props.openworkServerStatus === "limited") {
+  if (props.matterhornServerStatus === "limited") {
     return (
       <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot variant="partial" />
@@ -122,7 +122,7 @@ function StatusIndicator(props: StatusIndicatorProps) {
 
 export type StatusBarProps = {
   clientConnected: boolean;
-  openworkServerStatus: OpenworkServerStatus;
+  matterhornServerStatus: MatterhornServerStatus;
   developerMode: boolean;
   settingsOpen: boolean;
   onSendFeedback: () => void;
@@ -155,7 +155,7 @@ export function StatusBar(props: StatusBarProps) {
     return () => window.clearTimeout(timeout);
   }, [initializing]);
 
-  const docsControlAction = useMemo<OpenworkControlAction>(() => ({
+  const docsControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.docs.open",
     label: "Open OpenWork docs",
     description: "Open the documentation from the status bar.",
@@ -165,17 +165,17 @@ export function StatusBar(props: StatusBarProps) {
   }), [platform]);
   useControlAction(docsControlAction);
 
-  const feedbackControlAction = useMemo<OpenworkControlAction>(() => ({
+  const feedbackControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.feedback.open",
     label: "Send feedback",
-    description: "Open the OpenWork feedback surface from the status bar.",
+    description: "Open the Matterhorn Work feedback surface from the status bar.",
     sideEffect: "external",
     targetRef: feedbackButtonRef,
     execute: props.onSendFeedback,
   }), [props.onSendFeedback]);
   useControlAction(feedbackControlAction);
 
-  const settingsControlAction = useMemo<OpenworkControlAction>(() => ({
+  const settingsControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.settings.open",
     label: props.settingsOpen ? "Go back from settings" : "Open settings from the status bar",
     description: "Use the visible settings button in the status bar.",
@@ -191,7 +191,7 @@ export function StatusBar(props: StatusBarProps) {
       <div className="flex h-8 items-center justify-between gap-3 px-4 md:px-6">
         <StatusIndicator
           clientConnected={props.clientConnected}
-          openworkServerStatus={props.openworkServerStatus}
+          matterhornServerStatus={props.matterhornServerStatus}
           developerMode={props.developerMode}
           mcpConnectedCount={props.mcpConnectedCount}
           loading={props.loading}

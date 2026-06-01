@@ -4,14 +4,14 @@ import { ChevronDown, ChevronRight, Loader2, Mic2, MicOff, Radio, SendHorizontal
 import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 
 import { desktopFetch } from "../../../../app/lib/desktop";
-import type { OpenworkServerClient } from "../../../../app/lib/openwork-server";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { publishInspectorSlice, recordInspectorEvent } from "../../../shell/app-inspector";
-import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
+import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 
 type VoiceStatus = "idle" | "connecting" | "listening" | "muted" | "speaking" | "error";
 
@@ -34,7 +34,7 @@ type VoiceRuntimeSnapshot = {
 };
 
 type VoicePanelProps = {
-  client: OpenworkServerClient | null;
+  client: MatterhornServerClient | null;
   sessionId: string | null;
   onClose: () => void;
 };
@@ -129,7 +129,7 @@ function safeJson(value: unknown) {
 }
 
 function humanToolLabel(toolName?: string) {
-  if (!toolName) return "OpenWork action";
+  if (!toolName) return "Matterhorn Work action";
   return TOOL_LABELS[toolName] ?? toolName.replace(/_/g, " ");
 }
 
@@ -180,7 +180,7 @@ function waitForDataChannelOpen(channel: RTCDataChannel) {
 
 async function executeOpenWorkTool(name: string, args: Record<string, unknown>) {
   const control = window.__openworkControl;
-  if (!control) return { ok: false, error: "OpenWork control surface is not available." };
+  if (!control) return { ok: false, error: "Matterhorn Work control surface is not available." };
 
   if (name === "openwork_snapshot") return { ok: true, snapshot: control.snapshot() };
   if (name === "openwork_list_actions") return { ok: true, actions: control.listActions() };
@@ -313,7 +313,7 @@ export function VoicePanel(props: VoicePanelProps) {
       statusText: text ?? (
         nextStatus === "connecting" ? "Connecting to OpenAI Realtime..." :
           nextStatus === "listening" ? "Listening. Ask OpenWork to act." :
-            nextStatus === "speaking" ? "OpenWork is speaking..." :
+            nextStatus === "speaking" ? "Matterhorn Work is speaking..." :
               nextStatus === "muted" ? "Connected, microphone muted." :
                 nextStatus === "error" ? "Voice Mode needs attention." :
                   "Ready for voice control."
@@ -442,7 +442,7 @@ export function VoicePanel(props: VoicePanelProps) {
 
   const connectRealtime = useCallback(async (audioInput = true) => {
     const client = props.client;
-    if (!client) throw new Error("OpenWork host connection is not ready.");
+    if (!client) throw new Error("Matterhorn Work host connection is not ready.");
     if (audioInput && !navigator.mediaDevices?.getUserMedia) throw new Error("Microphone capture is unavailable in this runtime.");
 
     disconnectRealtime(true);
@@ -600,7 +600,7 @@ export function VoicePanel(props: VoicePanelProps) {
     return dispose;
   }, [assistantPreview, connected, entries, latestUserTranscript, micMuted, props.sessionId, status, statusText, textCommand.length]);
 
-  const startAction = useMemo<OpenworkControlAction>(() => ({
+  const startAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.start",
     label: "Start Voice Mode",
     description: "Connect the Voice Mode panel to OpenAI Realtime and start listening.",
@@ -611,7 +611,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [connected, props.client, startVoice, status]);
   useControlAction(startAction);
 
-  const stopAction = useMemo<OpenworkControlAction>(() => ({
+  const stopAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.stop",
     label: "Stop Voice Mode",
     description: "Disconnect the active Voice Mode Realtime session.",
@@ -622,7 +622,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [connected, stopVoice]);
   useControlAction(stopAction);
 
-  const muteAction = useMemo<OpenworkControlAction>(() => ({
+  const muteAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.toggle_mute",
     label: micMuted ? "Unmute Voice Mode" : "Mute Voice Mode",
     description: "Toggle the microphone track without closing the Realtime session.",
@@ -633,7 +633,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [connected, micMuted, toggleMic]);
   useControlAction(muteAction);
 
-  const injectTranscriptAction = useMemo<OpenworkControlAction>(() => ({
+  const injectTranscriptAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.inject_transcript",
     label: "Inject a voice transcript",
     description: "Deterministic eval hook: add a transcript to Voice Mode and place it in the composer.",
@@ -646,7 +646,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [injectTranscript]);
   useControlAction(injectTranscriptAction);
 
-  const sendTextAction = useMemo<OpenworkControlAction>(() => ({
+  const sendTextAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.send_text",
     label: "Send text through Voice Mode",
     description: "Send a deterministic text command through the active OpenAI Realtime voice session.",
@@ -659,7 +659,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [sendTextCommand]);
   useControlAction(sendTextAction);
 
-  const injectAudioAction = useMemo<OpenworkControlAction>(() => ({
+  const injectAudioAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.inject_audio",
     label: "Inject voice audio",
     description: "Deterministic eval hook: send PCM16 audio through the active OpenAI Realtime input buffer.",
@@ -671,7 +671,7 @@ export function VoicePanel(props: VoicePanelProps) {
   }), [injectAudio]);
   useControlAction(injectAudioAction);
 
-  const statusAction = useMemo<OpenworkControlAction>(() => ({
+  const statusAction = useMemo<MatterhornControlAction>(() => ({
     id: "voice.status",
     label: "Read Voice Mode status",
     description: "Return the Voice Mode runtime state for tests and agents.",
@@ -696,7 +696,7 @@ export function VoicePanel(props: VoicePanelProps) {
             <Radio className="text-primary" />
             Voice Mode
           </div>
-          <div className="truncate text-xs text-muted-foreground">Realtime voice over OpenWork UI MCP controls</div>
+          <div className="truncate text-xs text-muted-foreground">Realtime voice over Matterhorn Work UI MCP controls</div>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Voice Mode">
           <X />
@@ -751,7 +751,7 @@ export function VoicePanel(props: VoicePanelProps) {
                 <CardTitle>Host connection required</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                Voice Mode needs the local OpenWork server so it can mint short-lived Realtime client secrets without exposing your API key to the renderer.
+                Voice Mode needs the local Matterhorn Work server so it can mint short-lived Realtime client secrets without exposing your API key to the renderer.
               </CardContent>
             </Card>
           ) : null}

@@ -17,10 +17,10 @@ const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=OpenWork%20Den%20remote%
 
 /**
  * Small inline link rendered inside the remote-worker error card. When clicked,
- * it opens a dialog explaining the OpenWork Den upgrade situation and how to
+ * it opens a dialog explaining the Matterhorn Work Den upgrade situation and how to
  * reach support.
  */
-export function OpenWorkDenHelpLink() {
+export function MatterhornDenHelpLink() {
   const [open, setOpen] = useState(false);
 
   return (
@@ -40,7 +40,7 @@ export function OpenWorkDenHelpLink() {
             <DialogDescription>
               We recently upgraded our servers. If your remote worker was
               provisioned before that upgrade, it may no longer be compatible
-              with the current OpenWork app.
+              with the current Matterhorn Work app.
             </DialogDescription>
           </DialogHeader>
 

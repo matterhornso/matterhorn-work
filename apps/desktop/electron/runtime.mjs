@@ -133,7 +133,7 @@ function snapshotOpenworkServerState(state) {
   };
 }
 
-function assertOpenworkServerReady(snapshot) {
+function assertMatterhornServerReady(snapshot) {
   if (!snapshot?.running) {
     throw new Error("OpenWork server did not stay running after startup.");
   }
@@ -428,7 +428,7 @@ function loadUserEnvFile() {
 
 export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths }) {
   const engineState = createEngineState();
-  const openworkServerState = createOpenworkServerState();
+  const matterhornServerState = createOpenworkServerState();
   const orchestratorState = createOrchestratorState();
 
   // Serialize engine lifecycle operations. Without this, concurrent renderer
@@ -1278,7 +1278,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
       throw error;
     }
 
-    assertOpenworkServerReady(openworkServer);
+    assertMatterhornServerReady(openworkServer);
   }
 
   async function engineStart(projectDir, options = {}) {
@@ -1350,11 +1350,11 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     };
   }
 
-  async function openworkServerInfo() {
+  async function matterhornServerInfo() {
     return snapshotOpenworkServerState(openworkServerState);
   }
 
-  async function openworkServerRestart(options = {}) {
+  async function matterhornServerRestart(options = {}) {
     const workspacePaths = prioritizeWorkspacePaths(engineState.projectDir, await listLocalWorkspacePaths());
     const shouldManageOpencode = Boolean(
       openworkServerState.managedOpencodeBinPath || engineState.opencodeBinPath,
@@ -1372,7 +1372,7 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
 
   async function orchestratorStatus() {
     const engine = snapshotEngineState(engineState);
-    const openworkServer = snapshotOpenworkServerState(openworkServerState);
+    const matterhornServer = snapshotOpenworkServerState(openworkServerState);
     const workspaces = engine.projectDir
       ? [{ id: normalizeWorkspaceKey(engine.projectDir), path: engine.projectDir, name: path.basename(engine.projectDir) || "Workspace" }]
       : [];

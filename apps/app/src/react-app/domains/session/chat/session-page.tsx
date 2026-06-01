@@ -6,7 +6,7 @@ import { FileText, Globe, Mic2, Settings2, Zap } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
-import { type OpenworkServerClient, type OpenworkServerStatus } from "../../../../app/lib/openwork-server";
+import { type MatterhornServerClient, type MatterhornServerStatus } from "../../../../app/lib/matterhorn-server";
 import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
 import type { BootPhase } from "../../../../app/lib/startup-boot";
 import type { WorkspaceInfo } from "../../../../app/lib/desktop";
@@ -48,8 +48,8 @@ import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
-import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
-import { getExtensionId, isOpenWorkExtensionEnabled, OPENWORK_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
+import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
+import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { cn } from "@/lib/utils";
 
 const STARTUP_SKELETON_ROWS = [
@@ -103,7 +103,7 @@ export type SessionPageSidebarProps = {
 
 export type SessionPageSurfaceProps = Omit<
   SessionSurfaceProps,
-  "client" | "workspaceId" | "sessionId" | "opencodeBaseUrl" | "openworkToken"
+  "client" | "workspaceId" | "sessionId" | "opencodeBaseUrl" | "matterhornToken"
 >;
 
 export type SessionPageProps = {
@@ -126,9 +126,9 @@ export type SessionPageProps = {
   opencodeBaseUrl?: string | null;
   workspaces: WorkspaceInfo[];
   clientConnected: boolean;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerClient: OpenworkServerClient | null;
-  openworkServerToken?: string | null;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerClient: MatterhornServerClient | null;
+  matterhornServerToken?: string | null;
   developerMode: boolean;
   headerStatus: string;
   busyHint: string | null;
@@ -248,10 +248,10 @@ export function SessionPage(props: SessionPageProps) {
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const voiceExtension = useMemo(
-    () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "openwork-voice") ?? null,
+    () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
   );
-  const voiceExtensionEnabled = voiceExtension ? isOpenWorkExtensionEnabled(voiceExtension) : false;
+  const voiceExtensionEnabled = voiceExtension ? isMatterhornExtensionEnabled(voiceExtension) : false;
 
   useReactRenderWatchdog("SessionPage", {
     selectedSessionId: props.selectedSessionId,
@@ -419,10 +419,10 @@ export function SessionPage(props: SessionPageProps) {
   }, [setCurrentSidePanel]);
   useEffect(() => {
     const refresh = () => setExtensionStateVersion((value) => value + 1);
-    window.addEventListener(OPENWORK_EXTENSION_STATE_CHANGED, refresh);
+    window.addEventListener(MATTERHORN_EXTENSION_STATE_CHANGED, refresh);
     window.addEventListener("storage", refresh);
     return () => {
-      window.removeEventListener(OPENWORK_EXTENSION_STATE_CHANGED, refresh);
+      window.removeEventListener(MATTERHORN_EXTENSION_STATE_CHANGED, refresh);
       window.removeEventListener("storage", refresh);
     };
   }, []);
@@ -432,7 +432,7 @@ export function SessionPage(props: SessionPageProps) {
     }
   }, [activeSidePanel, setCurrentSidePanel, voiceExtensionEnabled]);
 
-  const openVoicePanelControlAction = useMemo<OpenworkControlAction | null>(() => (
+  const openVoicePanelControlAction = useMemo<MatterhornControlAction | null>(() => (
     voiceExtensionEnabled ? {
       id: "voice.panel.open",
       label: "Open Voice Mode",
@@ -446,7 +446,7 @@ export function SessionPage(props: SessionPageProps) {
   ), [setCurrentSidePanel, voiceExtensionEnabled]);
   useControlAction(openVoicePanelControlAction);
 
-  const closeVoicePanelControlAction = useMemo<OpenworkControlAction | null>(() => (
+  const closeVoicePanelControlAction = useMemo<MatterhornControlAction | null>(() => (
     voiceExtensionEnabled && activeSidePanel === "voice" ? {
       id: "voice.panel.close",
       label: "Close Voice Mode",
@@ -514,13 +514,13 @@ export function SessionPage(props: SessionPageProps) {
 
   const reactSessionBaseUrl = props.opencodeBaseUrl?.trim() ?? "";
   const reactSessionToken =
-    props.openworkServerToken?.trim() ||
-    props.openworkServerClient?.token?.trim() ||
+    props.matterhornServerToken?.trim() ||
+    props.matterhornServerClient?.token?.trim() ||
     "";
   const canRenderReactSurface = Boolean(
     props.selectedSessionId &&
       props.runtimeWorkspaceId &&
-      props.openworkServerClient &&
+      props.matterhornServerClient &&
       reactSessionBaseUrl &&
       reactSessionToken &&
       props.surface,
@@ -723,15 +723,15 @@ export function SessionPage(props: SessionPageProps) {
                   // Spread `surface` first so the explicit per-workspace
                   // routing props below CAN'T be silently overridden by
                   // anything that leaks into `surface`. SessionSurface's
-                  // server target (client/workspaceId/sessionId/opencodeBaseUrl/openworkToken)
+                  // server target (client/workspaceId/sessionId/opencodeBaseUrl/matterhornToken)
                   // must come from the resolved workspace endpoint passed by
                   // SessionRoute, not from anything in `surface`.
                   {...props.surface!}
-                  client={props.openworkServerClient!}
+                  client={props.matterhornServerClient!}
                   workspaceId={props.runtimeWorkspaceId!}
                   sessionId={props.selectedSessionId!}
                   opencodeBaseUrl={reactSessionBaseUrl}
-                  openworkToken={reactSessionToken}
+                  matterhornToken={reactSessionToken}
                   todos={props.todos}
                   activePermission={props.activePermission}
                   permissionReplyBusy={props.permissionReplyBusy}
@@ -881,7 +881,7 @@ export function SessionPage(props: SessionPageProps) {
           {shellConfig.statusBar ? (
             <StatusBar
               clientConnected={props.clientConnected}
-              openworkServerStatus={props.openworkServerStatus}
+              matterhornServerStatus={props.matterhornServerStatus}
               developerMode={props.developerMode}
               settingsOpen={props.statusBar?.settingsOpen ?? false}
               onSendFeedback={props.onSendFeedback}
@@ -910,13 +910,13 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : activeSidePanel === "voice" ? (
                     <VoicePanel
-                      client={props.openworkServerClient}
+                      client={props.matterhornServerClient}
                       sessionId={props.selectedSessionId}
                       onClose={closeRightPane}
                     />
-                  ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.openworkServerClient && props.runtimeWorkspaceId ? (
+                  ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
                     <ArtifactPanel
-                      client={props.openworkServerClient}
+                      client={props.matterhornServerClient}
                       workspaceId={props.runtimeWorkspaceId}
                       workspaceRoot={props.selectedWorkspaceRoot}
                       isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}

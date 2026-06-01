@@ -111,7 +111,7 @@ export function ArchitectureMismatchGate({ children }: ArchitectureMismatchGateP
                   Install the correct OpenWork build
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-white/72 sm:text-lg">
-                  Your application is running the {info.appArchLabel} version of OpenWork, but this {platformLabel(info.platform)} system is {info.systemArchLabel}. This may cause unpredictable issues.
+                  Your application is running the {info.appArchLabel} version of Matterhorn Work, but this {platformLabel(info.platform)} system is {info.systemArchLabel}. This may cause unpredictable issues.
                 </p>
               </div>
 

@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, X } from "lucide-react";
 
-import type { OpenworkServerClient } from "@/app/lib/openwork-server";
+import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { openDesktopPath } from "@/app/lib/desktop";
 import { PanelTab, PanelTabItem, PanelTabList } from "@/components/panel-tabs";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ const ArtifactSpreadsheetEditor = lazy(() =>
 );
 
 type ArtifactPanelProps = {
-  client: OpenworkServerClient;
+  client: MatterhornServerClient;
   workspaceId: string;
   workspaceRoot: string;
   isRemoteWorkspace?: boolean;

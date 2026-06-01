@@ -2,9 +2,9 @@
 import { useMemo } from "react";
 
 import type { createClient } from "../../../../app/lib/opencode";
-import type { OpenworkServerClient, OpenworkWorkspaceInfo } from "../../../../app/lib/openwork-server";
+import type { MatterhornServerClient, MatterhornWorkspaceInfo } from "../../../../app/lib/matterhorn-server";
 import { getDisplaySessionTitle } from "../../../../app/lib/session-title";
-import { useControlAction, type OpenworkControlAction } from "../../../shell/control/control-provider";
+import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 
 type SessionLike = {
   id?: string;
@@ -15,7 +15,7 @@ type SessionLike = {
   };
 };
 
-type SessionControlWorkspace = OpenworkWorkspaceInfo & {
+type SessionControlWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved?: string;
 };
 
@@ -26,7 +26,7 @@ type UseSessionControlActionsInput = {
   selectedWorkspaceRoot: string;
   selectedSessionId: string | null;
   canCreateTask: boolean;
-  openworkClient: OpenworkServerClient | null;
+  matterhornClient: MatterhornServerClient | null;
   opencodeClient: ReturnType<typeof createClient> | null;
   navigateToSession: (sessionId: string) => void;
   navigateToSessionRoot: () => void;
@@ -69,7 +69,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
     navigateToSession,
     navigateToSessionRoot,
     openModelPicker,
-    openworkClient,
+    matterhornClient,
     opencodeClient,
     refreshRouteState,
     selectedSessionId,
@@ -79,7 +79,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
     workspaces,
   } = input;
 
-  const createTaskControlAction = useMemo<OpenworkControlAction>(() => ({
+  const createTaskControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.create_task",
     label: "Create a new task",
     description: "Create a new session in the selected workspace.",
@@ -93,7 +93,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
   }), [canCreateTask, createTaskInWorkspace, selectedWorkspaceId]);
   useControlAction(createTaskControlAction);
 
-  const listSessionsControlAction = useMemo<OpenworkControlAction>(() => ({
+  const listSessionsControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.list_sessions",
     label: "List available sessions",
     description: "Return the list of sessions across workspaces so the user can ask to open one by name.",
@@ -116,7 +116,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
   }), [sessionsByWorkspaceId, workspaces]);
   useControlAction(listSessionsControlAction);
 
-  const openSessionControlAction = useMemo<OpenworkControlAction>(() => ({
+  const openSessionControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.open",
     label: "Open a session by ID",
     description: "Navigate to a specific session. Use list_sessions first to get the session ID.",
@@ -132,7 +132,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
   }), [navigateToSession]);
   useControlAction(openSessionControlAction);
 
-  const renameSessionControlAction = useMemo<OpenworkControlAction>(() => ({
+  const renameSessionControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.rename",
     label: "Rename a session",
     description: "Rename a session by ID. Use list_sessions first to match the title the user said.",
@@ -162,7 +162,7 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
   }), [opencodeClient, refreshRouteState, selectedWorkspaceRoot, sessionsByWorkspaceId, workspaces]);
   useControlAction(renameSessionControlAction);
 
-  const deleteSessionControlAction = useMemo<OpenworkControlAction>(() => ({
+  const deleteSessionControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.delete",
     label: "Delete a session",
     description: "Delete a session by ID. Destructive: only run after explicit user confirmation.",
@@ -173,27 +173,27 @@ export function useSessionControlActions(input: UseSessionControlActionsInput) {
       { name: "sessionId", type: "string", required: true, description: "Session ID from session.list_sessions." },
       { name: "confirmed", type: "boolean", required: true, description: "Must be true after explicit user confirmation." },
     ],
-    disabled: !openworkClient,
+    disabled: !matterhornClient,
     execute: async (args) => {
       const sessionId = stringArg(args, "sessionId");
       const confirmed = booleanArg(args, "confirmed");
       if (!sessionId) return { ok: false, error: "sessionId is required" };
       if (!confirmed) return { ok: false, error: "Deletion requires confirmed: true after explicit user confirmation" };
-      if (!openworkClient) return { ok: false, error: "OpenWork server is not connected" };
+      if (!matterhornClient) return { ok: false, error: "Matterhorn Work server is not connected" };
 
       const targetWorkspace = findSessionWorkspace(workspaces, sessionsByWorkspaceId, sessionId);
       if (!targetWorkspace) return { ok: false, error: "Session was not found in the current session list" };
-      await openworkClient.deleteSession(targetWorkspace.id, sessionId);
+      await matterhornClient.deleteSession(targetWorkspace.id, sessionId);
       if (selectedSessionId === sessionId) {
         navigateToSessionRoot();
       }
       await refreshRouteState();
       return { ok: true, sessionId, deleted: true };
     },
-  }), [navigateToSessionRoot, openworkClient, refreshRouteState, selectedSessionId, sessionsByWorkspaceId, workspaces]);
+  }), [navigateToSessionRoot, matterhornClient, refreshRouteState, selectedSessionId, sessionsByWorkspaceId, workspaces]);
   useControlAction(deleteSessionControlAction);
 
-  const modelPickerControlAction = useMemo<OpenworkControlAction>(() => ({
+  const modelPickerControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.model_picker.open",
     label: "Open the model picker",
     description: "Open the current session model picker.",

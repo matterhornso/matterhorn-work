@@ -4,62 +4,62 @@ import { t } from "../../../i18n";
 import type { StartupPreference, WorkspaceDisplay } from "../../../app/types";
 import { isDesktopRuntime } from "../../../app/utils";
 import {
-  openworkServerInfo,
-  openworkServerRestart,
-  type OpenworkServerInfo,
+  matterhornServerInfo,
+  matterhornServerRestart,
+  type MatterhornServerInfo,
 } from "../../../app/lib/desktop";
 import {
-  clearOpenworkServerSettings,
-  createOpenworkServerClient,
+  clearMatterhornServerSettings,
+  createMatterhornServerClient,
   isLoopbackOpenworkServerUrl,
-  normalizeOpenworkServerUrl,
-  readOpenworkServerSettings,
-  writeOpenworkServerSettings,
-  type OpenworkAuditEntry,
-  type OpenworkServerCapabilities,
-  type OpenworkServerClient,
-  type OpenworkServerDiagnostics,
-  type OpenworkServerError,
-  type OpenworkServerSettings,
-  type OpenworkServerStatus,
-} from "../../../app/lib/openwork-server";
+  normalizeMatterhornServerUrl,
+  readMatterhornServerSettings,
+  writeMatterhornServerSettings,
+  type MatterhornAuditEntry,
+  type MatterhornServerCapabilities,
+  type MatterhornServerClient,
+  type MatterhornServerDiagnostics,
+  type MatterhornServerError,
+  type MatterhornServerSettings,
+  type MatterhornServerStatus,
+} from "../../../app/lib/matterhorn-server";
 
 type SetStateAction<T> = T | ((current: T) => T);
 
 type RemoteWorkspaceInput = {
-  openworkHostUrl: string;
-  openworkToken?: string | null;
+  matterhornHostUrl: string;
+  matterhornToken?: string | null;
   directory?: string | null;
   displayName?: string | null;
 };
 
-export type OpenworkServerStoreSnapshot = {
-  openworkServerSettings: OpenworkServerSettings;
+export type MatterhornServerStoreSnapshot = {
+  matterhornServerSettings: MatterhornServerSettings;
   shareRemoteAccessBusy: boolean;
   shareRemoteAccessError: string | null;
-  openworkServerUrl: string;
-  openworkServerBaseUrl: string;
-  openworkServerAuth: { token?: string; hostToken?: string };
-  openworkServerClient: OpenworkServerClient | null;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerCapabilities: OpenworkServerCapabilities | null;
-  openworkServerReady: boolean;
-  openworkServerWorkspaceReady: boolean;
-  resolvedOpenworkCapabilities: OpenworkServerCapabilities | null;
-  openworkServerCanWriteSkills: boolean;
-  openworkServerCanWritePlugins: boolean;
-  openworkServerHostInfo: OpenworkServerInfo | null;
-  openworkServerDiagnostics: OpenworkServerDiagnostics | null;
-  openworkReconnectBusy: boolean;
-  openworkAuditEntries: OpenworkAuditEntry[];
-  openworkAuditStatus: "idle" | "loading" | "error";
-  openworkAuditError: string | null;
+  matterhornServerUrl: string;
+  matterhornServerBaseUrl: string;
+  matterhornServerAuth: { token?: string; hostToken?: string };
+  matterhornServerClient: MatterhornServerClient | null;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerCapabilities: MatterhornServerCapabilities | null;
+  matterhornServerReady: boolean;
+  matterhornServerWorkspaceReady: boolean;
+  resolvedOpenworkCapabilities: MatterhornServerCapabilities | null;
+  matterhornServerCanWriteSkills: boolean;
+  matterhornServerCanWritePlugins: boolean;
+  matterhornServerHostInfo: MatterhornServerInfo | null;
+  matterhornServerDiagnostics: MatterhornServerDiagnostics | null;
+  matterhornReconnectBusy: boolean;
+  matterhornAuditEntries: MatterhornAuditEntry[];
+  matterhornAuditStatus: "idle" | "loading" | "error";
+  matterhornAuditError: string | null;
   devtoolsWorkspaceId: string | null;
 };
 
-export type OpenworkServerStore = ReturnType<typeof createOpenworkServerStore>;
+export type MatterhornServerStore = ReturnType<typeof createMatterhornServerStore>;
 
-type CreateOpenworkServerStoreOptions = {
+type CreateMatterhornServerStoreOptions = {
   startupPreference: () => StartupPreference | null;
   documentVisible: () => boolean;
   developerMode: () => boolean;
@@ -71,33 +71,33 @@ type CreateOpenworkServerStoreOptions = {
 };
 
 type MutableState = {
-  openworkServerSettings: OpenworkServerSettings;
+  matterhornServerSettings: MatterhornServerSettings;
   shareRemoteAccessBusy: boolean;
   shareRemoteAccessError: string | null;
-  openworkServerUrl: string;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerCapabilities: OpenworkServerCapabilities | null;
-  openworkServerCheckedAt: number | null;
-  openworkServerHostInfo: OpenworkServerInfo | null;
-  openworkServerHostInfoReady: boolean;
-  openworkServerDiagnostics: OpenworkServerDiagnostics | null;
-  openworkReconnectBusy: boolean;
-  openworkAuditEntries: OpenworkAuditEntry[];
-  openworkAuditStatus: "idle" | "loading" | "error";
-  openworkAuditError: string | null;
+  matterhornServerUrl: string;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerCapabilities: MatterhornServerCapabilities | null;
+  matterhornServerCheckedAt: number | null;
+  matterhornServerHostInfo: MatterhornServerInfo | null;
+  matterhornServerHostInfoReady: boolean;
+  matterhornServerDiagnostics: MatterhornServerDiagnostics | null;
+  matterhornReconnectBusy: boolean;
+  matterhornAuditEntries: MatterhornAuditEntry[];
+  matterhornAuditStatus: "idle" | "loading" | "error";
+  matterhornAuditError: string | null;
   devtoolsWorkspaceId: string | null;
 };
 
 const applyStateAction = <T,>(current: T, next: SetStateAction<T>) =>
   typeof next === "function" ? (next as (value: T) => T)(current) : next;
 
-export function createOpenworkServerStore(options: CreateOpenworkServerStoreOptions) {
+export function createMatterhornServerStore(options: CreateMatterhornServerStoreOptions) {
   const bootStartedAt = Date.now();
   const listeners = new Set<() => void>();
   const intervals = new Map<string, number>();
 
   let clientCacheKey = "";
-  let clientCacheValue: OpenworkServerClient | null = null;
+  let clientCacheValue: MatterhornServerClient | null = null;
   let started = false;
   let disposed = false;
   let healthTimeoutId: number | null = null;
@@ -105,23 +105,23 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
   let healthDelayMs = 10_000;
   let consecutiveHealthFailures = 0;
   let visibilityChangeHandler: (() => void) | null = null;
-  let snapshot: OpenworkServerStoreSnapshot;
+  let snapshot: MatterhornServerStoreSnapshot;
 
   let state: MutableState = {
-    openworkServerSettings: readOpenworkServerSettings(),
+    matterhornServerSettings: readMatterhornServerSettings(),
     shareRemoteAccessBusy: false,
     shareRemoteAccessError: null,
-    openworkServerUrl: "",
-    openworkServerStatus: "disconnected",
-    openworkServerCapabilities: null,
-    openworkServerCheckedAt: null,
-    openworkServerHostInfo: null,
-    openworkServerHostInfoReady: !isDesktopRuntime(),
-    openworkServerDiagnostics: null,
-    openworkReconnectBusy: false,
-    openworkAuditEntries: [],
-    openworkAuditStatus: "idle",
-    openworkAuditError: null,
+    matterhornServerUrl: "",
+    matterhornServerStatus: "disconnected",
+    matterhornServerCapabilities: null,
+    matterhornServerCheckedAt: null,
+    matterhornServerHostInfo: null,
+    matterhornServerHostInfoReady: !isDesktopRuntime(),
+    matterhornServerDiagnostics: null,
+    matterhornReconnectBusy: false,
+    matterhornAuditEntries: [],
+    matterhornAuditStatus: "idle",
+    matterhornAuditError: null,
     devtoolsWorkspaceId: null,
   };
 
@@ -131,8 +131,8 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
 
   const getBaseUrl = () => {
     const pref = options.startupPreference();
-    const hostInfo = state.openworkServerHostInfo;
-    const settingsUrl = normalizeOpenworkServerUrl(state.openworkServerSettings.urlOverride ?? "") ?? "";
+    const hostInfo = state.matterhornServerHostInfo;
+    const settingsUrl = normalizeMatterhornServerUrl(state.matterhornServerSettings.urlOverride ?? "") ?? "";
 
     if (pref === "local") return hostInfo?.baseUrl ?? "";
     if (pref === "server" && settingsUrl && isLoopbackOpenworkServerUrl(settingsUrl) && hostInfo?.baseUrl) {
@@ -144,10 +144,10 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
 
   const getAuth = () => {
     const pref = options.startupPreference();
-    const hostInfo = state.openworkServerHostInfo;
-    const settingsUrl = normalizeOpenworkServerUrl(state.openworkServerSettings.urlOverride ?? "") ?? "";
-    const settingsToken = state.openworkServerSettings.token?.trim() ?? "";
-    const settingsHostToken = state.openworkServerSettings.hostToken?.trim() ?? "";
+    const hostInfo = state.matterhornServerHostInfo;
+    const settingsUrl = normalizeMatterhornServerUrl(state.matterhornServerSettings.urlOverride ?? "") ?? "";
+    const settingsToken = state.matterhornServerSettings.token?.trim() ?? "";
+    const settingsHostToken = state.matterhornServerSettings.hostToken?.trim() ?? "";
     const clientToken = hostInfo?.clientToken?.trim() ?? "";
     const hostToken = hostInfo?.hostToken?.trim() ?? "";
 
@@ -187,7 +187,7 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     const key = `${baseUrl}::${auth.token ?? ""}::${auth.hostToken ?? ""}`;
     if (key !== clientCacheKey) {
       clientCacheKey = key;
-      clientCacheValue = createOpenworkServerClient({
+      clientCacheValue = createMatterhornServerClient({
         baseUrl,
         token: auth.token,
         hostToken: auth.hostToken,
@@ -197,48 +197,48 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
   };
 
   const refreshSnapshot = () => {
-    const openworkServerBaseUrl = getBaseUrl().trim();
-    const openworkServerAuth = getAuth();
-    const openworkServerClient = getClient();
-    const openworkServerReady = state.openworkServerStatus === "connected";
-    const openworkServerWorkspaceReady = Boolean(options.runtimeWorkspaceId());
-    const resolvedOpenworkCapabilities = state.openworkServerCapabilities;
+    const matterhornServerBaseUrl = getBaseUrl().trim();
+    const matterhornServerAuth = getAuth();
+    const matterhornServerClient = getClient();
+    const matterhornServerReady = state.matterhornServerStatus === "connected";
+    const matterhornServerWorkspaceReady = Boolean(options.runtimeWorkspaceId());
+    const resolvedOpenworkCapabilities = state.matterhornServerCapabilities;
 
     const pref = options.startupPreference();
-    const info = state.openworkServerHostInfo;
+    const info = state.matterhornServerHostInfo;
     const hostUrl = info?.connectUrl ?? info?.lanUrl ?? info?.mdnsUrl ?? info?.baseUrl ?? "";
-    const settingsUrl = normalizeOpenworkServerUrl(state.openworkServerSettings.urlOverride ?? "") ?? "";
+    const settingsUrl = normalizeMatterhornServerUrl(state.matterhornServerSettings.urlOverride ?? "") ?? "";
 
-    let openworkServerUrl = hostUrl || settingsUrl;
-    if (pref === "local") openworkServerUrl = hostUrl;
-    if (pref === "server") openworkServerUrl = settingsUrl;
-    state.openworkServerUrl = openworkServerUrl;
+    let matterhornServerUrl = hostUrl || settingsUrl;
+    if (pref === "local") matterhornServerUrl = hostUrl;
+    if (pref === "server") matterhornServerUrl = settingsUrl;
+    state.matterhornServerUrl = matterhornServerUrl;
 
     snapshot = {
-      openworkServerSettings: state.openworkServerSettings,
+      matterhornServerSettings: state.matterhornServerSettings,
       shareRemoteAccessBusy: state.shareRemoteAccessBusy,
       shareRemoteAccessError: state.shareRemoteAccessError,
-      openworkServerUrl,
-      openworkServerBaseUrl,
-      openworkServerAuth,
-      openworkServerClient,
-      openworkServerStatus: state.openworkServerStatus,
-      openworkServerCapabilities: state.openworkServerCapabilities,
-      openworkServerReady,
-      openworkServerWorkspaceReady,
+      matterhornServerUrl,
+      matterhornServerBaseUrl,
+      matterhornServerAuth,
+      matterhornServerClient,
+      matterhornServerStatus: state.matterhornServerStatus,
+      matterhornServerCapabilities: state.matterhornServerCapabilities,
+      matterhornServerReady,
+      matterhornServerWorkspaceReady,
       resolvedOpenworkCapabilities,
-      openworkServerCanWriteSkills:
-        openworkServerReady &&
+      matterhornServerCanWriteSkills:
+        matterhornServerReady &&
         (resolvedOpenworkCapabilities?.skills?.write ?? false),
-      openworkServerCanWritePlugins:
-        openworkServerReady &&
+      matterhornServerCanWritePlugins:
+        matterhornServerReady &&
         (resolvedOpenworkCapabilities?.plugins?.write ?? false),
-      openworkServerHostInfo: state.openworkServerHostInfo,
-      openworkServerDiagnostics: state.openworkServerDiagnostics,
-      openworkReconnectBusy: state.openworkReconnectBusy,
-      openworkAuditEntries: state.openworkAuditEntries,
-      openworkAuditStatus: state.openworkAuditStatus,
-      openworkAuditError: state.openworkAuditError,
+      matterhornServerHostInfo: state.matterhornServerHostInfo,
+      matterhornServerDiagnostics: state.matterhornServerDiagnostics,
+      matterhornReconnectBusy: state.matterhornReconnectBusy,
+      matterhornAuditEntries: state.matterhornAuditEntries,
+      matterhornAuditStatus: state.matterhornAuditStatus,
+      matterhornAuditError: state.matterhornAuditError,
       devtoolsWorkspaceId: state.devtoolsWorkspaceId,
     };
   };
@@ -254,60 +254,60 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     mutateState((current) => ({ ...current, [key]: value }));
   };
 
-  const setOpenworkServerSettings = (next: SetStateAction<OpenworkServerSettings>) => {
-    const resolved = applyStateAction(state.openworkServerSettings, next);
-    mutateState((current) => ({ ...current, openworkServerSettings: resolved }));
+  const setMatterhornServerSettings = (next: SetStateAction<MatterhornServerSettings>) => {
+    const resolved = applyStateAction(state.matterhornServerSettings, next);
+    mutateState((current) => ({ ...current, matterhornServerSettings: resolved }));
     queueHealthCheck(0);
   };
 
-  const updateOpenworkServerSettings = (next: OpenworkServerSettings) => {
-    const stored = writeOpenworkServerSettings(next);
-    mutateState((current) => ({ ...current, openworkServerSettings: stored }));
+  const updateMatterhornServerSettings = (next: MatterhornServerSettings) => {
+    const stored = writeMatterhornServerSettings(next);
+    mutateState((current) => ({ ...current, matterhornServerSettings: stored }));
     queueHealthCheck(0);
   };
 
-  const resetOpenworkServerSettings = () => {
-    clearOpenworkServerSettings();
-    mutateState((current) => ({ ...current, openworkServerSettings: {} }));
+  const resetMatterhornServerSettings = () => {
+    clearMatterhornServerSettings();
+    mutateState((current) => ({ ...current, matterhornServerSettings: {} }));
     queueHealthCheck(0);
   };
 
   const shouldWaitForLocalHostInfo = () =>
     isDesktopRuntime() &&
     options.startupPreference() !== "server" &&
-    !state.openworkServerHostInfoReady;
+    !state.matterhornServerHostInfoReady;
 
-  const shouldRetryStartupCheck = (status: OpenworkServerStatus) =>
+  const shouldRetryStartupCheck = (status: MatterhornServerStatus) =>
     status !== "connected" &&
     isDesktopRuntime() &&
     options.startupPreference() !== "server" &&
     Date.now() - bootStartedAt < 5_000;
 
   const checkOpenworkServer = async (url: string, token?: string, hostToken?: string) => {
-    const client = createOpenworkServerClient({ baseUrl: url, token, hostToken });
+    const client = createMatterhornServerClient({ baseUrl: url, token, hostToken });
     try {
       await client.health();
     } catch (error) {
-      const resolved = error as OpenworkServerError | Error;
+      const resolved = error as MatterhornServerError | Error;
       if ("status" in resolved && (resolved.status === 401 || resolved.status === 403)) {
-        return { status: "limited" as OpenworkServerStatus, capabilities: null };
+        return { status: "limited" as MatterhornServerStatus, capabilities: null };
       }
-      return { status: "disconnected" as OpenworkServerStatus, capabilities: null };
+      return { status: "disconnected" as MatterhornServerStatus, capabilities: null };
     }
 
     if (!token) {
-      return { status: "limited" as OpenworkServerStatus, capabilities: null };
+      return { status: "limited" as MatterhornServerStatus, capabilities: null };
     }
 
     try {
       const capabilities = await client.capabilities();
-      return { status: "connected" as OpenworkServerStatus, capabilities };
+      return { status: "connected" as MatterhornServerStatus, capabilities };
     } catch (error) {
-      const resolved = error as OpenworkServerError | Error;
+      const resolved = error as MatterhornServerError | Error;
       if ("status" in resolved && (resolved.status === 401 || resolved.status === 403)) {
-        return { status: "limited" as OpenworkServerStatus, capabilities: null };
+        return { status: "limited" as MatterhornServerStatus, capabilities: null };
       }
-      return { status: "disconnected" as OpenworkServerStatus, capabilities: null };
+      return { status: "disconnected" as MatterhornServerStatus, capabilities: null };
     }
   };
 
@@ -345,9 +345,9 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       consecutiveHealthFailures = 0;
       mutateState((current) => ({
         ...current,
-        openworkServerStatus: "disconnected",
-        openworkServerCapabilities: null,
-        openworkServerCheckedAt: Date.now(),
+        matterhornServerStatus: "disconnected",
+        matterhornServerCapabilities: null,
+        matterhornServerCheckedAt: Date.now(),
       }));
       return;
     }
@@ -361,13 +361,13 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
         if (disposed) return;
 
         try {
-          const info = await openworkServerInfo() as OpenworkServerInfo;
+          const info = await matterhornServerInfo() as MatterhornServerInfo;
           if (disposed) return;
 
           mutateState((current) => ({
             ...current,
-            openworkServerHostInfo: info,
-            openworkServerHostInfoReady: true,
+            matterhornServerHostInfo: info,
+            matterhornServerHostInfoReady: true,
           }));
 
           const retryUrl = info.baseUrl?.trim() ?? "";
@@ -382,8 +382,8 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       }
 
       if (disposed) return;
-      const previousStatus = state.openworkServerStatus;
-      const previousCapabilities = state.openworkServerCapabilities;
+      const previousStatus = state.matterhornServerStatus;
+      const previousCapabilities = state.matterhornServerCapabilities;
       const healthy = result.status === "connected" || result.status === "limited";
       if (healthy) {
         consecutiveHealthFailures = 0;
@@ -400,15 +400,15 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
 
       mutateState((current) => ({
         ...current,
-        openworkServerStatus: preservePrevious ? previousStatus : result.status,
-        openworkServerCapabilities: preservePrevious ? previousCapabilities : result.capabilities,
-        openworkServerCheckedAt: Date.now(),
+        matterhornServerStatus: preservePrevious ? previousStatus : result.status,
+        matterhornServerCapabilities: preservePrevious ? previousCapabilities : result.capabilities,
+        matterhornServerCheckedAt: Date.now(),
       }));
     } catch {
       healthDelayMs = Math.min(healthDelayMs * 2, 60_000);
       mutateState((current) => ({
         ...current,
-        openworkServerCheckedAt: Date.now(),
+        matterhornServerCheckedAt: Date.now(),
       }));
     } finally {
       healthBusy = false;
@@ -421,12 +421,12 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     emitChange();
 
     if (!isDesktopRuntime()) return;
-    const port = state.openworkServerHostInfo?.port;
+    const port = state.matterhornServerHostInfo?.port;
     if (!port) return;
-    if (state.openworkServerSettings.portOverride === port) return;
+    if (state.matterhornServerSettings.portOverride === port) return;
 
-    updateOpenworkServerSettings({
-      ...state.openworkServerSettings,
+    updateMatterhornServerSettings({
+      ...state.matterhornServerSettings,
       portOverride: port,
     });
   };
@@ -468,19 +468,19 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       if (!options.documentVisible()) return;
       void (async () => {
         try {
-          const info = await openworkServerInfo() as OpenworkServerInfo;
+          const info = await matterhornServerInfo() as MatterhornServerInfo;
           if (disposed) return;
           mutateState((current) => ({
             ...current,
-            openworkServerHostInfo: info,
-            openworkServerHostInfoReady: true,
+            matterhornServerHostInfo: info,
+            matterhornServerHostInfoReady: true,
           }));
         } catch {
           if (disposed) return;
           mutateState((current) => ({
             ...current,
-            openworkServerHostInfo: null,
-            openworkServerHostInfoReady: true,
+            matterhornServerHostInfo: null,
+            matterhornServerHostInfoReady: true,
           }));
         }
       })();
@@ -491,22 +491,22 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     const refreshDiagnostics = () => {
       if (!options.documentVisible()) return;
       if (!options.developerMode()) {
-        setStateField("openworkServerDiagnostics", null);
+        setStateField("matterhornServerDiagnostics", null);
         return;
       }
 
       const client = getClient();
-      if (!client || state.openworkServerStatus === "disconnected") {
-        setStateField("openworkServerDiagnostics", null);
+      if (!client || state.matterhornServerStatus === "disconnected") {
+        setStateField("matterhornServerDiagnostics", null);
         return;
       }
 
       void (async () => {
         try {
           const status = await client.status();
-          if (!disposed) setStateField("openworkServerDiagnostics", status);
+          if (!disposed) setStateField("matterhornServerDiagnostics", status);
         } catch {
-          if (!disposed) setStateField("openworkServerDiagnostics", null);
+          if (!disposed) setStateField("matterhornServerDiagnostics", null);
         }
       })();
     };
@@ -548,9 +548,9 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       if (!options.developerMode()) {
         mutateState((current) => ({
           ...current,
-          openworkAuditEntries: [],
-          openworkAuditStatus: "idle",
-          openworkAuditError: null,
+          matterhornAuditEntries: [],
+          matterhornAuditStatus: "idle",
+          matterhornAuditError: null,
         }));
         return;
       }
@@ -560,17 +560,17 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       if (!client || !workspaceId) {
         mutateState((current) => ({
           ...current,
-          openworkAuditEntries: [],
-          openworkAuditStatus: "idle",
-          openworkAuditError: null,
+          matterhornAuditEntries: [],
+          matterhornAuditStatus: "idle",
+          matterhornAuditError: null,
         }));
         return;
       }
 
       mutateState((current) => ({
         ...current,
-        openworkAuditStatus: "loading",
-        openworkAuditError: null,
+        matterhornAuditStatus: "loading",
+        matterhornAuditError: null,
       }));
 
       void (async () => {
@@ -579,16 +579,16 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
           if (disposed) return;
           mutateState((current) => ({
             ...current,
-            openworkAuditEntries: Array.isArray(result.items) ? result.items : [],
-            openworkAuditStatus: "idle",
+            matterhornAuditEntries: Array.isArray(result.items) ? result.items : [],
+            matterhornAuditStatus: "idle",
           }));
         } catch (error) {
           if (disposed) return;
           mutateState((current) => ({
             ...current,
-            openworkAuditEntries: [],
-            openworkAuditStatus: "error",
-            openworkAuditError:
+            matterhornAuditEntries: [],
+            matterhornAuditStatus: "error",
+            matterhornAuditError:
               error instanceof Error
                 ? error.message
                 : t("app.error_audit_load"),
@@ -611,14 +611,14 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     for (const key of [...intervals.keys()]) stopInterval(key);
   };
 
-  const testOpenworkServerConnection = async (next: OpenworkServerSettings) => {
-    const derived = normalizeOpenworkServerUrl(next.urlOverride ?? "");
+  const testMatterhornServerConnection = async (next: MatterhornServerSettings) => {
+    const derived = normalizeMatterhornServerUrl(next.urlOverride ?? "");
     if (!derived) {
       mutateState((current) => ({
         ...current,
-        openworkServerStatus: "disconnected",
-        openworkServerCapabilities: null,
-        openworkServerCheckedAt: Date.now(),
+        matterhornServerStatus: "disconnected",
+        matterhornServerCapabilities: null,
+        matterhornServerCheckedAt: Date.now(),
       }));
       return false;
     }
@@ -627,9 +627,9 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     consecutiveHealthFailures = result.status === "disconnected" ? consecutiveHealthFailures + 1 : 0;
     mutateState((current) => ({
       ...current,
-      openworkServerStatus: result.status,
-      openworkServerCapabilities: result.capabilities,
-      openworkServerCheckedAt: Date.now(),
+      matterhornServerStatus: result.status,
+      matterhornServerCapabilities: result.capabilities,
+      matterhornServerCheckedAt: Date.now(),
     }));
 
     const ok = result.status === "connected" || result.status === "limited";
@@ -642,8 +642,8 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       if (shouldAttach) {
         await options
           .createRemoteWorkspaceFlow({
-            openworkHostUrl: derived,
-            openworkToken: next.token ?? null,
+            matterhornHostUrl: derived,
+            matterhornToken: next.token ?? null,
           })
           .catch(() => undefined);
       }
@@ -652,26 +652,26 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
   };
 
   const reconnectOpenworkServer = async () => {
-    if (state.openworkReconnectBusy) return false;
-    setStateField("openworkReconnectBusy", true);
+    if (state.matterhornReconnectBusy) return false;
+    setStateField("matterhornReconnectBusy", true);
 
     try {
-      let hostInfo = state.openworkServerHostInfo;
+      let hostInfo = state.matterhornServerHostInfo;
       if (isDesktopRuntime()) {
         try {
-          hostInfo = await openworkServerInfo() as OpenworkServerInfo;
-          mutateState((current) => ({ ...current, openworkServerHostInfo: hostInfo }));
+          hostInfo = await matterhornServerInfo() as MatterhornServerInfo;
+          mutateState((current) => ({ ...current, matterhornServerHostInfo: hostInfo }));
         } catch {
           hostInfo = null;
-          setStateField("openworkServerHostInfo", null);
+          setStateField("matterhornServerHostInfo", null);
         }
       }
 
       if (hostInfo?.clientToken?.trim() && options.startupPreference() !== "server") {
         const liveToken = hostInfo.clientToken.trim();
-        const settings = state.openworkServerSettings;
+        const settings = state.matterhornServerSettings;
         if ((settings.token?.trim() ?? "") !== liveToken) {
-          updateOpenworkServerSettings({ ...settings, token: liveToken });
+          updateMatterhornServerSettings({ ...settings, token: liveToken });
         }
       }
 
@@ -680,9 +680,9 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       if (!url) {
         mutateState((current) => ({
           ...current,
-          openworkServerStatus: "disconnected",
-          openworkServerCapabilities: null,
-          openworkServerCheckedAt: Date.now(),
+          matterhornServerStatus: "disconnected",
+          matterhornServerCapabilities: null,
+          matterhornServerCheckedAt: Date.now(),
         }));
         return false;
       }
@@ -690,20 +690,20 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       const result = await checkOpenworkServer(url, auth.token, auth.hostToken);
       mutateState((current) => ({
         ...current,
-        openworkServerStatus: result.status,
-        openworkServerCapabilities: result.capabilities,
-        openworkServerCheckedAt: Date.now(),
+        matterhornServerStatus: result.status,
+        matterhornServerCapabilities: result.capabilities,
+        matterhornServerCheckedAt: Date.now(),
       }));
       return result.status === "connected" || result.status === "limited";
     } finally {
-      setStateField("openworkReconnectBusy", false);
+      setStateField("matterhornReconnectBusy", false);
     }
   };
 
-  async function ensureLocalOpenworkServerClient(): Promise<OpenworkServerClient | null> {
-    let hostInfo = state.openworkServerHostInfo;
+  async function ensureLocalMatterhornServerClient(): Promise<MatterhornServerClient | null> {
+    let hostInfo = state.matterhornServerHostInfo;
     if (hostInfo?.baseUrl?.trim() && hostInfo.clientToken?.trim()) {
-      const existing = createOpenworkServerClient({
+      const existing = createMatterhornServerClient({
         baseUrl: hostInfo.baseUrl.trim(),
         token: hostInfo.clientToken.trim(),
         hostToken: hostInfo.hostToken?.trim() || undefined,
@@ -722,10 +722,10 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     if (!isDesktopRuntime()) return null;
 
     try {
-      hostInfo = await openworkServerRestart({
-        remoteAccessEnabled: state.openworkServerSettings.remoteAccessEnabled === true,
-      }) as OpenworkServerInfo;
-      mutateState((current) => ({ ...current, openworkServerHostInfo: hostInfo }));
+      hostInfo = await matterhornServerRestart({
+        remoteAccessEnabled: state.matterhornServerSettings.remoteAccessEnabled === true,
+      }) as MatterhornServerInfo;
+      mutateState((current) => ({ ...current, matterhornServerHostInfo: hostInfo }));
     } catch {
       return null;
     }
@@ -739,7 +739,7 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       await reconnectOpenworkServer();
     }
 
-    return createOpenworkServerClient({
+    return createMatterhornServerClient({
       baseUrl,
       token,
       hostToken: hostToken || undefined,
@@ -748,8 +748,8 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
 
   const saveShareRemoteAccess = async (enabled: boolean) => {
     if (state.shareRemoteAccessBusy) return;
-    const previous = state.openworkServerSettings;
-    const next: OpenworkServerSettings = {
+    const previous = state.matterhornServerSettings;
+    const next: MatterhornServerSettings = {
       ...previous,
       remoteAccessEnabled: enabled,
     };
@@ -759,7 +759,7 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
       shareRemoteAccessBusy: true,
       shareRemoteAccessError: null,
     }));
-    updateOpenworkServerSettings(next);
+    updateMatterhornServerSettings(next);
 
     try {
       if (isDesktopRuntime() && options.selectedWorkspaceDisplay().workspaceType === "local") {
@@ -770,7 +770,7 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
         await reconnectOpenworkServer();
       }
     } catch (error) {
-      updateOpenworkServerSettings(previous);
+      updateMatterhornServerSettings(previous);
       mutateState((current) => ({
         ...current,
         shareRemoteAccessError:
@@ -801,17 +801,17 @@ export function createOpenworkServerStore(options: CreateOpenworkServerStoreOpti
     start,
     dispose,
     syncFromOptions,
-    setOpenworkServerSettings,
-    updateOpenworkServerSettings,
-    resetOpenworkServerSettings,
+    setMatterhornServerSettings,
+    updateMatterhornServerSettings,
+    resetMatterhornServerSettings,
     saveShareRemoteAccess,
     checkOpenworkServer,
-    testOpenworkServerConnection,
+    testMatterhornServerConnection,
     reconnectOpenworkServer,
-    ensureLocalOpenworkServerClient,
+    ensureLocalMatterhornServerClient,
   };
 }
 
-export function useOpenworkServerStoreSnapshot(store: OpenworkServerStore) {
+export function useMatterhornServerStoreSnapshot(store: MatterhornServerStore) {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }

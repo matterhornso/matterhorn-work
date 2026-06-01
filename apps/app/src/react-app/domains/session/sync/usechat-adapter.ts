@@ -3,14 +3,14 @@ import type { UIMessage, UIMessageChunk, ChatTransport, DynamicToolUIPart } from
 import type { Part } from "@opencode-ai/sdk/v2/client";
 
 import { abortSessionSafe } from "../../../../app/lib/opencode-session";
-import type { OpenworkSessionMessage, OpenworkSessionSnapshot } from "../../../../app/lib/openwork-server";
+import type { MatterhornSessionMessage, MatterhornSessionSnapshot } from "../../../../app/lib/matterhorn-server";
 import { normalizeEvent, safeStringify } from "../../../../app/utils";
 import type { OpencodeEvent } from "../../../../app/types";
 import { createClient } from "../../../../app/lib/opencode";
 
 type TransportOptions = {
   baseUrl: string;
-  openworkToken: string;
+  matterhornToken: string;
   sessionId: string;
 };
 
@@ -160,7 +160,7 @@ function mapToolPart(part: ToolPart): DynamicToolUIPart {
   };
 }
 
-export function snapshotToUIMessages(snapshot: OpenworkSessionSnapshot): UIMessage[] {
+export function snapshotToUIMessages(snapshot: MatterhornSessionSnapshot): UIMessage[] {
   return snapshot.messages.map((message) => {
     const created = message.info.time?.created;
     return {
@@ -589,7 +589,7 @@ export function createOpenworkChatTransport(options: TransportOptions): ChatTran
   return {
     async sendMessages({ messages, abortSignal }) {
       const client = createClient(options.baseUrl, undefined, {
-        token: options.openworkToken,
+        token: options.matterhornToken,
         mode: "openwork",
       });
 

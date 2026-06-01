@@ -21,7 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { registerExtensionConfig, type ExtensionConfigContext } from "./extension-registry";
 
-export type OpenWorkVoiceConfigProps = {
+export type MatterhornVoiceConfigProps = {
   busy: boolean;
   status: string | null;
   error: string | null;
@@ -30,8 +30,8 @@ export type OpenWorkVoiceConfigProps = {
   onTestSession: () => void | Promise<void>;
 };
 
-const openWorkVoiceConfigFactory = (ctx: ExtensionConfigContext) => (
-  <OpenWorkVoiceConfig
+const matterhornVoiceConfigFactory = (ctx: ExtensionConfigContext) => (
+  <MatterhornVoiceConfig
     busy={ctx.voiceExtension.busy}
     status={ctx.voiceExtension.status}
     error={ctx.voiceExtension.error}
@@ -41,10 +41,10 @@ const openWorkVoiceConfigFactory = (ctx: ExtensionConfigContext) => (
   />
 );
 
-registerExtensionConfig("openwork.voice.settings", openWorkVoiceConfigFactory);
-registerExtensionConfig("openwork-voice", openWorkVoiceConfigFactory);
+registerExtensionConfig("openwork.voice.settings", matterhornVoiceConfigFactory);
+registerExtensionConfig("matterhorn-voice", matterhornVoiceConfigFactory);
 
-export function OpenWorkVoiceConfig(props: OpenWorkVoiceConfigProps) {
+export function MatterhornVoiceConfig(props: MatterhornVoiceConfigProps) {
   const [apiKey, setApiKey] = useState("");
   const canSave = Boolean(apiKey.trim());
 
@@ -53,7 +53,7 @@ export function OpenWorkVoiceConfig(props: OpenWorkVoiceConfigProps) {
       <CardHeader>
         <CardTitle>Realtime voice</CardTitle>
         <CardDescription>
-          Voice Mode uses OpenAI Realtime and the same OpenWork UI control surface exposed through OpenWork UI MCP.
+          Voice Mode uses OpenAI Realtime and the same Matterhorn Work UI control surface exposed through Matterhorn Work UI MCP.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -62,23 +62,23 @@ export function OpenWorkVoiceConfig(props: OpenWorkVoiceConfigProps) {
             <Mic2 />
             <AlertTitle>OpenAI key detected</AlertTitle>
             <AlertDescription>
-              Voice Mode will use OPENAI_REALTIME_API_KEY when present, otherwise OPENAI_API_KEY from OpenWork environment variables.
+              Voice Mode will use OPENAI_REALTIME_API_KEY when present, otherwise OPENAI_API_KEY from Matterhorn Work environment variables.
             </AlertDescription>
           </Alert>
         ) : null}
 
         <FieldGroup className="gap-4">
           <Field>
-            <FieldLabel htmlFor="openwork-voice-api-key">OpenAI API key</FieldLabel>
+            <FieldLabel htmlFor="matterhorn-voice-api-key">OpenAI API key</FieldLabel>
             <Input
-              id="openwork-voice-api-key"
+              id="matterhorn-voice-api-key"
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.currentTarget.value)}
               placeholder="sk-..."
             />
             <FieldDescription>
-              Saved as OPENAI_API_KEY in OpenWork's local env store. The renderer only receives short-lived Realtime client secrets.
+              Saved as OPENAI_API_KEY in Matterhorn Work's local env store. The renderer only receives short-lived Realtime client secrets.
             </FieldDescription>
           </Field>
         </FieldGroup>

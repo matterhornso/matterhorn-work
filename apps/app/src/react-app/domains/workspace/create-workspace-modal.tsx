@@ -380,8 +380,8 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
     if (!props.onConfirmRemote) return;
     await Promise.resolve(
       props.onConfirmRemote({
-        openworkHostUrl: remoteUrl.trim(),
-        openworkToken: remoteToken.trim() || null,
+        matterhornHostUrl: remoteUrl.trim(),
+        matterhornToken: remoteToken.trim() || null,
         directory: null,
         displayName: remoteDisplayName.trim() || null,
         closeModal: true,
@@ -400,18 +400,18 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
     setWorkersError(null);
     try {
       const tokens = await denClient.getWorkerTokens(worker.workerId, orgId);
-      const openworkUrl = tokens.openworkUrl?.trim() ?? "";
+      const matterhornUrl = tokens.matterhornUrl?.trim() ?? "";
       const accessToken =
         tokens.ownerToken?.trim() || tokens.clientToken?.trim() || "";
-      if (!openworkUrl || !accessToken) {
+      if (!matterhornUrl || !accessToken) {
         throw new Error(t("dashboard.error_workspace_not_ready"));
       }
       const ok = await Promise.resolve(
         props.onConfirmRemote({
-          openworkHostUrl: openworkUrl,
-          openworkToken: accessToken,
-          openworkClientToken: tokens.clientToken?.trim() || null,
-          openworkHostToken: tokens.hostToken?.trim() || null,
+          matterhornHostUrl: matterhornUrl,
+          matterhornToken: accessToken,
+          matterhornClientToken: tokens.clientToken?.trim() || null,
+          matterhornHostToken: tokens.hostToken?.trim() || null,
           directory: null,
           displayName: worker.workerName,
           closeModal: true,

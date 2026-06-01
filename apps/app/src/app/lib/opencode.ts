@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Message, type Part, type Session, type Todo } from "@opencode-ai/sdk/v2/client";
 
 import { desktopFetch } from "./desktop";
-import { createOpenworkServerClient, OpenworkServerError } from "./openwork-server";
+import { createMatterhornServerClient, MatterhornServerError } from "./matterhorn-server";
 import { isDesktopRuntime } from "../utils";
 
 type FieldsResult<T> =
@@ -184,13 +184,13 @@ async function wrapOpenworkRead<T>(
     return createSyntheticResult(url, "GET", {
       ok: false,
       error,
-      status: error instanceof OpenworkServerError ? error.status : 500,
+      status: error instanceof MatterhornServerError ? error.status : 500,
     });
   }
 }
 
 function shouldFallbackToLegacySessionRead(error: unknown): boolean {
-  if (!(error instanceof OpenworkServerError)) return false;
+  if (!(error instanceof MatterhornServerError)) return false;
   return error.status === 404 || error.status === 405 || error.status === 501;
 }
 
@@ -208,7 +208,7 @@ async function wrapOpenworkReadWithFallback<T>(
       return createSyntheticResult(url, "GET", {
         ok: false,
         error,
-        status: error instanceof OpenworkServerError ? error.status : 500,
+        status: error instanceof MatterhornServerError ? error.status : 500,
       });
     }
     return fallback();
@@ -371,13 +371,13 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
   });
 
   const session = client.session as typeof client.session;
-  const openworkMount = auth?.mode === "openwork" ? resolveOpenworkWorkspaceMount(baseUrl) : null;
-  const openworkSessionClient =
-    openworkMount && auth?.token
-      ? createOpenworkServerClient({ baseUrl: openworkMount.baseUrl, token: auth.token })
+  const matterhornMount = auth?.mode === "openwork" ? resolveOpenworkWorkspaceMount(baseUrl) : null;
+  const matterhornSessionClient =
+    matterhornMount && auth?.token
+      ? createMatterhornServerClient({ baseUrl: matterhornMount.baseUrl, token: auth.token })
       : null;
   // TODO(2026-04-12): remove the old-server compatibility path here once all
-  // OpenWork servers expose the workspace-scoped session read APIs.
+  // Matterhorn Work servers expose the workspace-scoped session read APIs.
   const sessionOverrides = session as any as {
     list: (parameters?: SessionListParameters, options?: { throwOnError?: boolean }) => Promise<FieldsResult<Session[]>>;
     get: (parameters: SessionLookupParameters, options?: { throwOnError?: boolean }) => Promise<FieldsResult<Session>>;
@@ -389,7 +389,7 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const listOriginal = sessionOverrides.list.bind(session);
   sessionOverrides.list = (parameters?: SessionListParameters, options?: { throwOnError?: boolean }) => {
-    if (!openworkMount || !openworkSessionClient) {
+    if (!matterhornMount || !matterhornSessionClient) {
       return listOriginal(parameters, options);
     }
     const query = new URLSearchParams();
@@ -397,10 +397,10 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
     if (typeof parameters?.start === "number") query.set("start", String(parameters.start));
     if (parameters?.search?.trim()) query.set("search", parameters.search.trim());
     if (typeof parameters?.limit === "number") query.set("limit", String(parameters.limit));
-    const url = `${openworkMount.baseUrl}/workspace/${encodeURIComponent(openworkMount.workspaceId)}/sessions${query.size ? `?${query.toString()}` : ""}`;
+    const url = `${matterhornMount.baseUrl}/workspace/${encodeURIComponent(matterhornMount.workspaceId)}/sessions${query.size ? `?${query.toString()}` : ""}`;
     return wrapOpenworkReadWithFallback(
       url,
-      async () => (await openworkSessionClient.listSessions(openworkMount.workspaceId, parameters)).items,
+      async () => (await matterhornSessionClient.listSessions(matterhornMount.workspaceId, parameters)).items,
       () => listOriginal(parameters, options),
       options,
     );
@@ -408,13 +408,13 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const getOriginal = sessionOverrides.get.bind(session);
   sessionOverrides.get = (parameters: SessionLookupParameters, options?: { throwOnError?: boolean }) => {
-    if (!openworkMount || !openworkSessionClient) {
+    if (!matterhornMount || !matterhornSessionClient) {
       return getOriginal(parameters, options);
     }
-    const url = `${openworkMount.baseUrl}/workspace/${encodeURIComponent(openworkMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}`;
+    const url = `${matterhornMount.baseUrl}/workspace/${encodeURIComponent(matterhornMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}`;
     return wrapOpenworkReadWithFallback(
       url,
-      async () => (await openworkSessionClient.getSession(openworkMount.workspaceId, parameters.sessionID)).item,
+      async () => (await matterhornSessionClient.getSession(matterhornMount.workspaceId, parameters.sessionID)).item,
       () => getOriginal(parameters, options),
       options,
     );
@@ -422,16 +422,16 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const messagesOriginal = sessionOverrides.messages.bind(session);
   sessionOverrides.messages = (parameters: SessionMessagesParameters, options?: { throwOnError?: boolean }) => {
-    if (!openworkMount || !openworkSessionClient) {
+    if (!matterhornMount || !matterhornSessionClient) {
       return messagesOriginal(parameters, options);
     }
     const query = new URLSearchParams();
     if (typeof parameters.limit === "number") query.set("limit", String(parameters.limit));
-    const url = `${openworkMount.baseUrl}/workspace/${encodeURIComponent(openworkMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}/messages${query.size ? `?${query.toString()}` : ""}`;
+    const url = `${matterhornMount.baseUrl}/workspace/${encodeURIComponent(matterhornMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}/messages${query.size ? `?${query.toString()}` : ""}`;
     return wrapOpenworkReadWithFallback(
       url,
       async () =>
-        (await openworkSessionClient.getSessionMessages(openworkMount.workspaceId, parameters.sessionID, {
+        (await matterhornSessionClient.getSessionMessages(matterhornMount.workspaceId, parameters.sessionID, {
           limit: parameters.limit,
         })).items,
       () => messagesOriginal(parameters, options),
@@ -441,13 +441,13 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
 
   const todoOriginal = sessionOverrides.todo.bind(session);
   sessionOverrides.todo = (parameters: SessionLookupParameters, options?: { throwOnError?: boolean }) => {
-    if (!openworkMount || !openworkSessionClient) {
+    if (!matterhornMount || !matterhornSessionClient) {
       return todoOriginal(parameters, options);
     }
-    const url = `${openworkMount.baseUrl}/workspace/${encodeURIComponent(openworkMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}/snapshot`;
+    const url = `${matterhornMount.baseUrl}/workspace/${encodeURIComponent(matterhornMount.workspaceId)}/sessions/${encodeURIComponent(parameters.sessionID)}/snapshot`;
     return wrapOpenworkReadWithFallback(
       url,
-      async () => (await openworkSessionClient.getSessionSnapshot(openworkMount.workspaceId, parameters.sessionID)).item.todos,
+      async () => (await matterhornSessionClient.getSessionSnapshot(matterhornMount.workspaceId, parameters.sessionID)).item.todos,
       () => todoOriginal(parameters, options),
       options,
     );

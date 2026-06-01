@@ -3,8 +3,8 @@ import { useEffect, type ReactNode } from "react";
 import { WagmiProvider } from "wagmi";
 
 import { wagmiConfig } from "../infra/wagmi-config";
-import { isWebDeployment } from "../../app/lib/openwork-deployment";
-import { hydrateOpenworkServerSettingsFromEnv } from "../../app/lib/openwork-server";
+import { isWebDeployment } from "../../app/lib/matterhorn-deployment";
+import { hydrateMatterhornServerSettingsFromEnv } from "../../app/lib/matterhorn-server";
 import { isDesktopRuntime } from "../../app/utils";
 import { DenAuthProvider } from "../domains/cloud/den-auth-provider";
 import { DesktopConfigProvider } from "../domains/cloud/desktop-config-provider";
@@ -16,18 +16,18 @@ import { ArchitectureMismatchGate } from "./architecture-mismatch-gate";
 import { BootStateProvider } from "./boot-state";
 import { DesktopRuntimeBoot } from "./desktop-runtime-boot";
 import { startDebugLogger, stopDebugLogger } from "./debug-logger";
-import { resolveOpenworkConnection } from "./openwork-connection";
+import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
 
-  const openworkUrl =
+  const matterhornUrl =
     typeof import.meta.env?.VITE_OPENWORK_URL === "string"
       ? import.meta.env.VITE_OPENWORK_URL.trim()
       : "";
-  if (openworkUrl) {
-    return `${openworkUrl.replace(/\/+$/, "")}/opencode`;
+  if (matterhornUrl) {
+    return `${matterhornUrl.replace(/\/+$/, "")}/opencode`;
   }
 
   if (isWebDeployment() && import.meta.env.PROD && typeof window !== "undefined") {
@@ -46,14 +46,14 @@ type AppProvidersProps = {
 };
 
 export function AppProviders({ children }: AppProvidersProps) {
-  hydrateOpenworkServerSettingsFromEnv();
+  hydrateMatterhornServerSettingsFromEnv();
 
   useEffect(() => {
     // Start the dev observability forwarder. Reads the current openwork-server
     // URL on every flush so reconnects after port changes still work. In prod
     // builds `startDebugLogger` is a no-op.
     startDebugLogger({
-      serverUrl: async () => (await resolveOpenworkConnection()).normalizedBaseUrl,
+      serverUrl: async () => (await resolveMatterhornConnection()).normalizedBaseUrl,
     });
     return () => {
       stopDebugLogger();

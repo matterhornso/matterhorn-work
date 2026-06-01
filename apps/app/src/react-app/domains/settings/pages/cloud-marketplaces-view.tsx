@@ -282,7 +282,7 @@ export function CloudMarketplacesView({
   const content = !isSignedIn ? (
     <SettingsNotice>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <span>Sign in to OpenWork Cloud to browse organization marketplace extensions.</span>
+        <span>Sign in to Matterhorn Cloud to browse organization marketplace extensions.</span>
         <Button size="sm" onClick={onOpenAccount}>
           {t("skills.share_team_sign_in")}
         </Button>
@@ -294,7 +294,7 @@ export function CloudMarketplacesView({
         <SettingsSectionHeaderContent>
           <SettingsSectionHeaderTitle>Extension Marketplace</SettingsSectionHeaderTitle>
           <SettingsSectionHeaderDescription>
-            Add extensions from OpenWork Cloud. Claude-compatible plugins are normalized into OpenWork extensions with installable resources such as skills, MCPs, commands, or tools.
+            Add extensions from Matterhorn Cloud. Claude-compatible plugins are normalized into Matterhorn Work extensions with installable resources such as skills, MCPs, commands, or tools.
           </SettingsSectionHeaderDescription>
         </SettingsSectionHeaderContent>
         <SettingsSectionHeaderActions>

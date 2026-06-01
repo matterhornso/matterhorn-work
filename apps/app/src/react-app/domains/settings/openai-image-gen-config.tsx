@@ -30,7 +30,7 @@ export type OpenAiImageGenConfigProps = {
   onTestGenerate: (input: { apiKey: string; prompt: string }) => void | Promise<void>;
 };
 
-const openAiImageGenConfigFactory = (ctx: ExtensionConfigContext) => (
+const matterhornImageGenConfigFactory = (ctx: ExtensionConfigContext) => (
   <OpenAiImageGenConfig
     busy={ctx.imageExtension.busy}
     status={ctx.imageExtension.status}
@@ -41,8 +41,8 @@ const openAiImageGenConfigFactory = (ctx: ExtensionConfigContext) => (
   />
 );
 
-registerExtensionConfig("openwork.imageGen.settings", openAiImageGenConfigFactory);
-registerExtensionConfig("openai-image-gen", openAiImageGenConfigFactory);
+registerExtensionConfig("matterhorn.imageGen.settings", matterhornImageGenConfigFactory);
+registerExtensionConfig("openai-image-gen", matterhornImageGenConfigFactory);
 
 const DEFAULT_PROMPT =
   "A friendly robot owl holding a paintbrush, teal neon UI frame, high contrast";

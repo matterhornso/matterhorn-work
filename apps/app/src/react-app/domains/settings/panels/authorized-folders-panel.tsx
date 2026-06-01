@@ -14,10 +14,10 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { t } from "@/i18n";
 import type {
-  OpenworkServerCapabilities,
-  OpenworkServerClient,
-  OpenworkServerStatus,
-} from "../../../../app/lib/openwork-server";
+  MatterhornServerCapabilities,
+  MatterhornServerClient,
+  MatterhornServerStatus,
+} from "../../../../app/lib/matterhorn-server";
 import { pickDirectory } from "../../../../app/lib/desktop";
 import {
   isDesktopRuntime,
@@ -45,9 +45,9 @@ import {
 } from "../settings-layout";
 
 export type AuthorizedFoldersPanelProps = {
-  openworkServerClient: OpenworkServerClient | null;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerCapabilities: OpenworkServerCapabilities | null;
+  matterhornServerClient: MatterhornServerClient | null;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerCapabilities: MatterhornServerCapabilities | null;
   runtimeWorkspaceId: string | null;
   selectedWorkspaceRoot: string;
   activeWorkspaceType: "local" | "remote";
@@ -139,24 +139,24 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
   const setAuthorizedFoldersStatus = (value: SetStateAction<string | null>) => setFolderState("status", value);
   const setAuthorizedFoldersError = (value: SetStateAction<string | null>) => setFolderState("error", value);
 
-  const openworkServerReady = props.openworkServerStatus === "connected";
-  const openworkServerWorkspaceReady = Boolean(props.runtimeWorkspaceId);
+  const matterhornServerReady = props.matterhornServerStatus === "connected";
+  const matterhornServerWorkspaceReady = Boolean(props.runtimeWorkspaceId);
   const canReadConfig =
-    openworkServerReady &&
-    openworkServerWorkspaceReady &&
-    (props.openworkServerCapabilities?.config?.read ?? false);
+    matterhornServerReady &&
+    matterhornServerWorkspaceReady &&
+    (props.matterhornServerCapabilities?.config?.read ?? false);
   const canWriteConfig =
-    openworkServerReady &&
-    openworkServerWorkspaceReady &&
-    (props.openworkServerCapabilities?.config?.write ?? false);
+    matterhornServerReady &&
+    matterhornServerWorkspaceReady &&
+    (props.matterhornServerCapabilities?.config?.write ?? false);
 
   const authorizedFoldersHint = useMemo(() => {
-    if (!openworkServerReady) return t("context_panel.server_disconnected");
-    if (!openworkServerWorkspaceReady) return t("context_panel.no_server_workspace");
+    if (!matterhornServerReady) return t("context_panel.server_disconnected");
+    if (!matterhornServerWorkspaceReady) return t("context_panel.no_server_workspace");
     if (!canReadConfig) return t("context_panel.config_access_unavailable");
     if (!canWriteConfig) return t("context_panel.config_read_only");
     return null;
-  }, [canReadConfig, canWriteConfig, openworkServerReady, openworkServerWorkspaceReady]);
+  }, [canReadConfig, canWriteConfig, matterhornServerReady, matterhornServerWorkspaceReady]);
 
   const canPickAuthorizedFolder =
     isDesktopRuntime() && canWriteConfig && props.activeWorkspaceType === "local";
@@ -167,10 +167,10 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
   }, [authorizedFolders, workspaceRootFolder]);
 
   useEffect(() => {
-    const openworkClient = props.openworkServerClient;
-    const openworkWorkspaceId = props.runtimeWorkspaceId;
+    const matterhornClient = props.matterhornServerClient;
+    const matterhornWorkspaceId = props.runtimeWorkspaceId;
 
-    if (!openworkClient || !openworkWorkspaceId || !canReadConfig) {
+    if (!matterhornClient || !matterhornWorkspaceId || !canReadConfig) {
       dispatchFolderState({ type: "reset" });
       return;
     }
@@ -180,7 +180,7 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
 
     void (async () => {
       try {
-        const config = await openworkClient.getConfig(openworkWorkspaceId);
+        const config = await matterhornClient.getConfig(matterhornWorkspaceId);
         if (cancelled) return;
         const next = readAuthorizedFoldersFromConfig(ensureRecord(config.opencode));
         dispatchFolderState({
@@ -200,12 +200,12 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [canReadConfig, props.openworkServerClient, props.runtimeWorkspaceId]);
+  }, [canReadConfig, props.matterhornServerClient, props.runtimeWorkspaceId]);
 
   const persistAuthorizedFolders = useCallback(async (nextFolders: string[]) => {
-    const openworkClient = props.openworkServerClient;
-    const openworkWorkspaceId = props.runtimeWorkspaceId;
-    if (!openworkClient || !openworkWorkspaceId || !canWriteConfig) {
+    const matterhornClient = props.matterhornServerClient;
+    const matterhornWorkspaceId = props.runtimeWorkspaceId;
+    if (!matterhornClient || !matterhornWorkspaceId || !canWriteConfig) {
       setAuthorizedFoldersError(t("context_panel.writable_workspace_required"));
       return false;
     }
@@ -215,7 +215,7 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
     setAuthorizedFoldersStatus(t("context_panel.saving_folders"));
 
     try {
-      const currentConfig = await openworkClient.getConfig(openworkWorkspaceId);
+      const currentConfig = await matterhornClient.getConfig(matterhornWorkspaceId);
       const currentAuthorizedFolders = readAuthorizedFoldersFromConfig(
         ensureRecord(currentConfig.opencode),
       );
@@ -224,7 +224,7 @@ export function AuthorizedFoldersPanel(props: AuthorizedFoldersPanelProps) {
         currentAuthorizedFolders.hiddenEntries,
       );
 
-      await openworkClient.patchConfig(openworkWorkspaceId, {
+      await matterhornClient.patchConfig(matterhornWorkspaceId, {
         opencode: {
           permission: {
             external_directory: nextExternalDirectory,

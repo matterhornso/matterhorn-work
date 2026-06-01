@@ -16,12 +16,12 @@ export const OLLAMA_PROVIDER_CONFIG = {
 
 export const OPENAI_IMAGE_EXTENSION_ID = "openai-image-generation";
 export const OPENAI_IMAGE_MODEL = "gpt-image-2";
-export const IMAGE_GENERATION_PLUGIN_PATH = ".opencode/plugins/openwork-image-generation.ts";
-export const IMAGE_GENERATION_EXTENSION_CONFIG_PATH = ".opencode/openwork-extensions/openai-image-generation.json";
+export const IMAGE_GENERATION_PLUGIN_PATH = ".opencode/plugins/matterhorn-image-generation.ts";
+export const IMAGE_GENERATION_EXTENSION_CONFIG_PATH = ".opencode/matterhorn-extensions/openai-image-generation.json";
 
 export const IMAGE_GENERATION_PLUGIN_CONTENT = `import { tool } from "@opencode-ai/plugin"
 
-const CONFIG_PATH = ".opencode/openwork-extensions/openai-image-generation.json"
+const CONFIG_PATH = ".opencode/matterhorn-extensions/openai-image-generation.json"
 const MODEL = "gpt-image-2"
 
 const readConfig = async (root) => {
@@ -42,7 +42,7 @@ const slugify = (value) => String(value)
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, "-")
   .replace(/^-+|-+$/g, "")
-  .slice(0, 48) || "openwork-image"
+  .slice(0, 48) || "matterhorn-image"
 
 const generateImage = async ({ apiKey, prompt }) => {
   const response = await fetch("https://api.openai.com/v1/images/generations", {
@@ -61,7 +61,7 @@ const generateImage = async ({ apiKey, prompt }) => {
   return payload
 }
 
-export const OpenWorkImageGeneration = async () => ({
+export const MatterhornImageGeneration = async () => ({
   tool: {
     image_generate: tool({
       description: "Generate a PNG image artifact using OpenAI image generation with gpt-image-2.",
@@ -72,10 +72,10 @@ export const OpenWorkImageGeneration = async () => ({
       async execute(args, context) {
         const { mkdir, writeFile } = await import("node:fs/promises")
         const { join } = await import("node:path")
-        const prompt = String(args.prompt || "").trim() || "OpenWork image"
+        const prompt = String(args.prompt || "").trim() || "Matterhorn Work image"
         const root = context.directory || context.worktree || process.cwd()
         const config = await readConfig(root)
-        if (!config.apiKey) throw new Error("OpenAI API key missing. Configure the OpenAI Image Generation extension in OpenWork.")
+        if (!config.apiKey) throw new Error("OpenAI API key missing. Configure the OpenAI Image Generation extension in Matterhorn Work.")
         const payload = await generateImage({ apiKey: config.apiKey, prompt })
         const first = payload?.data?.[0]
         if (!first?.b64_json) throw new Error("OpenAI did not return image data")
@@ -96,7 +96,7 @@ export function slugifyImageArtifactName(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "openwork-image";
+    .slice(0, 48) || "matterhorn-image";
 }
 
 export function base64ToArrayBuffer(value: string) {

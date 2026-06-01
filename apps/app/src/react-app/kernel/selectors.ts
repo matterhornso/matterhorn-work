@@ -1,12 +1,12 @@
-import type { OpenworkStore } from "./store";
+import type { MatterhornStore } from "./store";
 
-export const selectActiveWorkspace = (state: OpenworkStore) =>
+export const selectActiveWorkspace = (state: MatterhornStore) =>
   state.workspaces.find(
     (workspace) => workspace.id === state.activeWorkspaceId,
   ) ?? null;
 
-export const selectServerStatus = (state: OpenworkStore) => state.server.status;
+export const selectServerStatus = (state: MatterhornStore) => state.server.status;
 
-export const selectServerUrl = (state: OpenworkStore) => state.server.url;
+export const selectServerUrl = (state: MatterhornStore) => state.server.url;
 
-export const selectErrorBanner = (state: OpenworkStore) => state.errorBanner;
+export const selectErrorBanner = (state: MatterhornStore) => state.errorBanner;

@@ -3,7 +3,7 @@ import { desktopFetch } from "./desktop";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
 
-export type OpenworkServerCapabilities = {
+export type MatterhornServerCapabilities = {
   skills: { read: boolean; write: boolean; source: "openwork" | "opencode" };
   hub?: {
     skills?: {
@@ -34,9 +34,9 @@ export type OpenworkServerCapabilities = {
   };
 };
 
-export type OpenworkServerStatus = "connected" | "disconnected" | "limited";
+export type MatterhornServerStatus = "connected" | "disconnected" | "limited";
 
-export type OpenworkServerDiagnostics = {
+export type MatterhornServerDiagnostics = {
   ok: boolean;
   version: string;
   uptimeMs: number;
@@ -46,16 +46,16 @@ export type OpenworkServerDiagnostics = {
   workspaceCount: number;
   activeWorkspaceId?: string | null;
   selectedWorkspaceId?: string | null;
-  workspace: OpenworkWorkspaceInfo | null;
+  workspace: MatterhornWorkspaceInfo | null;
   authorizedRoots: string[];
   server: { host: string; port: number; configPath?: string | null };
   tokenSource: { client: string; host: string };
 };
 
-export type OpenworkRuntimeServiceName = "openwork-server" | "opencode";
+export type MatterhornRuntimeServiceName = "openwork-server" | "opencode";
 
-export type OpenworkRuntimeServiceSnapshot = {
-  name: OpenworkRuntimeServiceName;
+export type MatterhornRuntimeServiceSnapshot = {
+  name: MatterhornRuntimeServiceName;
   enabled: boolean;
   running: boolean;
   targetVersion: string | null;
@@ -63,7 +63,7 @@ export type OpenworkRuntimeServiceSnapshot = {
   upgradeAvailable: boolean;
 };
 
-export type OpenworkRuntimeSnapshot = {
+export type MatterhornRuntimeSnapshot = {
   ok: boolean;
   orchestrator?: {
     version: string;
@@ -79,12 +79,12 @@ export type OpenworkRuntimeSnapshot = {
     finishedAt: number | null;
     error: string | null;
     operationId: string | null;
-    services: OpenworkRuntimeServiceName[];
+    services: MatterhornRuntimeServiceName[];
   };
-  services: OpenworkRuntimeServiceSnapshot[];
+  services: MatterhornRuntimeServiceSnapshot[];
 };
 
-export type OpenworkServerSettings = {
+export type MatterhornServerSettings = {
   urlOverride?: string;
   portOverride?: number;
   token?: string;
@@ -92,7 +92,7 @@ export type OpenworkServerSettings = {
   remoteAccessEnabled?: boolean;
 };
 
-export type OpenworkWorkspaceInfo = WorkspaceInfo & {
+export type MatterhornWorkspaceInfo = WorkspaceInfo & {
   opencode?: {
     baseUrl?: string;
     directory?: string;
@@ -101,20 +101,20 @@ export type OpenworkWorkspaceInfo = WorkspaceInfo & {
   };
 };
 
-export type OpenworkWorkspaceList = {
-  items: OpenworkWorkspaceInfo[];
+export type MatterhornWorkspaceList = {
+  items: MatterhornWorkspaceInfo[];
   workspaces?: WorkspaceInfo[];
   activeId?: string | null;
 };
 
-export type OpenworkSessionMessage = {
+export type MatterhornSessionMessage = {
   info: Message;
   parts: Part[];
 };
 
-export type OpenworkSessionSnapshot = {
+export type MatterhornSessionSnapshot = {
   session: Session;
-  messages: OpenworkSessionMessage[];
+  messages: MatterhornSessionMessage[];
   todos: Todo[];
   status:
     | { type: "idle" }
@@ -122,14 +122,14 @@ export type OpenworkSessionSnapshot = {
     | { type: "retry"; attempt: number; message: string; next: number };
 };
 
-export type OpenworkPluginItem = {
+export type MatterhornPluginItem = {
   spec: string;
   source: "config" | "dir.project" | "dir.global";
   scope: "project" | "global";
   path?: string;
 };
 
-export type OpenworkSkillItem = {
+export type MatterhornSkillItem = {
   name: string;
   path: string;
   description: string;
@@ -137,12 +137,12 @@ export type OpenworkSkillItem = {
   trigger?: string;
 };
 
-export type OpenworkSkillContent = {
-  item: OpenworkSkillItem;
+export type MatterhornSkillContent = {
+  item: MatterhornSkillItem;
   content: string;
 };
 
-export type OpenworkHubSkillItem = {
+export type MatterhornHubSkillItem = {
   name: string;
   description: string;
   trigger?: string;
@@ -154,20 +154,20 @@ export type OpenworkHubSkillItem = {
   };
 };
 
-export type OpenworkHubRepo = {
+export type MatterhornHubRepo = {
   owner?: string;
   repo?: string;
   ref?: string;
 };
 
-export type OpenworkWorkspaceFileContent = {
+export type MatterhornWorkspaceFileContent = {
   path: string;
   content: string;
   bytes: number;
   updatedAt: number;
 };
 
-export type OpenworkWorkspaceFileWriteResult = {
+export type MatterhornWorkspaceFileWriteResult = {
   ok: boolean;
   path: string;
   bytes: number;
@@ -185,7 +185,7 @@ function arrayBufferToBase64(data: ArrayBuffer): string {
   return btoa(binary);
 }
 
-export type OpenworkCommandItem = {
+export type MatterhornCommandItem = {
   name: string;
   description?: string;
   template: string;
@@ -195,14 +195,14 @@ export type OpenworkCommandItem = {
   scope: "workspace" | "global";
 };
 
-export type OpenworkMcpItem = {
+export type MatterhornMcpItem = {
   name: string;
   config: Record<string, unknown>;
   source: "config.project" | "config.global" | "config.remote";
   disabledByTools?: boolean;
 };
 
-export type OpenworkWorkspaceExport = {
+export type MatterhornWorkspaceExport = {
   workspaceId: string;
   exportedAt: number;
   opencode?: Record<string, unknown>;
@@ -212,14 +212,14 @@ export type OpenworkWorkspaceExport = {
   files?: Array<{ path: string; content: string }>;
 };
 
-export type OpenworkWorkspaceImportChange = {
+export type MatterhornWorkspaceImportChange = {
   kind: "opencode" | "openwork" | "skill" | "command" | "file";
   action: "create" | "update" | "replace" | "delete" | "unchanged";
   label: string;
   path: string;
 };
 
-export type OpenworkWorkspaceImportPreview = {
+export type MatterhornWorkspaceImportPreview = {
   fingerprint: string;
   summary: {
     total: number;
@@ -229,25 +229,25 @@ export type OpenworkWorkspaceImportPreview = {
     delete: number;
     unchanged: number;
   };
-  changes: OpenworkWorkspaceImportChange[];
+  changes: MatterhornWorkspaceImportChange[];
 };
 
-export type OpenworkWorkspaceExportSensitiveMode = "auto" | "include" | "exclude";
+export type MatterhornWorkspaceExportSensitiveMode = "auto" | "include" | "exclude";
 
-export type OpenworkWorkspaceExportWarning = {
+export type MatterhornWorkspaceExportWarning = {
   id: string;
   label: string;
   detail: string;
 };
 
-export type OpenworkBlueprintSessionsMaterializeResult = {
+export type MatterhornBlueprintSessionsMaterializeResult = {
   ok: boolean;
   created: Array<{ templateId: string; sessionId: string; title: string }>;
   existing: Array<{ templateId: string; sessionId: string }>;
   openSessionId: string | null;
 };
 
-export type OpenworkArtifactItem = {
+export type MatterhornArtifactItem = {
   id: string;
   name?: string;
   path?: string;
@@ -257,8 +257,8 @@ export type OpenworkArtifactItem = {
   mime?: string;
 };
 
-export type OpenworkArtifactList = {
-  items: OpenworkArtifactItem[];
+export type MatterhornArtifactList = {
+  items: MatterhornArtifactItem[];
 };
 
 export type GoogleWorkspaceAccount = {
@@ -299,7 +299,7 @@ export type GoogleWorkspaceConnectStatus = {
   googleWorkspace: GoogleWorkspaceAuthStatus | null;
 };
 
-export type OpenworkResolvedArtifactTarget = {
+export type MatterhornResolvedArtifactTarget = {
   id: string;
   kind: "file" | "url";
   value: string;
@@ -313,7 +313,7 @@ export type OpenworkResolvedArtifactTarget = {
   contentType?: string;
 };
 
-export type OpenworkWorkspaceFileStat = {
+export type MatterhornWorkspaceFileStat = {
   ok: boolean;
   path: string;
   exists: boolean;
@@ -322,7 +322,7 @@ export type OpenworkWorkspaceFileStat = {
   updatedAt?: number;
 };
 
-export type OpenworkInboxItem = {
+export type MatterhornInboxItem = {
   id: string;
   name?: string;
   path?: string;
@@ -330,45 +330,45 @@ export type OpenworkInboxItem = {
   updatedAt?: number;
 };
 
-export type OpenworkInboxList = {
-  items: OpenworkInboxItem[];
+export type MatterhornInboxList = {
+  items: MatterhornInboxItem[];
 };
 
-export type OpenworkInboxUploadResult = {
+export type MatterhornInboxUploadResult = {
   ok: boolean;
   path: string;
   bytes: number;
 };
 
-export type OpenworkActor = {
+export type MatterhornActor = {
   type: "remote" | "host";
   clientId?: string;
   tokenHash?: string;
 };
 
-export type OpenworkAuditEntry = {
+export type MatterhornAuditEntry = {
   id: string;
   workspaceId: string;
-  actor: OpenworkActor;
+  actor: MatterhornActor;
   action: string;
   target: string;
   summary: string;
   timestamp: number;
 };
 
-export type OpenworkReloadTrigger = {
+export type MatterhornReloadTrigger = {
   type: "skill" | "plugin" | "config" | "mcp" | "agent" | "command";
   name?: string;
   action?: "added" | "removed" | "updated";
   path?: string;
 };
 
-export type OpenworkReloadEvent = {
+export type MatterhornReloadEvent = {
   id: string;
   seq: number;
   workspaceId: string;
   reason: "plugins" | "skills" | "mcp" | "config" | "agents" | "commands";
-  trigger?: OpenworkReloadTrigger;
+  trigger?: MatterhornReloadTrigger;
   timestamp: number;
 };
 
@@ -382,7 +382,7 @@ const STORAGE_TOKEN = "openwork.server.token";
 const STORAGE_HOST_AUTH_KEY = "openwork.server.hostToken";
 const STORAGE_REMOTE_ACCESS = "openwork.server.remoteAccessEnabled";
 
-export function normalizeOpenworkServerUrl(input: string) {
+export function normalizeMatterhornServerUrl(input: string) {
   const trimmed = input.trim();
   if (!trimmed) return null;
   const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`;
@@ -390,7 +390,7 @@ export function normalizeOpenworkServerUrl(input: string) {
 }
 
 export function isLoopbackOpenworkServerUrl(input: string) {
-  const normalized = normalizeOpenworkServerUrl(input) ?? "";
+  const normalized = normalizeMatterhornServerUrl(input) ?? "";
   if (!normalized) return false;
   try {
     const hostname = new URL(normalized).hostname.toLowerCase();
@@ -401,7 +401,7 @@ export function isLoopbackOpenworkServerUrl(input: string) {
 }
 
 export function parseOpenworkWorkspaceIdFromUrl(input: string) {
-  const normalized = normalizeOpenworkServerUrl(input) ?? "";
+  const normalized = normalizeMatterhornServerUrl(input) ?? "";
   if (!normalized) return null;
 
   try {
@@ -427,8 +427,8 @@ export function parseOpenworkWorkspaceIdFromUrl(input: string) {
   }
 }
 
-export function buildOpenworkWorkspaceBaseUrl(hostUrl: string, workspaceId?: string | null) {
-  const normalized = normalizeOpenworkServerUrl(hostUrl) ?? "";
+export function buildMatterhornWorkspaceBaseUrl(hostUrl: string, workspaceId?: string | null) {
+  const normalized = normalizeMatterhornServerUrl(hostUrl) ?? "";
   if (!normalized) return null;
 
   try {
@@ -463,7 +463,7 @@ const OPENWORK_INVITE_PARAM_TOKEN = "ow_token";
 const OPENWORK_INVITE_PARAM_STARTUP = "ow_startup";
 const OPENWORK_INVITE_PARAM_AUTO_CONNECT = "ow_auto_connect";
 
-export type OpenworkOpenCodeRouterHealthSnapshot = {
+export type MatterhornOpenCodeRouterHealthSnapshot = {
   ok: boolean;
   opencode: Record<string, unknown>;
   channels: Record<string, unknown>;
@@ -482,7 +482,7 @@ export type OpenworkOpenCodeRouterHealthSnapshot = {
   [key: string]: unknown;
 };
 
-export type OpenworkOpenCodeRouterIdentityItem = {
+export type MatterhornOpenCodeRouterIdentityItem = {
   id: string;
   channel?: string;
   enabled?: boolean;
@@ -490,7 +490,7 @@ export type OpenworkOpenCodeRouterIdentityItem = {
   [key: string]: unknown;
 };
 
-export type OpenworkOpenCodeRouterSendResult = {
+export type MatterhornOpenCodeRouterSendResult = {
   ok: boolean;
   sent: number;
   attempted: number;
@@ -499,21 +499,21 @@ export type OpenworkOpenCodeRouterSendResult = {
   [key: string]: unknown;
 };
 
-export type OpenworkConnectInvite = {
+export type MatterhornConnectInvite = {
   url: string;
   token?: string;
   startup?: "server";
   autoConnect?: boolean;
 };
 
-export function readOpenworkConnectInviteFromSearch(input: string | URLSearchParams) {
+export function readMatterhornConnectInviteFromSearch(input: string | URLSearchParams) {
   const search =
     typeof input === "string"
       ? new URLSearchParams(input.startsWith("?") ? input.slice(1) : input)
       : input;
 
   const rawUrl = search.get(OPENWORK_INVITE_PARAM_URL)?.trim() ?? "";
-  const url = normalizeOpenworkServerUrl(rawUrl);
+  const url = normalizeMatterhornServerUrl(rawUrl);
   if (!url) return null;
 
   const token = search.get(OPENWORK_INVITE_PARAM_TOKEN)?.trim() ?? "";
@@ -526,10 +526,10 @@ export function readOpenworkConnectInviteFromSearch(input: string | URLSearchPar
     token: token || undefined,
     startup,
     autoConnect: autoConnect || undefined,
-  } satisfies OpenworkConnectInvite;
+  } satisfies MatterhornConnectInvite;
 }
 
-export function stripOpenworkConnectInviteFromUrl(input: string) {
+export function stripMatterhornConnectInviteFromUrl(input: string) {
   try {
     const url = new URL(input);
     url.searchParams.delete(OPENWORK_INVITE_PARAM_URL);
@@ -542,10 +542,10 @@ export function stripOpenworkConnectInviteFromUrl(input: string) {
   }
 }
 
-export function readOpenworkServerSettings(): OpenworkServerSettings {
+export function readMatterhornServerSettings(): MatterhornServerSettings {
   if (typeof window === "undefined") return {};
   try {
-    const urlOverride = normalizeOpenworkServerUrl(
+    const urlOverride = normalizeMatterhornServerUrl(
       window.localStorage.getItem(STORAGE_URL_OVERRIDE) ?? "",
     );
     const portRaw = window.localStorage.getItem(STORAGE_PORT_OVERRIDE) ?? "";
@@ -565,10 +565,10 @@ export function readOpenworkServerSettings(): OpenworkServerSettings {
   }
 }
 
-export function writeOpenworkServerSettings(next: OpenworkServerSettings): OpenworkServerSettings {
+export function writeMatterhornServerSettings(next: MatterhornServerSettings): MatterhornServerSettings {
   if (typeof window === "undefined") return next;
   try {
-    const urlOverride = normalizeOpenworkServerUrl(next.urlOverride ?? "");
+    const urlOverride = normalizeMatterhornServerUrl(next.urlOverride ?? "");
     const portOverride = typeof next.portOverride === "number" ? next.portOverride : undefined;
     const token = next.token?.trim() || undefined;
     const hostToken = next.hostToken?.trim() || undefined;
@@ -604,13 +604,13 @@ export function writeOpenworkServerSettings(next: OpenworkServerSettings): Openw
       window.localStorage.removeItem(STORAGE_REMOTE_ACCESS);
     }
 
-    return readOpenworkServerSettings();
+    return readMatterhornServerSettings();
   } catch {
     return next;
   }
 }
 
-export function hydrateOpenworkServerSettingsFromEnv() {
+export function hydrateMatterhornServerSettingsFromEnv() {
   if (typeof window === "undefined") return;
 
   const envUrl = typeof import.meta.env?.VITE_OPENWORK_URL === "string"
@@ -629,12 +629,12 @@ export function hydrateOpenworkServerSettingsFromEnv() {
   if (!envUrl && !envPort && !envToken && !envHostToken) return;
 
   try {
-    const current = readOpenworkServerSettings();
-    const next: OpenworkServerSettings = { ...current };
+    const current = readMatterhornServerSettings();
+    const next: MatterhornServerSettings = { ...current };
     let changed = false;
 
     if (!current.urlOverride && envUrl) {
-      next.urlOverride = normalizeOpenworkServerUrl(envUrl) ?? undefined;
+      next.urlOverride = normalizeMatterhornServerUrl(envUrl) ?? undefined;
       changed = true;
     }
 
@@ -657,14 +657,14 @@ export function hydrateOpenworkServerSettingsFromEnv() {
     }
 
     if (changed) {
-      writeOpenworkServerSettings(next);
+      writeMatterhornServerSettings(next);
     }
   } catch {
     // ignore
   }
 }
 
-export function clearOpenworkServerSettings() {
+export function clearMatterhornServerSettings() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.removeItem(STORAGE_URL_OVERRIDE);
@@ -677,7 +677,7 @@ export function clearOpenworkServerSettings() {
   }
 }
 
-export class OpenworkServerError extends Error {
+export class MatterhornServerError extends Error {
   status: number;
   code: string;
   details?: unknown;
@@ -806,7 +806,7 @@ async function requestJson<T>(
   if (!response.ok) {
     const code = typeof json?.code === "string" ? json.code : "request_failed";
     const message = typeof json?.message === "string" ? json.message : response.statusText;
-    throw new OpenworkServerError(response.status, code, message, json?.details);
+    throw new MatterhornServerError(response.status, code, message, json?.details);
   }
 
   return json as T;
@@ -860,7 +860,7 @@ async function requestBinary(
     }
     const code = typeof json?.code === "string" ? json.code : "request_failed";
     const message = typeof json?.message === "string" ? json.message : response.statusText;
-    throw new OpenworkServerError(response.status, code, message, json?.details);
+    throw new MatterhornServerError(response.status, code, message, json?.details);
   }
 
   const contentType = response.headers.get("content-type");
@@ -872,7 +872,7 @@ async function requestBinary(
   return { data, contentType, filename };
 }
 
-export function createOpenworkServerClient(options: { baseUrl: string; token?: string; hostToken?: string }) {
+export function createMatterhornServerClient(options: { baseUrl: string; token?: string; hostToken?: string }) {
   const baseUrl = options.baseUrl.replace(/\/+$/, "");
   const token = options.token;
   const hostToken = options.hostToken;
@@ -898,16 +898,16 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
     health: () =>
       requestJson<{ ok: boolean; version: string; uptimeMs: number }>(baseUrl, "/health", { token, hostToken, timeoutMs: timeouts.health }),
     runtimeVersions: () =>
-      requestJson<OpenworkRuntimeSnapshot>(baseUrl, "/runtime/versions", { token, hostToken, timeoutMs: timeouts.status }),
-    status: () => requestJson<OpenworkServerDiagnostics>(baseUrl, "/status", { token, hostToken, timeoutMs: timeouts.status }),
-    capabilities: () => requestJson<OpenworkServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
+      requestJson<MatterhornRuntimeSnapshot>(baseUrl, "/runtime/versions", { token, hostToken, timeoutMs: timeouts.status }),
+    status: () => requestJson<MatterhornServerDiagnostics>(baseUrl, "/status", { token, hostToken, timeoutMs: timeouts.status }),
+    capabilities: () => requestJson<MatterhornServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceConnectStart: () => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),
     googleWorkspaceConnectStatus: (flowId: string) => requestJson<GoogleWorkspaceConnectStatus>(baseUrl, `/experimental/google-workspace/connect/status/${encodeURIComponent(flowId)}`, { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceDisconnect: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/disconnect", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),
     googleWorkspaceTestConnection: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/test", { token, hostToken, method: "POST", timeoutMs: 60_000 }),
     googleWorkspaceRunScopeSmokeTest: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/smoke-test", { token, hostToken, method: "POST", timeoutMs: 120_000 }),
-    listWorkspaces: () => requestJson<OpenworkWorkspaceList>(baseUrl, "/workspaces", { token, hostToken, timeoutMs: timeouts.listWorkspaces }),
+    listWorkspaces: () => requestJson<MatterhornWorkspaceList>(baseUrl, "/workspaces", { token, hostToken, timeoutMs: timeouts.listWorkspaces }),
     createLocalWorkspace: (payload: { folderPath: string; name: string; preset: string }) =>
       requestJson<WorkspaceList>(baseUrl, "/workspaces/local", {
         token,
@@ -925,13 +925,13 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         timeoutMs: timeouts.activateWorkspace,
       }),
     activateWorkspace: (workspaceId: string) =>
-      requestJson<{ activeId: string; workspace: OpenworkWorkspaceInfo }>(
+      requestJson<{ activeId: string; workspace: MatterhornWorkspaceInfo }>(
         baseUrl,
         `/workspaces/${encodeURIComponent(workspaceId)}/activate`,
         { token, hostToken, method: "POST", timeoutMs: timeouts.activateWorkspace },
       ),
     deleteWorkspace: (workspaceId: string) =>
-      requestJson<{ ok: boolean; deleted: boolean; persisted: boolean; activeId: string | null; items: OpenworkWorkspaceInfo[]; workspaces?: WorkspaceInfo[] }>(
+      requestJson<{ ok: boolean; deleted: boolean; persisted: boolean; activeId: string | null; items: MatterhornWorkspaceInfo[]; workspaces?: WorkspaceInfo[] }>(
         baseUrl,
         `/workspaces/${encodeURIComponent(workspaceId)}`,
         { token, hostToken, method: "DELETE", timeoutMs: timeouts.deleteWorkspace },
@@ -968,7 +968,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       const query = new URLSearchParams();
       if (typeof options?.limit === "number") query.set("limit", String(options.limit));
       const suffix = query.size ? `?${query.toString()}` : "";
-      return requestJson<{ items: OpenworkSessionMessage[] }>(
+      return requestJson<{ items: MatterhornSessionMessage[] }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages${suffix}`,
         { token, hostToken, timeoutMs: timeouts.sessionRead },
@@ -978,7 +978,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       const query = new URLSearchParams();
       if (typeof options?.limit === "number") query.set("limit", String(options.limit));
       const suffix = query.size ? `?${query.toString()}` : "";
-      return requestJson<{ item: OpenworkSessionSnapshot }>(
+      return requestJson<{ item: MatterhornSessionSnapshot }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/snapshot${suffix}`,
         { token, hostToken, timeoutMs: timeouts.sessionRead },
@@ -986,21 +986,21 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
     },
     exportWorkspace: (
       workspaceId: string,
-      options?: { sensitiveMode?: OpenworkWorkspaceExportSensitiveMode },
+      options?: { sensitiveMode?: MatterhornWorkspaceExportSensitiveMode },
     ) => {
       const query = new URLSearchParams();
       if (options?.sensitiveMode) {
         query.set("sensitive", options.sensitiveMode);
       }
       const suffix = query.size ? `?${query.toString()}` : "";
-      return requestJson<OpenworkWorkspaceExport>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/export${suffix}`, {
+      return requestJson<MatterhornWorkspaceExport>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/export${suffix}`, {
         token,
         hostToken,
         timeoutMs: timeouts.workspaceExport,
       });
     },
     importWorkspace: (workspaceId: string, payload: Record<string, unknown>) =>
-      requestJson<{ ok: boolean; preview?: OpenworkWorkspaceImportPreview }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/import`, {
+      requestJson<{ ok: boolean; preview?: MatterhornWorkspaceImportPreview }>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/import`, {
         token,
         hostToken,
         method: "POST",
@@ -1008,7 +1008,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         timeoutMs: timeouts.workspaceImport,
       }),
     previewWorkspaceImport: (workspaceId: string, payload: Record<string, unknown>) =>
-      requestJson<OpenworkWorkspaceImportPreview>(
+      requestJson<MatterhornWorkspaceImportPreview>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/import/preview`,
         {
@@ -1020,7 +1020,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         },
       ),
     materializeBlueprintSessions: (workspaceId: string) =>
-      requestJson<OpenworkBlueprintSessionsMaterializeResult>(
+      requestJson<MatterhornBlueprintSessionsMaterializeResult>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/blueprint/sessions/materialize`,
         {
@@ -1059,7 +1059,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       }),
     listReloadEvents: (workspaceId: string, options?: { since?: number }) => {
       const query = typeof options?.since === "number" ? `?since=${options.since}` : "";
-      return requestJson<{ items: OpenworkReloadEvent[]; cursor?: number }>(
+      return requestJson<{ items: MatterhornReloadEvent[]; cursor?: number }>(
         baseUrl,
         `/workspace/${workspaceId}/events${query}`,
         { token, hostToken },
@@ -1073,33 +1073,33 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       }),
     listPlugins: (workspaceId: string, options?: { includeGlobal?: boolean }) => {
       const query = options?.includeGlobal ? "?includeGlobal=true" : "";
-      return requestJson<{ items: OpenworkPluginItem[]; loadOrder: string[] }>(
+      return requestJson<{ items: MatterhornPluginItem[]; loadOrder: string[] }>(
         baseUrl,
         `/workspace/${workspaceId}/plugins${query}`,
         { token, hostToken },
       );
     },
     addPlugin: (workspaceId: string, spec: string) =>
-      requestJson<{ items: OpenworkPluginItem[]; loadOrder: string[] }>(
+      requestJson<{ items: MatterhornPluginItem[]; loadOrder: string[] }>(
         baseUrl,
         `/workspace/${workspaceId}/plugins`,
         { token, hostToken, method: "POST", body: { spec } },
       ),
     removePlugin: (workspaceId: string, name: string) =>
-      requestJson<{ items: OpenworkPluginItem[]; loadOrder: string[] }>(
+      requestJson<{ items: MatterhornPluginItem[]; loadOrder: string[] }>(
         baseUrl,
         `/workspace/${workspaceId}/plugins/${encodeURIComponent(name)}`,
         { token, hostToken, method: "DELETE" },
       ),
     listSkills: (workspaceId: string, options?: { includeGlobal?: boolean }) => {
       const query = options?.includeGlobal ? "?includeGlobal=true" : "";
-      return requestJson<{ items: OpenworkSkillItem[] }>(
+      return requestJson<{ items: MatterhornSkillItem[] }>(
         baseUrl,
         `/workspace/${workspaceId}/skills${query}`,
         { token, hostToken },
       );
     },
-    listHubSkills: (options?: { repo?: OpenworkHubRepo }) => {
+    listHubSkills: (options?: { repo?: MatterhornHubRepo }) => {
       const params = new URLSearchParams();
       const owner = options?.repo?.owner?.trim();
       const repo = options?.repo?.repo?.trim();
@@ -1108,7 +1108,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       if (repo) params.set("repo", repo);
       if (ref) params.set("ref", ref);
       const query = params.size ? `?${params.toString()}` : "";
-      return requestJson<{ items: OpenworkHubSkillItem[] }>(baseUrl, `/hub/skills${query}`, {
+      return requestJson<{ items: MatterhornHubSkillItem[] }>(baseUrl, `/hub/skills${query}`, {
         token,
         hostToken,
       });
@@ -1133,14 +1133,14 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       ),
     getSkill: (workspaceId: string, name: string, options?: { includeGlobal?: boolean }) => {
       const query = options?.includeGlobal ? "?includeGlobal=true" : "";
-      return requestJson<OpenworkSkillContent>(
+      return requestJson<MatterhornSkillContent>(
         baseUrl,
         `/workspace/${workspaceId}/skills/${encodeURIComponent(name)}${query}`,
         { token, hostToken },
       );
     },
     upsertSkill: (workspaceId: string, payload: { name: string; content: string; description?: string }) =>
-      requestJson<OpenworkSkillItem>(baseUrl, `/workspace/${workspaceId}/skills`, {
+      requestJson<MatterhornSkillItem>(baseUrl, `/workspace/${workspaceId}/skills`, {
         token,
         hostToken,
         method: "POST",
@@ -1157,22 +1157,22 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         },
       ),
     listMcp: (workspaceId: string) =>
-      requestJson<{ items: OpenworkMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, { token, hostToken }),
+      requestJson<{ items: MatterhornMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, { token, hostToken }),
     addMcp: (workspaceId: string, payload: { name: string; config: Record<string, unknown> }) =>
-      requestJson<{ items: OpenworkMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, {
+      requestJson<{ items: MatterhornMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp`, {
         token,
         hostToken,
         method: "POST",
         body: payload,
       }),
     removeMcp: (workspaceId: string, name: string) =>
-      requestJson<{ items: OpenworkMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp/${encodeURIComponent(name)}`, {
+      requestJson<{ items: MatterhornMcpItem[] }>(baseUrl, `/workspace/${workspaceId}/mcp/${encodeURIComponent(name)}`, {
         token,
         hostToken,
         method: "DELETE",
       }),
     setMcpEnabled: (workspaceId: string, name: string, enabled: boolean) =>
-      requestJson<{ items: OpenworkMcpItem[] }>(
+      requestJson<{ items: MatterhornMcpItem[] }>(
         baseUrl,
         `/workspace/${workspaceId}/mcp/${encodeURIComponent(name)}/enabled`,
         {
@@ -1191,13 +1191,13 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       }),
 
     listCommands: (workspaceId: string, scope: "workspace" | "global" = "workspace") =>
-      requestJson<{ items: OpenworkCommandItem[] }>(
+      requestJson<{ items: MatterhornCommandItem[] }>(
         baseUrl,
         `/workspace/${workspaceId}/commands?scope=${scope}`,
         { token, hostToken },
       ),
     listAudit: (workspaceId: string, limit = 50) =>
-      requestJson<{ items: OpenworkAuditEntry[] }>(
+      requestJson<{ items: MatterhornAuditEntry[] }>(
         baseUrl,
         `/workspace/${workspaceId}/audit?limit=${limit}`,
         { token, hostToken },
@@ -1206,7 +1206,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       workspaceId: string,
       payload: { name: string; description?: string; template: string; agent?: string; model?: string | null; subtask?: boolean },
     ) =>
-      requestJson<{ items: OpenworkCommandItem[] }>(baseUrl, `/workspace/${workspaceId}/commands`, {
+      requestJson<{ items: MatterhornCommandItem[] }>(baseUrl, `/workspace/${workspaceId}/commands`, {
         token,
         hostToken,
         method: "POST",
@@ -1246,7 +1246,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         } catch {
           // ignore
         }
-        throw new OpenworkServerError(
+        throw new MatterhornServerError(
           result.status,
           "request_failed",
           message || "Shared folder upload failed",
@@ -1256,13 +1256,13 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       const body = result.text.trim();
       if (body) {
         try {
-          const parsed = JSON.parse(body) as Partial<OpenworkInboxUploadResult>;
+          const parsed = JSON.parse(body) as Partial<MatterhornInboxUploadResult>;
           if (typeof parsed.path === "string" && parsed.path.trim()) {
             return {
               ok: parsed.ok ?? true,
               path: parsed.path.trim(),
               bytes: typeof parsed.bytes === "number" ? parsed.bytes : file.size,
-            } satisfies OpenworkInboxUploadResult;
+            } satisfies MatterhornInboxUploadResult;
           }
         } catch {
           // ignore invalid JSON and fall back
@@ -1273,11 +1273,11 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         ok: true,
         path: options?.path?.trim() || file.name,
         bytes: file.size,
-      } satisfies OpenworkInboxUploadResult;
+      } satisfies MatterhornInboxUploadResult;
     },
 
     listInbox: (workspaceId: string) =>
-      requestJson<OpenworkInboxList>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/inbox`, {
+      requestJson<MatterhornInboxList>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/inbox`, {
         token,
         hostToken,
       }),
@@ -1290,14 +1290,14 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       ),
 
     readWorkspaceFile: (workspaceId: string, path: string) =>
-      requestJson<OpenworkWorkspaceFileContent>(
+      requestJson<MatterhornWorkspaceFileContent>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/files/content?path=${encodeURIComponent(path)}`,
         { token, hostToken },
       ),
 
     statWorkspaceFile: (workspaceId: string, path: string) =>
-      requestJson<OpenworkWorkspaceFileStat>(
+      requestJson<MatterhornWorkspaceFileStat>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/files/stat?path=${encodeURIComponent(path)}`,
         { token, hostToken },
@@ -1307,7 +1307,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       workspaceId: string,
       payload: { path: string; content: string; baseUpdatedAt?: number | null; force?: boolean },
     ) =>
-      requestJson<OpenworkWorkspaceFileWriteResult>(
+      requestJson<MatterhornWorkspaceFileWriteResult>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/files/content`,
         {
@@ -1322,7 +1322,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       workspaceId: string,
       payload: { path: string; data: ArrayBuffer; baseUpdatedAt?: number | null; force?: boolean },
     ) =>
-      requestJson<OpenworkWorkspaceFileWriteResult>(
+      requestJson<MatterhornWorkspaceFileWriteResult>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/files/raw`,
         {
@@ -1346,7 +1346,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
       ),
 
     listArtifacts: (workspaceId: string) =>
-      requestJson<OpenworkArtifactList>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/artifacts`, {
+      requestJson<MatterhornArtifactList>(baseUrl, `/workspace/${encodeURIComponent(workspaceId)}/artifacts`, {
         token,
         hostToken,
       }),
@@ -1362,7 +1362,7 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
         reason?: string;
       }>,
     ) =>
-      requestJson<{ items: OpenworkResolvedArtifactTarget[] }>(
+      requestJson<{ items: MatterhornResolvedArtifactTarget[] }>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/artifacts/resolve`,
         { token, hostToken, method: "POST", body: { targets } },
@@ -1426,4 +1426,4 @@ export function createOpenworkServerClient(options: { baseUrl: string; token?: s
   };
 }
 
-export type OpenworkServerClient = ReturnType<typeof createOpenworkServerClient>;
+export type MatterhornServerClient = ReturnType<typeof createMatterhornServerClient>;

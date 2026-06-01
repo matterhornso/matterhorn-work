@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { GoogleWorkspaceAuthStatus, OpenworkServerClient } from "../../../app/lib/openwork-server";
+import type { GoogleWorkspaceAuthStatus, MatterhornServerClient } from "../../../app/lib/matterhorn-server";
 import { usePlatform } from "../../kernel/platform";
 import type { ExtensionConfigContext } from "./extension-registry";
 import { registerExtensionRuntime } from "./extension-registry";
@@ -71,7 +71,7 @@ function sleep(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-async function waitForGoogleWorkspaceConnection(client: OpenworkServerClient, flowId: string, expiresAt: number) {
+async function waitForGoogleWorkspaceConnection(client: MatterhornServerClient, flowId: string, expiresAt: number) {
   while (Date.now() < expiresAt + 5_000) {
     const result = await client.googleWorkspaceConnectStatus(flowId);
     if (result.status === "connected" && result.googleWorkspace) return result.googleWorkspace;
@@ -83,21 +83,21 @@ async function waitForGoogleWorkspaceConnection(client: OpenworkServerClient, fl
   throw new Error("Google Workspace OAuth timed out.");
 }
 
-function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChange }: ExtensionConfigContext) {
+function GoogleWorkspaceConfig({ matterhornServerClient, onExtensionConnectionChange }: ExtensionConfigContext) {
   const platform = usePlatform();
   const [status, setStatus] = useState<GoogleWorkspaceAuthStatus | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const serverAvailable = Boolean(openworkServerClient);
+  const serverAvailable = Boolean(matterhornServerClient);
   const canConnect = serverAvailable && status?.configured === true && status.vault !== "unavailable";
   const canTest = serverAvailable && status?.connected === true;
 
   const loadStatus = async (options: { clearError?: boolean } = {}) => {
-    if (!openworkServerClient) return;
+    if (!matterhornServerClient) return;
     setBusyAction("status");
     if (options.clearError !== false) setError(null);
     try {
-      const result = normalizeGoogleWorkspaceAuthStatus(await openworkServerClient.googleWorkspaceStatus());
+      const result = normalizeGoogleWorkspaceAuthStatus(await matterhornServerClient.googleWorkspaceStatus());
       setStatus(result);
       onExtensionConnectionChange?.("google-workspace", result.connected);
     } catch (err) {
@@ -109,17 +109,17 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
 
   useEffect(() => {
     void loadStatus();
-  }, [openworkServerClient]);
+  }, [matterhornServerClient]);
 
   const runDesktopAction = async (action: Exclude<BusyAction, "status">, command: GoogleWorkspaceCommand) => {
-    if (!openworkServerClient) return;
+    if (!matterhornServerClient) return;
     setBusyAction(action);
     setError(null);
     try {
       const result = await Promise.race([
         command(),
         new Promise<never>((_, reject) => {
-          window.setTimeout(() => reject(new Error("Google Workspace connection is taking too long. Try again, or restart OpenWork if the browser already said authorization was received.")), DESKTOP_ACTION_TIMEOUT_MS);
+          window.setTimeout(() => reject(new Error("Google Workspace connection is taking too long. Try again, or restart Matterhorn Work if the browser already said authorization was received.")), DESKTOP_ACTION_TIMEOUT_MS);
         }),
       ]);
       const next = normalizeGoogleWorkspaceAuthStatus(result);
@@ -134,10 +134,10 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
   };
 
   const connectGoogleWorkspace = async () => {
-    if (!openworkServerClient) return null;
-    const flow = await openworkServerClient.googleWorkspaceConnectStart();
+    if (!matterhornServerClient) return null;
+    const flow = await matterhornServerClient.googleWorkspaceConnectStart();
     platform.openLink(flow.authUrl);
-    return waitForGoogleWorkspaceConnection(openworkServerClient, flow.flowId, flow.expiresAt);
+    return waitForGoogleWorkspaceConnection(matterhornServerClient, flow.flowId, flow.expiresAt);
   };
 
   return (
@@ -145,8 +145,8 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
       {!serverAvailable ? (
         <Alert variant="warning">
           <ShieldCheck />
-          <AlertTitle>OpenWork server required</AlertTitle>
-          <AlertDescription>Start OpenWork server to connect Google Workspace.</AlertDescription>
+          <AlertTitle>Matterhorn Work server required</AlertTitle>
+          <AlertDescription>Start Matterhorn Work server to connect Google Workspace.</AlertDescription>
         </Alert>
       ) : null}
 
@@ -164,7 +164,7 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
           <ShieldCheck />
           <AlertTitle>Connect Google Workspace</AlertTitle>
           <AlertDescription>
-            Let OpenWork use your calendar, selected Drive files, and Gmail drafts when you ask it to.
+            Let Matterhorn Work use your calendar, selected Drive files, and Gmail drafts when you ask it to.
           </AlertDescription>
         </Alert>
       )}
@@ -181,7 +181,7 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
         <Alert variant="destructive">
           <XCircle />
           <AlertTitle>Encrypted token vault unavailable</AlertTitle>
-          <AlertDescription>OpenWork cannot securely save your Google connection on this machine right now.</AlertDescription>
+          <AlertDescription>Matterhorn Work cannot securely save your Google connection on this machine right now.</AlertDescription>
         </Alert>
       ) : null}
 
@@ -203,9 +203,9 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
 
       <Card variant="outline" size="sm">
         <CardHeader>
-          <CardTitle>What OpenWork can do</CardTitle>
+          <CardTitle>What Matterhorn Work can do</CardTitle>
           <CardDescription>
-            Connect Google Workspace so OpenWork can help with meeting prep, selected files, and draft emails.
+            Connect Google Workspace so Matterhorn Work can help with meeting prep, selected files, and draft emails.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
@@ -222,7 +222,7 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
           <div className="rounded-2xl border border-border bg-card p-3">
             <FileText className="mb-2 size-4 text-green-11" />
             <div className="text-sm font-medium text-card-foreground">Selected Drive files</div>
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Read files explicitly selected or created through OpenWork.</div>
+            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">Read files explicitly selected or created through Matterhorn Work.</div>
           </div>
         </CardContent>
       </Card>
@@ -231,7 +231,7 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
         <CardFooter className="flex-wrap gap-2 justify-between">
           <div className="flex flex-wrap gap-2">
             {status?.connected ? (
-              <Button variant="destructive" disabled={Boolean(busyAction)} onClick={() => void runDesktopAction("disconnect", () => openworkServerClient?.googleWorkspaceDisconnect() ?? Promise.resolve(null))}>
+              <Button variant="destructive" disabled={Boolean(busyAction)} onClick={() => void runDesktopAction("disconnect", () => matterhornServerClient?.googleWorkspaceDisconnect() ?? Promise.resolve(null))}>
                 {busyAction === "disconnect" ? <Loader2 className="size-4 animate-spin" /> : null}
                 Disconnect
               </Button>
@@ -241,11 +241,11 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
                 Connect with Google
               </Button>
             )}
-            <Button variant="outline" disabled={Boolean(busyAction) || !canTest} onClick={() => void runDesktopAction("test", () => openworkServerClient?.googleWorkspaceTestConnection() ?? Promise.resolve(null))}>
+            <Button variant="outline" disabled={Boolean(busyAction) || !canTest} onClick={() => void runDesktopAction("test", () => matterhornServerClient?.googleWorkspaceTestConnection() ?? Promise.resolve(null))}>
               {busyAction === "test" ? <Loader2 className="size-4 animate-spin" /> : null}
               Test connection
             </Button>
-            <Button variant="outline" disabled={Boolean(busyAction) || !canTest} onClick={() => void runDesktopAction("smoke-test", () => openworkServerClient?.googleWorkspaceRunScopeSmokeTest() ?? Promise.resolve(null))}>
+            <Button variant="outline" disabled={Boolean(busyAction) || !canTest} onClick={() => void runDesktopAction("smoke-test", () => matterhornServerClient?.googleWorkspaceRunScopeSmokeTest() ?? Promise.resolve(null))}>
               {busyAction === "smoke-test" ? <Loader2 className="size-4 animate-spin" /> : null}
               Run diagnostic
             </Button>
@@ -258,7 +258,7 @@ function GoogleWorkspaceConfig({ openworkServerClient, onExtensionConnectionChan
 
 registerExtensionRuntime({
   id: "google-workspace",
-  settingsPanelRefs: ["openwork.googleWorkspace.settings"],
+  settingsPanelRefs: ["matterhorn.googleWorkspace.settings"],
   settingsPanel: (ctx) => <GoogleWorkspaceConfig {...ctx} />,
   isConnected: (_entry, ctx) => ctx.extensionConnections?.["google-workspace"] === true,
 });

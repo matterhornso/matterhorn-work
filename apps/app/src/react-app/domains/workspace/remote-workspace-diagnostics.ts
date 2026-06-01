@@ -1,11 +1,11 @@
 import type { WorkspaceConnectionState } from "../../../app/types";
 import type { WorkspaceInfo } from "../../../app/lib/desktop";
 import {
-  createOpenworkServerClient,
-  normalizeOpenworkServerUrl,
+  createMatterhornServerClient,
+  normalizeMatterhornServerUrl,
   parseOpenworkWorkspaceIdFromUrl,
-  type OpenworkServerClient,
-} from "../../../app/lib/openwork-server";
+  type MatterhornServerClient,
+} from "../../../app/lib/matterhorn-server";
 import { redactTokenLikeText } from "../../../app/utils";
 
 export type RemoteWorkspaceConnectionTarget = {
@@ -29,9 +29,9 @@ export type RemoteWorkspaceConnectionResult = {
 type TestOptions = {
   now?: () => number;
   createClient?: (target: RemoteWorkspaceConnectionTarget) => Pick<
-    OpenworkServerClient,
+    MatterhornServerClient,
     "health" | "capabilities" | "status" | "listWorkspaces"
-  > | Promise<Pick<OpenworkServerClient, "health" | "capabilities" | "status" | "listWorkspaces">>;
+  > | Promise<Pick<MatterhornServerClient, "health" | "capabilities" | "status" | "listWorkspaces">>;
 };
 
 function trim(value: string | null | undefined) {
@@ -104,7 +104,7 @@ function rejectedTokenMessage(target: RemoteWorkspaceConnectionTarget) {
 }
 
 function remoteSupportMessage(message: string) {
-  return `${message} Upgrade the OpenWork host and try again. If this continues, contact team@openworklabs.com.`;
+  return `${message} Upgrade the Matterhorn Work host and try again. If this continues, contact team@openworklabs.com.`;
 }
 
 export function redactRemoteDiagnosticText(value: string): string {
@@ -117,11 +117,11 @@ export function getRemoteWorkspaceConnectionKey(workspace: WorkspaceInfo): strin
     workspace.workspaceType,
     workspace.remoteType ?? "",
     trim(workspace.baseUrl),
-    trim(workspace.openworkHostUrl),
-    trim(workspace.openworkWorkspaceId),
-    trim(workspace.openworkToken),
-    trim(workspace.openworkClientToken),
-    trim(workspace.openworkHostToken),
+    trim(workspace.matterhornHostUrl),
+    trim(workspace.matterhornWorkspaceId),
+    trim(workspace.matterhornToken),
+    trim(workspace.matterhornClientToken),
+    trim(workspace.matterhornHostToken),
   ].join("\u001f");
 }
 
@@ -129,20 +129,20 @@ function displayWorkspaceName(workspace: unknown) {
   if (!workspace || typeof workspace !== "object") return "";
   const value = workspace as {
     displayName?: string | null;
-    openworkWorkspaceName?: string | null;
+    matterhornWorkspaceName?: string | null;
     name?: string | null;
     id?: string | null;
   };
   return (
     trim(value.displayName) ||
-    trim(value.openworkWorkspaceName) ||
+    trim(value.matterhornWorkspaceName) ||
     trim(value.name) ||
     trim(value.id)
   );
 }
 
 function defaultCreateClient(target: RemoteWorkspaceConnectionTarget) {
-  return createOpenworkServerClient({
+  return createMatterhornServerClient({
     baseUrl: target.baseUrl,
     token: target.token || undefined,
   });
@@ -171,7 +171,7 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
     };
   }
 
-  const rawHostUrl = trim(workspace.openworkHostUrl) || trim(workspace.baseUrl);
+  const rawHostUrl = trim(workspace.matterhornHostUrl) || trim(workspace.baseUrl);
   if (!rawHostUrl) {
     return {
       ok: false,
@@ -183,7 +183,7 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
     };
   }
 
-  const normalizedHostUrl = normalizeOpenworkServerUrl(rawHostUrl);
+  const normalizedHostUrl = normalizeMatterhornServerUrl(rawHostUrl);
   if (!normalizedHostUrl || !isValidHttpEndpoint(normalizedHostUrl)) {
     return {
       ok: false,
@@ -196,15 +196,15 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
   }
 
   const workspaceId =
-    trim(workspace.openworkWorkspaceId) ||
+    trim(workspace.matterhornWorkspaceId) ||
     parseOpenworkWorkspaceIdFromUrl(normalizedHostUrl) ||
     parseOpenworkWorkspaceIdFromUrl(trim(workspace.baseUrl)) ||
     null;
   const hostBaseUrl = stripOpenworkWorkspaceMount(normalizedHostUrl);
   const token =
-    trim(workspace.openworkToken) ||
-    trim(workspace.openworkClientToken) ||
-    trim(workspace.openworkHostToken);
+    trim(workspace.matterhornToken) ||
+    trim(workspace.matterhornClientToken) ||
+    trim(workspace.matterhornHostToken);
 
   return {
     ok: true,

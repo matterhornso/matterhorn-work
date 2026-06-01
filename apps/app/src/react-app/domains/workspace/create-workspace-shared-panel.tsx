@@ -76,7 +76,7 @@ export function CreateWorkspaceSharedPanel(
               <Cloud size={24} />
             </div>
             <div className="mt-5 text-[20px] font-semibold tracking-[-0.3px] text-dls-text">
-              Sign in to OpenWork Cloud
+              Sign in to Matterhorn Cloud
             </div>
             <div className="mt-2 text-[14px] leading-6 text-dls-secondary">
               Access remote workers shared with your organization.

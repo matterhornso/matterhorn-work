@@ -6,14 +6,14 @@ import { createClient } from "@/app/lib/opencode";
 import { normalizeEvent, safeStringify } from "@/app/utils";
 import type { OpencodeEvent, PendingPermission, PendingQuestion } from "@/app/types";
 import { snapshotToUIMessages } from "./usechat-adapter";
-import type { OpenworkSessionSnapshot } from "@/app/lib/openwork-server";
+import type { MatterhornSessionSnapshot } from "@/app/lib/matterhorn-server";
 import { reconcileTranscriptMessages } from "./transcript-reconcile";
 import { useSessionActivityStore } from "../status/session-activity-store";
 
 type SyncOptions = {
   workspaceId: string;
   baseUrl: string;
-  openworkToken: string;
+  matterhornToken: string;
   onSessionUpdated?: (update: { sessionId: string; info: Record<string, unknown> }) => void;
   onSessionStatus?: (update: { sessionId: string; status: SessionStatus }) => void;
 };
@@ -62,7 +62,7 @@ export const questionKey = (workspaceId: string, sessionId: string) =>
   ["react-session-questions", workspaceId, sessionId] as const;
 
 function syncKey(input: SyncOptions) {
-  return `${input.workspaceId}:${input.baseUrl}:${input.openworkToken}`;
+  return `${input.workspaceId}:${input.baseUrl}:${input.matterhornToken}`;
 }
 
 function getErrorStatus(error: unknown) {
@@ -887,7 +887,7 @@ function flushDeltas(entry: SyncEntry, workspaceId: string) {
 }
 
 function startSync(input: SyncOptions) {
-  const client = createClient(input.baseUrl, undefined, { token: input.openworkToken, mode: "openwork" });
+  const client = createClient(input.baseUrl, undefined, { token: input.matterhornToken, mode: "openwork" });
   const controller = new AbortController();
   const entry = syncs.get(syncKey(input));
   let disposed = false;
@@ -1002,7 +1002,7 @@ function releaseWorkspaceSessionSync(input: SyncOptions) {
   }
 }
 
-export function seedSessionState(workspaceId: string, snapshot: OpenworkSessionSnapshot) {
+export function seedSessionState(workspaceId: string, snapshot: MatterhornSessionSnapshot) {
   const queryClient = getReactQueryClient();
   const key = transcriptKey(workspaceId, snapshot.session.id);
   const incoming = snapshotToUIMessages(snapshot);

@@ -5,7 +5,7 @@ import {
   workspaceUpdateRemote,
   type WorkspaceInfo,
 } from "../../../app/lib/desktop";
-import { buildOpenworkWorkspaceBaseUrl } from "../../../app/lib/openwork-server";
+import { buildMatterhornWorkspaceBaseUrl } from "../../../app/lib/matterhorn-server";
 import { t } from "../../../i18n";
 import type { RemoteWorkspaceInput } from "./types";
 
@@ -42,16 +42,16 @@ export function useRemoteWorkspaceConnectionEditor<TWorkspace extends WorkspaceI
 
   const initialValues = useMemo(
     () => {
-      const hostUrl = workspace?.openworkHostUrl ?? workspace?.baseUrl ?? "";
+      const hostUrl = workspace?.matterhornHostUrl ?? workspace?.baseUrl ?? "";
       const mountedUrl = workspace?.remoteType === "openwork"
-        ? buildOpenworkWorkspaceBaseUrl(hostUrl, workspace.openworkWorkspaceId) ?? hostUrl
+        ? buildMatterhornWorkspaceBaseUrl(hostUrl, workspace.matterhornWorkspaceId) ?? hostUrl
         : hostUrl;
       return {
-        openworkHostUrl: mountedUrl,
-        openworkToken:
-          workspace?.openworkToken ??
-          workspace?.openworkClientToken ??
-          workspace?.openworkHostToken ??
+        matterhornHostUrl: mountedUrl,
+        matterhornToken:
+          workspace?.matterhornToken ??
+          workspace?.matterhornClientToken ??
+          workspace?.matterhornHostToken ??
           "",
         directory: workspace?.directory ?? workspace?.path ?? "",
         displayName: workspace?.displayName ?? workspace?.name ?? "",
@@ -79,7 +79,7 @@ export function useRemoteWorkspaceConnectionEditor<TWorkspace extends WorkspaceI
   const save = useCallback(
     async (fields: RemoteWorkspaceInput) => {
       const id = workspaceId?.trim() ?? "";
-      const baseUrl = fields.openworkHostUrl?.trim() ?? "";
+      const baseUrl = fields.matterhornHostUrl?.trim() ?? "";
       if (!id || !baseUrl) {
         setError(t("dashboard.remote_base_url_required"));
         return;
@@ -91,10 +91,10 @@ export function useRemoteWorkspaceConnectionEditor<TWorkspace extends WorkspaceI
         await workspaceUpdateRemote({
           workspaceId: id,
           baseUrl,
-          openworkHostUrl: baseUrl,
-          openworkToken: fields.openworkToken?.trim() ?? "",
-          openworkClientToken: "",
-          openworkHostToken: "",
+          matterhornHostUrl: baseUrl,
+          matterhornToken: fields.matterhornToken?.trim() ?? "",
+          matterhornClientToken: "",
+          matterhornHostToken: "",
           displayName: fields.displayName?.trim() || null,
           directory: fields.directory?.trim() || null,
           remoteType: "openwork",

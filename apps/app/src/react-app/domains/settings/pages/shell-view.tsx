@@ -268,7 +268,7 @@ export function ShellCustomizationView() {
                   id="shell-app-name"
                   className="h-8 text-xs"
                   value={config.appName}
-                  placeholder="OpenWork"
+                  placeholder="Matterhorn Work"
                   disabled
                   onChange={(event) => update({ appName: event.currentTarget.value || DEFAULT_SHELL_CONFIG.appName })}
                 />
@@ -391,7 +391,7 @@ export function ShellCustomizationView() {
         <LayoutSectionHeader>
           <LayoutSectionTitle>Organization-wide settings</LayoutSectionTitle>
           <LayoutSectionDescription>
-            These settings are managed by your organization via OpenWork Cloud.
+            These settings are managed by your organization via Matterhorn Cloud.
           </LayoutSectionDescription>
         </LayoutSectionHeader>
 

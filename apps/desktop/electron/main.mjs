@@ -1739,7 +1739,7 @@ async function disposeRuntimeBeforeQuit() {
   await runtimeManager.dispose().catch(() => undefined);
 }
 
-function assertOpenworkServerReady(info) {
+function assertMatterhornServerReady(info) {
   if (!info?.running) {
     throw new Error("OpenWork server did not stay running after startup.");
   }
@@ -1811,7 +1811,7 @@ async function bootRuntimeForSelectedWorkspace() {
     workspacePath: bootWorkspaceRoot,
     name: bootWorkspace.name ?? bootWorkspace.displayName ?? null,
   }).catch(() => undefined);
-  const openworkServer = assertOpenworkServerReady(await runtimeManager.openworkServerInfo());
+  const matterhornServer = assertMatterhornServerReady(await runtimeManager.matterhornServerInfo());
   return { ok: true, skipped: false, engine, openworkServer, workspaceId: bootWorkspace.id ?? null };
 }
 
@@ -2356,9 +2356,9 @@ async function handleDesktopInvoke(event, command, ...args) {
       }
       return writeWorkspaceOpenworkConfig(workspacePath, config);
     }
-    case "workspaceOpenworkRead":
+    case "workspaceMatterhornRead":
       return readWorkspaceOpenworkConfig(String(args[0]?.workspacePath ?? "").trim());
-    case "workspaceOpenworkWrite":
+    case "workspaceMatterhornWrite":
       return writeWorkspaceOpenworkConfig(
         String(args[0]?.workspacePath ?? "").trim(),
         args[0]?.config ?? defaultWorkspaceOpenworkConfig(""),
@@ -2514,10 +2514,10 @@ async function handleDesktopInvoke(event, command, ...args) {
       return runtimeManager.sandboxCleanupOpenworkContainers();
     case "sandboxDebugProbe":
       return runtimeManager.sandboxDebugProbe();
-    case "openworkServerInfo":
-      return runtimeManager.openworkServerInfo();
-    case "openworkServerRestart":
-      return runtimeManager.openworkServerRestart(args[0] ?? {});
+    case "matterhornServerInfo":
+      return runtimeManager.matterhornServerInfo();
+    case "matterhornServerRestart":
+      return runtimeManager.matterhornServerRestart(args[0] ?? {});
     case "pickDirectory": {
       const options = args[0] ?? {};
       /** @type {import("electron").OpenDialogOptions["properties"]} */

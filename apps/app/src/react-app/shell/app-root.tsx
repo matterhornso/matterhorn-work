@@ -14,7 +14,7 @@ import { LoadingOverlay } from "./loading-overlay";
 import { DevProfiler, DevProfilerOverlay } from "./dev-profiler";
 import { ReactRenderWatchdogOverlay } from "./react-render-watchdog-overlay";
 import { AppMenuProvider } from "./app-menu";
-import { OpenworkControlProvider, OpenworkRouteControlActions } from "./control/control-provider";
+import { MatterhornControlProvider, MatterhornRouteControlActions } from "./control/control-provider";
 import { SessionRoute } from "./session-route";
 import { SettingsRoute } from "./settings-route";
 import { ShellConfigProvider } from "./shell-config";
@@ -130,8 +130,8 @@ export function AppRoot() {
       <DevProfiler id="AppRoot">
         <ShellConfigProvider>
         <AppMenuProvider>
-        <OpenworkControlProvider>
-          <OpenworkRouteControlActions />
+        <MatterhornControlProvider>
+          <MatterhornRouteControlActions />
           <DenSigninGate>
             <Routes>
               <Route
@@ -212,7 +212,7 @@ export function AppRoot() {
               <Route path="*" element={<Navigate to="/session" replace />} />
             </Routes>
           </DenSigninGate>
-        </OpenworkControlProvider>
+        </MatterhornControlProvider>
         </AppMenuProvider>
         </ShellConfigProvider>
         <LoadingOverlay />

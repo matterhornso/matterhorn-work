@@ -6,7 +6,7 @@ import {
   extensionContribution,
   extensionResource,
   isTrustedBuiltInExtension,
-  type OpenWorkExtensionManifest,
+  type MatterhornExtensionManifest,
 } from "./extensions";
 
 export const MODEL_PREF_KEY = "openwork.defaultModel";
@@ -51,10 +51,10 @@ export type McpDirectoryInfo = {
   /** Whether this extension is still in preview. */
   preview?: boolean;
   /** Normalized extension manifest backing this catalog entry. */
-  extensionManifest?: OpenWorkExtensionManifest;
+  extensionManifest?: MatterhornExtensionManifest;
 };
 
-function extensionManifestToDirectoryInfo(manifest: OpenWorkExtensionManifest): McpDirectoryInfo {
+function extensionManifestToDirectoryInfo(manifest: MatterhornExtensionManifest): McpDirectoryInfo {
   const mcpResource = extensionResource(manifest, "mcp");
   return {
     id: manifest.id,
@@ -75,7 +75,7 @@ function extensionManifestToDirectoryInfo(manifest: OpenWorkExtensionManifest): 
   };
 }
 
-export function isBuiltInOpenWorkExtension(entry: Pick<McpDirectoryInfo, "kind" | "extensionManifest">): boolean {
+export function isBuiltInMatterhornExtension(entry: Pick<McpDirectoryInfo, "kind" | "extensionManifest">): boolean {
   return entry.kind === "extension" && isTrustedBuiltInExtension(entry.extensionManifest);
 }
 

@@ -7,8 +7,8 @@ import {
   engineStart as engineStartCmd,
   nukeOpenworkAndOpencodeConfigAndExit,
   openDesktopUrl,
-  openworkServerInfo as openworkServerInfoCmd,
-  openworkServerRestart as openworkServerRestartCmd,
+  matterhornServerInfo as matterhornServerInfoCmd,
+  matterhornServerRestart as matterhornServerRestartCmd,
   pickFile,
   revealDesktopItemInDir,
   resetOpenworkState,
@@ -17,7 +17,7 @@ import {
   workspaceBootstrap as workspaceBootstrapCmd,
   type AppBuildInfo,
   type EngineInfo,
-  type OpenworkServerInfo,
+  type MatterhornServerInfo,
   type SandboxDebugProbeResult,
 } from "../../../../app/lib/desktop";
 import {
@@ -26,8 +26,8 @@ import {
 } from "../../../../app/lib/electron-alpha";
 
 import {
-  writeOpenworkServerSettings,
-} from "../../../../app/lib/openwork-server";
+  writeMatterhornServerSettings,
+} from "../../../../app/lib/matterhorn-server";
 import {
   clearStartupPreference,
   isDesktopRuntime,
@@ -38,7 +38,7 @@ import {
 import { t } from "../../../../i18n";
 import type { DebugViewProps } from "../pages/debug-view";
 import type { ReleaseChannel } from "../../../../app/types";
-import type { OpenworkServerStore, OpenworkServerStoreSnapshot } from "../../connections/openwork-server-store";
+import type { MatterhornServerStore, MatterhornServerStoreSnapshot } from "../../connections/matterhorn-server-store";
 
 const STARTUP_PREFERENCE_KEY = "openwork.startupPreference";
 const ENGINE_SOURCE_KEY = "openwork.engineSource";
@@ -56,8 +56,8 @@ const ONBOARDING_LOCAL_STORAGE_KEYS = [
 
 type UseDebugViewModelOptions = {
   developerMode: boolean;
-  openworkServerStore: OpenworkServerStore;
-  openworkServerSnapshot: OpenworkServerStoreSnapshot;
+  matterhornServerStore: MatterhornServerStore;
+  matterhornServerSnapshot: MatterhornServerStoreSnapshot;
   runtimeWorkspaceId: string | null;
   selectedWorkspaceRoot: string;
   setRouteError: (value: string | null) => void;
@@ -197,7 +197,7 @@ function formatOpencodeBinary(info: EngineInfo | null) {
   return formatBinaryWithSource(info?.opencodeBinPath, info?.opencodeBinSource);
 }
 
-function formatManagedOpencodeBinary(info: OpenworkServerInfo | null) {
+function formatManagedOpencodeBinary(info: MatterhornServerInfo | null) {
   return formatBinaryWithSource(
     info?.managedOpencodeBinPath,
     info?.managedOpencodeBinSource,
@@ -211,7 +211,7 @@ function formatBinaryWithSource(path: string | null | undefined, source: string 
   return sourceLabel ? `${binary} (${sourceLabel})` : binary;
 }
 
-function describeOpenworkServer(info: OpenworkServerInfo | null) {
+function describeOpenworkServer(info: MatterhornServerInfo | null) {
   const running = Boolean(info?.running);
   return {
     ...statusPill(running),
@@ -249,8 +249,8 @@ function describeOpencodeConnect(engine: EngineInfo | null) {
 export function useDebugViewModel(options: UseDebugViewModelOptions) {
   const {
     developerMode,
-    openworkServerStore,
-    openworkServerSnapshot,
+    matterhornServerStore,
+    matterhornServerSnapshot,
     runtimeWorkspaceId,
     selectedWorkspaceRoot,
     setRouteError,
@@ -266,7 +266,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
   const [sandboxProbeResult, setSandboxProbeResult] = useState<SandboxDebugProbeResult | null>(null);
   const [sandboxProbeStatus, setSandboxProbeStatus] = useState<string | null>(null);
   const [opencodeRestarting, setOpencodeRestarting] = useState(false);
-  const [openworkServerRestarting, setOpenworkServerRestarting] = useState(false);
+  const [matterhornServerRestarting, setOpenworkServerRestarting] = useState(false);
   const [opencodeServiceStatus, setOpencodeServiceStatus] = useState<{
     tone: "success" | "error";
     message: string;
@@ -276,7 +276,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
     message: string;
   } | null>(null);
   const [opencodeLogStatus, setOpencodeLogStatus] = useState<string | null>(null);
-  const [openworkLogStatus, setOpenworkLogStatus] = useState<string | null>(null);
+  const [matterhornLogStatus, setMatterhornLogStatus] = useState<string | null>(null);
   const [serviceRestartError, setServiceRestartError] = useState<string | null>(null);
   const [resetModalBusy, setResetModalBusy] = useState(false);
   const [nukeConfigBusy, setNukeConfigBusy] = useState(false);
@@ -342,13 +342,13 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       appVersionLabel: appBuild?.version ?? "—",
       appCommitLabel: appBuild?.gitSha ?? "—",
       opencodeVersionLabel: engineInfoState?.baseUrl ? "managed" : "—",
-      openworkServerVersionLabel: openworkServerSnapshot.openworkServerDiagnostics?.version ?? "—",
+      matterhornServerVersionLabel: matterhornServerSnapshot.matterhornServerDiagnostics?.version ?? "—",
     }),
     [
       appBuild?.gitSha,
       appBuild?.version,
       engineInfoState?.baseUrl,
-      openworkServerSnapshot.openworkServerDiagnostics?.version,
+      matterhornServerSnapshot.matterhornServerDiagnostics?.version,
     ],
   );
 
@@ -357,13 +357,13 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       collectedAt: new Date().toISOString(),
       app: appBuild ?? null,
       engine: engineInfoState,
-      openworkServer: {
-        hostInfo: openworkServerSnapshot.openworkServerHostInfo,
-        diagnostics: openworkServerSnapshot.openworkServerDiagnostics,
-        capabilities: openworkServerSnapshot.openworkServerCapabilities,
-        settings: openworkServerSnapshot.openworkServerSettings,
-        status: openworkServerSnapshot.openworkServerStatus,
-        url: openworkServerSnapshot.openworkServerUrl,
+      matterhornServer: {
+        hostInfo: matterhornServerSnapshot.matterhornServerHostInfo,
+        diagnostics: matterhornServerSnapshot.matterhornServerDiagnostics,
+        capabilities: matterhornServerSnapshot.matterhornServerCapabilities,
+        settings: matterhornServerSnapshot.matterhornServerSettings,
+        status: matterhornServerSnapshot.matterhornServerStatus,
+        url: matterhornServerSnapshot.matterhornServerUrl,
       },
       runtimeWorkspaceId,
       selectedWorkspaceRoot,
@@ -371,12 +371,12 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
   }, [
     appBuild,
     engineInfoState,
-    openworkServerSnapshot.openworkServerCapabilities,
-    openworkServerSnapshot.openworkServerDiagnostics,
-    openworkServerSnapshot.openworkServerHostInfo,
-    openworkServerSnapshot.openworkServerSettings,
-    openworkServerSnapshot.openworkServerStatus,
-    openworkServerSnapshot.openworkServerUrl,
+    matterhornServerSnapshot.matterhornServerCapabilities,
+    matterhornServerSnapshot.matterhornServerDiagnostics,
+    matterhornServerSnapshot.matterhornServerHostInfo,
+    matterhornServerSnapshot.matterhornServerSettings,
+    matterhornServerSnapshot.matterhornServerStatus,
+    matterhornServerSnapshot.matterhornServerUrl,
     runtimeWorkspaceId,
     selectedWorkspaceRoot,
   ]);
@@ -388,8 +388,8 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
 
   const engineCard = useMemo(() => describeEngine(engineInfoState), [engineInfoState]);
   const openworkCard = useMemo(
-    () => describeOpenworkServer(openworkServerSnapshot.openworkServerHostInfo),
-    [openworkServerSnapshot.openworkServerHostInfo],
+    () => describeOpenworkServer(matterhornServerSnapshot.matterhornServerHostInfo),
+    [matterhornServerSnapshot.matterhornServerHostInfo],
   );
   const opencodeConnectCard = useMemo(
     () => describeOpencodeConnect(engineInfoState),
@@ -482,11 +482,11 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       const env = await updaterEnvironmentCmd() as { appBundlePath?: string };
       const appBundlePath = env.appBundlePath?.trim();
       if (!appBundlePath) {
-        setElectronMigrationStatus("Could not resolve the current OpenWork.app bundle path.");
+        setElectronMigrationStatus("Could not resolve the current Matterhorn Work.app bundle path.");
         return;
       }
       await revealDesktopItemInDir(`${appBundlePath}.migrate-bak`);
-      setElectronMigrationStatus("Requested Finder reveal for OpenWork.app.migrate-bak. The backup exists after an install handoff completes.");
+      setElectronMigrationStatus("Requested Finder reveal for Matterhorn Work.app.migrate-bak. The backup exists after an install handoff completes.");
     } catch (error) {
       setElectronMigrationStatus(error instanceof Error ? error.message : safeStringify(error));
     }
@@ -673,14 +673,14 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       workspacePaths,
       opencodeEnableExa: readOpencodeEnableExa(),
       openworkRemoteAccess:
-        optionsRef.current.openworkServerSnapshot.openworkServerSettings
+        optionsRef.current.matterhornServerSnapshot.matterhornServerSettings
           .remoteAccessEnabled === true,
     });
 
     // engine_start restarts openwork-server on a NEW port and lets that server
     // manage OpenCode. Re-read host info and persist the fresh URL/token.
     try {
-      const hostInfo = (await openworkServerInfoCmd()) as {
+      const hostInfo = (await matterhornServerInfoCmd()) as {
         baseUrl?: string;
         ownerToken?: string;
         clientToken?: string;
@@ -689,7 +689,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
         remoteAccessEnabled?: boolean;
       } | null;
       if (hostInfo?.baseUrl) {
-        writeOpenworkServerSettings({
+        writeMatterhornServerSettings({
           urlOverride: hostInfo.baseUrl,
           token: hostInfo.ownerToken?.trim() || hostInfo.clientToken?.trim() || undefined,
           hostToken: hostInfo.hostToken?.trim() || undefined,
@@ -704,10 +704,10 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       // best-effort: if this fails, the host-info poller will catch up in ~10s.
     }
 
-    await openworkServerStore.reconnectOpenworkServer();
+    await matterhornServerStore.reconnectOpenworkServer();
     await refreshEngineInfo();
     return info;
-  }, [openworkServerStore, refreshEngineInfo]);
+  }, [matterhornServerStore, refreshEngineInfo]);
 
   const onRestartOpencode = useCallback(async () => {
     if (!isDesktopRuntime()) return;
@@ -739,28 +739,28 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
     setOpenworkServiceStatus(null);
     setServiceRestartError(null);
     try {
-      await openworkServerRestartCmd({
-        remoteAccessEnabled: openworkServerSnapshot.openworkServerSettings.remoteAccessEnabled === true,
+      await matterhornServerRestartCmd({
+        remoteAccessEnabled: matterhornServerSnapshot.matterhornServerSettings.remoteAccessEnabled === true,
       });
       setOpenworkServiceStatus({
         tone: "success",
-        message: t("settings.restart_succeeded_template", { service: "OpenWork server" }),
+        message: t("settings.restart_succeeded_template", { service: "Matterhorn Work server" }),
       });
       pushDeveloperLog("Restarted openwork-server");
-      await openworkServerStore.reconnectOpenworkServer();
+      await matterhornServerStore.reconnectOpenworkServer();
     } catch (error) {
       const message = error instanceof Error ? error.message : safeStringify(error);
       setOpenworkServiceStatus({
         tone: "error",
-        message: `${t("settings.restart_failed_template", { service: "OpenWork server" })} ${message}`,
+        message: `${t("settings.restart_failed_template", { service: "Matterhorn Work server" })} ${message}`,
       });
       setServiceRestartError(message);
     } finally {
       setOpenworkServerRestarting(false);
     }
   }, [
-    openworkServerSnapshot.openworkServerSettings.remoteAccessEnabled,
-    openworkServerStore,
+    matterhornServerSnapshot.matterhornServerSettings.remoteAccessEnabled,
+    matterhornServerStore,
     pushDeveloperLog,
   ]);
 
@@ -809,25 +809,25 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
   }, [engineInfoState?.lastStderr, engineInfoState?.lastStdout, formatServiceLogs]);
 
   const onCopyOpenworkLogs = useCallback(async () => {
-    const info = openworkServerSnapshot.openworkServerHostInfo;
+    const info = matterhornServerSnapshot.matterhornServerHostInfo;
     const text = formatServiceLogs(info?.lastStdout, info?.lastStderr);
     if (!text) {
-      setOpenworkLogStatus(t("settings.no_logs_captured"));
+      setMatterhornLogStatus(t("settings.no_logs_captured"));
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      setOpenworkLogStatus(t("settings.copied_service_logs", { service: "OpenWork server" }));
+      setMatterhornLogStatus(t("settings.copied_service_logs", { service: "Matterhorn Work server" }));
     } catch (error) {
-      setOpenworkLogStatus(error instanceof Error ? error.message : safeStringify(error));
+      setMatterhornLogStatus(error instanceof Error ? error.message : safeStringify(error));
     }
-  }, [formatServiceLogs, openworkServerSnapshot.openworkServerHostInfo]);
+  }, [formatServiceLogs, matterhornServerSnapshot.matterhornServerHostInfo]);
 
   const onExportOpenworkLogs = useCallback(async () => {
-    const info = openworkServerSnapshot.openworkServerHostInfo;
+    const info = matterhornServerSnapshot.matterhornServerHostInfo;
     const text = formatServiceLogs(info?.lastStdout, info?.lastStderr);
     if (!text) {
-      setOpenworkLogStatus(t("settings.no_logs_captured"));
+      setMatterhornLogStatus(t("settings.no_logs_captured"));
       return;
     }
     try {
@@ -836,11 +836,11 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
         text,
         "text/plain",
       );
-      setOpenworkLogStatus(t("settings.exported_developer_log"));
+      setMatterhornLogStatus(t("settings.exported_developer_log"));
     } catch (error) {
-      setOpenworkLogStatus(error instanceof Error ? error.message : safeStringify(error));
+      setMatterhornLogStatus(error instanceof Error ? error.message : safeStringify(error));
     }
-  }, [formatServiceLogs, openworkServerSnapshot.openworkServerHostInfo]);
+  }, [formatServiceLogs, matterhornServerSnapshot.matterhornServerHostInfo]);
 
   const [resetStatus, setResetStatus] = useState<string | null>(null);
 
@@ -849,7 +849,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       if (!isDesktopRuntime()) return;
       const message =
         mode === "all"
-          ? "Reset ALL OpenWork app data? Open sessions and workspaces will be removed."
+          ? "Reset ALL Matterhorn Work app data? Open sessions and workspaces will be removed."
           : "Reset onboarding state only?";
       if (typeof window !== "undefined" && !window.confirm(message)) {
         return;
@@ -861,7 +861,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
           clearOpenworkLocalStorageForReset(mode);
           setResetStatus(
             mode === "all"
-              ? "Reset OpenWork state. Restart the app to see changes."
+              ? "Reset Matterhorn Work state. Restart the app to see changes."
               : "Reset onboarding state. Restart the app to see changes.",
           );
           pushDeveloperLog(`reset_openwork_state mode=${mode}`);
@@ -882,7 +882,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       typeof window === "undefined"
         ? true
         : window.confirm(
-            "Delete ALL local OpenWork + OpenCode config and quit? This cannot be undone.",
+            "Delete ALL local Matterhorn Work + OpenCode config and quit? This cannot be undone.",
           );
     if (!confirmed) return;
     setNukeConfigBusy(true);
@@ -908,7 +908,7 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       anyActiveRuns: false,
       startupPreference: "server",
       startupLabel:
-        openworkServerSnapshot.openworkServerStatus === "connected"
+        matterhornServerSnapshot.matterhornServerStatus === "connected"
           ? t("settings.openwork_server_label")
           : t("status.disconnected_label"),
       runtimeSummary,
@@ -962,11 +962,11 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       startupStatus,
       workspaceDebugEventsStatus,
       opencodeRestarting,
-      openworkServerRestarting,
+      matterhornServerRestarting,
       opencodeServiceStatus,
       openworkServiceStatus,
       opencodeLogStatus,
-      openworkLogStatus,
+      matterhornLogStatus,
       onCopyOpencodeLogs,
       onExportOpencodeLogs,
       onCopyOpenworkLogs,
@@ -977,25 +977,25 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       engineCard,
       opencodeConnectCard,
       openworkCard,
-      openworkServerDiagnostics: openworkServerSnapshot.openworkServerDiagnostics,
+      matterhornServerDiagnostics: matterhornServerSnapshot.matterhornServerDiagnostics,
       runtimeWorkspaceId,
-      openworkServerCapabilities: openworkServerSnapshot.openworkServerCapabilities,
+      matterhornServerCapabilities: matterhornServerSnapshot.matterhornServerCapabilities,
       pendingPermissions: {},
       events: [],
       workspaceDebugEvents: [],
       safeStringify,
       onClearWorkspaceDebugEvents,
-      openworkAuditEntries: openworkServerSnapshot.openworkAuditEntries,
-      openworkAuditStatus: auditStatusPill(openworkServerSnapshot.openworkAuditStatus),
-      openworkAuditError: openworkServerSnapshot.openworkAuditError,
+      matterhornAuditEntries: matterhornServerSnapshot.matterhornAuditEntries,
+      matterhornAuditStatus: auditStatusPill(matterhornServerSnapshot.matterhornAuditStatus),
+      matterhornAuditError: matterhornServerSnapshot.matterhornAuditError,
       opencodeConnectStatus: null,
-      opencodeDevModeEnabled: appBuild?.openworkDevMode === true,
+      opencodeDevModeEnabled: appBuild?.matterhornDevMode === true,
       nukeConfigBusy,
       nukeConfigStatus,
       onNukeOpenworkAndOpencodeConfig,
     }),
     [
-      appBuild?.openworkDevMode,
+      appBuild?.matterhornDevMode,
       developerLog,
       developerLogStatus,
       developerMode,
@@ -1047,18 +1047,18 @@ export function useDebugViewModel(options: UseDebugViewModelOptions) {
       opencodeRestarting,
       opencodeServiceStatus,
       openworkCard,
-      openworkLogStatus,
+      matterhornLogStatus,
       openworkServiceStatus,
-      openworkServerRestarting,
+      matterhornServerRestarting,
       resetStatus,
       startupStatus,
       workspaceDebugEventsStatus,
-      openworkServerSnapshot.openworkAuditEntries,
-      openworkServerSnapshot.openworkAuditError,
-      openworkServerSnapshot.openworkAuditStatus,
-      openworkServerSnapshot.openworkServerCapabilities,
-      openworkServerSnapshot.openworkServerDiagnostics,
-      openworkServerSnapshot.openworkServerStatus,
+      matterhornServerSnapshot.matterhornAuditEntries,
+      matterhornServerSnapshot.matterhornAuditError,
+      matterhornServerSnapshot.matterhornAuditStatus,
+      matterhornServerSnapshot.matterhornServerCapabilities,
+      matterhornServerSnapshot.matterhornServerDiagnostics,
+      matterhornServerSnapshot.matterhornServerStatus,
       resetModalBusy,
       runtimeDebugReportJson,
       runtimeDebugStatus,

@@ -5,12 +5,12 @@ import { RefreshCcw } from "lucide-react";
 import { readDevLogs } from "../../../../app/lib/dev-log";
 import { readPerfLogs } from "../../../../app/lib/perf-log";
 import {
-  buildOpenworkWorkspaceBaseUrl,
+  buildMatterhornWorkspaceBaseUrl,
   parseOpenworkWorkspaceIdFromUrl,
-  type OpenworkServerSettings,
-  type OpenworkServerStatus,
-} from "../../../../app/lib/openwork-server";
-import type { OpenworkServerInfo } from "../../../../app/lib/desktop";
+  type MatterhornServerSettings,
+  type MatterhornServerStatus,
+} from "../../../../app/lib/matterhorn-server";
+import type { MatterhornServerInfo } from "../../../../app/lib/desktop";
 import { isDesktopRuntime } from "../../../../app/utils";
 import { t } from "../../../../i18n";
 import {
@@ -28,16 +28,16 @@ export type ConfigViewProps = {
   clientConnected: boolean;
   anyActiveRuns: boolean;
 
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerUrl: string;
-  openworkServerSettings: OpenworkServerSettings;
-  openworkServerHostInfo: OpenworkServerInfo | null;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerUrl: string;
+  matterhornServerSettings: MatterhornServerSettings;
+  matterhornServerHostInfo: MatterhornServerInfo | null;
   runtimeWorkspaceId: string | null;
 
-  updateOpenworkServerSettings: (next: OpenworkServerSettings) => void;
-  resetOpenworkServerSettings: () => void;
-  testOpenworkServerConnection: (
-    next: OpenworkServerSettings,
+  updateMatterhornServerSettings: (next: MatterhornServerSettings) => void;
+  resetMatterhornServerSettings: () => void;
+  testMatterhornServerConnection: (
+    next: MatterhornServerSettings,
   ) => Promise<boolean>;
 
   canReloadWorkspace: boolean;
@@ -55,14 +55,14 @@ function buildDiagnosticsBundleJson(input: {
   developerMode: boolean;
   hostConnectUrl: string;
   hostConnectUrlUsesMdns: boolean;
-  hostInfo: OpenworkServerInfo | null;
-  openworkServerSettings: OpenworkServerSettings;
-  openworkServerStatus: OpenworkServerStatus;
-  openworkServerUrl: string;
+  hostInfo: MatterhornServerInfo | null;
+  matterhornServerSettings: MatterhornServerSettings;
+  matterhornServerStatus: MatterhornServerStatus;
+  matterhornServerUrl: string;
   runtimeWorkspaceId: string | null;
 }) {
-  const urlOverride = input.openworkServerSettings.urlOverride?.trim() ?? "";
-  const token = input.openworkServerSettings.token?.trim() ?? "";
+  const urlOverride = input.matterhornServerSettings.urlOverride?.trim() ?? "";
+  const token = input.matterhornServerSettings.token?.trim() ?? "";
   const developerLogs = input.developerMode ? readDevLogs(80) : [];
   const perfLogs = input.developerMode ? readPerfLogs(80) : [];
   const bundle = {
@@ -76,9 +76,9 @@ function buildDiagnosticsBundleJson(input: {
       clientConnected: input.clientConnected,
       anyActiveRuns: input.anyActiveRuns,
     },
-    openworkServer: {
-      status: input.openworkServerStatus,
-      url: input.openworkServerUrl,
+    matterhornServer: {
+      status: input.matterhornServerStatus,
+      url: input.matterhornServerUrl,
       settings: {
         urlOverride: urlOverride || null,
         tokenPresent: Boolean(token),
@@ -119,8 +119,8 @@ export function ConfigView(props: ConfigViewProps) {
     initialConfigLocalState,
   );
   const { openworkConnection, tokenVisible, copyingField } = localState;
-  const openworkUrl = openworkConnection.url;
-  const openworkToken = openworkConnection.token;
+  const matterhornUrl = openworkConnection.url;
+  const matterhornToken = openworkConnection.token;
   const openworkTestState = openworkConnection.testState;
   const openworkTestMessage = openworkConnection.testMessage;
   const copyTimeoutRef = useRef<number | undefined>(undefined);
@@ -129,13 +129,13 @@ export function ConfigView(props: ConfigViewProps) {
     dispatchLocal({
       type: "serverSettings",
       connection: {
-        url: props.openworkServerSettings.urlOverride ?? "",
-        token: props.openworkServerSettings.token ?? "",
+        url: props.matterhornServerSettings.urlOverride ?? "",
+        token: props.matterhornServerSettings.token ?? "",
         testState: "idle",
         testMessage: null,
       },
     });
-  }, [props.openworkServerSettings]);
+  }, [props.matterhornServerSettings]);
 
   useEffect(() => {
     return () => {
@@ -145,8 +145,8 @@ export function ConfigView(props: ConfigViewProps) {
     };
   }, []);
 
-  const openworkStatusLabel = (() => {
-    switch (props.openworkServerStatus) {
+  const matterhornStatusLabel = (() => {
+    switch (props.matterhornServerStatus) {
       case "connected":
         return t("config.status_connected");
       case "limited":
@@ -156,8 +156,8 @@ export function ConfigView(props: ConfigViewProps) {
     }
   })();
 
-  const openworkStatusStyle = (() => {
-    switch (props.openworkServerStatus) {
+  const matterhornStatusStyle = (() => {
+    switch (props.matterhornServerStatus) {
       case "connected":
         return "bg-green-7/10 text-green-11 border-green-7/20";
       case "limited":
@@ -182,33 +182,33 @@ export function ConfigView(props: ConfigViewProps) {
   const reloadButtonDisabled =
     props.reloadBusy || Boolean(reloadAvailabilityReason);
 
-  const buildOpenworkSettings = (): OpenworkServerSettings => ({
-    ...props.openworkServerSettings,
-    urlOverride: openworkUrl.trim() || undefined,
-    token: openworkToken.trim() || undefined,
+  const buildOpenworkSettings = (): MatterhornServerSettings => ({
+    ...props.matterhornServerSettings,
+    urlOverride: matterhornUrl.trim() || undefined,
+    token: matterhornToken.trim() || undefined,
   });
 
   const hasOpenworkChanges = (() => {
-    const currentUrl = props.openworkServerSettings.urlOverride ?? "";
-    const currentToken = props.openworkServerSettings.token ?? "";
+    const currentUrl = props.matterhornServerSettings.urlOverride ?? "";
+    const currentToken = props.matterhornServerSettings.token ?? "";
     return (
-      openworkUrl.trim() !== currentUrl || openworkToken.trim() !== currentToken
+      matterhornUrl.trim() !== currentUrl || matterhornToken.trim() !== currentToken
     );
   })();
 
   const resolvedWorkspaceId = (() => {
     const explicitId = props.runtimeWorkspaceId?.trim() ?? "";
     if (explicitId) return explicitId;
-    return parseOpenworkWorkspaceIdFromUrl(openworkUrl) ?? "";
+    return parseOpenworkWorkspaceIdFromUrl(matterhornUrl) ?? "";
   })();
 
   const resolvedWorkspaceUrl = (() => {
-    const baseUrl = openworkUrl.trim();
+    const baseUrl = matterhornUrl.trim();
     if (!baseUrl) return "";
-    return buildOpenworkWorkspaceBaseUrl(baseUrl, resolvedWorkspaceId) ?? baseUrl;
+    return buildMatterhornWorkspaceBaseUrl(baseUrl, resolvedWorkspaceId) ?? baseUrl;
   })();
 
-  const hostInfo = props.openworkServerHostInfo;
+  const hostInfo = props.matterhornServerHostInfo;
   const hostRemoteAccessEnabled = hostInfo?.remoteAccessEnabled === true;
   const hostStatusLabel = !hostInfo?.running
     ? t("config.host_offline")
@@ -235,9 +235,9 @@ export function ConfigView(props: ConfigViewProps) {
       hostConnectUrl,
       hostConnectUrlUsesMdns,
       hostInfo,
-      openworkServerSettings: props.openworkServerSettings,
-      openworkServerStatus: props.openworkServerStatus,
-      openworkServerUrl: props.openworkServerUrl,
+      matterhornServerSettings: props.matterhornServerSettings,
+      matterhornServerStatus: props.matterhornServerStatus,
+      matterhornServerUrl: props.matterhornServerUrl,
       runtimeWorkspaceId: props.runtimeWorkspaceId,
     });
   }, [
@@ -248,10 +248,10 @@ export function ConfigView(props: ConfigViewProps) {
     props.canReloadWorkspace,
     props.clientConnected,
     props.developerMode,
-    props.openworkServerSettings.token,
-    props.openworkServerSettings.urlOverride,
-    props.openworkServerStatus,
-    props.openworkServerUrl,
+    props.matterhornServerSettings.token,
+    props.matterhornServerSettings.urlOverride,
+    props.matterhornServerStatus,
+    props.matterhornServerUrl,
     props.runtimeWorkspaceId,
   ]);
 
@@ -275,14 +275,14 @@ export function ConfigView(props: ConfigViewProps) {
   const handleTestConnection = async () => {
     if (openworkTestState === "testing") return;
     const next = buildOpenworkSettings();
-    props.updateOpenworkServerSettings(next);
+    props.updateMatterhornServerSettings(next);
     dispatchLocal({
       type: "testState",
       testState: "testing",
       testMessage: null,
     });
     try {
-      const ok = await props.testOpenworkServerConnection(next);
+      const ok = await props.testMatterhornServerConnection(next);
       dispatchLocal({
         type: "testState",
         testState: ok ? "success" : "error",
@@ -340,11 +340,11 @@ export function ConfigView(props: ConfigViewProps) {
       ) : null}
       <ConfigServerConnectionSection
         busy={props.busy}
-        openworkUrl={openworkUrl}
-        openworkToken={openworkToken}
+        matterhornUrl={matterhornUrl}
+        matterhornToken={matterhornToken}
         tokenVisible={tokenVisible.openwork}
-        openworkStatusLabel={openworkStatusLabel}
-        openworkStatusStyle={openworkStatusStyle}
+        matterhornStatusLabel={matterhornStatusLabel}
+        matterhornStatusStyle={matterhornStatusStyle}
         resolvedWorkspaceUrl={resolvedWorkspaceUrl}
         resolvedWorkspaceId={resolvedWorkspaceId}
         openworkTestState={openworkTestState}
@@ -354,8 +354,8 @@ export function ConfigView(props: ConfigViewProps) {
         onTokenChange={(token) => dispatchLocal({ type: "token", token })}
         onToggleToken={() => dispatchLocal({ type: "toggleToken", key: "openwork" })}
         onTestConnection={handleTestConnection}
-        onSave={() => props.updateOpenworkServerSettings(buildOpenworkSettings())}
-        onReset={props.resetOpenworkServerSettings}
+        onSave={() => props.updateMatterhornServerSettings(buildOpenworkSettings())}
+        onReset={props.resetMatterhornServerSettings}
       />
       <ConfigMessagingIdentitiesSection />
       {!isDesktopRuntime() ? <div className="text-xs text-gray-9">{t("config.desktop_only_hint")}</div> : null}

@@ -1,25 +1,25 @@
-export type OpenworkTestState = "idle" | "testing" | "success" | "error";
+export type MatterhornTestState = "idle" | "testing" | "success" | "error";
 
-export type OpenworkConnectionState = {
+export type MatterhornConnectionState = {
   url: string;
   token: string;
-  testState: OpenworkTestState;
+  testState: MatterhornTestState;
   testMessage: string | null;
 };
 
 export type TokenVisibilityKey = "openwork" | "client" | "owner" | "host";
 
 type ConfigLocalState = {
-  openworkConnection: OpenworkConnectionState;
+  openworkConnection: MatterhornConnectionState;
   tokenVisible: Record<TokenVisibilityKey, boolean>;
   copyingField: string | null;
 };
 
 type ConfigLocalAction =
-  | { type: "serverSettings"; connection: OpenworkConnectionState }
+  | { type: "serverSettings"; connection: MatterhornConnectionState }
   | { type: "url"; url: string }
   | { type: "token"; token: string }
-  | { type: "testState"; testState: OpenworkTestState; testMessage: string | null }
+  | { type: "testState"; testState: MatterhornTestState; testMessage: string | null }
   | { type: "toggleToken"; key: TokenVisibilityKey }
   | { type: "copyingField"; field: string | null };
 

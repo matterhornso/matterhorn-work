@@ -1,0 +1,33 @@
+/** @jsxImportSource react */
+import {
+  createContext,
+  use,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+
+import type { MatterhornServerStore } from "./matterhorn-server-store";
+
+const MatterhornServerContext = createContext<MatterhornServerStore | null>(null);
+
+export function MatterhornServerProvider(props: {
+  store: MatterhornServerStore;
+  children: ReactNode;
+}) {
+  return (
+    <MatterhornServerContext.Provider value={props.store}>
+      {props.children}
+    </MatterhornServerContext.Provider>
+  );
+}
+
+export function useOpenworkServer() {
+  const store = use(MatterhornServerContext);
+  if (!store) {
+    throw new Error("useOpenworkServer must be used within an MatterhornServerProvider");
+  }
+
+  useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+
+  return store;
+}

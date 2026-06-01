@@ -18,7 +18,7 @@ export type EngineInfo = {
   lastStderr: string | null;
 };
 
-export type OpenworkServerInfo = {
+export type MatterhornServerInfo = {
   running: boolean;
   remoteAccessEnabled: boolean;
   host: string | null;
@@ -60,12 +60,12 @@ export type WorkspaceInfo = {
   baseUrl?: string | null;
   directory?: string | null;
   displayName?: string | null;
-  openworkHostUrl?: string | null;
-  openworkToken?: string | null;
-  openworkClientToken?: string | null;
-  openworkHostToken?: string | null;
-  openworkWorkspaceId?: string | null;
-  openworkWorkspaceName?: string | null;
+  matterhornHostUrl?: string | null;
+  matterhornToken?: string | null;
+  matterhornClientToken?: string | null;
+  matterhornHostToken?: string | null;
+  matterhornWorkspaceId?: string | null;
+  matterhornWorkspaceName?: string | null;
   sandboxBackend?: "docker" | "microsandbox" | null;
   sandboxRunId?: string | null;
   sandboxContainerName?: string | null;
@@ -111,7 +111,7 @@ export type AppBuildInfo = {
   version: string;
   gitSha?: string | null;
   buildEpoch?: string | null;
-  openworkDevMode?: boolean;
+  matterhornDevMode?: boolean;
   os?: string | null;
   arch?: string | null;
 };
@@ -123,7 +123,7 @@ export type DesktopBootstrapConfig = {
 };
 
 export type OrchestratorDetachedHost = {
-  openworkUrl: string;
+  matterhornUrl: string;
   token: string;
   ownerToken?: string | null;
   hostToken: string;
@@ -157,7 +157,7 @@ export type SandboxDoctorResult = {
   } | null;
 };
 
-export type OpenworkDockerCleanupResult = {
+export type MatterhornDockerCleanupResult = {
   candidates: string[];
   removed: string[];
   errors: string[];

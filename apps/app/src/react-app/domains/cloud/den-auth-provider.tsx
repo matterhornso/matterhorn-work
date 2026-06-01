@@ -28,7 +28,7 @@ import {
   drainPendingDeepLinks,
   type DeepLinkBridgeDetail,
 } from "../../../app/lib/deep-link-bridge";
-import { parseDenAuthDeepLink } from "../../../app/lib/openwork-links";
+import { parseDenAuthDeepLink } from "../../../app/lib/matterhorn-links";
 
 export type DenAuthStatus = "checking" | "signed_in" | "signed_out";
 
@@ -104,7 +104,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
       setError(
         nextError instanceof Error
           ? nextError.message
-          : "Failed to restore OpenWork Cloud session.",
+          : "Failed to restore Matterhorn Cloud session.",
       );
       setStatus("signed_out");
     }
@@ -138,7 +138,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
           .exchangeDesktopHandoff(parsed.grant)
           .then((result) => {
             if (!result.token) {
-              throw new Error("Failed to sign in to OpenWork Cloud.");
+              throw new Error("Failed to sign in to Matterhorn Cloud.");
             }
 
             writeDenSettings({
@@ -164,7 +164,7 @@ export function DenAuthProvider({ children }: DenAuthProviderProps) {
               message:
                 error instanceof Error
                   ? error.message
-                  : "Failed to sign in to OpenWork Cloud.",
+                  : "Failed to sign in to Matterhorn Cloud.",
             });
           });
       }

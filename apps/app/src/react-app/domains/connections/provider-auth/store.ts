@@ -18,8 +18,8 @@ import { unwrap, waitForHealthy } from "../../../../app/lib/opencode";
 import {
   readOpencodeConfig,
   writeOpencodeConfig,
-  workspaceOpenworkRead,
-  workspaceOpenworkWrite,
+  workspaceMatterhornRead,
+  workspaceMatterhornWrite,
 } from "../../../../app/lib/desktop";
 import type {
   Client,
@@ -33,7 +33,7 @@ import {
 } from "../../../../app/utils/providers";
 import { getReactQueryClient } from "../../../infra/query-client";
 import { ensureProviderListQuery } from "../provider-list-query";
-import type { OpenworkServerStore } from "../openwork-server-store";
+import type { MatterhornServerStore } from "../matterhorn-server-store";
 import {
   denSessionUpdatedEvent,
   type DenSessionUpdatedDetail,
@@ -95,7 +95,7 @@ type CreateProviderAuthStoreOptions = {
   selectedWorkspaceDisplay: () => WorkspaceDisplay;
   selectedWorkspaceRoot: () => string;
   runtimeWorkspaceId: () => string | null;
-  openworkServer: OpenworkServerStore;
+  matterhornServer: MatterhornServerStore;
   setProviders: (value: ProviderListItem[]) => void;
   setProviderDefaults: (value: Record<string, string>) => void;
   setProviderConnectedIds: (value: string[]) => void;
@@ -316,29 +316,29 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     return next;
   };
 
-  const readWorkspaceOpenworkConfigRecord = async (): Promise<
+  const readWorkspaceMatterhornConfigRecord = async (): Promise<
     Record<string, unknown>
   > => {
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace =
       options.selectedWorkspaceDisplay().workspaceType === "local";
-    const openworkSnapshot = options.openworkServer.getSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const openworkCapabilities = openworkSnapshot.openworkServerCapabilities;
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkCapabilities?.config?.read;
+    const matterhornSnapshot = options.matterhornServer.getSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornCapabilities = matterhornSnapshot.matterhornServerCapabilities;
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornCapabilities?.config?.read;
 
-    if (canUseOpenworkServer) {
-      const config = await openworkClient.getConfig(openworkWorkspaceId);
+    if (canUseMatterhornServer) {
+      const config = await matterhornClient.getConfig(matterhornWorkspaceId);
       return config.openwork ?? {};
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
-      return (await workspaceOpenworkRead({
+      return (await workspaceMatterhornRead({
         workspacePath: root,
       })) as unknown as Record<string, unknown>;
     }
@@ -346,29 +346,29 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     return {};
   };
 
-  const writeWorkspaceOpenworkConfigRecord = async (
+  const writeWorkspaceMatterhornConfigRecord = async (
     config: Record<string, unknown>,
   ) => {
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace =
       options.selectedWorkspaceDisplay().workspaceType === "local";
-    const openworkSnapshot = options.openworkServer.getSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const openworkCapabilities = openworkSnapshot.openworkServerCapabilities;
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkCapabilities?.config?.write;
+    const matterhornSnapshot = options.matterhornServer.getSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornCapabilities = matterhornSnapshot.matterhornServerCapabilities;
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornCapabilities?.config?.write;
 
-    if (canUseOpenworkServer) {
-      await openworkClient.patchConfig(openworkWorkspaceId, { openwork: config });
+    if (canUseMatterhornServer) {
+      await matterhornClient.patchConfig(matterhornWorkspaceId, { openwork: config });
       return true;
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
-      const result = await workspaceOpenworkWrite({
+      const result = await workspaceMatterhornWrite({
         workspacePath: root,
         config: config as never,
       });
@@ -386,7 +386,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
   const refreshImportedCloudProviders = async () => {
     try {
-      const config = await readWorkspaceOpenworkConfigRecord();
+      const config = await readWorkspaceMatterhornConfigRecord();
       const cloudImports = readWorkspaceCloudImports(config);
       setStateField("importedCloudProviders", cloudImports.providers);
       return cloudImports.providers;
@@ -399,16 +399,16 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
   const persistImportedCloudProviders = async (
     nextProviders: Record<string, CloudImportedProvider>,
   ) => {
-    const config = await readWorkspaceOpenworkConfigRecord();
+    const config = await readWorkspaceMatterhornConfigRecord();
     const cloudImports = readWorkspaceCloudImports(config);
     const nextConfig = withWorkspaceCloudImports(config, {
       ...cloudImports,
       providers: nextProviders,
     });
-    const persisted = await writeWorkspaceOpenworkConfigRecord(nextConfig);
+    const persisted = await writeWorkspaceMatterhornConfigRecord(nextConfig);
     if (!persisted) {
       throw new Error(
-        "OpenWork server unavailable. Connect to manage imported cloud providers.",
+        "Matterhorn Work server unavailable. Connect to manage imported cloud providers.",
       );
     }
     setStateField("importedCloudProviders", nextProviders);
@@ -418,19 +418,19 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace =
       options.selectedWorkspaceDisplay().workspaceType === "local";
-    const openworkSnapshot = options.openworkServer.getSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const openworkCapabilities = openworkSnapshot.openworkServerCapabilities;
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkCapabilities?.config?.read &&
-      typeof openworkClient.readOpencodeConfigFile === "function";
+    const matterhornSnapshot = options.matterhornServer.getSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornCapabilities = matterhornSnapshot.matterhornServerCapabilities;
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornCapabilities?.config?.read &&
+      typeof matterhornClient.readOpencodeConfigFile === "function";
 
-    if (canUseOpenworkServer) {
-      return await openworkClient.readOpencodeConfigFile(openworkWorkspaceId, "project");
+    if (canUseMatterhornServer) {
+      return await matterhornClient.readOpencodeConfigFile(matterhornWorkspaceId, "project");
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
@@ -444,20 +444,20 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     const root = options.selectedWorkspaceRoot().trim();
     const isLocalWorkspace =
       options.selectedWorkspaceDisplay().workspaceType === "local";
-    const openworkSnapshot = options.openworkServer.getSnapshot();
-    const openworkClient = openworkSnapshot.openworkServerClient;
-    const openworkWorkspaceId = options.runtimeWorkspaceId();
-    const openworkCapabilities = openworkSnapshot.openworkServerCapabilities;
-    const canUseOpenworkServer =
-      openworkSnapshot.openworkServerStatus === "connected" &&
-      openworkClient &&
-      openworkWorkspaceId &&
-      openworkCapabilities?.config?.write &&
-      typeof openworkClient.writeOpencodeConfigFile === "function";
+    const matterhornSnapshot = options.matterhornServer.getSnapshot();
+    const matterhornClient = matterhornSnapshot.matterhornServerClient;
+    const matterhornWorkspaceId = options.runtimeWorkspaceId();
+    const matterhornCapabilities = matterhornSnapshot.matterhornServerCapabilities;
+    const canUseMatterhornServer =
+      matterhornSnapshot.matterhornServerStatus === "connected" &&
+      matterhornClient &&
+      matterhornWorkspaceId &&
+      matterhornCapabilities?.config?.write &&
+      typeof matterhornClient.writeOpencodeConfigFile === "function";
 
-    if (canUseOpenworkServer) {
-      const result = await openworkClient.writeOpencodeConfigFile(
-        openworkWorkspaceId,
+    if (canUseMatterhornServer) {
+      const result = await matterhornClient.writeOpencodeConfigFile(
+        matterhornWorkspaceId,
         "project",
         content,
       ) as { ok: boolean; stderr?: string; stdout?: string };
@@ -602,14 +602,14 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   const cloudProviderComment = (provider: Pick<DenOrgLlmProvider, "id" | "name">) =>
-    `// OpenWork Cloud import: ${provider.name
+    `// Matterhorn Cloud import: ${provider.name
       .replace(/\s+/g, " ")
       .trim()} (${provider.id}). Manage this entry from Cloud settings.`;
 
   const removeCloudProviderComment = (raw: string, providerId: string) =>
     raw.replace(
       new RegExp(
-        `(^[ \t]*)// OpenWork Cloud import:.*\\n\\1(?="${escapeRegExp(providerId)}":)`,
+        `(^[ \t]*)// Matterhorn Cloud import:.*\\n\\1(?="${escapeRegExp(providerId)}":)`,
         "m",
       ),
       "$1",
@@ -1313,7 +1313,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
     const token = settings.authToken?.trim() ?? "";
     const orgId = settings.activeOrgId?.trim() ?? "";
     if (!token || !orgId) {
-      throw new Error("Sign in to OpenWork Cloud and choose an organization first.");
+      throw new Error("Sign in to Matterhorn Cloud and choose an organization first.");
     }
 
     try {
