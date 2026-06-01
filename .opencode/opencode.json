@@ -6,6 +6,10 @@
     "wallet": {
       "command": ["node", "packages/matterhorn-work-wallet-mcp/index.mjs"],
       "type": "local"
+    },
+    "crypto": {
+      "command": ["node", "packages/matterhorn-work-crypto-mcp/index.mjs"],
+      "type": "local"
     }
   }
 }

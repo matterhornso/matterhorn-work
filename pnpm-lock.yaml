@@ -411,6 +411,12 @@ importers:
 
   packages/handsfree: {}
 
+  packages/matterhorn-work-crypto-mcp:
+    dependencies:
+      viem:
+        specifier: ^2.50.4
+        version: 2.50.4(typescript@5.9.3)(zod@4.3.6)
+
   packages/matterhorn-work-ui-mcp:
     dependencies:
       '@modelcontextprotocol/sdk':
