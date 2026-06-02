@@ -9,39 +9,42 @@ import { ApiClient } from "./api-client.js";
 const client = new ApiClient({ baseUrl: "https://api.hyperliquid.xyz/info" });
 
 /**
- * Call Hyperliquid info endpoint with a JSON-RPC-like payload.
+ * Call Hyperliquid info endpoint.
+ * Response is either an array [meta, assetCtxs] or a flat object depending on the type.
  */
 async function hlCall(type: string, payload?: unknown) {
   const data = (await client.post(
     "",
     { type, ...(payload !== undefined ? { ...payload } : {}) }
-  )) as Record<string, unknown>;
-  if ("error" in data) throw new Error(`Hyperliquid error: ${data.error}`);
+  )) as Record<string, unknown> | unknown[];
+
+  if (Array.isArray(data)) {
+    if (data.length > 0 && typeof data[0] === "object" && data[0] !== null && "error" in data[0]) {
+      throw new Error(`Hyperliquid error: ${(data[0] as { error: string }).error}`);
+    }
+  } else if ("error" in data) {
+    throw new Error(`Hyperliquid error: ${data.error}`);
+  }
+
   return data;
 }
+
+type MarketInfo = {
+  name: string;
+  szDecimals: number;
+  maxLeverage: number;
+  fundingIntervalHours: number;
+  isActive: boolean;
+};
 
 /**
  * Get all perpetual markets with status, max leverage, and metadata.
  */
-export async function hl_getMarkets(): Promise<
-  Array<{
-    name: string;
-    szDecimals: number;
-    maxLeverage: number;
-    fundingIntervalHours: number;
-    isActive: boolean;
-  }>
-> {
-  const data = (await hlCall("metaAndAssetCtxs")) as {
-    universe: Array<{
-      name: string;
-      szDecimals: number;
-      maxLeverage: number;
-      fundingIntervalHours: number;
-      isActive: boolean;
-    }>;
-  };
-  return data.universe;
+export async function hl_getMarkets(): Promise<MarketInfo[]> {
+  const data = await hlCall("metaAndAssetCtxs");
+  const raw = data as unknown[];
+  const meta = raw[0] as { universe: unknown[] };
+  return (meta.universe || []) as MarketInfo[];
 }
 
 /**
@@ -51,37 +54,22 @@ export async function hl_getFundingRates(symbol: string): Promise<{
   fundingRate: number;
   markPrice: number;
   openInterest: number;
-  prevFundingRate: number;
-  nextFundingTime: number;
+  premium: number;
+  oraclePrice: number;
 }> {
-  const data = (await hlCall("metaAndAssetCtxs")) as {
-    universe: Array<{
-      name: string;
-      szDecimals: number;
-      maxLeverage: number;
-      fundingIntervalHours: number;
-      isActive: boolean;
-    }>;
-    assetCtxs: Array<{
-      fundingRate: string;
-        markPrice: string;
-        openInterest: string;
-        prevFundingRate: string;
-        nextFundingTime: number;
-      }
-    >;
-  };
-
-  const idx = data.universe.findIndex((u) => u.name === symbol);
+  const data = await hlCall("metaAndAssetCtxs");
+  const raw = data as unknown[];
+  const meta = raw[0] as { universe: Array<{ name: string }> };
+  const ctxs = raw[1] as Record<number, { funding: string; markPx: string; openInterest: string; premium: string; oraclePx: string }>;
+  const idx = meta.universe.findIndex((u) => u.name === symbol);
   if (idx < 0) throw new Error(`Market not found: ${symbol}`);
-
-  const ctx = data.assetCtxs[idx];
+  const ctx = ctxs[idx];
   return {
-    fundingRate: Number(ctx.fundingRate),
-    markPrice: Number(ctx.markPrice),
+    fundingRate: Number(ctx.funding),
+    markPrice: Number(ctx.markPx),
     openInterest: Number(ctx.openInterest),
-    prevFundingRate: Number(ctx.prevFundingRate),
-    nextFundingTime: ctx.nextFundingTime,
+    premium: Number(ctx.premium),
+    oraclePrice: Number(ctx.oraclePx),
   };
 }
 

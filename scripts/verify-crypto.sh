@@ -41,7 +41,7 @@ check "  viem in deps"               "node -e \"const p=require('./apps/app/pack
 check "  @tanstack/react-query"      "node -e \"const p=require('./apps/app/package.json');process.exit(p.dependencies?.['@tanstack/react-query']?0:1)\""
 check "  chains.ts exports OK"       "node -e \"import('./apps/app/src/react-app/infra/chains.ts').then(m=>process.exit(Object.keys(m).length?0:1))\""
 check "  contracts.ts exports OK"    "node -e \"import('./apps/app/src/react-app/infra/contracts.ts').then(m=>process.exit(Object.keys(m).length?0:1))\""
-check "  USDC Base Sepolia addr"     "node -e \"import('./apps/app/src/react-app/infra/contracts.ts').then(m=>process.exit(m.USDC_BY_CHAIN?.[84532]==='0x036CbD53842c5426634e7949541eC2318f3dCF7e'?0:1))\""
+check "  USDC Base Sepolia addr"     "node -e \"import('./apps/app/src/react-app/infra/contracts.ts').then(m=>process.exit(m.USDC_BY_CHAIN?.[84532]==='0x036CbD53842c5426634e7929541eC2318f3dCF7e'?0:1))\""
 check "  USDC decimals = 6"          "node -e \"import('./apps/app/src/react-app/infra/contracts.ts').then(m=>process.exit(m.USDC_DECIMALS===6?0:1))\""
 check "  ERC20_TRANSFER_ABI exists"  "node -e \"import('./apps/app/src/react-app/infra/contracts.ts').then(m=>process.exit(Array.isArray(m.ERC20_TRANSFER_ABI)?0:1))\""
 echo ""

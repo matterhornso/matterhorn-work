@@ -93,7 +93,7 @@ async function main() {
     await page.goto(`${BASE}/settings/wallet`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("matterhorn:tx-approval-request", {
-        detail: { to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", value: "0.01", data: "0xa9059cbb", chainId: 84532 },
+        detail: { to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", value: "0.01", data: "0xa9059cbb", chainId: 84532 },
       }));
     });
     await page.waitForTimeout(500);
@@ -108,7 +108,7 @@ async function main() {
     await page.goto(`${BASE}/settings/wallet`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("matterhorn:tx-approval-request", {
-        detail: { to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", value: "0.01", data: "0x", chainId: 84532 },
+        detail: { to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", value: "0.01", data: "0x", chainId: 84532 },
       }));
     });
     await page.waitForTimeout(500);
@@ -140,7 +140,7 @@ async function main() {
     await page.goto(`${BASE}/settings/wallet`, { waitUntil: "networkidle" });
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("matterhorn:tx-approval-request", {
-        detail: { to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", value: "0", data: "0x", chainId: 84532 },
+        detail: { to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", value: "0", data: "0x", chainId: 84532 },
       }));
     });
     await page.waitForTimeout(500);
@@ -164,7 +164,7 @@ async function main() {
     });
     await page.evaluate(() => {
       window.dispatchEvent(new CustomEvent("matterhorn:tx-approval-request", {
-        detail: { to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", value: "0", data: "0x", chainId: 84532 },
+        detail: { to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", value: "0", data: "0x", chainId: 84532 },
       }));
     });
     await page.waitForTimeout(500);

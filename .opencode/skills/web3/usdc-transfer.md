@@ -10,7 +10,7 @@ Send USDC to any address on Base or Base Sepolia. The agent prepares an ERC-20 t
 ## Contract addresses
 | Chain | Contract | Address |
 |-------|----------|---------|
-| Base Sepolia | USDC | 0x036CbD53842c5426634e7949541eC2318f3dCF7e |
+| Base Sepolia | USDC | 0x036CbD53842c5426634e7929541eC2318f3dCF7e |
 | Base | USDC | 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 |
 
 ## Decimals
@@ -62,7 +62,7 @@ The user will approve or reject the transaction in their wallet panel. Report th
 User: "Send 10 USDC to 0xAbC123... on Base Sepolia"
 Agent calculates: 10 * 10^6 = 10000000
 Agent encodes: transfer("0xAbC123...", 10000000) 
-Agent calls: wallet_sendTransaction({ to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", value: "0x0", data: "0xa9059cbb..." })
+Agent calls: wallet_sendTransaction({ to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", value: "0x0", data: "0xa9059cbb..." })
 User approves in wallet panel
 Agent reports: "Sent 10 USDC to 0xAbC123... TX hash: 0x..."
 ```

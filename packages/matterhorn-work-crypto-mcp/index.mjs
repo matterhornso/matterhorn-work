@@ -83,7 +83,7 @@ const registry = {
     cbETH: { address: "0x2Ae3F1Ec7F1F5012CFEab8915BA8908c95F7e269", decimals: 18 },
   },
   84532: {
-    USDC: { address: "0x036CbD53842c5426634e7949541eC2318f3dCF7e", decimals: 6 },
+    USDC: { address: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", decimals: 6 },
     WETH: { address: "0x4200000000000000000000000000000000000006", decimals: 18 },
   },
 };
@@ -169,10 +169,13 @@ async function hl_getMarkets() {
 
 async function hl_getFundingRates(symbol) {
   const data = await hlCall("metaAndAssetCtxs");
-  const idx = (data.universe || []).findIndex(u => u.name === symbol);
+  // Response is [ { universe: [...] }, { 0: {...}, 1: {...}, ... } ]
+  const meta = Array.isArray(data) && data.length >= 1 ? data[0] : data;
+  const ctxs = Array.isArray(data) && data.length >= 2 ? data[1] : data.assetCtxs;
+  const idx = meta.universe?.findIndex(u => u.name === symbol) ?? -1;
   if (idx < 0) throw new Error(`Market not found: ${symbol}`);
-  const ctx = data.assetCtxs[idx];
-  return { fundingRate: Number(ctx.fundingRate), markPrice: Number(ctx.markPrice), openInterest: Number(ctx.openInterest), prevFundingRate: Number(ctx.prevFundingRate), nextFundingTime: ctx.nextFundingTime };
+  const ctx = ctxs[idx];
+  return { fundingRate: Number(ctx.funding), markPrice: Number(ctx.markPx), openInterest: Number(ctx.openInterest), premium: Number(ctx.premium), oraclePrice: Number(ctx.oraclePx) };
 }
 
 async function hl_getOrderbook(symbol, limit = 20) {
@@ -222,7 +225,8 @@ async function submitOrder({ signedOrder, signature, publicAddress }) {
 // =========================================================
 async function pm_searchEvents(query, limit = 10) {
   const data = await fetchJson(`https://gamma-api.polymarket.com/events?closed=false&active=true&_q=${encodeURIComponent(query)}&limit=${limit}`);
-  return (data.events || []).map(e => ({ id: e.id, title: e.title, description: e.description, endDate: e.endDate, volume: e.volume }));
+  const events = Array.isArray(data) ? data : (data.events || []);
+  return events.map(e => ({ id: e.id, title: e.title, description: e.description, endDate: e.endDate, volume: e.volume }));
 }
 
 async function pm_getEvent(eventId) {

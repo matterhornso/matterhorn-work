@@ -41,9 +41,10 @@ export async function pm_searchEvents(query: string, limit = 10): Promise<
     active: "true",
     _q: query,
     limit: String(limit),
-  })) as { events: PolymarketEvent[] };
+  })) as PolymarketEvent[] | { events: PolymarketEvent[] };
 
-  return (data.events || []).map((e) => ({
+  const events = Array.isArray(data) ? data : (data.events || []);
+  return events.map((e) => ({
     id: e.id,
     title: e.title,
     description: e.description,

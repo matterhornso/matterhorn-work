@@ -98,7 +98,7 @@ test.describe("F3: TX Pipeline", () => {
       window.dispatchEvent(
         new CustomEvent("matterhorn:tx-approval-request", {
           detail: {
-            to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e",
+            to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
             value: "0.01",
             data: "0xa9059cbb00000000000000000000000070997970c51812dc3a010c7d01b50e0d17dc79c800000000000000000000000000000000000000000000000000000000000f4240",
             chainId: 84532,
@@ -123,7 +123,7 @@ test.describe("F3: TX Pipeline", () => {
       window.dispatchEvent(
         new CustomEvent("matterhorn:tx-approval-request", {
           detail: {
-            to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e",
+            to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
             value: "0",
             data: "0xa9059cbb00000000000000000000000070997970c51812dc3a010c7d01b50e0d17dc79c800000000000000000000000000000000000000000000000000000000000f4240",
             chainId: 84532,
@@ -146,7 +146,7 @@ test.describe("F3: TX Pipeline", () => {
       window.dispatchEvent(
         new CustomEvent("matterhorn:tx-approval-request", {
           detail: {
-            to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e",
+            to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
             value: "0.01",
             data: "0x",
             chainId: 84532,
@@ -185,7 +185,7 @@ test.describe("F3: TX Pipeline", () => {
       window.dispatchEvent(
         new CustomEvent("matterhorn:tx-approval-request", {
           detail: {
-            to: "0x036CbD53842c5426634e7949541eC2318f3dCF7e",
+            to: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
             value: "0.01",
             data: "0x",
             chainId: 84532,

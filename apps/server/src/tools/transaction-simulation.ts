@@ -24,7 +24,7 @@ export async function simulateTransaction({
   from: Address;
 }) {
   const client = getClient(chainId);
-  if (!client) return { error: `Unsupported chainId: ${chainId}` };
+  if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
 
   try {
     await client.call({
@@ -60,7 +60,7 @@ export async function estimateGas({
   from: Address;
 }) {
   const client = getClient(chainId);
-  if (!client) return { error: `Unsupported chainId: ${chainId}` };
+  if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
 
   try {
     const gas = await client.estimateGas({
