@@ -5,7 +5,9 @@ import { useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { WalletStore } from "./state/wallet-store";
-import { useWalletStore } from "./state/wallet-store";
+import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
+import { CHAIN_NAMES } from "../../infra/chains";
+import { isWhitelistedAddress } from "./infra/whitelist";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -16,6 +18,8 @@ export type TxApprovalRequest = {
   value: string;
   data?: string;
   chainId: number;
+  proposedBy: string;
+  riskLevel: "low" | "medium" | "high";
 };
 
 export type TransactionApprovalProps = {
@@ -41,7 +45,7 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
   useEffect(() => {
     function handleTxRequest(e: Event) {
       const detail = (e as CustomEvent).detail as TxApprovalRequest;
-      store.requestApproval(detail.to, detail.value, detail.data, detail.chainId);
+      store.requestApproval(detail.to, detail.value, detail.data, detail.chainId, detail.proposedBy, detail.riskLevel);
     }
     window.addEventListener("matterhorn:tx-approval-request", handleTxRequest);
     return () => window.removeEventListener("matterhorn:tx-approval-request", handleTxRequest);
@@ -64,6 +68,9 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
   if (!pending) return null;
 
   const isContractInteraction = pending.data && pending.data !== "0x";
+  const isWhitelisted = isWhitelistedAddress(pending.chainId, pending.to);
+  const isMainnet = pending.chainId === 8453;
+  const chainName = CHAIN_NAMES[pending.chainId] ?? `Chain ${pending.chainId}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -91,6 +98,46 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
             <X className="size-4" />
           </button>
         </div>
+
+        {/* Mainnet warning */}
+        {isMainnet && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <p className="text-xs text-red-300">
+              You are on Base Mainnet — this will spend real money.
+            </p>
+          </div>
+        )}
+
+        {/* Spend limit warning */}
+        {state.pendingApproval && state.maxPerTransactionUSD > 0 && computeTxValueUSD(state.pendingApproval.value) > state.maxPerTransactionUSD && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">
+              This transaction exceeds your per-transaction limit of ${state.maxPerTransactionUSD}. Go to Settings &gt; Wallet to increase.
+            </p>
+          </div>
+        )}
+
+        {/* Daily limit warning */}
+        {state.pendingApproval && state.maxDailySpendUSD > 0 && (state.dailySpendUSD + computeTxValueUSD(state.pendingApproval.value)) > state.maxDailySpendUSD && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">
+              This transaction exceeds your daily limit of ${state.maxDailySpendUSD}. Go to Settings &gt; Wallet to increase.
+            </p>
+          </div>
+        )}
+
+        {/* Whitelist warning */}
+        {!isWhitelisted && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">
+              This contract is not on the known protocol whitelist. Only proceed if you trust this address.
+            </p>
+          </div>
+        )}
 
         {/* Warning for contract interactions */}
         {isContractInteraction && (
@@ -128,9 +175,14 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
           <div className="rounded-xl bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Network</div>
             <div className="flex items-center gap-2 text-sm text-dls-text">
-              <span className={cn("size-2 rounded-full", pending.chainId === 8453 ? "bg-green-500" : "bg-yellow-500")} />
-              {pending.chainId === 8453 ? "Base Mainnet" : "Base Sepolia"}
+              <span className={cn("size-2 rounded-full", isMainnet ? "bg-red-500" : "bg-yellow-500")} />
+              <span className={cn(isMainnet && "font-semibold text-red-400")}>{chainName}</span>
             </div>
+          </div>
+
+          <div className="rounded-xl bg-dls-surface p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Proposed By</div>
+            <div className="font-mono text-sm text-dls-text">{pending.proposedBy}</div>
           </div>
         </div>
 

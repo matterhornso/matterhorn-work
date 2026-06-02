@@ -4,10 +4,11 @@ import { useAccount, useChainId, useSendTransaction, useSignMessage } from "wagm
 import { parseEther } from "viem";
 
 import type { WalletStore } from "./state/wallet-store";
-import { useWalletStore } from "./state/wallet-store";
+import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
 import { buildSessionWalletContext, type SessionWalletContext } from "./SessionContextProvider";
 import { CHAIN_NAMES } from "../../infra/chains";
 import { USDC_BY_CHAIN } from "../../infra/contracts";
+import { isWhitelistedAddress } from "./infra/whitelist";
 
 /**
  * Hook that provides the session-scoped wallet context
@@ -48,6 +49,8 @@ export function useSessionWallet(store: WalletStore) {
     });
 
     store.clearApproval();
+    const txValueUSD = computeTxValueUSD(approval.value);
+    store.incrementDailySpendUSD(txValueUSD);
     store.addTransaction({
       hash,
       to: approval.to as `0x${string}`,
@@ -55,6 +58,8 @@ export function useSessionWallet(store: WalletStore) {
       status: "pending",
       timestamp: Date.now(),
       chainId: approval.chainId,
+      proposedBy: approval.proposedBy,
+      riskLevel: approval.riskLevel,
     });
 
     return hash;
@@ -79,13 +84,28 @@ export function useSessionWallet(store: WalletStore) {
 
   /**
    * Request a new transaction approval — shows the approval UI.
+   * Computes risk level from whitelist + amount, and enforces spend limits.
    */
   const requestTx = useCallback(
-    (to: string, value: string, data?: string) => {
+    (to: string, value: string, data?: string, proposedBy = "user_manual") => {
       const currentChainId = chainId ?? state.chainId ?? 84532;
-      store.requestApproval(to, value, data, currentChainId);
+      const whitelisted = isWhitelistedAddress(currentChainId, to);
+      const valueUSD = computeTxValueUSD(value);
+      let riskLevel: "low" | "medium" | "high" = "low";
+      if (!whitelisted) riskLevel = "high";
+      else if (valueUSD > state.maxPerTransactionUSD) riskLevel = "medium";
+      else if (valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) riskLevel = "medium";
+
+      if (state.maxPerTransactionUSD > 0 && valueUSD > state.maxPerTransactionUSD) {
+        store.setError(`This transaction exceeds your per-transaction limit of $${state.maxPerTransactionUSD}`);
+      }
+      if (state.maxDailySpendUSD > 0 && valueUSD + state.dailySpendUSD > state.maxDailySpendUSD) {
+        store.setError(`This transaction exceeds your daily limit of $${state.maxDailySpendUSD}`);
+      }
+
+      store.requestApproval(to, value, data, currentChainId, proposedBy, riskLevel);
     },
-    [chainId, state.chainId, store],
+    [chainId, state.chainId, store, state.maxPerTransactionUSD, state.maxDailySpendUSD, state.dailySpendUSD],
   );
 
   /**

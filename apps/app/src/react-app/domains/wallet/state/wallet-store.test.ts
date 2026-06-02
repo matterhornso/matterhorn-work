@@ -65,6 +65,8 @@ describe("wallet-store", () => {
         status: "pending",
         timestamp: Date.now(),
         chainId: 84532,
+        proposedBy: "user_manual",
+        riskLevel: "low",
       });
     }
     expect(store.getSnapshot().transactions.length).toBe(50); // max 50
@@ -80,6 +82,8 @@ describe("wallet-store", () => {
       status: "pending",
       timestamp: Date.now(),
       chainId: 84532,
+      proposedBy: "user_manual",
+      riskLevel: "low",
     });
     store.updateTransaction(hash, "confirmed");
     const tx = store.getSnapshot().transactions.find((t) => t.hash === hash);
@@ -88,12 +92,14 @@ describe("wallet-store", () => {
 
   it("handles approval requests", () => {
     const store = createWalletStore();
-    store.requestApproval("0xto", "0.01", "0xdata", 84532);
+    store.requestApproval("0xto", "0.01", "0xdata", 84532, "user_manual", "low");
     expect(store.getSnapshot().pendingApproval).toEqual({
       to: "0xto",
       value: "0.01",
       data: "0xdata",
       chainId: 84532,
+      proposedBy: "user_manual",
+      riskLevel: "low",
     });
     store.clearApproval();
     expect(store.getSnapshot().pendingApproval).toBeNull();

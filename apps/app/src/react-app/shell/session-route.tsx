@@ -127,6 +127,10 @@ import { saveSessionDraft } from "../domains/session/sync/draft-store";
 import { useControlAction, type MatterhornControlAction } from "./control/control-provider";
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
+import {
+  buildCryptoSystemPrompt,
+  shouldInjectCryptoPrompt,
+} from "../domains/wallet/prompts/crypto-system-prompt";
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -2046,10 +2050,16 @@ export function SessionRoute() {
           ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
           : "";
 
-        // Crypto reasoning rules (V1 engine)
-        const cryptoPrompt = wallet.snapshot.isConnected
-          ? `\n\n## Crypto Strategy Rules\nWhen the user asks about crypto or DeFi:\n1. Call wallet_getBalance to know what they have.\n2. Call crypto_searchCoins or crypto_getPrices for current prices.\n3. Compare options. Explain your thinking in chat.\n4. If proposing a swap, call crypto_buildSwap first, then crypto_simulate to verify.\n5. If simulation fails, warn user. Do NOT show Approve button.\n6. Always wait for user approval before spending money.`
-          : "";
+        // Crypto system prompt injected conditionally when the message is crypto-related
+        const cryptoPrompt =
+          wallet.snapshot.isConnected && shouldInjectCryptoPrompt(text)
+            ? buildCryptoSystemPrompt(
+                wallet.snapshot.address,
+                wallet.snapshot.chainId,
+                wallet.snapshot.ethBalance,
+                wallet.snapshot.usdcBalance,
+              )
+            : "";
 
         const systemContext = [envSystemContext, walletContext, cryptoPrompt].filter(Boolean).join("\n") || undefined;
 

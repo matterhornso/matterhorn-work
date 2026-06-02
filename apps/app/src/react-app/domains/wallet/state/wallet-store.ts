@@ -7,6 +7,8 @@ export type TxRecord = {
   status: "pending" | "confirmed" | "failed";
   timestamp: number;
   chainId: number;
+  proposedBy: string;
+  riskLevel: "low" | "medium" | "high";
 };
 
 export type WalletStoreSnapshot = {
@@ -23,18 +25,73 @@ export type WalletStoreSnapshot = {
     value: string;
     data?: string;
     chainId: number;
+    proposedBy: string;
+    riskLevel: "low" | "medium" | "high";
   } | null;
   error: string | null;
+  maxDailySpendUSD: number;
+  maxPerTransactionUSD: number;
+  dailySpendUSD: number;
+  lastSpendReset: string;
+  preferredNetwork: number | null;
 };
 
 export type WalletStore = ReturnType<typeof createWalletStore>;
 
 const MAX_TRANSACTIONS = 50;
+const FALLBACK_ETH_PRICE_USD = 2000;
 
-export function createWalletStore() {
-  const listeners = new Set<() => void>();
+const DAILY_RESET_KEY = "matterhorn:wallet:lastSpendReset";
+const DAILY_SPEND_KEY = "matterhorn:wallet:dailySpendUSD";
+const MAX_DAILY_KEY = "matterhorn:wallet:maxDailySpendUSD";
+const MAX_PER_TX_KEY = "matterhorn:wallet:maxPerTransactionUSD";
+const PREFERRED_NETWORK_KEY = "matterhorn:wallet:preferredNetwork";
 
-  let snapshot: WalletStoreSnapshot = {
+function readNum(key: string, fallback: number): number {
+  const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function writeNum(key: string, value: number): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(key, String(value));
+  }
+}
+
+function readStr(key: string, fallback: string): string {
+  return typeof window !== "undefined" ? window.localStorage.getItem(key) ?? fallback : fallback;
+}
+
+function writeStr(key: string, value: string): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(key, value);
+  }
+}
+
+function todayString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getDailySpendWithReset(): { dailySpendUSD: number; lastSpendReset: string } {
+  const today = todayString();
+  const lastReset = readStr(DAILY_RESET_KEY, today);
+  let dailySpend = readNum(DAILY_SPEND_KEY, 0);
+  if (lastReset !== today) {
+    dailySpend = 0;
+    writeStr(DAILY_RESET_KEY, today);
+    writeNum(DAILY_SPEND_KEY, 0);
+  }
+  return { dailySpendUSD: dailySpend, lastSpendReset: lastReset };
+}
+
+function getInitialSnapshot(): WalletStoreSnapshot {
+  const { dailySpendUSD, lastSpendReset } = getDailySpendWithReset();
+  const maxDailySpendUSD = readNum(MAX_DAILY_KEY, 100);
+  const maxPerTransactionUSD = readNum(MAX_PER_TX_KEY, 50);
+  const preferredNetwork = readNum(PREFERRED_NETWORK_KEY, 84532);
+  return {
     address: null,
     chainId: null,
     ethBalance: null,
@@ -45,7 +102,24 @@ export function createWalletStore() {
     transactions: [],
     pendingApproval: null,
     error: null,
+    maxDailySpendUSD,
+    maxPerTransactionUSD,
+    dailySpendUSD,
+    lastSpendReset,
+    preferredNetwork,
   };
+}
+
+export function computeTxValueUSD(value: string): number {
+  const numeric = value.startsWith("0x") ? Number(BigInt(value)) / 1e18 : Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return 0;
+  return numeric * FALLBACK_ETH_PRICE_USD;
+}
+
+export function createWalletStore() {
+  const listeners = new Set<() => void>();
+
+  let snapshot = getInitialSnapshot();
 
   function emitChange() {
     for (const listener of listeners) listener();
@@ -123,10 +197,17 @@ export function createWalletStore() {
       }));
     },
 
-    requestApproval(to: string, value: string, data: string | undefined, chainId: number) {
+    requestApproval(
+      to: string,
+      value: string,
+      data: string | undefined,
+      chainId: number,
+      proposedBy = "user_manual",
+      riskLevel: "low" | "medium" | "high" = "low",
+    ) {
       mutate((s) => ({
         ...s,
-        pendingApproval: { to, value, data, chainId },
+        pendingApproval: { to, value, data, chainId, proposedBy, riskLevel },
       }));
     },
 
@@ -136,6 +217,35 @@ export function createWalletStore() {
 
     setError(error: string | null) {
       mutate((s) => ({ ...s, error }));
+    },
+
+    setMaxDailySpendUSD(value: number) {
+      const v = Number.isFinite(value) && value > 0 ? value : 100;
+      writeNum(MAX_DAILY_KEY, v);
+      mutate((s) => ({ ...s, maxDailySpendUSD: v }));
+    },
+
+    setMaxPerTransactionUSD(value: number) {
+      const v = Number.isFinite(value) && value > 0 ? value : 50;
+      writeNum(MAX_PER_TX_KEY, v);
+      mutate((s) => ({ ...s, maxPerTransactionUSD: v }));
+    },
+
+    incrementDailySpendUSD(amountUSD: number) {
+      const today = todayString();
+      if (snapshot.lastSpendReset !== today) {
+        writeStr(DAILY_RESET_KEY, today);
+        writeNum(DAILY_SPEND_KEY, 0);
+        mutate((s) => ({ ...s, dailySpendUSD: 0, lastSpendReset: today }));
+      }
+      const next = snapshot.dailySpendUSD + amountUSD;
+      writeNum(DAILY_SPEND_KEY, next);
+      mutate((s) => ({ ...s, dailySpendUSD: next }));
+    },
+
+    setPreferredNetwork(chainId: number) {
+      writeNum(PREFERRED_NETWORK_KEY, chainId);
+      mutate((s) => ({ ...s, preferredNetwork: chainId }));
     },
   };
 }

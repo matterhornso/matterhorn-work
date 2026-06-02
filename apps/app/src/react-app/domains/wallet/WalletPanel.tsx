@@ -45,9 +45,20 @@ export function WalletPanel({ store }: WalletPanelProps) {
 
   const chainName = state.chainId ? CHAIN_NAMES[state.chainId] ?? "Unknown Chain" : null;
   const recentTxs = state.transactions.slice(0, 5);
+  const isTestnet = state.chainId === 84532;
 
   return (
     <div className="flex flex-col gap-3 p-4">
+      {/* Testnet banner */}
+      {isTestnet && (
+        <div className="flex items-start gap-2 rounded-xl border border-green-500/20 bg-green-500/10 px-3 py-2">
+          <span className="text-sm">🔒</span>
+          <p className="text-xs text-green-300">
+            Testnet mode — Transactions won't spend real money. Switch to mainnet in Settings &gt; Wallet when ready.
+          </p>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -125,6 +136,33 @@ export function WalletPanel({ store }: WalletPanelProps) {
                       {truncateAddress(tx.hash)}
                     </span>
                     <span className="shrink-0 text-dls-secondary">{tx.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-dls-border pt-3">
+            <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Activity</h4>
+            {state.transactions.length === 0 ? (
+              <p className="text-xs text-dls-secondary py-2">No activity yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {state.transactions.slice(0, 5).map((tx) => (
+                  <div
+                    key={tx.hash}
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-dls-hover transition-colors"
+                  >
+                    <span className={cn("size-1.5 shrink-0 rounded-full", txStatusColor(tx.status))} />
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-mono text-dls-text truncate">
+                        {truncateAddress(tx.hash)}
+                      </span>
+                      <span className="text-dls-secondary">
+                        {tx.value} ETH • {tx.proposedBy} • {tx.riskLevel}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-dls-secondary ml-auto">{tx.status}</span>
                   </div>
                 ))}
               </div>

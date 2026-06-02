@@ -21,6 +21,7 @@ import {
   browseAgents,
   selectAgent,
   deployAgent,
+  hireAgent,
   pauseAgent,
   resumeAgent,
   addDeployLog,
@@ -103,10 +104,12 @@ function AgentCard({
   agent,
   onSelect,
   onHire,
+  isWalletConnected,
 }: {
   agent: AgentBlueprint
   onSelect: (id: string) => void
   onHire: (agent: AgentBlueprint) => void
+  isWalletConnected: boolean
 }) {
   return (
     <div
@@ -182,6 +185,7 @@ function AgentCard({
         size="sm"
         className="mt-3 w-full gap-1.5"
         variant="secondary"
+        disabled={!isWalletConnected}
         onClick={(e) => {
           e.stopPropagation()
           onHire(agent)
@@ -190,6 +194,12 @@ function AgentCard({
         <Plus className="w-3.5 h-3.5" />
         Hire Agent
       </Button>
+      {!isWalletConnected && (
+        <p className="text-[10px] text-amber-400/70 text-center mt-1.5 flex items-center justify-center gap-1">
+          <Wallet className="w-3 h-3" />
+          Connect wallet to hire
+        </p>
+      )}
     </div>
   )
 }
@@ -315,11 +325,10 @@ export default function MarketplaceView() {
   )
 
   const handleHire = useCallback((agent: AgentBlueprint) => {
-    setDeployTargetId(agent.id)
-    setDeployName(agent.name)
-    setDeployBudget(agent.dailyCost.toFixed(0))
-    setActiveTab("Deploy")
-  }, [])
+    if (!wallet.isConnected) return
+    hireAgent(agent.id)
+    setActiveTab("My Agents")
+  }, [wallet.isConnected])
 
   const handleDeploy = useCallback(() => {
     if (!deployTargetId) return
@@ -690,6 +699,7 @@ export default function MarketplaceView() {
                     agent={agent}
                     onSelect={handleSelectAgent}
                     onHire={handleHire}
+                    isWalletConnected={wallet.isConnected}
                   />
                 ))}
               </div>

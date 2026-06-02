@@ -106,6 +106,29 @@ export function deployAgent(
   return id
 }
 
+export function hireAgent(blueprintId: string): string {
+  const { agents } = marketplaceStore.getState()
+  const blueprint = agents.find((a) => a.id === blueprintId)
+  if (!blueprint) throw new Error(`Blueprint ${blueprintId} not found`)
+
+  const id = `deployed-${nextDeployedId++}`
+  const deployed: DeployedAgent = {
+    id,
+    blueprintId,
+    name: blueprint.name,
+    provider: "auto",
+    status: "paused",
+    revenue: 0,
+    deployedAt: Date.now(),
+  }
+
+  marketplaceStore.setState((s) => ({
+    myAgents: [...s.myAgents, deployed],
+  }))
+
+  return id
+}
+
 export function pauseAgent(id: string): void {
   marketplaceStore.setState((s) => ({
     myAgents: s.myAgents.map((a) =>
