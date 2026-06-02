@@ -2,7 +2,7 @@
 
 > **Use cases (in order):** (1) Hyperliquid trading strategies / market making, (2) Polymarket prediction market bots
 > **Approach:** Agent blueprints inside Matterhorn Work. Not "separate features" — these are the agent skills that run inside the workspace.
-> **Status:** ~15-20% complete. Wallet shell exists. Agent is blind to both Hyperliquid and Polymarket.
+> **Status:** ~60-70% P0 complete. Server tools + MCPs verified end-to-end via `scripts/e2e-crypto-test.ts` (20/20 pass). Remaining gaps: blueprints not wired to marketplace UI, security hardening, swap builder needs 1inch API key for full testing.
 > **Source material:** `CLAUDE.md`, `scripts/verify-crypto.sh`, Matterhorn-Agent blueprints (`~/matterhorn/Matterhorn-Agent/src/data/blueprints.ts`, `mcpSkills.ts`)
 
 ---
@@ -17,7 +17,7 @@
 | **Wallet domain (React)** | ✅ Complete | `WalletConnect.tsx`, `WalletPanel.tsx`, `TransactionApproval.tsx`, wallet store with tx history |
 | **Session wallet context injection** | ✅ Complete | `SessionContextProvider.tsx` injects address/chain into agent prompt as text |
 | **Transaction broadcast pipeline** | ✅ Complete | `TransactionApproval.tsx` → wagmi → receipt UI |
-| **Wallet MCP (stub)** | ✅ Skeleton | `packages/matterhorn-work-wallet-mcp/` — 4 tools exist but only return UI prompts. No actual reads. |
+| **Wallet MCP** | ✅ Real reads | `packages/matterhorn-work-wallet-mcp/` — real `wallet_getBalance` via viem, `wallet_readContract`, structured tx/signature responses |
 | **UI-MCP** | ✅ Complete | Real bridge to OpenWork desktop |
 | **24 Web3 skill markdown files** | ✅ Skeletons | `.opencode/skills/web3/*.md` — markdown descriptions, not executable |
 | **CLAUDE.md + verify-crypto.sh** | ✅ Complete | Build plan + test script ready |
@@ -26,27 +26,25 @@
 
 ---
 
-## What Is NOT Built (The Gap)
-
-**The agent cannot do the two things it's supposed to do:**
+## What Is NOT Built (Remaining Gaps)
 
 ### Use Case 1: Hyperliquid Trading Strategies
-- ✅ Hyperliquid skill markdown exists (`.opencode/skills/web3/`) — but it's just a text description
-- ❌ No actual Hyperliquid API client
-- ❌ No tools to: fetch orderbook, place orders, manage positions, check perps funding rates
-- ❌ Agent cannot say "ETH perp is overfunded, should I short?" and then do it
-- ❌ No structured execution: agent can reason, but cannot build a Hyperliquid transaction
+- ✅ Research tools exist and verified: `hl_getMarkets`, `hl_getFundingRates`, `hl_getOrderbook`, `hl_getPositions`, `hl_getAccountSummary`
+- ✅ Execution scaffolding: `hl_buildOrder`, `hl_summarizeOrder`, `hl_submitOrder` in both server + MCP
+- ❌ **Execution not wired to UI:** `wallet_signMessage` L1 proof flow not tested end-to-end for Hyperliquid
+- ❌ Agent cannot autonomously open a position (requires testing the full sign → submit flow)
 
 ### Use Case 2: Polymarket Prediction Market Bots
-- ✅ Polymarket skill markdown exists
-- ❌ Gamma API client exists in my deleted file only — not in the actual build
-- ❌ **Polymarket execution is centralized orderbook.** No smart contract to call. Agent can research markets but cannot actually "place a bet" without Polymarket's internal API (which requires KYC/approval).
-- ❌ No tools to research market probabilities from on-chain + social signals
+- ✅ Research tools exist and verified: `pm_searchEvents`, `pm_getEvent`, `pm_getOrderbook`
+- ❌ **Execution impossible:** Polymarket is custodial orderbook — no public API for placing bets. Agent can research + suggest manual action only.
 
 ### Cross-Cutting Gaps
-- ❌ **Agent is blind.** Cannot read chain state. Cannot call CoinGecko. Cannot check balances. Cannot reason from actual data.
-- ❌ **No MCP tools for research.** The 24 skill files are markdown spec sheets. The agent reads them as text but has no callable tools.
-- ❌ **Server-side chain client missing.** `SessionContextProvider.tsx` builds a context string. The agent reads it but cannot act on it.
+- ✅ **Agent can read chain state** — `wallet_getBalance` via MCP returns real ETH + USDC
+- ✅ **MCP research tools exist** — CoinGecko, DeFiLlama, Hyperliquid, Polymarket all callable via `crypto` MCP
+- ✅ **Server-side chain client** — `chain-client.ts` + `chain-tools.ts` + `token-registry.ts` verified
+- ❌ **Swap builder not fully tested** — requires `ONE_INCH_API_KEY` for 1inch integration
+- ❌ **Blueprints not wired to UI** — 16 blueprints exist in source but not yet loaded into marketplace
+- ❌ **System prompt needs iteration** — rules injected but not battle-tested with live agent conversations
 
 ---
 
@@ -207,21 +205,21 @@
 
 ## Total Revised Effort Estimate
 
-| Subsystem | Effort | Priority | Notes |
-|-----------|--------|----------|-------|
-| 1. Server-Side Chain Client | 3-5 days | P0 | Balance reading is foundational |
-| 2. Crypto Research Tools | 2-3 days | P0 | CoinGecko + DeFiLlama |
-| 3. Swap Execution (1inch) | 3-5 days | P0 | Standard DEX routing |
-| 3b. **Hyperliquid Research** | 2-3 days | P0 | Funding rates, orderbook, positions |
-| 3c. **Hyperliquid Execution** | 2-3 weeks | P2 | Complex signing, not a standard swap |
-| 3d. **Polymarket Research** | 1-2 days | P0 | Market search + odds |
-| 4. Port Blueprints + Skills | 2-3 days | P0 | Copy from source, wire into UI |
-| 5. System Prompt Engineering | 5-8 days | P0 | Iterative, critical for usability |
-| 6. Security | 5-7 days | P1 | Before mainnet |
-| 7. Marketplace UI | 3-5 days | P2 | After core loop works |
-| **Total (P0 only)** | **4-5 weeks** | | Ship "agent researches + proposes" for both use cases |
-| **Total (P0 + Hyperliquid exec)** | **7-8 weeks** | | Ship full Hyperliquid trading |
-| **Total (full vision)** | **3 months** | | Every blueprint works |
+| Subsystem | Effort | Priority | Status | Notes |
+|-----------|--------|----------|--------|-------|
+| 1. Server-Side Chain Client | 3-5 days | P0 | **✅ DONE** | `chain-client.ts`, `token-registry.ts`, `chain-tools.ts` — verified |
+| 2. Crypto Research Tools | 2-3 days | P0 | **✅ DONE** | CoinGecko + DeFiLlama + caching — verified |
+| 3. Swap Execution (1inch) | 3-5 days | P0 | 🔧 Needs API key | Code complete, needs `ONE_INCH_API_KEY` for full test |
+| 3b. **Hyperliquid Research** | 2-3 days | P0 | **✅ DONE** | `hl_getMarkets`, `hl_getFundingRates`, `hl_getOrderbook` — verified |
+| 3c. **Hyperliquid Execution** | 2-3 weeks | P2 | 🔧 Scaffolded | `hl_buildOrder`, `hl_submitOrder` exist, needs L1 sign flow |
+| 3d. **Polymarket Research** | 1-2 days | P0 | **✅ DONE** | `pm_searchEvents`, `pm_getEvent`, `pm_getOrderbook` — verified |
+| 4. Port Blueprints + Skills | 2-3 days | P0 | 🔧 Pending | Code exists in source, needs wiring into marketplace UI |
+| 5. System Prompt Engineering | 5-8 days | P0 | 🔧 In progress | Rules injected in `session-route.tsx`, needs live testing |
+| 6. Security | 5-7 days | P1 | ❌ Not started | Spend limits, protocol whitelist, testnet default |
+| 7. Marketplace UI | 3-5 days | P2 | 🔧 Partial | Browse + filter exists, blueprints not wired yet |
+| **Total (P0 only)** | **4-5 weeks** | | | Ship "agent researches + proposes" for both use cases |
+| **Total (P0 + Hyperliquid exec)** | **7-8 weeks** | | | Ship full Hyperliquid trading |
+| **Total (full vision)** | **3 months** | | | Every blueprint works |
 
 ---
 
