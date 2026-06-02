@@ -49,18 +49,18 @@ export function WalletConnect({ store }: WalletConnectProps) {
           size="sm"
           onClick={() => setOpen(!open)}
           disabled={state.isConnecting}
-          className="gap-2"
+          className="gap-2 border-dls-border bg-dls-surface hover:bg-dls-hover text-dls-text"
         >
           <Wallet className="size-4" />
           {state.isConnecting ? "Connecting..." : "Connect Wallet"}
         </Button>
         {open && (
-          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-lg">
+          <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
             {connectors.map((connector) => (
               <button
                 key={connector.id}
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-10 hover:bg-dls-surface hover:text-dls-text transition-colors"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-dls-text hover:bg-dls-hover hover:text-dls-accent transition-colors"
                 onClick={() => {
                   handleConnect(connector.id);
                   setOpen(false);
@@ -81,28 +81,28 @@ export function WalletConnect({ store }: WalletConnectProps) {
         type="button"
         className={cn(
           "flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
-          "border border-dls-border bg-dls-sidebar text-gray-10 hover:bg-dls-surface",
+          "border border-dls-border bg-dls-sidebar text-dls-text hover:bg-dls-hover",
         )}
         onClick={() => setOpen(!open)}
       >
         {chainName && (
           <span className="flex items-center gap-1">
             <span className="size-2 rounded-full bg-green-500" />
-            <span className="text-xs text-gray-8">{chainName}</span>
+            <span className="text-xs text-dls-secondary">{chainName}</span>
           </span>
         )}
         <span className="font-mono">{state.address ? truncateAddress(state.address) : ""}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-dls-border bg-dls-sidebar p-2 shadow-[var(--dls-shell-shadow)] animate-in fade-in zoom-in-95 duration-150">
           <div className="border-b border-dls-border px-3 py-2">
-            <div className="text-xs text-gray-8">Connected with {state.connector}</div>
-            <div className="font-mono text-sm text-gray-10">{state.address ? truncateAddress(state.address) : ""}</div>
+            <div className="text-xs text-dls-secondary">Connected with {state.connector}</div>
+            <div className="font-mono text-sm text-dls-text">{state.address ? truncateAddress(state.address) : ""}</div>
           </div>
           <div className="space-y-1 py-1">
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-10 hover:bg-dls-surface hover:text-dls-text transition-colors"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-dls-text hover:bg-dls-hover hover:text-dls-accent transition-colors"
               onClick={() => {
                 if (state.address) {
                   navigator.clipboard.writeText(state.address);
@@ -116,7 +116,7 @@ export function WalletConnect({ store }: WalletConnectProps) {
             {chainId && (
               <button
                 type="button"
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-10 hover:bg-dls-surface hover:text-dls-text transition-colors"
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-dls-text hover:bg-dls-hover hover:text-dls-accent transition-colors"
                 onClick={() => {
                   switchChain?.({ chainId: chainId === 8453 ? 84532 : 8453 });
                   setOpen(false);
@@ -128,7 +128,7 @@ export function WalletConnect({ store }: WalletConnectProps) {
             )}
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-dls-surface hover:text-red-300 transition-colors"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
               onClick={handleDisconnect}
             >
               <LogOut className="size-4" />

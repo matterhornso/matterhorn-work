@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ function txStatusColor(status: string): string {
     case "failed":
       return "bg-red-500";
     default:
-      return "bg-gray-500";
+      return "bg-dls-secondary";
   }
 }
 
@@ -35,8 +35,10 @@ export function WalletPanel({ store }: WalletPanelProps) {
   if (!state.isConnected) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-6 text-center">
-        <WalletIcon className="size-8 text-gray-8" />
-        <p className="text-sm text-gray-8">Connect a wallet to see balances and transactions.</p>
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-dls-surface border border-dls-border">
+          <WalletIcon className="size-6 text-dls-secondary" />
+        </div>
+        <p className="text-sm text-dls-secondary">Connect a wallet to see balances and transactions.</p>
       </div>
     );
   }
@@ -46,23 +48,30 @@ export function WalletPanel({ store }: WalletPanelProps) {
 
   return (
     <div className="flex flex-col gap-3 p-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-10">Wallet</h3>
+        <div className="flex items-center gap-2">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-green-500/10">
+            <span className="size-2 rounded-full bg-green-500" />
+          </div>
+          <h3 className="text-sm font-medium text-dls-text">Wallet</h3>
+        </div>
         <button
           type="button"
-          className="rounded-lg p-1 text-gray-8 hover:bg-dls-surface hover:text-gray-10 transition-colors"
+          className="rounded-lg p-1 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
           onClick={() => setExpanded(!expanded)}
         >
-          <ChevronDown className={cn("size-4 transition-transform", expanded && "rotate-180")} />
+          <ChevronDown className={cn("size-4 transition-transform duration-200", expanded && "rotate-180")} />
         </button>
       </div>
 
+      {/* Address + Chain */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-8">Address</span>
+          <span className="text-dls-secondary">Address</span>
           <button
             type="button"
-            className="flex items-center gap-1 font-mono text-xs text-gray-10 hover:text-dls-text transition-colors"
+            className="flex items-center gap-1 font-mono text-xs text-dls-text hover:text-dls-accent transition-colors"
             onClick={() => {
               if (state.address) navigator.clipboard.writeText(state.address);
             }}
@@ -74,43 +83,48 @@ export function WalletPanel({ store }: WalletPanelProps) {
 
         {chainName && (
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-8">Chain</span>
-            <span className="flex items-center gap-1.5 text-gray-10">
+            <span className="text-dls-secondary">Chain</span>
+            <span className="flex items-center gap-1.5 text-dls-text">
               <span className="size-2 rounded-full bg-green-500" />
               {chainName}
             </span>
           </div>
         )}
+      </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-8">ETH</span>
-          <span className="font-mono text-gray-10">{state.ethBalance ?? "—"}</span>
+      {/* Balances */}
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-dls-surface p-3 border border-dls-border">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-0.5">ETH</div>
+          <div className="font-mono text-sm text-dls-text">{state.ethBalance ?? "—"}</div>
         </div>
-
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-8">USDC</span>
-          <span className="font-mono text-gray-10">{state.usdcBalance ?? "—"}</span>
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-0.5">USDC</div>
+          <div className="font-mono text-sm text-dls-text">{state.usdcBalance ?? "—"}</div>
         </div>
       </div>
 
       {expanded && (
         <>
           <div className="border-t border-dls-border pt-3">
-            <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-8">Recent Transactions</h4>
+            <h4 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Recent Transactions</h4>
             {recentTxs.length === 0 ? (
-              <p className="text-xs text-gray-8">No transactions yet.</p>
+              <div className="flex flex-col items-center gap-2 py-4 text-center">
+                <RefreshCw className="size-5 text-dls-secondary" />
+                <p className="text-xs text-dls-secondary">No transactions yet.</p>
+              </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {recentTxs.map((tx) => (
                   <div
                     key={tx.hash}
-                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-dls-surface transition-colors"
+                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-dls-hover transition-colors"
                   >
                     <span className={cn("size-1.5 shrink-0 rounded-full", txStatusColor(tx.status))} />
-                    <span className="font-mono text-gray-10 truncate flex-1">
+                    <span className="font-mono text-dls-text truncate flex-1">
                       {truncateAddress(tx.hash)}
                     </span>
-                    <span className="shrink-0 text-gray-8">{tx.status}</span>
+                    <span className="shrink-0 text-dls-secondary">{tx.status}</span>
                   </div>
                 ))}
               </div>
@@ -126,7 +140,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
               }
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-gray-8 hover:text-gray-10 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-dls-secondary hover:text-dls-text transition-colors"
             >
               <ExternalLink className="size-3" />
               View on Block Explorer

@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Shield, X } from "lucide-react";
+import { Shield, X, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { useEffect } from "react";
 
 import { cn } from "@/lib/utils";
@@ -47,73 +47,116 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
     return () => window.removeEventListener("matterhorn:tx-approval-request", handleTxRequest);
   }, [store]);
 
+  // Allow rejecting via Escape key
+  useEffect(() => {
+    if (!pending) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        dispatchTxApprovalResponse(false);
+        store.clearApproval();
+        onReject();
+      }
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [pending, store, onReject]);
+
   if (!pending) return null;
 
+  const isContractInteraction = pending.data && pending.data !== "0x";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="mx-4 w-full max-w-md rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="size-5 text-violet-500" />
-            <h2 className="text-lg font-semibold text-dls-text">Transaction Approval</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="mx-4 w-full max-w-md rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+              <Shield className="size-5 text-violet-500" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-dls-text">Transaction Approval</h2>
+              <p className="text-xs text-dls-secondary">Review before signing</p>
+            </div>
           </div>
           <button
             type="button"
-            className="rounded-lg p-1 text-gray-8 hover:bg-dls-surface hover:text-gray-10 transition-colors"
-            onClick={onReject}
-          >
-            <X className="size-5" />
-          </button>
-        </div>
-
-        <div className="space-y-3 mb-6">
-          <div className="rounded-xl bg-dls-surface p-3">
-            <div className="text-xs text-gray-8 mb-1">To</div>
-            <div className="font-mono text-sm text-dls-text break-all" title={pending.to}>
-              {truncateAddress(pending.to)}
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-dls-surface p-3">
-            <div className="text-xs text-gray-8 mb-1">Value</div>
-            <div className="font-mono text-sm text-dls-text">{pending.value} ETH</div>
-          </div>
-
-          {pending.data && pending.data !== "0x" && (
-            <div className="rounded-xl bg-dls-surface p-3">
-              <div className="text-xs text-gray-8 mb-1">Data</div>
-              <div className="font-mono text-xs text-dls-text break-all max-h-20 overflow-y-auto">
-                {pending.data.length > 100 ? `${pending.data.slice(0, 50)}...${pending.data.slice(-10)}` : pending.data}
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-xl bg-dls-surface p-3">
-            <div className="text-xs text-gray-8 mb-1">Chain</div>
-            <div className="text-sm text-dls-text">{pending.chainId === 8453 ? "Base" : "Base Sepolia"}</div>
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            className="flex-1"
+            className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
             onClick={() => {
               dispatchTxApprovalResponse(false);
               store.clearApproval();
               onReject();
             }}
           >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Warning for contract interactions */}
+        {isContractInteraction && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">
+              This is a contract interaction. Make sure you trust the contract.
+            </p>
+          </div>
+        )}
+
+        {/* Details */}
+        <div className="space-y-2.5 mb-6">
+          <div className="rounded-xl bg-dls-surface p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">To</div>
+            <div className="font-mono text-sm text-dls-text break-all" title={pending.to}>
+              {truncateAddress(pending.to)}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-dls-surface p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Value</div>
+            <div className="font-mono text-sm text-dls-text">{pending.value} ETH</div>
+          </div>
+
+          {isContractInteraction && (
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Data</div>
+              <div className="font-mono text-xs text-dls-text break-all max-h-24 overflow-y-auto scrollbar-thin">
+                {pending.data!.length > 120 ? `${pending.data!.slice(0, 60)}...${pending.data!.slice(-20)}` : pending.data}
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl bg-dls-surface p-3">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Network</div>
+            <div className="flex items-center gap-2 text-sm text-dls-text">
+              <span className={cn("size-2 rounded-full", pending.chainId === 8453 ? "bg-green-500" : "bg-yellow-500")} />
+              {pending.chainId === 8453 ? "Base Mainnet" : "Base Sepolia"}
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 gap-1.5 h-11"
+            onClick={() => {
+              dispatchTxApprovalResponse(false);
+              store.clearApproval();
+              onReject();
+            }}
+          >
+            <XCircle className="size-4" />
             Reject
           </Button>
           <Button
-            className={cn("flex-1 bg-violet-500 hover:bg-violet-600 text-white")}
+            className={cn("flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20")}
             onClick={() => {
               dispatchTxApprovalResponse(true);
               onApprove(pending);
               store.clearApproval();
             }}
           >
+            <CheckCircle2 className="size-4" />
             Approve
           </Button>
         </div>
