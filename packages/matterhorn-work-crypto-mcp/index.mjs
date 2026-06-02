@@ -261,9 +261,10 @@ const tools = [
   { name: "hl_getOrderbook", description: "Get orderbook depth for a Hyperliquid market", inputSchema: { type: "object", properties: { symbol: { type: "string" }, limit: { type: "number" } }, required: ["symbol"] } },
   { name: "hl_getPositions", description: "Get open positions for a Hyperliquid user", inputSchema: { type: "object", properties: { user: { type: "string" } }, required: ["user"] } },
   { name: "hl_getAccountSummary", description: "Get Hyperliquid account summary (margin, balance)", inputSchema: { type: "object", properties: { user: { type: "string" } }, required: ["user"] } },
-  { name: "hl_buildOrder", description: "Build an unsigned Hyperliquid order JSON (needs wallet_signMessage after)", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" }, reduceOnly: { type: "boolean" } }, required: ["asset", "isBuy", "sz"] } },
+  { name: "hl_buildOrder", description: "Build an unsigned Hyperliquid order JSON (needs wallet_signTypedData after)", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" }, reduceOnly: { type: "boolean" } }, required: ["asset", "isBuy", "sz"] } },
   { name: "hl_summarizeOrder", description: "Generate a human-readable summary of an HL order", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" } }, required: ["asset", "isBuy", "sz"] } },
-  { name: "hl_submitOrder", description: "Submit a signed Hyperliquid order. Requires L1 signature from wallet_signMessage.", inputSchema: { type: "object", properties: { signedOrder: {}, signature: { type: "string" }, publicAddress: { type: "string" } }, required: ["signedOrder", "signature", "publicAddress"] } },
+  { name: "hl_placeOrder", description: "Request a Hyperliquid order placement. The UI will prompt the user to sign.", inputSchema: { type: "object", properties: { asset: { type: "string" }, isBuy: { type: "boolean" }, sz: { type: "number" }, limitPx: { type: "number" }, reduceOnly: { type: "boolean" } }, required: ["asset", "isBuy", "sz"] } },
+  { name: "hl_submitOrder", description: "Submit a signed Hyperliquid order. Requires L1 signature from wallet_signTypedData.", inputSchema: { type: "object", properties: { signedOrder: {}, signature: { type: "string" }, publicAddress: { type: "string" } }, required: ["signedOrder", "signature", "publicAddress"] } },
 
   // -- polymarket --
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
@@ -329,6 +330,11 @@ function handleMessage(msg) {
         case "hl_getAccountSummary": return hl_getAccountSummary(args.user).then(r => respond(textResult(r))).catch(catchErr);
         case "hl_buildOrder": return respond(textResult(buildOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx, reduceOnly: args.reduceOnly })));
         case "hl_summarizeOrder": return respond(textResult({ summary: summarizeOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx }) }));
+        case "hl_placeOrder": {
+          const order = buildOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx, reduceOnly: args.reduceOnly });
+          process.stderr.write(JSON.stringify({ event: "hl_placeOrder", order }) + "\n");
+          return respond(textResult({ status: "needs_private_key", message: "Hyperliquid orders require a private key. This must be done via the UI or a secure signing service.", order }));
+        }
         case "hl_submitOrder": return submitOrder({ signedOrder: args.signedOrder, signature: args.signature, publicAddress: args.publicAddress }).then(r => respond(textResult(r))).catch(catchErr);
 
         case "pm_searchEvents": return pm_searchEvents(args.query, args.limit).then(r => respond(textResult(r))).catch(catchErr);

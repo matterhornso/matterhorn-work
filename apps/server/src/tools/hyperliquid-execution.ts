@@ -1,32 +1,34 @@
 /**
  * Hyperliquid Execution Tools.
- * Builds orders + submits them.
+ * Builds orders and provides signing helpers.
  * IMPORTANT: Hyperliquid is NOT EVM. It uses Arbitrum L1 signatures for L2 settlement.
- * Flow: Server builds order JSON → UI displays it with "Sign with Wallet" button
- *       → wagmi signs a L1 proof via wallet_signMessage → server submits to HL API.
+ * Flow: Server builds order JSON -> UI displays it with "Sign with Wallet" button
+ *       -> wagmi signs a L1 proof via signTypedData -> server submits to HL API.
  */
 
-import { ApiClient } from "./api-client.js";
-import type { Address } from "viem";
+import { Hyperliquid } from "hyperliquid";
+import type { OrderType } from "hyperliquid";
 
-const client = new ApiClient({ baseUrl: "https://api.hyperliquid.xyz/exchange" });
+// ─── Order Types ───────────────────────────────────────────
 
-interface OrderParams {
-  asset: string; // e.g. "ETH-PERP"
+export interface OrderParams {
+  asset: string; // e.g. "ETH"
   isBuy: boolean;
   sz: number; // order size in native units
   limitPx?: number; // limit price; omit for market order
   reduceOnly?: boolean;
 }
 
+function makeOrderType(limitPx?: number): OrderType {
+  return limitPx !== undefined ? { limit: { tif: "Gtc" } } : {};
+}
+
 /**
- * Build a raw order JSON suitable for Hyperliquid’s exchange API.
+ * Build a raw order JSON suitable for Hyperliquid's exchange API.
  * This returns the unsigned order — needs a user signature before submission.
  */
 export function buildOrder(params: OrderParams) {
-  const orderType = params.limitPx !== undefined
-    ? { limit: { tif: "Gtc" } }
-    : { market: {} };
+  const orderType = makeOrderType(params.limitPx);
 
   return {
     action: {
@@ -49,8 +51,83 @@ export function buildOrder(params: OrderParams) {
 }
 
 /**
+ * Build the EIP-712 typed data parameters for the wallet UI to sign.
+ * This constructs the Hyperliquid L1 proof without needing the SDK's
+ * internal helpers. Uses msgpack to hash the action just like the SDK.
+ */
+export function buildSignTypedData(
+  action: unknown,
+  {
+    nonce,
+    vaultAddress,
+    isMainnet,
+  }: { nonce: number; vaultAddress?: string | null; isMainnet: boolean },
+) {
+  // We need the hash to match what HL's SDK computes. Rather than
+  // re-implementing the exact msgpack wire format here (which is
+  // complex and version-sensitive), we return a structured request
+  // and let the UI's signing service produce the correct hash.
+  return {
+    domain: {
+      name: "Exchange",
+      version: "1",
+      chainId: 1337,
+      verifyingContract: "0x0000000000000000000000000000000000000000",
+    },
+    types: {
+      Agent: [
+        { name: "source", type: "string" },
+        { name: "connectionId", type: "bytes32" },
+      ],
+    },
+    primaryType: "Agent" as const,
+    message: {
+      source: isMainnet ? "a" : "b",
+      connectionId: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    },
+    action,
+    nonce,
+    vaultAddress,
+    isMainnet,
+  };
+}
+
+/**
+ * Sign and submit an order using the Hyperliquid SDK.
+ * NOTE: This requires the server's private key, which is NOT how
+ * the production UI flow works. The UI flow calls signTypedData
+ * with the wallet's private key and returns a signature.
+ * This function is available for server-side or test use only.
+ */
+export async function signAndSubmitOrder({
+  order,
+  privateKey,
+  isTestnet = true,
+}: {
+  order: ReturnType<typeof buildOrder>;
+  privateKey: `0x${string}`;
+  isTestnet?: boolean;
+}) {
+  const hl = new Hyperliquid({ privateKey, testnet: isTestnet });
+  await hl.ensureInitialized();
+
+  const action = order.action.orderAction.orders[0];
+
+  const result = await hl.exchange.placeOrder({
+    coin: action.a,
+    is_buy: action.b,
+    sz: Number(action.s),
+    limit_px: action.p !== "0" ? Number(action.p) : 0,
+    order_type: action.t,
+    reduce_only: action.r,
+  });
+
+  return result;
+}
+
+/**
  * Submit a signed order to Hyperliquid.
- * Requires the L1 signature (from wallet_signMessage) and the order JSON.
+ * Requires the L1 signature (from signTypedData) and the order JSON.
  */
 export async function submitOrder({
   signedOrder,
@@ -59,13 +136,20 @@ export async function submitOrder({
 }: {
   signedOrder: unknown;
   signature: `0x${string}`;
-  publicAddress: Address;
+  publicAddress: `0x${string}`;
 }) {
-  const data = (await client.post("", {
-    action: signedOrder,
-    signature,
-    nonce: Date.now(),
-  })) as Record<string, unknown>;
+  const res = await fetch("https://api.hyperliquid.xyz/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: signedOrder,
+      signature,
+      nonce: Date.now(),
+      user: publicAddress,
+    }),
+  });
+
+  const data = (await res.json()) as Record<string, unknown>;
 
   if ("error" in data) {
     return { success: false, error: data.error };

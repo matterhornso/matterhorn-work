@@ -19,6 +19,37 @@ function getClient(chainId: number) {
   });
 }
 
+const DEFAULT_MAX_SLIPPAGE_BPS = 100; // 1%
+
+/** Resolve a symbol like "USDC" or "WETH" to its on-chain address. */
+function resolveToken(chainId: number, symbol: string): string {
+  const registry = tokensForChain(chainId);
+  const match = registry?.[symbol.toUpperCase()];
+  if (match) return match.address;
+  // If already an address
+  if (/^0x[a-fA-F0-9]{40}$/.test(symbol)) return symbol;
+  throw new Error(`Unknown token "${symbol}" on chain ${chainId}`);
+}
+
+/** Format raw amount to human-readable. */
+function formatAmount(raw: string, symbol: string): string {
+  const num = Number(raw);
+  if (symbol.toUpperCase() === "USDC") return (num / 1e6).toFixed(2);
+  if (symbol.toUpperCase() === "WETH" || symbol.toUpperCase() === "ETH") return (num / 1e18).toFixed(4);
+  return raw;
+}
+
+/** Reject slippage above limit (basis points). */
+function enforceSlippageLimit(slippagePct: number, maxBps: number = DEFAULT_MAX_SLIPPAGE_BPS): void {
+  const requestedBps = Math.round(slippagePct * 100);
+  if (requestedBps > maxBps) {
+    throw new Error(
+      `Slippage ${slippagePct}% exceeds the maximum allowed ${(maxBps / 100).toFixed(2)}% (${maxBps} bps). ` +
+        "Increase the limit in wallet settings or reduce slippage."
+    );
+  }
+}
+
 /** Quote only — no transaction. Useful for agent reasoning. */
 export async function getQuote({
   chainId,
@@ -26,13 +57,18 @@ export async function getQuote({
   toToken,
   amount,
   slippage = 1,
+  maxSlippageBps,
 }: {
   chainId: number;
   fromToken: string;
   toToken: string;
   amount: string; // wei / raw amount
   slippage?: number; // percent
+  maxSlippageBps?: number;
 }) {
+  const effectiveMax = maxSlippageBps ?? DEFAULT_MAX_SLIPPAGE_BPS;
+  enforceSlippageLimit(slippage, effectiveMax);
+
   const client = getClient(chainId);
   const data = await client.get("/quote", {
     src: resolveToken(chainId, fromToken),
@@ -64,6 +100,7 @@ export async function buildSwap({
   amount,
   fromAddress,
   slippage = 1,
+  maxSlippageBps,
 }: {
   chainId: number;
   fromToken: string;
@@ -71,7 +108,11 @@ export async function buildSwap({
   amount: string; // wei / raw amount
   fromAddress: Address;
   slippage?: number; // percent
+  maxSlippageBps?: number;
 }) {
+  const effectiveMax = maxSlippageBps ?? DEFAULT_MAX_SLIPPAGE_BPS;
+  enforceSlippageLimit(slippage, effectiveMax);
+
   const client = getClient(chainId);
   const data = await client.get("/swap", {
     src: resolveToken(chainId, fromToken),
@@ -111,21 +152,4 @@ export async function buildSwap({
     needsApproval: true,
     protocol: "1inch",
   };
-}
-
-/** Resolve a symbol like "USDC" or "WETH" to its on-chain address. */
-function resolveToken(chainId: number, symbol: string): string {
-  const registry = tokensForChain(chainId);
-  const match = registry?.[symbol.toUpperCase()];
-  if (match) return match.address;
-  // If already an address
-  if (/^0x[a-fA-F0-9]{40}$/.test(symbol)) return symbol;
-  throw new Error(`Unknown token "${symbol}" on chain ${chainId}`);
-}
-
-function formatAmount(raw: string, symbol: string): string {
-  const num = Number(raw);
-  if (symbol.toUpperCase() === "USDC") return (num / 1e6).toFixed(2);
-  if (symbol.toUpperCase() === "WETH" || symbol.toUpperCase() === "ETH") return (num / 1e18).toFixed(4);
-  return raw;
 }

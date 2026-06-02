@@ -1,12 +1,12 @@
 /** @jsxImportSource react */
-import { Shield, X, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { useEffect } from "react";
+import { Shield, X, AlertTriangle, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
-import { CHAIN_NAMES } from "../../infra/chains";
+import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { isWhitelistedAddress } from "./infra/whitelist";
 
 function truncateAddress(addr: string): string {
@@ -38,9 +38,29 @@ export function dispatchTxApprovalResponse(approved: boolean, txHash?: string) {
   );
 }
 
+const MAINNET_COUNTDOWN_SECONDS = 3;
+
 export function TransactionApproval({ store, onApprove, onReject }: TransactionApprovalProps) {
   const state = useWalletStore(store);
   const pending = state.pendingApproval;
+  const [countdown, setCountdown] = useState(0);
+
+  // Countdown delay for mainnet transactions
+  useEffect(() => {
+    if (!pending || pending.type !== "tx") return;
+    const isMainnet = pending.chainId === 8453;
+    if (isMainnet) {
+      setCountdown(MAINNET_COUNTDOWN_SECONDS);
+    } else {
+      setCountdown(0);
+    }
+  }, [pending]);
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   useEffect(() => {
     function handleTxRequest(e: Event) {
@@ -67,6 +87,122 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
 
   if (!pending) return null;
 
+  // ─── Hyperliquid Order Approval UI ───────────────────────
+  if (pending.type === "hl_order") {
+    const side = pending.isBuy ? "Buy" : "Sell";
+    const type = pending.limitPx !== undefined ? `Limit @ ${pending.limitPx}` : "Market";
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="mx-4 w-full max-w-md rounded-2xl border border-dls-border bg-dls-sidebar p-6 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200">
+          {/* Header */}
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
+                <TrendingUp className="size-5 text-violet-500" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-dls-text">Hyperliquid Order</h2>
+                <p className="text-xs text-dls-secondary">Review before signing</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover hover:text-dls-text transition-colors"
+              onClick={() => {
+                dispatchTxApprovalResponse(false);
+                store.clearApproval();
+                onReject();
+              }}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Perpetual trade warning */}
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <p className="text-xs text-red-300">
+              ⚠️ This is a PERPETUAL TRADE on Hyperliquid. Losses can exceed your deposit.
+            </p>
+          </div>
+
+          {/* Order details */}
+          <div className="space-y-2.5 mb-6">
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Asset</div>
+              <div className="font-mono text-sm text-dls-text">{pending.asset}</div>
+            </div>
+
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Side</div>
+              <div className={cn("font-mono text-sm font-semibold", pending.isBuy ? "text-green-400" : "text-red-400")}>
+                {side}
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Size</div>
+              <div className="font-mono text-sm text-dls-text">{pending.sz}</div>
+            </div>
+
+            {pending.limitPx !== undefined && (
+              <div className="rounded-xl bg-dls-surface p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Limit Price</div>
+                <div className="font-mono text-sm text-dls-text">{pending.limitPx}</div>
+              </div>
+            )}
+
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Summary</div>
+              <div className="font-mono text-sm text-dls-text">{pending.summary}</div>
+            </div>
+
+            {pending.reduceOnly && (
+              <div className="rounded-xl bg-dls-surface p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Reduce Only</div>
+                <div className="font-mono text-sm text-amber-400">Yes</div>
+              </div>
+            )}
+
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Type</div>
+              <div className="font-mono text-sm text-dls-text">{type}</div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1 gap-1.5 h-11"
+              onClick={() => {
+                dispatchTxApprovalResponse(false);
+                store.clearApproval();
+                onReject();
+              }}
+            >
+              <XCircle className="size-4" />
+              Cancel
+            </Button>
+            <Button
+              className={cn("flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20")}
+              onClick={() => {
+                dispatchTxApprovalResponse(true);
+                onApprove(pending as unknown as TxApprovalRequest);
+                store.clearApproval();
+              }}
+            >
+              <CheckCircle2 className="size-4" />
+              Sign & Submit
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Standard Transaction Approval UI ─────────────────────
   const isContractInteraction = pending.data && pending.data !== "0x";
   const isWhitelisted = isWhitelistedAddress(pending.chainId, pending.to);
   const isMainnet = pending.chainId === 8453;
@@ -99,6 +235,16 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
           </button>
         </div>
 
+        {/* FORCE_TESTNET block */}
+        {FORCE_TESTNET && isMainnet && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-400" />
+            <p className="text-xs text-red-300">
+              Mainnet is disabled. Switch to a testnet in Settings &gt; Wallet.
+            </p>
+          </div>
+        )}
+
         {/* Mainnet warning */}
         {isMainnet && (
           <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5">
@@ -110,7 +256,7 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
         )}
 
         {/* Spend limit warning */}
-        {state.pendingApproval && state.maxPerTransactionUSD > 0 && computeTxValueUSD(state.pendingApproval.value) > state.maxPerTransactionUSD && (
+        {state.pendingApproval?.type === "tx" && state.maxPerTransactionUSD > 0 && computeTxValueUSD(state.pendingApproval.value) > state.maxPerTransactionUSD && (
           <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
@@ -120,7 +266,7 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
         )}
 
         {/* Daily limit warning */}
-        {state.pendingApproval && state.maxDailySpendUSD > 0 && (state.dailySpendUSD + computeTxValueUSD(state.pendingApproval.value)) > state.maxDailySpendUSD && (
+        {state.pendingApproval?.type === "tx" && state.maxDailySpendUSD > 0 && (state.dailySpendUSD + computeTxValueUSD(state.pendingApproval.value)) > state.maxDailySpendUSD && (
           <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
             <p className="text-xs text-amber-300">
@@ -184,6 +330,20 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Proposed By</div>
             <div className="font-mono text-sm text-dls-text">{pending.proposedBy}</div>
           </div>
+
+          {state.maxSlippageBps > 0 && (
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Max Slippage</div>
+              <div className="font-mono text-sm text-dls-text">{(state.maxSlippageBps / 100).toFixed(2)}%</div>
+            </div>
+          )}
+
+          {pending.type === "tx" && pending.contractWarning && (
+            <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
+              <p className="text-xs text-amber-300">{pending.contractWarning}</p>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -201,15 +361,20 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
             Reject
           </Button>
           <Button
-            className={cn("flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20")}
+            disabled={isMainnet && countdown > 0}
+            className={cn(
+              "flex-1 gap-1.5 h-11 bg-violet-500 hover:bg-violet-600 text-white shadow-lg shadow-violet-500/20",
+              isMainnet && countdown > 0 && "opacity-60 cursor-not-allowed",
+            )}
             onClick={() => {
+              if (FORCE_TESTNET && isMainnet) return;
               dispatchTxApprovalResponse(true);
               onApprove(pending);
               store.clearApproval();
             }}
           >
             <CheckCircle2 className="size-4" />
-            Approve
+            {isMainnet && countdown > 0 ? `Approve (${countdown})...` : "Approve"}
           </Button>
         </div>
       </div>

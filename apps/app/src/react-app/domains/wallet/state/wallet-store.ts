@@ -1,5 +1,17 @@
 import * as React from "react";
 
+export type HlOrderApproval = {
+  type: "hl_order";
+  asset: string;
+  isBuy: boolean;
+  sz: number;
+  limitPx?: number;
+  reduceOnly?: boolean;
+  summary: string;
+  proposedBy: string;
+  riskLevel: "low" | "medium" | "high";
+};
+
 export type TxRecord = {
   hash: `0x${string}`;
   to: `0x${string}`;
@@ -11,6 +23,17 @@ export type TxRecord = {
   riskLevel: "low" | "medium" | "high";
 };
 
+export type ApprovalRequest = {
+  to: string;
+  value: string;
+  data?: string;
+  chainId: number;
+  proposedBy: string;
+  riskLevel: "low" | "medium" | "high";
+  /** Warn if target address has no bytecode (EOA with data). */
+  contractWarning?: string;
+};
+
 export type WalletStoreSnapshot = {
   address: `0x${string}` | null;
   chainId: number | null;
@@ -20,20 +43,19 @@ export type WalletStoreSnapshot = {
   isConnecting: boolean;
   connector: string | null;
   transactions: TxRecord[];
-  pendingApproval: {
-    to: string;
-    value: string;
-    data?: string;
-    chainId: number;
-    proposedBy: string;
-    riskLevel: "low" | "medium" | "high";
-  } | null;
+  pendingApproval: (ApprovalRequest & { type: "tx" }) | HlOrderApproval | null;
   error: string | null;
   maxDailySpendUSD: number;
   maxPerTransactionUSD: number;
   dailySpendUSD: number;
   lastSpendReset: string;
   preferredNetwork: number | null;
+  /** Max slippage in basis points (1 = 0.01%). Default 100 = 1%. */
+  maxSlippageBps: number;
+  /** Number of swaps performed in the current hourly window. */
+  sessionSwapCount: number;
+  /** Timestamp (ms) when the swap count window started. */
+  lastSwapReset: number;
 };
 
 export type WalletStore = ReturnType<typeof createWalletStore>;
@@ -46,6 +68,9 @@ const DAILY_SPEND_KEY = "matterhorn:wallet:dailySpendUSD";
 const MAX_DAILY_KEY = "matterhorn:wallet:maxDailySpendUSD";
 const MAX_PER_TX_KEY = "matterhorn:wallet:maxPerTransactionUSD";
 const PREFERRED_NETWORK_KEY = "matterhorn:wallet:preferredNetwork";
+const MAX_SLIPPAGE_BPS_KEY = "matterhorn:wallet:maxSlippageBps";
+const SWAP_COUNT_KEY = "matterhorn:wallet:sessionSwapCount";
+const LAST_SWAP_RESET_KEY = "matterhorn:wallet:lastSwapReset";
 
 function readNum(key: string, fallback: number): number {
   const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
@@ -91,6 +116,11 @@ function getInitialSnapshot(): WalletStoreSnapshot {
   const maxDailySpendUSD = readNum(MAX_DAILY_KEY, 100);
   const maxPerTransactionUSD = readNum(MAX_PER_TX_KEY, 50);
   const preferredNetwork = readNum(PREFERRED_NETWORK_KEY, 84532);
+  const maxSlippageBps = readNum(MAX_SLIPPAGE_BPS_KEY, 100);
+  const now = Date.now();
+  const lastSwap = readNum(LAST_SWAP_RESET_KEY, now);
+  const hourMs = 60 * 60 * 1000;
+  const sessionSwapCount = now - lastSwap >= hourMs ? 0 : readNum(SWAP_COUNT_KEY, 0);
   return {
     address: null,
     chainId: null,
@@ -107,6 +137,9 @@ function getInitialSnapshot(): WalletStoreSnapshot {
     dailySpendUSD,
     lastSpendReset,
     preferredNetwork,
+    maxSlippageBps,
+    sessionSwapCount,
+    lastSwapReset: lastSwap,
   };
 }
 
@@ -204,10 +237,22 @@ export function createWalletStore() {
       chainId: number,
       proposedBy = "user_manual",
       riskLevel: "low" | "medium" | "high" = "low",
+      contractWarning?: string,
     ) {
       mutate((s) => ({
         ...s,
-        pendingApproval: { to, value, data, chainId, proposedBy, riskLevel },
+        pendingApproval: { type: "tx" as const, to, value, data, chainId, proposedBy, riskLevel, contractWarning },
+      }));
+    },
+
+    requestHlOrderApproval(order: Omit<HlOrderApproval, "type" | "riskLevel">) {
+      mutate((s) => ({
+        ...s,
+        pendingApproval: {
+          type: "hl_order" as const,
+          ...order,
+          riskLevel: "high" as const,
+        },
       }));
     },
 
@@ -246,6 +291,24 @@ export function createWalletStore() {
     setPreferredNetwork(chainId: number) {
       writeNum(PREFERRED_NETWORK_KEY, chainId);
       mutate((s) => ({ ...s, preferredNetwork: chainId }));
+    },
+
+    setMaxSlippageBps(value: number) {
+      const v = Number.isFinite(value) && value > 0 ? value : 100;
+      writeNum(MAX_SLIPPAGE_BPS_KEY, v);
+      mutate((s) => ({ ...s, maxSlippageBps: v }));
+    },
+
+    /** Call this after a swap is successfully initiated to rate-limit. */
+    incrementSessionSwapCount() {
+      const now = Date.now();
+      const hourMs = 60 * 60 * 1000;
+      const windowExpired = now - snapshot.lastSwapReset >= hourMs;
+      const nextCount = windowExpired ? 1 : snapshot.sessionSwapCount + 1;
+      const nextReset = windowExpired ? now : snapshot.lastSwapReset;
+      writeNum(SWAP_COUNT_KEY, nextCount);
+      writeNum(LAST_SWAP_RESET_KEY, nextReset);
+      mutate((s) => ({ ...s, sessionSwapCount: nextCount, lastSwapReset: nextReset }));
     },
   };
 }

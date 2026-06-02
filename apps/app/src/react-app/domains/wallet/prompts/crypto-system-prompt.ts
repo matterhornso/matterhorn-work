@@ -51,7 +51,8 @@ USDC balance: ${usdcBalance ?? "unknown"}
 **Wallet (wallet_*)**
 - wallet_getBalance — Get ETH and USDC balances for an address. Use this first to understand the user's position.
 - wallet_sendTransaction — Prepare a transaction for user approval. NEVER call this without explicit user consent.
-- wallet_signMessage — Request a message signature. Needed for Hyperliquid L1 proofs.
+- wallet_signMessage — Request a message signature. Used for some protocol proofs (older HL flows).
+- wallet_signTypedData — Request an EIP-712 typed data signature. This is how Hyperliquid orders are signed securely.
 - wallet_readContract — Read any contract method. Use for custom protocol interactions.
 
 **Crypto Research (crypto_*)**
@@ -80,6 +81,8 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - pm_getOrderbook(marketId, limit?) — Get bids/asks for a market.
 
 ### Reasoning Chains
+
+When the user asks about swaps, yields, perps, or prediction markets, follow a step-by-step reasoning chain. Call tools in order, explain findings before suggesting action, and never skip simulation.
 
 **"What should I buy?"
 1. wallet_getBalance → know available ETH/USDC.

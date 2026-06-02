@@ -18,3 +18,13 @@ export const CHAIN_LIST = [
 ];
 
 export const DEFAULT_CHAIN = baseSepolia;
+
+/**
+ * FORCE_TESTNET — when true, rejects any mainnet chainId.
+ * Default false for dev. Set true in CI or prod to enforce testnet-only.
+ */
+export const FORCE_TESTNET = false;
+
+export function isTestnetChainId(chainId: number): boolean {
+  return chainId === baseSepolia.id;
+}

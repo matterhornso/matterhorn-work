@@ -1,11 +1,12 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, Shield } from "lucide-react";
+import { useState, useMemo } from "react";
 
 import { cn } from "@/lib/utils";
 import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore } from "./state/wallet-store";
 import { CHAIN_NAMES } from "../../infra/chains";
+import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -24,6 +25,38 @@ function txStatusColor(status: string): string {
   }
 }
 
+function securityLogActionLabel(action: SecurityLogEntry["action"]): string {
+  const labels: Record<SecurityLogEntry["action"], string> = {
+    tx_proposed: "Proposed",
+    tx_approved: "Approved",
+    tx_rejected: "Rejected",
+    limit_hit: "Limit",
+    whitelist_denied: "Denied",
+    rate_limit_hit: "Rate limit",
+    simulation_failed: "Failed",
+    countdown_expired: "Ready",
+  };
+  return labels[action] ?? action;
+}
+
+function securityLogColor(action: SecurityLogEntry["action"]): string {
+  switch (action) {
+    case "tx_approved":
+      return "text-green-400";
+    case "tx_rejected":
+      return "text-red-400";
+    case "limit_hit":
+    case "rate_limit_hit":
+      return "text-amber-400";
+    case "whitelist_denied":
+      return "text-red-400";
+    case "simulation_failed":
+      return "text-red-400";
+    default:
+      return "text-dls-secondary";
+  }
+}
+
 export type WalletPanelProps = {
   store: WalletStore;
 };
@@ -31,6 +64,7 @@ export type WalletPanelProps = {
 export function WalletPanel({ store }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
+  const securityLog = useMemo(() => getSecurityLog(5), []);
 
   if (!state.isConnected) {
     return (

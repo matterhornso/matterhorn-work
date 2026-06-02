@@ -94,15 +94,25 @@ describe("wallet-store", () => {
     const store = createWalletStore();
     store.requestApproval("0xto", "0.01", "0xdata", 84532, "user_manual", "low");
     expect(store.getSnapshot().pendingApproval).toEqual({
+      type: "tx",
       to: "0xto",
       value: "0.01",
       data: "0xdata",
       chainId: 84532,
       proposedBy: "user_manual",
       riskLevel: "low",
+      contractWarning: undefined,
     });
     store.clearApproval();
     expect(store.getSnapshot().pendingApproval).toBeNull();
+  });
+
+  it("stores maxSlippageBps, sessionSwapCount, lastSwapReset", () => {
+    const store = createWalletStore();
+    store.setMaxSlippageBps(200);
+    expect(store.getSnapshot().maxSlippageBps).toBe(200);
+    store.incrementSessionSwapCount();
+    expect(store.getSnapshot().sessionSwapCount).toBe(1);
   });
 
   it("handles errors", () => {

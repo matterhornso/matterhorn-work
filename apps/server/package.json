@@ -45,9 +45,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
+"dependencies": {
     "@opencode-ai/sdk": "^1.14.38",
     "better-sqlite3": "^11.10.0",
+    "hyperliquid": "^1.7.7",
     "jsonc-parser": "^3.2.1",
     "minimatch": "^10.0.1",
     "viem": "^2.50.4",
