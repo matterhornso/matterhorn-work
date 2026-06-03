@@ -34,6 +34,28 @@ export type ApprovalRequest = {
   contractWarning?: string;
 };
 
+export type BatchApproval = {
+  type: "batch";
+  /** Unique batch ID for tracking. */
+  batchId: string;
+  steps: BatchStepView[];
+  chainId: number;
+  proposedBy: string;
+  riskLevel: "low" | "medium" | "high";
+};
+
+export type BatchStepView = {
+  id: string;
+  type: string;
+  description: string;
+  to: string;
+  data?: string;
+  value?: string;
+  dependsOn?: string;
+  estimatedGas?: string | null;
+  estimatedCostEth?: string | null;
+};
+
 export type WalletStoreSnapshot = {
   address: `0x${string}` | null;
   chainId: number | null;
@@ -43,7 +65,7 @@ export type WalletStoreSnapshot = {
   isConnecting: boolean;
   connector: string | null;
   transactions: TxRecord[];
-  pendingApproval: (ApprovalRequest & { type: "tx" }) | HlOrderApproval | null;
+  pendingApproval: (ApprovalRequest & { type: "tx" }) | HlOrderApproval | BatchApproval | null;
   error: string | null;
   maxDailySpendUSD: number;
   maxPerTransactionUSD: number;
@@ -253,6 +275,13 @@ export function createWalletStore() {
           ...order,
           riskLevel: "high" as const,
         },
+      }));
+    },
+
+    requestBatchApproval(batch: Omit<BatchApproval, "type">) {
+      mutate((s) => ({
+        ...s,
+        pendingApproval: { type: "batch" as const, ...batch },
       }));
     },
 

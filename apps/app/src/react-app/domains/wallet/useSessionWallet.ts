@@ -196,6 +196,38 @@ export function useSessionWallet(store: WalletStore) {
   );
 
   /**
+   * Execute a single batch step — send its transaction to the chain.
+   */
+  const executeBatchStep = useCallback(
+    async (step: { to: string; data?: string; value?: string }): Promise<`0x${string}`> => {
+      if (!wagmiAddress) throw new Error("Wallet not connected");
+      const hash = await sendTransactionAsync({
+        to: step.to as `0x${string}`,
+        value: step.value
+          ? (step.value.startsWith("0x")
+            ? BigInt(step.value)
+            : parseEther(step.value))
+          : undefined,
+        data: step.data as `0x${string}` | undefined,
+      });
+      store.addTransaction({
+        hash,
+        to: step.to as `0x${string}`,
+        value: step.value ?? "0",
+        status: "pending",
+        timestamp: Date.now(),
+        chainId: state.chainId ?? 84532,
+        proposedBy: "batch",
+        riskLevel: "medium",
+      });
+      const txValueUSD = computeTxValueUSD(step.value ?? "0");
+      store.incrementDailySpendUSD(txValueUSD);
+      return hash;
+    },
+    [wagmiAddress, sendTransactionAsync, store, state.chainId],
+  );
+
+  /**
    * Sign a message with the connected wallet.
    */
   const signMessage = useCallback(
@@ -223,6 +255,7 @@ The wallet is connected and ready for on-chain actions.`;
     rejectTx,
     updateTxStatus,
     requestTx,
+    executeBatchStep,
     signMessage,
     pendingApproval: state.pendingApproval,
   };

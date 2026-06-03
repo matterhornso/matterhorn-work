@@ -3,6 +3,7 @@
  * Matterhorn Work Crypto MCP Server.
  * V1+V2: CoinGecko, DeFiLlama, 1inch swap builder, tx simulation, Hyperliquid, Polymarket.
  * V3: Added security tools — approval manager, calldata decoder, ENS resolver, gas estimator.
+ * V4: Added batch builder (crypto_buildBatch) + portfolio tracker (crypto_getPortfolio).
  */
 
 import { createServer } from "node:http";
@@ -515,6 +516,10 @@ const tools = [
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
   { name: "pm_getEvent", description: "Get full Polymarket event details", inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"] } },
   { name: "pm_getOrderbook", description: "Get orderbook for a Polymarket market", inputSchema: { type: "object", properties: { marketId: { type: "string" }, limit: { type: "number" } }, required: ["marketId"] } },
+
+  // -- portfolio / batch --
+  { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
+  { name: "crypto_buildBatch", description: "Build a multi-step DeFi batch (swap -> approve -> supply). Returns steps in order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, from: { type: "string" }, steps: { type: "array" } }, required: ["chainId", "from", "steps"] } },
 ];
 
 // =========================================================
@@ -550,7 +555,7 @@ function handleMessage(msg) {
   const { method, id } = msg;
   switch (method) {
     case "initialize":
-      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.3.0" } }));
+      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.4.0" } }));
     case "notifications/initialized":
       return;
     case "tools/list":
@@ -601,6 +606,55 @@ function handleMessage(msg) {
         case "pm_getEvent": return pm_getEvent(args.eventId).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getOrderbook": return pm_getOrderbook(args.marketId, args.limit).then(r => respond(textResult(r))).catch(catchErr);
 
+        // portfolio / batch
+        case "crypto_getPortfolio": {
+          const pclient = getClient(args.chainId);
+          if (!pclient) return respond(textResult({ success: false, error: "Unsupported chainId" }));
+          const registry = { 8453: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", WETH: "0x4200000000000000000000000000000000000006" }, 84532: { USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", WETH: "0x4200000000000000000000000000000000000006" } };
+          const tok = Object.entries(registry[args.chainId] || {});
+          Promise.all([
+            pclient.getBalance({ address: args.address }).catch(() => null),
+            Promise.all(tok.map(([sym, addr]) =>
+              pclient.readContract({
+                address: addr,
+                abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }],
+                functionName: "balanceOf",
+                args: [args.address],
+              }).catch(() => 0n).then((bal) => {
+                const dec = sym === "USDC" ? 6 : 18;
+                return { symbol: sym, raw: bal.toString(), formatted: Number(bal) / 10 ** dec };
+              })
+            )),
+            hl_getPositions(args.address).catch(() => null),
+          ]).then(([native, tokenBalances, hl]) => {
+            return respond(textResult({
+              success: true,
+              address: args.address,
+              chainId: args.chainId,
+              native: native ? { raw: native.toString(), formatted: Number(native) / 1e18, symbol: "ETH" } : null,
+              tokens: tokenBalances,
+              hyperliquid: hl,
+            }));
+          }).catch((err) => respond(textResult({ success: false, error: err.message || "Portfolio fetch failed" })));
+          return;
+        }
+        case "crypto_buildBatch": {
+          try {
+            const steps = (args.steps || []).map((s, i) => ({
+              id: s.id || `step-${i + 1}`,
+              type: s.type || "custom",
+              description: s.description || `Step ${i + 1}`,
+              to: s.to,
+              data: s.data,
+              value: s.value || "0",
+              dependsOn: s.dependsOn || undefined,
+            }));
+            return respond(textResult({ success: true, steps, chainId: args.chainId, from: args.from }));
+          } catch (err) {
+            return respond(textResult({ success: false, error: err.message || "Batch build failed" }));
+          }
+        }
+
         default:
           return process.stdout.write(jsonRpcError(id, -32601, `Unknown tool: ${name}`));
       }
@@ -610,4 +664,4 @@ function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work Crypto MCP Server v0.3.0 ready\n");
+process.stderr.write("Matterhorn Work Crypto MCP Server v0.4.0 ready\n");

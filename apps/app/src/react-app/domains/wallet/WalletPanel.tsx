@@ -1,12 +1,14 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, Shield } from "lucide-react";
-import { useState, useMemo } from "react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, Shield, BarChart3 } from "lucide-react";
+import { useState, useMemo, lazy, Suspense, useCallback } from "react";
 
 import { cn } from "@/lib/utils";
 import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore } from "./state/wallet-store";
 import { CHAIN_NAMES } from "../../infra/chains";
 import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
+
+const PortfolioView = lazy(() => import("./pages/PortfolioView"));
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;

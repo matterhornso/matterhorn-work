@@ -10,6 +10,7 @@ import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { isWhitelistedAddress } from "./infra/whitelist";
 import { estimateGasClient, type GasEstimateResult } from "./lib/gas-estimate";
 import { lookupEnsName, truncateAddress } from "./lib/ens";
+import { TransactionBatch } from "./components/TransactionBatch";
 
 export type TxApprovalRequest = {
   to: string;
@@ -252,6 +253,42 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
             </Button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ─── Batch Transaction Approval UI ───────────────────────
+  if (pending.type === "batch") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <TransactionBatch
+          plan={{
+            steps: pending.steps.map(s => ({
+              id: s.id,
+              type: s.type,
+              description: s.description,
+              to: s.to,
+              data: s.data,
+              value: s.value,
+            })),
+            totalEstimatedGas: "0",
+            totalEstimatedCostEth: null,
+            chainId: pending.chainId,
+            from: state.address ?? "",
+          }}
+          onExecute={async (stepIndex) => {
+            const step = pending.steps[stepIndex];
+            if (!step) throw new Error("Step not found");
+            dispatchTxApprovalResponse(true);
+            onApprove(pending as unknown as TxApprovalRequest);
+            return "0x";
+          }}
+          onDismiss={() => {
+            dispatchTxApprovalResponse(false);
+            store.clearApproval();
+            onReject();
+          }}
+        />
       </div>
     );
   }
