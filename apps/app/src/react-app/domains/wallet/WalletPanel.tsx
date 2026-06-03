@@ -66,7 +66,26 @@ export type WalletPanelProps = {
 export function WalletPanel({ store }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
+  const [showPortfolio, setShowPortfolio] = useState(false);
+  const [isPortfolioLoading, setIsPortfolioLoading] = useState(false);
+  const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
   const securityLog = useMemo(() => getSecurityLog(5), []);
+
+  const handlePortfolioOpen = useCallback(async () => {
+    if (!state.address || !state.chainId) return;
+    setShowPortfolio(true);
+    setIsPortfolioLoading(true);
+    try {
+      const res = await fetch(`/api/portfolio?chainId=${state.chainId}&address=${state.address}`);
+      const json = await res.json();
+      if (json.success) setPortfolioData(json.data);
+      else setPortfolioData(null);
+    } catch {
+      setPortfolioData(null);
+    } finally {
+      setIsPortfolioLoading(false);
+    }
+  }, [state.address, state.chainId]);
 
   if (!state.isConnected) {
     return (
@@ -206,6 +225,17 @@ export function WalletPanel({ store }: WalletPanelProps) {
           </div>
 
           {state.address && (
+            <button
+              type="button"
+              className="flex items-center gap-1.5 text-xs text-dls-secondary hover:text-violet-400 transition-colors"
+              onClick={handlePortfolioOpen}
+            >
+              <BarChart3 className="size-3" />
+              View Portfolio
+            </button>
+          )}
+
+          {state.address && (
             <a
               href={
                 state.chainId === 8453
@@ -221,6 +251,28 @@ export function WalletPanel({ store }: WalletPanelProps) {
             </a>
           )}
         </>
+      )}
+
+      {/* Portfolio overlay */}
+      {showPortfolio && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading portfolio...</div>
+          }>
+            <PortfolioView
+              data={portfolioData}
+              onRefresh={handlePortfolioOpen}
+              isLoading={isPortfolioLoading}
+            />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={() => setShowPortfolio(false)}
+          >
+            Back
+          </button>
+        </div>
       )}
     </div>
   );
