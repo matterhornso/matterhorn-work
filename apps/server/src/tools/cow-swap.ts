@@ -134,7 +134,7 @@ export async function submitCowOrder({
   signature,
 }: {
   chainId: number;
-  order: ReturnType<typeof buildCowOrder>;
+  order: Record<string, unknown>;
   signature: Hex;
 }): Promise<
   | { success: true; orderId: string; explorerUrl: string }

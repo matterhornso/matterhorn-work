@@ -520,6 +520,18 @@ const tools = [
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
   { name: "crypto_buildBatch", description: "Build a multi-step DeFi batch (swap -> approve -> supply). Returns steps in order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, from: { type: "string" }, steps: { type: "array" } }, required: ["chainId", "from", "steps"] } },
+
+  // -- cow protocol --
+  { name: "crypto_cowQuote", description: "Get a CoW Protocol MEV-protected swap quote.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, sellToken: { type: "string" }, buyToken: { type: "string" }, sellAmount: { type: "string" }, receiver: { type: "string" } }, required: ["chainId", "sellToken", "buyToken", "sellAmount", "receiver"] } },
+  { name: "crypto_cowSubmit", description: "Submit a signed CoW Protocol order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, order: { type: "object" }, signature: { type: "string" } }, required: ["chainId", "order", "signature"] } },
+
+  // -- aave --
+  { name: "crypto_aaveDeposit", description: "Build an Aave V3 supply (deposit) transaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
+  { name: "crypto_aaveBorrow", description: "Build an Aave V3 borrow transaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, interestRateMode: { type: "number" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
+  { name: "crypto_aaveUserData", description: "Get Aave V3 user account data (collateral, debt, health factor).", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
+
+  // -- bridge --
+  { name: "crypto_bridgeEstimate", description: "Estimate fees and time for a cross-chain bridge transfer.", inputSchema: { type: "object", properties: { fromChain: { type: "number" }, toChain: { type: "number" }, token: { type: "string" }, amount: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount"] } },
 ];
 
 // =========================================================
@@ -555,7 +567,7 @@ function handleMessage(msg) {
   const { method, id } = msg;
   switch (method) {
     case "initialize":
-      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.4.0" } }));
+      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.5.0" } }));
     case "notifications/initialized":
       return;
     case "tools/list":
@@ -653,6 +665,78 @@ function handleMessage(msg) {
           } catch (err) {
             return respond(textResult({ success: false, error: err.message || "Batch build failed" }));
           }
+        }
+
+        // cow protocol (mcp wrappers)
+        case "crypto_cowQuote": {
+          const baseUrl = { 1: "https://api.cow.fi/mainnet", 8453: "https://api.cow.fi/base", 42161: "https://api.cow.fi/arbitrum" }[args.chainId];
+          if (!baseUrl) return respond(textResult({ success: false, error: "Unsupported chainId" }));
+          return fetch(`${baseUrl}/api/v1/quote`, {
+            method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              sellToken: args.sellToken, buyToken: args.buyToken, sellAmount: args.sellAmount,
+              receiver: args.receiver, kind: "sell", partiallyFillable: false,
+              validTo: Math.floor(Date.now() / 1000) + 600,
+              appData: "0x0000000000000000000000000000000000000000000000000000000000000000",
+              sellTokenBalance: "erc20", buyTokenBalance: "erc20", from: args.receiver,
+            }),
+          }).then(async (res) => {
+            const data = await res.json();
+            if (data.errorType) return respond(textResult({ success: false, error: `${data.errorType}: ${data.description || ""}` }));
+            return respond(textResult({ success: true, quote: data.quote, quoteId: data.id, protocol: "cow", mevProtected: true }));
+          }).catch(catchErr);
+        }
+        case "crypto_cowSubmit": {
+          const baseUrl = { 1: "https://api.cow.fi/mainnet", 8453: "https://api.cow.fi/base", 42161: "https://api.cow.fi/arbitrum" }[args.chainId];
+          if (!baseUrl) return respond(textResult({ success: false, error: "Unsupported chainId" }));
+          return fetch(`${baseUrl}/api/v1/orders`, {
+            method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ ...(args.order || {}), signature: args.signature }),
+          }).then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const orderId = await res.json();
+            return respond(textResult({ success: true, orderId, explorerUrl: `${baseUrl}/orders/${orderId}` }));
+          }).catch(catchErr);
+        }
+
+        // aave (scaffold — real contract calls in Phase 3b)
+        case "crypto_aaveDeposit":
+        case "crypto_aaveBorrow": {
+          const aavePool = { 8453: "0xA238Dd80C2594FecF6fE2D89C5E3Bc3E6B01f994" }[args.chainId];
+          if (!aavePool) return respond(textResult({ success: false, error: "Aave not deployed on this chain" }));
+          return respond(textResult({
+            success: true,
+            action: name === "crypto_aaveDeposit" ? "deposit" : "borrow",
+            chainId: args.chainId,
+            token: args.token,
+            amount: args.amount,
+            onBehalfOf: args.onBehalfOf,
+            note: "Aave tx calldata must be built with ABI encoder (server-side).",
+          }));
+        }
+        case "crypto_aaveUserData": {
+          const aavePool = { 8453: "0xA238Dd80C2594FecF6fE2D89C5E3Bc3E6B01f994" }[args.chainId];
+          if (!aavePool) return respond(textResult({ success: false, error: "Aave not deployed on this chain" }));
+          return respond(textResult({
+            success: true,
+            chainId: args.chainId,
+            address: args.address,
+            note: "getUserAccountData requires contract read via viem (server-side). Returns collateral, debt, healthFactor.",
+          }));
+        }
+
+        // bridge (scaffold — real Across integration in Phase 3b)
+        case "crypto_bridgeEstimate": {
+          return respond(textResult({
+            success: true,
+            fromChain: args.fromChain,
+            toChain: args.toChain,
+            token: args.token,
+            amount: args.amount,
+            estimatedFee: "~$2.50",
+            estimatedTime: "~10 min",
+            protocol: "Across (scaffold)",
+          }));
         }
 
         default:

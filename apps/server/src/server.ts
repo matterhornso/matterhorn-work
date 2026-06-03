@@ -3474,7 +3474,11 @@ function createRoutes(
     if (!chainId || !order || !signature) {
       throw new ApiError(400, "invalid_params", "chainId, order, signature required");
     }
-    const result = await submitCowOrder({ chainId: Number(chainId), order, signature: signature as `0x${string}` });
+    const result = await submitCowOrder({
+      chainId: Number(chainId),
+      order: order as Record<string, unknown>,
+      signature: signature as `0x${string}`,
+    });
     return jsonResponse(result);
   });
 

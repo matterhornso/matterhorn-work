@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, Shield, BarChart3 } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark } from "lucide-react";
 import { useState, useMemo, lazy, Suspense, useCallback } from "react";
 
 import { cn } from "@/lib/utils";
@@ -9,6 +9,11 @@ import { CHAIN_NAMES } from "../../infra/chains";
 import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
+const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
+const AavePanel = lazy(() => import("./pages/AavePanel"));
+const BridgePanel = lazy(() => import("./pages/BridgePanel"));
+
+type PanelType = "portfolio" | "cow" | "aave" | "bridge" | null;
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -66,14 +71,14 @@ export type WalletPanelProps = {
 export function WalletPanel({ store }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
-  const [showPortfolio, setShowPortfolio] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelType>(null);
   const [isPortfolioLoading, setIsPortfolioLoading] = useState(false);
   const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
   const securityLog = useMemo(() => getSecurityLog(5), []);
 
   const handlePortfolioOpen = useCallback(async () => {
     if (!state.address || !state.chainId) return;
-    setShowPortfolio(true);
+    setActivePanel("portfolio");
     setIsPortfolioLoading(true);
     try {
       const res = await fetch(`/api/portfolio?chainId=${state.chainId}&address=${state.address}`);
@@ -86,6 +91,8 @@ export function WalletPanel({ store }: WalletPanelProps) {
       setIsPortfolioLoading(false);
     }
   }, [state.address, state.chainId]);
+
+  const handlePanelClose = useCallback(() => setActivePanel(null), []);
 
   if (!state.isConnected) {
     return (
@@ -224,16 +231,41 @@ export function WalletPanel({ store }: WalletPanelProps) {
             )}
           </div>
 
-          {state.address && (
+          {/* Protocol nav buttons */}
+          <div className="grid grid-cols-2 gap-2 pt-2">
             <button
               type="button"
-              className="flex items-center gap-1.5 text-xs text-dls-secondary hover:text-violet-400 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
               onClick={handlePortfolioOpen}
             >
-              <BarChart3 className="size-3" />
-              View Portfolio
+              <BarChart3 className="size-3.5 text-violet-400" />
+              Portfolio
             </button>
-          )}
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
+              onClick={() => setActivePanel("cow")}
+            >
+              <ArrowRightLeft className="size-3.5 text-green-400" />
+              CoW Swap
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
+              onClick={() => setActivePanel("aave")}
+            >
+              <Landmark className="size-3.5 text-amber-400" />
+              Aave
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
+              onClick={() => setActivePanel("bridge")}
+            >
+              <ExternalLink className="size-3.5 text-blue-400" />
+              Bridge
+            </button>
+          </div>
 
           {state.address && (
             <a
@@ -253,8 +285,8 @@ export function WalletPanel({ store }: WalletPanelProps) {
         </>
       )}
 
-      {/* Portfolio overlay */}
-      {showPortfolio && (
+      {/* Panel overlays */}
+      {activePanel === "portfolio" && (
         <div className="absolute inset-0 z-50 bg-dls-sidebar">
           <Suspense fallback={
             <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading portfolio...</div>
@@ -268,7 +300,55 @@ export function WalletPanel({ store }: WalletPanelProps) {
           <button
             type="button"
             className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
-            onClick={() => setShowPortfolio(false)}
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "cow" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading CoW Swap...</div>
+          }>
+            <CowSwapPanel store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "aave" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Aave...</div>
+          }>
+            <AavePanel store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "bridge" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Bridge...</div>
+          }>
+            <BridgePanel store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
           >
             Back
           </button>
