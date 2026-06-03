@@ -83,7 +83,6 @@ export async function getCowQuote({
     const data = (await res.json()) as {
       quote: CowQuote;
       id: string;
-      id?: string;
       // error response
       errorType?: string;
       description?: string;

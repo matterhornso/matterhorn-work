@@ -104,19 +104,19 @@ async function hl_getPositions(user: string) {
   if (!res.ok) return null;
   const data = await res.json();
   return (data.assetPositions || []).map((ap: Record<string, unknown>) => ({
-    coin: (ap.position as Record<string, string>).coin,
-    entryPx: Number((ap.position as Record<string, unknown>).entryPx),
-    positionValue: Number((ap.position as Record<string, unknown>).positionValue),
+    coin: ((ap.position as Record<string, unknown>).coin as string) || "",
+    entryPx: Number((ap.position as Record<string, unknown>).entryPx || 0),
+    positionValue: Number((ap.position as Record<string, unknown>).positionValue || 0),
     unrealizedPnl: Number(
-      (ap.position as Record<string, unknown>).unrealizedPnl,
+      (ap.position as Record<string, unknown>).unrealizedPnl || 0,
     ),
     leverage: Number(
-      (ap.position as Record<string, unknown>).leverage?.value,
+      ((ap.position as Record<string, unknown>).leverage as null | { value?: number })?.value || 0,
     ),
     liquidationPx: (ap.position as Record<string, unknown>).liquidationPx
       ? Number((ap.position as Record<string, unknown>).liquidationPx)
       : null,
-    marginUsed: Number((ap.position as Record<string, unknown>).marginUsed),
+    marginUsed: Number((ap.position as Record<string, unknown>).marginUsed || 0),
   }));
 }
 
@@ -151,7 +151,6 @@ async function getYields(chain: string, limit = 10) {
 // ─── Portfolio Tracker Entry Point ────────────────────────────────────
 
 export interface PortfolioResponse {
-  success: true;
   address: Address;
   chainId: number;
   native: { raw: string; formatted: number; symbol: string } | null;
