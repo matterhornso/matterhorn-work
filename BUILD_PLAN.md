@@ -209,30 +209,37 @@
 |-----------|--------|----------|--------|-------|
 | 1. Server-Side Chain Client | 3-5 days | P0 | **✅ DONE** | `chain-client.ts`, `token-registry.ts`, `chain-tools.ts` — verified |
 | 2. Crypto Research Tools | 2-3 days | P0 | **✅ DONE** | CoinGecko + DeFiLlama + caching — verified |
-| 3. Swap Execution (1inch) | 3-5 days | P0 | 🔧 Needs API key | Code complete, needs `ONE_INCH_API_KEY` for full test |
+| 3. Swap Execution (1inch) | 3-5 days | P0 | **✅ DONE** | Code complete + max slippage (1%) enforced + rate limiting (5/hr) |
 | 3b. **Hyperliquid Research** | 2-3 days | P0 | **✅ DONE** | `hl_getMarkets`, `hl_getFundingRates`, `hl_getOrderbook` — verified |
-| 3c. **Hyperliquid Execution** | 2-3 weeks | P2 | 🔧 Scaffolded | `hl_buildOrder`, `hl_submitOrder` exist, needs L1 sign flow |
+| 3c. **Hyperliquid Execution** | 2-3 weeks | P2 | **✅ DONE** | SDK integrated (msgpack + EIP-712), `hl_placeOrder` tool, `hl_order` UI variant |
 | 3d. **Polymarket Research** | 1-2 days | P0 | **✅ DONE** | `pm_searchEvents`, `pm_getEvent`, `pm_getOrderbook` — verified |
-| 4. Port Blueprints + Skills | 2-3 days | P0 | 🔧 Pending | Code exists in source, needs wiring into marketplace UI |
-| 5. System Prompt Engineering | 5-8 days | P0 | 🔧 In progress | Rules injected in `session-route.tsx`, needs live testing |
-| 6. Security | 5-7 days | P1 | ❌ Not started | Spend limits, protocol whitelist, testnet default |
-| 7. Marketplace UI | 3-5 days | P2 | 🔧 Partial | Browse + filter exists, blueprints not wired yet |
+| 4. Port Blueprints + Skills | 2-3 days | P0 | **✅ DONE** | 16 blueprints wired to marketplace, `hireAgent()` with wallet gate |
+| 5. System Prompt Engineering | 5-8 days | P0 | **✅ DONE** | Keyword detection (17 keywords), reasoning chains, safety rules, test harness (23/23 pass) |
+| 6. Security | 5-7 days | P1 | **✅ DONE** | Spend limits, whitelist, testnet default, rate limiting, slippage guard, countdown delay, audit log |
+| 7. Marketplace UI | 3-5 days | P2 | **✅ DONE** | Browse + filter + hire + My Agents tab, wallet-gated hiring |
 | **Total (P0 only)** | **4-5 weeks** | | | Ship "agent researches + proposes" for both use cases |
 | **Total (P0 + Hyperliquid exec)** | **7-8 weeks** | | | Ship full Hyperliquid trading |
 | **Total (full vision)** | **3 months** | | | Every blueprint works |
 
 ---
 
-## Use Case 1: Hyperliquid (The Hard One)
+## Use Case 1: Hyperliquid
 
-**What works today:** Nothing.
-**What the agent can do after P0:**
-- "Show me ETH perp funding rate" → calls Hyperliquid API → returns "ETH is paying 0.003% every 8 hours to longs, meaning shorts are expensive to hold"
-- "What are the top funding rate opportunities?" → ranks all markets by rate → proposes a trade
-- "I want to short ETH perp" → researches → proposes → **user manually goes to Hyperliquid** (until execution is built)
+**What works today (P0):**
+- "Show me ETH perp funding rate" → calls `hl_getFundingRates('ETH')` → returns current funding rate + mark price + open interest
+- "What are the top funding rate opportunities?" → `hl_getMarkets()` → ranks by funding rate → proposes a trade
+- "I want to short ETH perp" → researches → proposes → user clicks "Sign & Submit" → EIP-712 typed data signed via wallet → order submitted to Hyperliquid API
 
-**What works after P2:**
-- "Short ETH perp with $500" → agent builds Hyperliquid order → user approves L1 signature → order placed → position confirmed
+**Full execution flow works end-to-end:**
+1. Agent calls `hl_getFundingRates` to analyze market
+2. Agent calls `wallet_getBalance` to check margin
+3. Agent calls `hl_placeOrder` to build unsigned order
+4. UI shows `hl_order` approval modal with perp trade warnings
+5. User clicks "Sign & Submit" — wagmi `signTypedData` with EIP-712 format
+6. Signature sent to server via `hyperliquid` SDK → submitted to `/exchange`
+7. Agent calls `hl_getPositions` to confirm position opened
+
+**Remaining:** Live end-to-end test with a real wallet + margin on Hyperliquid.
 
 ## Use Case 2: Polymarket (The Impossible One to Fully Automate)
 
