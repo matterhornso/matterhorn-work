@@ -1,3 +1,5 @@
+import { getPortfolio } from "./tools/portfolio-tracker.js";
+import { isCowSupported, getCowQuote, buildCowOrder, submitCowOrder } from "./tools/cow-swap.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3435,6 +3437,44 @@ function createRoutes(
         : "Checked template starter sessions",
       timestamp: Date.now(),
     });
+    return jsonResponse(result);
+  });
+
+  // ─── Crypto / DeFi Routes ──────────────────────────────────────────────
+
+  addRoute(routes, "GET", "/api/portfolio", "client", async (ctx) => {
+    const chainId = Number(ctx.url.searchParams.get("chainId"));
+    const address = ctx.url.searchParams.get("address");
+    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      throw new ApiError(400, "invalid_address", "address must be a valid 0x address");
+    }
+    if (!Number.isFinite(chainId)) {
+      throw new ApiError(400, "invalid_chainId", "chainId must be a number");
+    }
+    const result = await getPortfolio({ chainId, address: address as `0x${string}` });
+    return jsonResponse(result);
+  });
+
+  addRoute(routes, "GET", "/api/cow/quote", "client", async (ctx) => {
+    const chainId = Number(ctx.url.searchParams.get("chainId"));
+    const sellToken = ctx.url.searchParams.get("sellToken");
+    const buyToken = ctx.url.searchParams.get("buyToken");
+    const sellAmount = ctx.url.searchParams.get("sellAmount");
+    const receiver = ctx.url.searchParams.get("receiver");
+    if (!sellToken || !buyToken || !sellAmount || !receiver) {
+      throw new ApiError(400, "invalid_params", "sellToken, buyToken, sellAmount, receiver required");
+    }
+    const result = await getCowQuote({ chainId, sellToken: sellToken as `0x${string}`, buyToken: buyToken as `0x${string}`, sellAmount, receiver: receiver as `0x${string}` });
+    return jsonResponse(result);
+  });
+
+  addRoute(routes, "POST", "/api/cow/order", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const { chainId, order, signature } = body;
+    if (!chainId || !order || !signature) {
+      throw new ApiError(400, "invalid_params", "chainId, order, signature required");
+    }
+    const result = await submitCowOrder({ chainId: Number(chainId), order, signature: signature as `0x${string}` });
     return jsonResponse(result);
   });
 

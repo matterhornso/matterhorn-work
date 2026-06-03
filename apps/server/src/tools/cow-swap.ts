@@ -125,6 +125,41 @@ export function buildCowOrder({
 }
 
 /**
+ * Submit a CoW Protocol order (POST to /api/v1/orders).
+ * The order must already include an EIP-712 signature.
+ */
+export async function submitCowOrder({
+  chainId,
+  order,
+  signature,
+}: {
+  chainId: number;
+  order: ReturnType<typeof buildCowOrder>;
+  signature: Hex;
+}): Promise<
+  | { success: true; orderId: string; explorerUrl: string }
+  | { success: false; error: string }
+> {
+  const base = COW_API_BASE[chainId];
+  if (!base) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  try {
+    const res = await fetch(`${base}/api/v1/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ ...order, signature }),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "unknown");
+      return { success: false, error: `CoW order submission failed: ${res.status} ${err}` };
+    }
+    const orderId = (await res.json()) as string;
+    return { success: true, orderId, explorerUrl: `${base}/orders/${orderId}` };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Order submission failed" };
+  }
+}
+
+/**
  * Check if CoW supports a chain.
  */
 export function isCowSupported(chainId: number): boolean {
