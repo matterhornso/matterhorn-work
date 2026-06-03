@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
-import { Shield, X, AlertTriangle, CheckCircle2, XCircle, TrendingUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Shield, X, AlertTriangle, CheckCircle2, XCircle, TrendingUp, Fuel, FileCode } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,8 @@ import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
 import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { isWhitelistedAddress } from "./infra/whitelist";
-
-function truncateAddress(addr: string): string {
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
+import { estimateGasClient, type GasEstimateResult } from "./lib/gas-estimate";
+import { lookupEnsName, truncateAddress } from "./lib/ens";
 
 export type TxApprovalRequest = {
   to: string;
@@ -40,10 +38,30 @@ export function dispatchTxApprovalResponse(approved: boolean, txHash?: string) {
 
 const MAINNET_COUNTDOWN_SECONDS = 3;
 
+function decodeSelector(data: string): { selector: string; signature: string | null } {
+  const clean = data.toLowerCase().replace(/^0x/, "");
+  const selector = `0x${clean.slice(0, 8)}`;
+  const KNOWN: Record<string, string> = {
+    "0x095ea7b3": "approve(address,uint256)",
+    "0xa9059cbb": "transfer(address,uint256)",
+    "0x23b872dd": "transferFrom(address,address,uint256)",
+    "0x38ed1739": "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
+    "0x8803dbee": "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)",
+    "0x7ff36ab5": "swapExactETHForTokens(uint256,address[],address,uint256)",
+    "0x18cbafe5": "swapExactTokensForETH(uint256,uint256,address[],address,uint256)",
+    "0xd0e30db0": "deposit()",
+    "0x2e1a7d4d": "withdraw(uint256)",
+  };
+  return { selector, signature: KNOWN[selector] ?? null };
+}
+
 export function TransactionApproval({ store, onApprove, onReject }: TransactionApprovalProps) {
   const state = useWalletStore(store);
   const pending = state.pendingApproval;
   const [countdown, setCountdown] = useState(0);
+  const [ensName, setEnsName] = useState<string | null>(null);
+  const [gasEstimate, setGasEstimate] = useState<GasEstimateResult | null>(null);
+  const [decoded, setDecoded] = useState<{ selector: string; signature: string | null } | null>(null);
 
   // Countdown delay for mainnet transactions
   useEffect(() => {
@@ -84,6 +102,42 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [pending, store, onReject]);
+
+  // Gas estimation + ENS reverse lookup + calldata decode
+  useEffect(() => {
+    if (!pending || pending.type !== "tx" || !state.address) {
+      setGasEstimate(null);
+      setEnsName(null);
+      setDecoded(null);
+      return;
+    }
+    let cancelled = false;
+
+    // Decode calldata
+    if (pending.data && pending.data !== "0x") {
+      setDecoded(decodeSelector(pending.data));
+    } else {
+      setDecoded(null);
+    }
+
+    // ENS lookup
+    lookupEnsName(pending.to as `0x${string}`).then((name) => {
+      if (!cancelled) setEnsName(name);
+    }).catch(() => {});
+
+    // Gas estimation
+    estimateGasClient({
+      chainId: pending.chainId,
+      to: pending.to as `0x${string}`,
+      data: (pending.data ?? "0x") as `0x${string}`,
+      value: pending.value,
+      from: state.address,
+    }).then((result) => {
+      if (!cancelled) setGasEstimate(result);
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [pending, state.address]);
 
   if (!pending) return null;
 
@@ -300,8 +354,11 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
           <div className="rounded-xl bg-dls-surface p-3">
             <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">To</div>
             <div className="font-mono text-sm text-dls-text break-all" title={pending.to}>
-              {truncateAddress(pending.to)}
+              {ensName ?? truncateAddress(pending.to)}
             </div>
+            {ensName && (
+              <div className="text-xs text-dls-secondary mt-0.5">{truncateAddress(pending.to)}</div>
+            )}
           </div>
 
           <div className="rounded-xl bg-dls-surface p-3">
@@ -311,10 +368,41 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
 
           {isContractInteraction && (
             <div className="rounded-xl bg-dls-surface p-3">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary mb-1">Data</div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <FileCode className="size-3 text-dls-secondary" />
+                <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Calldata</div>
+              </div>
+              {decoded?.signature && (
+                <div className="text-xs text-green-400 mb-1 font-medium">{decoded.signature}</div>
+              )}
               <div className="font-mono text-xs text-dls-text break-all max-h-24 overflow-y-auto scrollbar-thin">
                 {pending.data!.length > 120 ? `${pending.data!.slice(0, 60)}...${pending.data!.slice(-20)}` : pending.data}
               </div>
+              {decoded && !decoded.signature && (
+                <div className="text-xs text-amber-400 mt-1">Unknown function selector: {decoded.selector}</div>
+              )}
+            </div>
+          )}
+
+          {gasEstimate && (
+            <div className="rounded-xl bg-dls-surface p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Fuel className="size-3 text-dls-secondary" />
+                <div className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Estimated Gas</div>
+              </div>
+              {gasEstimate.success ? (
+                <div className="space-y-1">
+                  <div className="font-mono text-sm text-dls-text">{gasEstimate.gasFormatted} units</div>
+                  {gasEstimate.gasPriceGwei !== null && (
+                    <div className="text-xs text-dls-secondary">
+                      {gasEstimate.gasPriceGwei.toFixed(2)} gwei • ~{gasEstimate.estimatedCostEth} ETH
+                      {gasEstimate.estimatedCostUSD && ` ($${gasEstimate.estimatedCostUSD})`}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-amber-400">{gasEstimate.error}</div>
+              )}
             </div>
           )}
 

@@ -18,7 +18,7 @@ import { DesktopRuntimeBoot } from "./desktop-runtime-boot";
 import { startDebugLogger, stopDebugLogger } from "./debug-logger";
 import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { ReloadCoordinatorProvider } from "./reload-coordinator";
-import { WalletProvider } from "../domains/wallet/WalletProvider";
+import { LazyWalletProvider } from "./LazyWalletProvider";
 
 function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
@@ -64,7 +64,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   const defaultUrl = resolveDefaultServerUrl();
   return (
     <WagmiProvider config={wagmiConfig}>
-      <WalletProvider>
+      <LazyWalletProvider>
       <BootStateProvider>
         <ServerProvider defaultUrl={defaultUrl}>
           <ArchitectureMismatchGate>
@@ -83,7 +83,7 @@ export function AppProviders({ children }: AppProvidersProps) {
           </ArchitectureMismatchGate>
         </ServerProvider>
       </BootStateProvider>
-      </WalletProvider>
+      </LazyWalletProvider>
     </WagmiProvider>
   );
 }

@@ -110,6 +110,41 @@ export default defineConfig({
         app: resolve(appRoot, "index.html"),
         overlay: resolve(appRoot, "overlay.html"),
       },
+      output: {
+        manualChunks(id: string): string | undefined {
+          // Core vendor libraries that change rarely
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/react-router-dom")
+          ) {
+            return "vendor-core";
+          }
+          // Markdown + syntax highlighting
+          if (
+            id.includes("node_modules/marked") ||
+            id.includes("node_modules/marked-") ||
+            id.includes("node_modules/shiki") ||
+            id.includes("node_modules/\u0004shiki") ||
+            id.includes("node_modules/@shikijs")
+          ) {
+            return "vendor-markdown";
+          }
+          // Wallet + Web3 stack
+          if (
+            id.includes("node_modules/wagmi") ||
+            id.includes("node_modules/viem") ||
+            id.includes("node_modules/@tanstack/react-query")
+          ) {
+            return "vendor-wallet";
+          }
+          // Editor / lexical (heavy, only needed for composer)
+          if (id.includes("node_modules/@lexical")) {
+            return "vendor-editor";
+          }
+          return undefined;
+        },
+      },
     },
   },
   resolve: {

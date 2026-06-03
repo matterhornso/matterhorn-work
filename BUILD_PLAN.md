@@ -217,6 +217,12 @@
 | 5. System Prompt Engineering | 5-8 days | P0 | **✅ DONE** | Keyword detection (17 keywords), reasoning chains, safety rules, test harness (23/23 pass) |
 | 6. Security | 5-7 days | P1 | **✅ DONE** | Spend limits, whitelist, testnet default, rate limiting, slippage guard, countdown delay, audit log |
 | 7. Marketplace UI | 3-5 days | P2 | **✅ DONE** | Browse + filter + hire + My Agents tab, wallet-gated hiring |
+| 8. **Bundle Fix (Shiki)** | 2-3 days | P0 | **✅ DONE** | Replaced `bundledLanguages` with 15 specific lang imports; vite manualChunks (vendor-core/vendor-markdown/vendor-wallet/vendor-editor) |
+| 9. **Lazy Wallet Provider** | 0.5 day | P0 | **✅ DONE** | WalletProvider loaded via React.lazy + Suspense; reduces initial chunk |
+| 10. **Token Approval Manager** | 1-2 days | P0 | **✅ DONE** | `approval-manager.ts`: getAllowance(), buildRevokeApprovalTx(), on-chain ERC-20 reads |
+| 11. **Calldata Decoder** | 0.5 day | P0 | **✅ DONE** | `calldata-decoder.ts`: 4byte.directory API + local known-sig fallback (10+ common DeFi methods) |
+| 12. **ENS Resolution** | 0.5 day | P0 | **✅ DONE** | `ens-resolver.ts`: resolveEnsName(), lookupEnsAddress(); UI shows ENS name in TransactionApproval |
+| 13. **Gas Estimator** | 0.5 day | P0 | **✅ DONE** | `gas-estimator.ts` (server) + `gas-estimate.ts` (client); live gas + ETH/USD cost in TxApproval UI |
 | **Total (P0 only)** | **4-5 weeks** | | | Ship "agent researches + proposes" for both use cases |
 | **Total (P0 + Hyperliquid exec)** | **7-8 weeks** | | | Ship full Hyperliquid trading |
 | **Total (full vision)** | **3 months** | | | Every blueprint works |

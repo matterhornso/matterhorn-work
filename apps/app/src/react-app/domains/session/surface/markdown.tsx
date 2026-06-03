@@ -13,7 +13,26 @@ import {
   transformerNotationHighlight,
   transformerNotationWordHighlight,
 } from "@shikijs/transformers";
-import { bundledLanguages, codeToHtml } from "shiki";
+import { createHighlighterCore } from "shiki/core";
+import type { LanguageRegistration } from "shiki/core";
+import { createOnigurumaEngine } from "shiki/engine/oniguruma";
+import wasm from "shiki/wasm";
+import githubLight from "shiki/themes/github-light.mjs";
+import js from "shiki/langs/javascript.mjs";
+import ts from "shiki/langs/typescript.mjs";
+import tsx from "shiki/langs/tsx.mjs";
+import jsx from "shiki/langs/jsx.mjs";
+import python from "shiki/langs/python.mjs";
+import rust from "shiki/langs/rust.mjs";
+import solidity from "shiki/langs/solidity.mjs";
+import markdown from "shiki/langs/markdown.mjs";
+import html from "shiki/langs/html.mjs";
+import css from "shiki/langs/css.mjs";
+import shell from "shiki/langs/shellscript.mjs";
+import json from "shiki/langs/json.mjs";
+import yaml from "shiki/langs/yaml.mjs";
+import sql from "shiki/langs/sql.mjs";
+import go from "shiki/langs/go.mjs";
 
 import { applyTextHighlights } from "./text-highlights";
 
@@ -66,9 +85,42 @@ function createEmojiAliases() {
 
 const emojiAliases = createEmojiAliases();
 
+const languageMap: Record<string, LanguageRegistration[]> = {
+  javascript: js,
+  typescript: ts,
+  tsx,
+  jsx,
+  python,
+  rust,
+  solidity,
+  markdown,
+  html,
+  css,
+  shellscript: shell,
+  shell: shell,
+  bash: shell,
+  json,
+  yaml,
+  yml: yaml,
+  sql,
+  go,
+};
+
+let highlighter: Awaited<ReturnType<typeof createHighlighterCore>> | undefined;
+
+async function ensureHighlighter() {
+  if (highlighter) return highlighter;
+  highlighter = await createHighlighterCore({
+    engine: createOnigurumaEngine(wasm),
+    themes: [githubLight],
+    langs: Object.values(languageMap),
+  });
+  return highlighter;
+}
+
 function normalizeShikiLanguage(lang: string) {
   const normalized = lang.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-  return normalized in bundledLanguages ? normalized : "text";
+  return normalized in languageMap ? normalized : "text";
 }
 
 function hasFencedCodeBlock(text: string) {
@@ -172,7 +224,8 @@ const highlightedMarkdownParser = new Marked<string, string>({
   markedShiki({
     async highlight(code, lang, props) {
       const language = normalizeShikiLanguage(lang);
-      return codeToHtml(code, {
+      const highlighter = await ensureHighlighter();
+      return highlighter.codeToHtml(code, {
         lang: language,
         meta: { __raw: props.join(" ") },
         theme: "github-light",

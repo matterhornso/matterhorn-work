@@ -2,9 +2,23 @@
 /**
  * Matterhorn Work Crypto MCP Server.
  * V1+V2: CoinGecko, DeFiLlama, 1inch swap builder, tx simulation, Hyperliquid, Polymarket.
+ * V3: Added security tools — approval manager, calldata decoder, ENS resolver, gas estimator.
  */
 
 import { createServer } from "node:http";
+import { createPublicClient, http } from "viem";
+import { base, baseSepolia, mainnet } from "viem/chains";
+
+// =========================================================
+// Clients
+// =========================================================
+const clients = {
+  8453: createPublicClient({ chain: base, transport: http() }),
+  84532: createPublicClient({ chain: baseSepolia, transport: http() }),
+};
+const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+
+function getClient(chainId) { return clients[chainId] ?? null; }
 
 // =========================================================
 // Generic fetch helper with timeout
@@ -96,7 +110,50 @@ function resolveToken(chainId, symbol) {
   throw new Error(`Unknown token "${symbol}" on chain ${chainId}`);
 }
 
-async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, slippage = 1 }) {
+function formatAmount(raw, symbol) {
+  const num = Number(raw);
+  if (symbol.toUpperCase() === "USDC") return (num / 1e6).toFixed(2);
+  if (symbol.toUpperCase() === "WETH" || symbol.toUpperCase() === "ETH") return (num / 1e18).toFixed(4);
+  return raw;
+}
+
+function enforceSlippageLimit(slippagePct, maxBps = 100) {
+  const requestedBps = Math.round(slippagePct * 100);
+  if (requestedBps > maxBps) {
+    throw new Error(
+      `Slippage ${slippagePct}% exceeds the maximum allowed ${(maxBps / 100).toFixed(2)}% (${maxBps} bps). ` +
+        "Increase the limit in wallet settings or reduce slippage."
+    );
+  }
+}
+
+/** Quote only — no transaction. Useful for agent reasoning. */
+export async function getQuote({ chainId, fromToken, toToken, amount, slippage = 1, maxSlippageBps }) {
+  const effectiveMax = maxSlippageBps ?? 100;
+  enforceSlippageLimit(slippage, effectiveMax);
+
+  const key = process.env.ONE_INCH_API_KEY;
+  if (!key) throw new Error("ONE_INCH_API_KEY not configured");
+
+  const url = `https://api.1inch.dev/swap/v6.0/${chainId}/quote?` +
+    new URLSearchParams({ src: resolveToken(chainId, fromToken), dst: resolveToken(chainId, toToken), amount: String(amount) }).toString();
+
+  const data = await fetchJson(url, { headers: { Authorization: `Bearer ${key}` } });
+
+  return {
+    from: data.fromToken?.symbol ?? fromToken,
+    to: data.toToken?.symbol ?? toToken,
+    fromAmount: data.fromAmount,
+    toAmount: data.toAmount,
+    estimatedGas: data.estimatedGas,
+    slippagePct: slippage,
+  };
+}
+
+async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, slippage = 1, maxSlippageBps }) {
+  const effectiveMax = maxSlippageBps ?? 100;
+  enforceSlippageLimit(slippage, effectiveMax);
+
   const key = process.env.ONE_INCH_API_KEY;
   if (!key) throw new Error("ONE_INCH_API_KEY not configured");
 
@@ -117,7 +174,7 @@ async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, sli
     action: "swap",
     chainId,
     tx: { to: data.tx.to, data: data.tx.data, value: data.tx.value, gas: data.tx.gas, gasPrice: data.tx.gasPrice },
-    summary: `Swap ${fromToken} → ${toToken}`,
+    summary: `Swap ${formatAmount(data.fromTokenAmount, fromToken)} ${data.fromToken.symbol} → ${formatAmount(data.toTokenAmount, data.toToken.symbol)} ${data.toToken.symbol}`,
     needsApproval: true,
     protocol: "1inch",
   };
@@ -126,16 +183,6 @@ async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, sli
 // =========================================================
 // Transaction simulation via viem read-only clients
 // =========================================================
-import { createPublicClient, http } from "viem";
-import { base, baseSepolia } from "viem/chains";
-
-const clients = {
-  8453: createPublicClient({ chain: base, transport: http() }),
-  84532: createPublicClient({ chain: baseSepolia, transport: http() }),
-};
-
-function getClient(chainId) { return clients[chainId] ?? null; }
-
 async function simulateTransaction({ chainId, to, data, value = "0", from }) {
   const client = getClient(chainId);
   if (!client) return { error: `Unsupported chainId: ${chainId}` };
@@ -148,12 +195,200 @@ async function simulateTransaction({ chainId, to, data, value = "0", from }) {
 }
 
 // =========================================================
+// Security: Approval Manager
+// =========================================================
+const erc20AllowanceAbi = [
+  { constant: true, inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], name: "allowance", outputs: [{ name: "", type: "uint256" }], type: "function" },
+  { constant: true, inputs: [], name: "decimals", outputs: [{ name: "", type: "uint8" }], type: "function" },
+  { constant: true, inputs: [], name: "symbol", outputs: [{ name: "", type: "string" }], type: "function" },
+  { constant: true, inputs: [], name: "name", outputs: [{ name: "", type: "string" }], type: "function" },
+];
+
+const erc20ApproveAbi = [
+  { name: "approve", type: "function", inputs: [{ name: "spender", type: "address" }, { name: "amount", type: "uint256" }], outputs: [{ name: "", type: "bool" }] },
+];
+
+async function getTokenMeta(chainId, tokenAddress) {
+  const client = getClient(chainId);
+  if (!client) return null;
+  try {
+    const [symbol, name, decimals] = await Promise.all([
+      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "symbol" }).catch(() => "???"),
+      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "name" }).catch(() => "Unknown Token"),
+      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "decimals" }).catch(() => 18),
+    ]);
+    return { symbol, name, decimals: Number(decimals) };
+  } catch { return null; }
+}
+
+async function getAllowance({ chainId, tokenAddress, owner, spender }) {
+  const client = getClient(chainId);
+  if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  try {
+    const [allowance, meta] = await Promise.all([
+      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "allowance", args: [owner, spender] }),
+      getTokenMeta(chainId, tokenAddress),
+    ]);
+    return {
+      success: true, tokenAddress, owner, spender,
+      allowance: allowance.toString(),
+      allowanceFormatted: meta ? Number(allowance) / 10 ** meta.decimals : null,
+      symbol: meta?.symbol ?? null, name: meta?.name ?? null,
+    };
+  } catch (err) {
+    return { success: false, error: err.message || "getAllowance failed" };
+  }
+}
+
+function buildRevokeApprovalTx({ tokenAddress, spender }) {
+  try {
+    // viem encodeFunctionData is not readily available in plain node without viem/utils in ESM.
+    // We know the function selector for approve(address,uint256) is 0x095ea7b3.
+    // ABI encode: approve(address spender, uint256 amount)
+    // selector = 0x095ea7b3
+    // address pad left to 32 bytes
+    // uint256 0 = 0x0000....0000 (64 zeros)
+    const paddedSpender = spender.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+    const data = `0x095ea7b3${paddedSpender}0000000000000000000000000000000000000000000000000000000000000000`;
+    return {
+      success: true, tokenAddress, spender, data,
+      description: `Revoke approval for ${spender} on ${tokenAddress}`,
+    };
+  } catch (err) {
+    return { success: false, error: err.message || "Failed to build revoke tx" };
+  }
+}
+
+// =========================================================
+// Security: Calldata Decoder
+// =========================================================
+const KNOWN_SIGNATURES = {
+  "0x095ea7b3": "approve(address,uint256)",
+  "0xa9059cbb": "transfer(address,uint256)",
+  "0x23b872dd": "transferFrom(address,address,uint256)",
+  "0x38ed1739": "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
+  "0x8803dbee": "swapTokensForExactTokens(uint256,uint256,address[],address,uint256)",
+  "0x7ff36ab5": "swapExactETHForTokens(uint256,address[],address,uint256)",
+  "0x18cbafe5": "swapExactTokensForETH(uint256,uint256,address[],address,uint256)",
+  "0xe8e33700": "addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)",
+  "0xf305d719": "addLiquidityETH(address,uint256,uint256,uint256,address,uint256)",
+  "0xbaa2abde": "removeLiquidity(address,address,uint256,uint256,uint256,address,uint256)",
+  "0x02751cec": "removeLiquidityETH(address,uint256,uint256,uint256,address,uint256)",
+  "0xd0e30db0": "deposit()",
+  "0x2e1a7d4d": "withdraw(uint256)",
+};
+
+function decodeCalldataFast(data) {
+  const clean = data.toLowerCase().replace(/^0x/, "");
+  const selector = `0x${clean.slice(0, 8)}`;
+  return { selector, signature: KNOWN_SIGNATURES[selector] ?? null, params: `0x${clean.slice(8)}`, raw: data };
+}
+
+async function decodeSelector(selector) {
+  const short = selector.toLowerCase().replace(/^0x/, "").slice(0, 8);
+  // Prefer local known-signature cache (higher quality, no network)
+  if (KNOWN_SIGNATURES[`0x${short}`]) {
+    return { success: true, selector: short, signatures: [KNOWN_SIGNATURES[`0x${short}`]], bestGuess: KNOWN_SIGNATURES[`0x${short}`] };
+  }
+  // Fall back to 4byte.directory
+  try {
+    const res = await fetchJson(`https://www.4byte.directory/api/v1/signatures/?hex_signature=0x${short}`, {}, 10000);
+    const signatures = (res.results || []).map(r => r.text_signature);
+    return { success: true, selector: short, signatures, bestGuess: signatures[0] ?? null };
+  } catch (err) {
+    return { success: false, error: err.message || "4byte lookup failed" };
+  }
+}
+
+async function decodeCalldata(data) {
+  const clean = data.toLowerCase().replace(/^0x/, "");
+  if (clean.length < 8) return { success: false, error: "Calldata too short" };
+  const selector = `0x${clean.slice(0, 8)}`;
+  const params = `0x${clean.slice(8)}`;
+  const lookup = await decodeSelector(selector);
+  if (!lookup.success) {
+    return { success: true, selector, signature: null, params, raw: data, note: "Unknown function — could not decode via 4byte.directory" };
+  }
+  return { success: true, selector, signature: lookup.bestGuess, signatures: lookup.signatures, params, raw: data };
+}
+
+// =========================================================
+// Security: ENS Resolution
+// =========================================================
+async function resolveEnsName(name) {
+  try {
+    const address = await mainnetClient.getEnsAddress({ name });
+    return { success: true, name, address: address ?? null, resolved: address !== null };
+  } catch (err) {
+    return { success: false, name, error: err.message || "ENS resolution failed" };
+  }
+}
+
+async function lookupEnsAddress(address) {
+  try {
+    const ensName = await mainnetClient.getEnsName({ address });
+    return { success: true, address, ensName: ensName ?? null, resolved: ensName !== null };
+  } catch (err) {
+    return { success: false, address, error: err.message || "ENS reverse lookup failed" };
+  }
+}
+
+// =========================================================
+// Security: Gas Estimator
+// =========================================================
+const gasPriceCache = {};
+const GAS_PRICE_TTL_MS = 60_000;
+
+async function getGasPriceCached(chainId) {
+  const now = Date.now();
+  const cached = gasPriceCache[chainId];
+  if (cached && now - cached.timestamp < GAS_PRICE_TTL_MS) return cached.price;
+  const client = getClient(chainId);
+  if (!client) return null;
+  try {
+    const price = await client.getGasPrice();
+    gasPriceCache[chainId] = { price, timestamp: now };
+    return price;
+  } catch { return null; }
+}
+
+async function estimateGas({ chainId, to, data, value = "0", from }) {
+  const client = getClient(chainId);
+  if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  try {
+    const [gas, gasPrice] = await Promise.all([
+      client.estimateGas({ to, data, value: BigInt(value), account: from }),
+      getGasPriceCached(chainId),
+    ]);
+    const gasPriceGwei = gasPrice ? Number(gasPrice) / 1e9 : null;
+    const costWei = gasPrice ? gas * gasPrice : null;
+    const costEth = costWei ? Number(costWei) / 1e18 : null;
+    return {
+      success: true,
+      gas: gas.toString(), gasFormatted: Number(gas).toLocaleString(),
+      gasPriceWei: gasPrice?.toString() ?? null, gasPriceGwei,
+      estimatedCostWei: costWei?.toString() ?? null,
+      estimatedCostEth: costEth !== null ? costEth.toFixed(8) : null,
+      estimatedCostUSD: costEth !== null ? (costEth * 2000).toFixed(2) : null,
+      unit: "ETH",
+    };
+  } catch (err) {
+    return { success: false, error: err.message || "Gas estimation failed" };
+  }
+}
+
+async function getGasPrice(chainId) {
+  const price = await getGasPriceCached(chainId);
+  if (!price) return { success: false, error: "Failed to fetch gas price" };
+  return { success: true, gasPriceWei: price.toString(), gasPriceGwei: Number(price) / 1e9, unit: "gwei" };
+}
+
+// =========================================================
 // Hyperliquid Research
 // =========================================================
 async function hlCall(type, payload) {
   const data = await fetchJson("https://api.hyperliquid.xyz/info", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ type, ...(payload !== undefined ? { ...payload } : {}) }),
   });
   if (data?.error) throw new Error(`Hyperliquid error: ${data.error}`);
@@ -162,14 +397,14 @@ async function hlCall(type, payload) {
 
 async function hl_getMarkets() {
   const data = await hlCall("metaAndAssetCtxs");
-  return (data.universe || []).map(u => ({
+  const meta = Array.isArray(data) && data.length >= 1 ? data[0] : data;
+  return (meta.universe || []).map(u => ({
     name: u.name, szDecimals: u.szDecimals, maxLeverage: u.maxLeverage, fundingIntervalHours: u.fundingIntervalHours, isActive: u.isActive,
   }));
 }
 
 async function hl_getFundingRates(symbol) {
   const data = await hlCall("metaAndAssetCtxs");
-  // Response is [ { universe: [...] }, { 0: {...}, 1: {...}, ... } ]
   const meta = Array.isArray(data) && data.length >= 1 ? data[0] : data;
   const ctxs = Array.isArray(data) && data.length >= 2 ? data[1] : data.assetCtxs;
   const idx = meta.universe?.findIndex(u => u.name === symbol) ?? -1;
@@ -252,8 +487,18 @@ const tools = [
   { name: "crypto_getYields", description: "Get top yield pools on a chain (e.g., Base). Optional protocol filter.", inputSchema: { type: "object", properties: { chain: { type: "string" }, protocol: { type: "string" }, limit: { type: "number" } }, required: ["chain"] } },
 
   // -- execution --
-  { name: "crypto_buildSwap", description: "Build a swap transaction via 1inch. Returns tx ready for wallet_sendTransaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, fromToken: { type: "string" }, toToken: { type: "string" }, amount: { type: "string" }, fromAddress: { type: "string" }, slippage: { type: "number" } }, required: ["chainId", "fromToken", "toToken", "amount", "fromAddress"] } },
+  { name: "crypto_getQuote", description: "Get a swap quote via 1inch (no transaction built). Useful for comparing rates.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, fromToken: { type: "string" }, toToken: { type: "string" }, amount: { type: "string" }, slippage: { type: "number" }, maxSlippageBps: { type: "number" } }, required: ["chainId", "fromToken", "toToken", "amount"] } },
+  { name: "crypto_buildSwap", description: "Build a swap transaction via 1inch. Returns tx ready for wallet_sendTransaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, fromToken: { type: "string" }, toToken: { type: "string" }, amount: { type: "string" }, fromAddress: { type: "string" }, slippage: { type: "number" }, maxSlippageBps: { type: "number" } }, required: ["chainId", "fromToken", "toToken", "amount", "fromAddress"] } },
   { name: "crypto_simulate", description: "Simulate a raw transaction before signing. Returns success or failure reason.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, to: { type: "string" }, data: { type: "string" }, value: { type: "string" }, from: { type: "string" } }, required: ["chainId", "to", "data", "from"] } },
+
+  // -- security / analysis --
+  { name: "security_checkAllowance", description: "Check the current ERC-20 allowance for a token, owner, and spender.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, tokenAddress: { type: "string" }, owner: { type: "string" }, spender: { type: "string" } }, required: ["chainId", "tokenAddress", "owner", "spender"] } },
+  { name: "security_revokeApproval", description: "Build a revoke (approve to 0) transaction for an ERC-20 token. Returns tx data to send via wallet_sendTransaction.", inputSchema: { type: "object", properties: { tokenAddress: { type: "string" }, spender: { type: "string" } }, required: ["tokenAddress", "spender"] } },
+  { name: "security_decodeCalldata", description: "Decode a transaction's calldata to reveal which function is being called. Uses 4byte.directory + local known signatures.", inputSchema: { type: "object", properties: { data: { type: "string" } }, required: ["data"] } },
+  { name: "security_estimateGas", description: "Estimate gas cost for a transaction in ETH and USD. Use before suggesting any on-chain action.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, to: { type: "string" }, data: { type: "string" }, value: { type: "string" }, from: { type: "string" } }, required: ["chainId", "to", "data", "from"] } },
+  { name: "security_resolveEns", description: "Resolve an ENS name (e.g. vitalik.eth) to a 0x address.", inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } },
+  { name: "security_lookupEns", description: "Reverse-resolve an address to its ENS name, if any.", inputSchema: { type: "object", properties: { address: { type: "string" } }, required: ["address"] } },
+  { name: "security_getGasPrice", description: "Get current gas price for a chain.", inputSchema: { type: "object", properties: { chainId: { type: "number" } }, required: ["chainId"] } },
 
   // -- hyperliquid --
   { name: "hl_getMarkets", description: "Get all Hyperliquid perpetual markets", inputSchema: { type: "object", properties: {} } },
@@ -305,7 +550,7 @@ function handleMessage(msg) {
   const { method, id } = msg;
   switch (method) {
     case "initialize":
-      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.2.0" } }));
+      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.3.0" } }));
     case "notifications/initialized":
       return;
     case "tools/list":
@@ -316,13 +561,27 @@ function handleMessage(msg) {
       const catchErr = (err) => process.stdout.write(jsonRpcError(id, -32000, err.message || `${name} failed`));
 
       switch (name) {
+        // research
         case "crypto_searchCoins": return searchCoins(args.query).then(r => respond(textResult(r))).catch(catchErr);
         case "crypto_getPrices": return getPrices(args.ids).then(r => respond(textResult(r))).catch(catchErr);
         case "crypto_trending": return trendingCoins().then(r => respond(textResult(r))).catch(catchErr);
         case "crypto_getYields": return getYields(args.chain, args.protocol, args.limit).then(r => respond(textResult(r))).catch(catchErr);
-        case "crypto_buildSwap": return buildSwap({ chainId: args.chainId, fromToken: args.fromToken, toToken: args.toToken, amount: args.amount, fromAddress: args.fromAddress, slippage: args.slippage }).then(r => respond(textResult(r))).catch(catchErr);
+
+        // execution
+        case "crypto_getQuote": return getQuote({ chainId: args.chainId, fromToken: args.fromToken, toToken: args.toToken, amount: args.amount, slippage: args.slippage, maxSlippageBps: args.maxSlippageBps }).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_buildSwap": return buildSwap({ chainId: args.chainId, fromToken: args.fromToken, toToken: args.toToken, amount: args.amount, fromAddress: args.fromAddress, slippage: args.slippage, maxSlippageBps: args.maxSlippageBps }).then(r => respond(textResult(r))).catch(catchErr);
         case "crypto_simulate": return simulateTransaction({ chainId: args.chainId, to: args.to, data: args.data, value: args.value, from: args.from }).then(r => respond(textResult(r))).catch(catchErr);
 
+        // security / analysis
+        case "security_checkAllowance": return getAllowance({ chainId: args.chainId, tokenAddress: args.tokenAddress, owner: args.owner, spender: args.spender }).then(r => respond(textResult(r))).catch(catchErr);
+        case "security_revokeApproval": return respond(textResult(buildRevokeApprovalTx({ tokenAddress: args.tokenAddress, spender: args.spender })));
+        case "security_decodeCalldata": return decodeCalldata(args.data).then(r => respond(textResult(r))).catch(catchErr);
+        case "security_estimateGas": return estimateGas({ chainId: args.chainId, to: args.to, data: args.data, value: args.value, from: args.from }).then(r => respond(textResult(r))).catch(catchErr);
+        case "security_resolveEns": return resolveEnsName(args.name).then(r => respond(textResult(r))).catch(catchErr);
+        case "security_lookupEns": return lookupEnsAddress(args.address).then(r => respond(textResult(r))).catch(catchErr);
+        case "security_getGasPrice": return getGasPrice(args.chainId).then(r => respond(textResult(r))).catch(catchErr);
+
+        // hyperliquid
         case "hl_getMarkets": return hl_getMarkets().then(r => respond(textResult(r))).catch(catchErr);
         case "hl_getFundingRates": return hl_getFundingRates(args.symbol).then(r => respond(textResult(r))).catch(catchErr);
         case "hl_getOrderbook": return hl_getOrderbook(args.symbol, args.limit).then(r => respond(textResult(r))).catch(catchErr);
@@ -333,10 +592,11 @@ function handleMessage(msg) {
         case "hl_placeOrder": {
           const order = buildOrder({ asset: args.asset, isBuy: args.isBuy, sz: args.sz, limitPx: args.limitPx, reduceOnly: args.reduceOnly });
           process.stderr.write(JSON.stringify({ event: "hl_placeOrder", order }) + "\n");
-          return respond(textResult({ status: "needs_private_key", message: "Hyperliquid orders require a private key. This must be done via the UI or a secure signing service.", order }));
+          return respond(textResult({ status: "needs_signature", message: "Hyperliquid orders require EIP-712 signing via wallet_signTypedData.", order }));
         }
         case "hl_submitOrder": return submitOrder({ signedOrder: args.signedOrder, signature: args.signature, publicAddress: args.publicAddress }).then(r => respond(textResult(r))).catch(catchErr);
 
+        // polymarket
         case "pm_searchEvents": return pm_searchEvents(args.query, args.limit).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getEvent": return pm_getEvent(args.eventId).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getOrderbook": return pm_getOrderbook(args.marketId, args.limit).then(r => respond(textResult(r))).catch(catchErr);
@@ -350,4 +610,4 @@ function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work Crypto MCP Server v0.2.0 ready\n");
+process.stderr.write("Matterhorn Work Crypto MCP Server v0.3.0 ready\n");

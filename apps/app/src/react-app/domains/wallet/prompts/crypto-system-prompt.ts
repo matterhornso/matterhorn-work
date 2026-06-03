@@ -61,7 +61,17 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - crypto_trending() — Get trending coins on CoinGecko.
 - crypto_getYields(chain, protocol?, limit?) — Get top yield pools on a chain. Example: crypto_getYields("Base", "aave", 10).
 
+**Security & Analysis (security_*)**
+- security_checkAllowance(chainId, tokenAddress, owner, spender) — Check current ERC-20 approval amount.
+- security_revokeApproval(tokenAddress, spender) — Build a revoke (approve to 0) transaction.
+- security_decodeCalldata(data) — Decode a transaction's function selector and show what method is being called.
+- security_estimateGas(chainId, to, data, value, from) — Estimate gas cost in ETH and USD before signing.
+- security_getGasPrice(chainId) — Get current gas price for a chain.
+- security_resolveEns(name) — Resolve an ENS name (e.g. vitalik.eth) to an address.
+- security_lookupEns(address) — Reverse-resolve an address to its ENS name.
+
 **Execution (crypto_*)**
+- crypto_getQuote(chainId, fromToken, toToken, amount, slippage?) — Get a swap quote via 1inch (no tx built). Use this to compare rates before building a swap.
 - crypto_buildSwap(chainId, fromToken, toToken, amount, fromAddress, slippage?) — Build a 1inch swap transaction. Returns tx data ready for wallet_sendTransaction.
 - crypto_simulate(chainId, to, data, value?, from) — Simulate a raw transaction before signing. Always run this before presenting a swap.
 
