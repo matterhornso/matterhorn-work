@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useSavings } from "../hooks/useSavings";
 import type { WalletStore } from "../state/wallet-store";
+import YieldSheet from "../components/YieldSheet";
 
 export type TokenPosition = {
   raw: string;
@@ -212,6 +213,18 @@ function HoldingsTab({ data, store }: { data: PortfolioData; store?: WalletStore
       {data.tokens.length === 0 && !data.native && (
         <div className="py-8 text-center text-sm text-dls-secondary">No token balances found.</div>
       )}
+
+      <YieldSheet
+        open={yieldSheetOpen}
+        onOpenChange={setYieldSheetOpen}
+        tokenSymbol={yieldToken}
+        chainId={data.chainId}
+        address={data.address as `0x${string}`}
+        balance={yieldToken ? data.tokens.find((t) => t.symbol === yieldToken)?.formatted ?? 0 : 0}
+        depositAmount={yieldToken ? Number(savings.positions.find((p) => p.symbol === yieldToken)?.depositAmount ?? "0") / 10 ** (data.tokens.find((t) => t.symbol === yieldToken)?.decimals ?? 18) : 0}
+        supplyApy={yieldToken ? savings.positions.find((p) => p.symbol === yieldToken)?.supplyApy ?? 0 : 0}
+        store={store}
+      />
     </div>
   );
 }
