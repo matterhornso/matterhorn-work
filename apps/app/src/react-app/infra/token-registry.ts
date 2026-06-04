@@ -32,6 +32,14 @@ export const MAINNET: Record<string, TokenMeta> = {
   },
 } as const;
 
+/** Protocol addresses for client reference */
+export const PROTOCOLS = {
+  8453: {
+    aaveV3Pool: "0xA238Dd80C2594FecF6fE2D89C5E3Bc3E6B01f994" as `0x${string}`,
+    acrossSpokePool: "0x09aea4b2242abC8bb4BB78D537A67a245A7bEC64" as `0x${string}`,
+  },
+};
+
 /** Sepolia testnet (chainId 84532) */
 export const SEPOLIA: Record<string, TokenMeta> = {
   USDC: {
