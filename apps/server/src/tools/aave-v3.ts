@@ -154,6 +154,42 @@ export async function getAaveSupplyApy({
   }
 }
 
+const erc20Abi = [
+  "function balanceOf(address) external view returns (uint256)",
+] as const;
+
+export async function getAaveTokenDeposits({
+  chainId,
+  user,
+}: {
+  chainId: number;
+  user: Address;
+}): Promise<{ success: true; deposits: { asset: Address; aToken: Address; amount: string; symbol: string }[] } | { success: false; error: string }> {
+  const registry = WHITELISTED_PROTOCOLS[chainId];
+  if (!registry) return { success: false, error: `Chain ${chainId} not supported` };
+  const deposits = [];
+  for (const [symbol, aTokenKey] of [
+    ["USDC", "aaveV3aUSDC"],
+    ["WETH", "aaveV3aWETH"],
+  ] as const) {
+    const aToken = registry[aTokenKey as keyof typeof registry] as Address | undefined;
+    const underlying = registry[symbol] as Address | undefined;
+    if (!aToken || !underlying) continue;
+    try {
+      const { getClient } = await import("../infra/chain-client.js");
+      const client = getClient(chainId);
+      if (!client) continue;
+      const balance = await client.readContract({ address: aToken, abi: erc20Abi, functionName: "balanceOf", args: [user] }) as bigint;
+      if (balance > 0n) {
+        deposits.push({ asset: underlying, aToken, amount: balance.toString(), symbol });
+      }
+    } catch {
+      /* skip */
+    }
+  }
+  return { success: true, deposits };
+}
+
 export async function getAaveUserPositions({
   chainId,
   user,

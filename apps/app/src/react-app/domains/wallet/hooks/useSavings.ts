@@ -30,16 +30,27 @@ export function useSavings(data: PortfolioData | null): SavingsState {
   const fetchPositions = useCallback(async () => {
     if (!data || !data.address || !data.chainId) return;
     try {
+      const depRes = await fetch(`/api/aave/deposits?chainId=${data.chainId}&address=${data.address}`);
+      const depJson = await depRes.json();
+      const deposits = depJson.success ? depJson.deposits : [];
+
       const yieldPositions: AavePosition[] = [];
       for (const token of data.tokens.filter((t) => isYieldSymbol(t.symbol))) {
         const apyRes = await fetch(`/api/aave/apy?chainId=${data.chainId}&asset=${token.address}`);
         const apyJson = await apyRes.json();
         const supplyApy = apyJson.success ? Number(apyJson.supplyApy) : 0;
+
+        const deposit = deposits.find((d: any) => d.symbol === token.symbol);
+        const depositAmount = deposit ? deposit.amount : "0";
+        const depositValue = deposit
+          ? (Number(deposit.amount) / 10 ** token.decimals)
+          : 0;
+
         yieldPositions.push({
           asset: token.address as Address,
           symbol: token.symbol,
-          depositAmount: "0",
-          depositValue: 0,
+          depositAmount,
+          depositValue,
           supplyApy,
         });
       }
