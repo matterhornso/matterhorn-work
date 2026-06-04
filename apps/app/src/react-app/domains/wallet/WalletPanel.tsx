@@ -295,6 +295,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
               data={portfolioData}
               onRefresh={handlePortfolioOpen}
               isLoading={isPortfolioLoading}
+              store={store}
             />
           </Suspense>
           <button

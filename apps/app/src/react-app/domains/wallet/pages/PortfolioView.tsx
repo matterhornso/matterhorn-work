@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   Wallet,
   TrendingUp,
@@ -9,10 +9,13 @@ import {
   Loader2,
   AlertTriangle,
   RefreshCw,
+  Sprout,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useSavings } from "../hooks/useSavings";
+import type { WalletStore } from "../state/wallet-store";
 
 export type TokenPosition = {
   raw: string;
@@ -54,10 +57,12 @@ export default function PortfolioView({
   data,
   onRefresh,
   isLoading,
+  store,
 }: {
   data: PortfolioData | null;
   onRefresh: () => void;
   isLoading: boolean;
+  store?: WalletStore;
 }) {
   const [tab, setTab] = useState<"overview" | "perps" | "opportunities">("overview");
 
@@ -140,33 +145,70 @@ export default function PortfolioView({
       </div>
 
       {/* Tab content */}
-      {tab === "overview" && <HoldingsTab data={data} />}
+      {tab === "overview" && <HoldingsTab data={data} store={store} />}
       {tab === "perps" && <PerpsTab positions={data.hyperliquid} />}
       {tab === "opportunities" && <YieldsTab yields={data.yields} />}
     </div>
   );
 }
 
-function HoldingsTab({ data }: { data: PortfolioData }) {
+function HoldingsTab({ data, store }: { data: PortfolioData; store?: WalletStore }) {
+  const savings = useSavings(data);
+  const [yieldSheetOpen, setYieldSheetOpen] = useState(false);
+  const [yieldToken, setYieldToken] = useState<string | null>(null);
+
+  const openYieldSheet = (symbol: string) => {
+    setYieldToken(symbol);
+    setYieldSheetOpen(true);
+  };
+
   return (
     <div className="space-y-2">
+      {/* Savings summary card */}
+      {savings.positions.length > 0 && (
+        <div className="mb-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Sprout className="size-4 text-emerald-400" />
+            <span className="text-sm font-medium text-dls-text">Yield Opportunities</span>
+          </div>
+          {savings.positions.map((pos) => (
+            <div key={pos.symbol} className="flex items-center justify-between py-1">
+              <span className="text-xs text-dls-secondary">{pos.symbol} APY</span>
+              <span className="text-xs font-mono text-emerald-400">{pos.supplyApy.toFixed(1)}%</span>
+            </div>
+          ))}
+          {savings.idleValue > 0 && (
+            <div className="mt-2 pt-2 border-t border-dls-border text-xs text-dls-secondary">
+              {savings.idleValue.toFixed(4)} idle tokens available to earn
+            </div>
+          )}
+        </div>
+      )}
+
       {data.native && (
         <TokenCard
           symbol={data.native.symbol}
           balance={data.native.formatted}
           address="Native"
           type="native"
+          position={undefined}
+          onAction={undefined}
         />
       )}
-      {data.tokens.map((t) => (
-        <TokenCard
-          key={t.address}
-          symbol={t.symbol}
-          balance={t.formatted}
-          address={t.address}
-          type="token"
-        />
-      ))}
+      {data.tokens.map((t) => {
+        const position = savings.positions.find((p) => p.symbol === t.symbol);
+        return (
+          <TokenCard
+            key={t.address}
+            symbol={t.symbol}
+            balance={t.formatted}
+            address={t.address}
+            type="token"
+            position={position}
+            onAction={isYieldSymbol(t.symbol) ? () => openYieldSheet(t.symbol) : undefined}
+          />
+        );
+      })}
       {data.tokens.length === 0 && !data.native && (
         <div className="py-8 text-center text-sm text-dls-secondary">No token balances found.</div>
       )}
@@ -174,17 +216,29 @@ function HoldingsTab({ data }: { data: PortfolioData }) {
   );
 }
 
+const YIELD_SYMBOLS = ["USDC", "WETH"] as const;
+
+function isYieldSymbol(symbol: string): boolean {
+  return YIELD_SYMBOLS.includes(symbol as typeof YIELD_SYMBOLS[number]);
+}
+
 function TokenCard({
   symbol,
   balance,
   address,
   type,
+  position,
+  onAction,
 }: {
   symbol: string;
   balance: number;
   address: string;
   type: "native" | "token";
+  position?: { depositAmount: string; supplyApy: number };
+  onAction?: () => void;
 }) {
+  const hasDeposit = position && Number(position.depositAmount) > 0;
+
   return (
     <div className="flex items-center gap-3 rounded-xl border border-dls-border bg-dls-surface p-3">
       <div
@@ -203,8 +257,21 @@ function TokenCard({
           {type === "token" ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Base gas token"}
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right flex items-center gap-2">
         <div className="font-mono text-sm text-dls-text">{balance.toFixed(6)}</div>
+        {onAction && (
+          <button
+            onClick={onAction}
+            className={cn(
+              "text-xs font-medium px-2.5 py-1 rounded-full transition-colors shrink-0",
+              hasDeposit
+                ? "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20"
+                : "bg-dls-hover text-dls-secondary hover:text-dls-text border border-dls-border"
+            )}
+          >
+            {hasDeposit ? "Manage" : "Earn"}
+          </button>
+        )}
       </div>
     </div>
   );
