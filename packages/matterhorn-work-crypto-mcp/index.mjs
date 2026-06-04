@@ -21,6 +21,20 @@ const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
 
 function getClient(chainId) { return clients[chainId] ?? null; }
 
+// Server proxy for tools that live in apps/server
+const SERVER = process.env.MATTERHORN_SERVER_URL || "http://localhost:8787";
+async function callServer(path, method = "GET", body = null) {
+  const url = `${SERVER}${path}`;
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`Server HTTP ${res.status}`);
+  return res.json();
+}
+
 // =========================================================
 // Generic fetch helper with timeout
 // =========================================================
@@ -525,13 +539,16 @@ const tools = [
   { name: "crypto_cowQuote", description: "Get a CoW Protocol MEV-protected swap quote.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, sellToken: { type: "string" }, buyToken: { type: "string" }, sellAmount: { type: "string" }, receiver: { type: "string" } }, required: ["chainId", "sellToken", "buyToken", "sellAmount", "receiver"] } },
   { name: "crypto_cowSubmit", description: "Submit a signed CoW Protocol order.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, order: { type: "object" }, signature: { type: "string" } }, required: ["chainId", "order", "signature"] } },
 
-  // -- aave --
-  { name: "crypto_aaveDeposit", description: "Build an Aave V3 supply (deposit) transaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
-  { name: "crypto_aaveBorrow", description: "Build an Aave V3 borrow transaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, interestRateMode: { type: "number" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
-  { name: "crypto_aaveUserData", description: "Get Aave V3 user account data (collateral, debt, health factor).", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
+  // -- aave (v0.6) --
+  { name: "crypto_aaveDeposit", description: "Build Aave V3 supply calldata. Returns {to, data, value} for client signing.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
+  { name: "crypto_aaveWithdraw", description: "Build Aave V3 withdraw calldata.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, to: { type: "string" } }, required: ["chainId", "token", "amount", "to"] } },
+  { name: "crypto_aaveBorrow", description: "Build Aave V3 borrow calldata.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
+  { name: "crypto_aaveRepay", description: "Build Aave V3 repay calldata.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, onBehalfOf: { type: "string" } }, required: ["chainId", "token", "amount", "onBehalfOf"] } },
+  { name: "crypto_aavePositions", description: "Read Aave V3 user positions and health factor.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
 
-  // -- bridge --
-  { name: "crypto_bridgeEstimate", description: "Estimate fees and time for a cross-chain bridge transfer.", inputSchema: { type: "object", properties: { fromChain: { type: "number" }, toChain: { type: "number" }, token: { type: "string" }, amount: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount"] } },
+  // -- bridge (v0.6) --
+  { name: "crypto_bridgeQuote", description: "Get Across Protocol bridge quote (fee, time, receive amount).", inputSchema: { type: "object", properties: { fromChain: { type: "number" }, toChain: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, recipient: { type: "string" } }, required: ["fromChain", "toChain", "token", "amount"] } },
+  { name: "crypto_bridgeDeposit", description: "Build Across Protocol depositV2 calldata.", inputSchema: { type: "object", properties: { fromChain: { type: "number" }, toChain: { type: "number" }, token: { type: "string" }, amount: { type: "string" }, outputToken: { type: "string" }, outputAmount: { type: "string" }, recipient: { type: "string" }, quoteTimestamp: { type: "number" } }, required: ["fromChain", "toChain", "token", "amount", "outputAmount", "recipient", "quoteTimestamp"] } },
 ];
 
 // =========================================================
@@ -567,7 +584,7 @@ function handleMessage(msg) {
   const { method, id } = msg;
   switch (method) {
     case "initialize":
-      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.5.0" } }));
+      return process.stdout.write(jsonRpc(id, { protocolVersion: "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "matterhorn-work-crypto-mcp", version: "0.6.0" } }));
     case "notifications/initialized":
       return;
     case "tools/list":
@@ -699,45 +716,23 @@ function handleMessage(msg) {
           }).catch(catchErr);
         }
 
-        // aave (scaffold — real contract calls in Phase 3b)
+        // aave (v0.6 — proxied to server)
         case "crypto_aaveDeposit":
-        case "crypto_aaveBorrow": {
-          const aavePool = { 8453: "0xA238Dd80C2594FecF6fE2D89C5E3Bc3E6B01f994" }[args.chainId];
-          if (!aavePool) return respond(textResult({ success: false, error: "Aave not deployed on this chain" }));
-          return respond(textResult({
-            success: true,
-            action: name === "crypto_aaveDeposit" ? "deposit" : "borrow",
-            chainId: args.chainId,
-            token: args.token,
-            amount: args.amount,
-            onBehalfOf: args.onBehalfOf,
-            note: "Aave tx calldata must be built with ABI encoder (server-side).",
-          }));
-        }
-        case "crypto_aaveUserData": {
-          const aavePool = { 8453: "0xA238Dd80C2594FecF6fE2D89C5E3Bc3E6B01f994" }[args.chainId];
-          if (!aavePool) return respond(textResult({ success: false, error: "Aave not deployed on this chain" }));
-          return respond(textResult({
-            success: true,
-            chainId: args.chainId,
-            address: args.address,
-            note: "getUserAccountData requires contract read via viem (server-side). Returns collateral, debt, healthFactor.",
-          }));
-        }
+          return callServer("/api/aave/deposit", "POST", { chainId: args.chainId, asset: args.token, amount: args.amount, onBehalfOf: args.onBehalfOf }).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_aaveWithdraw":
+          return callServer("/api/aave/withdraw", "POST", { chainId: args.chainId, asset: args.token, amount: args.amount, to: args.to || args.onBehalfOf }).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_aaveBorrow":
+          return callServer("/api/aave/borrow", "POST", { chainId: args.chainId, asset: args.token, amount: args.amount, onBehalfOf: args.onBehalfOf }).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_aaveRepay":
+          return callServer("/api/aave/repay", "POST", { chainId: args.chainId, asset: args.token, amount: args.amount, onBehalfOf: args.onBehalfOf }).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_aavePositions":
+          return callServer(`/api/aave/positions?chainId=${args.chainId}&address=${args.address}`).then(r => respond(textResult(r))).catch(catchErr);
 
-        // bridge (scaffold — real Across integration in Phase 3b)
-        case "crypto_bridgeEstimate": {
-          return respond(textResult({
-            success: true,
-            fromChain: args.fromChain,
-            toChain: args.toChain,
-            token: args.token,
-            amount: args.amount,
-            estimatedFee: "~$2.50",
-            estimatedTime: "~10 min",
-            protocol: "Across (scaffold)",
-          }));
-        }
+        // bridge (v0.6 — real Across integration)
+        case "crypto_bridgeQuote":
+          return callServer(`/api/bridge/quote?originChainId=${args.fromChain}&destinationChainId=${args.toChain}&originToken=${args.token}&amount=${args.amount}&recipient=${args.recipient || args.fromAddress || "0x0000000000000000000000000000000000000000"}`).then(r => respond(textResult(r))).catch(catchErr);
+        case "crypto_bridgeDeposit":
+          return callServer("/api/bridge/deposit", "POST", { chainId: args.fromChain, destinationChainId: args.toChain, inputToken: args.token, outputToken: args.outputToken || args.token, inputAmount: args.amount, outputAmount: args.outputAmount, recipient: args.recipient, quoteTimestamp: args.quoteTimestamp }).then(r => respond(textResult(r))).catch(catchErr);
 
         default:
           return process.stdout.write(jsonRpcError(id, -32601, `Unknown tool: ${name}`));
@@ -748,4 +743,4 @@ function handleMessage(msg) {
   }
 }
 
-process.stderr.write("Matterhorn Work Crypto MCP Server v0.4.0 ready\n");
+process.stderr.write("Matterhorn Work Crypto MCP Server v0.6.0 ready\n");
