@@ -1,5 +1,13 @@
 import { getPortfolio } from "./tools/portfolio-tracker.js";
 import { isCowSupported, getCowQuote, buildCowOrder, submitCowOrder } from "./tools/cow-swap.js";
+import {
+  buildAaveSupplyTx,
+  buildAaveWithdrawTx,
+  buildAaveBorrowTx,
+  buildAaveRepayTx,
+  getAaveUserPositions,
+} from "./tools/aave-v3.js";
+import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3478,6 +3486,63 @@ function createRoutes(
       chainId: Number(chainId),
       order: order as Record<string, unknown>,
       signature: signature as `0x${string}`,
+    });
+    return jsonResponse(result);
+  });
+
+  // Aave V3 routes
+  addRoute(routes, "POST", "/api/aave/deposit", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const chainId = Number(body.chainId);
+    const result = buildAaveSupplyTx({ chainId, asset: String(body.asset) as `0x${string}`, amount: String(body.amount), onBehalfOf: String(body.onBehalfOf) as `0x${string}` });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "POST", "/api/aave/withdraw", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const chainId = Number(body.chainId);
+    const result = buildAaveWithdrawTx({ chainId, asset: String(body.asset) as `0x${string}`, amount: String(body.amount), to: String(body.to) as `0x${string}` });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "POST", "/api/aave/borrow", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const chainId = Number(body.chainId);
+    const result = buildAaveBorrowTx({ chainId, asset: String(body.asset) as `0x${string}`, amount: String(body.amount), onBehalfOf: String(body.onBehalfOf) as `0x${string}` });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "POST", "/api/aave/repay", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const chainId = Number(body.chainId);
+    const result = buildAaveRepayTx({ chainId, asset: String(body.asset) as `0x${string}`, amount: String(body.amount), onBehalfOf: String(body.onBehalfOf) as `0x${string}` });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "GET", "/api/aave/positions", "client", async (ctx) => {
+    const chainId = Number(ctx.url.searchParams.get("chainId"));
+    const user = (ctx.url.searchParams.get("address") || "") as `0x${string}`;
+    const result = await getAaveUserPositions({ chainId, user });
+    return jsonResponse(result);
+  });
+
+  // Bridge routes
+  addRoute(routes, "GET", "/api/bridge/quote", "client", async (ctx) => {
+    const originChainId = Number(ctx.url.searchParams.get("originChainId"));
+    const destinationChainId = Number(ctx.url.searchParams.get("destinationChainId"));
+    const originToken = (ctx.url.searchParams.get("originToken") || "") as `0x${string}`;
+    const amount = ctx.url.searchParams.get("amount") || "0";
+    const recipient = (ctx.url.searchParams.get("recipient") || "") as `0x${string}`;
+    const result = await getBridgeQuote({ originChainId, destinationChainId, originToken, amount, recipient });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "POST", "/api/bridge/deposit", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const result = buildBridgeDepositTx({
+      chainId: Number(body.chainId),
+      destinationChainId: Number(body.destinationChainId),
+      inputToken: String(body.inputToken) as `0x${string}`,
+      outputToken: String(body.outputToken) as `0x${string}`,
+      inputAmount: String(body.inputAmount),
+      outputAmount: String(body.outputAmount),
+      recipient: String(body.recipient) as `0x${string}`,
+      quoteTimestamp: Number(body.quoteTimestamp),
     });
     return jsonResponse(result);
   });
