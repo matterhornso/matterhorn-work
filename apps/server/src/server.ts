@@ -6,6 +6,7 @@ import {
   buildAaveBorrowTx,
   buildAaveRepayTx,
   getAaveUserPositions,
+  getAaveSupplyApy,
 } from "./tools/aave-v3.js";
 import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
 import { existsSync } from "node:fs";
@@ -3519,6 +3520,12 @@ function createRoutes(
     const chainId = Number(ctx.url.searchParams.get("chainId"));
     const user = (ctx.url.searchParams.get("address") || "") as `0x${string}`;
     const result = await getAaveUserPositions({ chainId, user });
+    return jsonResponse(result);
+  });
+  addRoute(routes, "GET", "/api/aave/apy", "client", async (ctx) => {
+    const chainId = Number(ctx.url.searchParams.get("chainId"));
+    const asset = (ctx.url.searchParams.get("asset") || "") as `0x${string}`;
+    const result = await getAaveSupplyApy({ chainId, asset });
     return jsonResponse(result);
   });
 

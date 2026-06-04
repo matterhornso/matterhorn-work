@@ -122,6 +122,38 @@ export function buildAaveRepayTx({
   }
 }
 
+const poolDataProviderAbi = [
+  "function getReserveData(address asset) external view returns (uint256 unbacked, uint256 accruedToTreasuryShares, uint256 totalAToken, uint256 totalStableDebt, uint256 totalVariableDebt, uint256 liquidityRate, uint256 stableBorrowRate, uint256 variableBorrowRate, uint256 averageStableBorrowRate, uint256 liquidityIndex, uint256 variableBorrowIndex, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbackedMintCap, uint128 debtCeiling, uint128 debtCeilingDecimals, uint8 eModeCategory, uint128 borrowCap, uint128 supplyCap, uint40 eModeLabel, uint16 borrowableInIsolation, uint16 flashLoanEnabled)"
+] as const;
+
+export async function getAaveSupplyApy({
+  chainId,
+  asset,
+}: {
+  chainId: number;
+  asset: Address;
+}): Promise<{ success: true; supplyApy: string } | { success: false; error: string }> {
+  const registry = WHITELISTED_PROTOCOLS[chainId];
+  const provider = registry?.aaveV3PoolDataProvider as Address | undefined;
+  if (!provider) return { success: false, error: `Aave not supported on chain ${chainId}` };
+  try {
+    const { getClient } = await import("../infra/chain-client.js");
+    const client = getClient(chainId);
+    if (!client) return { success: false, error: "Chain client not available" };
+    const result = await client.readContract({
+      address: provider,
+      abi: poolDataProviderAbi,
+      functionName: "getReserveData",
+      args: [asset],
+    }) as [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, number, number, Address, Address, Address, Address, bigint, bigint, bigint, bigint, number, number, number, number, number];
+    const liquidityRate = result[5];
+    const apy = (Number(liquidityRate) / 1e27) * 100;
+    return { success: true, supplyApy: apy.toFixed(2) };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "APY read failed" };
+  }
+}
+
 export async function getAaveUserPositions({
   chainId,
   user,
