@@ -26,9 +26,14 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
     : [NATIVE_OPTION];
 
   const selectedMeta = token === "native" ? NATIVE_OPTION : tokenList.find((t) => t.address === token);
-  const maxAmount = selectedMeta && state.address
-    ? 100 // placeholder — real balance read from portfolio or wagmi
-    : 0;
+  const maxAmount =
+    selectedMeta && state.address
+      ? selectedMeta.symbol === "ETH"
+        ? Number(state.ethBalance ?? 0)
+        : selectedMeta.symbol === "USDC"
+          ? Number(state.usdcBalance ?? 0)
+          : 0
+      : 0;
 
   const [error, setError] = useState<string | null>(null);
 
@@ -135,8 +140,15 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       <div className="space-y-1">
         <div className="flex justify-between">
           <label className="text-xs text-dls-secondary">Amount</label>
-          <button onClick={() => setAmount(String(maxAmount))} className="text-xs text-violet-400 hover:text-violet-300">
-            Max: {maxAmount.toFixed(4)} {selectedMeta?.symbol}
+          <button
+            onClick={() => maxAmount > 0 && setAmount(String(maxAmount))}
+            disabled={maxAmount <= 0}
+            className={cn(
+              "text-xs",
+              maxAmount > 0 ? "text-violet-400 hover:text-violet-300" : "text-dls-secondary cursor-not-allowed"
+            )}
+          >
+            {maxAmount > 0 ? `Max: ${maxAmount.toFixed(4)} ${selectedMeta?.symbol}` : `Balance unavailable`}
           </button>
         </div>
         <Input

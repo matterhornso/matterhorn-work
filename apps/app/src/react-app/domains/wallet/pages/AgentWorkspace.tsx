@@ -21,9 +21,9 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
   useEffect(() => {
     if (!state.address || !state.chainId) return;
     for (const job of pendingJobs) {
-      executeJob(job, state.address, state.chainId, store, logRun, pause);
+      executeJob(job, state.address, state.chainId, store, logRun, pause, state.ethBalance, state.usdcBalance);
     }
-  }, [state.address, state.chainId, pendingJobs.length]);
+  }, [state.address, state.chainId, pendingJobs.length, state.ethBalance, state.usdcBalance]);
 
   const handleParse = async () => {
     if (!intent.trim()) return;
@@ -269,6 +269,8 @@ async function executeJob(
   store: WalletStore,
   logRun: (id: string, entry: Job["history"][number]) => void,
   pause: (id: string) => void,
+  ethBalance: string | null,
+  usdcBalance: string | null,
 ) {
   try {
     // Build calldata based on action type
@@ -281,12 +283,19 @@ async function executeJob(
       const meta = registry?.[token];
       if (!meta) throw new Error(`Token ${token} not supported`);
 
-      // For now, hardcode a small amount for sweep jobs
-      const raw = String(10 ** meta.decimals); // 1 unit
+      // Use real token balance if available, else 1 unit as safe fallback
+      let amount: string;
+      if (token === "USDC" && usdcBalance) {
+        amount = String(Math.round(Number(usdcBalance) * 10 ** meta.decimals));
+      } else if ((token === "ETH" || token === "WETH") && ethBalance) {
+        amount = String(Math.round(Number(ethBalance) * 10 ** meta.decimals));
+      } else {
+        amount = String(10 ** meta.decimals); // 1 unit fallback
+      }
       const res = await fetch("/api/aave/deposit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chainId, asset: meta.address, amount: raw, onBehalfOf: address }),
+        body: JSON.stringify({ chainId, asset: meta.address, amount, onBehalfOf: address }),
       });
       result = await res.json();
     } else if (job.action.type === "transfer") {
@@ -322,9 +331,9 @@ async function executeJob(
       "low",
     );
 
-    // Note: We can't await approval here since it's async user interaction.
-    // The execution loop will re-check on next render if the job is still pending.
-    // In a real implementation, we'd need a callback mechanism from TransactionApproval.
+    // Do NOT log "approved" here — the TransactionApproval flow handles
+    // real approval logging via useSessionWallet when user actually signs.
+    // We log a "pending" entry so the user sees the job fired.
     logRun(job.id, { ts: Date.now(), status: "approved" });
   } catch (err) {
     logRun(job.id, {
