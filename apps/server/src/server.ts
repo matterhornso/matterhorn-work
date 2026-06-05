@@ -11,6 +11,7 @@ import {
 } from "./tools/aave-v3.js";
 import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
 import { buildTransferTx } from "./tools/transfer.js";
+import { parseIntent } from "./tools/scheduler.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3571,6 +3572,13 @@ function createRoutes(
       to: String(body.to) as `0x${string}`,
       amount: String(body.amount),
     });
+    return jsonResponse(result);
+  });
+
+  // Schedule / Agent routes
+  addRoute(routes, "POST", "/api/schedule/parse", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const result = parseIntent(String(body.intent));
     return jsonResponse(result);
   });
 
