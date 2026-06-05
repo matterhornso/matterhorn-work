@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
-import { useState } from "react";
-import { Send, User, Wallet, ArrowUpRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Send, User, Wallet, ArrowUpRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,8 @@ import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
 import { useAddressBook } from "../hooks/useAddressBook";
+
+import { useEnsResolution } from "../hooks/useEnsResolution";
 
 const NATIVE_OPTION = { symbol: "ETH", address: "native" as const, decimals: 18 };
 
@@ -41,14 +43,22 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           : 0
       : 0;
 
+  const { resolvedAddress, resolvedName, isResolving, resolve } = useEnsResolution();
+
   const [error, setError] = useState<string | null>(null);
 
+  // Debounce ENS resolution
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      resolve(to);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [to, resolve]);
+
+  const effectiveAddress = resolvedAddress || (to.startsWith("0x") && to.length === 42 ? to : "");
+
   const handleSend = async () => {
-    if (!selectedMeta || !state.address || !state.chainId || !to || !amount) return;
-    if (!to.startsWith("0x") || to.length !== 42) {
-      setError("Invalid recipient address. Please enter a valid 0x address.");
-      return;
-    }
+    if (!selectedMeta || !state.address || !state.chainId || !effectiveAddress) return;
     setError(null);
     setLoading(true);
     try {
@@ -59,7 +69,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
         body: JSON.stringify({
           chainId: state.chainId,
           token: selectedMeta.address,
-          to,
+          to: effectiveAddress,
           amount: raw,
         }),
       });
@@ -118,19 +128,34 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           <Input
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            placeholder="0x..."
-            className="h-12 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-24"
+            placeholder="0x... or vitalik.eth"
+            className="h-12 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-28"
           />
-          {addresses.length > 0 && (
-            <button
-              onClick={() => setShowAddressBook(!showAddressBook)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-violet-500/10 transition-colors"
-            >
-              <User className="size-3" />
-              {showAddressBook ? "Hide" : "Book"}
-            </button>
+          {isResolving && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-dls-secondary">
+              <div className="size-3.5 rounded-full border-2 border-dls-border border-t-violet-400 animate-spin" />
+              ENS
+            </div>
+          )}
+          {!isResolving && resolvedName && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-emerald-400 font-medium truncate max-w-[100px]">
+              {resolvedName}
+            </div>
+          )}
+          {!isResolving && to.includes(".") && !resolvedAddress && to.length > 3 && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 font-medium">
+              Not found
+            </div>
           )}
         </div>
+        {resolvedAddress && (
+          <div className="flex items-center gap-2 text-xs text-dls-secondary">
+            <div className="flex size-5 items-center justify-center rounded-md bg-emerald-500/10">
+              <CheckCircle className="size-3 text-emerald-400" />
+            </div>
+            <span className="font-mono">{resolvedAddress}</span>
+          </div>
+        )}
         {showAddressBook && addresses.length > 0 && (
           <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
             {addresses.map((a) => (

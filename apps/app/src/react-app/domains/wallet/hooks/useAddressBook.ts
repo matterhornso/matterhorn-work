@@ -8,6 +8,7 @@ export interface SavedAddress {
   name: string;
   address: string;
   chainId?: number;
+  ensName?: string;
 }
 
 const STORAGE_KEY = "matterhorn_address_book";

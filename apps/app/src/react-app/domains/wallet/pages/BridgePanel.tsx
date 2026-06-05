@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
-import { useState } from "react";
-import { ExternalLink, ArrowRightLeft, Fuel, Clock, User, Wallet, ArrowUpRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ExternalLink, ArrowRightLeft, Fuel, Clock, User, Wallet, ArrowUpRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,8 @@ import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
 import { useAddressBook } from "../hooks/useAddressBook";
+
+import { useEnsResolution } from "../hooks/useEnsResolution";
 
 type ChainOption = { id: number; name: string; color: string };
 
@@ -20,6 +22,7 @@ const CHAINS: ChainOption[] = [
 export default function BridgePanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
   const { addresses } = useAddressBook();
+  const { resolvedAddress, resolvedName, isResolving, resolve } = useEnsResolution();
   const [fromChain, setFromChain] = useState<number>(8453);
   const [toChain, setToChain] = useState<number>(42161);
   const [amount, setAmount] = useState("");
@@ -32,15 +35,25 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
   const tokens = registry ? Object.entries(registry).map(([symbol, meta]) => ({ symbol, address: meta.address, decimals: meta.decimals })) : [];
 
+  const effectiveRecipient = resolvedAddress || (recipient.startsWith("0x") && recipient.length === 42 ? recipient : "");
+
+  // Debounce ENS resolution
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      resolve(recipient);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [recipient, resolve]);
+
   const handleEstimate = async () => {
-    if (!amount || !recipient || !state.chainId) return;
+    if (!amount || !effectiveRecipient || !state.chainId) return;
     setLoading(true);
     try {
       const meta = tokens.find((t) => t.symbol === selectedToken);
       if (!meta) return;
       const raw = String(Math.round(Number(amount) * 10 ** meta.decimals));
       const res = await fetch(
-        `/api/bridge/quote?originChainId=${fromChain}&destinationChainId=${toChain}&originToken=${meta.address}&amount=${raw}&recipient=${recipient}`,
+        `/api/bridge/quote?originChainId=${fromChain}&destinationChainId=${toChain}&originToken=${meta.address}&amount=${raw}&recipient=${effectiveRecipient}`,
       );
       const json = await res.json();
       if (json.success) {
@@ -56,7 +69,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   };
 
   const handleBridge = async () => {
-    if (!quoteData || !recipient || !state.chainId) return;
+    if (!quoteData || !effectiveRecipient || !state.chainId) return;
     const meta = tokens.find((t) => t.symbol === selectedToken);
     if (!meta) return;
     setLoading(true);
@@ -72,7 +85,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
           outputToken: meta.address,
           inputAmount: raw,
           outputAmount: quoteData.receiveAmount,
-          recipient,
+          recipient: effectiveRecipient,
           quoteTimestamp: quoteData.quoteTimestamp,
         }),
       });
@@ -157,19 +170,34 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
             <Input
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
-              placeholder="0x..."
-              className="h-11 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-24"
+              placeholder="0x... or vitalik.eth"
+              className="h-11 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-28"
             />
-            {addresses.length > 0 && (
-              <button
-                onClick={() => setShowAddressBook(!showAddressBook)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-blue-500/10 transition-colors"
-              >
-                <User className="size-3" />
-                {showAddressBook ? "Hide" : "Book"}
-              </button>
+            {isResolving && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-dls-secondary">
+                <div className="size-3.5 rounded-full border-2 border-dls-border border-t-blue-400 animate-spin" />
+                ENS
+              </div>
+            )}
+            {!isResolving && resolvedName && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-emerald-400 font-medium truncate max-w-[100px]">
+                {resolvedName}
+              </div>
+            )}
+            {!isResolving && recipient.includes(".") && !resolvedAddress && recipient.length > 3 && (
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 font-medium">
+                Not found
+              </div>
             )}
           </div>
+          {effectiveRecipient && (
+            <div className="flex items-center gap-2 text-xs text-dls-secondary">
+              <div className="flex size-5 items-center justify-center rounded-md bg-emerald-500/10">
+                <CheckCircle className="size-3 text-emerald-400" />
+              </div>
+              <span className="font-mono">{effectiveRecipient}</span>
+            </div>
+          )}
           {showAddressBook && addresses.length > 0 && (
             <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
               {addresses.map((a) => (
@@ -237,14 +265,14 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
           variant="outline"
           className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
           onClick={handleEstimate}
-          disabled={loading || !amount || !recipient}
+          disabled={loading || !amount || !effectiveRecipient}
         >
           {loading ? "Getting quote..." : "Get Quote"}
         </Button>
         <Button
           className="flex-1 h-12 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20"
           onClick={handleBridge}
-          disabled={!amount || !quoteData || !recipient}
+          disabled={!amount || !quoteData || !effectiveRecipient}
         >
           <ExternalLink className="size-4 mr-1.5" /> Bridge
         </Button>
