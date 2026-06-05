@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send } from "lucide-react";
 import { useState, useMemo, lazy, Suspense, useCallback } from "react";
 
 import { cn } from "@/lib/utils";
@@ -12,8 +12,9 @@ const PortfolioView = lazy(() => import("./pages/PortfolioView"));
 const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
 const AavePanel = lazy(() => import("./pages/AavePanel"));
 const BridgePanel = lazy(() => import("./pages/BridgePanel"));
+const TransferPanel = lazy(() => import("./pages/TransferPanel"));
 
-type PanelType = "portfolio" | "cow" | "aave" | "bridge" | null;
+type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | null;
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -235,6 +236,14 @@ export function WalletPanel({ store }: WalletPanelProps) {
           <div className="grid grid-cols-2 gap-2 pt-2">
             <button
               type="button"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-violet-500 px-3 py-2 text-xs font-medium text-white hover:bg-violet-600 transition-colors col-span-2"
+              onClick={() => setActivePanel("send")}
+            >
+              <Send className="size-3.5" />
+              Send
+            </button>
+            <button
+              type="button"
               className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
               onClick={handlePortfolioOpen}
             >
@@ -345,6 +354,22 @@ export function WalletPanel({ store }: WalletPanelProps) {
             <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Bridge...</div>
           }>
             <BridgePanel store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "send" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Send...</div>
+          }>
+            <TransferPanel store={store} />
           </Suspense>
           <button
             type="button"
