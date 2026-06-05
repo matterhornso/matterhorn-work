@@ -27,6 +27,7 @@ export function useAddressBook() {
   }, [addresses]);
 
   const add = useCallback((addr: SavedAddress) => {
+    if (!addr.address.startsWith("0x") || addr.address.length !== 42) return;
     setAddresses((prev) => {
       if (prev.some((a) => a.address.toLowerCase() === addr.address.toLowerCase())) return prev;
       return [...prev, addr];

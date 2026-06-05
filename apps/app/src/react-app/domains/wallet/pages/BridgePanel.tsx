@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState } from "react";
-import { ExternalLink, ArrowRightLeft, Fuel, Clock, User, Wallet } from "lucide-react";
+import { ExternalLink, ArrowRightLeft, Fuel, Clock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -174,7 +174,13 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
             </div>
             <div className="pt-2 border-t border-dls-border flex items-center justify-between">
               <span className="text-dls-secondary">Recipient gets</span>
-              <span className="text-emerald-400 font-mono font-medium">{(Number(quoteData.receiveAmount) / 1e6).toFixed(2)} {selectedToken}</span>
+              <span className="text-emerald-400 font-mono font-medium">
+                {(() => {
+                  const meta = tokens.find((t) => t.symbol === selectedToken);
+                  const dec = meta ? meta.decimals : 18;
+                  return (Number(quoteData.receiveAmount) / 10 ** dec).toFixed(dec >= 8 ? 6 : 4);
+                })()} {selectedToken}
+              </span>
             </div>
           </div>
         )}

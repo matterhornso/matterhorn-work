@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState } from "react";
-import { Send, Wallet, ChevronDown, Plus, X, User } from "lucide-react";
+import { Send, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -30,8 +30,15 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
     ? 100 // placeholder — real balance read from portfolio or wagmi
     : 0;
 
+  const [error, setError] = useState<string | null>(null);
+
   const handleSend = async () => {
     if (!selectedMeta || !state.address || !state.chainId || !to || !amount) return;
+    if (!to.startsWith("0x") || to.length !== 42) {
+      setError("Invalid recipient address. Please enter a valid 0x address.");
+      return;
+    }
+    setError(null);
     setLoading(true);
     try {
       const raw = String(Math.round(Number(amount) * 10 ** selectedMeta.decimals));
@@ -142,6 +149,9 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Review + Send */}
+      {error && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>
+      )}
       <Button
         onClick={handleSend}
         disabled={loading || !to || !amount || Number(amount) <= 0}
