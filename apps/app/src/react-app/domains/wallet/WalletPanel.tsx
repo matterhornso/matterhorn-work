@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot } from "lucide-react";
 import { useState, useMemo, lazy, Suspense, useCallback } from "react";
 
 import { cn } from "@/lib/utils";
@@ -13,8 +13,9 @@ const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
 const AavePanel = lazy(() => import("./pages/AavePanel"));
 const BridgePanel = lazy(() => import("./pages/BridgePanel"));
 const TransferPanel = lazy(() => import("./pages/TransferPanel"));
+const AgentWorkspace = lazy(() => import("./pages/AgentWorkspace"));
 
-type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | null;
+type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | null;
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -244,6 +245,14 @@ export function WalletPanel({ store }: WalletPanelProps) {
             </button>
             <button
               type="button"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors col-span-2"
+              onClick={() => setActivePanel("agent")}
+            >
+              <Bot className="size-3.5 text-violet-400" />
+              Agent
+            </button>
+            <button
+              type="button"
               className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2 text-xs text-dls-text hover:bg-dls-hover transition-colors"
               onClick={handlePortfolioOpen}
             >
@@ -370,6 +379,22 @@ export function WalletPanel({ store }: WalletPanelProps) {
             <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Send...</div>
           }>
             <TransferPanel store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "agent" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center text-xs text-dls-secondary">Loading Agent...</div>
+          }>
+            <AgentWorkspace store={store} />
           </Suspense>
           <button
             type="button"
