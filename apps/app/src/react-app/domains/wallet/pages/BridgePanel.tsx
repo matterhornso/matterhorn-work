@@ -1,12 +1,13 @@
 /** @jsxImportSource react */
 import { useState } from "react";
-import { ExternalLink, ArrowRightLeft, Fuel, Clock } from "lucide-react";
+import { ExternalLink, ArrowRightLeft, Fuel, Clock, User, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
+import { useAddressBook } from "../hooks/useAddressBook";
 
 type ChainOption = { id: number; name: string };
 
@@ -18,10 +19,13 @@ const CHAINS: ChainOption[] = [
 
 export default function BridgePanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
+  const { addresses } = useAddressBook();
   const [fromChain, setFromChain] = useState<number>(8453);
   const [toChain, setToChain] = useState<number>(42161);
   const [amount, setAmount] = useState("");
   const [selectedToken, setSelectedToken] = useState("USDC");
+  const [recipient, setRecipient] = useState("");
+  const [showAddressBook, setShowAddressBook] = useState(false);
   const [loading, setLoading] = useState(false);
   const [quoteData, setQuoteData] = useState<{ fee: string; time: string; receiveAmount: string; totalSent: string; quoteTimestamp: number } | null>(null);
 
@@ -29,14 +33,14 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   const tokens = registry ? Object.entries(registry).map(([symbol, meta]) => ({ symbol, address: meta.address, decimals: meta.decimals })) : [];
 
   const handleEstimate = async () => {
-    if (!amount || !state.address || !state.chainId) return;
+    if (!amount || !recipient || !state.chainId) return;
     setLoading(true);
     try {
       const meta = tokens.find((t) => t.symbol === selectedToken);
       if (!meta) return;
       const raw = String(Math.round(Number(amount) * 10 ** meta.decimals));
       const res = await fetch(
-        `/api/bridge/quote?originChainId=${fromChain}&destinationChainId=${toChain}&originToken=${meta.address}&amount=${raw}&recipient=${state.address}`,
+        `/api/bridge/quote?originChainId=${fromChain}&destinationChainId=${toChain}&originToken=${meta.address}&amount=${raw}&recipient=${recipient}`,
       );
       const json = await res.json();
       if (json.success) {
@@ -52,7 +56,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   };
 
   const handleBridge = async () => {
-    if (!quoteData || !state.address || !state.chainId) return;
+    if (!quoteData || !recipient || !state.chainId) return;
     const meta = tokens.find((t) => t.symbol === selectedToken);
     if (!meta) return;
     setLoading(true);
@@ -68,7 +72,7 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
           outputToken: meta.address,
           inputAmount: raw,
           outputAmount: quoteData.receiveAmount,
-          recipient: state.address,
+          recipient,
           quoteTimestamp: quoteData.quoteTimestamp,
         }),
       });
@@ -119,25 +123,68 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
           <Input type="number" placeholder="0.0" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-10 bg-dls-surface border-dls-border text-dls-text" />
         </div>
 
-        {quoteData && (
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-              <Fuel className="size-3 text-dls-secondary" />
-              <div className="text-dls-text">Fee: {quoteData.fee}</div>
+        <div className="space-y-1.5">
+          <div className="flex justify-between">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Recipient</label>
+            {addresses.length > 0 && (
+              <button
+                onClick={() => setShowAddressBook(!showAddressBook)}
+                className="text-[11px] text-violet-400 hover:text-violet-300 flex items-center gap-1"
+              >
+                <User className="size-3" />
+                {showAddressBook ? "Hide" : "Address book"}
+              </button>
+            )}
+          </div>
+          <Input
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder="0x..."
+            className="h-10 bg-dls-surface border-dls-border text-dls-text text-sm"
+          />
+          {showAddressBook && addresses.length > 0 && (
+            <div className="mt-1 space-y-1 rounded-lg border border-dls-border bg-dls-surface p-2">
+              {addresses.map((a) => (
+                <button
+                  key={a.address}
+                  onClick={() => { setRecipient(a.address); setShowAddressBook(false); }}
+                  className="w-full text-left px-2 py-1.5 rounded-md text-xs text-dls-text hover:bg-dls-hover transition-colors"
+                >
+                  <span className="font-medium">{a.name}</span>
+                  <span className="text-dls-secondary ml-2">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
+                </button>
+              ))}
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-              <Clock className="size-3 text-dls-secondary" />
-              <div className="text-dls-text">Time: {quoteData.time}</div>
+          )}
+        </div>
+
+        {quoteData && (
+          <div className="rounded-lg border border-dls-border bg-dls-surface p-3 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-dls-secondary">You send</span>
+              <span className="text-dls-text font-mono">{amount} {selectedToken}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-dls-secondary flex items-center gap-1"><Fuel className="size-3" /> Fee</span>
+              <span className="text-dls-text font-mono">{quoteData.fee}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-dls-secondary flex items-center gap-1"><Clock className="size-3" /> Time</span>
+              <span className="text-dls-text">{quoteData.time}</span>
+            </div>
+            <div className="pt-2 border-t border-dls-border flex items-center justify-between">
+              <span className="text-dls-secondary">Recipient gets</span>
+              <span className="text-emerald-400 font-mono font-medium">{(Number(quoteData.receiveAmount) / 1e6).toFixed(2)} {selectedToken}</span>
             </div>
           </div>
         )}
       </div>
 
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 h-10" onClick={handleEstimate} disabled={loading || !amount}>
-          Estimate
+        <Button variant="outline" className="flex-1 h-10" onClick={handleEstimate} disabled={loading || !amount || !recipient}>
+          {loading ? "..." : "Estimate"}
         </Button>
-        <Button className="flex-1 h-10 bg-blue-500 hover:bg-blue-600 text-white" onClick={handleBridge} disabled={!amount || !quoteData}>
+        <Button className="flex-1 h-10 bg-blue-500 hover:bg-blue-600 text-white" onClick={handleBridge} disabled={!amount || !quoteData || !recipient}>
           <ExternalLink className="size-4 mr-1.5" /> Bridge
         </Button>
       </div>
