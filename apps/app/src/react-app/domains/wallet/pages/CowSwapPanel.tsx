@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState, useCallback } from "react";
-import { TrendingUp, Shield } from "lucide-react";
+import { TrendingUp, Shield, Zap, ArrowRightLeft, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,13 @@ const COW_LOGO = (
     <path d="M8 12c0-2 1.5-4 4-4s4 2 4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
   </svg>
 );
+
+const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
+  USDC: { color: "text-sky-400", bg: "bg-sky-500/10" },
+  WETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+  ETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+  cbETH: { color: "text-emerald-400", bg: "bg-emerald-500/10" },
+};
 
 type CowQuoteData = {
   sellToken: string;
@@ -117,7 +124,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
       });
       const json = await res.json();
       if (json.success) {
-        alert(`Order submitted! ID: ${json.orderId}\n${json.explorerUrl}`);
+        store.setError?.(`Order submitted! ID: ${json.orderId}`);
       } else {
         setError(json.error ?? "Submission failed");
       }
@@ -130,75 +137,127 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
   const buyDecimals = tokens.find((t) => t.symbol === selectedBuy)?.decimals ?? 18;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-500">
-          {COW_LOGO}
+    <div className="flex flex-col gap-4 p-4 animate-fade-in">
+      {/* Header */}
+      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/20">
+            <ArrowRightLeft className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-dls-text">CoW Swap</h2>
+            <p className="text-xs text-dls-secondary">MEV-protected batch auctions</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-semibold text-dls-text">CoW Swap</h2>
-          <p className="text-xs text-dls-secondary">MEV-protected batch auctions</p>
+
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+          <div className="flex size-6 items-center justify-center rounded-md bg-emerald-500/10">
+            <Shield className="size-3.5 text-emerald-400" />
+          </div>
+          <span className="text-xs text-emerald-300">MEV protected — No slippage front-running</span>
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Sell</label>
-        <div className="flex gap-2">
-          <select className="h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={selectedSell} onChange={(e) => setSelectedSell(e.target.value)}>
-            {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
-          </select>
-          <Input type="number" placeholder="0.0" value={sellAmount} onChange={(e) => setSellAmount(e.target.value)} className="flex-1 h-10 bg-dls-surface border-dls-border text-dls-text" />
+      <div className="ow-glass-card p-4 space-y-4">
+        <div className="space-y-2">
+          <div className="ow-section-heading">Sell</div>
+          <div className="flex gap-2">
+            <select
+              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
+              value={selectedSell}
+              onChange={(e) => setSelectedSell(e.target.value)}
+            >
+              {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
+            </select>
+            <Input
+              type="number"
+              placeholder="0.0"
+              value={sellAmount}
+              onChange={(e) => setSellAmount(e.target.value)}
+              className="flex-1 h-11 bg-dls-surface border-dls-border text-dls-text text-lg font-mono"
+            />
+          </div>
         </div>
+
+        <div className="flex justify-center">
+          <div className="flex size-8 items-center justify-center rounded-full bg-dls-surface-muted border border-dls-border">
+            <ArrowRightLeft className="size-3.5 text-dls-secondary" />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="ow-section-heading">Buy</div>
+          <div className="flex gap-2">
+            <select
+              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-emerald-500/30 transition-colors shrink-0 w-28"
+              value={selectedBuy}
+              onChange={(e) => setSelectedBuy(e.target.value)}
+            >
+              {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
+            </select>
+            <div className="flex-1 h-11 flex items-center rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-mono">
+              {quote ? (Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6) : "—"}
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+            <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
+              <span className="text-red-400 font-bold">!</span>
+            </div>
+            {error}
+          </div>
+        )}
+
+        {quote && (
+          <div className="ow-glass-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
+                <Zap className="size-4 text-emerald-400" />
+              </div>
+              <span className="text-sm font-semibold text-dls-text">Quote ready</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">You Sell</div>
+                <div className="font-mono font-semibold text-dls-text">{(Number(quote.sellAmount) / 10 ** sellDecimals).toFixed(4)} {selectedSell}</div>
+              </div>
+              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">You Receive</div>
+                <div className="font-mono font-semibold text-emerald-400">{(Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6)} {selectedBuy}</div>
+              </div>
+              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Fee</div>
+                <div className="font-mono font-semibold text-dls-text">{(Number(quote.feeAmount) / 10 ** sellDecimals).toFixed(4)}</div>
+              </div>
+              <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
+                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Valid Until</div>
+                <div className="font-mono font-semibold text-dls-text">{new Date(quote.validTo * 1000).toLocaleTimeString()}</div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Buy</label>
-        <div className="flex gap-2">
-          <select className="h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={selectedBuy} onChange={(e) => setSelectedBuy(e.target.value)}>
-            {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
-          </select>
-          <div className="flex-1 h-10 flex items-center rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text">
-            {quote ? (Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6) : "—"}
-          </div>
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>
-      )}
-
-      {quote && (
-        <div className="space-y-2 rounded-xl border border-dls-border bg-dls-surface p-3">
-          <div className="flex items-center gap-1.5 text-xs text-green-400">
-            <Shield className="size-3" />
-            <span>MEV Protected</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <div className="text-dls-secondary mb-0.5">You Sell</div>
-              <div className="font-mono text-dls-text">{(Number(quote.sellAmount) / 10 ** sellDecimals).toFixed(4)} {selectedSell}</div>
-            </div>
-            <div>
-              <div className="text-dls-secondary mb-0.5">You Receive</div>
-              <div className="font-mono text-dls-text">{(Number(quote.buyAmount) / 10 ** buyDecimals).toFixed(6)} {selectedBuy}</div>
-            </div>
-            <div>
-              <div className="text-dls-secondary mb-0.5">Fee</div>
-              <div className="font-mono text-dls-text">{(Number(quote.feeAmount) / 10 ** sellDecimals).toFixed(4)}</div>
-            </div>
-            <div>
-              <div className="text-dls-secondary mb-0.5">Valid Until</div>
-              <div className="font-mono text-dls-text">{new Date(quote.validTo * 1000).toLocaleTimeString()}</div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 h-10" onClick={handleGetQuote} disabled={loading || !sellAmount}>
-          <TrendingUp className="size-4 mr-1.5" /> Get Quote
+        <Button
+          variant="outline"
+          className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
+          onClick={handleGetQuote}
+          disabled={loading || !sellAmount}
+        >
+          <TrendingUp className="size-4 mr-1.5" />
+          {loading ? "Quoting..." : "Get Quote"}
         </Button>
-        <Button className={cn("flex-1 h-10 bg-violet-500 hover:bg-violet-600 text-white", !quote && "opacity-50 cursor-not-allowed")} onClick={handleSubmit} disabled={loading || !quote}>
+        <Button
+          className={cn(
+            "flex-1 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20",
+            !quote && "opacity-50 cursor-not-allowed"
+          )}
+          onClick={handleSubmit}
+          disabled={loading || !quote}
+        >
           Submit Order
         </Button>
       </div>

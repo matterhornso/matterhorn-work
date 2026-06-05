@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState } from "react";
-import { ExternalLink, ArrowRightLeft, Fuel, Clock, User } from "lucide-react";
+import { ExternalLink, ArrowRightLeft, Fuel, Clock, User, Wallet, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -9,12 +9,12 @@ import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
 import { useAddressBook } from "../hooks/useAddressBook";
 
-type ChainOption = { id: number; name: string };
+type ChainOption = { id: number; name: string; color: string };
 
 const CHAINS: ChainOption[] = [
-  { id: 8453, name: "Base" },
-  { id: 1, name: "Ethereum" },
-  { id: 42161, name: "Arbitrum" },
+  { id: 8453, name: "Base", color: "text-blue-400" },
+  { id: 1, name: "Ethereum", color: "text-violet-400" },
+  { id: 42161, name: "Arbitrum", color: "text-sky-400" },
 ];
 
 export default function BridgePanel({ store }: { store: WalletStore }) {
@@ -84,74 +84,108 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full">
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-blue-500/10 text-blue-500">
-          <ArrowRightLeft className="size-5" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-dls-text">Bridge</h2>
-          <p className="text-xs text-dls-secondary">Cross-chain transfers</p>
+    <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
+      {/* Header */}
+      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/20">
+            <ExternalLink className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-dls-text">Bridge</h2>
+            <p className="text-xs text-dls-secondary">Cross-chain transfers</p>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">From</label>
-            <select className="w-full h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={fromChain} onChange={(e) => setFromChain(Number(e.target.value))}>
-              {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+      <div className="ow-glass-card p-4 space-y-4">
+        {/* Chain selector */}
+        <div className="space-y-2">
+          <div className="ow-section-heading">Route</div>
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+            <div className="space-y-1">
+              <div className="text-[10px] text-dls-secondary uppercase tracking-wider">From</div>
+              <select
+                className="w-full h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
+                value={fromChain}
+                onChange={(e) => setFromChain(Number(e.target.value))}
+              >
+                {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center justify-center">
+              <div className="flex size-8 items-center justify-center rounded-full bg-blue-500/10">
+                <ArrowRightLeft className="size-4 text-blue-400" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-[10px] text-dls-secondary uppercase tracking-wider">To</div>
+              <select
+                className="w-full h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors"
+                value={toChain}
+                onChange={(e) => setToChain(Number(e.target.value))}
+              >
+                {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">To</label>
-            <select className="w-full h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={toChain} onChange={(e) => setToChain(Number(e.target.value))}>
-              {CHAINS.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </div>
+
+        <div className="space-y-2">
+          <div className="ow-section-heading">Token & Amount</div>
+          <div className="flex gap-2">
+            <select
+              className="h-11 rounded-xl bg-dls-surface border border-dls-border px-3 text-sm text-dls-text font-medium appearance-none cursor-pointer hover:border-blue-500/30 transition-colors shrink-0 w-28"
+              value={selectedToken}
+              onChange={(e) => setSelectedToken(e.target.value)}
+            >
+              {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
             </select>
+            <Input
+              type="number"
+              placeholder="0.0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="flex-1 h-11 bg-dls-surface border-dls-border text-dls-text text-lg font-mono"
+            />
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Token</label>
-          <select className="w-full h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={selectedToken} onChange={(e) => setSelectedToken(e.target.value)}>
-            {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Amount</label>
-          <Input type="number" placeholder="0.0" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-10 bg-dls-surface border-dls-border text-dls-text" />
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="flex justify-between">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Recipient</label>
+        <div className="space-y-2">
+          <div className="ow-section-heading">Recipient</div>
+          <div className="relative">
+            <Input
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              placeholder="0x..."
+              className="h-11 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-24"
+            />
             {addresses.length > 0 && (
               <button
                 onClick={() => setShowAddressBook(!showAddressBook)}
-                className="text-[11px] text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-blue-500/10 transition-colors"
               >
                 <User className="size-3" />
-                {showAddressBook ? "Hide" : "Address book"}
+                {showAddressBook ? "Hide" : "Book"}
               </button>
             )}
           </div>
-          <Input
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            placeholder="0x..."
-            className="h-10 bg-dls-surface border-dls-border text-dls-text text-sm"
-          />
           {showAddressBook && addresses.length > 0 && (
-            <div className="mt-1 space-y-1 rounded-lg border border-dls-border bg-dls-surface p-2">
+            <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
               {addresses.map((a) => (
                 <button
                   key={a.address}
                   onClick={() => { setRecipient(a.address); setShowAddressBook(false); }}
-                  className="w-full text-left px-2 py-1.5 rounded-md text-xs text-dls-text hover:bg-dls-hover transition-colors"
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs text-dls-text hover:bg-dls-hover transition-colors flex items-center gap-2"
                 >
-                  <span className="font-medium">{a.name}</span>
-                  <span className="text-dls-secondary ml-2">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
+                  <div className="flex size-6 items-center justify-center rounded-md bg-blue-500/10">
+                    <User className="size-3 text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium">{a.name}</span>
+                    <span className="text-dls-secondary ml-2 font-mono">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
+                  </div>
+                  <ArrowUpRight className="size-3 text-dls-secondary" />
                 </button>
               ))}
             </div>
@@ -159,38 +193,59 @@ export default function BridgePanel({ store }: { store: WalletStore }) {
         </div>
 
         {quoteData && (
-          <div className="rounded-lg border border-dls-border bg-dls-surface p-3 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-dls-secondary">You send</span>
-              <span className="text-dls-text font-mono">{amount} {selectedToken}</span>
+          <div className="ow-glass-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
+                <Clock className="size-4 text-emerald-400" />
+              </div>
+              <span className="text-sm font-semibold text-dls-text">Quote ready</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-dls-secondary flex items-center gap-1"><Fuel className="size-3" /> Fee</span>
-              <span className="text-dls-text font-mono">{quoteData.fee}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-dls-secondary flex items-center gap-1"><Clock className="size-3" /> Time</span>
-              <span className="text-dls-text">{quoteData.time}</span>
-            </div>
-            <div className="pt-2 border-t border-dls-border flex items-center justify-between">
-              <span className="text-dls-secondary">Recipient gets</span>
-              <span className="text-emerald-400 font-mono font-medium">
-                {(() => {
-                  const meta = tokens.find((t) => t.symbol === selectedToken);
-                  const dec = meta ? meta.decimals : 18;
-                  return (Number(quoteData.receiveAmount) / 10 ** dec).toFixed(dec >= 8 ? 6 : 4);
-                })()} {selectedToken}
-              </span>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-dls-secondary">You send</span>
+                <span className="text-dls-text font-mono font-semibold">{amount} {selectedToken}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-dls-secondary flex items-center gap-1">
+                  <Fuel className="size-3" /> Fee
+                </span>
+                <span className="text-dls-text font-mono">{quoteData.fee}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-dls-secondary flex items-center gap-1">
+                  <Clock className="size-3" /> Time
+                </span>
+                <span className="text-dls-text">{quoteData.time}</span>
+              </div>
+              <div className="pt-2 border-t border-dls-border flex items-center justify-between">
+                <span className="text-dls-secondary">Recipient gets</span>
+                <span className="text-emerald-400 font-mono font-bold text-base">
+                  {(() => {
+                    const meta = tokens.find((t) => t.symbol === selectedToken);
+                    const dec = meta ? meta.decimals : 18;
+                    return (Number(quoteData.receiveAmount) / 10 ** dec).toFixed(dec >= 8 ? 6 : 4);
+                  })()} {selectedToken}
+                </span>
+              </div>
             </div>
           </div>
         )}
       </div>
 
       <div className="flex gap-2">
-        <Button variant="outline" className="flex-1 h-10" onClick={handleEstimate} disabled={loading || !amount || !recipient}>
-          {loading ? "..." : "Estimate"}
+        <Button
+          variant="outline"
+          className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
+          onClick={handleEstimate}
+          disabled={loading || !amount || !recipient}
+        >
+          {loading ? "Getting quote..." : "Get Quote"}
         </Button>
-        <Button className="flex-1 h-10 bg-blue-500 hover:bg-blue-600 text-white" onClick={handleBridge} disabled={!amount || !quoteData || !recipient}>
+        <Button
+          className="flex-1 h-12 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/20"
+          onClick={handleBridge}
+          disabled={!amount || !quoteData || !recipient}
+        >
           <ExternalLink className="size-4 mr-1.5" /> Bridge
         </Button>
       </div>

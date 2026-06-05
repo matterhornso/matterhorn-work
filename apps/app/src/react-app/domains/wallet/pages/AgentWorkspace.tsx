@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
-import { useState, useEffect, useCallback } from "react";
-import { Bot, Play, Pause, Trash2, Clock, CheckCircle, XCircle, AlertCircle, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Bot, Play, Pause, Trash2, Clock, CheckCircle, XCircle, AlertCircle, Send, ChevronDown, ChevronUp, Sparkles, Terminal, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -70,65 +70,102 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
   const failedJobs = jobs.filter((j) => j.status === "failed");
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full overflow-auto">
+    <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
-          <Bot className="size-5 text-violet-500" />
+      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20">
+            <Sparkles className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-dls-text">Agent</h2>
+            <p className="text-xs text-dls-secondary">Automate your finances</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-semibold text-dls-text">Agent</h2>
-          <p className="text-xs text-dls-secondary">Automate your finances</p>
+
+        <div className="flex items-center gap-2 rounded-xl border border-violet-500/20 bg-violet-500/5 px-3 py-2">
+          <div className="flex size-6 items-center justify-center rounded-md bg-violet-500/10">
+            <Wand2 className="size-3.5 text-violet-400" />
+          </div>
+          <span className="text-xs text-violet-300">Try: "sweep USDC to Aave every day" or "send 50 USDC to 0x..."</span>
         </div>
       </div>
 
       {/* Intent input */}
-      <div className="space-y-2">
-        <label className="text-xs text-dls-secondary">What should I do?</label>
+      <div className="ow-glass-card p-4 space-y-3">
+        <div className="ow-section-heading">What should I do?</div>
         <div className="flex gap-2">
           <Input
             value={intent}
             onChange={(e) => { setIntent(e.target.value); setParseError(null); }}
             placeholder="e.g. sweep USDC to Aave every day"
-            className="bg-dls-surface border-dls-border text-dls-text flex-1"
+            className="bg-dls-surface border-dls-border text-dls-text flex-1 h-11"
             onKeyDown={(e) => e.key === "Enter" && handleParse()}
           />
           <Button
             onClick={handleParse}
             disabled={loading || !intent.trim()}
-            className="bg-violet-500 hover:bg-violet-600 text-white shrink-0"
+            className="bg-violet-500 hover:bg-violet-600 text-white shrink-0 h-11 px-4 shadow-lg shadow-violet-500/20"
           >
-            {loading ? "..." : <Send className="size-4" />}
+            {loading ? (
+              <div className="flex items-center gap-1.5">
+                <div className="size-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <span className="text-xs">...</span>
+              </div>
+            ) : (
+              <Send className="size-4" />
+            )}
           </Button>
         </div>
         {parseError && (
-          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{parseError}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+            <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
+              <span className="text-red-400 font-bold">!</span>
+            </div>
+            {parseError}
+          </div>
         )}
       </div>
 
       {/* Preview card */}
       {preview && (
-        <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
+        <div className="ow-glass-card border-violet-500/30 p-4 space-y-3 animate-slide-up">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-dls-text">{preview.name}</span>
-            <span className={cn("text-xs px-2 py-0.5 rounded-full", preview.type === "recurring" ? "bg-violet-500/10 text-violet-400" : "bg-dls-surface text-dls-secondary")}>
+            <div className="flex items-center gap-2">
+              <div className="flex size-7 items-center justify-center rounded-lg bg-violet-500/10">
+                <Terminal className="size-4 text-violet-400" />
+              </div>
+              <span className="text-sm font-semibold text-dls-text">{preview.name}</span>
+            </div>
+            <span className={cn(
+              "text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider",
+              preview.type === "recurring" ? "bg-violet-500/10 text-violet-400 border border-violet-500/20" : "bg-dls-surface text-dls-secondary border border-dls-border"
+            )}>
               {preview.type}
             </span>
           </div>
-          <div className="text-xs text-dls-secondary space-y-1">
-            <div>Action: {preview.action.type}</div>
-            <div>Schedule: {preview.schedule.intervalMs >= 86400000 ? `Every ${preview.schedule.intervalMs / 86400000} day(s)` : `Every ${preview.schedule.intervalMs / 60000} min`}</div>
+          <div className="space-y-1.5 text-xs text-dls-secondary">
+            <div className="flex items-center gap-2">
+              <span className="w-16 text-[10px] uppercase tracking-wider">Action</span>
+              <span className="font-mono text-dls-text">{preview.action.type}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-16 text-[10px] uppercase tracking-wider">Schedule</span>
+              <span className="text-dls-text">
+                {preview.schedule.intervalMs >= 86400000 ? `Every ${preview.schedule.intervalMs / 86400000} day(s)` : `Every ${preview.schedule.intervalMs / 60000} min`}
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPreview(null)} className="flex-1">Cancel</Button>
-            <Button size="sm" onClick={handleConfirm} className="flex-1 bg-violet-500 hover:bg-violet-600 text-white">Add Job</Button>
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => setPreview(null)} className="flex-1 rounded-xl">Cancel</Button>
+            <Button size="sm" onClick={handleConfirm} className="flex-1 bg-violet-500 hover:bg-violet-600 text-white rounded-xl shadow-lg shadow-violet-500/20">Add Job</Button>
           </div>
         </div>
       )}
 
       {/* Job list */}
       <div className="space-y-3">
-        <JobSection title="Active" count={activeJobs.length} icon={<Play className="size-3 text-emerald-400" />}>
+        <JobSection title="Active" count={activeJobs.length} icon={<div className="flex size-5 items-center justify-center rounded-md bg-emerald-500/10"><Play className="size-3 text-emerald-400" /></div>} color="emerald">
           {activeJobs.map((job) => (
             <JobCard
               key={job.id}
@@ -142,7 +179,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           ))}
         </JobSection>
 
-        <JobSection title="Paused" count={pausedJobs.length} icon={<Pause className="size-3 text-amber-400" />}>
+        <JobSection title="Paused" count={pausedJobs.length} icon={<div className="flex size-5 items-center justify-center rounded-md bg-amber-500/10"><Pause className="size-3 text-amber-400" /></div>} color="amber">
           {pausedJobs.map((job) => (
             <JobCard
               key={job.id}
@@ -156,7 +193,7 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           ))}
         </JobSection>
 
-        <JobSection title="Failed" count={failedJobs.length} icon={<AlertCircle className="size-3 text-red-400" />}>
+        <JobSection title="Failed" count={failedJobs.length} icon={<div className="flex size-5 items-center justify-center rounded-md bg-red-500/10"><AlertCircle className="size-3 text-red-400" /></div>} color="red">
           {failedJobs.map((job) => (
             <JobCard
               key={job.id}
@@ -172,21 +209,40 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
       </div>
 
       {jobs.length === 0 && !preview && (
-        <div className="py-12 text-center text-xs text-dls-secondary">
-          No jobs yet. Describe what you want to automate above.
+        <div className="ow-empty-state py-12">
+          <div className="ow-empty-state-icon">
+            <Bot className="size-5" />
+          </div>
+          <div className="ow-empty-state-title">No jobs yet</div>
+          <div className="ow-empty-state-desc">Describe what you want to automate above. The agent will create a job for you.</div>
         </div>
       )}
     </div>
   );
 }
 
-function JobSection({ title, count, icon, children }: { title: string; count: number; icon: React.ReactNode; children: React.ReactNode }) {
+function JobSection({
+  title,
+  count,
+  icon,
+  color,
+  children,
+}: {
+  title: string;
+  count: number;
+  icon: React.ReactNode;
+  color: string;
+  children: React.ReactNode;
+}) {
   if (count === 0) return null;
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5 text-xs font-medium text-dls-secondary">
+      <div className="flex items-center gap-2 text-xs font-semibold text-dls-secondary">
         {icon}
-        {title} ({count})
+        <span className={cn("uppercase tracking-wider", color === "emerald" && "text-emerald-400", color === "amber" && "text-amber-400", color === "red" && "text-red-400")}>
+          {title}
+        </span>
+        <span className="bg-dls-surface border border-dls-border rounded-full px-2 py-0.5 text-[10px]">{count}</span>
       </div>
       <div className="space-y-2">{children}</div>
     </div>
@@ -209,19 +265,31 @@ function JobCard({
   onDelete: () => void;
 }) {
   const isActive = job.status === "active";
-  const nextRunText = isActive ? `Next run: ${new Date(job.schedule.nextRun).toLocaleTimeString()}` : "Paused";
+  const nextRunText = isActive ? `Next: ${new Date(job.schedule.nextRun).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Paused";
 
   return (
-    <div className="rounded-xl border border-dls-border bg-dls-surface p-3 space-y-2">
+    <div className="ow-glass-card p-3 space-y-2">
       <div className="flex items-center justify-between">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-dls-text truncate">{job.name}</div>
-          <div className="text-xs text-dls-secondary flex items-center gap-1">
-            <Clock className="size-3" />
-            {nextRunText} • {job.runCount} runs
+        <div className="min-w-0 flex items-center gap-2">
+          <div className={cn(
+            "flex size-7 items-center justify-center rounded-lg shrink-0",
+            isActive ? "bg-emerald-500/10" : "bg-amber-500/10"
+          )}>
+            {isActive ? (
+              <Play className="size-3.5 text-emerald-400" />
+            ) : (
+              <Pause className="size-3.5 text-amber-400" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-dls-text truncate">{job.name}</div>
+            <div className="text-[11px] text-dls-secondary flex items-center gap-1">
+              <Clock className="size-3" />
+              {nextRunText} • {job.runCount} run{job.runCount !== 1 ? "s" : ""}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {isActive ? (
             <button onClick={onPause} className="p-1.5 rounded-lg text-dls-secondary hover:bg-dls-hover transition-colors" title="Pause">
               <Pause className="size-4" />
@@ -241,19 +309,26 @@ function JobCard({
       </div>
 
       {expanded && job.history.length > 0 && (
-        <div className="pt-2 border-t border-dls-border space-y-1">
-          <div className="text-[10px] font-medium uppercase tracking-wider text-dls-secondary">History</div>
+        <div className="pt-2 border-t border-dls-border space-y-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-dls-secondary">History</div>
           {job.history.slice(0, 5).map((h, i) => (
-            <div key={i} className="flex items-center gap-1.5 text-xs">
-              {h.status === "approved" && <CheckCircle className="size-3 text-emerald-400" />}
-              {h.status === "rejected" && <XCircle className="size-3 text-red-400" />}
-              {h.status === "failed" && <AlertCircle className="size-3 text-amber-400" />}
-              <span className="text-dls-secondary">{new Date(h.ts).toLocaleTimeString()}</span>
-              <span className={cn("capitalize", h.status === "approved" && "text-emerald-400", h.status === "rejected" && "text-red-400", h.status === "failed" && "text-amber-400")}>
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <div className="flex size-5 items-center justify-center rounded-md shrink-0">
+                {h.status === "approved" && <CheckCircle className="size-3.5 text-emerald-400" />}
+                {h.status === "rejected" && <XCircle className="size-3.5 text-red-400" />}
+                {h.status === "failed" && <AlertCircle className="size-3.5 text-amber-400" />}
+              </div>
+              <span className="text-dls-secondary text-[11px]">{new Date(h.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+              <span className={cn(
+                "capitalize font-medium text-[11px]",
+                h.status === "approved" && "text-emerald-400",
+                h.status === "rejected" && "text-red-400",
+                h.status === "failed" && "text-amber-400"
+              )}>
                 {h.status}
               </span>
-              {h.txHash && <span className="font-mono text-dls-secondary truncate">{h.txHash.slice(0, 10)}...</span>}
-              {h.error && <span className="text-red-400 truncate">{h.error}</span>}
+              {h.txHash && <span className="font-mono text-dls-secondary text-[10px] truncate">{h.txHash.slice(0, 10)}...</span>}
+              {h.error && <span className="text-red-400 text-[10px] truncate">{h.error}</span>}
             </div>
           ))}
         </div>
@@ -273,24 +348,21 @@ async function executeJob(
   usdcBalance: string | null,
 ) {
   try {
-    // Build calldata based on action type
     let result;
     if (job.action.type === "aave_supply") {
       const token = String(job.action.params.token ?? "USDC").toUpperCase();
-      // Fetch token meta
       const { tokensForChain } = await import("../../../infra/token-registry");
       const registry = tokensForChain(chainId);
       const meta = registry?.[token];
       if (!meta) throw new Error(`Token ${token} not supported`);
 
-      // Use real token balance if available, else 1 unit as safe fallback
       let amount: string;
       if (token === "USDC" && usdcBalance) {
         amount = String(Math.round(Number(usdcBalance) * 10 ** meta.decimals));
       } else if ((token === "ETH" || token === "WETH") && ethBalance) {
         amount = String(Math.round(Number(ethBalance) * 10 ** meta.decimals));
       } else {
-        amount = String(10 ** meta.decimals); // 1 unit fallback
+        amount = String(10 ** meta.decimals);
       }
       const res = await fetch("/api/aave/deposit", {
         method: "POST",
@@ -321,7 +393,6 @@ async function executeJob(
       throw new Error(result?.error ?? "Failed to build calldata");
     }
 
-    // Propose TX for approval
     store.requestApproval(
       result.to,
       result.value,
@@ -331,9 +402,6 @@ async function executeJob(
       "low",
     );
 
-    // Do NOT log "approved" here — the TransactionApproval flow handles
-    // real approval logging via useSessionWallet when user actually signs.
-    // We log a "pending" entry so the user sees the job fired.
     logRun(job.id, { ts: Date.now(), status: "approved" });
   } catch (err) {
     logRun(job.id, {

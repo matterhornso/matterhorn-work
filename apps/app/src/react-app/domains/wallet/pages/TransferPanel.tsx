@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState } from "react";
-import { Send, User } from "lucide-react";
+import { Send, User, Wallet, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,12 @@ import { tokensForChain } from "../../../infra/token-registry";
 import { useAddressBook } from "../hooks/useAddressBook";
 
 const NATIVE_OPTION = { symbol: "ETH", address: "native" as const, decimals: 18 };
+
+const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
+  ETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+  USDC: { color: "text-sky-400", bg: "bg-sky-500/10" },
+  WETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+};
 
 export default function TransferPanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
@@ -67,33 +73,38 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full overflow-auto">
+    <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10">
-          <Send className="size-5 text-violet-500" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-dls-text">Send</h2>
-          <p className="text-xs text-dls-secondary">Same-chain transfer</p>
+      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-lg shadow-violet-500/20">
+            <Send className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-dls-text">Send</h2>
+            <p className="text-xs text-dls-secondary">Same-chain transfer</p>
+          </div>
         </div>
       </div>
 
       {/* Token selector */}
-      <div className="space-y-1">
-        <label className="text-xs text-dls-secondary">Token</label>
+      <div className="ow-glass-card p-4 space-y-3">
+        <div className="ow-section-heading">Select Token</div>
         <div className="flex gap-2 flex-wrap">
           {tokenList.map((t) => (
             <button
               key={t.address}
               onClick={() => setToken(t.address)}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+                "flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all border",
                 token === t.address
-                  ? "bg-violet-500 text-white border-violet-500"
-                  : "bg-dls-surface text-dls-secondary border-dls-border hover:text-dls-text"
+                  ? "bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/20"
+                  : "bg-dls-surface text-dls-text border-dls-border hover:border-violet-500/30"
               )}
             >
+              <div className={cn("w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold", TOKEN_ICONS[t.symbol]?.bg ?? "bg-slate-500/10", token === t.address ? "text-white bg-white/20" : TOKEN_ICONS[t.symbol]?.color ?? "text-slate-400")}>
+                {t.symbol[0]}
+              </div>
               {t.symbol}
             </button>
           ))}
@@ -101,35 +112,41 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Recipient */}
-      <div className="space-y-1">
-        <div className="flex justify-between">
-          <label className="text-xs text-dls-secondary">Recipient</label>
+      <div className="ow-glass-card p-4 space-y-3">
+        <div className="ow-section-heading">Recipient</div>
+        <div className="relative">
+          <Input
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            placeholder="0x..."
+            className="h-12 bg-dls-surface border-dls-border text-dls-text text-sm font-mono pr-24"
+          />
           {addresses.length > 0 && (
             <button
               onClick={() => setShowAddressBook(!showAddressBook)}
-              className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-violet-500/10 transition-colors"
             >
               <User className="size-3" />
-              {showAddressBook ? "Hide" : "Address book"}
+              {showAddressBook ? "Hide" : "Book"}
             </button>
           )}
         </div>
-        <Input
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-          placeholder="0x..."
-          className="bg-dls-surface border-dls-border text-dls-text text-sm"
-        />
         {showAddressBook && addresses.length > 0 && (
-          <div className="mt-1 space-y-1 rounded-lg border border-dls-border bg-dls-surface p-2">
+          <div className="space-y-1 rounded-xl border border-dls-border bg-dls-surface p-2">
             {addresses.map((a) => (
               <button
                 key={a.address}
                 onClick={() => { setTo(a.address); setShowAddressBook(false); }}
-                className="w-full text-left px-2 py-1.5 rounded-md text-xs text-dls-text hover:bg-dls-hover transition-colors"
+                className="w-full text-left px-3 py-2 rounded-lg text-xs text-dls-text hover:bg-dls-hover transition-colors flex items-center gap-2"
               >
-                <span className="font-medium">{a.name}</span>
-                <span className="text-dls-secondary ml-2">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
+                <div className="flex size-6 items-center justify-center rounded-md bg-violet-500/10">
+                  <User className="size-3 text-violet-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium">{a.name}</span>
+                  <span className="text-dls-secondary ml-2 font-mono">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
+                </div>
+                <ArrowUpRight className="size-3 text-dls-secondary" />
               </button>
             ))}
           </div>
@@ -137,18 +154,18 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       </div>
 
       {/* Amount */}
-      <div className="space-y-1">
-        <div className="flex justify-between">
-          <label className="text-xs text-dls-secondary">Amount</label>
+      <div className="ow-glass-card p-4 space-y-3">
+        <div className="flex justify-between items-center">
+          <div className="ow-section-heading">Amount</div>
           <button
             onClick={() => maxAmount > 0 && setAmount(String(maxAmount))}
             disabled={maxAmount <= 0}
             className={cn(
-              "text-xs",
+              "text-xs font-medium transition-colors",
               maxAmount > 0 ? "text-violet-400 hover:text-violet-300" : "text-dls-secondary cursor-not-allowed"
             )}
           >
-            {maxAmount > 0 ? `Max: ${maxAmount.toFixed(4)} ${selectedMeta?.symbol}` : `Balance unavailable`}
+            {maxAmount > 0 ? `Max: ${maxAmount.toFixed(4)} ${selectedMeta?.symbol}` : "Balance unavailable"}
           </button>
         </div>
         <Input
@@ -156,19 +173,29 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder={`0 ${selectedMeta?.symbol ?? "ETH"}`}
-          className="bg-dls-surface border-dls-border text-dls-text"
+          className="h-14 bg-dls-surface border-dls-border text-dls-text text-xl font-mono"
         />
+        <div className="flex items-center gap-2 text-xs text-dls-secondary">
+          <Wallet className="size-3" />
+          <span>{selectedMeta?.symbol === "ETH" ? state.ethBalance ?? "0.00" : state.usdcBalance ?? "0.00"} {selectedMeta?.symbol} available</span>
+        </div>
       </div>
 
       {/* Review + Send */}
       {error && (
-        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</div>
+        <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs text-red-300">
+          <div className="flex size-5 items-center justify-center rounded-md bg-red-500/10">
+            <span className="text-red-400 font-bold">!</span>
+          </div>
+          {error}
+        </div>
       )}
       <Button
         onClick={handleSend}
         disabled={loading || !to || !amount || Number(amount) <= 0}
-        className="w-full bg-violet-500 hover:bg-violet-600 text-white mt-2"
+        className="w-full h-12 bg-violet-500 hover:bg-violet-600 text-white font-semibold shadow-lg shadow-violet-500/20"
       >
+        <Send className="size-4 mr-1.5" />
         {loading ? "Building..." : `Send ${selectedMeta?.symbol ?? "ETH"}`}
       </Button>
     </div>

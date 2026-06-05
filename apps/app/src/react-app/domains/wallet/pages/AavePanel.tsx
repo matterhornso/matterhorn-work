@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState, useCallback, useEffect } from "react";
-import { Landmark, TrendingUp, Shield, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Landmark, TrendingUp, Shield, ArrowDownLeft, ArrowUpRight, Wallet, Sprout, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,13 @@ type AavePosition = {
   totalCollateral: string;
   totalDebt: string;
   availableBorrows: string;
+};
+
+const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
+  USDC: { color: "text-sky-400", bg: "bg-sky-500/10" },
+  WETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+  ETH: { color: "text-blue-400", bg: "bg-blue-500/10" },
+  cbETH: { color: "text-emerald-400", bg: "bg-emerald-500/10" },
 };
 
 export default function AavePanel({ store }: { store: WalletStore }) {
@@ -76,25 +83,43 @@ export default function AavePanel({ store }: { store: WalletStore }) {
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 h-full">
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
-          <Landmark className="size-5" />
+    <div className="flex flex-col gap-4 p-4 h-full overflow-auto animate-fade-in">
+      {/* Header */}
+      <div className="ow-glass-card ow-glow-border p-4 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-lg shadow-amber-500/20">
+            <Landmark className="size-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-dls-text">Aave V3</h2>
+            <p className="text-xs text-dls-secondary">Lend and borrow on Base</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-semibold text-dls-text">Aave V3</h2>
-          <p className="text-xs text-dls-secondary">Lend and borrow on Base</p>
+
+        {/* Stats row */}
+        <div className="flex gap-2">
+          <div className="flex-1 rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
+            <div className="text-[10px] text-dls-secondary uppercase tracking-wider">APY</div>
+            <div className="ow-apy-tag">▲ 3.2%</div>
+          </div>
+          <div className="flex-1 rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-0.5">
+            <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Positions</div>
+            <div className="text-sm font-mono font-semibold text-dls-text">{positions ? "Active" : "—"}</div>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-1 rounded-lg bg-dls-surface p-1 border border-dls-border">
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-xl bg-dls-surface p-1 border border-dls-border">
         {(["deposit", "borrow", "positions"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
             className={cn(
-              "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              tab === t ? "bg-amber-500/20 text-amber-400" : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover",
+              "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all",
+              tab === t
+                ? "bg-amber-500 text-white shadow-lg shadow-amber-500/20"
+                : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
             )}
             onClick={() => setTab(t)}
           >
@@ -104,72 +129,148 @@ export default function AavePanel({ store }: { store: WalletStore }) {
       </div>
 
       {tab === "deposit" && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Token</label>
-            <select className="w-full h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={selectedToken} onChange={(e) => setSelectedToken(e.target.value)}>
-              {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
-            </select>
+        <div className="ow-glass-card p-4 space-y-4">
+          <div className="space-y-2">
+            <div className="ow-section-heading">Token</div>
+            <div className="flex gap-2 flex-wrap">
+              {tokens.map((t) => (
+                <button
+                  key={t.symbol}
+                  onClick={() => setSelectedToken(t.symbol)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border",
+                    selectedToken === t.symbol
+                      ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20"
+                      : "bg-dls-surface text-dls-text border-dls-border hover:border-amber-500/30"
+                  )}
+                >
+                  <div className={cn("w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold", TOKEN_ICONS[t.symbol]?.bg ?? "bg-slate-500/10", TOKEN_ICONS[t.symbol]?.color ?? "text-slate-400")}>
+                    {t.symbol[0]}
+                  </div>
+                  {t.symbol}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Amount</label>
-            <Input type="number" placeholder="0.0" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-10 bg-dls-surface border-dls-border text-dls-text" />
+          <div className="space-y-2">
+            <div className="ow-section-heading">Amount</div>
+            <Input
+              type="number"
+              placeholder="0.0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="h-12 bg-dls-surface border-dls-border text-dls-text text-lg font-mono"
+            />
           </div>
-          <div className="flex items-center gap-1.5 rounded-xl border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs text-green-300">
-            <TrendingUp className="size-3" />
-            <span>Current supply APY: ~3.2%</span>
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
+              <TrendingUp className="size-4 text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <div className="text-xs font-medium text-emerald-300">Earn ~3.2% APY</div>
+              <div className="text-[10px] text-emerald-400/60">Supply {selectedToken} to Aave V3 pool</div>
+            </div>
+            <Sprout className="size-4 text-emerald-400/40" />
           </div>
-          <Button className="w-full h-10 bg-amber-500 hover:bg-amber-600 text-white" disabled={!amount || loading} onClick={handleDeposit}>
-            <ArrowDownLeft className="size-4 mr-1.5" /> Deposit
+          <Button
+            className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-lg shadow-amber-500/20"
+            disabled={!amount || loading}
+            onClick={handleDeposit}
+          >
+            <ArrowDownLeft className="size-4 mr-1.5" />
+            {loading ? "Building..." : `Deposit ${selectedToken}`}
           </Button>
         </div>
       )}
 
       {tab === "borrow" && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            <Shield className="size-3" />
-            <span>Borrowing requires collateral. Ensure you have supplied assets first.</span>
+        <div className="ow-glass-card p-4 space-y-4">
+          <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-red-500/10">
+              <Shield className="size-4 text-red-400" />
+            </div>
+            <span className="text-xs text-red-300">Borrowing requires collateral. Ensure you have supplied assets first.</span>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Token</label>
-            <select className="w-full h-10 rounded-lg bg-dls-surface border border-dls-border px-3 text-sm text-dls-text" value={selectedToken} onChange={(e) => setSelectedToken(e.target.value)}>
-              {tokens.map((t) => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
-            </select>
+          <div className="space-y-2">
+            <div className="ow-section-heading">Token</div>
+            <div className="flex gap-2 flex-wrap">
+              {tokens.map((t) => (
+                <button
+                  key={t.symbol}
+                  onClick={() => setSelectedToken(t.symbol)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all border",
+                    selectedToken === t.symbol
+                      ? "bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20"
+                      : "bg-dls-surface text-dls-text border-dls-border hover:border-amber-500/30"
+                  )}
+                >
+                  <div className={cn("w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold", TOKEN_ICONS[t.symbol]?.bg ?? "bg-slate-500/10", TOKEN_ICONS[t.symbol]?.color ?? "text-slate-400")}>
+                    {t.symbol[0]}
+                  </div>
+                  {t.symbol}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-medium uppercase tracking-wider text-dls-secondary">Amount</label>
-            <Input type="number" placeholder="0.0" value={amount} onChange={(e) => setAmount(e.target.value)} className="h-10 bg-dls-surface border-dls-border text-dls-text" />
+          <div className="space-y-2">
+            <div className="ow-section-heading">Amount</div>
+            <Input
+              type="number"
+              placeholder="0.0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="h-12 bg-dls-surface border-dls-border text-dls-text text-lg font-mono"
+            />
           </div>
-          <Button className="w-full h-10 bg-amber-500 hover:bg-amber-600 text-white" disabled={!amount || loading} onClick={handleBorrow}>
-            <ArrowUpRight className="size-4 mr-1.5" /> Borrow
+          <Button
+            className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-lg shadow-amber-500/20"
+            disabled={!amount || loading}
+            onClick={handleBorrow}
+          >
+            <ArrowUpRight className="size-4 mr-1.5" />
+            {loading ? "Building..." : `Borrow ${selectedToken}`}
           </Button>
         </div>
       )}
 
       {tab === "positions" && (
-        <div className="space-y-3">
+        <div className="ow-glass-card p-4 space-y-3">
           {positions ? (
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-                <div className="text-dls-secondary">Health Factor</div>
-                <div className={cn("font-mono text-dls-text", Number(positions.healthFactor) < 1.1 && "text-red-400")}>{positions.healthFactor}</div>
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                  <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Health Factor</div>
+                  <div className={cn("text-lg font-mono font-bold", Number(positions.healthFactor) < 1.1 ? "text-red-400" : "text-emerald-400")}>
+                    {positions.healthFactor}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                  <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Collateral</div>
+                  <div className="text-lg font-mono font-bold text-dls-text">${positions.totalCollateral}</div>
+                </div>
+                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                  <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Debt</div>
+                  <div className="text-lg font-mono font-bold text-red-400">${positions.totalDebt}</div>
+                </div>
+                <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-3 space-y-1">
+                  <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Available</div>
+                  <div className="text-lg font-mono font-bold text-dls-text">${positions.availableBorrows}</div>
+                </div>
               </div>
-              <div className="rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-                <div className="text-dls-secondary">Collateral</div>
-                <div className="font-mono text-dls-text">${positions.totalCollateral}</div>
+              <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface-muted/30 px-3 py-2">
+                <Activity className="size-3.5 text-dls-secondary" />
+                <span className="text-xs text-dls-secondary">Positions update on-chain</span>
               </div>
-              <div className="rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-                <div className="text-dls-secondary">Debt</div>
-                <div className="font-mono text-dls-text">${positions.totalDebt}</div>
-              </div>
-              <div className="rounded-lg bg-dls-surface border border-dls-border px-3 py-2">
-                <div className="text-dls-secondary">Available</div>
-                <div className="font-mono text-dls-text">${positions.availableBorrows}</div>
-              </div>
-            </div>
+            </>
           ) : (
-            <p className="text-sm text-dls-secondary">Connect wallet to view positions.</p>
+            <div className="ow-empty-state py-8">
+              <div className="ow-empty-state-icon">
+                <Wallet className="size-5" />
+              </div>
+              <div className="ow-empty-state-title">No positions</div>
+              <div className="ow-empty-state-desc">Deposit assets to Aave to see your position data here.</div>
+            </div>
           )}
         </div>
       )}
