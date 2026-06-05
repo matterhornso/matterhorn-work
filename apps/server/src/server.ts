@@ -10,6 +10,7 @@ import {
   getAaveTokenDeposits,
 } from "./tools/aave-v3.js";
 import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
+import { buildTransferTx } from "./tools/transfer.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3557,6 +3558,18 @@ function createRoutes(
       outputAmount: String(body.outputAmount),
       recipient: String(body.recipient) as `0x${string}`,
       quoteTimestamp: Number(body.quoteTimestamp),
+    });
+    return jsonResponse(result);
+  });
+
+  // Transfer route
+  addRoute(routes, "POST", "/api/transfer/build", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const result = buildTransferTx({
+      chainId: Number(body.chainId),
+      token: body.token === "native" ? "native" : String(body.token) as `0x${string}`,
+      to: String(body.to) as `0x${string}`,
+      amount: String(body.amount),
     });
     return jsonResponse(result);
   });
