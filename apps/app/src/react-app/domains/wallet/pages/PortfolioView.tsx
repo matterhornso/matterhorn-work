@@ -3,11 +3,7 @@ import { useState, useMemo } from "react";
 import {
   Wallet,
   TrendingUp,
-  ArrowDownLeft,
-  ArrowUpRight,
-  X,
   Loader2,
-  AlertTriangle,
   RefreshCw,
   Sprout,
 } from "lucide-react";
@@ -192,8 +188,6 @@ function HoldingsTab({ data, store }: { data: PortfolioData; store?: WalletStore
           balance={data.native.formatted}
           address="Native"
           type="native"
-          position={undefined}
-          onAction={undefined}
         />
       )}
       {data.tokens.map((t) => {
@@ -267,7 +261,9 @@ function TokenCard({
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-dls-text">{symbol}</div>
         <div className="text-xs text-dls-secondary truncate">
-          {type === "token" ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Base gas token"}
+          {hasDeposit
+            ? `${(Number(position.depositAmount) / 10 ** 18).toFixed(4)} deposited @ ${position.supplyApy.toFixed(1)}% APY`
+            : type === "token" ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Base gas token"}
         </div>
       </div>
       <div className="text-right flex items-center gap-2">

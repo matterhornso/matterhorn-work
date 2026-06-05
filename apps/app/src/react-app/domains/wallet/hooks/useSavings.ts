@@ -74,7 +74,7 @@ export function useSavings(data: PortfolioData | null): SavingsState {
 
   return {
     savingsValue,
-    idleValue,
+    idleValue: 0,
     blendedApy,
     yieldEarned: 0,
     positions,

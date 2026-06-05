@@ -11,11 +11,15 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Address } from "viem";
 import type { WalletStore } from "../state/wallet-store";
+import { tokensForChain } from "../../../infra/token-registry";
 
-const TOKENS: Record<string, { address: Address; decimals: number; symbol: string }> = {
-  USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" },
-  WETH: { address: "0x4200000000000000000000000000000000000006", decimals: 18, symbol: "WETH" },
-};
+function getTokenMeta(chainId: number, symbol: string): { address: Address; decimals: number; symbol: string } | null {
+  const registry = tokensForChain(chainId);
+  if (!registry) return null;
+  const meta = registry[symbol];
+  if (!meta) return null;
+  return { address: meta.address, decimals: meta.decimals, symbol: meta.symbol };
+}
 
 export default function YieldSheet({
   open,
@@ -42,7 +46,7 @@ export default function YieldSheet({
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [loading, setLoading] = useState(false);
 
-  const token = tokenSymbol ? TOKENS[tokenSymbol] : null;
+  const token = tokenSymbol && chainId ? getTokenMeta(chainId, tokenSymbol) : null;
   const isDeposit = mode === "deposit";
   const maxAmount = isDeposit ? balance : depositAmount;
 
