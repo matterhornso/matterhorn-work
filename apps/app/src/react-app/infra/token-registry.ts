@@ -10,6 +10,10 @@ export interface TokenMeta {
   name: string;
   /** CoinGecko platform ID for price lookups. */
   coingeckoId?: string;
+  /** CoinGecko coin image ID for logo URLs. */
+  coingeckoImageId?: number;
+  /** Direct logo URL (preferred over image ID). */
+  logoUrl?: string;
 }
 
 /** Mainnet (chainId 8453) */
@@ -20,6 +24,7 @@ export const MAINNET: Record<string, TokenMeta> = {
     symbol: "USDC",
     name: "USD Coin",
     coingeckoId: "usd-coin",
+    logoUrl: "https://assets.coingecko.com/coins/images/6319/small/USD_Coin_icon.png",
   },
   WETH: {
     address: "0x4200000000000000000000000000000000000006",
@@ -27,6 +32,7 @@ export const MAINNET: Record<string, TokenMeta> = {
     symbol: "WETH",
     name: "Wrapped Ether",
     coingeckoId: "weth",
+    logoUrl: "https://assets.coingecko.com/coins/images/2518/small/weth.png",
   },
   cbETH: {
     address: "0x2Ae3F1Ec7F1F5012CFEab8915BA8908c95F7e269",
@@ -34,6 +40,7 @@ export const MAINNET: Record<string, TokenMeta> = {
     symbol: "cbETH",
     name: "Coinbase Wrapped Staked ETH",
     coingeckoId: "coinbase-wrapped-staked-eth",
+    logoUrl: "https://assets.coingecko.com/coins/images/30061/small/cbeth.png",
   },
 } as const;
 

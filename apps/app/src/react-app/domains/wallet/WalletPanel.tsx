@@ -8,6 +8,7 @@ import { useWalletStore } from "./state/wallet-store";
 import { CHAIN_NAMES } from "../../infra/chains";
 import { MAINNET } from "../../infra/token-registry";
 import { TransactionHistory } from "./components/TransactionHistory";
+import { TokenIcon } from "./components/TokenIcon";
 import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
 import { useTokenPrices } from "./hooks/useTokenPrices";
 
@@ -225,9 +226,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
         {/* Token allocation mini-bars */}
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
-              <span className="text-[10px] font-bold text-blue-400">E</span>
-            </div>
+            <TokenIcon symbol="ETH" size="md" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium text-dls-text">Ethereum</span>
@@ -242,9 +241,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center shrink-0">
-              <span className="text-[10px] font-bold text-sky-400">U</span>
-            </div>
+            <TokenIcon symbol="USDC" size="md" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-medium text-dls-text">USDC</span>

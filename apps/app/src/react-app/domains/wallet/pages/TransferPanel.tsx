@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState, useEffect } from "react";
-import { Send, User, Wallet, ArrowUpRight, CheckCircle } from "lucide-react";
+import { Send, User, Wallet, ArrowUpRight, CheckCircle, Star, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,7 @@ import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { tokensForChain } from "../../../infra/token-registry";
 import { useAddressBook } from "../hooks/useAddressBook";
-
+import { TokenIcon } from "../components/TokenIcon";
 import { useEnsResolution } from "../hooks/useEnsResolution";
 
 const NATIVE_OPTION = { symbol: "ETH", address: "native" as const, decimals: 18 };
@@ -21,7 +21,7 @@ const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
 
 export default function TransferPanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
-  const { addresses } = useAddressBook();
+  const { addresses, toggleFavorite } = useAddressBook();
   const [token, setToken] = useState<"native" | string>("native");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -101,23 +101,25 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
       <div className="ow-glass-card p-4 space-y-3">
         <div className="ow-section-heading">Select Token</div>
         <div className="flex gap-2 flex-wrap">
-          {tokenList.map((t) => (
-            <button
-              key={t.address}
-              onClick={() => setToken(t.address)}
-              className={cn(
-                "flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all border",
-                token === t.address
-                  ? "bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/20"
-                  : "bg-dls-surface text-dls-text border-dls-border hover:border-violet-500/30"
-              )}
-            >
-              <div className={cn("w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold", TOKEN_ICONS[t.symbol]?.bg ?? "bg-slate-500/10", token === t.address ? "text-white bg-white/20" : TOKEN_ICONS[t.symbol]?.color ?? "text-slate-400")}>
-                {t.symbol[0]}
-              </div>
-              {t.symbol}
-            </button>
-          ))}
+          {tokenList.map((t) => {
+            const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
+            const meta = registry?.[t.symbol];
+            return (
+              <button
+                key={t.address}
+                onClick={() => setToken(t.address)}
+                className={cn(
+                  "flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all border",
+                  token === t.address
+                    ? "bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/20"
+                    : "bg-dls-surface text-dls-text border-dls-border hover:border-violet-500/30"
+                )}
+              >
+                <TokenIcon symbol={t.symbol} logoUrl={meta?.logoUrl} size="sm" />
+                {t.symbol}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -170,8 +172,17 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
                 <div className="flex-1 min-w-0">
                   <span className="font-medium">{a.name}</span>
                   {a.ensName && <span className="text-emerald-400 ml-1.5 text-[11px] font-medium">{a.ensName}</span>}
+                  {a.favorite && <Star className="size-3 text-amber-400 inline ml-1 fill-amber-400" />}
+                  {a.group && <span className="text-[10px] text-dls-secondary ml-1.5 bg-dls-hover px-1.5 py-0.5 rounded">{a.group}</span>}
                   <span className="text-dls-secondary ml-2 font-mono">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
                 </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggleFavorite(a.address); }}
+                  className="p-1 rounded-md hover:bg-dls-hover transition-colors"
+                  title={a.favorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  <Star className={cn("size-3.5", a.favorite ? "text-amber-400 fill-amber-400" : "text-dls-secondary")} />
+                </button>
                 <ArrowUpRight className="size-3 text-dls-secondary" />
               </button>
             ))}

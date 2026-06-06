@@ -2,7 +2,7 @@
  * Address book hook — save/recall recipient addresses via localStorage.
  * Auto-resolves ENS names when saving. No backend persistence.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { lookupEnsName } from "../lib/ens";
 import type { Address } from "viem";
 
@@ -11,6 +11,8 @@ export interface SavedAddress {
   address: string;
   chainId?: number;
   ensName?: string;
+  favorite?: boolean;
+  group?: string;
 }
 
 const STORAGE_KEY = "matterhorn_address_book";
@@ -75,5 +77,27 @@ export function useAddressBook() {
     setAddresses((prev) => prev.filter((a) => a.address.toLowerCase() !== address.toLowerCase()));
   }, []);
 
-  return { addresses, add, remove };
+  const toggleFavorite = useCallback((address: string) => {
+    setAddresses((prev) =>
+      prev.map((a) => (a.address.toLowerCase() === address.toLowerCase() ? { ...a, favorite: !a.favorite } : a))
+    );
+  }, []);
+
+  const setGroup = useCallback((address: string, group: string | undefined) => {
+    setAddresses((prev) =>
+      prev.map((a) => (a.address.toLowerCase() === address.toLowerCase() ? { ...a, group } : a))
+    );
+  }, []);
+
+  const groups = useMemo(() => {
+    const g = new Set<string>();
+    for (const a of addresses) {
+      if (a.group) g.add(a.group);
+    }
+    return Array.from(g);
+  }, [addresses]);
+
+  const favorites = useMemo(() => addresses.filter((a) => a.favorite), [addresses]);
+
+  return { addresses, add, remove, toggleFavorite, setGroup, groups, favorites };
 }
