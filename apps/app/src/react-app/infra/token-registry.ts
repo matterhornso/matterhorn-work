@@ -8,6 +8,8 @@ export interface TokenMeta {
   decimals: number;
   symbol: string;
   name: string;
+  /** CoinGecko platform ID for price lookups. */
+  coingeckoId?: string;
 }
 
 /** Mainnet (chainId 8453) */
@@ -17,18 +19,21 @@ export const MAINNET: Record<string, TokenMeta> = {
     decimals: 6,
     symbol: "USDC",
     name: "USD Coin",
+    coingeckoId: "usd-coin",
   },
   WETH: {
     address: "0x4200000000000000000000000000000000000006",
     decimals: 18,
     symbol: "WETH",
     name: "Wrapped Ether",
+    coingeckoId: "weth",
   },
   cbETH: {
     address: "0x2Ae3F1Ec7F1F5012CFEab8915BA8908c95F7e269",
     decimals: 18,
     symbol: "cbETH",
     name: "Coinbase Wrapped Staked ETH",
+    coingeckoId: "coinbase-wrapped-staked-eth",
   },
 } as const;
 

@@ -12,6 +12,7 @@ import {
 import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
 import { buildTransferTx } from "./tools/transfer.js";
 import { parseIntent } from "./tools/scheduler.js";
+import { getPrices } from "./tools/coingecko.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3453,6 +3454,19 @@ function createRoutes(
   });
 
   // ─── Crypto / DeFi Routes ──────────────────────────────────────────────
+
+  addRoute(routes, "GET", "/api/prices", "client", async (ctx) => {
+    const idsParam = ctx.url.searchParams.get("ids");
+    if (!idsParam) {
+      throw new ApiError(400, "invalid_params", "ids query param required (comma-separated CoinGecko IDs)");
+    }
+    const ids = idsParam.split(",").map((s) => s.trim()).filter(Boolean);
+    if (ids.length === 0) {
+      throw new ApiError(400, "invalid_params", "ids must contain at least one CoinGecko ID");
+    }
+    const prices = await getPrices(ids);
+    return jsonResponse({ success: true, prices });
+  });
 
   addRoute(routes, "GET", "/api/portfolio", "client", async (ctx) => {
     const chainId = Number(ctx.url.searchParams.get("chainId"));

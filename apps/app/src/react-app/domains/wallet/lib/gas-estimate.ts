@@ -31,12 +31,14 @@ export async function estimateGasClient({
   data,
   value,
   from,
+  ethPriceUSD = 2000,
 }: {
   chainId: number;
   to: Address;
   data: Hex;
   value?: string;
   from: Address;
+  ethPriceUSD?: number;
 }): Promise<GasEstimateResult> {
   const client = clients[chainId as keyof typeof clients];
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
@@ -62,7 +64,7 @@ export async function estimateGasClient({
       gasFormatted: Number(gas).toLocaleString(),
       gasPriceGwei,
       estimatedCostEth: costEth !== null ? costEth.toFixed(8) : null,
-      estimatedCostUSD: costEth !== null ? (costEth * 2000).toFixed(2) : null,
+      estimatedCostUSD: costEth !== null ? (costEth * ethPriceUSD).toFixed(2) : null,
     };
   } catch (err) {
     return {

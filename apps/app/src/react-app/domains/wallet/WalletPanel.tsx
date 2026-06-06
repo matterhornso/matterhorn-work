@@ -1,13 +1,15 @@
 /** @jsxImportSource react */
 import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot, Sparkles, Activity, Shield, Zap } from "lucide-react";
-import { useState, useMemo, lazy, Suspense, useCallback } from "react";
+import { useState, useMemo, lazy, Suspense, useCallback, useEffect } from "react";
 
 import { cn } from "@/lib/utils";
 import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore } from "./state/wallet-store";
 import { CHAIN_NAMES } from "../../infra/chains";
+import { MAINNET } from "../../infra/token-registry";
 import { TransactionHistory } from "./components/TransactionHistory";
 import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
+import { useTokenPrices } from "./hooks/useTokenPrices";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
 const CowSwapPanel = lazy(() => import("./pages/CowSwapPanel"));
@@ -78,6 +80,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
   const [isPortfolioLoading, setIsPortfolioLoading] = useState(false);
   const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
   const securityLog = useMemo(() => getSecurityLog(5), []);
+  const { prices, fetchPrices, getPrice } = useTokenPrices();
 
   const handlePortfolioOpen = useCallback(async () => {
     if (!state.address || !state.chainId) return;
@@ -96,6 +99,30 @@ export function WalletPanel({ store }: WalletPanelProps) {
   }, [state.address, state.chainId]);
 
   const handlePanelClose = useCallback(() => setActivePanel(null), []);
+
+  // Fetch real token prices on mount / when connected
+  useEffect(() => {
+    if (!state.isConnected || state.chainId !== 8453) return;
+    const ids = Object.values(MAINNET)
+      .map((t) => t.coingeckoId)
+      .filter(Boolean) as string[];
+    if (ids.length > 0) {
+      fetchPrices(ids);
+    }
+  }, [state.isConnected, state.chainId, fetchPrices]);
+
+  // Live prices
+  const ethPrice = getPrice("ethereum");
+  const usdcPrice = getPrice("usd-coin");
+  const wethPrice = getPrice("weth");
+  const cbethPrice = getPrice("coinbase-wrapped-staked-eth");
+
+  const effectiveEthPrice = ethPrice || wethPrice || 2000;
+  const effectiveUsdcPrice = usdcPrice || 1;
+
+  const ethUsdValue = Number(state.ethBalance ?? 0) * effectiveEthPrice;
+  const usdcUsdValue = Number(state.usdcBalance ?? 0) * effectiveUsdcPrice;
+  const totalUsdValue = ethUsdValue + usdcUsdValue;
 
   if (!state.isConnected) {
     return (
@@ -171,9 +198,21 @@ export function WalletPanel({ store }: WalletPanelProps) {
 
       {/* Hero Balance Card */}
       <div className="ow-glass-card p-4 space-y-3">
-        <div className="ow-section-heading">Total Balance</div>
+        <div className="flex items-center justify-between">
+          <div className="ow-section-heading">Total Balance</div>
+          {prices.length > 0 && (
+            <div className="flex items-center gap-1 text-[10px] text-emerald-400">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-soft-pulse" />
+              Live
+            </div>
+          )}
+        </div>
         <div className="ow-hero-text bg-gradient-to-r from-white via-white to-violet-300 bg-clip-text text-transparent">
-          {state.ethBalance ? `$${(Number(state.ethBalance) * 2000 + Number(state.usdcBalance ?? 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+          {totalUsdValue > 0
+            ? `$${totalUsdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : state.ethBalance
+              ? `$${(Number(state.ethBalance) * 2000 + Number(state.usdcBalance ?? 0)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : "—"}
         </div>
 
         {/* Token allocation mini-bars */}
@@ -190,7 +229,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
               <div className="h-1.5 rounded-full bg-dls-surface-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-blue-400 to-blue-500 transition-all duration-500"
-                  style={{ width: `${state.ethBalance ? Math.min((Number(state.ethBalance) * 2000 / (Number(state.ethBalance) * 2000 + Number(state.usdcBalance ?? 0) + 1)) * 100, 100) : 0}%` }}
+                  style={{ width: `${totalUsdValue > 0 ? Math.min((ethUsdValue / totalUsdValue) * 100, 100) : state.ethBalance ? Math.min((Number(state.ethBalance) * 2000 / (Number(state.ethBalance) * 2000 + Number(state.usdcBalance ?? 0) + 1)) * 100, 100) : 0}%` }}
                 />
               </div>
             </div>
@@ -207,7 +246,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
               <div className="h-1.5 rounded-full bg-dls-surface-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-sky-400 to-sky-500 transition-all duration-500"
-                  style={{ width: `${state.usdcBalance ? Math.min((Number(state.usdcBalance) / (Number(state.ethBalance ?? 0) * 2000 + Number(state.usdcBalance) + 1)) * 100, 100) : 0}%` }}
+                  style={{ width: `${totalUsdValue > 0 ? Math.min((usdcUsdValue / totalUsdValue) * 100, 100) : state.usdcBalance ? Math.min((Number(state.usdcBalance) / (Number(state.ethBalance ?? 0) * 2000 + Number(state.usdcBalance) + 1)) * 100, 100) : 0}%` }}
                 />
               </div>
             </div>
