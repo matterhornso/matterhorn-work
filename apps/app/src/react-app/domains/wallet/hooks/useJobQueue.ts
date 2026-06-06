@@ -90,6 +90,17 @@ export function useJobQueue() {
     );
   }, []);
 
+  // Background cron: check every 30s for overdue jobs and dispatch global event
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const overdue = jobs.filter((j) => j.status === "active" && j.schedule.nextRun <= Date.now());
+      if (overdue.length > 0) {
+        window.dispatchEvent(new CustomEvent("matterhorn:jobs-due", { detail: { jobs: overdue } }));
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [jobs]);
+
   const pendingJobs = jobs.filter((j) => j.status === "active" && j.schedule.nextRun <= Date.now());
 
   return { jobs, add, update, remove, pause, resume, logRun, pendingJobs };

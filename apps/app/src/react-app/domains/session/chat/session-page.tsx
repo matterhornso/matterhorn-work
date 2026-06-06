@@ -51,6 +51,7 @@ import { WalletPanel } from "../../wallet/WalletPanel";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
+import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
@@ -226,6 +227,7 @@ export function SessionPage(props: SessionPageProps) {
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
+  useJobCron(wallet.store);
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (
