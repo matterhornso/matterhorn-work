@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useSendTransaction, useSignMessage, usePublicClient } from "wagmi";
 import { parseEther } from "viem";
 
@@ -239,6 +239,53 @@ export function useSessionWallet(store: WalletStore) {
     [wagmiAddress, signMessageAsync],
   );
 
+  // Gas price polling
+  const [gasPriceGwei, setGasPriceGwei] = useState<number | null>(null);
+  useEffect(() => {
+    if (!publicClient || !state.chainId) return;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const price = await publicClient.getGasPrice();
+        if (!cancelled) setGasPriceGwei(Number(price) / 1e9);
+      } catch { /* ignore */ }
+    }
+    poll();
+    const interval = setInterval(poll, 15_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [publicClient, state.chainId]);
+
+  // TX receipt polling — auto-update pending transactions
+  const pendingHashesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!publicClient || !state.transactions.length) return;
+    const pending = state.transactions.filter((tx) => tx.status === "pending");
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    async function checkReceipts() {
+      for (const tx of pending) {
+        if (pendingHashesRef.current.has(tx.hash)) continue; // already checking
+        pendingHashesRef.current.add(tx.hash);
+        try {
+          const receipt = await publicClient.getTransactionReceipt({ hash: tx.hash });
+          if (!cancelled) {
+            const status = receipt.status === "success" ? "confirmed" : "failed";
+            store.updateTransaction(tx.hash, status);
+            pendingHashesRef.current.delete(tx.hash);
+          }
+        } catch {
+          // Receipt not yet available — keep pending
+          pendingHashesRef.current.delete(tx.hash);
+        }
+      }
+    }
+
+    checkReceipts();
+    const interval = setInterval(checkReceipts, 10_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [publicClient, state.transactions, store]);
+
   // Format wallet context as a string for injection into system prompts
   const promptContext = useMemo(() => {
     if (!walletContext.address) return "";
@@ -246,6 +293,13 @@ export function useSessionWallet(store: WalletStore) {
 USDC token: ${walletContext.usdcAddress ?? "Not available"}
 The wallet is connected and ready for on-chain actions.`;
   }, [walletContext]);
+
+  const blockExplorerUrl = useCallback((hash: string) => {
+    const cid = state.chainId ?? 84532;
+    return cid === 8453
+      ? `https://basescan.org/tx/${hash}`
+      : `https://sepolia.basescan.org/tx/${hash}`;
+  }, [state.chainId]);
 
   return {
     walletContext,
@@ -258,5 +312,7 @@ The wallet is connected and ready for on-chain actions.`;
     executeBatchStep,
     signMessage,
     pendingApproval: state.pendingApproval,
+    gasPriceGwei,
+    blockExplorerUrl,
   };
 }

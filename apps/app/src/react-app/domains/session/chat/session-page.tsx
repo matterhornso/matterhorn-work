@@ -938,7 +938,7 @@ export function SessionPage(props: SessionPageProps) {
                       onClose={closeRightPane}
                     />
                   ) : activeSidePanel === "wallet" ? (
-                    <WalletPanel store={wallet.store} />
+                    <WalletPanel store={wallet.store} gasPriceGwei={sessionWallet.gasPriceGwei} blockExplorerUrl={sessionWallet.blockExplorerUrl} />
                   ) : (
                     <BrowserPanel onClose={closeRightPane} />
                   )}

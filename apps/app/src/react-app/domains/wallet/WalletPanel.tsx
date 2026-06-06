@@ -71,9 +71,11 @@ function securityLogColor(action: SecurityLogEntry["action"]): string {
 
 export type WalletPanelProps = {
   store: WalletStore;
+  gasPriceGwei?: number | null;
+  blockExplorerUrl?: (hash: string) => string;
 };
 
-export function WalletPanel({ store }: WalletPanelProps) {
+export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelType>(null);
@@ -165,6 +167,11 @@ export function WalletPanel({ store }: WalletPanelProps) {
               <div className="flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-emerald-400 animate-soft-pulse" />
                 <span className="text-[11px] text-dls-secondary">{chainName ?? "Unknown"}</span>
+                {gasPriceGwei !== null && (
+                  <span className="text-[10px] text-amber-400 font-mono ml-1">
+                    {gasPriceGwei.toFixed(1)} gwei
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -272,7 +279,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
               <div className="ow-section-heading">Transactions</div>
               <Activity className="size-3.5 text-dls-secondary" />
             </div>
-            <TransactionHistory txs={recentTxs} />
+            <TransactionHistory txs={recentTxs} blockExplorerUrl={blockExplorerUrl} />
           </div>
 
           {/* Security Activity */}

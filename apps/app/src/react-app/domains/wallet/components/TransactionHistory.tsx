@@ -63,7 +63,7 @@ function exportToCSV(txs: TxRecord[]) {
   URL.revokeObjectURL(url);
 }
 
-export function TransactionHistory({ txs }: { txs: TxRecord[] }) {
+export function TransactionHistory({ txs, blockExplorerUrl }: { txs: TxRecord[]; blockExplorerUrl?: (hash: string) => string }) {
   const [filter, setFilter] = useState<"all" | "confirmed" | "pending" | "failed">("all");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -181,7 +181,18 @@ export function TransactionHistory({ txs }: { txs: TxRecord[] }) {
               </div>
               <div className="flex flex-col min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-dls-text truncate">{truncateAddress(tx.hash)}</span>
+                  {blockExplorerUrl ? (
+                    <a
+                      href={blockExplorerUrl(tx.hash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-dls-text truncate hover:text-violet-400 transition-colors"
+                    >
+                      {truncateAddress(tx.hash)}
+                    </a>
+                  ) : (
+                    <span className="font-mono text-dls-text truncate">{truncateAddress(tx.hash)}</span>
+                  )}
                   <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full border", info.color.replace("text-", "bg-").replace("400", "500/10"), info.color.replace("400", "300"), "border-current/20")}>
                     {info.label}
                   </span>
