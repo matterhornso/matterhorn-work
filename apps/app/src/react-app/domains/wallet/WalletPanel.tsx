@@ -216,7 +216,7 @@ export function WalletPanel({ store }: WalletPanelProps) {
       </div>
 
       {/* Quick Actions — Icon grid */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <ActionButton icon={<Send className="size-4" />} label="Send" accent="violet" onClick={() => setActivePanel("send")} primary />
         <ActionButton icon={<Bot className="size-4" />} label="Agent" accent="violet" onClick={() => setActivePanel("agent")} />
         <ActionButton icon={<BarChart3 className="size-4" />} label="Portfolio" accent="violet" onClick={handlePortfolioOpen} />

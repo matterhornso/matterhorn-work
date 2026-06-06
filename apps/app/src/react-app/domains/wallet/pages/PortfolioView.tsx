@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useSavings } from "../hooks/useSavings";
 import type { WalletStore } from "../state/wallet-store";
 import YieldSheet from "../components/YieldSheet";
+import { AllocationPieChart } from "../components/AllocationPieChart";
 
 export type TokenPosition = {
   raw: string;
@@ -159,8 +160,27 @@ function HoldingsTab({ data, store }: { data: PortfolioData; store?: WalletStore
     setYieldSheetOpen(true);
   };
 
+  // Build allocation data for pie chart
+  const pieData = useMemo(() => {
+    const out: { label: string; value: number }[] = [];
+    if (data.native && data.native.formatted > 0) {
+      out.push({ label: data.native.symbol, value: data.native.formatted });
+    }
+    for (const t of data.tokens) {
+      if (t.formatted > 0) out.push({ label: t.symbol, value: t.formatted });
+    }
+    return out;
+  }, [data]);
+
   return (
     <div className="space-y-2">
+      {/* Allocation chart */}
+      {pieData.length > 0 && (
+        <div className="mb-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+          <AllocationPieChart data={pieData} size={160} />
+        </div>
+      )}
+
       {/* Savings summary card */}
       {savings.positions.length > 0 && (
         <div className="mb-3 rounded-xl border border-dls-border bg-dls-surface p-4">

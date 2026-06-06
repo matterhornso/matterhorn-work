@@ -25,6 +25,8 @@ export type TransactionApprovalProps = {
   store: WalletStore;
   onApprove: (tx: TxApprovalRequest) => void;
   onReject: () => void;
+  /** Called to execute a single batch step (for multi-hop / batch approvals). */
+  onExecuteBatchStep?: (step: { to: string; data?: string; value?: string }) => Promise<string>;
 };
 
 export function dispatchTxApprovalRequest(tx: TxApprovalRequest) {
@@ -56,7 +58,7 @@ function decodeSelector(data: string): { selector: string; signature: string | n
   return { selector, signature: KNOWN[selector] ?? null };
 }
 
-export function TransactionApproval({ store, onApprove, onReject }: TransactionApprovalProps) {
+export function TransactionApproval({ store, onApprove, onReject, onExecuteBatchStep }: TransactionApprovalProps) {
   const state = useWalletStore(store);
   const pending = state.pendingApproval;
   const [countdown, setCountdown] = useState(0);
@@ -279,6 +281,11 @@ export function TransactionApproval({ store, onApprove, onReject }: TransactionA
           onExecute={async (stepIndex) => {
             const step = pending.steps[stepIndex];
             if (!step) throw new Error("Step not found");
+            if (onExecuteBatchStep) {
+              const hash = await onExecuteBatchStep({ to: step.to, data: step.data, value: step.value });
+              return hash;
+            }
+            // Fallback: old behavior for backwards compat
             dispatchTxApprovalResponse(true);
             onApprove(pending as unknown as TxApprovalRequest);
             return "0x";

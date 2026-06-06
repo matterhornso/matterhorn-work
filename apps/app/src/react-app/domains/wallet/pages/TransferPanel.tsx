@@ -169,6 +169,7 @@ export default function TransferPanel({ store }: { store: WalletStore }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="font-medium">{a.name}</span>
+                  {a.ensName && <span className="text-emerald-400 ml-1.5 text-[11px] font-medium">{a.ensName}</span>}
                   <span className="text-dls-secondary ml-2 font-mono">{a.address.slice(0, 6)}...{a.address.slice(-4)}</span>
                 </div>
                 <ArrowUpRight className="size-3 text-dls-secondary" />

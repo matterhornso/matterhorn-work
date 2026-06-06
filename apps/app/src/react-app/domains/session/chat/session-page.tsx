@@ -1073,6 +1073,7 @@ export function SessionPage(props: SessionPageProps) {
         store={wallet.store}
         onApprove={() => { void sessionWallet.approveTx(); }}
         onReject={sessionWallet.rejectTx}
+        onExecuteBatchStep={sessionWallet.executeBatchStep}
       />
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
