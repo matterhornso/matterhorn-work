@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useState, useCallback } from "react";
-import { TrendingUp, Shield, Zap, ArrowRightLeft, Wallet } from "lucide-react";
+import { TrendingUp, Shield, Zap, ArrowRightLeft, Wallet, Timer, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,8 @@ const TOKEN_ICONS: Record<string, { color: string; bg: string }> = {
   cbETH: { color: "text-emerald-400", bg: "bg-emerald-500/10" },
 };
 
+type OrderMode = "market" | "limit";
+
 type CowQuoteData = {
   sellToken: string;
   buyToken: string;
@@ -34,7 +36,9 @@ type CowQuoteData = {
 
 export default function CowSwapPanel({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
+  const [mode, setMode] = useState<OrderMode>("market");
   const [sellAmount, setSellAmount] = useState("");
+  const [limitPrice, setLimitPrice] = useState("");
   const [selectedSell, setSelectedSell] = useState("USDC");
   const [selectedBuy, setSelectedBuy] = useState("WETH");
   const [quote, setQuote] = useState<CowQuoteData>(null);
@@ -46,16 +50,45 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
   const registry = state.chainId ? tokensForChain(state.chainId) : undefined;
   const tokens = registry ? Object.entries(registry).map(([symbol, meta]) => ({ symbol, address: meta.address, decimals: meta.decimals })) : [];
 
+  const sellMeta = tokens.find((t) => t.symbol === selectedSell);
+  const buyMeta = tokens.find((t) => t.symbol === selectedBuy);
+  const sellDecimals = sellMeta?.decimals ?? 18;
+  const buyDecimals = buyMeta?.decimals ?? 18;
+
+  // Computed limit buy amount
+  const computedLimitBuyAmount = useCallback(() => {
+    if (!sellAmount || !limitPrice || Number(limitPrice) <= 0) return null;
+    const sellRaw = Number(sellAmount) * 10 ** sellDecimals;
+    // limitPrice is "buy tokens per sell token"
+    // buyAmount = sellAmount * limitPrice
+    const buyRaw = Math.round(sellRaw * Number(limitPrice));
+    return buyRaw.toString();
+  }, [sellAmount, limitPrice, sellDecimals]);
+
   const handleGetQuote = useCallback(async () => {
     if (!state.chainId || !state.address || !sellAmount) return;
+    if (mode === "limit") {
+      // Limit orders don't need a quote — user sets the price
+      const buyAmount = computedLimitBuyAmount();
+      if (!buyAmount || !sellMeta || !buyMeta) return;
+      const validTo = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60; // 7 days
+      setQuote({
+        sellToken: sellMeta.address,
+        buyToken: buyMeta.address,
+        sellAmount: String(Math.round(Number(sellAmount) * 10 ** sellDecimals)),
+        buyAmount,
+        feeAmount: "0",
+        validTo,
+      });
+      setQuoteId(`limit_${Date.now()}`);
+      return;
+    }
     setLoading(true);
     setError(null);
     setQuote(null);
     try {
-      const sellMeta = tokens.find((t) => t.symbol === selectedSell);
-      const buyMeta = tokens.find((t) => t.symbol === selectedBuy);
       if (!sellMeta || !buyMeta) throw new Error("Token not found");
-      const rawAmount = String(Math.round(Number(sellAmount) * 10 ** sellMeta.decimals));
+      const rawAmount = String(Math.round(Number(sellAmount) * 10 ** sellDecimals));
       const res = await fetch(
         `/api/cow/quote?chainId=${state.chainId}&sellToken=${sellMeta.address}&buyToken=${buyMeta.address}&sellAmount=${rawAmount}&receiver=${state.address}`,
       );
@@ -71,7 +104,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
     } finally {
       setLoading(false);
     }
-  }, [state.chainId, state.address, sellAmount, selectedSell, selectedBuy, tokens]);
+  }, [state.chainId, state.address, sellAmount, selectedSell, selectedBuy, tokens, mode, sellMeta, buyMeta, sellDecimals, computedLimitBuyAmount]);
 
   const handleSubmit = useCallback(async () => {
     if (!quote || !state.address || !quoteId || !state.chainId) return;
@@ -108,7 +141,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         appData: "0x0000000000000000000000000000000000000000000000000000000000000000",
         feeAmount: quote.feeAmount,
         kind: "sell",
-        partiallyFillable: false,
+        partiallyFillable: mode === "limit",
         sellTokenBalance: "erc20",
         buyTokenBalance: "erc20",
       };
@@ -131,10 +164,7 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Signing failed");
     }
-  }, [quote, state.address, state.chainId, quoteId, signTypedDataAsync]);
-
-  const sellDecimals = tokens.find((t) => t.symbol === selectedSell)?.decimals ?? 18;
-  const buyDecimals = tokens.find((t) => t.symbol === selectedBuy)?.decimals ?? 18;
+  }, [quote, state.address, state.chainId, quoteId, signTypedDataAsync, mode]);
 
   return (
     <div className="flex flex-col gap-4 p-4 animate-fade-in">
@@ -158,6 +188,36 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
         </div>
       </div>
 
+      {/* Mode toggle */}
+      <div className="flex gap-1 rounded-xl bg-dls-surface p-1 border border-dls-border">
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+            mode === "market"
+              ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+              : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+          )}
+          onClick={() => { setMode("market"); setQuote(null); setError(null); }}
+        >
+          <Zap className="size-3.5" />
+          Market
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition-all flex items-center justify-center gap-1.5",
+            mode === "limit"
+              ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+              : "text-dls-secondary hover:text-dls-text hover:bg-dls-hover"
+          )}
+          onClick={() => { setMode("limit"); setQuote(null); setError(null); }}
+        >
+          <Target className="size-3.5" />
+          Limit
+        </button>
+      </div>
+
       <div className="ow-glass-card p-4 space-y-4">
         <div className="space-y-2">
           <div className="ow-section-heading">Sell</div>
@@ -178,6 +238,25 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
             />
           </div>
         </div>
+
+        {/* Limit price input */}
+        {mode === "limit" && (
+          <div className="space-y-2">
+            <div className="ow-section-heading">Limit Price</div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                placeholder={`0.0 ${selectedBuy} per ${selectedSell}`}
+                value={limitPrice}
+                onChange={(e) => setLimitPrice(e.target.value)}
+                className="flex-1 h-11 bg-dls-surface border-dls-border text-dls-text text-lg font-mono"
+              />
+            </div>
+            <div className="text-[11px] text-dls-secondary">
+              You will receive at least {(Number(sellAmount || 0) * Number(limitPrice || 0)).toFixed(6)} {selectedBuy}
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-center">
           <div className="flex size-8 items-center justify-center rounded-full bg-dls-surface-muted border border-dls-border">
@@ -214,9 +293,17 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           <div className="ow-glass-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/10">
-                <Zap className="size-4 text-emerald-400" />
+                {mode === "limit" ? <Timer className="size-4 text-emerald-400" /> : <Zap className="size-4 text-emerald-400" />}
               </div>
-              <span className="text-sm font-semibold text-dls-text">Quote ready</span>
+              <span className="text-sm font-semibold text-dls-text">
+                {mode === "limit" ? "Limit order ready" : "Quote ready"}
+              </span>
+              <span className={cn(
+                "text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider",
+                mode === "limit" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+              )}>
+                {mode === "limit" ? "Limit" : "Market"}
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
@@ -232,7 +319,9 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
                 <div className="font-mono font-semibold text-dls-text">{(Number(quote.feeAmount) / 10 ** sellDecimals).toFixed(4)}</div>
               </div>
               <div className="rounded-xl bg-dls-surface-muted/50 border border-dls-border px-3 py-2 space-y-1">
-                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">Valid Until</div>
+                <div className="text-[10px] text-dls-secondary uppercase tracking-wider">
+                  {mode === "limit" ? "Expires" : "Valid Until"}
+                </div>
                 <div className="font-mono font-semibold text-dls-text">{new Date(quote.validTo * 1000).toLocaleTimeString()}</div>
               </div>
             </div>
@@ -245,10 +334,10 @@ export default function CowSwapPanel({ store }: { store: WalletStore }) {
           variant="outline"
           className="flex-1 h-12 rounded-xl border-dls-border hover:bg-dls-hover"
           onClick={handleGetQuote}
-          disabled={loading || !sellAmount}
+          disabled={loading || !sellAmount || (mode === "limit" && (!limitPrice || Number(limitPrice) <= 0))}
         >
-          <TrendingUp className="size-4 mr-1.5" />
-          {loading ? "Quoting..." : "Get Quote"}
+          {mode === "limit" ? <Target className="size-4 mr-1.5" /> : <TrendingUp className="size-4 mr-1.5" />}
+          {loading ? "Building..." : mode === "limit" ? "Build Order" : "Get Quote"}
         </Button>
         <Button
           className={cn(
