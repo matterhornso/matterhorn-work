@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { WalletStore } from "../state/wallet-store";
 import { useWalletStore } from "../state/wallet-store";
 import { useJobQueue, type Job } from "../hooks/useJobQueue";
+import { requestNotificationPermission, sendJobCompleted } from "../lib/notifications";
 
 export default function AgentWorkspace({ store }: { store: WalletStore }) {
   const state = useWalletStore(store);
@@ -16,12 +17,29 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      setNotificationsEnabled(true);
+    }
+  }, []);
+
+  const handleToggleNotifications = async () => {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      return;
+    }
+    const granted = await requestNotificationPermission();
+    setNotificationsEnabled(granted);
+  };
 
   // Execute pending jobs
   useEffect(() => {
     if (!state.address || !state.chainId) return;
     for (const job of pendingJobs) {
-      executeJob(job, state.address, state.chainId, store, logRun, pause, state.ethBalance, state.usdcBalance);
+      executeJob(job, state.address, state.chainId, store, logRun, pause, state.ethBalance, state.usdcBalance, notificationsEnabled);
     }
   }, [state.address, state.chainId, pendingJobs.length, state.ethBalance, state.usdcBalance]);
 
@@ -87,7 +105,19 @@ export default function AgentWorkspace({ store }: { store: WalletStore }) {
           <div className="flex size-6 items-center justify-center rounded-md bg-violet-500/10">
             <Wand2 className="size-3.5 text-violet-400" />
           </div>
-          <span className="text-xs text-violet-300">Try: "sweep USDC to Aave every day" or "send 50 USDC to 0x..."</span>
+          <span className="text-xs text-violet-300 flex-1">Try: "sweep USDC to Aave every day" or "send 50 USDC to 0x..."</span>
+          <button
+            onClick={handleToggleNotifications}
+            className={cn(
+              "text-[10px] px-2 py-1 rounded-full font-semibold uppercase tracking-wider transition-colors",
+              notificationsEnabled
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                : "bg-dls-surface text-dls-secondary border border-dls-border hover:text-dls-text"
+            )}
+            title={notificationsEnabled ? "Notifications on — click to disable" : "Enable desktop notifications"}
+          >
+            {notificationsEnabled ? "ON" : "OFF"}
+          </button>
         </div>
       </div>
 
@@ -346,8 +376,12 @@ async function executeJob(
   pause: (id: string) => void,
   ethBalance: string | null,
   usdcBalance: string | null,
+  notificationsEnabled: boolean = false,
 ) {
-  try {
+  let jobStatus: "approved" | "rejected" | "failed" = "approved";
+  let txHash: string | undefined;
+
+    try {
     let result;
     if (job.action.type === "aave_supply") {
       const token = String(job.action.params.token ?? "USDC").toUpperCase();
@@ -385,6 +419,125 @@ async function executeJob(
         body: JSON.stringify({ chainId, token: tokenAddr, to, amount: raw }),
       });
       result = await res.json();
+    } else if (job.action.type === "bridge") {
+      const token = String(job.action.params.token ?? "USDC").toUpperCase();
+      const amount = String(job.action.params.amount ?? "1");
+      const toChain = Number(job.action.params.toChain ?? 1);
+      const { tokensForChain } = await import("../../../infra/token-registry");
+      const registry = tokensForChain(chainId);
+      const meta = registry?.[token];
+      const tokenAddr = meta ? meta.address : "native";
+      const raw = meta ? String(Math.round(Number(amount) * 10 ** meta.decimals)) : String(Math.round(Number(amount) * 10 ** 18));
+      const res = await fetch("/api/bridge/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chainId, destinationChainId: toChain, originToken: tokenAddr, amount: raw, recipient: address }),
+      });
+      const quoteJson = await res.json();
+      if (!quoteJson.success) throw new Error(quoteJson.error ?? "Bridge quote failed");
+      const depositRes = await fetch("/api/bridge/deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chainId,
+          destinationChainId: toChain,
+          inputToken: tokenAddr,
+          outputToken: tokenAddr,
+          inputAmount: raw,
+          outputAmount: quoteJson.receiveAmount,
+          recipient: address,
+          quoteTimestamp: Math.floor(Date.now() / 1000),
+        }),
+      });
+      result = await depositRes.json();
+    } else if (job.action.type === "multi_hop") {
+      // Build batch approval for multi-step job
+      const steps = job.action.params.steps as Array<{ type: string; params: Record<string, unknown> }>;
+      if (!Array.isArray(steps) || steps.length === 0) throw new Error("No steps in multi-hop job");
+
+      const batchSteps: import("../state/wallet-store").BatchStepView[] = [];
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
+        let stepResult;
+        if (step.type === "bridge") {
+          const token = String(step.params.token ?? "USDC").toUpperCase();
+          const amount = String(step.params.amount ?? "1");
+          const toChain = Number(step.params.toChain ?? 1);
+          const { tokensForChain } = await import("../../../infra/token-registry");
+          const registry = tokensForChain(chainId);
+          const meta = registry?.[token];
+          const tokenAddr = meta ? meta.address : "native";
+          const raw = meta ? String(Math.round(Number(amount) * 10 ** meta.decimals)) : String(Math.round(Number(amount) * 10 ** 18));
+          const res = await fetch("/api/bridge/quote", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chainId, destinationChainId: toChain, originToken: tokenAddr, amount: raw, recipient: address }),
+          });
+          const quoteJson = await res.json();
+          if (!quoteJson.success) throw new Error(`Step ${i + 1} bridge quote failed: ${quoteJson.error}`);
+          const depositRes = await fetch("/api/bridge/deposit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chainId,
+              destinationChainId: toChain,
+              inputToken: tokenAddr,
+              outputToken: tokenAddr,
+              inputAmount: raw,
+              outputAmount: quoteJson.receiveAmount,
+              recipient: address,
+              quoteTimestamp: Math.floor(Date.now() / 1000),
+            }),
+          });
+          stepResult = await depositRes.json();
+        } else if (step.type === "aave_supply") {
+          const token = String(step.params.token ?? "USDC").toUpperCase();
+          const { tokensForChain } = await import("../../../infra/token-registry");
+          const registry = tokensForChain(chainId);
+          const meta = registry?.[token];
+          if (!meta) throw new Error(`Token ${token} not supported in step ${i + 1}`);
+          let amount: string;
+          if (token === "USDC" && usdcBalance) {
+            amount = String(Math.round(Number(usdcBalance) * 10 ** meta.decimals));
+          } else if ((token === "ETH" || token === "WETH") && ethBalance) {
+            amount = String(Math.round(Number(ethBalance) * 10 ** meta.decimals));
+          } else {
+            amount = String(10 ** meta.decimals);
+          }
+          const res = await fetch("/api/aave/deposit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chainId, asset: meta.address, amount, onBehalfOf: address }),
+          });
+          stepResult = await res.json();
+        } else {
+          throw new Error(`Unsupported step type: ${step.type}`);
+        }
+        if (!stepResult?.success) throw new Error(`Step ${i + 1} failed: ${stepResult?.error ?? "Unknown error"}`);
+        batchSteps.push({
+          id: `step-${i}`,
+          type: step.type,
+          description: step.type === "bridge" ? `Bridge to chain ${step.params.toChain ?? "?"}` : `Deposit to Aave`,
+          to: stepResult.to,
+          data: stepResult.data,
+          value: stepResult.value,
+        });
+      }
+
+      store.requestBatchApproval({
+        batchId: `multi_hop_${job.id}`,
+        steps: batchSteps,
+        chainId,
+        proposedBy: `agent_job:${job.id}`,
+        riskLevel: "medium",
+      });
+
+      logRun(job.id, { ts: Date.now(), status: "approved" });
+      jobStatus = "approved";
+      if (notificationsEnabled) {
+        sendJobCompleted(job.name, jobStatus, txHash);
+      }
+      return;
     } else {
       throw new Error(`Unsupported action: ${job.action.type}`);
     }
@@ -403,12 +556,18 @@ async function executeJob(
     );
 
     logRun(job.id, { ts: Date.now(), status: "approved" });
+    jobStatus = "approved";
   } catch (err) {
+    jobStatus = "failed";
     logRun(job.id, {
       ts: Date.now(),
       status: "failed",
       error: err instanceof Error ? err.message : "Unknown error",
     });
     pause(job.id);
+  }
+
+  if (notificationsEnabled) {
+    sendJobCompleted(job.name, jobStatus, txHash);
   }
 }

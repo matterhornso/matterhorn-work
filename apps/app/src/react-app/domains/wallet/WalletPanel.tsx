@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { WalletStore } from "./state/wallet-store";
 import { useWalletStore } from "./state/wallet-store";
 import { CHAIN_NAMES } from "../../infra/chains";
+import { TransactionHistory } from "./components/TransactionHistory";
 import { getSecurityLog, type SecurityLogEntry } from "./state/security-log";
 
 const PortfolioView = lazy(() => import("./pages/PortfolioView"));
@@ -229,39 +230,10 @@ export function WalletPanel({ store }: WalletPanelProps) {
           {/* Recent Transactions */}
           <div className="ow-glass-card p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="ow-section-heading">Recent Transactions</div>
+              <div className="ow-section-heading">Transactions</div>
               <Activity className="size-3.5 text-dls-secondary" />
             </div>
-            {recentTxs.length === 0 ? (
-              <div className="ow-empty-state py-6">
-                <div className="ow-empty-state-icon">
-                  <RefreshCw className="size-5" />
-                </div>
-                <div className="ow-empty-state-desc">No transactions yet. Your on-chain activity will appear here.</div>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {recentTxs.map((tx) => (
-                  <div
-                    key={tx.hash}
-                    className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs hover:bg-dls-hover transition-colors"
-                  >
-                    <span className={cn("size-2 shrink-0 rounded-full", txStatusColor(tx.status))} />
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <span className="font-mono text-dls-text truncate">
-                        {truncateAddress(tx.hash)}
-                      </span>
-                      <span className="text-dls-secondary text-[11px]">
-                        {tx.value} ETH • {tx.proposedBy}
-                      </span>
-                    </div>
-                    <span className={cn("shrink-0 text-[11px] font-medium", tx.status === "confirmed" ? "text-emerald-400" : tx.status === "failed" ? "text-red-400" : "text-amber-400")}>
-                      {tx.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <TransactionHistory txs={recentTxs} />
           </div>
 
           {/* Security Activity */}

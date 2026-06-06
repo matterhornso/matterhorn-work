@@ -16,6 +16,8 @@ export interface Job {
   runCount: number;
   history: { ts: number; status: "approved" | "rejected" | "failed"; txHash?: string; error?: string }[];
   createdAt: number;
+  /** Current step index for multi-hop jobs (0-based). */
+  multiHopProgress?: number;
 }
 
 const STORAGE_KEY = "matterhorn_job_queue";

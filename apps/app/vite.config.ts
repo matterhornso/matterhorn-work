@@ -120,13 +120,18 @@ export default defineConfig({
           ) {
             return "vendor-core";
           }
-          // Markdown + syntax highlighting
+          // Syntax highlighting (heavy WASM)
           if (
-            id.includes("node_modules/marked") ||
-            id.includes("node_modules/marked-") ||
             id.includes("node_modules/shiki") ||
             id.includes("node_modules/\u0004shiki") ||
             id.includes("node_modules/@shikijs")
+          ) {
+            return "vendor-shiki";
+          }
+          // Markdown
+          if (
+            id.includes("node_modules/marked") ||
+            id.includes("node_modules/marked-")
           ) {
             return "vendor-markdown";
           }
