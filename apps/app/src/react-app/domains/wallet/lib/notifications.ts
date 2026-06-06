@@ -30,6 +30,32 @@ export function sendJobNotification(title: string, body: string, tag?: string): 
   }
 }
 
+/** Play a subtle sound on transaction completion (desktop only). */
+export function playTxSound(type: "success" | "error" = "success"): void {
+  try {
+    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    if (type === "success") {
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1); // E5
+    } else {
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+    }
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {
+    // Ignore audio errors
+  }
+}
+
 export function sendJobCompleted(name: string, status: "approved" | "rejected" | "failed", txHash?: string): void {
   const title = status === "approved" ? `Job completed: ${name}` : `Job ${status}: ${name}`;
   const body = status === "approved"
@@ -40,4 +66,5 @@ export function sendJobCompleted(name: string, status: "approved" | "rejected" |
       ? "You rejected the transaction proposal. Job paused."
       : "The job failed to execute. Check the job history for details.";
   sendJobNotification(title, body, `job-${name}`);
+  playTxSound(status === "approved" ? "success" : "error");
 }

@@ -2,7 +2,7 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { FileText, Globe, Mic2, Settings2, Wallet as WalletIcon, Zap } from "lucide-react";
+import { FileText, Globe, Mic2, Settings2, Wallet as WalletIcon, Zap, Command } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
@@ -52,6 +52,7 @@ import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
+import { CommandPalette } from "../../wallet/components/CommandPalette";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
@@ -228,6 +229,20 @@ export function SessionPage(props: SessionPageProps) {
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
   useJobCron(wallet.store);
+  const [commandOpen, setCommandOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K command palette
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (
@@ -1076,6 +1091,19 @@ export function SessionPage(props: SessionPageProps) {
         onApprove={() => { void sessionWallet.approveTx(); }}
         onReject={sessionWallet.rejectTx}
         onExecuteBatchStep={sessionWallet.executeBatchStep}
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        commands={[
+          { id: "send", label: "Send crypto", shortcut: "→ Send", action: () => {/* open send panel */} },
+          { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
+          { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
+          { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },
+          { id: "agent", label: "Agent workspace", shortcut: "→ Agent", action: () => {/* open agent panel */} },
+        ]}
       />
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
