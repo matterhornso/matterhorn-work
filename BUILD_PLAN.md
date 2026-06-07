@@ -1,9 +1,9 @@
-# Matterhorn Work: Remaining Build Plan (Revised)
+# Matterhorn Work: Build Plan (Current)
 
 > **Use cases (in order):** (1) Hyperliquid trading strategies / market making, (2) Polymarket prediction market bots
 > **Approach:** Agent blueprints inside Matterhorn Work. Not "separate features" — these are the agent skills that run inside the workspace.
-> **Status:** ~60-70% P0 complete. Server tools + MCPs verified end-to-end via `scripts/e2e-crypto-test.ts` (20/20 pass). Remaining gaps: blueprints not wired to marketplace UI, security hardening, swap builder needs 1inch API key for full testing.
-> **Source material:** `CLAUDE.md`, `scripts/verify-crypto.sh`, Matterhorn-Agent blueprints (`~/matterhorn/Matterhorn-Agent/src/data/blueprints.ts`, `mcpSkills.ts`)
+> **Status:** ~85% P0 complete. Server tools + MCPs verified end-to-end. Build green (UI 8.7s, typecheck 0 errors). 2,888 commits. Remaining: swap builder needs 1inch API key for full testing, blueprints wired to marketplace UI, system prompt battle-tested, Hyperliquid E2E with real wallet.
+> **Last updated:** June 7, 2026
 
 ---
 

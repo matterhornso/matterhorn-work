@@ -1,5 +1,7 @@
 # V1 + V2 Build Plan
 
+> **Status: V1+V2 COMPLETE as of June 7, 2026.** All tools, APIs, UI panels, MCP servers, blueprints, and tests shipped. See `BUILD_PLAN.md` for current state and remaining gaps. This document kept for historical reference only.
+>
 > Dense plan. No filler. Exact files. Build order matters.
 
 ---

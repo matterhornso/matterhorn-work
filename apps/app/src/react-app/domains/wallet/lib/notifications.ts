@@ -33,7 +33,7 @@ export function sendJobNotification(title: string, body: string, tag?: string): 
 /** Play a subtle sound on transaction completion (desktop only). */
 export function playTxSound(type: "success" | "error" = "success"): void {
   try {
-    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
     if (!AudioContext) return;
     const ctx = new AudioContext();
     const osc = ctx.createOscillator();

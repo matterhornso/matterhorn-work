@@ -245,6 +245,7 @@ export function useSessionWallet(store: WalletStore) {
     if (!publicClient || !state.chainId) return;
     let cancelled = false;
     async function poll() {
+      if (!publicClient) return;
       try {
         const price = await publicClient.getGasPrice();
         if (!cancelled) setGasPriceGwei(Number(price) / 1e9);
@@ -264,6 +265,7 @@ export function useSessionWallet(store: WalletStore) {
 
     let cancelled = false;
     async function checkReceipts() {
+      if (!publicClient) return;
       for (const tx of pending) {
         if (pendingHashesRef.current.has(tx.hash)) continue; // already checking
         pendingHashesRef.current.add(tx.hash);

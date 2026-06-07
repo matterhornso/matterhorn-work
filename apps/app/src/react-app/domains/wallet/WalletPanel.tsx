@@ -168,7 +168,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
               <div className="flex items-center gap-1.5">
                 <span className="size-1.5 rounded-full bg-emerald-400 animate-soft-pulse" />
                 <span className="text-[11px] text-dls-secondary">{chainName ?? "Unknown"}</span>
-                {gasPriceGwei !== null && (
+                {gasPriceGwei != null && (
                   <span className="text-[10px] text-amber-400 font-mono ml-1">
                     {gasPriceGwei.toFixed(1)} gwei
                   </span>
