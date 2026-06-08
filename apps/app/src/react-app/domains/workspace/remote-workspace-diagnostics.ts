@@ -160,12 +160,12 @@ export function resolveRemoteWorkspaceConnectionTarget(workspace: WorkspaceInfo)
     };
   }
 
-  if (workspace.remoteType && workspace.remoteType !== "openwork") {
+  if (workspace.remoteType && workspace.remoteType !== "matterhorn") {
     return {
       ok: false,
       state: {
         status: "error",
-        message: "Connection diagnostics are only available for OpenWork remote workers.",
+        message: "Connection diagnostics are only available for Matterhorn remote workers.",
         checkedAt: Date.now(),
       },
     };
@@ -254,7 +254,7 @@ export async function testRemoteWorkspaceConnection(
 
   if (!target.token) {
     return fail(
-      remoteSupportMessage(`Token is missing for ${target.endpointLabel}. Edit connection and paste a valid OpenWork token.`),
+      remoteSupportMessage(`Token is missing for ${target.endpointLabel}. Edit connection and paste a valid Matterhorn token.`),
       checkedAt,
     );
   }

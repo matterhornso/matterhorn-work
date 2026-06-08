@@ -8,7 +8,7 @@ export type FeedbackEmailProps = {
   entrypoint: string
   deployment: string
   appVersion: string
-  openworkServerVersion: string
+  matterhornServerVersion: string
   opencodeVersion: string
   orchestratorVersion: string
   opencodeRouterVersion: string
@@ -27,7 +27,7 @@ export function FeedbackEmail({
   entrypoint,
   deployment,
   appVersion,
-  openworkServerVersion,
+  matterhornServerVersion,
   opencodeVersion,
   orchestratorVersion,
   opencodeRouterVersion,
@@ -43,7 +43,7 @@ export function FeedbackEmail({
     ["Entrypoint", entrypoint],
     ["Deployment", deployment],
     ["App version", appVersion],
-    ["OpenWork server", openworkServerVersion],
+    ["Matterhorn server", matterhornServerVersion],
     ["OpenCode", opencodeVersion],
     ["Orchestrator", orchestratorVersion],
     ["Router", opencodeRouterVersion],
@@ -55,10 +55,10 @@ export function FeedbackEmail({
   return (
     <Html>
       <Head />
-      <Preview>{name} sent OpenWork feedback from {entrypoint || source || "unknown"}</Preview>
+      <Preview>{name} sent Matterhorn feedback from {entrypoint || source || "unknown"}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.eyebrow}>OpenWork feedback</Text>
+          <Text style={styles.eyebrow}>Matterhorn feedback</Text>
           <Heading style={styles.heading}>Feedback from {name}</Heading>
           <Text style={styles.contact}>{email}</Text>
 

@@ -40,7 +40,7 @@ const STORAGE_AUTH_TOKEN = "openwork.den.authToken";
 const STORAGE_ACTIVE_ORG_ID = "openwork.den.activeOrgId";
 const STORAGE_ACTIVE_ORG_SLUG = "openwork.den.activeOrgSlug";
 const STORAGE_ACTIVE_ORG_NAME = "openwork.den.activeOrgName";
-const ORG_PROXY_HEADER = "x-openwork-legacy-org-id";
+const ORG_PROXY_HEADER = "x-matterhorn-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
 export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Work User";
@@ -120,7 +120,7 @@ export type DenOrgLlmProviderModel = {
 
 export type DenOrgLlmProvider = {
   id: string;
-  source: "models_dev" | "custom" | "openwork";
+  source: "models_dev" | "custom" | "matterhorn";
   providerId: string;
   name: string;
   providerConfig: Record<string, unknown>;
@@ -899,7 +899,7 @@ function parseDenOrgLlmProvider(value: unknown): DenOrgLlmProvider | null {
     typeof value.name !== "string" ||
     (value.source !== "models_dev" &&
       value.source !== "custom" &&
-      value.source !== "openwork")
+      value.source !== "matterhorn")
   ) {
     return null;
   }
@@ -987,8 +987,8 @@ function parsePluginConfigObject(value: unknown): DenPluginConfigObject | null {
 
 function parseExtensionSourceFormat(value: unknown): MatterhornExtensionSourceFormat | null {
   switch (value) {
-    case "openwork-builtin":
-    case "openwork-extension-manifest":
+    case "matterhorn-builtin":
+    case "matterhorn-extension-manifest":
     case "claude-plugin":
     case "opencode-plugin":
     case "mcp-directory":

@@ -164,7 +164,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
   const getCloudManagedProviderId = (
     provider: Pick<DenOrgLlmProvider, "id" | "providerId" | "source">,
-  ) => provider.source === "openwork" ? "openwork" : provider.id.trim();
+  ) => provider.source === "matterhorn" ? "matterhorn" : provider.id.trim();
 
   const getProviderAuthWorkerType = (): "local" | "remote" =>
     options.selectedWorkspaceDisplay().workspaceType === "remote" ? "remote" : "local";
@@ -334,7 +334,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
 
     if (canUseMatterhornServer) {
       const config = await matterhornClient.getConfig(matterhornWorkspaceId);
-      return config.openwork ?? {};
+      return config.matterhorn ?? {};
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
@@ -363,7 +363,7 @@ export function createProviderAuthStore(options: CreateProviderAuthStoreOptions)
       matterhornCapabilities?.config?.write;
 
     if (canUseMatterhornServer) {
-      await matterhornClient.patchConfig(matterhornWorkspaceId, { openwork: config });
+      await matterhornClient.patchConfig(matterhornWorkspaceId, { matterhorn: config });
       return true;
     }
 

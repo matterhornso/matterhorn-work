@@ -157,7 +157,7 @@ export function StatusBar(props: StatusBarProps) {
 
   const docsControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.docs.open",
-    label: "Open OpenWork docs",
+    label: "Open Matterhorn docs",
     description: "Open the documentation from the status bar.",
     sideEffect: "external",
     targetRef: docsButtonRef,

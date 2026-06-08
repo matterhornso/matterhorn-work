@@ -39,7 +39,7 @@ type VoicePanelProps = {
   onClose: () => void;
 };
 
-const DEFAULT_TEXT_COMMAND = "Summarize the current OpenWork session and put the next step in the composer.";
+const DEFAULT_TEXT_COMMAND = "Summarize the current Matterhorn session and put the next step in the composer.";
 const VOICE_SUGGESTIONS = [
   "Read the latest message in this session",
   "Put a concise next step in the composer",
@@ -47,9 +47,9 @@ const VOICE_SUGGESTIONS = [
   "Send the current composer prompt",
 ];
 const TOOL_LABELS: Record<string, string> = {
-  openwork_snapshot: "Checking OpenWork",
-  openwork_list_actions: "Listing controls",
-  openwork_execute_action: "Running UI action",
+  matterhorn_snapshot: "Checking Matterhorn",
+  matterhorn_list_actions: "Listing controls",
+  matterhorn_execute_action: "Running UI action",
 };
 
 const initialVoiceRuntimeSnapshot: VoiceRuntimeSnapshot = {
@@ -182,16 +182,16 @@ async function executeOpenWorkTool(name: string, args: Record<string, unknown>) 
   const control = window.__openworkControl;
   if (!control) return { ok: false, error: "Matterhorn Work control surface is not available." };
 
-  if (name === "openwork_snapshot") return { ok: true, snapshot: control.snapshot() };
-  if (name === "openwork_list_actions") return { ok: true, actions: control.listActions() };
-  if (name === "openwork_execute_action") {
+  if (name === "matterhorn_snapshot") return { ok: true, snapshot: control.snapshot() };
+  if (name === "matterhorn_list_actions") return { ok: true, actions: control.listActions() };
+  if (name === "matterhorn_execute_action") {
     const actionId = typeof args.actionId === "string" ? args.actionId.trim() : "";
     if (!actionId) return { ok: false, error: "Missing actionId." };
     const actionArgs = isRecord(args.args) ? args.args : {};
     return control.execute(actionId, actionArgs);
   }
 
-  return { ok: false, error: `Unknown OpenWork voice tool: ${name}` };
+  return { ok: false, error: `Unknown Matterhorn voice tool: ${name}` };
 }
 
 function VoiceOrb(props: { status: VoiceStatus; muted: boolean }) {
@@ -312,7 +312,7 @@ export function VoicePanel(props: VoicePanelProps) {
       status: nextStatus,
       statusText: text ?? (
         nextStatus === "connecting" ? "Connecting to OpenAI Realtime..." :
-          nextStatus === "listening" ? "Listening. Ask OpenWork to act." :
+          nextStatus === "listening" ? "Listening. Ask Matterhorn to act." :
             nextStatus === "speaking" ? "Matterhorn Work is speaking..." :
               nextStatus === "muted" ? "Connected, microphone muted." :
                 nextStatus === "error" ? "Voice Mode needs attention." :
@@ -497,7 +497,7 @@ export function VoicePanel(props: VoicePanelProps) {
     await peer.setRemoteDescription({ type: "answer", sdp: await sdpResponse.text() });
     await waitForDataChannelOpen(channel);
     setRuntimeStatus("listening", audioInput ? undefined : "Connected. Send a typed voice command.");
-    addEntry("system", `Realtime connected with ${realtimeSession.model} and ${realtimeSession.tools.length} OpenWork tools.`);
+    addEntry("system", `Realtime connected with ${realtimeSession.model} and ${realtimeSession.tools.length} Matterhorn tools.`);
     recordInspectorEvent("voice.connected", { sessionId: props.sessionId, model: realtimeSession.model });
   }, [addEntry, disconnectRealtime, handleRealtimeMessage, props.client, props.sessionId, setRuntimeStatus]);
 

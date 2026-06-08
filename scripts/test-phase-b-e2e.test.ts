@@ -62,7 +62,7 @@ test("TransferPanel file exists with key features", () => {
   );
   expect(content).toInclude("requestApproval");
   expect(content).toInclude("/api/transfer/build");
-  expect(content).toInclude("Address book");
+  expect(content).toInclude("useAddressBook");
 });
 
 test("WalletPanel includes Send button and TransferPanel wiring", () => {
@@ -84,5 +84,5 @@ test("BridgePanel includes recipient input and fee preview", () => {
   );
   expect(content).toInclude("recipient");
   expect(content).toInclude("Fee");
-  expect(content).toInclude("Address book");
+  expect(content).toInclude("useAddressBook");
 });

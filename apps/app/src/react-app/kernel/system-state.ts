@@ -53,7 +53,7 @@ function clearOpenworkLocalStorage(mode: ResetOpenworkMode) {
     }
     const keys = Object.keys(window.localStorage);
     for (const key of keys) {
-      if (/openwork/.test(key)) window.localStorage.removeItem(key);
+      if (/matterhorn/.test(key)) window.localStorage.removeItem(key);
     }
     window.localStorage.removeItem("openwork_mode_pref");
   } catch {

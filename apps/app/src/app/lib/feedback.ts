@@ -85,7 +85,7 @@ export function buildFeedbackUrl(options: FeedbackUrlOptions): string {
   const url = new URL(DEFAULT_FEEDBACK_URL);
   const osContext = parseClientOsContext();
 
-  url.searchParams.set("source", "openwork-app");
+  url.searchParams.set("source", "matterhorn-app");
   url.searchParams.set("entrypoint", options.entrypoint);
 
   const entries = {

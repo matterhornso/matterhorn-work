@@ -102,7 +102,7 @@ export function ServerProvider({ children, defaultUrl }: ServerProviderProps) {
 
     const fallback = normalizeServerUrl(defaultUrl) ?? "";
 
-    // Hosted web deployments served by OpenWork must reuse the OpenCode proxy
+    // Hosted web deployments served by Matterhorn must reuse the OpenCode proxy
     // rather than any persisted localhost target.
     const forceProxy =
       !isDesktopRuntime() &&

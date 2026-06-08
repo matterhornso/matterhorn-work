@@ -51,11 +51,11 @@ export function AdvancedView(props: AdvancedViewProps) {
     initialAdvancedLocalState,
   );
   const {
-    reconnectStatus: openworkReconnectStatus,
-    reconnectError: openworkReconnectError,
-    restartBusy: openworkRestartBusy,
-    restartStatus: openworkRestartStatus,
-    restartError: openworkRestartError,
+    reconnectStatus: matterhornReconnectStatus,
+    reconnectError: matterhornReconnectError,
+    restartBusy: matterhornRestartBusy,
+    restartStatus: matterhornRestartStatus,
+    restartError: matterhornRestartError,
     deepLinkOpen: debugDeepLinkOpen,
     deepLinkInput: debugDeepLinkInput,
     deepLinkBusy: debugDeepLinkBusy,
@@ -87,7 +87,7 @@ export function AdvancedView(props: AdvancedViewProps) {
     }
   })();
 
-  const openworkTone: AdvancedStatusTone = (() => {
+  const matterhornTone: AdvancedStatusTone = (() => {
     switch (props.matterhornServerStatus) {
       case "connected":
         return "ready";
@@ -117,7 +117,7 @@ export function AdvancedView(props: AdvancedViewProps) {
   };
 
   const handleRestartLocalServer = async () => {
-    if (props.busy || openworkRestartBusy) return;
+    if (props.busy || matterhornRestartBusy) return;
     dispatchLocal({ type: "restartStart" });
     try {
       const ok = await props.restartLocalServer();
@@ -162,7 +162,7 @@ export function AdvancedView(props: AdvancedViewProps) {
         clientStatusLabel={clientStatusLabel}
         clientTone={clientTone}
         matterhornStatusLabel={matterhornStatusLabel}
-        openworkTone={openworkTone}
+        matterhornTone={matterhornTone}
       />
 
       <Separator />
@@ -201,11 +201,11 @@ export function AdvancedView(props: AdvancedViewProps) {
         matterhornServerStatus={props.matterhornServerStatus}
         matterhornReconnectBusy={props.matterhornReconnectBusy}
         isLocalEngineRunning={isLocalEngineRunning}
-        restartBusy={openworkRestartBusy}
-        reconnectStatus={openworkReconnectStatus}
-        reconnectError={openworkReconnectError}
-        restartStatus={openworkRestartStatus}
-        restartError={openworkRestartError}
+        restartBusy={matterhornRestartBusy}
+        reconnectStatus={matterhornReconnectStatus}
+        reconnectError={matterhornReconnectError}
+        restartStatus={matterhornRestartStatus}
+        restartError={matterhornRestartError}
         onReconnect={handleReconnectOpenworkServer}
         onRestart={handleRestartLocalServer}
         onStopHost={props.stopHost}

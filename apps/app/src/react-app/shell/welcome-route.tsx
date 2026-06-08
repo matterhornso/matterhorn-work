@@ -129,7 +129,7 @@ export function WelcomeRoute() {
           await workspaceSetRuntimeActive(createdId).catch(() => undefined);
           writeActiveWorkspaceId(createdId);
         }
-        // Register with the running openwork-server if available.
+        // Register with the running matterhorn-server if available.
         try {
           const { normalizedBaseUrl, resolvedToken, resolvedHostToken } =
             await resolveMatterhornConnection();
@@ -155,7 +155,7 @@ export function WelcomeRoute() {
               const session = unwrap(await createClient(
                 `${(buildMatterhornWorkspaceBaseUrl(normalizedBaseUrl, targetWorkspaceId) ?? normalizedBaseUrl).replace(/\/+$/, "")}/opencode`,
                 workspacePath || undefined,
-                { token: resolvedToken, mode: "openwork" },
+                { token: resolvedToken, mode: "matterhorn" },
               ).session.create({ directory: workspacePath || undefined }));
               targetSessionId = session.id;
             }

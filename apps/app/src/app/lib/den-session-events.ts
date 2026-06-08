@@ -1,7 +1,7 @@
 import type { DenSettings, DenUser } from "./den";
 
-export const denSessionUpdatedEvent = "openwork-den-session-updated";
-export const denSettingsChangedEvent = "openwork-den-settings-changed";
+export const denSessionUpdatedEvent = "matterhorn-den-session-updated";
+export const denSettingsChangedEvent = "matterhorn-den-settings-changed";
 
 export type DenSessionUpdatedDetail = {
   status?: "success" | "error" | "signed_out";

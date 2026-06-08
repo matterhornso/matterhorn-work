@@ -135,7 +135,7 @@ const baseMarkedOptions = {
   silent: true,
   renderer: {
     html({ text }) {
-      return text.includes('data-openwork-shiki="true"') ? text : "";
+      return text.includes('data-matterhorn-shiki="true"') ? text : "";
     },
     paragraph({ tokens }) {
       return `<p class="my-3 leading-relaxed">${this.parser.parseInline(tokens)}</p>`;
@@ -240,7 +240,7 @@ const highlightedMarkdownParser = new Marked<string, string>({
         ],
       });
     },
-    container: `<div data-openwork-shiki="true" class="my-4 overflow-hidden rounded-[18px] border border-dls-border/70 bg-gray-1/80 p-4 text-xs leading-6">%s</div>`,
+    container: `<div data-matterhorn-shiki="true" class="my-4 overflow-hidden rounded-[18px] border border-dls-border/70 bg-gray-1/80 p-4 text-xs leading-6">%s</div>`,
   }),
 );
 

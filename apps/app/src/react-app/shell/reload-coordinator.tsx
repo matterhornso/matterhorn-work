@@ -34,7 +34,7 @@ type ReloadCoordinatorContextValue = {
   registerWorkspaceReloadControls: (controls: WorkspaceReloadControls | null) => () => void;
 };
 
-export const orgOnboardingVisibilityEvent = "openwork-org-onboarding-visibility";
+export const orgOnboardingVisibilityEvent = "matterhorn-org-onboarding-visibility";
 
 const ReloadCoordinatorContext = createContext<ReloadCoordinatorContextValue | null>(null);
 

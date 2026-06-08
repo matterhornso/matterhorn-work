@@ -58,7 +58,7 @@ export async function ensureDesktopLocalMatterhornConnection(
     workspacePaths.unshift(workspaceRoot);
   }
 
-  recordInspectorEvent("route.local_openwork.ensure.start", {
+  recordInspectorEvent("route.local_matterhorn.ensure.start", {
     route: options.route,
     workspaceId: workspace.id,
     workspaceRoot,
@@ -70,7 +70,7 @@ export async function ensureDesktopLocalMatterhornConnection(
       await engineStart(workspaceRoot, {
         runtime: "direct",
         workspacePaths,
-        openworkRemoteAccess: readMatterhornServerSettings().remoteAccessEnabled === true,
+        matterhornRemoteAccess: readMatterhornServerSettings().remoteAccessEnabled === true,
       });
     }
 
@@ -88,7 +88,7 @@ export async function ensureDesktopLocalMatterhornConnection(
     });
     emitOpenworkSettingsChanged();
 
-    recordInspectorEvent("route.local_openwork.ensure.success", {
+    recordInspectorEvent("route.local_matterhorn.ensure.success", {
       route: options.route,
       workspaceId: workspace.id,
       workspaceRoot,
@@ -99,7 +99,7 @@ export async function ensureDesktopLocalMatterhornConnection(
   } catch (error) {
     const message = describeError(error);
     console.error(`[${options.route}-route] local workspace reconnect failed`, error);
-    recordInspectorEvent("route.local_openwork.ensure.error", {
+    recordInspectorEvent("route.local_matterhorn.ensure.error", {
       route: options.route,
       workspaceId: workspace.id,
       workspaceRoot,

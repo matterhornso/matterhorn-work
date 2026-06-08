@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 
 import { useUiStateStore } from "./ui-state-store";
 
-const NATIVE_MENU_OPEN_SETTINGS_EVENT = "openwork:native-menu:open-settings";
-const NATIVE_MENU_TOGGLE_SIDEBAR_EVENT = "openwork:native-menu:toggle-sidebar";
+const NATIVE_MENU_OPEN_SETTINGS_EVENT = "matterhorn:native-menu:open-settings";
+const NATIVE_MENU_TOGGLE_SIDEBAR_EVENT = "matterhorn:native-menu:toggle-sidebar";
 
 export function AppMenuProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();

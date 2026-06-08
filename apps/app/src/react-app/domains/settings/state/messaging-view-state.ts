@@ -388,7 +388,7 @@ export function useMessagingViewProps(
       }
 
       const config = await client.getConfig(id).catch(() => null);
-      const isModuleEnabled = readMessagingEnabledFromOpenworkConfig(config?.openwork);
+      const isModuleEnabled = readMessagingEnabledFromOpenworkConfig(config?.matterhorn);
       setMessagingEnabled(isModuleEnabled);
 
       if (!isModuleEnabled) {
@@ -516,7 +516,7 @@ export function useMessagingViewProps(
     setMessagingError(null);
     try {
       await client.patchConfig(id, {
-        openwork: {
+        matterhorn: {
           messaging: {
             enabled: true,
           },
@@ -549,7 +549,7 @@ export function useMessagingViewProps(
     setMessagingError(null);
     try {
       await client.patchConfig(id, {
-        openwork: {
+        matterhorn: {
           messaging: {
             enabled: false,
           },

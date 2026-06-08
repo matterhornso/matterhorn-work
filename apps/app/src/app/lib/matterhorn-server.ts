@@ -206,14 +206,14 @@ export type MatterhornWorkspaceExport = {
   workspaceId: string;
   exportedAt: number;
   opencode?: Record<string, unknown>;
-  openwork?: Record<string, unknown>;
+  matterhorn?: Record<string, unknown>;
   skills?: Array<{ name: string; description?: string; trigger?: string; content: string }>;
   commands?: Array<{ name: string; description?: string; template?: string }>;
   files?: Array<{ path: string; content: string }>;
 };
 
 export type MatterhornWorkspaceImportChange = {
-  kind: "opencode" | "openwork" | "skill" | "command" | "file";
+  kind: "opencode" | "matterhorn" | "skill" | "command" | "file";
   action: "create" | "update" | "replace" | "delete" | "unchanged";
   label: string;
   path: string;
@@ -700,7 +700,7 @@ function buildHeaders(
     headers.Authorization = `Bearer ${token}`;
   }
   if (hostToken) {
-    headers["X-OpenWork-Host-Token"] = hostToken;
+    headers["X-Matterhorn-Host-Token"] = hostToken;
   }
   if (extra) {
     Object.assign(headers, extra);
@@ -714,7 +714,7 @@ function buildAuthHeaders(token?: string, hostToken?: string, extra?: Record<str
     headers.Authorization = `Bearer ${token}`;
   }
   if (hostToken) {
-    headers["X-OpenWork-Host-Token"] = hostToken;
+    headers["X-Matterhorn-Host-Token"] = hostToken;
   }
   if (extra) {
     Object.assign(headers, extra);
@@ -1031,12 +1031,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         },
       ),
     getConfig: (workspaceId: string) =>
-      requestJson<{ opencode: Record<string, unknown>; openwork: Record<string, unknown>; updatedAt?: number | null }>(
+      requestJson<{ opencode: Record<string, unknown>; matterhorn: Record<string, unknown>; updatedAt?: number | null }>(
         baseUrl,
         `/workspace/${workspaceId}/config`,
         { token, hostToken, timeoutMs: timeouts.config },
       ),
-    patchConfig: (workspaceId: string, payload: { opencode?: Record<string, unknown>; openwork?: Record<string, unknown> }) =>
+    patchConfig: (workspaceId: string, payload: { opencode?: Record<string, unknown>; matterhorn?: Record<string, unknown> }) =>
       requestJson<{ updatedAt?: number | null }>(baseUrl, `/workspace/${workspaceId}/config`, {
         token,
         hostToken,

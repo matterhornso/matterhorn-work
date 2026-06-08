@@ -7,10 +7,10 @@ export type MatterhornConnectionState = {
   testMessage: string | null;
 };
 
-export type TokenVisibilityKey = "openwork" | "client" | "owner" | "host";
+export type TokenVisibilityKey = "matterhorn" | "client" | "owner" | "host";
 
 type ConfigLocalState = {
-  openworkConnection: MatterhornConnectionState;
+  matterhornConnection: MatterhornConnectionState;
   tokenVisible: Record<TokenVisibilityKey, boolean>;
   copyingField: string | null;
 };
@@ -24,14 +24,14 @@ type ConfigLocalAction =
   | { type: "copyingField"; field: string | null };
 
 export const initialConfigLocalState: ConfigLocalState = {
-  openworkConnection: {
+  matterhornConnection: {
     url: "",
     token: "",
     testState: "idle",
     testMessage: null,
   },
   tokenVisible: {
-    openwork: false,
+    matterhorn: false,
     client: false,
     owner: false,
     host: false,
@@ -45,12 +45,12 @@ export function configLocalReducer(
 ): ConfigLocalState {
   switch (action.type) {
     case "serverSettings":
-      return { ...state, openworkConnection: action.connection };
+      return { ...state, matterhornConnection: action.connection };
     case "url":
       return {
         ...state,
-        openworkConnection: {
-          ...state.openworkConnection,
+        matterhornConnection: {
+          ...state.matterhornConnection,
           url: action.url,
           testState: "idle",
           testMessage: null,
@@ -59,8 +59,8 @@ export function configLocalReducer(
     case "token":
       return {
         ...state,
-        openworkConnection: {
-          ...state.openworkConnection,
+        matterhornConnection: {
+          ...state.matterhornConnection,
           token: action.token,
           testState: "idle",
           testMessage: null,
@@ -69,8 +69,8 @@ export function configLocalReducer(
     case "testState":
       return {
         ...state,
-        openworkConnection: {
-          ...state.openworkConnection,
+        matterhornConnection: {
+          ...state.matterhornConnection,
           testState: action.testState,
           testMessage: action.testMessage,
         },

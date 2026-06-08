@@ -638,7 +638,7 @@ export function createMatterhornServerStore(options: CreateMatterhornServerStore
       const shouldAttach =
         !options.activeClient() ||
         active.workspaceType !== "remote" ||
-        active.remoteType !== "openwork";
+        active.remoteType !== "matterhorn";
       if (shouldAttach) {
         await options
           .createRemoteWorkspaceFlow({

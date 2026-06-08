@@ -43,7 +43,7 @@ export function useRemoteWorkspaceConnectionEditor<TWorkspace extends WorkspaceI
   const initialValues = useMemo(
     () => {
       const hostUrl = workspace?.matterhornHostUrl ?? workspace?.baseUrl ?? "";
-      const mountedUrl = workspace?.remoteType === "openwork"
+      const mountedUrl = workspace?.remoteType === "matterhorn"
         ? buildMatterhornWorkspaceBaseUrl(hostUrl, workspace.matterhornWorkspaceId) ?? hostUrl
         : hostUrl;
       return {

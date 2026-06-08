@@ -1,9 +1,9 @@
 import { getMcpServerName, type McpDirectoryInfo } from "../../../app/constants";
 
-const EXTENSION_DISABLED_KEY_PREFIX = "openwork.extension.disabled.";
-const EXTENSION_ENABLED_KEY_PREFIX = "openwork.extension.enabled.";
-const EXTENSION_HIDDEN_KEY_PREFIX = "openwork.extension.hidden.";
-export const MATTERHORN_EXTENSION_STATE_CHANGED = "openwork:extension-state-changed";
+const EXTENSION_DISABLED_KEY_PREFIX = "matterhorn.extension.disabled.";
+const EXTENSION_ENABLED_KEY_PREFIX = "matterhorn.extension.enabled.";
+const EXTENSION_HIDDEN_KEY_PREFIX = "matterhorn.extension.hidden.";
+export const MATTERHORN_EXTENSION_STATE_CHANGED = "matterhorn:extension-state-changed";
 
 export function getExtensionId(entry: McpDirectoryInfo): string {
   return entry.id ?? entry.serverName ?? getMcpServerName(entry);

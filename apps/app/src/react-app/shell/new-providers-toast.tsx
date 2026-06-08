@@ -14,7 +14,7 @@ const SEEN_KEY = "openwork.seenProviderIds";
 const PENDING_MODEL_PICKER_KEY = "openwork.pendingModelPickerProviderIds";
 
 /** Custom event to request the model picker to open. */
-export const openModelPickerEvent = "openwork-open-model-picker";
+export const openModelPickerEvent = "matterhorn-open-model-picker";
 export const pendingModelPickerProviderIdsKey = PENDING_MODEL_PICKER_KEY;
 
 function readSeenProviderIds(): Set<string> {

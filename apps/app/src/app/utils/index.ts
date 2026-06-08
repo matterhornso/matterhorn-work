@@ -987,8 +987,8 @@ const ARTIFACT_OUTPUT_SKIP_TOOLS = new Set(["webfetch"]);
 
 // Patterns that indicate a path is a truncated system/absolute path rather than a workspace-relative path
 const TRUNCATED_SYSTEM_PATH_PATTERNS = [
-  /com\.[^/]+\.(openwork|opencode)/i, // macOS app bundle identifiers
-  /\.openwork\.dev\//i, // OpenWork dev paths
+  /com\.[^/]+\.(matterhorn|opencode)/i, // macOS app bundle identifiers
+  /\.matterhorn\.dev\//i, // Matterhorn dev paths
   /Application Support\//i, // macOS Application Support
   /AppData[/\\]/i, // Windows AppData
   /\.local\/share\//i, // Linux XDG data

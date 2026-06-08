@@ -165,8 +165,8 @@ export function ConfigServerConnectionSection(props: {
   matterhornStatusStyle: string;
   resolvedWorkspaceUrl: string;
   resolvedWorkspaceId: string;
-  openworkTestState: MatterhornTestState;
-  openworkTestMessage: string | null;
+  matterhornTestState: MatterhornTestState;
+  matterhornTestMessage: string | null;
   hasOpenworkChanges: boolean;
   onUrlChange: (url: string) => void;
   onTokenChange: (token: string) => void;
@@ -202,11 +202,11 @@ export function ConfigServerConnectionSection(props: {
         <div className="text-[11px] text-gray-8 font-mono truncate">{t("config.worker_id")}{props.resolvedWorkspaceId || t("config.unavailable")}</div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => void props.onTestConnection()} disabled={props.busy || props.openworkTestState === "testing"}>{props.openworkTestState === "testing" ? t("config.testing") : t("config.test_connection")}</Button>
+        <Button variant="outline" onClick={() => void props.onTestConnection()} disabled={props.busy || props.matterhornTestState === "testing"}>{props.matterhornTestState === "testing" ? t("config.testing") : t("config.test_connection")}</Button>
         <Button onClick={props.onSave} disabled={props.busy || !props.hasOpenworkChanges}>{t("common.save")}</Button>
         <Button variant="outline" onClick={props.onReset} disabled={props.busy}>{t("common.reset")}</Button>
       </div>
-      {props.openworkTestState !== "idle" ? <ConfigConnectionTestStatus state={props.openworkTestState} message={props.openworkTestMessage} /> : null}
+      {props.matterhornTestState !== "idle" ? <ConfigConnectionTestStatus state={props.matterhornTestState} message={props.matterhornTestMessage} /> : null}
       {props.matterhornStatusLabel !== t("config.status_connected") ? <div className="text-xs text-gray-9">{t("config.server_needed_hint")}</div> : null}
     </div>
   );

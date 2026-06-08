@@ -27,7 +27,7 @@ type SettingsTone = "ready" | "warning" | "neutral" | "error";
 
 declare global {
   interface WindowEventMap {
-    "openwork-den-session-updated": CustomEvent<DenSessionUpdatedDetail>;
+    "matterhorn-den-session-updated": CustomEvent<DenSessionUpdatedDetail>;
   }
 }
 
@@ -48,7 +48,7 @@ function parseManualAuthInput(value: string) {
     const routeSegments = routePath.split("/").filter(Boolean);
     const routeTail = routeSegments[routeSegments.length - 1] ?? "";
     if (
-      (protocol === "openwork:" || protocol === "openwork-dev:") &&
+      (protocol === "matterhorn:" || protocol === "matterhorn-dev:") &&
       (routeHost === "den-auth" || routePath === "den-auth" || routeTail === "den-auth")
     ) {
       const grant = url.searchParams.get("grant")?.trim() ?? "";
@@ -177,7 +177,7 @@ export function useDenSession({
               (id: unknown) => typeof id === "string" && !/^lpr_/i.test(id),
             );
             window.localStorage.setItem(
-              "openwork.acknowledgedProviders",
+              "matterhorn.acknowledgedProviders",
               JSON.stringify(kept),
             );
           }

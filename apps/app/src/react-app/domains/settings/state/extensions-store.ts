@@ -464,7 +464,7 @@ export function createExtensionsStore(options: {
 
     if (canUseMatterhornServer) {
       const config = await matterhornClient.getConfig(matterhornWorkspaceId);
-      return config.openwork ?? {};
+      return config.matterhorn ?? {};
     }
 
     if (isLocalWorkspace && isDesktopRuntime() && root) {
@@ -487,7 +487,7 @@ export function createExtensionsStore(options: {
       matterhornSnapshot.matterhornServerCapabilities?.config?.write;
 
     if (canUseMatterhornServer) {
-      await matterhornClient.patchConfig(matterhornWorkspaceId, { openwork: config });
+      await matterhornClient.patchConfig(matterhornWorkspaceId, { matterhorn: config });
       return true;
     }
 
@@ -1925,7 +1925,7 @@ export function createExtensionsStore(options: {
       mutateState((current) => ({
         ...current,
         pluginConfig: null,
-        pluginConfigPath: `opencode.json (${isRemoteWorkspace ? "remote" : "openwork"} server)`,
+        pluginConfigPath: `opencode.json (${isRemoteWorkspace ? "remote" : "matterhorn"} server)`,
       }));
 
       try {

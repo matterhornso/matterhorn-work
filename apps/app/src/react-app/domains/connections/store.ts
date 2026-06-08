@@ -174,7 +174,7 @@ export function createConnectionsStore(options: {
       buildMatterhornWorkspaceBaseUrl(matterhornBaseUrl, options.runtimeWorkspaceId()) ?? matterhornBaseUrl;
     activeClient = createClient(`${mountedBaseUrl.replace(/\/+$/, "")}/opencode`, undefined, {
       token,
-      mode: "openwork",
+      mode: "matterhorn",
     });
     options.setClient(activeClient);
     return activeClient;
@@ -283,7 +283,7 @@ export function createConnectionsStore(options: {
       if (!fallbackOnError) {
         throw error instanceof Error
           ? error
-          : new Error("Computer Use helper app is unavailable. Restart OpenWork or reinstall the app.");
+          : new Error("Computer Use helper app is unavailable. Restart Matterhorn or reinstall the app.");
       }
       // Fall through to the published package command in the manifest/catalog.
     }
@@ -304,7 +304,7 @@ export function createConnectionsStore(options: {
   };
 
   const resolveLocalMcpEnvironment = async (entry: McpDirectoryInfo) => {
-    if (entry.serverName !== "openwork-ui") return undefined;
+    if (entry.serverName !== "matterhorn-ui") return undefined;
     try {
       const environment = await (window as any).__OPENWORK_ELECTRON__?.invokeDesktop?.("getOpenworkUiMcpEnvironment");
       if (environment && typeof environment === "object" && !Array.isArray(environment)) {
@@ -476,7 +476,7 @@ export function createConnectionsStore(options: {
     if (isRemoteWorkspace && !canUseMatterhornServer) {
       setStateField("mcpStatus", "Matterhorn Work server unavailable. MCP config is read-only.");
       finishPerf(options.developerMode(), "mcp.connect", "blocked", startedAt, {
-        reason: "openwork-server-unavailable",
+        reason: "matterhorn-server-unavailable",
       });
       return;
     }
@@ -524,7 +524,7 @@ export function createConnectionsStore(options: {
       // Resolve dynamic URLs for built-in MCPs
       let resolvedUrl = entry.url;
       let resolvedHeaders: Record<string, string> | undefined;
-      if (!resolvedUrl && entry.serverName === "openwork-ui") {
+      if (!resolvedUrl && entry.serverName === "matterhorn-ui") {
         try {
           const bridgeInfo = await (window as any).__OPENWORK_ELECTRON__?.invokeDesktop?.("getUiControlBridgeInfo");
           if (bridgeInfo?.baseUrl) {

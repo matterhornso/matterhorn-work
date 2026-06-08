@@ -590,7 +590,7 @@ export function createOpenworkChatTransport(options: TransportOptions): ChatTran
     async sendMessages({ messages, abortSignal }) {
       const client = createClient(options.baseUrl, undefined, {
         token: options.matterhornToken,
-        mode: "openwork",
+        mode: "matterhorn",
       });
 
       return new ReadableStream<UIMessageChunk>({

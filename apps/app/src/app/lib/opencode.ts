@@ -58,7 +58,7 @@ export type OpencodeAuth = {
   username?: string;
   password?: string;
   token?: string;
-  mode?: "basic" | "openwork";
+  mode?: "basic" | "matterhorn";
 };
 
 const DEFAULT_OPENCODE_REQUEST_TIMEOUT_MS = 10_000;
@@ -265,7 +265,7 @@ const encodeBasicAuth = (auth?: OpencodeAuth) => {
 };
 
 const resolveAuthHeader = (auth?: OpencodeAuth) => {
-  if (auth?.mode === "openwork" && auth.token) {
+  if (auth?.mode === "matterhorn" && auth.token) {
     return `Bearer ${auth.token}`;
   }
   const encoded = encodeBasicAuth(auth);
@@ -278,7 +278,7 @@ const resolveAuthHeader = (auth?: OpencodeAuth) => {
  * `fetch_read_body` IPC call blocks until the entire body is delivered, so
  * pointing it at an infinite stream freezes the webview's main thread for
  * minutes. For these endpoints we always use the webview's native fetch —
- * CORS is already wide open on the openwork/opencode stack, so there's no
+ * CORS is already wide open on the matterhorn/opencode stack, so there's no
  * reason to route them through the plugin.
  */
 const STREAM_URL_RE = /\/(event|stream)(\b|\/|$|\?)/;
@@ -371,7 +371,7 @@ export function createClient(baseUrl: string, directory?: string, auth?: Opencod
   });
 
   const session = client.session as typeof client.session;
-  const matterhornMount = auth?.mode === "openwork" ? resolveOpenworkWorkspaceMount(baseUrl) : null;
+  const matterhornMount = auth?.mode === "matterhorn" ? resolveOpenworkWorkspaceMount(baseUrl) : null;
   const matterhornSessionClient =
     matterhornMount && auth?.token
       ? createMatterhornServerClient({ baseUrl: matterhornMount.baseUrl, token: auth.token })

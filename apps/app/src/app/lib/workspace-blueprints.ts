@@ -27,7 +27,7 @@ const defaultWelcomeBlueprintMessages = (): WorkspaceBlueprintSessionMessage[] =
 export function defaultBlueprintSessionsForPreset(_preset: string): WorkspaceBlueprintSessionTemplate[] {
   return [
     {
-      id: "welcome-to-openwork",
+      id: "welcome-to-matterhorn",
       title: t("blueprint.welcome_title"),
       messages: defaultWelcomeBlueprintMessages(),
       openOnFirstLoad: true,

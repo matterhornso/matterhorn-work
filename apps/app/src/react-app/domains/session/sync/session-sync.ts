@@ -887,7 +887,7 @@ function flushDeltas(entry: SyncEntry, workspaceId: string) {
 }
 
 function startSync(input: SyncOptions) {
-  const client = createClient(input.baseUrl, undefined, { token: input.matterhornToken, mode: "openwork" });
+  const client = createClient(input.baseUrl, undefined, { token: input.matterhornToken, mode: "matterhorn" });
   const controller = new AbortController();
   const entry = syncs.get(syncKey(input));
   let disposed = false;

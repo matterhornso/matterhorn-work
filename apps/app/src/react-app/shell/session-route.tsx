@@ -225,7 +225,7 @@ const emptyWorkspaceDisplay: WorkspaceDisplay = {
   workspaceType: "local",
 };
 
-const reloadAfterOrgOnboardingKey = "openwork.reloadAfterOrgOnboarding";
+const reloadAfterOrgOnboardingKey = "matterhorn.reloadAfterOrgOnboarding";
 
 function describeRouteError(error: unknown) {
   if (error instanceof Error) {
@@ -1470,7 +1470,7 @@ export function SessionRoute() {
       opencodeBaseUrl && selectedWorkspaceServerToken && !selectedWorkspaceError
         ? createClient(opencodeBaseUrl, selectedWorkspaceRoot || undefined, {
             token: selectedWorkspaceServerToken,
-            mode: "openwork",
+            mode: "matterhorn",
           })
         : null,
     [opencodeBaseUrl, selectedWorkspaceError, selectedWorkspaceRoot, selectedWorkspaceServerToken],
@@ -2381,7 +2381,7 @@ export function SessionRoute() {
     const workspaceClient = createClient(
       endpoint.opencodeBaseUrl,
       workspace.path?.trim() || undefined,
-      { token: endpoint.token, mode: "openwork" },
+      { token: endpoint.token, mode: "matterhorn" },
     );
     try {
       setErrorsByWorkspaceId((current) => ({ ...current, [workspaceId]: null }));
@@ -2585,7 +2585,7 @@ export function SessionRoute() {
         await workspaceSetSelected(createdId).catch(() => undefined);
         await workspaceSetRuntimeActive(createdId).catch(() => undefined);
       }
-      // Register the workspace with the running openwork-server so
+      // Register the workspace with the running matterhorn-server so
       // listWorkspaces() reflects it immediately. Without this the UI only
       // picks up the new workspace after an app restart (because the server
       // is launched with a fixed --workspace list at boot and the bridge
@@ -2609,7 +2609,7 @@ export function SessionRoute() {
           ? unwrap(await createClient(
               `${(buildMatterhornWorkspaceBaseUrl(baseUrl, targetWorkspaceId) ?? baseUrl).replace(/\/+$/, "")}/opencode`,
               workspacePath || undefined,
-              { token, mode: "openwork" },
+              { token, mode: "matterhorn" },
             ).session.create({ directory: workspacePath || undefined }))
           : null;
         setLegacySelectedWorkspaceId(targetWorkspaceId);
@@ -2836,7 +2836,7 @@ export function SessionRoute() {
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspace.path?.trim() || undefined,
-              { token: endpoint.token, mode: "openwork" },
+              { token: endpoint.token, mode: "matterhorn" },
             );
             try {
               const session = unwrap(

@@ -247,12 +247,12 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
       setActiveOrgId(settings.activeOrgId?.trim() ?? "");
     };
     window.addEventListener(
-      "openwork-den-session-updated",
+      "matterhorn-den-session-updated",
       handler as EventListener,
     );
     return () =>
       window.removeEventListener(
-        "openwork-den-session-updated",
+        "matterhorn-den-session-updated",
         handler as EventListener,
       );
   }, [props.open]);

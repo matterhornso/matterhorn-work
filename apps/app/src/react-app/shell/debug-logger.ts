@@ -1,6 +1,6 @@
 /**
  * Dev observability client. Forwards browser console logs, uncaught errors,
- * promise rejections, and fetch activity to the openwork-server `/dev/log`
+ * promise rejections, and fetch activity to the matterhorn-server `/dev/log`
  * sink so an operator can tail a single file and see everything the React
  * shell is doing — especially right before a hang.
  *
@@ -183,7 +183,7 @@ export function recordDebugLog(entry: DevLogEntry) {
 
 function isEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  // Always on in dev; explicit opt-out via `localStorage.openwork.debug.disableLogger = "1"`.
+  // Always on in dev; explicit opt-out via `localStorage.matterhorn.debug.disableLogger = "1"`.
   try {
     if (window.localStorage.getItem("openwork.debug.disableLogger") === "1") return false;
   } catch {

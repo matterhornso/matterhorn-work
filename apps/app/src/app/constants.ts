@@ -44,9 +44,9 @@ export type McpDirectoryInfo = {
   iconSrc?: string;
   /** Prompt inserted from the composer extension picker. */
   composerPrompt?: string;
-  /** Whether OpenWork should show this extension as enabled before user setup. */
+  /** Whether Matterhorn should show this extension as enabled before user setup. */
   defaultEnabled?: boolean;
-  /** Whether OpenWork should hide this extension from the default catalog view. */
+  /** Whether Matterhorn should hide this extension from the default catalog view. */
   defaultHidden?: boolean;
   /** Whether this extension is still in preview. */
   preview?: boolean;
@@ -146,9 +146,9 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
     iconSrc: "/ext-context7.svg",
   },
   {
-    get name() { return t("mcp.quick_connect_openwork_cloud_title"); },
-    serverName: "openwork-cloud",
-    get description() { return t("mcp.quick_connect_openwork_cloud_desc"); },
+    get name() { return t("mcp.quick_connect_matterhorn_cloud_title"); },
+    serverName: "matterhorn-cloud",
+    get description() { return t("mcp.quick_connect_matterhorn_cloud_desc"); },
     get url() {
       try {
         return `${readDenBootstrapConfig().baseUrl.replace(/\/+$/, "")}/mcp`;
@@ -159,18 +159,18 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
     type: "remote",
     oauth: true,
     kind: "mcp",
-    iconSrc: "/openwork-mark.svg",
+    iconSrc: "/matterhorn-mark.svg",
   },
   {
-    get name() { return t("mcp.quick_connect_openwork_ui_title"); },
-    serverName: "openwork-ui",
-    get description() { return t("mcp.quick_connect_openwork_ui_desc"); },
+    get name() { return t("mcp.quick_connect_matterhorn_ui_title"); },
+    serverName: "matterhorn-ui",
+    get description() { return t("mcp.quick_connect_matterhorn_ui_desc"); },
     type: "local",
     // Dev builds replace this with the local checkout path before writing config.
     command: ["npx", "-y", "openwork-ui-mcp"],
     oauth: false,
     kind: "ui-control",
-    iconSrc: "/openwork-mark.svg",
+    iconSrc: "/matterhorn-mark.svg",
   },
   ...BUILT_IN_OPENWORK_EXTENSION_MANIFESTS.map(extensionManifestToDirectoryInfo),
 ];

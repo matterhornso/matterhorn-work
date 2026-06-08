@@ -84,7 +84,7 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
     const workspace = shareWorkspace;
     if (!workspace) return "";
     if (workspace.workspaceType === "remote") {
-      if (workspace.remoteType === "openwork") {
+      if (workspace.remoteType === "matterhorn") {
         const hostUrl = workspace.matterhornHostUrl?.trim() || workspace.baseUrl?.trim() || "";
         const mounted = buildMatterhornWorkspaceBaseUrl(
           hostUrl,
@@ -210,7 +210,7 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
       ];
     }
 
-    if (workspace.remoteType === "openwork") {
+    if (workspace.remoteType === "matterhorn") {
       const hostUrl = workspace.matterhornHostUrl?.trim() || workspace.baseUrl?.trim() || "";
       const url =
         buildMatterhornWorkspaceBaseUrl(hostUrl, workspace.matterhornWorkspaceId) ||
@@ -266,8 +266,8 @@ export function useShareWorkspaceState(options: UseShareWorkspaceStateOptions) {
   const shareServiceDisabledReason = useMemo(() => {
     const workspace = shareWorkspace;
     if (!workspace) return t("session.share_select_workspace");
-    if (workspace.workspaceType === "remote" && workspace.remoteType !== "openwork") {
-      return t("session.share_openwork_workers_only");
+    if (workspace.workspaceType === "remote" && workspace.remoteType !== "matterhorn") {
+      return t("session.share_matterhorn_workers_only");
     }
     if (workspace.workspaceType !== "remote") {
       const baseUrl = options.matterhornServerHostInfo?.baseUrl?.trim() ?? "";

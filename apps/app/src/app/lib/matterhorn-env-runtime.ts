@@ -44,7 +44,7 @@ export function buildMatterhornEnvRuntimeKey(input: {
     : "";
   const runtime = pid || port;
   if (!baseUrl && !runtime) return undefined;
-  return `${baseUrl || "openwork"}::${runtime || "runtime"}`;
+  return `${baseUrl || "matterhorn"}::${runtime || "runtime"}`;
 }
 
 export function readMatterhornEnvPendingChanges(runtimeKey?: string | null): boolean {

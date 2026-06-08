@@ -511,7 +511,7 @@ export function SkillsView(props: SkillsViewProps) {
   );
 
   const hasDefaultHubRepo = useMemo(
-    () => hubRepos.some((repo) => `${repo.owner}/${repo.repo}@${repo.ref}` === "different-ai/openwork-hub@main"),
+    () => hubRepos.some((repo) => `${repo.owner}/${repo.repo}@${repo.ref}` === "different-ai/matterhorn-hub@main"),
     [hubRepos],
   );
 
@@ -648,7 +648,7 @@ export function SkillsView(props: SkillsViewProps) {
       });
       setShareTeamSuccess(t("skills.share_team_uploaded_success", undefined, { org: orgName }));
       window.dispatchEvent(
-        new CustomEvent<{ orgId: string }>("openwork-den-org-skills-changed", {
+        new CustomEvent<{ orgId: string }>("matterhorn-den-org-skills-changed", {
           detail: { orgId },
         }),
       );
@@ -878,7 +878,7 @@ export function SkillsView(props: SkillsViewProps) {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <h4 className="truncate text-[14px] font-semibold text-dls-text">{skill.name}</h4>
-                          {isMatterhornInjectedSkill(skill) ? <span className={tagClass}>OpenWork</span> : null}
+                          {isMatterhornInjectedSkill(skill) ? <span className={tagClass}>Matterhorn</span> : null}
                         </div>
                         <p className="mt-2 line-clamp-2 text-[13px] leading-relaxed text-dls-secondary">
                           {skill.description || t("skills.no_description")}
@@ -1077,7 +1077,7 @@ export function SkillsView(props: SkillsViewProps) {
                 disabled={props.busy || hasDefaultHubRepo}
               >
                 <Plus size={14} />
-                {t("skills.add_openwork_hub")}
+                {t("skills.add_matterhorn_hub")}
               </button>
               <button type="button" onClick={openCustomRepoModal} disabled={props.busy} className={pillSecondaryClass}>
                 <Plus size={14} />

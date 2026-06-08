@@ -175,7 +175,7 @@ function isOpenWorkCloudProvider(provider: {
   sourceProviderId?: string | null;
 }) {
   return [provider.providerId, provider.source, provider.sourceProviderId].some(
-    (value) => value?.trim().toLowerCase() === "openwork",
+    (value) => value?.trim().toLowerCase() === "matterhorn",
   );
 }
 
@@ -897,7 +897,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       selectedWorkspaceRoot || undefined,
       {
         token: selectedWorkspaceEndpoint.token,
-        mode: "openwork",
+        mode: "matterhorn",
       },
     );
   }, [selectedWorkspaceEndpoint, selectedWorkspaceRoot]);
@@ -995,7 +995,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         data: encoder.encode(JSON.stringify({
           id: "openai-image-generation",
           name: "OpenAI Image Generation",
-          type: "openwork-extension",
+          type: "matterhorn-extension",
           model: OPENAI_IMAGE_MODEL,
           apiKey: resolvedApiKey,
           env: ["OPENAI_API_KEY"],
@@ -1086,7 +1086,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
     setVoiceError(null);
     try {
       const session = await matterhornClient.createVoiceRealtimeSession();
-      setVoiceStatus(`Realtime ready with ${session.model} (${session.tools.length} OpenWork tools).`);
+      setVoiceStatus(`Realtime ready with ${session.model} (${session.tools.length} Matterhorn tools).`);
     } catch (error) {
       setVoiceError(describeRouteError(error));
     } finally {
@@ -1738,7 +1738,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       preferSidecar: true,
       runtime: "direct",
       workspacePaths,
-      openworkRemoteAccess: matterhornServerSnapshot.matterhornServerSettings.remoteAccessEnabled === true,
+      matterhornRemoteAccess: matterhornServerSnapshot.matterhornServerSettings.remoteAccessEnabled === true,
     });
     const reconnected = await matterhornServerStore.reconnectOpenworkServer();
     if (!reconnected) {
@@ -1871,7 +1871,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         await workspaceSetSelected(createdId).catch(() => undefined);
         await workspaceSetRuntimeActive(createdId).catch(() => undefined);
       }
-      // Register the workspace with the running openwork-server so
+      // Register the workspace with the running matterhorn-server so
       // listWorkspaces() reflects it immediately. Without this the UI only
       // picks up the new workspace after an app restart (because the server
       // is launched with a fixed --workspace list at boot and the bridge

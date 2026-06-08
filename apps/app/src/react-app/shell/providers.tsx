@@ -50,7 +50,7 @@ export function AppProviders({ children }: AppProvidersProps) {
   hydrateMatterhornServerSettingsFromEnv();
 
   useEffect(() => {
-    // Start the dev observability forwarder. Reads the current openwork-server
+    // Start the dev observability forwarder. Reads the current matterhorn-server
     // URL on every flush so reconnects after port changes still work. In prod
     // builds `startDebugLogger` is a no-op.
     startDebugLogger({

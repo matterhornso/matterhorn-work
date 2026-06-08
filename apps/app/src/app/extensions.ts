@@ -1,8 +1,8 @@
 import type { ReloadReason } from "./types";
 
 export type MatterhornExtensionSourceFormat =
-  | "openwork-builtin"
-  | "openwork-extension-manifest"
+  | "matterhorn-builtin"
+  | "matterhorn-extension-manifest"
   | "claude-plugin"
   | "opencode-plugin"
   | "mcp-directory"
@@ -153,8 +153,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     id: "matterhorn-browser",
     name: "Matterhorn Work Browser",
     description: "Automate the built-in browser panel that stays visible inside Matterhorn Work.",
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/openwork-mark.svg" },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
+    icon: { src: "/matterhorn-mark.svg" },
     composer: { prompt: "Use the Matterhorn Work Browser extension to " },
     setup: {
       instructions: "Matterhorn Work Browser is ready by default in desktop workspaces.",
@@ -169,8 +169,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       },
     ],
     contributions: [
-      { type: "settings-panel", ref: "openwork.browser.settings", location: "settings-detail" },
-      { type: "session-side-panel", ref: "openwork.browser.panel", location: "session-right-pane" },
+      { type: "settings-panel", ref: "matterhorn.browser.settings", location: "settings-detail" },
+      { type: "session-side-panel", ref: "matterhorn.browser.panel", location: "session-right-pane" },
       { type: "composer-prompt", prompt: "Use the Matterhorn Work Browser extension to ", location: "composer" },
     ],
     enablement: [
@@ -186,8 +186,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Computer Use",
     description: "Control macOS apps through semantic accessibility refs, screenshots, background-safe clicks, keyboard input, and strict mode.",
     preview: true,
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/openwork-mark.svg" },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
+    icon: { src: "/matterhorn-mark.svg" },
     composer: { prompt: "Use Computer Use to " },
     setup: {
       instructions: "Computer Use runs as a local MCP server backed by a macOS accessibility runtime. Grant Accessibility and Screen Recording permissions when macOS asks, then connect the MCP server in this workspace.",
@@ -232,15 +232,15 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     id: "openai-image-gen",
     name: "OpenAI Image Gen",
     description: "Generate image artifacts with gpt-image-2.",
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/ext-openai.svg" },
     composer: { prompt: "Use the OpenAI Image Gen extension to " },
     setup: {
-      instructions: "Add an OpenAI API key, then OpenWork installs an OpenCode plugin that exposes image_generate.",
+      instructions: "Add an OpenAI API key, then Matterhorn installs an OpenCode plugin that exposes image_generate.",
       primaryCta: "Enable image generation",
       secondaryCta: "Generate test image",
       requiredEnv: ["OPENAI_API_KEY"],
-      testActionRef: "openwork.imageGen.testGenerate",
+      testActionRef: "matterhorn.imageGen.testGenerate",
     },
     resources: [
       { type: "opencode-plugin", id: "openwork-image-generation", path: ".opencode/plugins/matterhorn-image-generation.ts", required: true },
@@ -249,7 +249,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     ],
     contributions: [
       { type: "settings-panel", ref: "matterhorn.imageGen.settings", location: "settings-detail" },
-      { type: "test-action", ref: "openwork.imageGen.testGenerate", label: "Generate test image" },
+      { type: "test-action", ref: "matterhorn.imageGen.testGenerate", label: "Generate test image" },
       { type: "composer-prompt", prompt: "Use the OpenAI Image Gen extension to ", location: "composer" },
     ],
     enablement: [
@@ -264,15 +264,15 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Voice Mode",
     description: "Talk to Matterhorn Work through a Realtime voice panel that drives the same semantic UI controls as Matterhorn Work UI MCP.",
     preview: true,
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/openwork-mark.svg" },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
+    icon: { src: "/matterhorn-mark.svg" },
     composer: { prompt: "Use Voice Mode to " },
     setup: {
       instructions: "Voice Mode uses OpenAI Realtime. Save an OpenAI API key in Matterhorn Work env vars, then open the session rail panel and speak or send a typed voice command.",
       primaryCta: "Save OpenAI key",
       secondaryCta: "Test Realtime",
       requiredEnv: ["OPENAI_REALTIME_API_KEY", "OPENAI_API_KEY"],
-      testActionRef: "openwork.voice.testRealtime",
+      testActionRef: "matterhorn.voice.testRealtime",
     },
     resources: [
       { type: "secret", id: "openai-realtime-api-key", envKey: "OPENAI_REALTIME_API_KEY", required: false },
@@ -280,12 +280,12 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       { type: "local-service", id: "openwork-voice-realtime-session", label: "Realtime client-secret minting", required: true },
     ],
     contributions: [
-      { type: "settings-panel", ref: "openwork.voice.settings", location: "settings-detail" },
-      { type: "session-side-panel", ref: "openwork.voice.panel", location: "session-right-pane" },
-      { type: "session-rail-item", ref: "openwork.voice.rail", label: "Voice Mode", location: "session-rail" },
+      { type: "settings-panel", ref: "matterhorn.voice.settings", location: "settings-detail" },
+      { type: "session-side-panel", ref: "matterhorn.voice.panel", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.voice.rail", label: "Voice Mode", location: "session-rail" },
       { type: "server-route", ref: "POST /voice/realtime/session", location: "server" },
-      { type: "control-actions", ref: "openwork.voice.controlActions" },
-      { type: "test-action", ref: "openwork.voice.testRealtime", label: "Test Realtime" },
+      { type: "control-actions", ref: "matterhorn.voice.controlActions" },
+      { type: "test-action", ref: "matterhorn.voice.testRealtime", label: "Test Realtime" },
       { type: "composer-prompt", prompt: "Use Voice Mode to ", location: "composer" },
     ],
     enablement: [
@@ -300,14 +300,14 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Google Workspace",
     description: "Let Matterhorn Work help with meetings, selected Drive files, and Gmail drafts.",
     preview: true,
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { simpleIconSlug: "google" },
     composer: { prompt: "Use Google Workspace to " },
     setup: {
       instructions: "Connect your Google account to use Calendar, Drive, and Gmail drafts in Matterhorn Work.",
       primaryCta: "Connect Google Workspace",
       secondaryCta: "Test connection",
-      testActionRef: "openwork.googleWorkspace.testConnection",
+      testActionRef: "matterhorn.googleWorkspace.testConnection",
     },
     resources: [
       { type: "provider", id: "google-oauth", label: "Google account", providerId: "google-workspace", required: true },
@@ -318,7 +318,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     ],
     contributions: [
       { type: "settings-panel", ref: "matterhorn.googleWorkspace.settings", location: "settings-detail" },
-      { type: "test-action", ref: "openwork.googleWorkspace.testConnection", label: "Test Google Workspace" },
+      { type: "test-action", ref: "matterhorn.googleWorkspace.testConnection", label: "Test Google Workspace" },
       { type: "composer-prompt", prompt: "Use Google Workspace to ", location: "composer" },
     ],
     lifecycle: { reload: ["config"], detection: ["provider:google-workspace"] },
@@ -329,7 +329,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     id: "ollama",
     name: "Ollama",
     description: "Local model provider at http://localhost:11434.",
-    source: { format: "openwork-builtin", origin: "builtin", trusted: true },
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/ext-ollama.svg" },
     composer: { prompt: "Use the Ollama extension to " },
     setup: {
@@ -342,8 +342,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       { type: "provider", id: "ollama", providerId: "ollama", packageName: "@ai-sdk/openai-compatible", required: true },
     ],
     contributions: [
-      { type: "settings-panel", ref: "openwork.ollama.settings", location: "settings-detail" },
-      { type: "test-action", ref: "openwork.ollama.listModels", label: "Check local models" },
+      { type: "settings-panel", ref: "matterhorn.ollama.settings", location: "settings-detail" },
+      { type: "test-action", ref: "matterhorn.ollama.listModels", label: "Check local models" },
       { type: "composer-prompt", prompt: "Use the Ollama extension to ", location: "composer" },
     ],
     enablement: [

@@ -122,7 +122,7 @@ export type DebugViewProps = {
   opencodeRestarting: boolean;
   matterhornServerRestarting: boolean;
   opencodeServiceStatus: ServiceStatus;
-  openworkServiceStatus: ServiceStatus;
+  matterhornServiceStatus: ServiceStatus;
   opencodeLogStatus: string | null;
   matterhornLogStatus: string | null;
   onCopyOpencodeLogs: () => void | Promise<void>;
@@ -134,7 +134,7 @@ export type DebugViewProps = {
   onRestartOpenworkServer: () => void | Promise<void>;
   engineCard: RuntimeServiceCard;
   opencodeConnectCard: OpenCodeConnectDebugCard;
-  openworkCard: RuntimeServiceCard;
+  matterhornCard: RuntimeServiceCard;
   matterhornServerDiagnostics: MatterhornServerDiagnostics | null;
   runtimeWorkspaceId: string | null;
   matterhornServerCapabilities: MatterhornServerCapabilities | null;
@@ -351,7 +351,7 @@ export function DebugView(props: DebugViewProps) {
             {t("settings.debug_opencode_version", { version: props.runtimeSummary.opencodeVersionLabel })}
           </div>
           <div>
-            {t("settings.debug_openwork_server_version", {
+            {t("settings.debug_matterhorn_server_version", {
               version: props.runtimeSummary.matterhornServerVersionLabel,
             })}
           </div>
@@ -374,17 +374,17 @@ export function DebugView(props: DebugViewProps) {
 
         <div className="grid gap-3 grid-cols-1 lg:grid-cols-2">
           <ServiceCard
-            title={t("settings.openwork_server_label")}
-            description={t("settings.openwork_config_sidecar_desc")}
-            pill={props.openworkCard}
-            lines={props.openworkCard.lines}
-            stdout={props.openworkCard.stdout ?? null}
-            stderr={props.openworkCard.stderr ?? null}
-            error={props.openworkCard.error ?? null}
+            title={t("settings.matterhorn_server_label")}
+            description={t("settings.matterhorn_config_sidecar_desc")}
+            pill={props.matterhornCard}
+            lines={props.matterhornCard.lines}
+            stdout={props.matterhornCard.stdout ?? null}
+            stderr={props.matterhornCard.stderr ?? null}
+            error={props.matterhornCard.error ?? null}
             restarting={props.matterhornServerRestarting}
-            restartLabel={t("settings.restart_openwork_server")}
+            restartLabel={t("settings.restart_matterhorn_server")}
             onRestart={props.onRestartOpenworkServer}
-            serviceStatus={props.openworkServiceStatus}
+            serviceStatus={props.matterhornServiceStatus}
             logStatus={props.matterhornLogStatus}
             onCopyLogs={props.onCopyOpenworkLogs}
             onExportLogs={props.onExportOpenworkLogs}
@@ -446,7 +446,7 @@ export function DebugView(props: DebugViewProps) {
       {/* Section: Diagnostics */}
       <div className={cardClass}>
         <div className={sectionHeaderClass}>
-          <div className={sectionTitleClass}>{t("settings.openwork_diagnostics_title")}</div>
+          <div className={sectionTitleClass}>{t("settings.matterhorn_diagnostics_title")}</div>
           <div className={sectionDescClass}>
             <span className="font-mono text-[11px] text-dls-secondary">
               {props.matterhornServerDiagnostics?.version ?? "—"}
@@ -1044,12 +1044,12 @@ export function DebugView(props: DebugViewProps) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold tracking-[-0.1px] text-dls-text">
-                {t("settings.reset_openwork_title")}
+                {t("settings.reset_matterhorn_title")}
               </div>
               <div className="text-[12px] text-dls-secondary">
                 {props.opencodeDevModeEnabled
-                  ? t("settings.reset_openwork_desc_dev")
-                  : t("settings.reset_openwork_desc_prod")}
+                  ? t("settings.reset_matterhorn_desc_dev")
+                  : t("settings.reset_matterhorn_desc_prod")}
               </div>
             </div>
             <div

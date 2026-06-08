@@ -11,6 +11,6 @@ OrganizationInvitePreview.PreviewProps = {
   inviteLink: "https://app.openworklabs.com/join-org?invite=invitation_preview",
   invitedByName: "Ada Lovelace",
   invitedByEmail: "ada@example.com",
-  organizationName: "OpenWork Preview",
+  organizationName: "Matterhorn Preview",
   role: "admin",
 } satisfies OrganizationInviteEmailProps

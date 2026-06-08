@@ -78,7 +78,7 @@ interface AdvancedRuntimeSectionProps {
   clientStatusLabel: string;
   clientTone: SettingsTone;
   matterhornStatusLabel: string;
-  openworkTone: SettingsTone;
+  matterhornTone: SettingsTone;
 }
 
 export function AdvancedRuntimeSection(props: AdvancedRuntimeSectionProps) {
@@ -104,10 +104,10 @@ export function AdvancedRuntimeSection(props: AdvancedRuntimeSectionProps) {
         />
         <RuntimeStatusCard
           icon={<Server size={18} />}
-          title={t("settings.openwork_server_label")}
-          description={t("settings.openwork_server_desc")}
+          title={t("settings.matterhorn_server_label")}
+          description={t("settings.matterhorn_server_desc")}
           statusLabel={props.matterhornStatusLabel}
-          tone={props.openworkTone}
+          tone={props.matterhornTone}
         />
       </div>
     </LayoutSection>
@@ -323,7 +323,7 @@ export function AdvancedConnectionSection(props: AdvancedConnectionSectionProps)
               disabled={props.busy || props.restartBusy}
             >
               <RefreshCcw size={14} className={props.restartBusy ? "animate-spin" : ""} />
-              {props.restartBusy ? t("settings.restarting") : t("settings.restart_openwork_server")}
+              {props.restartBusy ? t("settings.restarting") : t("settings.restart_matterhorn_server")}
             </Button>
           ) : null}
 

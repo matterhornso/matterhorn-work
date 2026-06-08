@@ -98,15 +98,15 @@ const kindLabel: Record<ExtensionKind, string> = {
 
 const kindDesc: Record<ExtensionKind, string> = {
   mcp: "Connects as a Model Context Protocol server, giving your agent access to external tools and data.",
-  plugin: "Extends OpenWork with additional capabilities managed by your organization.",
+  plugin: "Extends Matterhorn with additional capabilities managed by your organization.",
   skill: "A reusable workflow that your agent can execute on demand.",
   "ui-control": "Lets another MCP client inspect and drive this Matterhorn Work desktop UI through a local stdio wrapper.",
-  extension: "An OpenWork extension that adds tools, providers, or integrations to your workspace.",
+  extension: "An Matterhorn extension that adds tools, providers, or integrations to your workspace.",
 };
 
 const uiControlClientConfig = `{
   "mcpServers": {
-    "openwork-ui": {
+    "matterhorn-ui": {
       "command": "npx",
       "args": ["-y", "openwork-ui-mcp"]
     }
@@ -116,7 +116,7 @@ const uiControlClientConfig = `{
 function uiControlOpencodeConfig(command: string[], environment?: Record<string, string>) {
   return JSON.stringify({
     mcp: {
-      "openwork-ui": {
+      "matterhorn-ui": {
         type: "local",
         command,
         ...(environment ? { environment } : {}),
@@ -130,7 +130,7 @@ const fallbackUiControlCommand = ["npx", "-y", "openwork-ui-mcp"];
 
 const fallbackUiControlOpencodeConfig = `{
   "mcp": {
-    "openwork-ui": {
+    "matterhorn-ui": {
       "type": "local",
       "command": ["npx", "-y", "openwork-ui-mcp"],
       "enabled": true

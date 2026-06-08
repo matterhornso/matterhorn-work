@@ -9,7 +9,7 @@
  *
  * <DevProfilerOverlay /> renders a small floating card in the bottom-right
  * that shows the hottest zones. Toggle with Cmd+Shift+P or set
- * localStorage.openwork.debug.profilerOverlay = "1" / "0".
+ * localStorage.matterhorn.debug.profilerOverlay = "1" / "0".
  *
  * In prod builds the wrapper is a pass-through (no Profiler overhead) and
  * the overlay renders null.

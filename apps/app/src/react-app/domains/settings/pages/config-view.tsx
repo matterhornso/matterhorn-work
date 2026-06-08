@@ -118,11 +118,11 @@ export function ConfigView(props: ConfigViewProps) {
     configLocalReducer,
     initialConfigLocalState,
   );
-  const { openworkConnection, tokenVisible, copyingField } = localState;
-  const matterhornUrl = openworkConnection.url;
-  const matterhornToken = openworkConnection.token;
-  const openworkTestState = openworkConnection.testState;
-  const openworkTestMessage = openworkConnection.testMessage;
+  const { matterhornConnection, tokenVisible, copyingField } = localState;
+  const matterhornUrl = matterhornConnection.url;
+  const matterhornToken = matterhornConnection.token;
+  const matterhornTestState = matterhornConnection.testState;
+  const matterhornTestMessage = matterhornConnection.testMessage;
   const copyTimeoutRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -273,7 +273,7 @@ export function ConfigView(props: ConfigViewProps) {
   };
 
   const handleTestConnection = async () => {
-    if (openworkTestState === "testing") return;
+    if (matterhornTestState === "testing") return;
     const next = buildOpenworkSettings();
     props.updateMatterhornServerSettings(next);
     dispatchLocal({
@@ -342,17 +342,17 @@ export function ConfigView(props: ConfigViewProps) {
         busy={props.busy}
         matterhornUrl={matterhornUrl}
         matterhornToken={matterhornToken}
-        tokenVisible={tokenVisible.openwork}
+        tokenVisible={tokenVisible.matterhorn}
         matterhornStatusLabel={matterhornStatusLabel}
         matterhornStatusStyle={matterhornStatusStyle}
         resolvedWorkspaceUrl={resolvedWorkspaceUrl}
         resolvedWorkspaceId={resolvedWorkspaceId}
-        openworkTestState={openworkTestState}
-        openworkTestMessage={openworkTestMessage}
+        matterhornTestState={matterhornTestState}
+        matterhornTestMessage={matterhornTestMessage}
         hasOpenworkChanges={hasOpenworkChanges}
         onUrlChange={(url) => dispatchLocal({ type: "url", url })}
         onTokenChange={(token) => dispatchLocal({ type: "token", token })}
-        onToggleToken={() => dispatchLocal({ type: "toggleToken", key: "openwork" })}
+        onToggleToken={() => dispatchLocal({ type: "toggleToken", key: "matterhorn" })}
         onTestConnection={handleTestConnection}
         onSave={() => props.updateMatterhornServerSettings(buildOpenworkSettings())}
         onReset={props.resetMatterhornServerSettings}
