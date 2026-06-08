@@ -2,9 +2,9 @@
 # the same macOS bundle identifier, keychain entries, Launchpad slot, and TCC
 # permissions. In-place migration from Tauri to Electron depends on this.
 appId: com.differentai.openwork
-productName: OpenWork
+productName: Matterhorn
 protocols:
-  - name: OpenWork
+  - name: Matterhorn
     schemes:
       - openwork
 directories:
@@ -25,8 +25,8 @@ afterSign: scripts/electron-after-sign.cjs
 # release assets during the migration window.
 publish:
   - provider: github
-    owner: different-ai
-    repo: openwork
+    owner: matterhornso
+    repo: matterhorn-work
     releaseType: release
 mac:
   icon: resources/icons/icon.icns
@@ -35,7 +35,7 @@ mac:
   gatekeeperAssess: false
   notarize: false
   extendInfo:
-    NSMicrophoneUsageDescription: OpenWork uses the microphone when you start Voice Mode so you can speak commands to your agent.
+    NSMicrophoneUsageDescription: Matterhorn uses the microphone when you start Voice Mode so you can speak commands to your agent.
   extraResources:
     - from: resources/sidecars
       to: sidecars
@@ -91,4 +91,4 @@ win:
         - versions.json-x86_64-pc-windows-msvc.exe
   target:
     - nsis
-artifactName: openwork-${os}-${arch}-${version}.${ext}
+artifactName: matterhorn-${os}-${arch}-${version}.${ext}
