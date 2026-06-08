@@ -19,10 +19,10 @@ export type EmailTemplateProps = {
 export type EmailTemplate = keyof EmailTemplateProps
 
 export const emailSubjects: { [Template in EmailTemplate]: (props: EmailTemplateProps[Template]) => string } = {
-  verification: ({ verificationCode }) => `Your OpenWork verification code is ${verificationCode}`,
-  passwordReset: () => "Reset your OpenWork password",
-  organizationInvite: ({ organizationName }) => `You're invited to join ${organizationName} on OpenWork`,
-  feedback: ({ name, source }) => `OpenWork feedback from ${name}${source ? ` (${source})` : ""}`,
+  verification: ({ verificationCode }) => `Your Matterhorn Work verification code is ${verificationCode}`,
+  passwordReset: () => "Reset your Matterhorn Work password",
+  organizationInvite: ({ organizationName }) => `You're invited to join ${organizationName} on Matterhorn Work`,
+  feedback: ({ name, source }) => `Matterhorn Work feedback from ${name}${source ? ` (${source})` : ""}`,
 }
 
 export const emailReplyTo: { [Template in EmailTemplate]: (props: EmailTemplateProps[Template]) => string | undefined } = {

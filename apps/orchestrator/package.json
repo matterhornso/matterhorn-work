@@ -25,12 +25,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/different-ai/openwork.git",
+    "url": "git+https://github.com/matterhornso/matterhorn-work.git",
     "directory": "apps/orchestrator"
   },
-  "homepage": "https://github.com/different-ai/openwork/tree/dev/apps/orchestrator",
+  "homepage": "https://github.com/matterhornso/matterhorn-work/tree/dev/apps/orchestrator",
   "bugs": {
-    "url": "https://github.com/different-ai/openwork/issues"
+    "url": "https://github.com/matterhornso/matterhorn-work/issues"
   },
   "keywords": [
     "openwork",

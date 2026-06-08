@@ -1988,7 +1988,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             onSendFeedback={() => platform.openLink(buildFeedbackUrl({ entrypoint: "settings" }))}
             onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
-            onReportIssue={() => platform.openLink("https://github.com/different-ai/openwork/issues/new?template=bug.yml")}
+            onReportIssue={() => platform.openLink("https://github.com/matterhornso/matterhorn-work/issues/new?template=bug.yml")}
           />
         );
       case "permissions":

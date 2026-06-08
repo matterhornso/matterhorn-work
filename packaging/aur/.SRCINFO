@@ -1,8 +1,8 @@
 pkgbase = openwork
-	pkgdesc = An Open source alternative to Claude Cowork
+	pkgdesc = Matterhorn Work desktop agentic workspace
 	pkgver = 0.13.12
 	pkgrel = 1
-	url = https://github.com/different-ai/openwork
+	url = https://github.com/matterhornso/matterhorn-work
 	arch = x86_64
 	arch = aarch64
 	license = MIT

@@ -221,7 +221,7 @@ jobs:
           asset_url="${INPUT_ASSET_URL_X86_64:-}"
           if [ -z "$asset_url" ]; then
             version="${release_tag#v}"
-            asset_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/openwork-linux-x64-${version}.tar.gz"
+            asset_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${release_tag}/matterhorn-linux-x64-${version}.tar.gz"
           fi
 
           mkdir -p /tmp/aur-artifacts
@@ -252,7 +252,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          asset_path=$(find /tmp/aur-artifacts -maxdepth 3 -type f -name 'openwork-linux-x64-*.tar.gz' | head -n 1)
+          asset_path=$(find /tmp/aur-artifacts -maxdepth 3 -type f -name 'matterhorn-linux-x64-*.tar.gz' | head -n 1)
+          if [ -z "${asset_path:-}" ]; then
+            asset_path=$(find /tmp/aur-artifacts -maxdepth 3 -type f -name 'openwork-linux-x64-*.tar.gz' | head -n 1)
+          fi
           if [ -z "${asset_path:-}" ]; then
             asset_path=$(find /tmp/aur-artifacts -maxdepth 3 -type f -name '*.tar.gz' | head -n 1)
           fi
@@ -297,7 +300,7 @@ jobs:
             source_url="${INPUT_ASSET_URL_X86_64}"
           fi
           if [ -z "$source_url" ]; then
-            source_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/openwork-linux-x64-${version}.tar.gz"
+            source_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/matterhorn-linux-x64-${version}.tar.gz"
           fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"

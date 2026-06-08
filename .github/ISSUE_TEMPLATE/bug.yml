@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem in OpenWork
+description: Report a problem in Matterhorn Work
 title: "[Bug]: "
 labels:
   - bug
@@ -47,12 +47,12 @@ body:
   - type: textarea
     id: desktop_info
     attributes:
-      label: OW version & Desktop info (optional) 
+      label: Matterhorn Work version & desktop info (optional)
       description: |
-        Include OS and OpenWork version if possible.
-        OpenWork version: Settings > General.
+        Include OS and Matterhorn Work version if possible.
+        Matterhorn Work version: Settings > General.
       placeholder: |
-        - OpenWork version: [e.g. 0.1.166]
+        - Matterhorn Work version: [e.g. 0.13.12]
         - OS: [e.g. macOS Tahoe 26.2]
     validations:
       required: false

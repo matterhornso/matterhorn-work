@@ -1911,7 +1911,7 @@ function resolveSidecarBaseUrl(
     readFlag(flags, "sidecar-base-url") ??
     process.env.OPENWORK_SIDECAR_BASE_URL;
   if (override && override.trim()) return override.trim();
-  return `https://github.com/different-ai/openwork/releases/download/openwork-orchestrator-v${cliVersion}`;
+  return `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v${cliVersion}`;
 }
 
 function resolveSidecarManifestUrl(
