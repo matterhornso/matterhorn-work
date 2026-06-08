@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Matterhorn Work is a Web3-native agentic workspace — Cowork for Web3. It is a fork of [different-ai/openwork](https://github.com/different-ai/openwork).
+Matterhorn Work is a Web3-native agentic workspace — Cowork for Web3.
 
 ## What Matterhorn Work Is
 
