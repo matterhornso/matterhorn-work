@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
+  auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
+  buildBittensorReadinessCard,
   buildBittensorSigningHandoffCard,
   buildBittensorValidatorComparisonCards,
   buildBittensorWalletCard,
@@ -269,6 +271,18 @@ describe("compareBittensorValidators", () => {
     expect(comparison.candidates).toEqual([]);
     expect(comparison.warnings.join(" ")).toContain("requested validator hotkeys");
     expect(buildBittensorValidatorComparisonCards(comparison)[0]?.tone).toBe("warning");
+  });
+});
+
+describe("auditBittensorReadiness", () => {
+  test("runs the Bittensor readiness gate without secret-shaped fields", async () => {
+    const report = await auditBittensorReadiness();
+    expect(["pass", "warning", "fail"]).toContain(report.status);
+    expect(report.checks.some((check) => check.id === "chat_intents")).toBe(true);
+    expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
+    const card = buildBittensorReadinessCard(report);
+    expect(card.kind).toBe("readiness_report");
+    expect(JSON.stringify({ report, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
   });
 });
 

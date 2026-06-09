@@ -231,6 +231,23 @@ export type BittensorWatchEvaluation = {
   checkedAt: string;
 };
 
+export type BittensorReadinessCheck = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+export type BittensorReadinessReport = {
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  checks: BittensorReadinessCheck[];
+  blockers: string[];
+  warnings: string[];
+  nextActions: string[];
+};
+
 export type BittensorChatCardKind =
   | "subnet_comparison"
   | "wallet_snapshot"
@@ -241,7 +258,8 @@ export type BittensorChatCardKind =
   | "watchlist"
   | "signer_status"
   | "signing_handoff"
-  | "unsupported_adapter";
+  | "unsupported_adapter"
+  | "readiness_report";
 
 export type BittensorChatCardItem = {
   label: string;

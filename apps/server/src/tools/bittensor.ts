@@ -265,6 +265,23 @@ export interface BittensorWatchEvaluation {
   checkedAt: string;
 }
 
+export interface BittensorReadinessCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  summary: string;
+  details?: Record<string, unknown>;
+}
+
+export interface BittensorReadinessReport {
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  checks: BittensorReadinessCheck[];
+  blockers: string[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export type BittensorChatCardKind =
   | "subnet_comparison"
   | "wallet_snapshot"
@@ -275,7 +292,8 @@ export type BittensorChatCardKind =
   | "watchlist"
   | "signer_status"
   | "signing_handoff"
-  | "unsupported_adapter";
+  | "unsupported_adapter"
+  | "readiness_report";
 
 export interface BittensorChatCardItem {
   label: string;
@@ -1709,6 +1727,210 @@ export async function evaluateBittensorWatches(): Promise<BittensorWatchEvaluati
   return Promise.all(watches.map((watch) => evaluateBittensorWatch(watch)));
 }
 
+function readinessStatus(checks: BittensorReadinessCheck[]): BittensorReadinessReport["status"] {
+  if (checks.some((check) => check.status === "fail")) return "fail";
+  if (checks.some((check) => check.status === "warning")) return "warning";
+  return "pass";
+}
+
+function secretFieldPath(value: unknown, path: string[] = []): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = secretFieldPath(value[index], [...path, String(index)]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/(seed|mnemonic|private|secret|password|passphrase|keyfile|suri)/i.test(key)) return [...path, key].join(".");
+    const nested = secretFieldPath(child, [...path, key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+export async function auditBittensorReadiness(): Promise<BittensorReadinessReport> {
+  const checks: BittensorReadinessCheck[] = [];
+  const checkedAt = nowIso();
+
+  try {
+    const samples: Array<[string, BittensorChatIntent]> = [
+      ["I'm new to Bittensor, explain coldkeys and hotkeys", "learn"],
+      ["Which subnet helps with image generation?", "discover"],
+      ["Show my Bittensor wallet", "wallet"],
+      ["Stake 1 TAO to subnet 14 safely", "stake_plan"],
+      ["Use subnet 14 for this task", "subnet_use"],
+      ["Monitor subnet 14 emissions", "monitor"],
+    ];
+    const plans = samples.map(([message]) => planBittensorChat({ message }));
+    const mismatches = plans.flatMap((plan, index) => plan.intent === samples[index]?.[1] ? [] : [`${samples[index]?.[0]} -> ${plan.intent}`]);
+    checks.push({
+      id: "chat_intents",
+      label: "Chat intent planner",
+      status: mismatches.length ? "fail" : "pass",
+      summary: mismatches.length ? "Some Bittensor chat intents classified incorrectly." : "Core Bittensor chat intents classify into deterministic workflows.",
+      details: { mismatches, intents: plans.map((plan) => plan.intent) },
+    });
+  } catch (err) {
+    checks.push({ id: "chat_intents", label: "Chat intent planner", status: "fail", summary: err instanceof Error ? err.message : "Intent planner failed." });
+  }
+
+  let subnets: BittensorSubnetSummary[] = [];
+  try {
+    subnets = await bittensorProvider.listSubnets();
+    const fallbackOnly = subnets.length > 0 && subnets.every((subnet) => subnet.source === "curated-fallback");
+    checks.push({
+      id: "subnet_discovery",
+      label: "Subnet discovery",
+      status: subnets.length ? fallbackOnly ? "warning" : "pass" : "fail",
+      summary: subnets.length
+        ? fallbackOnly
+          ? "Subnet discovery is available, but only fallback metadata is loaded."
+          : "Subnet discovery returned live or provider-backed subnet metadata."
+        : "Subnet discovery returned no subnets.",
+      details: { count: subnets.length, sources: [...new Set(subnets.map((subnet) => subnet.source))] },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_discovery", label: "Subnet discovery", status: "fail", summary: err instanceof Error ? err.message : "Subnet discovery failed." });
+  }
+
+  try {
+    const capabilities = subnets.length ? subnets.map(capabilityFromSubnet) : await listBittensorCapabilities();
+    const missingUniversal = capabilities.filter((capability) =>
+      !capability.supportedChatIntents.includes("learn") ||
+      !capability.supportedChatIntents.includes("discover") ||
+      !capability.supportedChatIntents.includes("wallet") ||
+      !capability.supportedChatIntents.includes("stake_plan") ||
+      !capability.supportedChatIntents.includes("monitor")
+    );
+    checks.push({
+      id: "capabilities",
+      label: "Subnet capability registry",
+      status: missingUniversal.length ? "fail" : capabilities.length ? "pass" : "warning",
+      summary: missingUniversal.length
+        ? "Some capability manifests are missing universal chat support."
+        : capabilities.length
+          ? "Capability manifests include universal Bittensor chat support."
+          : "No capability manifests were available to audit.",
+      details: { count: capabilities.length, missingNetuids: missingUniversal.map((capability) => capability.netuid) },
+    });
+  } catch (err) {
+    checks.push({ id: "capabilities", label: "Subnet capability registry", status: "fail", summary: err instanceof Error ? err.message : "Capability audit failed." });
+  }
+
+  try {
+    const wallet = await bittensorProvider.getWallet("invalid-ss58");
+    checks.push({
+      id: "wallet_safety",
+      label: "Wallet read safety",
+      status: wallet.providerStatus === "provider_unavailable" && wallet.message?.includes("valid watch-only SS58") ? "pass" : "fail",
+      summary: wallet.providerStatus === "provider_unavailable"
+        ? "Wallet reads reject invalid SS58 addresses without asking for secrets."
+        : "Wallet read did not reject an invalid SS58 address as expected.",
+      details: { providerStatus: wallet.providerStatus },
+    });
+  } catch (err) {
+    checks.push({ id: "wallet_safety", label: "Wallet read safety", status: "fail", summary: err instanceof Error ? err.message : "Wallet safety check failed." });
+  }
+
+  try {
+    const preview = await prepareBittensorExtrinsic({ action: "stake", netuid: 14, amountTao: "1" });
+    const handoff = createBittensorSigningHandoff(preview);
+    const forbiddenPath = secretFieldPath({ preview, handoff });
+    checks.push({
+      id: "signing_safety",
+      label: "Signing safety",
+      status: forbiddenPath ? "fail" : preview.requiresExternalSignature && handoff.payloadSha256.length === 64 ? "pass" : "fail",
+      summary: forbiddenPath
+        ? `Unsigned signing flow exposes a forbidden field: ${forbiddenPath}.`
+        : "Extrinsic previews and handoffs stay unsigned, checksumed, and external-signature-only.",
+      details: {
+        action: preview.action,
+        signerMode: preview.signer.mode,
+        canSign: preview.signer.canSign,
+        canSubmit: preview.signer.canSubmit,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "signing_safety", label: "Signing safety", status: "fail", summary: err instanceof Error ? err.message : "Signing safety check failed." });
+  }
+
+  try {
+    const signer = getBittensorSignerStatus();
+    const sidecar = getSubtensorSidecarStatus();
+    checks.push({
+      id: "sidecar_status",
+      label: "Subtensor sidecar status",
+      status: sidecar.configured ? "pass" : "warning",
+      summary: sidecar.configured
+        ? "Subtensor sidecar is configured for live chain reads and signed-payload submission."
+        : "Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks.",
+      details: { signerMode: signer.mode, canSubmit: signer.canSubmit, network: sidecar.network },
+    });
+  } catch (err) {
+    checks.push({ id: "sidecar_status", label: "Subtensor sidecar status", status: "fail", summary: err instanceof Error ? err.message : "Sidecar status check failed." });
+  }
+
+  try {
+    const comparison = await compareBittensorValidators({ netuid: 14, strategy: "balanced", limit: 3 });
+    checks.push({
+      id: "validator_comparison",
+      label: "Validator comparison",
+      status: comparison.candidates.length ? "pass" : "warning",
+      summary: comparison.candidates.length
+        ? "Validator comparison returned public metagraph candidates."
+        : "Validator comparison works, but no validator candidates are available from the current provider sample.",
+      details: { candidates: comparison.candidates.length, source: comparison.source },
+    });
+  } catch (err) {
+    checks.push({ id: "validator_comparison", label: "Validator comparison", status: "fail", summary: err instanceof Error ? err.message : "Validator comparison failed." });
+  }
+
+  try {
+    const watch: BittensorWatch = {
+      id: "bt-readiness-watch",
+      kind: "subnet",
+      netuid: 14,
+      label: "Readiness watch",
+      ss58Address: null,
+      threshold: null,
+      createdAt: checkedAt,
+    };
+    const evaluation = await evaluateBittensorWatch(watch);
+    checks.push({
+      id: "monitoring",
+      label: "Monitoring and watches",
+      status: evaluation.status === "unavailable" ? "warning" : "pass",
+      summary: evaluation.status === "unavailable"
+        ? "Watch evaluation is wired, but provider data is unavailable for the sample watch."
+        : "Watch creation and evaluation are wired for Bittensor monitoring.",
+      details: { status: evaluation.status, source: evaluation.source },
+    });
+  } catch (err) {
+    checks.push({ id: "monitoring", label: "Monitoring and watches", status: "fail", summary: err instanceof Error ? err.message : "Monitoring check failed." });
+  }
+
+  const status = readinessStatus(checks);
+  const blockers = checks.filter((check) => check.status === "fail").map((check) => `${check.label}: ${check.summary}`);
+  const warnings = checks.filter((check) => check.status === "warning").map((check) => `${check.label}: ${check.summary}`);
+  return {
+    status,
+    checkedAt,
+    checks,
+    blockers,
+    warnings,
+    nextActions: [
+      "Run this readiness audit after every Bittensor change and before starting Hyperliquid or Polymarket execution work.",
+      sidecarBaseUrl()
+        ? "Use the configured Subtensor sidecar for live metagraph, wallet, quote, and signed-payload submission checks."
+        : "Configure BITTENSOR_SUBTENSOR_SIDECAR_URL to upgrade fallback warnings into live-chain checks.",
+      "Add subnet service adapters only behind explicit capability manifests and unsupported-adapter fallbacks.",
+      "Keep external signing mandatory until a separate custody/security review is complete.",
+    ],
+  };
+}
+
 function formatMetric(value: number | null | undefined, suffix = "", digits = 3): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "Unavailable";
   return `${value.toLocaleString("en-US", { maximumFractionDigits: digits })}${suffix}`;
@@ -1986,6 +2208,31 @@ export function buildBittensorValidatorComparisonCards(comparison: BittensorVali
     warnings: [...comparison.warnings, ...candidate.warnings],
     data: { candidate, comparison },
   }));
+}
+
+export function buildBittensorReadinessCard(report: BittensorReadinessReport): BittensorChatCard {
+  const passed = report.checks.filter((check) => check.status === "pass").length;
+  const warning = report.checks.filter((check) => check.status === "warning").length;
+  const failed = report.checks.filter((check) => check.status === "fail").length;
+  return {
+    kind: "readiness_report",
+    title: "Bittensor readiness audit",
+    subtitle: titleCase(report.status),
+    summary: failed
+      ? "Bittensor needs fixes before expanding into more execution surfaces."
+      : warning
+        ? "Bittensor chat is functional, with provider/runtime warnings to resolve before calling it perfect."
+        : "Bittensor chat workflows passed the readiness gate.",
+    tone: report.status === "pass" ? "good" : report.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Passed", passed, "good"),
+      cardItem("Warnings", warning, warning ? "warning" : "muted"),
+      cardItem("Failed", failed, failed ? "danger" : "muted"),
+      cardItem("Checked", report.checkedAt, "muted"),
+    ],
+    warnings: [...report.blockers, ...report.warnings],
+    data: { report },
+  };
 }
 
 export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorChatCard[] {

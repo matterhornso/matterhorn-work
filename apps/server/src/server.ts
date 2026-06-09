@@ -14,10 +14,12 @@ import { buildTransferTx } from "./tools/transfer.js";
 import { parseIntent } from "./tools/scheduler.js";
 import { getPrices } from "./tools/coingecko.js";
 import {
+  auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
+  buildBittensorReadinessCard,
   buildBittensorSignerCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
@@ -3601,6 +3603,11 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/sidecar/status", "client", async () => {
     const sidecar = getSubtensorSidecarStatus();
     return jsonResponse({ success: true, sidecar });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/readiness", "client", async () => {
+    const report = await auditBittensorReadiness();
+    return jsonResponse({ success: true, report, cards: [buildBittensorReadinessCard(report)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/prepare", "client", async (ctx) => {
