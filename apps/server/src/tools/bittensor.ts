@@ -6,6 +6,7 @@
  */
 
 import { ApiClient } from "./api-client.js";
+import { createHash } from "node:crypto";
 
 const TAO_APP_BASE_URL = "https://api.tao.app";
 const CACHE_MS = 60_000;
@@ -189,6 +190,23 @@ export interface BittensorSignedResult {
   explorerUrl: string | null;
 }
 
+export interface BittensorSigningHandoff {
+  id: string;
+  action: BittensorExtrinsicAction;
+  network: BittensorSignerStatus["network"];
+  netuid: number | null;
+  payload: Record<string, unknown>;
+  payloadJson: string;
+  payloadSha256: string;
+  suggestedFilename: string;
+  signerMode: BittensorSignerStatus["mode"];
+  createdAt: string;
+  expiresAt: string;
+  instructions: string[];
+  warnings: string[];
+  consequenceSummary: string;
+}
+
 export interface BittensorSubnetInvocation {
   netuid: number;
   intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";
@@ -218,6 +236,7 @@ export type BittensorChatCardKind =
   | "subnet_result"
   | "watchlist"
   | "signer_status"
+  | "signing_handoff"
   | "unsupported_adapter";
 
 export interface BittensorChatCardItem {
@@ -1143,6 +1162,81 @@ export async function prepareBittensorExtrinsic(input: BittensorExtrinsicPrepare
   };
 }
 
+const HANDOFF_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri)/i;
+
+function findForbiddenHandoffKey(value: unknown, path: string[] = []): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = findForbiddenHandoffKey(value[index], [...path, String(index)]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (HANDOFF_FORBIDDEN_KEY_RE.test(key)) {
+      return [...path, key].join(".");
+    }
+    const nested = findForbiddenHandoffKey(child, [...path, key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+export function createBittensorSigningHandoff(preview: BittensorExtrinsicPreview): BittensorSigningHandoff {
+  if (!preview.requiresExternalSignature) {
+    throw new Error("Bittensor handoff requires an external-signature preview.");
+  }
+  const payload = asRecord(preview.unsignedPayload);
+  if (!Object.keys(payload).length) {
+    throw new Error("Unsigned payload is required before creating a Bittensor signing handoff.");
+  }
+  const forbiddenKey = findForbiddenHandoffKey(payload);
+  if (forbiddenKey) {
+    throw new Error(`Unsigned payload contains a disallowed signing-material field: ${forbiddenKey}`);
+  }
+  const payloadJson = stableJson(payload);
+  const payloadSha256 = createHash("sha256").update(payloadJson).digest("hex");
+  const createdAt = nowIso();
+  const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+  const netuidPart = preview.netuid === null ? "network" : `subnet-${preview.netuid}`;
+  const suggestedFilename = `bittensor-${preview.action}-${netuidPart}-${payloadSha256.slice(0, 10)}.json`;
+  return {
+    id: `bt-handoff-${payloadSha256.slice(0, 16)}`,
+    action: preview.action,
+    network: preview.network,
+    netuid: preview.netuid,
+    payload,
+    payloadJson,
+    payloadSha256,
+    suggestedFilename,
+    signerMode: preview.signer.mode,
+    createdAt,
+    expiresAt,
+    instructions: [
+      "Review the action, network, netuid, amount, destination, fee, and slippage in Matterhorn.",
+      "Open the payload in a Bittensor-compatible external signer or CLI flow.",
+      "Confirm the signer shows the same payload SHA-256 before signing.",
+      "Return only the signed payload or signature to Matterhorn for optional sidecar submission.",
+    ],
+    warnings: [
+      ...preview.warnings,
+      "Matterhorn cannot sign this payload. The external signer is the final authority.",
+      "If the signer displays different action details, cancel and rebuild the preview.",
+    ],
+    consequenceSummary: preview.consequenceSummary,
+  };
+}
+
 export async function submitSignedBittensorExtrinsic(input: BittensorSignedSubmitInput): Promise<BittensorSignedResult> {
   if (!input.signature || input.signature.trim().length < 16) {
     return {
@@ -1442,6 +1536,40 @@ export function buildBittensorExtrinsicPreviewCard(preview: BittensorExtrinsicPr
     }],
     warnings: preview.warnings,
     data: { preview },
+  };
+}
+
+export function buildBittensorSigningHandoffCard(handoff: BittensorSigningHandoff): BittensorChatCard {
+  return {
+    kind: "signing_handoff",
+    title: "External signing handoff",
+    subtitle: `${titleCase(handoff.action)} · ${handoff.network}`,
+    summary: handoff.consequenceSummary,
+    tone: handoff.warnings.length ? "warning" : "default",
+    items: [
+      cardItem("Payload SHA-256", handoff.payloadSha256.slice(0, 20), "muted"),
+      cardItem("Filename", handoff.suggestedFilename),
+      cardItem("Expires", handoff.expiresAt, "muted"),
+      cardItem("Signer mode", titleCase(handoff.signerMode)),
+    ],
+    actions: [
+      {
+        label: "Copy payload",
+        kind: "copy_payload",
+        payload: {
+          filename: handoff.suggestedFilename,
+          payload: handoff.payload,
+          payloadSha256: handoff.payloadSha256,
+        },
+      },
+      {
+        label: "Sign externally",
+        kind: "sign_externally",
+        payload: handoff.payload,
+      },
+    ],
+    warnings: handoff.warnings,
+    data: { handoff },
   };
 }
 

@@ -3,9 +3,11 @@ import {
   buildBittensorExtrinsicPreviewCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
+  buildBittensorSigningHandoffCard,
   buildBittensorWalletCard,
   buildBittensorQuote,
   capabilityFromSubnet,
+  createBittensorSigningHandoff,
   createBittensorWatch,
   getConfiguredSubnetAdapter,
   getBittensorSignerStatus,
@@ -260,6 +262,37 @@ describe("prepareBittensorExtrinsic", () => {
     expect(preview.signer.canSign).toBe(false);
     expect(preview.warnings.join(" ")).toContain("external");
     expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("sign_externally");
+  });
+
+  test("creates a checksumed desktop signing handoff", async () => {
+    const preview = await prepareBittensorExtrinsic({
+      action: "stake",
+      netuid: 14,
+      amountTao: "1",
+      hotkey: VALID_SS58,
+    });
+    const handoff = createBittensorSigningHandoff(preview);
+    expect(handoff.id).toContain("bt-handoff");
+    expect(handoff.payloadSha256).toHaveLength(64);
+    expect(handoff.suggestedFilename).toContain("bittensor-stake-subnet-14");
+    expect(handoff.instructions.join(" ")).toContain("SHA-256");
+    expect(buildBittensorSigningHandoffCard(handoff).kind).toBe("signing_handoff");
+  });
+
+  test("rejects handoff payloads with disallowed signing-material fields", async () => {
+    const preview = await prepareBittensorExtrinsic({
+      action: "stake",
+      netuid: 14,
+      amountTao: "1",
+      hotkey: VALID_SS58,
+    });
+    expect(() => createBittensorSigningHandoff({
+      ...preview,
+      unsignedPayload: {
+        ...preview.unsignedPayload,
+        secretSeed: "do-not-accept",
+      },
+    })).toThrow("disallowed");
   });
 });
 

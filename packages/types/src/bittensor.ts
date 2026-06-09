@@ -159,6 +159,23 @@ export type BittensorSignedResult = {
   explorerUrl: string | null;
 };
 
+export type BittensorSigningHandoff = {
+  id: string;
+  action: BittensorExtrinsicPreview["action"];
+  network: BittensorExtrinsicPreview["network"];
+  netuid: number | null;
+  payload: Record<string, unknown>;
+  payloadJson: string;
+  payloadSha256: string;
+  suggestedFilename: string;
+  signerMode: BittensorSignerStatus["mode"];
+  createdAt: string;
+  expiresAt: string;
+  instructions: string[];
+  warnings: string[];
+  consequenceSummary: string;
+};
+
 export type BittensorSubnetInvocation = {
   netuid: number;
   intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";
@@ -188,6 +205,7 @@ export type BittensorChatCardKind =
   | "subnet_result"
   | "watchlist"
   | "signer_status"
+  | "signing_handoff"
   | "unsupported_adapter";
 
 export type BittensorChatCardItem = {

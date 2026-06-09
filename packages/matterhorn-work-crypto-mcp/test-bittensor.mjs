@@ -209,6 +209,33 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/handoff") {
+    res.end(JSON.stringify({
+      success: true,
+      handoff: {
+        id: "bt-handoff-mock",
+        action: "stake",
+        network: "finney",
+        netuid: 14,
+        payload: { action: "stake", netuid: 14, amountTao: 1 },
+        payloadJson: "{\"action\":\"stake\",\"amountTao\":1,\"netuid\":14}",
+        payloadSha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        suggestedFilename: "bittensor-stake-subnet-14-0123456789.json",
+        signerMode: "desktop_handoff",
+        createdAt: "2026-06-09T00:00:00.000Z",
+        expiresAt: "2026-06-09T00:10:00.000Z",
+        instructions: ["Review the payload checksum."],
+        warnings: ["External signature required."],
+        consequenceSummary: "If signed, this stakes 1 TAO.",
+      },
+      cards: [{
+        kind: "signing_handoff",
+        title: "External signing handoff",
+        items: [{ label: "Payload SHA-256", value: "0123456789abcdef0123" }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/submit") {
     res.end(JSON.stringify({
       success: true,
@@ -333,6 +360,7 @@ try {
     "bittensor_get_subnet_capabilities",
     "bittensor_get_sidecar_status",
     "bittensor_prepare_extrinsic",
+    "bittensor_create_signing_handoff",
     "bittensor_submit_signed_extrinsic",
     "bittensor_invoke_subnet",
     "bittensor_create_watch",
@@ -374,20 +402,25 @@ try {
   assert.equal(JSON.parse(sidecar.result.content[0].text).sidecar.configured, false);
 
   const preview = await ask({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
-  assert.equal(JSON.parse(preview.result.content[0].text).preview.requiresExternalSignature, true);
-  assert.equal(JSON.parse(preview.result.content[0].text).cards[0].kind, "signed_action_review");
+  const previewPayload = JSON.parse(preview.result.content[0].text);
+  assert.equal(previewPayload.preview.requiresExternalSignature, true);
+  assert.equal(previewPayload.cards[0].kind, "signed_action_review");
 
-  const submit = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
+  const handoff = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_create_signing_handoff", arguments: { preview: previewPayload.preview } } });
+  assert.equal(JSON.parse(handoff.result.content[0].text).handoff.payloadSha256.length, 64);
+  assert.equal(JSON.parse(handoff.result.content[0].text).cards[0].kind, "signing_handoff");
+
+  const submit = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
   assert.equal(JSON.parse(submit.result.content[0].text).result.status, "sidecar_unavailable");
 
-  const invoke = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
+  const invoke = await ask({ jsonrpc: "2.0", id: 15, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
   assert.equal(JSON.parse(invoke.result.content[0].text).invocation.supported, true);
   assert.equal(JSON.parse(invoke.result.content[0].text).cards[0].kind, "subnet_result");
 
-  const watch = await ask({ jsonrpc: "2.0", id: 15, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
+  const watch = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
   assert.equal(JSON.parse(watch.result.content[0].text).watch.netuid, 14);
 
-  const watchlist = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
+  const watchlist = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
   assert.equal(JSON.parse(watchlist.result.content[0].text).watches.length, 1);
 
   console.log("All Bittensor MCP smoke tests passed.");

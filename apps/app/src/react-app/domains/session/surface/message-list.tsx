@@ -754,6 +754,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
       return <Wallet className={className} strokeWidth={1.9} />;
     case "staking_quote":
     case "signed_action_review":
+    case "signing_handoff":
       return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "signer_status":
       return <BadgeCheck className={className} strokeWidth={1.9} />;

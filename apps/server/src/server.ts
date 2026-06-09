@@ -19,11 +19,13 @@ import {
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorSignerCard,
+  buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
   buildBittensorSubnetCards,
   buildBittensorWalletCard,
   buildBittensorWatchCards,
   bittensorProvider,
+  createBittensorSigningHandoff,
   createBittensorWatch,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
@@ -3615,6 +3617,19 @@ function createRoutes(
       rateTolerance: body.rateTolerance === null || body.rateTolerance === undefined || body.rateTolerance === "" ? null : Number(body.rateTolerance),
     });
     return jsonResponse({ success: true, preview, cards: [buildBittensorExtrinsicPreviewCard(preview)] });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/extrinsics/handoff", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    if (!body.preview || typeof body.preview !== "object") {
+      throw new ApiError(400, "invalid_preview", "preview is required");
+    }
+    try {
+      const handoff = createBittensorSigningHandoff(body.preview);
+      return jsonResponse({ success: true, handoff, cards: [buildBittensorSigningHandoffCard(handoff)] });
+    } catch (err) {
+      throw new ApiError(400, "invalid_handoff", err instanceof Error ? err.message : "Could not create Bittensor signing handoff");
+    }
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {

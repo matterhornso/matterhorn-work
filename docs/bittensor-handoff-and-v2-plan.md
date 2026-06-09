@@ -62,6 +62,23 @@ Optional network selector:
 - `BITTENSOR_NETWORK=test`
 - `BITTENSOR_NETWORK=local`
 
+### Desktop External-Signing Handoff
+
+Matterhorn now supports a deterministic handoff step between preview and submission:
+
+1. `bittensor_prepare_extrinsic` builds the unsigned preview.
+2. `bittensor_create_signing_handoff` creates a handoff bundle with:
+   - canonical payload JSON
+   - SHA-256 checksum
+   - suggested filename
+   - expiry timestamp
+   - plain-English review instructions
+   - consequence summary
+3. The user signs the payload in an external Bittensor-compatible wallet or CLI flow.
+4. `bittensor_submit_signed_extrinsic` can submit the externally signed payload only when a Subtensor sidecar is configured.
+
+The handoff helper rejects payloads containing signing-material field names before returning a bundle. This keeps the Phase 2 flow non-custodial while making desktop/CLI signing practical from chat.
+
 ### Subnet Service Adapters
 
 Set `BITTENSOR_SUBNET_ADAPTERS_JSON` to opt a subnet into direct service invocation.

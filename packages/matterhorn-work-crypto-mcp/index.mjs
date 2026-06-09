@@ -642,6 +642,18 @@ async function bittensor_prepare_extrinsic(args) {
   };
 }
 
+async function bittensor_create_signing_handoff(args) {
+  const res = await callServer("/api/bittensor/extrinsics/handoff", "POST", {
+    preview: args.preview,
+  });
+  return {
+    success: true,
+    handoff: res.handoff,
+    cards: res.cards || [],
+    execution: "external_signature_handoff",
+  };
+}
+
 async function bittensor_submit_signed_extrinsic(args) {
   const res = await callServer("/api/bittensor/extrinsics/submit", "POST", {
     preview: args.preview,
@@ -727,6 +739,7 @@ const tools = [
   { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
   { name: "bittensor_get_sidecar_status", description: "Report whether the configured Bittensor Subtensor sidecar can read, prepare, and submit externally signed payloads.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
+  { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
   { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
   { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
   { name: "bittensor_create_watch", description: "Create a Bittensor watch for a subnet, wallet, validator, emissions, or slippage condition.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] }, label: { type: "string" }, netuid: { type: "number" }, ss58Address: { type: "string" }, threshold: { type: "number" } } } },
@@ -847,6 +860,7 @@ function handleMessage(msg) {
         case "bittensor_get_subnet_capabilities": return bittensor_get_subnet_capabilities(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_sidecar_status": return bittensor_get_sidecar_status().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_create_signing_handoff": return bittensor_create_signing_handoff(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_invoke_subnet": return bittensor_invoke_subnet(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_watch": return bittensor_create_watch(args).then(r => respond(textResult(r))).catch(catchErr);
