@@ -186,6 +186,31 @@ export type BittensorSubnetInvocation = {
   warnings: string[];
 };
 
+export type BittensorValidatorCandidate = {
+  netuid: number;
+  subnetName: string;
+  uid: number | null;
+  hotkey: string | null;
+  coldkey: string | null;
+  stake: number | null;
+  trust: number | null;
+  dividends: number | null;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+  source: string;
+};
+
+export type BittensorValidatorComparison = {
+  netuid: number;
+  subnetName: string;
+  strategy: "balanced" | "yield" | "safety";
+  candidates: BittensorValidatorCandidate[];
+  warnings: string[];
+  source: string;
+  updatedAt: string;
+};
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -194,6 +219,16 @@ export type BittensorWatch = {
   ss58Address: string | null;
   threshold: number | null;
   createdAt: string;
+};
+
+export type BittensorWatchEvaluation = {
+  watch: BittensorWatch;
+  status: "ok" | "warning" | "unavailable";
+  summary: string;
+  observedValue: number | string | null;
+  threshold: number | null;
+  source: string;
+  checkedAt: string;
 };
 
 export type BittensorChatCardKind =

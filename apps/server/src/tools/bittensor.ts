@@ -217,6 +217,31 @@ export interface BittensorSubnetInvocation {
   warnings: string[];
 }
 
+export interface BittensorValidatorCandidate {
+  netuid: number;
+  subnetName: string;
+  uid: number | null;
+  hotkey: string | null;
+  coldkey: string | null;
+  stake: number | null;
+  trust: number | null;
+  dividends: number | null;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+  source: string;
+}
+
+export interface BittensorValidatorComparison {
+  netuid: number;
+  subnetName: string;
+  strategy: "balanced" | "yield" | "safety";
+  candidates: BittensorValidatorCandidate[];
+  warnings: string[];
+  source: string;
+  updatedAt: string;
+}
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -226,6 +251,16 @@ export type BittensorWatch = {
   threshold: number | null;
   createdAt: string;
 };
+
+export interface BittensorWatchEvaluation {
+  watch: BittensorWatch;
+  status: "ok" | "warning" | "unavailable";
+  summary: string;
+  observedValue: number | string | null;
+  threshold: number | null;
+  source: string;
+  checkedAt: string;
+}
 
 export type BittensorChatCardKind =
   | "subnet_comparison"
@@ -286,6 +321,13 @@ export type BittensorSubnetInvokeInput = {
   intent?: BittensorSubnetInvocation["intent"];
   task?: string | null;
   ss58Address?: string | null;
+};
+
+export type BittensorValidatorCompareInput = {
+  netuid: number;
+  hotkeys?: string[] | null;
+  limit?: number | null;
+  strategy?: BittensorValidatorComparison["strategy"] | null;
 };
 
 export interface BittensorSubtensorSidecarStatus {
@@ -1380,6 +1422,98 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
   };
 }
 
+function normalizeForScore(value: number | null, max: number): number {
+  if (value === null || !Number.isFinite(value) || max <= 0) return 0;
+  return Math.max(0, Math.min(1, value / max));
+}
+
+function validatorStrategyWeights(strategy: BittensorValidatorComparison["strategy"]): { stake: number; trust: number; dividends: number } {
+  if (strategy === "yield") return { stake: 0.25, trust: 0.25, dividends: 0.5 };
+  if (strategy === "safety") return { stake: 0.45, trust: 0.4, dividends: 0.15 };
+  return { stake: 0.35, trust: 0.35, dividends: 0.3 };
+}
+
+function normalizeValidatorStrategy(value: unknown): BittensorValidatorComparison["strategy"] {
+  return value === "yield" || value === "safety" || value === "balanced" ? value : "balanced";
+}
+
+export async function compareBittensorValidators(input: BittensorValidatorCompareInput): Promise<BittensorValidatorComparison> {
+  const netuid = Number.isInteger(input.netuid) && input.netuid >= 0 ? input.netuid : 0;
+  const detail = await bittensorProvider.getSubnet(netuid);
+  const strategy = normalizeValidatorStrategy(input.strategy);
+  const requestedHotkeys = new Set((input.hotkeys ?? []).filter((item): item is string => typeof item === "string" && isValidSs58Address(item)));
+  const limit = Math.min(12, Math.max(1, Number(input.limit ?? 6) || 6));
+  const validators = requestedHotkeys.size
+    ? detail.topValidators.filter((validator) => Boolean(validator.hotkey && requestedHotkeys.has(validator.hotkey)))
+    : detail.topValidators;
+  const maxStake = Math.max(0, ...validators.map((validator) => validator.stake ?? 0));
+  const maxTrust = Math.max(0, ...validators.map((validator) => validator.trust ?? 0));
+  const maxDividends = Math.max(0, ...validators.map((validator) => validator.dividends ?? 0));
+  const weights = validatorStrategyWeights(strategy);
+
+  const candidates = validators
+    .map((validator): BittensorValidatorCandidate => {
+      const stakeScore = normalizeForScore(validator.stake, maxStake);
+      const trustScore = maxTrust > 1
+        ? normalizeForScore(validator.trust, maxTrust)
+        : Math.max(0, Math.min(1, validator.trust ?? 0));
+      const dividendScore = maxDividends > 1
+        ? normalizeForScore(validator.dividends, maxDividends)
+        : Math.max(0, Math.min(1, validator.dividends ?? 0));
+      const score = Math.round(100 * (
+        stakeScore * weights.stake +
+        trustScore * weights.trust +
+        dividendScore * weights.dividends
+      ));
+      const reasons = [
+        validator.stake !== null ? `Stake sample: ${formatMetric(validator.stake)}.` : "Stake sample unavailable.",
+        validator.trust !== null ? `Trust sample: ${formatMetric(validator.trust, "", 4)}.` : "Trust sample unavailable.",
+        validator.dividends !== null ? `Dividend sample: ${formatMetric(validator.dividends, "", 4)}.` : "Dividend sample unavailable.",
+      ];
+      const warnings = [
+        "Validator comparison is informational, not financial advice.",
+        "Verify validator identity, commission/fees where applicable, and recent behavior in an external explorer before staking.",
+      ];
+      if (!validator.hotkey) warnings.push("Validator hotkey is unavailable in this metagraph sample.");
+      if (detail.source === "curated-fallback") warnings.push("Live provider data was unavailable; this comparison is incomplete.");
+
+      return {
+        netuid,
+        subnetName: detail.name,
+        uid: validator.uid,
+        hotkey: validator.hotkey,
+        coldkey: validator.coldkey,
+        stake: validator.stake,
+        trust: validator.trust,
+        dividends: validator.dividends,
+        score,
+        reasons,
+        warnings,
+        source: detail.source,
+      };
+    })
+    .sort((a, b) => b.score - a.score || (b.stake ?? 0) - (a.stake ?? 0))
+    .slice(0, limit);
+
+  const warnings = [
+    "This is a deterministic inspection shortlist, not a recommendation to stake.",
+    "Matterhorn uses public metagraph/provider data only and never handles Bittensor seed phrases or private keys.",
+  ];
+  if (!detail.topValidators.length) warnings.push("No validator sample was available for this subnet.");
+  if (requestedHotkeys.size && !candidates.length) warnings.push("None of the requested validator hotkeys appeared in the available top-validator sample.");
+  if (detail.source === "curated-fallback") warnings.push("Live provider data was unavailable; connect TAO.app or a Subtensor sidecar for stronger results.");
+
+  return {
+    netuid,
+    subnetName: detail.name,
+    strategy,
+    candidates,
+    warnings,
+    source: detail.source,
+    updatedAt: nowIso(),
+  };
+}
+
 export function listBittensorWatches(): BittensorWatch[] {
   return [...watchlist.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
@@ -1397,6 +1531,124 @@ export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorW
   };
   watchlist.set(id, watch);
   return watch;
+}
+
+function compareThreshold(observedValue: number | null, threshold: number | null, mode: "min" | "max"): BittensorWatchEvaluation["status"] {
+  if (observedValue === null) return "unavailable";
+  if (threshold === null) return "ok";
+  return mode === "min"
+    ? observedValue >= threshold ? "ok" : "warning"
+    : observedValue <= threshold ? "ok" : "warning";
+}
+
+export async function evaluateBittensorWatch(watch: BittensorWatch): Promise<BittensorWatchEvaluation> {
+  const checkedAt = nowIso();
+  if (watch.kind === "wallet") {
+    if (!watch.ss58Address) {
+      return {
+        watch,
+        status: "unavailable",
+        summary: "Wallet watch needs an SS58 coldkey public address.",
+        observedValue: null,
+        threshold: watch.threshold,
+        source: "matterhorn",
+        checkedAt,
+      };
+    }
+    const wallet = await bittensorProvider.getWallet(watch.ss58Address);
+    return {
+      watch,
+      status: wallet.providerStatus === "ok" ? "ok" : "unavailable",
+      summary: wallet.providerStatus === "ok"
+        ? `Wallet has ${wallet.stakePositions.length} subnet stake position(s).`
+        : wallet.message ?? "Wallet provider data is unavailable.",
+      observedValue: wallet.estimatedValueTao,
+      threshold: watch.threshold,
+      source: wallet.providerStatus === "ok" ? "provider" : "matterhorn",
+      checkedAt,
+    };
+  }
+
+  if (watch.netuid === null) {
+    return {
+      watch,
+      status: "unavailable",
+      summary: "This watch needs a subnet netuid before it can be checked.",
+      observedValue: null,
+      threshold: watch.threshold,
+      source: "matterhorn",
+      checkedAt,
+    };
+  }
+
+  const subnet = await bittensorProvider.getSubnet(watch.netuid);
+  if (watch.kind === "emissions") {
+    const status = compareThreshold(subnet.emission, watch.threshold, "min");
+    return {
+      watch,
+      status,
+      summary: subnet.emission === null
+        ? `Emission data for ${subnet.name} is unavailable.`
+        : status === "warning"
+          ? `${subnet.name} emission is below the configured threshold.`
+          : `${subnet.name} emission is within the configured range.`,
+      observedValue: subnet.emission,
+      threshold: watch.threshold,
+      source: subnet.source,
+      checkedAt,
+    };
+  }
+
+  if (watch.kind === "slippage") {
+    return {
+      watch,
+      status: subnet.priceTao === null ? "unavailable" : "ok",
+      summary: subnet.priceTao === null
+        ? `Live alpha price for ${subnet.name} is unavailable; quote-specific slippage cannot be inferred.`
+        : `${subnet.name} alpha price is ${subnet.priceTao} TAO. Build an action preview for quote-specific slippage.`,
+      observedValue: subnet.priceTao,
+      threshold: watch.threshold,
+      source: subnet.source,
+      checkedAt,
+    };
+  }
+
+  if (watch.kind === "validator") {
+    const target = watch.ss58Address;
+    const match = target
+      ? subnet.topValidators.find((validator) => validator.hotkey === target || validator.coldkey === target)
+      : null;
+    return {
+      watch,
+      status: target && match ? "ok" : target ? "warning" : "unavailable",
+      summary: target
+        ? match
+          ? `Validator ${shortSs58(target)} appears in the top validator sample for ${subnet.name}.`
+          : `Validator ${shortSs58(target)} was not found in the top validator sample for ${subnet.name}.`
+        : "Validator watch needs a hotkey or coldkey public address.",
+      observedValue: match?.stake ?? null,
+      threshold: watch.threshold,
+      source: subnet.source,
+      checkedAt,
+    };
+  }
+
+  return {
+    watch,
+    status: subnet.source === "curated-fallback" ? "warning" : "ok",
+    summary: subnet.source === "curated-fallback"
+      ? `Only fallback metadata is available for ${subnet.name}.`
+      : `${subnet.name} metadata is available from ${subnet.source}.`,
+    observedValue: subnet.metagraphSummary.neurons ?? subnet.emission ?? subnet.priceTao,
+    threshold: watch.threshold,
+    source: subnet.source,
+    checkedAt,
+  };
+}
+
+export async function evaluateBittensorWatches(): Promise<BittensorWatchEvaluation[]> {
+  const watches = listBittensorWatches();
+  return Promise.all(watches.map((watch) => evaluateBittensorWatch(watch)));
 }
 
 function formatMetric(value: number | null | undefined, suffix = "", digits = 3): string {
@@ -1634,6 +1886,50 @@ export function buildBittensorInvocationCard(invocation: BittensorSubnetInvocati
   };
 }
 
+export function buildBittensorValidatorComparisonCards(comparison: BittensorValidatorComparison): BittensorChatCard[] {
+  if (!comparison.candidates.length) {
+    return [{
+      kind: "validator_selection",
+      title: "Validator comparison",
+      subtitle: `Subnet ${comparison.netuid} · ${titleCase(comparison.strategy)}`,
+      summary: "No validator candidates were available from the current provider sample.",
+      tone: "warning",
+      items: [
+        cardItem("Subnet", comparison.subnetName),
+        cardItem("Candidates", 0, "warning"),
+        cardItem("Source", comparison.source, comparison.source === "curated-fallback" ? "warning" : "muted"),
+      ],
+      warnings: comparison.warnings,
+      data: { comparison },
+    }];
+  }
+
+  return comparison.candidates.slice(0, 6).map((candidate, index) => ({
+    kind: "validator_selection",
+    title: `Validator candidate ${index + 1}`,
+    subtitle: `${comparison.subnetName} · Score ${candidate.score}/100`,
+    summary: candidate.reasons.join(" "),
+    tone: candidate.score >= 70 ? "good" : candidate.score >= 40 ? "default" : "warning",
+    items: [
+      cardItem("UID", candidate.uid ?? "Unavailable", candidate.uid === null ? "muted" : "default"),
+      cardItem("Hotkey", shortSs58(candidate.hotkey)),
+      cardItem("Stake", formatMetric(candidate.stake)),
+      cardItem("Trust", formatMetric(candidate.trust, "", 4)),
+      cardItem("Dividends", formatMetric(candidate.dividends, "", 4)),
+      cardItem("Source", candidate.source, candidate.source === "curated-fallback" ? "warning" : "muted"),
+    ],
+    actions: candidate.hotkey ? [{
+      label: "Plan stake",
+      kind: "send_to_chat",
+      payload: {
+        prompt: `Prepare a safe Bittensor staking plan for subnet ${candidate.netuid} using validator hotkey ${candidate.hotkey}.`,
+      },
+    }] : [],
+    warnings: [...comparison.warnings, ...candidate.warnings],
+    data: { candidate, comparison },
+  }));
+}
+
 export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorChatCard[] {
   if (!watches.length) {
     return [{
@@ -1658,6 +1954,34 @@ export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorCh
       cardItem("Threshold", watch.threshold ?? "Not set", watch.threshold === null ? "muted" : "default"),
     ],
     data: { watch },
+  }));
+}
+
+export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEvaluation[]): BittensorChatCard[] {
+  if (!evaluations.length) {
+    return [{
+      kind: "watchlist",
+      title: "Bittensor watch check",
+      summary: "No Bittensor watches are configured yet.",
+      tone: "default",
+      items: [cardItem("Watches checked", 0, "muted")],
+      data: { evaluations },
+    }];
+  }
+  return evaluations.slice(0, 8).map((evaluation) => ({
+    kind: "watchlist",
+    title: evaluation.watch.label,
+    subtitle: `${titleCase(evaluation.watch.kind)} · ${titleCase(evaluation.status)}`,
+    summary: evaluation.summary,
+    tone: evaluation.status === "ok" ? "good" : evaluation.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Status", titleCase(evaluation.status), evaluation.status === "ok" ? "good" : evaluation.status === "warning" ? "warning" : "danger"),
+      cardItem("Observed", evaluation.observedValue ?? "Unavailable", evaluation.observedValue === null ? "muted" : "default"),
+      cardItem("Threshold", evaluation.threshold ?? "Not set", evaluation.threshold === null ? "muted" : "default"),
+      cardItem("Source", evaluation.source, evaluation.source === "curated-fallback" ? "warning" : "muted"),
+    ],
+    warnings: evaluation.status === "ok" ? [] : [evaluation.summary],
+    data: { evaluation },
   }));
 }
 

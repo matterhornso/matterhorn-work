@@ -672,6 +672,16 @@ async function bittensor_invoke_subnet(args) {
   return { success: true, invocation: res.invocation, cards: res.cards || [] };
 }
 
+async function bittensor_compare_validators(args) {
+  const res = await callServer("/api/bittensor/validators/compare", "POST", {
+    netuid: args.netuid,
+    hotkeys: args.hotkeys,
+    limit: args.limit,
+    strategy: args.strategy,
+  });
+  return { success: true, comparison: res.comparison, cards: res.cards || [] };
+}
+
 async function bittensor_create_watch(args) {
   const res = await callServer("/api/bittensor/monitoring/watchlist", "POST", {
     kind: args.kind,
@@ -686,6 +696,11 @@ async function bittensor_create_watch(args) {
 async function bittensor_list_watches() {
   const res = await callServer("/api/bittensor/monitoring/watchlist");
   return { success: true, watches: res.watches || [], cards: res.cards || [] };
+}
+
+async function bittensor_check_watches() {
+  const res = await callServer("/api/bittensor/monitoring/check");
+  return { success: true, evaluations: res.evaluations || [], cards: res.cards || [] };
 }
 
 // =========================================================
@@ -742,8 +757,10 @@ const tools = [
   { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
   { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
   { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
+  { name: "bittensor_compare_validators", description: "Compare visible validator candidates for a subnet by public metagraph samples. Informational only; not financial advice.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, hotkeys: { type: "array", items: { type: "string" } }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] } }, required: ["netuid"] } },
   { name: "bittensor_create_watch", description: "Create a Bittensor watch for a subnet, wallet, validator, emissions, or slippage condition.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] }, label: { type: "string" }, netuid: { type: "number" }, ss58Address: { type: "string" }, threshold: { type: "number" } } } },
   { name: "bittensor_list_watches", description: "List Bittensor watches created through chat or the Bittensor monitoring API.", inputSchema: { type: "object", properties: {} } },
+  { name: "bittensor_check_watches", description: "Check current Bittensor watch status for configured subnet, wallet, validator, emissions, or slippage watches.", inputSchema: { type: "object", properties: {} } },
 
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
@@ -863,8 +880,10 @@ function handleMessage(msg) {
         case "bittensor_create_signing_handoff": return bittensor_create_signing_handoff(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_invoke_subnet": return bittensor_invoke_subnet(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_compare_validators": return bittensor_compare_validators(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_watch": return bittensor_create_watch(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_list_watches": return bittensor_list_watches().then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_check_watches": return bittensor_check_watches().then(r => respond(textResult(r))).catch(catchErr);
 
         // portfolio / batch
         case "crypto_getPortfolio": {

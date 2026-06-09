@@ -22,11 +22,15 @@ import {
   buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
   buildBittensorSubnetCards,
+  buildBittensorValidatorComparisonCards,
   buildBittensorWalletCard,
+  buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
   bittensorProvider,
+  compareBittensorValidators,
   createBittensorSigningHandoff,
   createBittensorWatch,
+  evaluateBittensorWatches,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorSignerStatus,
@@ -3663,6 +3667,28 @@ function createRoutes(
     return jsonResponse({ success: true, invocation, cards: [buildBittensorInvocationCard(invocation)] });
   });
 
+  addRoute(routes, "POST", "/api/bittensor/validators/compare", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const netuid = Number(body.netuid);
+    if (!Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const strategy = typeof body.strategy === "string" ? body.strategy : "balanced";
+    if (!["balanced", "yield", "safety"].includes(strategy)) {
+      throw new ApiError(400, "invalid_strategy", "strategy must be balanced, yield, or safety");
+    }
+    const hotkeys = Array.isArray(body.hotkeys)
+      ? body.hotkeys.filter((value): value is string => typeof value === "string" && isValidSs58Address(value))
+      : null;
+    const comparison = await compareBittensorValidators({
+      netuid,
+      hotkeys,
+      limit: typeof body.limit === "number" ? body.limit : null,
+      strategy: strategy as "balanced" | "yield" | "safety",
+    });
+    return jsonResponse({ success: true, comparison, cards: buildBittensorValidatorComparisonCards(comparison) });
+  });
+
   addRoute(routes, "GET", "/api/bittensor/monitoring/watchlist", "client", async () => {
     const watches = listBittensorWatches();
     return jsonResponse({ success: true, watches, cards: buildBittensorWatchCards(watches) });
@@ -3679,6 +3705,11 @@ function createRoutes(
     });
     const watches = listBittensorWatches();
     return jsonResponse({ success: true, watch, watches, cards: buildBittensorWatchCards([watch]) });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/monitoring/check", "client", async () => {
+    const evaluations = await evaluateBittensorWatches();
+    return jsonResponse({ success: true, evaluations, cards: buildBittensorWatchEvaluationCards(evaluations) });
   });
 
   addRoute(routes, "GET", "/api/cow/quote", "client", async (ctx) => {

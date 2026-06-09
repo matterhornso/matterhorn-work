@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import assert from "node:assert/strict";
 
+const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
+
 const subnet = {
   netuid: 14,
   name: "TAOHash",
@@ -23,7 +25,7 @@ const subnet = {
 const detail = {
   ...subnet,
   metagraphSummary: { neurons: 128, totalStake: 1000, block: 123 },
-  topValidators: [],
+  topValidators: [{ uid: 1, hotkey: VALID_SS58, coldkey: VALID_SS58, stake: 1000, trust: 0.9, dividends: 0.2 }],
   knownUseCases: ["Evaluate decentralized compute capacity"],
   risks: ["Quote only"],
   links: [],
@@ -260,6 +262,39 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/validators/compare") {
+    res.end(JSON.stringify({
+      success: true,
+      comparison: {
+        netuid: 14,
+        subnetName: "TAOHash",
+        strategy: "balanced",
+        candidates: [{
+          netuid: 14,
+          subnetName: "TAOHash",
+          uid: 1,
+          hotkey: VALID_SS58,
+          coldkey: VALID_SS58,
+          stake: 1000,
+          trust: 0.9,
+          dividends: 0.2,
+          score: 100,
+          reasons: ["Stake sample: 1,000.", "Trust sample: 0.9.", "Dividend sample: 0.2."],
+          warnings: ["Informational only."],
+          source: "mock",
+        }],
+        warnings: ["Informational only."],
+        source: "mock",
+        updatedAt: "2026-06-09T00:00:00.000Z",
+      },
+      cards: [{
+        kind: "validator_selection",
+        title: "Validator candidate 1",
+        items: [{ label: "Hotkey", value: "5Grw..." }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/monitoring/watchlist") {
     res.end(JSON.stringify({
       success: true,
@@ -281,6 +316,26 @@ const server = createServer(async (req, res) => {
         kind: "watchlist",
         title: "Watch subnet 14",
         items: [{ label: "Netuid", value: "14" }],
+      }],
+    }));
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
+    res.end(JSON.stringify({
+      success: true,
+      evaluations: [{
+        watch: { id: "watch-1", kind: "subnet", label: "Watch subnet 14", netuid: 14, ss58Address: null, threshold: null, createdAt: "2026-06-09T00:00:00.000Z" },
+        status: "ok",
+        summary: "TAOHash metadata is available from mock.",
+        observedValue: 128,
+        threshold: null,
+        source: "mock",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+      }],
+      cards: [{
+        kind: "watchlist",
+        title: "Watch subnet 14",
+        items: [{ label: "Status", value: "Ok" }],
       }],
     }));
     return;
@@ -363,8 +418,10 @@ try {
     "bittensor_create_signing_handoff",
     "bittensor_submit_signed_extrinsic",
     "bittensor_invoke_subnet",
+    "bittensor_compare_validators",
     "bittensor_create_watch",
     "bittensor_list_watches",
+    "bittensor_check_watches",
   ]) {
     assert.ok(names.includes(name), `${name} should be registered`);
   }
@@ -381,7 +438,7 @@ try {
   const compare = await ask({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "bittensor_compare_subnets", arguments: { netuids: [14] } } });
   assert.equal(JSON.parse(compare.result.content[0].text).comparison.length, 1);
 
-  const wallet = await ask({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "bittensor_get_wallet_positions", arguments: { ss58Address: "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF" } } });
+  const wallet = await ask({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "bittensor_get_wallet_positions", arguments: { ss58Address: VALID_SS58 } } });
   assert.equal(JSON.parse(wallet.result.content[0].text).wallet.providerStatus, "provider_unavailable");
 
   const quote = await ask({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "bittensor_prepare_action", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
@@ -417,11 +474,19 @@ try {
   assert.equal(JSON.parse(invoke.result.content[0].text).invocation.supported, true);
   assert.equal(JSON.parse(invoke.result.content[0].text).cards[0].kind, "subnet_result");
 
-  const watch = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
+  const validators = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_compare_validators", arguments: { netuid: 14, strategy: "balanced" } } });
+  assert.equal(JSON.parse(validators.result.content[0].text).comparison.candidates.length, 1);
+  assert.equal(JSON.parse(validators.result.content[0].text).cards[0].kind, "validator_selection");
+
+  const watch = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
   assert.equal(JSON.parse(watch.result.content[0].text).watch.netuid, 14);
 
-  const watchlist = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
+  const watchlist = await ask({ jsonrpc: "2.0", id: 18, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
   assert.equal(JSON.parse(watchlist.result.content[0].text).watches.length, 1);
+
+  const checkedWatches = await ask({ jsonrpc: "2.0", id: 19, method: "tools/call", params: { name: "bittensor_check_watches", arguments: {} } });
+  assert.equal(JSON.parse(checkedWatches.result.content[0].text).evaluations[0].status, "ok");
+  assert.equal(JSON.parse(checkedWatches.result.content[0].text).cards[0].kind, "watchlist");
 
   console.log("All Bittensor MCP smoke tests passed.");
 } finally {

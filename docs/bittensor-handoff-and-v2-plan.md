@@ -119,6 +119,21 @@ Without an adapter, direct `service_call` returns a clear unsupported-adapter re
 
 Each match includes a score and reasons so chat can explain why a subnet was recommended.
 
+### Watch Evaluation
+
+Matterhorn can now evaluate Bittensor watches after they are created:
+
+- `bittensor_create_watch` creates subnet, wallet, validator, emissions, or slippage watches.
+- `bittensor_list_watches` lists existing watches.
+- `bittensor_check_watches` checks current watch status and returns cards with:
+  - `ok`, `warning`, or `unavailable`
+  - observed value
+  - threshold
+  - data source
+  - plain-English summary
+
+This is not a full background scheduler yet, but it gives chat a deterministic monitoring workflow and keeps unsupported or stale data explicit.
+
 ## Current PR
 
 - PR: https://github.com/matterhornso/matterhorn-work/pull/2
@@ -513,3 +528,25 @@ Add tests for:
 3. Re-run or repair production build verification. The unresolved command is `pnpm --filter @matterhorn-work/app build`.
 4. Do not merge until CI is green or the failing/queued runner situation is explicitly accepted.
 5. For Phase 2, start by adding the subnet registry/capability schema and chat intent router. Do not start with signing or transaction execution.
+
+## Overnight Phase 2 Progress: Validator Comparison
+
+The next high-leverage chat workflow is validator comparison for staking plans. Users naturally ask "stake safely", "which validator", or "compare these validators" before they understand hotkeys, coldkeys, alpha exposure, or metagraph metrics.
+
+Implemented locally:
+
+- Shared/server types for `BittensorValidatorCandidate` and `BittensorValidatorComparison`.
+- Deterministic server-side `compareBittensorValidators` helper that scores visible validator candidates from public metagraph/provider samples by stake, trust, and dividends.
+- Strategy modes: `balanced`, `yield`, and `safety`.
+- Chat cards with `validator_selection` kind and a "Plan stake" handoff action.
+- HTTP API: `POST /api/bittensor/validators/compare`.
+- MCP tool: `bittensor_compare_validators(netuid, hotkeys?, limit?, strategy?)`.
+- Prompt guidance: compare validators before stake planning when validator choice is missing or explicitly requested.
+
+Important product constraint: validator comparison is an inspection shortlist, not financial advice. It must continue to tell users to verify validator identity, behavior, and fees/commission where available in external explorers before signing anything.
+
+Research basis from current docs:
+
+- The subnet metagraph is the correct read model for validator/miner state because it contains neurons, stake, trust, dividends, emissions, hotkeys, coldkeys, activity, and validator permit fields.
+- Dynamic TAO means staking plans must include alpha-token exposure, price/slippage, and rate tolerance.
+- Signing stays external; Matterhorn prepares and explains but does not custody keys.
