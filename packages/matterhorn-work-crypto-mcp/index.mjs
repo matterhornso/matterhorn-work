@@ -7,19 +7,37 @@
  */
 
 import { createServer } from "node:http";
-import { createPublicClient, http } from "viem";
-import { base, baseSepolia, mainnet } from "viem/chains";
 
 // =========================================================
 // Clients
 // =========================================================
-const clients = {
-  8453: createPublicClient({ chain: base, transport: http() }),
-  84532: createPublicClient({ chain: baseSepolia, transport: http() }),
-};
-const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+let viemClientsPromise = null;
 
-function getClient(chainId) { return clients[chainId] ?? null; }
+async function getViemClients() {
+  if (!viemClientsPromise) {
+    viemClientsPromise = Promise.all([import("viem"), import("viem/chains")]).then(
+      ([{ createPublicClient, http }, { base, baseSepolia, mainnet }]) => {
+        const clients = {
+          8453: createPublicClient({ chain: base, transport: http() }),
+          84532: createPublicClient({ chain: baseSepolia, transport: http() }),
+        };
+        const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+        return { clients, mainnetClient };
+      },
+    );
+  }
+  return viemClientsPromise;
+}
+
+async function getClient(chainId) {
+  const { clients } = await getViemClients();
+  return clients[chainId] ?? null;
+}
+
+async function getMainnetClient() {
+  const { mainnetClient } = await getViemClients();
+  return mainnetClient;
+}
 
 // Server proxy for tools that live in apps/server
 const SERVER = process.env.MATTERHORN_SERVER_URL || "http://localhost:8787";
@@ -199,7 +217,7 @@ async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, sli
 // Transaction simulation via viem read-only clients
 // =========================================================
 async function simulateTransaction({ chainId, to, data, value = "0", from }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { error: `Unsupported chainId: ${chainId}` };
   try {
     await client.call({ to, data, value: BigInt(value), account: from });
@@ -224,7 +242,7 @@ const erc20ApproveAbi = [
 ];
 
 async function getTokenMeta(chainId, tokenAddress) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return null;
   try {
     const [symbol, name, decimals] = await Promise.all([
@@ -237,7 +255,7 @@ async function getTokenMeta(chainId, tokenAddress) {
 }
 
 async function getAllowance({ chainId, tokenAddress, owner, spender }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
   try {
     const [allowance, meta] = await Promise.all([
@@ -332,6 +350,7 @@ async function decodeCalldata(data) {
 // =========================================================
 async function resolveEnsName(name) {
   try {
+    const mainnetClient = await getMainnetClient();
     const address = await mainnetClient.getEnsAddress({ name });
     return { success: true, name, address: address ?? null, resolved: address !== null };
   } catch (err) {
@@ -341,6 +360,7 @@ async function resolveEnsName(name) {
 
 async function lookupEnsAddress(address) {
   try {
+    const mainnetClient = await getMainnetClient();
     const ensName = await mainnetClient.getEnsName({ address });
     return { success: true, address, ensName: ensName ?? null, resolved: ensName !== null };
   } catch (err) {
@@ -358,7 +378,7 @@ async function getGasPriceCached(chainId) {
   const now = Date.now();
   const cached = gasPriceCache[chainId];
   if (cached && now - cached.timestamp < GAS_PRICE_TTL_MS) return cached.price;
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return null;
   try {
     const price = await client.getGasPrice();
@@ -368,7 +388,7 @@ async function getGasPriceCached(chainId) {
 }
 
 async function estimateGas({ chainId, to, data, value = "0", from }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
   try {
     const [gas, gasPrice] = await Promise.all([
@@ -715,25 +735,26 @@ function handleMessage(msg) {
 
         // portfolio / batch
         case "crypto_getPortfolio": {
-          const pclient = getClient(args.chainId);
-          if (!pclient) return respond(textResult({ success: false, error: "Unsupported chainId" }));
-          const registry = { 8453: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", WETH: "0x4200000000000000000000000000000000000006" }, 84532: { USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", WETH: "0x4200000000000000000000000000000000000006" } };
-          const tok = Object.entries(registry[args.chainId] || {});
-          Promise.all([
-            pclient.getBalance({ address: args.address }).catch(() => null),
-            Promise.all(tok.map(([sym, addr]) =>
-              pclient.readContract({
-                address: addr,
-                abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }],
-                functionName: "balanceOf",
-                args: [args.address],
-              }).catch(() => 0n).then((bal) => {
-                const dec = sym === "USDC" ? 6 : 18;
-                return { symbol: sym, raw: bal.toString(), formatted: Number(bal) / 10 ** dec };
-              })
-            )),
-            hl_getPositions(args.address).catch(() => null),
-          ]).then(([native, tokenBalances, hl]) => {
+          (async () => {
+            const pclient = await getClient(args.chainId);
+            if (!pclient) return respond(textResult({ success: false, error: "Unsupported chainId" }));
+            const registry = { 8453: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", WETH: "0x4200000000000000000000000000000000000006" }, 84532: { USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", WETH: "0x4200000000000000000000000000000000000006" } };
+            const tok = Object.entries(registry[args.chainId] || {});
+            const [native, tokenBalances, hl] = await Promise.all([
+              pclient.getBalance({ address: args.address }).catch(() => null),
+              Promise.all(tok.map(([sym, addr]) =>
+                pclient.readContract({
+                  address: addr,
+                  abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }],
+                  functionName: "balanceOf",
+                  args: [args.address],
+                }).catch(() => 0n).then((bal) => {
+                  const dec = sym === "USDC" ? 6 : 18;
+                  return { symbol: sym, raw: bal.toString(), formatted: Number(bal) / 10 ** dec };
+                })
+              )),
+              hl_getPositions(args.address).catch(() => null),
+            ]);
             return respond(textResult({
               success: true,
               address: args.address,
@@ -742,7 +763,7 @@ function handleMessage(msg) {
               tokens: tokenBalances,
               hyperliquid: hl,
             }));
-          }).catch((err) => respond(textResult({ success: false, error: err.message || "Portfolio fetch failed" })));
+          })().catch((err) => respond(textResult({ success: false, error: err.message || "Portfolio fetch failed" })));
           return;
         }
         case "crypto_buildBatch": {
