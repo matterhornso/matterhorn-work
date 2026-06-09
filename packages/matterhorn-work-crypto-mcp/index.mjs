@@ -627,6 +627,11 @@ async function bittensor_get_subnet_capabilities(args) {
   return { success: true, capabilities: res.capabilities };
 }
 
+async function bittensor_get_sidecar_status() {
+  const res = await callServer("/api/bittensor/sidecar/status");
+  return { success: true, sidecar: res.sidecar };
+}
+
 async function bittensor_prepare_extrinsic(args) {
   const res = await callServer("/api/bittensor/extrinsics/prepare", "POST", args);
   return {
@@ -664,6 +669,11 @@ async function bittensor_create_watch(args) {
     threshold: args.threshold,
   });
   return { success: true, watch: res.watch, watches: res.watches, cards: res.cards || [] };
+}
+
+async function bittensor_list_watches() {
+  const res = await callServer("/api/bittensor/monitoring/watchlist");
+  return { success: true, watches: res.watches || [], cards: res.cards || [] };
 }
 
 // =========================================================
@@ -715,10 +725,12 @@ const tools = [
   { name: "bittensor_plan_from_chat", description: "Parse an ordinary user request into a safe Bittensor chat workflow plan.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" } }, required: ["message"] } },
   { name: "bittensor_find_subnets_for_goal", description: "Find Bittensor subnets that match a plain-English goal such as image generation, data search, compute, or agent tools.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
+  { name: "bittensor_get_sidecar_status", description: "Report whether the configured Bittensor Subtensor sidecar can read, prepare, and submit externally signed payloads.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
   { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
   { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
   { name: "bittensor_create_watch", description: "Create a Bittensor watch for a subnet, wallet, validator, emissions, or slippage condition.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] }, label: { type: "string" }, netuid: { type: "number" }, ss58Address: { type: "string" }, threshold: { type: "number" } } } },
+  { name: "bittensor_list_watches", description: "List Bittensor watches created through chat or the Bittensor monitoring API.", inputSchema: { type: "object", properties: {} } },
 
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
@@ -833,10 +845,12 @@ function handleMessage(msg) {
         case "bittensor_plan_from_chat": return bittensor_plan_from_chat(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_find_subnets_for_goal": return bittensor_find_subnets_for_goal(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_capabilities": return bittensor_get_subnet_capabilities(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_sidecar_status": return bittensor_get_sidecar_status().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_invoke_subnet": return bittensor_invoke_subnet(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_watch": return bittensor_create_watch(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_list_watches": return bittensor_list_watches().then(r => respond(textResult(r))).catch(catchErr);
 
         // portfolio / batch
         case "crypto_getPortfolio": {

@@ -110,10 +110,12 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - bittensor_compare_subnets(netuids) — Compare subnets by utility, price, emissions, metagraph size, and data freshness.
 - bittensor_get_wallet_positions(ss58Address) — Read watch-only TAO balance and subnet stake positions for an SS58 coldkey public address.
 - bittensor_get_subnet_capabilities(netuid?) — Check whether a subnet can be directly invoked or only explained/monitored.
+- bittensor_get_sidecar_status() — Check whether Matterhorn has a configured Subtensor sidecar for live chain reads, unsigned payload preparation, and signed-payload submission.
 - bittensor_prepare_extrinsic(action, netuid?, amountTao?, coldkey?, hotkey?, destination?) — Prepare an unsigned Bittensor action preview for external signing.
 - bittensor_submit_signed_extrinsic(preview, signature, signerAddress?) — Submit an externally signed preview only when a Subtensor sidecar is configured.
 - bittensor_invoke_subnet(netuid, intent, task?, ss58Address?) — Use a supported subnet adapter, or explain that direct service invocation is not available yet.
 - bittensor_create_watch(kind, label?, netuid?, ss58Address?, threshold?) — Create a chat watch for subnet, wallet, validator, emissions, or slippage changes.
+- bittensor_list_watches() — List Bittensor watches already created through chat.
 
 ### Reasoning Chains
 
