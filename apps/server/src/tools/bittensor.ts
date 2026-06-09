@@ -209,6 +209,42 @@ export type BittensorWatch = {
   createdAt: string;
 };
 
+export type BittensorChatCardKind =
+  | "subnet_comparison"
+  | "wallet_snapshot"
+  | "validator_selection"
+  | "staking_quote"
+  | "signed_action_review"
+  | "subnet_result"
+  | "watchlist"
+  | "signer_status"
+  | "unsupported_adapter";
+
+export interface BittensorChatCardItem {
+  label: string;
+  value: string;
+  tone?: "default" | "good" | "warning" | "danger" | "muted";
+}
+
+export interface BittensorChatCardAction {
+  label: string;
+  kind: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+  href?: string | null;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface BittensorChatCard {
+  kind: BittensorChatCardKind;
+  title: string;
+  subtitle?: string | null;
+  summary?: string | null;
+  tone?: "default" | "good" | "warning" | "danger";
+  items: BittensorChatCardItem[];
+  actions?: BittensorChatCardAction[];
+  warnings?: string[];
+  data?: Record<string, unknown>;
+}
+
 export type BittensorExtrinsicPrepareInput = {
   action: BittensorExtrinsicAction;
   netuid?: number | null;
@@ -232,6 +268,27 @@ export type BittensorSubnetInvokeInput = {
   task?: string | null;
   ss58Address?: string | null;
 };
+
+export interface BittensorSubtensorSidecarStatus {
+  configured: boolean;
+  network: "finney" | "test" | "local";
+  canRead: boolean;
+  canPrepare: boolean;
+  canSubmit: boolean;
+  message: string;
+}
+
+export interface BittensorConfiguredSubnetAdapter {
+  netuid: number;
+  name: string;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  endpoint: string;
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  timeoutMs: number;
+  authEnv?: string | null;
+  safetyNotes: string[];
+}
 
 type CacheEntry<T> = { at: number; data: T };
 
@@ -298,6 +355,171 @@ function taoAppClient(): ApiClient {
     headers: apiKey ? { "X-API-Key": apiKey } : {},
     timeout: 12_000,
   });
+}
+
+function sidecarBaseUrl(): string {
+  return readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL").replace(/\/$/, "");
+}
+
+function bittensorNetwork(): BittensorSignerStatus["network"] {
+  const configured = readEnv("BITTENSOR_NETWORK");
+  return configured === "test" || configured === "local" ? configured : "finney";
+}
+
+export function getSubtensorSidecarStatus(): BittensorSubtensorSidecarStatus {
+  const configured = Boolean(sidecarBaseUrl());
+  return {
+    configured,
+    network: bittensorNetwork(),
+    canRead: configured,
+    canPrepare: configured,
+    canSubmit: configured,
+    message: configured
+      ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation while keeping signing external."
+      : "Subtensor sidecar is not configured. Matterhorn will use TAO.app analytics and local safe fallbacks.",
+  };
+}
+
+class SubtensorSidecarClient {
+  constructor(private readonly baseUrl: string) {}
+
+  private async request(path: string, init?: RequestInit): Promise<Record<string, unknown> | null> {
+    try {
+      const { headers: _headers, ...rest } = init ?? {};
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        ...rest,
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!res.ok) return null;
+      return asRecord(await res.json());
+    } catch {
+      return null;
+    }
+  }
+
+  async getSubnetMetagraph(netuid: number): Promise<unknown | null> {
+    return this.request(`/subnets/${encodeURIComponent(String(netuid))}/metagraph`);
+  }
+
+  async getWallet(ss58Address: string): Promise<Record<string, unknown> | null> {
+    return this.request(`/wallet/${encodeURIComponent(ss58Address)}`);
+  }
+
+  async quoteAction(input: BittensorActionQuoteInput): Promise<Record<string, unknown> | null> {
+    return this.request("/extrinsics/quote", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async prepareExtrinsic(input: BittensorExtrinsicPrepareInput): Promise<Record<string, unknown> | null> {
+    return this.request("/extrinsics/prepare", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+}
+
+function subtensorSidecarClient(): SubtensorSidecarClient | null {
+  const baseUrl = sidecarBaseUrl();
+  return baseUrl ? new SubtensorSidecarClient(baseUrl) : null;
+}
+
+function normalizeServiceAdapter(value: unknown, fallback: BittensorCapabilityManifest["serviceAdapter"]): BittensorCapabilityManifest["serviceAdapter"] {
+  return value === "inference" ||
+    value === "data_search" ||
+    value === "compute" ||
+    value === "creative_media" ||
+    value === "agent_tooling" ||
+    value === "universal" ||
+    value === "unsupported"
+    ? value
+    : fallback;
+}
+
+function normalizeRequiredAuth(value: unknown): BittensorCapabilityManifest["requiredAuth"] {
+  return value === "none" || value === "api_key" || value === "external_wallet" || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function normalizeCostModel(value: unknown): BittensorCapabilityManifest["costModel"] {
+  return value === "free_read" || value === "tao_fee" || value === "provider_priced" || value === "unknown"
+    ? value
+    : "unknown";
+}
+
+function configuredSubnetAdapters(): BittensorConfiguredSubnetAdapter[] {
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTERS_JSON");
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : Object.entries(asRecord(parsed)).map(([netuid, value]) => ({ ...asRecord(value), netuid: Number(netuid) }));
+    return entries.flatMap((entry) => {
+      const record = asRecord(entry);
+      const netuid = firstNumber(record, ["netuid", "net_uid", "subnet"]);
+      const endpoint = firstString(record, ["endpoint", "url", "baseUrl", "base_url"]);
+      if (netuid === null || !Number.isInteger(netuid) || netuid < 0 || !endpoint) return [];
+      const timeoutMs = firstNumber(record, ["timeoutMs", "timeout_ms"]) ?? 20_000;
+      return [{
+        netuid,
+        name: firstString(record, ["name", "label"]) ?? `Subnet ${netuid} adapter`,
+        serviceAdapter: normalizeServiceAdapter(record["serviceAdapter"] ?? record["adapter"], "unsupported"),
+        endpoint,
+        requiredAuth: normalizeRequiredAuth(record["requiredAuth"] ?? record["auth"]),
+        costModel: normalizeCostModel(record["costModel"] ?? record["cost"]),
+        timeoutMs: Math.min(60_000, Math.max(1_000, timeoutMs)),
+        authEnv: firstString(record, ["authEnv", "auth_env", "apiKeyEnv", "api_key_env"]),
+        safetyNotes: arrayFrom(record["safetyNotes"] ?? record["safety_notes"])
+          .filter((item): item is string => typeof item === "string" && item.trim().length > 0),
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function getConfiguredSubnetAdapter(netuid: number): BittensorConfiguredSubnetAdapter | null {
+  return configuredSubnetAdapters().find((adapter) => adapter.netuid === netuid) ?? null;
+}
+
+async function invokeConfiguredSubnetAdapter(
+  adapter: BittensorConfiguredSubnetAdapter,
+  input: BittensorSubnetInvokeInput,
+): Promise<Record<string, unknown> | null> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (adapter.authEnv) {
+    const token = readEnv(adapter.authEnv);
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  try {
+    const res = await fetch(adapter.endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        netuid: adapter.netuid,
+        intent: input.intent ?? "service_call",
+        task: input.task ?? "",
+        ss58Address: input.ss58Address ?? null,
+        safeMode: true,
+      }),
+      signal: AbortSignal.timeout(adapter.timeoutMs),
+    });
+    if (!res.ok) return {
+      ok: false,
+      status: res.status,
+      message: `Adapter returned HTTP ${res.status}.`,
+    };
+    return asRecord(await res.json());
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Adapter invocation failed.",
+    };
+  }
 }
 
 async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
@@ -653,7 +875,10 @@ function adapterForCategory(category: string): BittensorCapabilityManifest["serv
 }
 
 export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorCapabilityManifest {
-  const adapter = adapterForCategory(subnet.category);
+  const configuredAdapter = getConfiguredSubnetAdapter(subnet.netuid);
+  const adapter = configuredAdapter?.serviceAdapter === "unsupported"
+    ? adapterForCategory(subnet.category)
+    : configuredAdapter?.serviceAdapter ?? adapterForCategory(subnet.category);
   return {
     netuid: subnet.netuid,
     name: subnet.name,
@@ -661,8 +886,8 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
     utilitySummary: subnet.benefitSummary,
     supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "monitor", "subnet_use"],
     serviceAdapter: adapter,
-    requiredAuth: adapter === "universal" ? "none" : "unknown",
-    costModel: adapter === "universal" ? "free_read" : "unknown",
+    requiredAuth: configuredAdapter?.requiredAuth ?? (adapter === "universal" ? "none" : "unknown"),
+    costModel: configuredAdapter?.costModel ?? (adapter === "universal" ? "free_read" : "unknown"),
     requestSchema: {
       type: "object",
       properties: {
@@ -681,9 +906,12 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
     },
     safetyNotes: [
       "Universal support covers explanation, metagraph, staking guidance, wallet context, and monitoring.",
-      adapter === "universal"
+      configuredAdapter
+        ? `Direct service adapter configured: ${configuredAdapter.name}.`
+        : adapter === "universal"
         ? "No direct service adapter is configured for this subnet yet."
         : "Direct service calls require a subnet-specific adapter and may need auth or payment.",
+      ...(configuredAdapter?.safetyNotes ?? []),
       "Signed Bittensor actions require an external signer.",
     ],
   };
@@ -707,7 +935,7 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
       available: true,
       canSign: false,
       canSubmit: true,
-      network: (readEnv("BITTENSOR_NETWORK") || "finney") as BittensorSignerStatus["network"],
+      network: bittensorNetwork(),
       address: address && isValidSs58Address(address) ? address : null,
       message: "Subtensor sidecar is configured for signed payload submission. Signing still happens outside Matterhorn.",
     };
@@ -717,7 +945,7 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
     available: true,
     canSign: false,
     canSubmit: false,
-    network: (readEnv("BITTENSOR_NETWORK") || "finney") as BittensorSignerStatus["network"],
+    network: bittensorNetwork(),
     address: address && isValidSs58Address(address) ? address : null,
     message: "Matterhorn can prepare the action and hand it to an external Bittensor-compatible signer. It cannot sign or broadcast by itself.",
   };
@@ -772,6 +1000,15 @@ export async function prepareBittensorExtrinsic(input: BittensorExtrinsicPrepare
   if (action === "transfer" && input.destination && !isValidSs58Address(input.destination)) {
     warnings.push("Destination does not look like a valid SS58 address.");
   }
+  const sidecar = subtensorSidecarClient();
+  const sidecarPreview = sidecar ? await sidecar.prepareExtrinsic(input) : null;
+  const sidecarPayload = sidecarPreview
+    ? asRecord(sidecarPreview["unsignedPayload"] ?? sidecarPreview["payload"] ?? sidecarPreview["call"] ?? sidecarPreview["extrinsic"])
+    : {};
+  const sidecarWarnings = sidecarPreview
+    ? arrayFrom(sidecarPreview["warnings"]).filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  if (sidecarPreview) warnings.push("Unsigned payload enriched by configured Subtensor sidecar.", ...sidecarWarnings);
 
   return {
     action,
@@ -781,10 +1018,10 @@ export async function prepareBittensorExtrinsic(input: BittensorExtrinsicPrepare
     coldkey,
     hotkey,
     destination,
-    feeTao: quote.feeTao,
-    slippageBps: quote.slippageBps,
-    expectedAlpha: quote.expectedAlpha,
-    unsignedPayload: {
+    feeTao: firstNumber(sidecarPreview ?? {}, ["feeTao", "fee_tao", "partialFeeTao", "partial_fee_tao"]) ?? quote.feeTao,
+    slippageBps: firstNumber(sidecarPreview ?? {}, ["slippageBps", "slippage_bps", "priceImpactBps", "price_impact_bps"]) ?? quote.slippageBps,
+    expectedAlpha: firstNumber(sidecarPreview ?? {}, ["expectedAlpha", "expected_alpha", "alphaOut", "alpha_out"]) ?? quote.expectedAlpha,
+    unsignedPayload: Object.keys(sidecarPayload).length ? sidecarPayload : {
       chain: "bittensor",
       network: signer.network,
       action,
@@ -901,6 +1138,31 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
     };
   }
   if (intent === "service_call") {
+    const configuredAdapter = getConfiguredSubnetAdapter(netuid);
+    if (configuredAdapter) {
+      const adapterResult = await invokeConfiguredSubnetAdapter(configuredAdapter, input);
+      const ok = adapterResult?.["ok"] !== false;
+      return {
+        netuid,
+        intent,
+        adapter: configuredAdapter.serviceAdapter,
+        supported: Boolean(ok && adapterResult),
+        result: {
+          capability,
+          requestedTask: input.task ?? null,
+          adapter: {
+            name: configuredAdapter.name,
+            requiredAuth: configuredAdapter.requiredAuth,
+            costModel: configuredAdapter.costModel,
+          },
+          output: adapterResult,
+        },
+        message: ok && adapterResult
+          ? `Matterhorn invoked the configured ${configuredAdapter.name} adapter for ${detail.name}.`
+          : `The configured ${configuredAdapter.name} adapter for ${detail.name} did not complete successfully.`,
+        warnings: [...warnings, ...configuredAdapter.safetyNotes],
+      };
+    }
     return {
       netuid,
       intent,
@@ -942,6 +1204,234 @@ export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorW
   return watch;
 }
 
+function formatMetric(value: number | null | undefined, suffix = "", digits = 3): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "Unavailable";
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: digits })}${suffix}`;
+}
+
+function formatPercentFromBps(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "Unavailable";
+  return `${(value / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+}
+
+function shortSs58(value: string | null | undefined): string {
+  if (!value) return "Unavailable";
+  return value.length > 16 ? `${value.slice(0, 7)}...${value.slice(-6)}` : value;
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function cardItem(label: string, value: string | number | null | undefined, tone?: BittensorChatCardItem["tone"]): BittensorChatCardItem {
+  return { label, value: value === null || value === undefined || value === "" ? "Unavailable" : String(value), tone };
+}
+
+export function buildBittensorPlanCards(plan: BittensorPlan): BittensorChatCard[] {
+  return [{
+    kind: "subnet_result",
+    title: "Bittensor chat plan",
+    subtitle: titleCase(plan.intent),
+    summary: plan.requiresClarification
+      ? plan.clarificationQuestion
+      : "Matterhorn has enough context to continue this Bittensor workflow safely.",
+    tone: plan.requiresClarification ? "warning" : "default",
+    items: [
+      cardItem("Intent", titleCase(plan.intent)),
+      cardItem("Confidence", `${Math.round(plan.confidence * 100)}%`),
+      cardItem("Netuids", plan.netuids.length ? plan.netuids.join(", ") : "None detected", plan.netuids.length ? "default" : "muted"),
+      cardItem("Wallet", plan.ss58Address ? shortSs58(plan.ss58Address) : "Not provided", plan.ss58Address ? "default" : "muted"),
+    ],
+    warnings: plan.safetyNotes,
+    data: { plan },
+  }];
+}
+
+export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): BittensorChatCard[] {
+  return subnets.slice(0, 6).map((subnet) => ({
+    kind: "subnet_comparison",
+    title: `${subnet.name} (${subnet.symbol})`,
+    subtitle: `Subnet ${subnet.netuid} · ${subnet.category}`,
+    summary: subnet.benefitSummary,
+    tone: subnet.source === "curated-fallback" ? "warning" : "default",
+    items: [
+      cardItem("Price", subnet.priceTao === null ? "Unavailable" : `${formatMetric(subnet.priceTao)} TAO`),
+      cardItem("Emission", formatMetric(subnet.emission)),
+      cardItem("Tempo", formatMetric(subnet.tempo)),
+      cardItem("Source", subnet.source, subnet.source === "curated-fallback" ? "warning" : "muted"),
+    ],
+    actions: [{
+      label: "Inspect subnet",
+      kind: "send_to_chat",
+      payload: { prompt: `Explain Bittensor subnet ${subnet.netuid} (${subnet.name}) and how it can help my work.` },
+    }],
+    warnings: subnet.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
+    data: { subnet },
+  }));
+}
+
+export function buildBittensorWalletCard(wallet: BittensorWalletSnapshot): BittensorChatCard {
+  const stakeTotal = wallet.stakePositions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0);
+  const riskiest = wallet.stakePositions.find((position) => position.slippageRisk === "high")
+    ?? wallet.stakePositions.find((position) => position.slippageRisk === "medium")
+    ?? wallet.stakePositions[0]
+    ?? null;
+  return {
+    kind: "wallet_snapshot",
+    title: "Bittensor wallet snapshot",
+    subtitle: shortSs58(wallet.ss58Address),
+    summary: wallet.providerStatus === "ok"
+      ? "Watch-only balance and stake exposure loaded."
+      : wallet.message ?? "Wallet provider data is unavailable.",
+    tone: wallet.providerStatus === "ok" ? "default" : "warning",
+    items: [
+      cardItem("Free TAO", wallet.taoBalance === null ? "Unavailable" : `${formatMetric(wallet.taoBalance)} TAO`),
+      cardItem("Staked value", `${formatMetric(stakeTotal)} TAO`),
+      cardItem("Positions", wallet.stakePositions.length),
+      cardItem("Highest risk", riskiest ? `${riskiest.subnetName}: ${riskiest.slippageRisk}` : "Unavailable", riskiest?.slippageRisk === "high" ? "warning" : "muted"),
+    ],
+    warnings: wallet.providerStatus === "ok" ? [] : [wallet.message ?? "Wallet provider data is unavailable."],
+    data: { wallet },
+  };
+}
+
+export function buildBittensorQuoteCard(quote: BittensorActionQuote): BittensorChatCard {
+  return {
+    kind: "staking_quote",
+    title: `${titleCase(quote.action)} quote`,
+    subtitle: quote.netuid === null ? "Bittensor action" : `Subnet ${quote.netuid}`,
+    summary: "Quote only. Nothing can move until the user reviews and signs externally.",
+    tone: quote.warnings.length ? "warning" : "default",
+    items: [
+      cardItem("Amount", quote.amountTao === null ? "Unavailable" : `${formatMetric(quote.amountTao)} TAO`),
+      cardItem("Expected alpha", formatMetric(quote.expectedAlpha)),
+      cardItem("Estimated fee", quote.feeTao === null ? "Unavailable" : `${formatMetric(quote.feeTao, " TAO", 6)}`),
+      cardItem("Slippage", formatPercentFromBps(quote.slippageBps), quote.slippageBps && quote.slippageBps > 100 ? "warning" : "default"),
+    ],
+    actions: [{
+      label: "Review in chat",
+      kind: "send_to_chat",
+      payload: { prompt: `Review this Bittensor ${quote.action} quote before external signing.` },
+    }],
+    warnings: quote.warnings,
+    data: { quote },
+  };
+}
+
+export function buildBittensorExtrinsicPreviewCard(preview: BittensorExtrinsicPreview): BittensorChatCard {
+  return {
+    kind: "signed_action_review",
+    title: `${titleCase(preview.action)} review`,
+    subtitle: preview.netuid === null ? preview.network : `Subnet ${preview.netuid} · ${preview.network}`,
+    summary: preview.consequenceSummary,
+    tone: preview.warnings.length ? "warning" : "default",
+    items: [
+      cardItem("Coldkey", shortSs58(preview.coldkey)),
+      cardItem("Hotkey", shortSs58(preview.hotkey)),
+      cardItem("Amount", preview.amountTao === null ? "Unavailable" : `${formatMetric(preview.amountTao)} TAO`),
+      cardItem("Signer", preview.signer.message, preview.signer.canSign ? "good" : "warning"),
+      cardItem("Slippage", formatPercentFromBps(preview.slippageBps), preview.slippageBps && preview.slippageBps > 100 ? "warning" : "default"),
+    ],
+    actions: [{
+      label: "Sign externally",
+      kind: "sign_externally",
+      payload: preview.unsignedPayload,
+    }],
+    warnings: preview.warnings,
+    data: { preview },
+  };
+}
+
+export function buildBittensorSignerCard(signer: BittensorSignerStatus): BittensorChatCard {
+  return {
+    kind: "signer_status",
+    title: "Bittensor signer status",
+    subtitle: titleCase(signer.mode),
+    summary: signer.message,
+    tone: signer.canSubmit || signer.canSign ? "default" : "warning",
+    items: [
+      cardItem("Network", signer.network),
+      cardItem("Can sign", signer.canSign ? "Yes" : "No", signer.canSign ? "good" : "warning"),
+      cardItem("Can submit", signer.canSubmit ? "Yes" : "No", signer.canSubmit ? "good" : "warning"),
+      cardItem("Address", shortSs58(signer.address)),
+    ],
+    warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use an external Bittensor-compatible signer."],
+    data: { signer },
+  };
+}
+
+export function buildBittensorSignedResultCard(result: BittensorSignedResult): BittensorChatCard {
+  const submitted = result.status === "submitted";
+  const invalid = result.status === "invalid_signature" || result.status === "rejected";
+  return {
+    kind: "signed_action_review",
+    title: submitted ? "Bittensor action submitted" : "Bittensor action not submitted",
+    subtitle: titleCase(result.status),
+    summary: result.message,
+    tone: submitted ? "good" : invalid ? "danger" : "warning",
+    items: [
+      cardItem("Status", titleCase(result.status), submitted ? "good" : invalid ? "danger" : "warning"),
+      cardItem("Transaction", result.txHash ?? "Unavailable", result.txHash ? "default" : "muted"),
+      cardItem("Block", result.blockHash ?? "Unavailable", result.blockHash ? "default" : "muted"),
+      cardItem("Explorer", result.explorerUrl ?? "Unavailable", result.explorerUrl ? "default" : "muted"),
+    ],
+    actions: result.explorerUrl ? [{
+      label: "Open explorer",
+      kind: "open_url",
+      href: result.explorerUrl,
+    }] : [],
+    warnings: submitted ? [] : [result.message],
+    data: { result },
+  };
+}
+
+export function buildBittensorInvocationCard(invocation: BittensorSubnetInvocation): BittensorChatCard {
+  return {
+    kind: invocation.supported ? "subnet_result" : "unsupported_adapter",
+    title: invocation.supported ? `Subnet ${invocation.netuid} result` : `Subnet ${invocation.netuid} adapter unavailable`,
+    subtitle: `${titleCase(invocation.intent)} · ${titleCase(invocation.adapter)}`,
+    summary: invocation.message,
+    tone: invocation.supported ? "default" : "warning",
+    items: [
+      cardItem("Netuid", invocation.netuid),
+      cardItem("Intent", titleCase(invocation.intent)),
+      cardItem("Adapter", titleCase(invocation.adapter)),
+      cardItem("Supported", invocation.supported ? "Yes" : "No", invocation.supported ? "good" : "warning"),
+    ],
+    warnings: invocation.warnings,
+    data: { invocation },
+  };
+}
+
+export function buildBittensorWatchCards(watches: BittensorWatch[]): BittensorChatCard[] {
+  if (!watches.length) {
+    return [{
+      kind: "watchlist",
+      title: "Bittensor watchlist",
+      summary: "No Bittensor watches are configured yet.",
+      tone: "default",
+      items: [cardItem("Watches", 0, "muted")],
+      data: { watches },
+    }];
+  }
+  return watches.slice(0, 6).map((watch) => ({
+    kind: "watchlist",
+    title: watch.label,
+    subtitle: titleCase(watch.kind),
+    summary: watch.netuid === null ? "Wallet or validator watch." : `Watching subnet ${watch.netuid}.`,
+    tone: "default",
+    items: [
+      cardItem("Kind", titleCase(watch.kind)),
+      cardItem("Netuid", watch.netuid ?? "Any", watch.netuid === null ? "muted" : "default"),
+      cardItem("Wallet", watch.ss58Address ? shortSs58(watch.ss58Address) : "Not scoped", "muted"),
+      cardItem("Threshold", watch.threshold ?? "Not set", watch.threshold === null ? "muted" : "default"),
+    ],
+    data: { watch },
+  }));
+}
+
 function normalizeStakePosition(value: unknown, subnets: BittensorSubnetSummary[]): BittensorStakePosition | null {
   const record = asRecord(value);
   const netuid = firstNumber(record, ["netuid", "net_uid", "subnet_id"]);
@@ -962,6 +1452,42 @@ function normalizeStakePosition(value: unknown, subnets: BittensorSubnetSummary[
     alphaAmount,
     taoValue,
     slippageRisk,
+  };
+}
+
+function normalizeSidecarWalletSnapshot(
+  raw: Record<string, unknown>,
+  ss58Address: string,
+  subnets: BittensorSubnetSummary[],
+): BittensorWalletSnapshot | null {
+  const source = asRecord(raw.data ?? raw.wallet ?? raw);
+  const positionsSource =
+    source.stakePositions ??
+    source.stakes ??
+    source.delegations ??
+    source.positions ??
+    source.allocations ??
+    [];
+  const stakePositions = arrayFrom(positionsSource)
+    .map((row) => normalizeStakePosition(row, subnets))
+    .filter(Boolean) as BittensorStakePosition[];
+  const taoBalance = firstNumber(source, ["taoBalance", "tao_balance", "freeBalance", "free_balance", "balance", "free"]);
+  const estimatedValueTao =
+    firstNumber(source, ["estimatedValueTao", "estimated_value_tao", "totalValueTao", "total_value_tao"]) ??
+    ((taoBalance ?? 0) + stakePositions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0));
+
+  if (taoBalance === null && !stakePositions.length && !("data" in raw) && !("wallet" in raw)) {
+    return null;
+  }
+
+  return {
+    ss58Address,
+    taoBalance,
+    stakePositions,
+    estimatedValueTao,
+    providerStatus: "ok",
+    updatedAt: firstString(source, ["updatedAt", "updated_at", "timestamp"]) ?? nowIso(),
+    message: "Loaded from configured Subtensor sidecar.",
   };
 }
 
@@ -991,10 +1517,17 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         // Keep list/fallback summary.
       }
 
-      try {
-        metagraphRaw = await taoAppClient().get(`/api/beta/analytics/subnets/metagraph/${netuid}`);
-      } catch {
-        metagraphRaw = null;
+      const sidecar = subtensorSidecarClient();
+      if (sidecar) {
+        metagraphRaw = await sidecar.getSubnetMetagraph(netuid);
+      }
+
+      if (!metagraphRaw) {
+        try {
+          metagraphRaw = await taoAppClient().get(`/api/beta/analytics/subnets/metagraph/${netuid}`);
+        } catch {
+          metagraphRaw = null;
+        }
       }
 
       return {
@@ -1022,6 +1555,18 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         updatedAt: nowIso(),
         message: "Address must be a valid watch-only SS58 public address.",
       };
+    }
+
+    const sidecar = subtensorSidecarClient();
+    if (sidecar) {
+      const [sidecarWallet, subnets] = await Promise.all([
+        sidecar.getWallet(ss58Address),
+        this.listSubnets(),
+      ]);
+      if (sidecarWallet) {
+        const wallet = normalizeSidecarWalletSnapshot(sidecarWallet, ss58Address, subnets);
+        if (wallet) return wallet;
+      }
     }
 
     if (!readEnv("TAO_APP_API_KEY")) {
@@ -1079,7 +1624,19 @@ export class TaoAppBittensorProvider implements BittensorProvider {
   async quoteAction(input: BittensorActionQuoteInput): Promise<BittensorActionQuote> {
     const netuid = typeof input.netuid === "number" && Number.isFinite(input.netuid) ? input.netuid : null;
     const subnet = netuid === null ? undefined : await this.getSubnet(netuid).catch(() => fallbackSubnet(netuid));
-    return buildBittensorQuote(input, subnet);
+  const local = buildBittensorQuote(input, subnet);
+  const sidecar = subtensorSidecarClient();
+  if (!sidecar) return local;
+  const sidecarQuote = await sidecar.quoteAction(input);
+  if (!sidecarQuote) return local;
+  const sidecarWarnings = arrayFrom(sidecarQuote["warnings"]).filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return {
+      ...local,
+      expectedAlpha: firstNumber(sidecarQuote, ["expectedAlpha", "expected_alpha", "alphaOut", "alpha_out"]) ?? local.expectedAlpha,
+      feeTao: firstNumber(sidecarQuote, ["feeTao", "fee_tao", "partialFeeTao", "partial_fee_tao"]) ?? local.feeTao,
+      slippageBps: firstNumber(sidecarQuote, ["slippageBps", "slippage_bps", "priceImpactBps", "price_impact_bps"]) ?? local.slippageBps,
+      warnings: [...local.warnings, "Quote enriched by configured Subtensor sidecar.", ...sidecarWarnings],
+    };
   }
 }
 

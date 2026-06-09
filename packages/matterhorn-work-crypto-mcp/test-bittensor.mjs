@@ -29,16 +29,29 @@ const detail = {
   links: [],
 };
 
+const subnetCard = {
+  kind: "subnet_comparison",
+  title: "TAOHash (SN14)",
+  subtitle: "Subnet 14 · Compute and infrastructure",
+  summary: subnet.benefitSummary,
+  items: [
+    { label: "Price", value: "0.5 TAO" },
+    { label: "Emission", value: "12.5" },
+  ],
+  warnings: [],
+  data: { subnet },
+};
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
   res.setHeader("Content-Type", "application/json");
 
   if (req.method === "GET" && url.pathname === "/api/bittensor/subnets") {
-    res.end(JSON.stringify({ success: true, subnets: [subnet] }));
+    res.end(JSON.stringify({ success: true, subnets: [subnet], cards: [subnetCard] }));
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/bittensor/subnets/14") {
-    res.end(JSON.stringify({ success: true, subnet: detail }));
+    res.end(JSON.stringify({ success: true, subnet: detail, cards: [subnetCard] }));
     return;
   }
   if (req.method === "GET" && url.pathname.startsWith("/api/bittensor/wallet/")) {
@@ -53,6 +66,11 @@ const server = createServer(async (req, res) => {
         updatedAt: "2026-06-09T00:00:00.000Z",
         message: "Mock provider unavailable",
       },
+      cards: [{
+        kind: "wallet_snapshot",
+        title: "Bittensor wallet snapshot",
+        items: [{ label: "Positions", value: "0" }],
+      }],
     }));
     return;
   }
@@ -69,6 +87,11 @@ const server = createServer(async (req, res) => {
         warnings: ["Quote only. External signature required."],
         requiresExternalSignature: true,
       },
+      cards: [{
+        kind: "staking_quote",
+        title: "Stake quote",
+        items: [{ label: "Amount", value: "1 TAO" }],
+      }],
     }));
     return;
   }
@@ -89,6 +112,11 @@ const server = createServer(async (req, res) => {
         requiresClarification: false,
         clarificationQuestion: null,
       },
+      cards: [{
+        kind: "subnet_result",
+        title: "Bittensor chat plan",
+        items: [{ label: "Intent", value: "Discover" }],
+      }],
     }));
     return;
   }
@@ -150,6 +178,11 @@ const server = createServer(async (req, res) => {
         consequenceSummary: "If signed, this stakes 1 TAO.",
         requiresExternalSignature: true,
       },
+      cards: [{
+        kind: "signed_action_review",
+        title: "Stake review",
+        items: [{ label: "Amount", value: "1 TAO" }],
+      }],
     }));
     return;
   }
@@ -157,6 +190,11 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({
       success: true,
       result: { status: "sidecar_unavailable", txHash: null, blockHash: null, message: "Mock sidecar unavailable", explorerUrl: null },
+      cards: [{
+        kind: "signed_action_review",
+        title: "Bittensor action not submitted",
+        items: [{ label: "Status", value: "Sidecar Unavailable" }],
+      }],
     }));
     return;
   }
@@ -164,6 +202,11 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({
       success: true,
       invocation: { netuid: 14, intent: "metagraph", adapter: "universal", supported: true, result: { metagraphSummary: detail.metagraphSummary }, message: "Mock invocation", warnings: [] },
+      cards: [{
+        kind: "subnet_result",
+        title: "Subnet 14 result",
+        items: [{ label: "Supported", value: "Yes" }],
+      }],
     }));
     return;
   }
@@ -172,6 +215,11 @@ const server = createServer(async (req, res) => {
       success: true,
       watch: { id: "watch-1", kind: "subnet", label: "Watch subnet 14", netuid: 14, ss58Address: null, threshold: null, createdAt: "2026-06-09T00:00:00.000Z" },
       watches: [],
+      cards: [{
+        kind: "watchlist",
+        title: "Watch subnet 14",
+        items: [{ label: "Netuid", value: "14" }],
+      }],
     }));
     return;
   }
@@ -260,6 +308,7 @@ try {
 
   const list = await ask({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "bittensor_list_subnets", arguments: { query: "hash" } } });
   assert.equal(JSON.parse(list.result.content[0].text).subnets.length, 1);
+  assert.equal(JSON.parse(list.result.content[0].text).cards[0].kind, "subnet_comparison");
 
   const explain = await ask({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "bittensor_explain_subnet", arguments: { netuid: 14 } } });
   assert.equal(JSON.parse(explain.result.content[0].text).subnet.netuid, 14);
@@ -272,6 +321,7 @@ try {
 
   const quote = await ask({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "bittensor_prepare_action", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   assert.equal(JSON.parse(quote.result.content[0].text).quote.requiresExternalSignature, true);
+  assert.equal(JSON.parse(quote.result.content[0].text).cards[0].kind, "staking_quote");
 
   const plan = await ask({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "bittensor_plan_from_chat", arguments: { message: "Find compute subnets" } } });
   assert.equal(JSON.parse(plan.result.content[0].text).plan.intent, "discover");
@@ -284,12 +334,14 @@ try {
 
   const preview = await ask({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   assert.equal(JSON.parse(preview.result.content[0].text).preview.requiresExternalSignature, true);
+  assert.equal(JSON.parse(preview.result.content[0].text).cards[0].kind, "signed_action_review");
 
   const submit = await ask({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
   assert.equal(JSON.parse(submit.result.content[0].text).result.status, "sidecar_unavailable");
 
   const invoke = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
   assert.equal(JSON.parse(invoke.result.content[0].text).invocation.supported, true);
+  assert.equal(JSON.parse(invoke.result.content[0].text).cards[0].kind, "subnet_result");
 
   const watch = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
   assert.equal(JSON.parse(watch.result.content[0].text).watch.netuid, 14);

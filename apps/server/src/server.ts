@@ -14,10 +14,20 @@ import { buildTransferTx } from "./tools/transfer.js";
 import { parseIntent } from "./tools/scheduler.js";
 import { getPrices } from "./tools/coingecko.js";
 import {
+  buildBittensorExtrinsicPreviewCard,
+  buildBittensorInvocationCard,
+  buildBittensorPlanCards,
+  buildBittensorQuoteCard,
+  buildBittensorSignerCard,
+  buildBittensorSignedResultCard,
+  buildBittensorSubnetCards,
+  buildBittensorWalletCard,
+  buildBittensorWatchCards,
   bittensorProvider,
   createBittensorWatch,
   getBittensorCapability,
   getBittensorSignerStatus,
+  getSubtensorSidecarStatus,
   invokeBittensorSubnet,
   isValidSs58Address,
   listBittensorCapabilities,
@@ -3499,7 +3509,7 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
     const subnets = await bittensorProvider.listSubnets();
-    return jsonResponse({ success: true, subnets });
+    return jsonResponse({ success: true, subnets, cards: buildBittensorSubnetCards(subnets) });
   });
 
   addRoute(routes, "GET", "/api/bittensor/subnets/:netuid", "client", async (ctx) => {
@@ -3508,7 +3518,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
     }
     const subnet = await bittensorProvider.getSubnet(netuid);
-    return jsonResponse({ success: true, subnet });
+    return jsonResponse({ success: true, subnet, cards: buildBittensorSubnetCards([subnet]) });
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/:ss58Address", "client", async (ctx) => {
@@ -3517,7 +3527,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_ss58_address", "ss58Address must be a valid watch-only SS58 public address");
     }
     const wallet = await bittensorProvider.getWallet(ss58Address);
-    return jsonResponse({ success: true, wallet });
+    return jsonResponse({ success: true, wallet, cards: [buildBittensorWalletCard(wallet)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/actions/quote", "client", async (ctx) => {
@@ -3534,7 +3544,7 @@ function createRoutes(
       recipient: typeof body.recipient === "string" ? body.recipient : null,
     };
     const quote = await bittensorProvider.quoteAction(input);
-    return jsonResponse({ success: true, quote });
+    return jsonResponse({ success: true, quote, cards: [buildBittensorQuoteCard(quote)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/chat/plan", "client", async (ctx) => {
@@ -3545,7 +3555,7 @@ function createRoutes(
     }
     const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address : null;
     const plan = planBittensorChat({ message, ss58Address });
-    return jsonResponse({ success: true, plan });
+    return jsonResponse({ success: true, plan, cards: buildBittensorPlanCards(plan) });
   });
 
   addRoute(routes, "GET", "/api/bittensor/capabilities", "client", async () => {
@@ -3565,7 +3575,12 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/signer/status", "client", async (ctx) => {
     const address = ctx.url.searchParams.get("address");
     const signer = getBittensorSignerStatus(address);
-    return jsonResponse({ success: true, signer });
+    return jsonResponse({ success: true, signer, cards: [buildBittensorSignerCard(signer)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/sidecar/status", "client", async () => {
+    const sidecar = getSubtensorSidecarStatus();
+    return jsonResponse({ success: true, sidecar });
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/prepare", "client", async (ctx) => {
@@ -3585,7 +3600,7 @@ function createRoutes(
       destinationNetuid: body.destinationNetuid === null || body.destinationNetuid === undefined || body.destinationNetuid === "" ? null : Number(body.destinationNetuid),
       rateTolerance: body.rateTolerance === null || body.rateTolerance === undefined || body.rateTolerance === "" ? null : Number(body.rateTolerance),
     });
-    return jsonResponse({ success: true, preview });
+    return jsonResponse({ success: true, preview, cards: [buildBittensorExtrinsicPreviewCard(preview)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {
@@ -3598,7 +3613,7 @@ function createRoutes(
       signature: typeof body.signature === "string" ? body.signature : null,
       signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
     });
-    return jsonResponse({ success: true, result });
+    return jsonResponse({ success: true, result, cards: [buildBittensorSignedResultCard(result)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/subnets/:netuid/invoke", "client", async (ctx) => {
@@ -3616,11 +3631,12 @@ function createRoutes(
       task: typeof body.task === "string" ? body.task : null,
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
     });
-    return jsonResponse({ success: true, invocation });
+    return jsonResponse({ success: true, invocation, cards: [buildBittensorInvocationCard(invocation)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/monitoring/watchlist", "client", async () => {
-    return jsonResponse({ success: true, watches: listBittensorWatches() });
+    const watches = listBittensorWatches();
+    return jsonResponse({ success: true, watches, cards: buildBittensorWatchCards(watches) });
   });
 
   addRoute(routes, "POST", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
@@ -3632,7 +3648,8 @@ function createRoutes(
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
       threshold: body.threshold === null || body.threshold === undefined || body.threshold === "" ? null : Number(body.threshold),
     });
-    return jsonResponse({ success: true, watch, watches: listBittensorWatches() });
+    const watches = listBittensorWatches();
+    return jsonResponse({ success: true, watch, watches, cards: buildBittensorWatchCards([watch]) });
   });
 
   addRoute(routes, "GET", "/api/cow/quote", "client", async (ctx) => {

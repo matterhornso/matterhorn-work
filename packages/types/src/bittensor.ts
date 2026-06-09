@@ -178,3 +178,48 @@ export type BittensorWatch = {
   threshold: number | null;
   createdAt: string;
 };
+
+export type BittensorChatCardKind =
+  | "subnet_comparison"
+  | "wallet_snapshot"
+  | "validator_selection"
+  | "staking_quote"
+  | "signed_action_review"
+  | "subnet_result"
+  | "watchlist"
+  | "signer_status"
+  | "unsupported_adapter";
+
+export type BittensorChatCardItem = {
+  label: string;
+  value: string;
+  tone?: "default" | "good" | "warning" | "danger" | "muted";
+};
+
+export type BittensorChatCardAction = {
+  label: string;
+  kind: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+  href?: string | null;
+  payload?: Record<string, unknown> | null;
+};
+
+export type BittensorChatCard = {
+  kind: BittensorChatCardKind;
+  title: string;
+  subtitle?: string | null;
+  summary?: string | null;
+  tone?: "default" | "good" | "warning" | "danger";
+  items: BittensorChatCardItem[];
+  actions?: BittensorChatCardAction[];
+  warnings?: string[];
+  data?: Record<string, unknown>;
+};
+
+export type BittensorSubtensorSidecarStatus = {
+  configured: boolean;
+  network: "finney" | "test" | "local";
+  canRead: boolean;
+  canPrepare: boolean;
+  canSubmit: boolean;
+  message: string;
+};

@@ -4,18 +4,25 @@ import { isToolUIPart, type DynamicToolUIPart, type UIMessage } from "ai";
 import type { Part } from "@opencode-ai/sdk/v2/client";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  Activity,
+  BadgeCheck,
   Box,
+  BrainCircuit,
   Check,
   ChevronDown,
   CircleAlert,
   Copy,
+  ExternalLink,
   File as FileIcon,
   Folder,
   GitFork,
   Globe,
   Search,
+  ShieldAlert,
   Terminal,
   Undo2,
+  Wallet,
+  Zap,
 } from "lucide-react";
 
 import { openDesktopPath, revealDesktopItemInDir } from "../../../../app/lib/desktop";
@@ -668,6 +675,223 @@ function FileCard(props: {
   );
 }
 
+type BittensorChatCard = {
+  kind?: string;
+  title?: string;
+  subtitle?: string | null;
+  summary?: string | null;
+  tone?: "default" | "good" | "warning" | "danger";
+  items?: Array<{
+    label?: string;
+    value?: string;
+    tone?: "default" | "good" | "warning" | "danger" | "muted";
+  }>;
+  actions?: Array<{
+    label?: string;
+    kind?: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+    href?: string | null;
+    payload?: Record<string, unknown> | null;
+  }>;
+  warnings?: string[];
+  data?: Record<string, unknown>;
+};
+
+type BittensorChatCardItem = NonNullable<BittensorChatCard["items"]>[number];
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readBittensorCards(output: unknown): BittensorChatCard[] {
+  if (!isRecordValue(output)) return [];
+  const cards = output.cards;
+  if (!Array.isArray(cards)) return [];
+  return cards
+    .filter(isRecordValue)
+    .map((card) => card as BittensorChatCard)
+    .filter((card) => typeof card.title === "string" && card.title.trim().length > 0)
+    .slice(0, 6);
+}
+
+function bittensorCardToneClass(tone?: BittensorChatCard["tone"]) {
+  switch (tone) {
+    case "good":
+      return "border-emerald-500/25 bg-emerald-500/[0.06]";
+    case "warning":
+      return "border-amber-500/28 bg-amber-500/[0.07]";
+    case "danger":
+      return "border-red-500/28 bg-red-500/[0.07]";
+    default:
+      return "border-dls-border/75 bg-dls-surface/80";
+  }
+}
+
+function bittensorItemToneClass(tone?: BittensorChatCardItem["tone"]) {
+  switch (tone) {
+    case "good":
+      return "text-emerald-700";
+    case "warning":
+      return "text-amber-700";
+    case "danger":
+      return "text-red-700";
+    case "muted":
+      return "text-muted-foreground";
+    default:
+      return "text-foreground";
+  }
+}
+
+function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["tone"] }) {
+  const className = cn(
+    "size-4 shrink-0",
+    props.tone === "good" && "text-emerald-700",
+    props.tone === "warning" && "text-amber-700",
+    props.tone === "danger" && "text-red-700",
+    !props.tone || props.tone === "default" ? "text-primary" : "",
+  );
+  switch (props.kind) {
+    case "wallet_snapshot":
+      return <Wallet className={className} strokeWidth={1.9} />;
+    case "staking_quote":
+    case "signed_action_review":
+      return <ShieldAlert className={className} strokeWidth={1.9} />;
+    case "signer_status":
+      return <BadgeCheck className={className} strokeWidth={1.9} />;
+    case "watchlist":
+      return <Activity className={className} strokeWidth={1.9} />;
+    case "unsupported_adapter":
+      return <CircleAlert className={className} strokeWidth={1.9} />;
+    case "subnet_result":
+      return <Zap className={className} strokeWidth={1.9} />;
+    default:
+      return <BrainCircuit className={className} strokeWidth={1.9} />;
+  }
+}
+
+function BittensorCardActionButton(props: { action: NonNullable<BittensorChatCard["actions"]>[number] }) {
+  const label = props.action.label?.trim() || "Action";
+  const payload = props.action.payload ?? null;
+  const copyPayload = async () => {
+    if (!payload) return;
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+  };
+  const sendToChat = () => {
+    const prompt = typeof payload?.prompt === "string" && payload.prompt.trim()
+      ? payload.prompt.trim()
+      : label;
+    window.dispatchEvent(new CustomEvent("matterhorn:bittensor-chat-handoff", {
+      detail: { prompt, context: payload ?? {} },
+    }));
+  };
+
+  if (props.action.kind === "open_url" && props.action.href) {
+    return (
+      <a
+        className="inline-flex items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/35 hover:text-primary"
+        href={props.action.href}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <ExternalLink size={12} />
+        <span>{label}</span>
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1.5 rounded-md border border-dls-border bg-dls-surface px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:border-primary/35 hover:text-primary disabled:opacity-50"
+      disabled={!payload && (props.action.kind === "copy_payload" || props.action.kind === "sign_externally")}
+      onClick={() => {
+        if (props.action.kind === "copy_payload" || props.action.kind === "sign_externally") {
+          void copyPayload();
+          return;
+        }
+        if (props.action.kind === "send_to_chat") {
+          sendToChat();
+        }
+      }}
+      title={props.action.kind === "sign_externally" ? "Copy the unsigned payload for external signing" : label}
+    >
+      {props.action.kind === "sign_externally" ? <ShieldAlert size={12} /> : props.action.kind === "send_to_chat" ? <BrainCircuit size={12} /> : <Copy size={12} />}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
+  if (!props.cards.length) return null;
+
+  return (
+    <div className="grid gap-2.5">
+      {props.cards.map((card, index) => {
+        const title = card.title?.trim() || "Bittensor";
+        const items = (card.items ?? []).slice(0, 6);
+        const warnings = (card.warnings ?? []).filter(Boolean).slice(0, 3);
+        const actions = (card.actions ?? []).slice(0, 2);
+        return (
+          <div
+            key={`${card.kind ?? "card"}:${title}:${index}`}
+            className={cn("rounded-[8px] border px-3.5 py-3 shadow-sm", bittensorCardToneClass(card.tone))}
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="mt-0.5">
+                <BittensorCardIcon kind={card.kind} tone={card.tone} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <div className="min-w-0 text-sm font-semibold leading-5 text-foreground">{title}</div>
+                  {card.subtitle ? (
+                    <div className="rounded-md bg-gray-3/55 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {card.subtitle}
+                    </div>
+                  ) : null}
+                </div>
+                {card.summary ? (
+                  <div className="mt-1 text-xs leading-5 text-muted-foreground wrap-break-word">{card.summary}</div>
+                ) : null}
+
+                {items.length ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {items.map((item, itemIndex) => (
+                      <div key={`${item.label ?? "item"}:${itemIndex}`} className="min-w-0 rounded-md border border-dls-border/60 bg-white/45 px-2.5 py-2">
+                        <div className="text-[11px] font-medium uppercase text-muted-foreground">{item.label}</div>
+                        <div className={cn("mt-0.5 text-xs font-semibold leading-4 wrap-break-word", bittensorItemToneClass(item.tone))}>
+                          {item.value || "Unavailable"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {warnings.length ? (
+                  <div className="mt-3 space-y-1">
+                    {warnings.map((warning, warningIndex) => (
+                      <div key={`${warning}:${warningIndex}`} className="flex items-start gap-1.5 text-xs leading-5 text-amber-800">
+                        <CircleAlert size={12} className="mt-1 shrink-0" />
+                        <span className="wrap-break-word">{warning}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {actions.length ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {actions.map((action, actionIndex) => (
+                      <BittensorCardActionButton key={`${action.kind ?? "action"}:${action.label ?? actionIndex}`} action={action} />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StepRow(props: {
   id: string;
   part: TranscriptPart;
@@ -683,6 +907,7 @@ function StepRow(props: {
     ? (toolState.input as Record<string, unknown>)
     : undefined;
   const toolOutput = toolState.output;
+  const bittensorCards = useMemo(() => readBittensorCards(toolOutput), [toolOutput]);
   const toolError = typeof toolState.error === "string" ? toolState.error : null;
   const expandable =
     props.part.type === "tool" &&
@@ -737,6 +962,11 @@ function StepRow(props: {
         </span>
       </button>
       {statusText ? <div className="ml-7 mt-2 text-sm leading-[1.65] text-muted-foreground">{statusText}</div> : null}
+      {bittensorCards.length ? (
+        <div className="mt-3 ml-7 max-w-[720px]">
+          <BittensorToolCards cards={bittensorCards} />
+        </div>
+      ) : null}
       {props.expanded ? (
         <div className="mt-3 ml-7 space-y-3">
           {hasStructuredValue(toolInput) ? (

@@ -524,7 +524,7 @@ function filterSubnets(subnets, query, limit) {
 
 async function bittensor_list_subnets({ query, limit } = {}) {
   const res = await callServer("/api/bittensor/subnets");
-  return { success: true, subnets: filterSubnets(res.subnets || [], query, limit), source: "matterhorn-server" };
+  return { success: true, subnets: filterSubnets(res.subnets || [], query, limit), cards: res.cards || [], source: "matterhorn-server" };
 }
 
 async function bittensor_explain_subnet(netuid) {
@@ -532,6 +532,7 @@ async function bittensor_explain_subnet(netuid) {
   return {
     success: true,
     subnet: res.subnet,
+    cards: res.cards || [],
     guidance: "Use this as read-only context. Bittensor stake, unstake, and transfer operations require an external Bittensor-compatible signer.",
   };
 }
@@ -552,12 +553,26 @@ async function bittensor_compare_subnets(netuids) {
       benefitSummary: s.benefitSummary,
       providerSource: s.source,
     })),
+    cards: subnets.flatMap((s) => s ? [{
+      kind: "subnet_comparison",
+      title: `${s.name} (${s.symbol})`,
+      subtitle: `Subnet ${s.netuid} · ${s.category}`,
+      summary: s.benefitSummary,
+      items: [
+        { label: "Price", value: s.priceTao === null || s.priceTao === undefined ? "Unavailable" : `${s.priceTao} TAO` },
+        { label: "Emission", value: s.emission === null || s.emission === undefined ? "Unavailable" : String(s.emission) },
+        { label: "Neurons", value: s.metagraphSummary?.neurons === null || s.metagraphSummary?.neurons === undefined ? "Unavailable" : String(s.metagraphSummary.neurons) },
+        { label: "Source", value: s.source || "Unavailable", tone: s.source === "curated-fallback" ? "warning" : "muted" },
+      ],
+      warnings: s.risks || [],
+      data: { subnet: s },
+    }] : []),
   };
 }
 
 async function bittensor_get_wallet_positions(ss58Address) {
   const res = await callServer(`/api/bittensor/wallet/${encodeURIComponent(String(ss58Address || ""))}`);
-  return { success: true, wallet: res.wallet };
+  return { success: true, wallet: res.wallet, cards: res.cards || [] };
 }
 
 async function bittensor_prepare_action(args) {
@@ -571,6 +586,7 @@ async function bittensor_prepare_action(args) {
   return {
     success: true,
     quote: res.quote,
+    cards: res.cards || [],
     execution: "quote_only_external_signature_required",
   };
 }
@@ -580,7 +596,7 @@ async function bittensor_plan_from_chat(args) {
     message: args.message,
     ss58Address: args.ss58Address,
   });
-  return { success: true, plan: res.plan };
+  return { success: true, plan: res.plan, cards: res.cards || [] };
 }
 
 async function bittensor_find_subnets_for_goal(args) {
@@ -595,6 +611,20 @@ async function bittensor_find_subnets_for_goal(args) {
     goal: args.goal || args.query || "",
     plan: plan.plan,
     subnets,
+    cards: subnets.slice(0, 6).map((s) => ({
+      kind: "subnet_comparison",
+      title: `${s.name} (${s.symbol})`,
+      subtitle: `Subnet ${s.netuid} · ${s.category}`,
+      summary: s.benefitSummary,
+      items: [
+        { label: "Price", value: s.priceTao === null || s.priceTao === undefined ? "Unavailable" : `${s.priceTao} TAO` },
+        { label: "Emission", value: s.emission === null || s.emission === undefined ? "Unavailable" : String(s.emission) },
+        { label: "Tempo", value: s.tempo === null || s.tempo === undefined ? "Unavailable" : String(s.tempo) },
+        { label: "Source", value: s.source || "Unavailable", tone: s.source === "curated-fallback" ? "warning" : "muted" },
+      ],
+      warnings: s.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
+      data: { subnet: s },
+    })),
   };
 }
 
@@ -612,6 +642,7 @@ async function bittensor_prepare_extrinsic(args) {
   return {
     success: true,
     preview: res.preview,
+    cards: res.cards || [],
     execution: "external_signature_required",
   };
 }
@@ -622,7 +653,7 @@ async function bittensor_submit_signed_extrinsic(args) {
     signature: args.signature,
     signerAddress: args.signerAddress,
   });
-  return { success: true, result: res.result };
+  return { success: true, result: res.result, cards: res.cards || [] };
 }
 
 async function bittensor_invoke_subnet(args) {
@@ -631,7 +662,7 @@ async function bittensor_invoke_subnet(args) {
     task: args.task,
     ss58Address: args.ss58Address,
   });
-  return { success: true, invocation: res.invocation };
+  return { success: true, invocation: res.invocation, cards: res.cards || [] };
 }
 
 async function bittensor_create_watch(args) {
@@ -642,7 +673,7 @@ async function bittensor_create_watch(args) {
     ss58Address: args.ss58Address,
     threshold: args.threshold,
   });
-  return { success: true, watch: res.watch, watches: res.watches };
+  return { success: true, watch: res.watch, watches: res.watches, cards: res.cards || [] };
 }
 
 // =========================================================

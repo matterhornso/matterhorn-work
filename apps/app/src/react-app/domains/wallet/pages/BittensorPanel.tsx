@@ -20,6 +20,7 @@ import type {
   BittensorActionQuote,
   BittensorSubnetDetail,
   BittensorSubnetSummary,
+  BittensorSubtensorSidecarStatus,
   BittensorWalletSnapshot,
 } from "@matterhorn-work/types";
 
@@ -85,6 +86,7 @@ export default function BittensorPanel() {
   const [recipient, setRecipient] = useState("");
   const [quote, setQuote] = useState<BittensorActionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarStatus | null>(null);
   const [agentPromptCopied, setAgentPromptCopied] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
@@ -102,6 +104,17 @@ export default function BittensorPanel() {
       setError(err instanceof Error ? err.message : "Failed to load Bittensor subnets");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const loadSidecarStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bittensor/sidecar/status");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load sidecar status");
+      setSidecarStatus(json.sidecar as BittensorSubtensorSidecarStatus);
+    } catch {
+      setSidecarStatus(null);
     }
   }, []);
 
@@ -150,6 +163,10 @@ export default function BittensorPanel() {
   useEffect(() => {
     loadSubnets();
   }, [loadSubnets]);
+
+  useEffect(() => {
+    void loadSidecarStatus();
+  }, [loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -227,6 +244,11 @@ export default function BittensorPanel() {
     }
   };
 
+  const refreshBittensor = () => {
+    void loadSubnets();
+    void loadSidecarStatus();
+  };
+
   const sendToChat = async (prompt: string, context: Record<string, unknown>) => {
     window.dispatchEvent(new CustomEvent("matterhorn:bittensor-chat-handoff", {
       detail: {
@@ -271,14 +293,16 @@ export default function BittensorPanel() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-dls-text">Bittensor</h2>
-              <p className="text-xs text-dls-secondary">Finney mainnet · watch-only</p>
+              <p className="text-xs text-dls-secondary">
+                Finney mainnet · {sidecarStatus?.configured ? "sidecar ready" : "watch-only"}
+              </p>
             </div>
           </div>
           <Button
             variant="ghost"
             size="sm"
             className="gap-1.5 text-xs text-dls-secondary"
-            onClick={loadSubnets}
+            onClick={refreshBittensor}
             disabled={loading}
           >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
@@ -316,10 +340,11 @@ export default function BittensorPanel() {
 
         {tab === "overview" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
               <Metric label="Favorites" value={String(favorites.length)} />
               <Metric label="Source" value={subnets.some((s) => s.source === "tao.app") ? "Live" : "Fallback"} />
+              <Metric label="Sidecar" value={sidecarStatus?.configured ? "On" : "Off"} />
             </div>
 
             <Section title="Watched Wallet" icon={<Wallet className="size-4" />}>

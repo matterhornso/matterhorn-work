@@ -1,9 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildBittensorExtrinsicPreviewCard,
+  buildBittensorPlanCards,
+  buildBittensorQuoteCard,
+  buildBittensorWalletCard,
   buildBittensorQuote,
   capabilityFromSubnet,
   createBittensorWatch,
+  getConfiguredSubnetAdapter,
   getBittensorSignerStatus,
+  getSubtensorSidecarStatus,
   isValidSs58Address,
   planBittensorChat,
   prepareBittensorExtrinsic,
@@ -108,6 +114,39 @@ describe("planBittensorChat", () => {
   });
 });
 
+describe("Bittensor chat cards", () => {
+  test("builds plan cards that preserve safety context", () => {
+    const plan = planBittensorChat({ message: "Stake 1 TAO to subnet 14" });
+    const cards = buildBittensorPlanCards(plan);
+    expect(cards[0]?.kind).toBe("subnet_result");
+    expect(cards[0]?.warnings?.join(" ")).toContain("external signer");
+  });
+
+  test("builds wallet and quote cards for chat rendering", () => {
+    const walletCard = buildBittensorWalletCard({
+      ss58Address: VALID_SS58,
+      taoBalance: 2,
+      stakePositions: [{
+        netuid: 14,
+        subnetName: "TAOHash",
+        validatorHotkey: VALID_SS58,
+        alphaAmount: 4,
+        taoValue: 2,
+        slippageRisk: "low",
+      }],
+      estimatedValueTao: 4,
+      providerStatus: "ok",
+      updatedAt: "2026-06-09T00:00:00.000Z",
+    });
+    expect(walletCard.kind).toBe("wallet_snapshot");
+    expect(walletCard.items.some((item) => item.label === "Free TAO")).toBe(true);
+
+    const quoteCard = buildBittensorQuoteCard(buildBittensorQuote({ action: "stake", netuid: 14, amountTao: "1" }));
+    expect(quoteCard.kind).toBe("staking_quote");
+    expect(quoteCard.actions?.[0]?.kind).toBe("send_to_chat");
+  });
+});
+
 describe("capabilityFromSubnet", () => {
   test("creates a universal capability manifest without requiring auth for read flows", () => {
     const capability = capabilityFromSubnet({
@@ -128,6 +167,47 @@ describe("capabilityFromSubnet", () => {
     expect(capability.supportedChatIntents).toContain("subnet_use");
     expect(capability.serviceAdapter).toBe("compute");
   });
+
+  test("reflects configured service adapters without exposing auth values", () => {
+    const previous = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+      netuid: 14,
+      name: "Mock compute adapter",
+      serviceAdapter: "compute",
+      endpoint: "http://127.0.0.1:4040/invoke",
+      requiredAuth: "api_key",
+      authEnv: "BITTENSOR_MOCK_ADAPTER_TOKEN",
+      costModel: "provider_priced",
+      safetyNotes: ["Mock adapter safety note."],
+    }]);
+
+    const adapter = getConfiguredSubnetAdapter(14);
+    const capability = capabilityFromSubnet({
+      netuid: 14,
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute and infrastructure",
+      benefitSummary: "Compute subnet",
+      ownerColdkey: null,
+      ownerHotkey: null,
+      priceTao: null,
+      emission: null,
+      tempo: null,
+      updatedAt: "2026-06-09T00:00:00.000Z",
+      source: "test",
+    });
+
+    expect(adapter?.name).toBe("Mock compute adapter");
+    expect(capability.requiredAuth).toBe("api_key");
+    expect(capability.costModel).toBe("provider_priced");
+    expect(JSON.stringify(capability)).not.toContain("BITTENSOR_MOCK_ADAPTER_TOKEN");
+
+    if (previous === undefined) {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    } else {
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previous;
+    }
+  });
 });
 
 describe("prepareBittensorExtrinsic", () => {
@@ -143,6 +223,7 @@ describe("prepareBittensorExtrinsic", () => {
     expect(preview.unsignedPayload.action).toBe("stake");
     expect(preview.signer.canSign).toBe(false);
     expect(preview.warnings.join(" ")).toContain("external");
+    expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("sign_externally");
   });
 });
 
@@ -159,5 +240,19 @@ describe("signer and watch helpers", () => {
     expect(watch.id).toContain("bt-watch");
     expect(watch.netuid).toBe(14);
     expect(JSON.stringify(watch)).not.toMatch(/seed|private|mnemonic/i);
+  });
+
+  test("reports sidecar mode from configuration without exposing endpoint details", () => {
+    const previous = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://127.0.0.1:9944";
+    const status = getSubtensorSidecarStatus();
+    expect(status.configured).toBe(true);
+    expect(status.canRead).toBe(true);
+    expect(JSON.stringify(status)).not.toContain("127.0.0.1");
+    if (previous === undefined) {
+      delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    } else {
+      process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previous;
+    }
   });
 });
