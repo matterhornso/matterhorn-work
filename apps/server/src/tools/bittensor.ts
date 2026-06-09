@@ -290,6 +290,18 @@ export interface BittensorConfiguredSubnetAdapter {
   safetyNotes: string[];
 }
 
+export interface BittensorSubnetDiscoveryMatch {
+  subnet: BittensorSubnetSummary;
+  score: number;
+  reasons: string[];
+}
+
+export interface BittensorSubnetDiscoveryResult {
+  goal: string;
+  matches: BittensorSubnetDiscoveryMatch[];
+  cards: BittensorChatCard[];
+}
+
 type CacheEntry<T> = { at: number; data: T };
 
 const cache = new Map<string, CacheEntry<unknown>>();
@@ -915,6 +927,95 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
       "Signed Bittensor actions require an external signer.",
     ],
   };
+}
+
+function goalCategoryHints(goal: string): Array<{ category: string; reason: string }> {
+  const lower = goal.toLowerCase();
+  const hints: Array<{ category: string; reason: string }> = [];
+  if (/(image|video|media|creative|art|render|vision|design|generate)/.test(lower)) {
+    hints.push({ category: "Creative AI", reason: "The goal looks like a creative or media task." });
+  }
+  if (/(compute|gpu|hash|infrastructure|hosting|serve|serving|cloud)/.test(lower)) {
+    hints.push({ category: "Compute and infrastructure", reason: "The goal needs compute, hosting, or infrastructure." });
+  }
+  if (/(search|data|dataset|crawl|index|retrieval|knowledge|document|web)/.test(lower)) {
+    hints.push({ category: "Data and knowledge", reason: "The goal needs data, search, or retrieval." });
+  }
+  if (/(agent|tool|automation|workflow|mcp|assistant)/.test(lower)) {
+    hints.push({ category: "Agent tools", reason: "The goal mentions agent tooling or workflow automation." });
+  }
+  if (/(inference|model|chat|text|prompt|llm|language)/.test(lower)) {
+    hints.push({ category: "Intelligence market", reason: "The goal looks like a model or inference task." });
+  }
+  if (/(market|finance|trading|risk|price|prediction)/.test(lower)) {
+    hints.push({ category: "Financial intelligence", reason: "The goal looks like market or financial intelligence." });
+  }
+  if (/(science|research|biology|health|paper|lab)/.test(lower)) {
+    hints.push({ category: "Science and research", reason: "The goal looks like a research task." });
+  }
+  return hints;
+}
+
+function tokenizeGoal(goal: string): string[] {
+  return goal
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2 && !["the", "and", "for", "with", "use", "using", "subnet", "bittensor"].includes(token))
+    .slice(0, 16);
+}
+
+export function scoreBittensorSubnetForGoal(subnet: BittensorSubnetSummary, goal: string): BittensorSubnetDiscoveryMatch {
+  const lowerGoal = goal.toLowerCase();
+  const searchable = `${subnet.netuid} ${subnet.name} ${subnet.symbol} ${subnet.category} ${subnet.benefitSummary}`.toLowerCase();
+  const hints = goalCategoryHints(goal);
+  const tokens = tokenizeGoal(goal);
+  const reasons: string[] = [];
+  let score = 0;
+
+  for (const hint of hints) {
+    if (subnet.category === hint.category) {
+      score += 10;
+      reasons.push(hint.reason);
+    }
+  }
+
+  for (const token of tokens) {
+    if (searchable.includes(token)) {
+      score += 2;
+      reasons.push(`Matched "${token}" in subnet metadata.`);
+    }
+  }
+
+  if (lowerGoal.includes(String(subnet.netuid)) || lowerGoal.includes(`sn${subnet.netuid}`)) {
+    score += 8;
+    reasons.push("The prompt names this netuid directly.");
+  }
+  if (subnet.emission !== null && subnet.emission > 0) score += 1;
+  if (subnet.source !== "curated-fallback") score += 1;
+  if (!reasons.length) reasons.push("Included as a fallback candidate because no stronger match was available.");
+
+  return { subnet, score, reasons: [...new Set(reasons)].slice(0, 4) };
+}
+
+export async function findBittensorSubnetsForGoal(input: { goal: string; limit?: number | null }): Promise<BittensorSubnetDiscoveryResult> {
+  const goal = input.goal.trim() || "Find useful Bittensor subnets";
+  const limit = Math.min(12, Math.max(1, Number(input.limit ?? 8) || 8));
+  const subnets = await bittensorProvider.listSubnets();
+  const scored = subnets
+    .map((subnet) => scoreBittensorSubnetForGoal(subnet, goal))
+    .sort((a, b) => b.score - a.score || a.subnet.netuid - b.subnet.netuid);
+  const confident = scored.filter((match) => match.score > 0);
+  const matches = (confident.length ? confident : scored).slice(0, limit);
+  const cards = buildBittensorSubnetCards(matches.map((match) => match.subnet)).map((card, index) => {
+    const match = matches[index];
+    return {
+      ...card,
+      summary: match ? `${card.summary ?? ""} Match reason: ${match.reasons[0]}`.trim() : card.summary,
+      data: { ...(card.data ?? {}), match },
+    };
+  });
+  return { goal, matches, cards };
 }
 
 export async function listBittensorCapabilities(): Promise<BittensorCapabilityManifest[]> {

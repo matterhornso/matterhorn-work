@@ -25,6 +25,7 @@ import {
   buildBittensorWatchCards,
   bittensorProvider,
   createBittensorWatch,
+  findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
@@ -3510,6 +3511,19 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
     const subnets = await bittensorProvider.listSubnets();
     return jsonResponse({ success: true, subnets, cards: buildBittensorSubnetCards(subnets) });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/subnets/discover", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const goal = typeof body.goal === "string" ? body.goal : typeof body.query === "string" ? body.query : "";
+    if (!goal.trim()) {
+      throw new ApiError(400, "invalid_goal", "goal is required");
+    }
+    const result = await findBittensorSubnetsForGoal({
+      goal,
+      limit: body.limit === null || body.limit === undefined || body.limit === "" ? null : Number(body.limit),
+    });
+    return jsonResponse({ success: true, ...result });
   });
 
   addRoute(routes, "GET", "/api/bittensor/subnets/:netuid", "client", async (ctx) => {

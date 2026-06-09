@@ -54,6 +54,15 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify({ success: true, subnet: detail, cards: [subnetCard] }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/discover") {
+    res.end(JSON.stringify({
+      success: true,
+      goal: "compute",
+      matches: [{ subnet, score: 12, reasons: ["The goal needs compute, hosting, or infrastructure."] }],
+      cards: [subnetCard],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname.startsWith("/api/bittensor/wallet/")) {
     res.end(JSON.stringify({
       success: true,
@@ -328,6 +337,7 @@ try {
 
   const find = await ask({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "bittensor_find_subnets_for_goal", arguments: { goal: "compute", limit: 3 } } });
   assert.equal(JSON.parse(find.result.content[0].text).subnets.length, 1);
+  assert.equal(JSON.parse(find.result.content[0].text).matches[0].score, 12);
 
   const capabilities = await ask({ jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "bittensor_get_subnet_capabilities", arguments: { netuid: 14 } } });
   assert.equal(JSON.parse(capabilities.result.content[0].text).capability.netuid, 14);

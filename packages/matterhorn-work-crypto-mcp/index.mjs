@@ -600,31 +600,21 @@ async function bittensor_plan_from_chat(args) {
 }
 
 async function bittensor_find_subnets_for_goal(args) {
-  const [plan, subnetsRes] = await Promise.all([
+  const goal = args.goal || args.query || "Find useful Bittensor subnets";
+  const [plan, discovery] = await Promise.all([
     bittensor_plan_from_chat({ message: args.goal || args.query || "Find useful Bittensor subnets" }),
-    callServer("/api/bittensor/subnets"),
+    callServer("/api/bittensor/subnets/discover", "POST", {
+      goal,
+      limit: args.limit || 8,
+    }),
   ]);
-  const q = String(args.goal || args.query || "").toLowerCase();
-  const subnets = filterSubnets(subnetsRes.subnets || [], q, args.limit || 8);
   return {
     success: true,
-    goal: args.goal || args.query || "",
+    goal,
     plan: plan.plan,
-    subnets,
-    cards: subnets.slice(0, 6).map((s) => ({
-      kind: "subnet_comparison",
-      title: `${s.name} (${s.symbol})`,
-      subtitle: `Subnet ${s.netuid} · ${s.category}`,
-      summary: s.benefitSummary,
-      items: [
-        { label: "Price", value: s.priceTao === null || s.priceTao === undefined ? "Unavailable" : `${s.priceTao} TAO` },
-        { label: "Emission", value: s.emission === null || s.emission === undefined ? "Unavailable" : String(s.emission) },
-        { label: "Tempo", value: s.tempo === null || s.tempo === undefined ? "Unavailable" : String(s.tempo) },
-        { label: "Source", value: s.source || "Unavailable", tone: s.source === "curated-fallback" ? "warning" : "muted" },
-      ],
-      warnings: s.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
-      data: { subnet: s },
-    })),
+    matches: discovery.matches || [],
+    subnets: (discovery.matches || []).map((match) => match.subnet).filter(Boolean),
+    cards: discovery.cards || [],
   };
 }
 

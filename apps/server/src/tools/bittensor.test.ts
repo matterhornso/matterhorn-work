@@ -14,6 +14,7 @@ import {
   planBittensorChat,
   prepareBittensorExtrinsic,
   parseAmountTao,
+  scoreBittensorSubnetForGoal,
   TaoAppBittensorProvider,
 } from "./bittensor.js";
 
@@ -207,6 +208,41 @@ describe("capabilityFromSubnet", () => {
     } else {
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previous;
     }
+  });
+});
+
+describe("scoreBittensorSubnetForGoal", () => {
+  test("scores subnet categories from ordinary user goals", () => {
+    const creative = scoreBittensorSubnetForGoal({
+      netuid: 22,
+      name: "Creative subnet",
+      symbol: "SN22",
+      category: "Creative AI",
+      benefitSummary: "Generate images and media outputs.",
+      ownerColdkey: null,
+      ownerHotkey: null,
+      priceTao: null,
+      emission: 1,
+      tempo: null,
+      updatedAt: "2026-06-09T00:00:00.000Z",
+      source: "test",
+    }, "which subnet helps with image generation?");
+    const compute = scoreBittensorSubnetForGoal({
+      netuid: 14,
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute and infrastructure",
+      benefitSummary: "Compute subnet",
+      ownerColdkey: null,
+      ownerHotkey: null,
+      priceTao: null,
+      emission: 1,
+      tempo: null,
+      updatedAt: "2026-06-09T00:00:00.000Z",
+      source: "test",
+    }, "which subnet helps with image generation?");
+    expect(creative.score).toBeGreaterThan(compute.score);
+    expect(creative.reasons.join(" ")).toContain("creative");
   });
 });
 
