@@ -757,6 +757,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
     case "signing_handoff":
       return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "signer_status":
+    case "readiness_report":
       return <BadgeCheck className={className} strokeWidth={1.9} />;
     case "watchlist":
       return <Activity className={className} strokeWidth={1.9} />;
