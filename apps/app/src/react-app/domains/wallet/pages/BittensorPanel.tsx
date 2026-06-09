@@ -86,6 +86,7 @@ export default function BittensorPanel() {
   const [quote, setQuote] = useState<BittensorActionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [agentPromptCopied, setAgentPromptCopied] = useState(false);
+  const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
   const loadSubnets = useCallback(async () => {
     setLoading(true);
@@ -155,8 +156,10 @@ export default function BittensorPanel() {
   }, [loadDetail, selectedNetuid]);
 
   useEffect(() => {
-    if (watchAddress.trim()) loadWallet();
-  }, []);
+    if (loadedSavedWatchAddress) return;
+    setLoadedSavedWatchAddress(true);
+    if (watchAddress.trim()) void loadWallet();
+  }, [loadWallet, loadedSavedWatchAddress, watchAddress]);
 
   const filteredSubnets = useMemo(() => {
     const q = query.trim().toLowerCase();
