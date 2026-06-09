@@ -542,6 +542,7 @@ Implemented locally:
 - HTTP API: `POST /api/bittensor/validators/compare`.
 - MCP tool: `bittensor_compare_validators(netuid, hotkeys?, limit?, strategy?)`.
 - Prompt guidance: compare validators before stake planning when validator choice is missing or explicitly requested.
+- Persistent watchlist storage for chat-created Bittensor watches. Default path: `~/.openwork/openwork-server/bittensor-watchlist.json`; override with `BITTENSOR_WATCHLIST_PATH`; disable with `BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE=1`.
 
 Important product constraint: validator comparison is an inspection shortlist, not financial advice. It must continue to tell users to verify validator identity, behavior, and fees/commission where available in external explorers before signing anything.
 

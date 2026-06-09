@@ -4,11 +4,15 @@ import {
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorSigningHandoffCard,
+  buildBittensorValidatorComparisonCards,
   buildBittensorWalletCard,
+  buildBittensorWatchEvaluationCards,
   buildBittensorQuote,
   capabilityFromSubnet,
+  compareBittensorValidators,
   createBittensorSigningHandoff,
   createBittensorWatch,
+  evaluateBittensorWatch,
   getConfiguredSubnetAdapter,
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
@@ -19,6 +23,8 @@ import {
   scoreBittensorSubnetForGoal,
   TaoAppBittensorProvider,
 } from "./bittensor.js";
+
+process.env.BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE = "1";
 
 const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
 
@@ -248,6 +254,24 @@ describe("scoreBittensorSubnetForGoal", () => {
   });
 });
 
+describe("compareBittensorValidators", () => {
+  test("returns safe validator comparison cards for a subnet", async () => {
+    const comparison = await compareBittensorValidators({ netuid: 14, strategy: "balanced", limit: 3 });
+    expect(comparison.netuid).toBe(14);
+    expect(comparison.warnings.join(" ")).toContain("not a recommendation");
+    const cards = buildBittensorValidatorComparisonCards(comparison);
+    expect(cards[0]?.kind).toBe("validator_selection");
+    expect(JSON.stringify(cards)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+  });
+
+  test("warns when requested validator hotkeys are not in the provider sample", async () => {
+    const comparison = await compareBittensorValidators({ netuid: 14, hotkeys: [VALID_SS58], strategy: "safety" });
+    expect(comparison.candidates).toEqual([]);
+    expect(comparison.warnings.join(" ")).toContain("requested validator hotkeys");
+    expect(buildBittensorValidatorComparisonCards(comparison)[0]?.tone).toBe("warning");
+  });
+});
+
 describe("prepareBittensorExtrinsic", () => {
   test("builds unsigned external-signer preview", async () => {
     const preview = await prepareBittensorExtrinsic({
@@ -309,6 +333,16 @@ describe("signer and watch helpers", () => {
     expect(watch.id).toContain("bt-watch");
     expect(watch.netuid).toBe(14);
     expect(JSON.stringify(watch)).not.toMatch(/seed|private|mnemonic/i);
+  });
+
+  test("evaluates watch entries into chat cards", async () => {
+    const watch = createBittensorWatch({ kind: "wallet", ss58Address: VALID_SS58, label: "Watch wallet" });
+    const evaluation = await evaluateBittensorWatch(watch);
+    expect(evaluation.watch.id).toBe(watch.id);
+    expect(["ok", "warning", "unavailable"]).toContain(evaluation.status);
+    const card = buildBittensorWatchEvaluationCards([evaluation])[0];
+    expect(card?.kind).toBe("watchlist");
+    expect(card?.items.some((item) => item.label === "Status")).toBe(true);
   });
 
   test("reports sidecar mode from configuration without exposing endpoint details", () => {

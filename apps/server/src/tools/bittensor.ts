@@ -7,6 +7,9 @@
 
 import { ApiClient } from "./api-client.js";
 import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const TAO_APP_BASE_URL = "https://api.tao.app";
 const CACHE_MS = 60_000;
@@ -367,6 +370,7 @@ type CacheEntry<T> = { at: number; data: T };
 
 const cache = new Map<string, CacheEntry<unknown>>();
 const watchlist = new Map<string, BittensorWatch>();
+let watchlistLoadedFromDisk = false;
 
 const FALLBACK_SUBNETS: BittensorSubnetSummary[] = [
   {
@@ -419,6 +423,57 @@ function nowIso(): string {
 
 function readEnv(name: string): string {
   return (process.env[name] ?? "").trim();
+}
+
+function bittensorWatchlistPath(): string | null {
+  if (readEnv("BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE") === "1") return null;
+  return readEnv("BITTENSOR_WATCHLIST_PATH") || join(homedir(), ".openwork", "openwork-server", "bittensor-watchlist.json");
+}
+
+function normalizePersistedWatch(value: unknown): BittensorWatch | null {
+  const record = asRecord(value);
+  const id = firstString(record, ["id"]);
+  const kind = firstString(record, ["kind"]);
+  if (!id || !["subnet", "wallet", "validator", "emissions", "slippage"].includes(kind ?? "")) return null;
+  const netuid = firstNumber(record, ["netuid"]);
+  const threshold = firstNumber(record, ["threshold"]);
+  return {
+    id,
+    kind: kind as BittensorWatch["kind"],
+    label: firstString(record, ["label"]) ?? "Bittensor watch",
+    netuid: netuid !== null && Number.isInteger(netuid) ? netuid : null,
+    ss58Address: firstString(record, ["ss58Address", "ss58_address"]),
+    threshold,
+    createdAt: firstString(record, ["createdAt", "created_at"]) ?? nowIso(),
+  };
+}
+
+function loadPersistedWatchlist(): void {
+  if (watchlistLoadedFromDisk) return;
+  watchlistLoadedFromDisk = true;
+  const file = bittensorWatchlistPath();
+  if (!file || !existsSync(file)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    const rows = Array.isArray(asRecord(parsed).watches) ? asRecord(parsed).watches as unknown[] : arrayFrom(parsed);
+    for (const watch of rows) {
+      const normalized = normalizePersistedWatch(watch);
+      if (normalized) watchlist.set(normalized.id, normalized);
+    }
+  } catch {
+    // Corrupt persistence should not break read-only Bittensor chat flows.
+  }
+}
+
+function persistWatchlist(): void {
+  const file = bittensorWatchlistPath();
+  if (!file) return;
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${JSON.stringify({ watches: [...watchlist.values()] }, null, 2)}\n`, "utf8");
+  } catch {
+    // Persistence is best-effort; watch creation still returns the in-memory entry.
+  }
 }
 
 function taoAppClient(): ApiClient {
@@ -1515,10 +1570,12 @@ export async function compareBittensorValidators(input: BittensorValidatorCompar
 }
 
 export function listBittensorWatches(): BittensorWatch[] {
+  loadPersistedWatchlist();
   return [...watchlist.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorWatch {
+  loadPersistedWatchlist();
   const id = `bt-watch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const watch: BittensorWatch = {
     id,
@@ -1530,6 +1587,7 @@ export function createBittensorWatch(input: Partial<BittensorWatch>): BittensorW
     createdAt: nowIso(),
   };
   watchlist.set(id, watch);
+  persistWatchlist();
   return watch;
 }
 
