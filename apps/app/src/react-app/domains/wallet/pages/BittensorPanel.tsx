@@ -20,7 +20,7 @@ import type {
   BittensorActionQuote,
   BittensorSubnetDetail,
   BittensorSubnetSummary,
-  BittensorSubtensorSidecarStatus,
+  BittensorSubtensorSidecarHealth,
   BittensorWalletSnapshot,
 } from "@matterhorn-work/types";
 
@@ -86,7 +86,7 @@ export default function BittensorPanel() {
   const [recipient, setRecipient] = useState("");
   const [quote, setQuote] = useState<BittensorActionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
-  const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarStatus | null>(null);
+  const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
   const [agentPromptCopied, setAgentPromptCopied] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
@@ -109,10 +109,10 @@ export default function BittensorPanel() {
 
   const loadSidecarStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/bittensor/sidecar/status");
+      const res = await fetch("/api/bittensor/sidecar/health");
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load sidecar status");
-      setSidecarStatus(json.sidecar as BittensorSubtensorSidecarStatus);
+      setSidecarStatus(json.health as BittensorSubtensorSidecarHealth);
     } catch {
       setSidecarStatus(null);
     }
@@ -344,8 +344,14 @@ export default function BittensorPanel() {
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
               <Metric label="Favorites" value={String(favorites.length)} />
               <Metric label="Source" value={subnets.some((s) => s.source === "tao.app") ? "Live" : "Fallback"} />
-              <Metric label="Sidecar" value={sidecarStatus?.configured ? "On" : "Off"} />
+              <Metric
+                label="Sidecar"
+                value={sidecarStatus?.status === "healthy" ? "Healthy" : sidecarStatus?.status === "unreachable" ? "Unreachable" : "Off"}
+              />
             </div>
+            {sidecarStatus?.status === "unreachable" ? (
+              <p className="text-xs leading-5 text-amber-300">{sidecarStatus.message}</p>
+            ) : null}
 
             <Section title="Watched Wallet" icon={<Wallet className="size-4" />}>
               {watchAddress.trim() ? (
