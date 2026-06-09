@@ -183,6 +183,29 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/sidecar/health") {
+    res.end(JSON.stringify({
+      success: true,
+      health: {
+        configured: false,
+        network: "finney",
+        canRead: false,
+        canPrepare: false,
+        canSubmit: false,
+        reachable: false,
+        status: "unconfigured",
+        latencyMs: null,
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        message: "Mock sidecar disabled",
+      },
+      cards: [{
+        kind: "signer_status",
+        title: "Subtensor sidecar health",
+        items: [{ label: "Reachable", value: "No" }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     res.end(JSON.stringify({
       success: true,
@@ -436,6 +459,7 @@ try {
     "bittensor_find_subnets_for_goal",
     "bittensor_get_subnet_capabilities",
     "bittensor_get_sidecar_status",
+    "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
@@ -481,37 +505,41 @@ try {
   const sidecar = await ask({ jsonrpc: "2.0", id: 11, method: "tools/call", params: { name: "bittensor_get_sidecar_status", arguments: {} } });
   assert.equal(JSON.parse(sidecar.result.content[0].text).sidecar.configured, false);
 
-  const readiness = await ask({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "bittensor_readiness_audit", arguments: {} } });
+  const sidecarHealth = await ask({ jsonrpc: "2.0", id: 12, method: "tools/call", params: { name: "bittensor_get_sidecar_health", arguments: {} } });
+  assert.equal(JSON.parse(sidecarHealth.result.content[0].text).health.status, "unconfigured");
+  assert.equal(JSON.parse(sidecarHealth.result.content[0].text).cards[0].kind, "signer_status");
+
+  const readiness = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_readiness_audit", arguments: {} } });
   assert.equal(JSON.parse(readiness.result.content[0].text).report.status, "warning");
   assert.equal(JSON.parse(readiness.result.content[0].text).cards[0].kind, "readiness_report");
 
-  const preview = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
+  const preview = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   const previewPayload = JSON.parse(preview.result.content[0].text);
   assert.equal(previewPayload.preview.requiresExternalSignature, true);
   assert.equal(previewPayload.cards[0].kind, "signed_action_review");
 
-  const handoff = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_create_signing_handoff", arguments: { preview: previewPayload.preview } } });
+  const handoff = await ask({ jsonrpc: "2.0", id: 15, method: "tools/call", params: { name: "bittensor_create_signing_handoff", arguments: { preview: previewPayload.preview } } });
   assert.equal(JSON.parse(handoff.result.content[0].text).handoff.payloadSha256.length, 64);
   assert.equal(JSON.parse(handoff.result.content[0].text).cards[0].kind, "signing_handoff");
 
-  const submit = await ask({ jsonrpc: "2.0", id: 15, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
+  const submit = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
   assert.equal(JSON.parse(submit.result.content[0].text).result.status, "sidecar_unavailable");
 
-  const invoke = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
+  const invoke = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
   assert.equal(JSON.parse(invoke.result.content[0].text).invocation.supported, true);
   assert.equal(JSON.parse(invoke.result.content[0].text).cards[0].kind, "subnet_result");
 
-  const validators = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_compare_validators", arguments: { netuid: 14, strategy: "balanced" } } });
+  const validators = await ask({ jsonrpc: "2.0", id: 18, method: "tools/call", params: { name: "bittensor_compare_validators", arguments: { netuid: 14, strategy: "balanced" } } });
   assert.equal(JSON.parse(validators.result.content[0].text).comparison.candidates.length, 1);
   assert.equal(JSON.parse(validators.result.content[0].text).cards[0].kind, "validator_selection");
 
-  const watch = await ask({ jsonrpc: "2.0", id: 18, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
+  const watch = await ask({ jsonrpc: "2.0", id: 19, method: "tools/call", params: { name: "bittensor_create_watch", arguments: { kind: "subnet", netuid: 14, label: "Watch subnet 14" } } });
   assert.equal(JSON.parse(watch.result.content[0].text).watch.netuid, 14);
 
-  const watchlist = await ask({ jsonrpc: "2.0", id: 19, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
+  const watchlist = await ask({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "bittensor_list_watches", arguments: {} } });
   assert.equal(JSON.parse(watchlist.result.content[0].text).watches.length, 1);
 
-  const checkedWatches = await ask({ jsonrpc: "2.0", id: 20, method: "tools/call", params: { name: "bittensor_check_watches", arguments: {} } });
+  const checkedWatches = await ask({ jsonrpc: "2.0", id: 21, method: "tools/call", params: { name: "bittensor_check_watches", arguments: {} } });
   assert.equal(JSON.parse(checkedWatches.result.content[0].text).evaluations[0].status, "ok");
   assert.equal(JSON.parse(checkedWatches.result.content[0].text).cards[0].kind, "watchlist");
 

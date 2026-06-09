@@ -294,3 +294,10 @@ export type BittensorSubtensorSidecarStatus = {
   canSubmit: boolean;
   message: string;
 };
+
+export type BittensorSubtensorSidecarHealth = BittensorSubtensorSidecarStatus & {
+  reachable: boolean;
+  status: "healthy" | "unreachable" | "unconfigured";
+  latencyMs: number | null;
+  checkedAt: string;
+};

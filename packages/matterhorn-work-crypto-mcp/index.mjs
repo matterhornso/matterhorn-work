@@ -632,6 +632,11 @@ async function bittensor_get_sidecar_status() {
   return { success: true, sidecar: res.sidecar };
 }
 
+async function bittensor_get_sidecar_health() {
+  const res = await callServer("/api/bittensor/sidecar/health");
+  return { success: true, health: res.health, cards: res.cards || [] };
+}
+
 async function bittensor_readiness_audit() {
   const res = await callServer("/api/bittensor/readiness");
   return { success: true, report: res.report, cards: res.cards || [] };
@@ -758,6 +763,7 @@ const tools = [
   { name: "bittensor_find_subnets_for_goal", description: "Find Bittensor subnets that match a plain-English goal such as image generation, data search, compute, or agent tools.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
   { name: "bittensor_get_sidecar_status", description: "Report whether the configured Bittensor Subtensor sidecar can read, prepare, and submit externally signed payloads.", inputSchema: { type: "object", properties: {} } },
+  { name: "bittensor_get_sidecar_health", description: "Probe whether the configured Bittensor Subtensor sidecar is reachable, without exposing its endpoint URL.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_readiness_audit", description: "Run the Bittensor readiness gate across chat planning, discovery, wallet safety, signing safety, capabilities, monitoring, validator comparison, and sidecar status.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
   { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
@@ -882,6 +888,7 @@ function handleMessage(msg) {
         case "bittensor_find_subnets_for_goal": return bittensor_find_subnets_for_goal(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_capabilities": return bittensor_get_subnet_capabilities(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_sidecar_status": return bittensor_get_sidecar_status().then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_sidecar_health": return bittensor_get_sidecar_health().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_readiness_audit": return bittensor_readiness_audit().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_signing_handoff": return bittensor_create_signing_handoff(args).then(r => respond(textResult(r))).catch(catchErr);

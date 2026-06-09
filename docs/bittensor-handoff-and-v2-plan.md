@@ -544,6 +544,7 @@ Implemented locally:
 - Prompt guidance: compare validators before stake planning when validator choice is missing or explicitly requested.
 - Persistent watchlist storage for chat-created Bittensor watches. Default path: `~/.openwork/openwork-server/bittensor-watchlist.json`; override with `BITTENSOR_WATCHLIST_PATH`; disable with `BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE=1`.
 - Bittensor readiness audit: `GET /api/bittensor/readiness` and MCP `bittensor_readiness_audit()`. This checks chat planning, subnet discovery, capability manifests, wallet safety, external-signing safety, sidecar status, validator comparison, and monitoring before Matterhorn claims Bittensor is ready.
+- Sanitized sidecar health probe: `GET /api/bittensor/sidecar/health` and MCP `bittensor_get_sidecar_health()`. The probe checks `/health` then `/status`, returns reachability/latency/network, and never exposes the configured sidecar URL.
 
 Important product constraint: validator comparison is an inspection shortlist, not financial advice. It must continue to tell users to verify validator identity, behavior, and fees/commission where available in external explorers before signing anything.
 

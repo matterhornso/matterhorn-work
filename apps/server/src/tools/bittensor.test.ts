@@ -6,12 +6,14 @@ import {
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
   buildBittensorSigningHandoffCard,
+  buildBittensorSidecarHealthCard,
   buildBittensorValidatorComparisonCards,
   buildBittensorWalletCard,
   buildBittensorWatchEvaluationCards,
   buildBittensorQuote,
   capabilityFromSubnet,
   compareBittensorValidators,
+  checkSubtensorSidecarHealth,
   createBittensorSigningHandoff,
   createBittensorWatch,
   evaluateBittensorWatch,
@@ -369,6 +371,20 @@ describe("signer and watch helpers", () => {
     if (previous === undefined) {
       delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
     } else {
+      process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previous;
+    }
+  });
+
+  test("reports sanitized sidecar health when no sidecar is configured", async () => {
+    const previous = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const health = await checkSubtensorSidecarHealth();
+    expect(health.status).toBe("unconfigured");
+    expect(health.reachable).toBe(false);
+    expect(JSON.stringify(health)).not.toContain("127.0.0.1");
+    const card = buildBittensorSidecarHealthCard(health);
+    expect(card.kind).toBe("signer_status");
+    if (previous !== undefined) {
       process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previous;
     }
   });

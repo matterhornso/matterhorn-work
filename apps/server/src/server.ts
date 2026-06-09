@@ -21,6 +21,7 @@ import {
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
   buildBittensorSignerCard,
+  buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
   buildBittensorSubnetCards,
@@ -29,6 +30,7 @@ import {
   buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
   bittensorProvider,
+  checkSubtensorSidecarHealth,
   compareBittensorValidators,
   createBittensorSigningHandoff,
   createBittensorWatch,
@@ -3603,6 +3605,11 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/sidecar/status", "client", async () => {
     const sidecar = getSubtensorSidecarStatus();
     return jsonResponse({ success: true, sidecar });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/sidecar/health", "client", async () => {
+    const health = await checkSubtensorSidecarHealth();
+    return jsonResponse({ success: true, health, cards: [buildBittensorSidecarHealthCard(health)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/readiness", "client", async () => {

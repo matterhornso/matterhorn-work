@@ -111,6 +111,7 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - bittensor_get_wallet_positions(ss58Address) — Read watch-only TAO balance and subnet stake positions for an SS58 coldkey public address.
 - bittensor_get_subnet_capabilities(netuid?) — Check whether a subnet can be directly invoked or only explained/monitored.
 - bittensor_get_sidecar_status() — Check whether Matterhorn has a configured Subtensor sidecar for live chain reads, unsigned payload preparation, and signed-payload submission.
+- bittensor_get_sidecar_health() — Probe whether the configured Subtensor sidecar is reachable. Use this before relying on live sidecar data.
 - bittensor_readiness_audit() — Run the Bittensor readiness gate across chat planning, discovery, wallet safety, signing safety, capabilities, monitoring, validator comparison, and sidecar status. Use before saying the Bittensor surface is ready or before moving on to Hyperliquid/Polymarket execution work.
 - bittensor_prepare_extrinsic(action, netuid?, amountTao?, coldkey?, hotkey?, destination?) — Prepare an unsigned Bittensor action preview for external signing.
 - bittensor_create_signing_handoff(preview) — Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.

@@ -360,6 +360,13 @@ export interface BittensorSubtensorSidecarStatus {
   message: string;
 }
 
+export interface BittensorSubtensorSidecarHealth extends BittensorSubtensorSidecarStatus {
+  reachable: boolean;
+  status: "healthy" | "unreachable" | "unconfigured";
+  latencyMs: number | null;
+  checkedAt: string;
+}
+
 export interface BittensorConfiguredSubnetAdapter {
   netuid: number;
   name: string;
@@ -523,6 +530,50 @@ export function getSubtensorSidecarStatus(): BittensorSubtensorSidecarStatus {
     message: configured
       ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation while keeping signing external."
       : "Subtensor sidecar is not configured. Matterhorn will use TAO.app analytics and local safe fallbacks.",
+  };
+}
+
+async function probeSidecarPath(baseUrl: string, path: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${baseUrl}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(3_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorSidecarHealth> {
+  const baseUrl = sidecarBaseUrl();
+  const baseStatus = getSubtensorSidecarStatus();
+  const checkedAt = nowIso();
+  if (!baseUrl) {
+    return {
+      ...baseStatus,
+      reachable: false,
+      status: "unconfigured",
+      latencyMs: null,
+      checkedAt,
+    };
+  }
+
+  const started = Date.now();
+  const reachable = await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
+  const latencyMs = Date.now() - started;
+  return {
+    ...baseStatus,
+    reachable,
+    status: reachable ? "healthy" : "unreachable",
+    latencyMs,
+    checkedAt,
+    canRead: reachable,
+    canPrepare: reachable,
+    canSubmit: reachable,
+    message: reachable
+      ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and signed-payload submission while keeping signing external."
+      : "Subtensor sidecar is configured but not reachable. Matterhorn will fall back to TAO.app analytics and local safe behavior.",
   };
 }
 
@@ -1858,15 +1909,17 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
 
   try {
     const signer = getBittensorSignerStatus();
-    const sidecar = getSubtensorSidecarStatus();
+    const sidecar = await checkSubtensorSidecarHealth();
     checks.push({
       id: "sidecar_status",
       label: "Subtensor sidecar status",
-      status: sidecar.configured ? "pass" : "warning",
-      summary: sidecar.configured
-        ? "Subtensor sidecar is configured for live chain reads and signed-payload submission."
-        : "Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks.",
-      details: { signerMode: signer.mode, canSubmit: signer.canSubmit, network: sidecar.network },
+      status: sidecar.status === "healthy" ? "pass" : "warning",
+      summary: sidecar.status === "healthy"
+        ? "Subtensor sidecar is configured and reachable for live chain reads and signed-payload submission."
+        : sidecar.status === "unreachable"
+          ? "Subtensor sidecar is configured but unreachable; Matterhorn will rely on provider data and safe fallbacks."
+          : "Subtensor sidecar is not configured; Matterhorn will rely on provider data and safe fallbacks.",
+      details: { signerMode: signer.mode, canSubmit: signer.canSubmit, network: sidecar.network, reachable: sidecar.reachable },
     });
   } catch (err) {
     checks.push({ id: "sidecar_status", label: "Subtensor sidecar status", status: "fail", summary: err instanceof Error ? err.message : "Sidecar status check failed." });
@@ -2120,6 +2173,24 @@ export function buildBittensorSignerCard(signer: BittensorSignerStatus): Bittens
     ],
     warnings: signer.canSign ? [] : ["Matterhorn does not hold signing authority. Use an external Bittensor-compatible signer."],
     data: { signer },
+  };
+}
+
+export function buildBittensorSidecarHealthCard(health: BittensorSubtensorSidecarHealth): BittensorChatCard {
+  return {
+    kind: "signer_status",
+    title: "Subtensor sidecar health",
+    subtitle: titleCase(health.status),
+    summary: health.message,
+    tone: health.status === "healthy" ? "good" : "warning",
+    items: [
+      cardItem("Network", health.network),
+      cardItem("Configured", health.configured ? "Yes" : "No", health.configured ? "good" : "warning"),
+      cardItem("Reachable", health.reachable ? "Yes" : "No", health.reachable ? "good" : "warning"),
+      cardItem("Latency", health.latencyMs === null ? "Unavailable" : `${health.latencyMs} ms`, health.latencyMs === null ? "muted" : "default"),
+    ],
+    warnings: health.status === "healthy" ? [] : [health.message],
+    data: { health },
   };
 }
 
