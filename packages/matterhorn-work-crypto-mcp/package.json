@@ -6,6 +6,9 @@
   "bin": {
     "matterhorn-work-crypto-mcp": "index.mjs"
   },
+  "scripts": {
+    "test:bittensor": "node test-bittensor.mjs"
+  },
   "dependencies": {
     "viem": "^2.50.4"
   },

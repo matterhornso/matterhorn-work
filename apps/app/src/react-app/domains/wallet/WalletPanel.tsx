@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot, Sparkles, Activity, Shield, Zap } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot, Sparkles, Activity, Shield, Zap, BrainCircuit } from "lucide-react";
 import { useState, useMemo, lazy, Suspense, useCallback, useEffect } from "react";
 
 import { cn } from "@/lib/utils";
@@ -18,8 +18,9 @@ const AavePanel = lazy(() => import("./pages/AavePanel"));
 const BridgePanel = lazy(() => import("./pages/BridgePanel"));
 const TransferPanel = lazy(() => import("./pages/TransferPanel"));
 const AgentWorkspace = lazy(() => import("./pages/AgentWorkspace"));
+const BittensorPanel = lazy(() => import("./pages/BittensorPanel"));
 
-type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | null;
+type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | "bittensor" | null;
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -262,6 +263,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <ActionButton icon={<Send className="size-4" />} label="Send" accent="violet" onClick={() => setActivePanel("send")} primary />
         <ActionButton icon={<Bot className="size-4" />} label="Agent" accent="violet" onClick={() => setActivePanel("agent")} />
+        <ActionButton icon={<BrainCircuit className="size-4" />} label="Bittensor" accent="blue" onClick={() => setActivePanel("bittensor")} />
         <ActionButton icon={<BarChart3 className="size-4" />} label="Portfolio" accent="violet" onClick={handlePortfolioOpen} />
         <ActionButton icon={<ArrowRightLeft className="size-4" />} label="Swap" accent="emerald" onClick={() => setActivePanel("cow")} />
         <ActionButton icon={<Landmark className="size-4" />} label="Aave" accent="amber" onClick={() => setActivePanel("aave")} />
@@ -453,6 +455,27 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
             </div>
           }>
             <AgentWorkspace store={store} />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg p-1.5 text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Back
+          </button>
+        </div>
+      )}
+      {activePanel === "bittensor" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-sky-500/10 animate-skeleton" />
+                <span className="text-sm text-dls-secondary">Loading Bittensor...</span>
+              </div>
+            </div>
+          }>
+            <BittensorPanel />
           </Suspense>
           <button
             type="button"

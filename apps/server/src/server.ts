@@ -13,6 +13,7 @@ import { getBridgeQuote, buildBridgeDepositTx } from "./tools/bridge.js";
 import { buildTransferTx } from "./tools/transfer.js";
 import { parseIntent } from "./tools/scheduler.js";
 import { getPrices } from "./tools/coingecko.js";
+import { bittensorProvider, isValidSs58Address, type BittensorActionQuoteInput } from "./tools/bittensor.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3479,6 +3480,46 @@ function createRoutes(
     }
     const result = await getPortfolio({ chainId, address: address as `0x${string}` });
     return jsonResponse(result);
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
+    const subnets = await bittensorProvider.listSubnets();
+    return jsonResponse({ success: true, subnets });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/subnets/:netuid", "client", async (ctx) => {
+    const netuid = Number(ctx.params.netuid);
+    if (!Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const subnet = await bittensorProvider.getSubnet(netuid);
+    return jsonResponse({ success: true, subnet });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/wallet/:ss58Address", "client", async (ctx) => {
+    const ss58Address = ctx.params.ss58Address.trim();
+    if (!isValidSs58Address(ss58Address)) {
+      throw new ApiError(400, "invalid_ss58_address", "ss58Address must be a valid watch-only SS58 public address");
+    }
+    const wallet = await bittensorProvider.getWallet(ss58Address);
+    return jsonResponse({ success: true, wallet });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/actions/quote", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const action = String(body.action);
+    if (!["stake", "unstake", "transfer", "compare"].includes(action)) {
+      throw new ApiError(400, "invalid_action", "action must be stake, unstake, transfer, or compare");
+    }
+    const input: BittensorActionQuoteInput = {
+      action: action as BittensorActionQuoteInput["action"],
+      netuid: body.netuid === null || body.netuid === undefined || body.netuid === "" ? null : Number(body.netuid),
+      amountTao: body.amountTao === undefined ? null : String(body.amountTao),
+      validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
+      recipient: typeof body.recipient === "string" ? body.recipient : null,
+    };
+    const quote = await bittensorProvider.quoteAction(input);
+    return jsonResponse({ success: true, quote });
   });
 
   addRoute(routes, "GET", "/api/cow/quote", "client", async (ctx) => {

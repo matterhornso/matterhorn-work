@@ -492,6 +492,70 @@ async function pm_getOrderbook(marketId, limit = 5) {
 }
 
 // =========================================================
+// Bittensor Research and Quote-only Actions
+// =========================================================
+function filterSubnets(subnets, query, limit) {
+  const q = String(query || "").trim().toLowerCase();
+  const filtered = q
+    ? subnets.filter((s) => `${s.netuid} ${s.name} ${s.symbol} ${s.category} ${s.benefitSummary}`.toLowerCase().includes(q))
+    : subnets;
+  return filtered.slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
+}
+
+async function bittensor_list_subnets({ query, limit } = {}) {
+  const res = await callServer("/api/bittensor/subnets");
+  return { success: true, subnets: filterSubnets(res.subnets || [], query, limit), source: "matterhorn-server" };
+}
+
+async function bittensor_explain_subnet(netuid) {
+  const res = await callServer(`/api/bittensor/subnets/${encodeURIComponent(String(netuid))}`);
+  return {
+    success: true,
+    subnet: res.subnet,
+    guidance: "Use this as read-only context. Bittensor stake, unstake, and transfer operations require an external Bittensor-compatible signer.",
+  };
+}
+
+async function bittensor_compare_subnets(netuids) {
+  const ids = Array.isArray(netuids) ? netuids : [];
+  const subnets = await Promise.all(ids.slice(0, 6).map((netuid) => bittensor_explain_subnet(netuid).then((r) => r.subnet)));
+  return {
+    success: true,
+    subnets,
+    comparison: subnets.map((s) => ({
+      netuid: s.netuid,
+      name: s.name,
+      category: s.category,
+      priceTao: s.priceTao,
+      emission: s.emission,
+      neurons: s.metagraphSummary?.neurons ?? null,
+      benefitSummary: s.benefitSummary,
+      providerSource: s.source,
+    })),
+  };
+}
+
+async function bittensor_get_wallet_positions(ss58Address) {
+  const res = await callServer(`/api/bittensor/wallet/${encodeURIComponent(String(ss58Address || ""))}`);
+  return { success: true, wallet: res.wallet };
+}
+
+async function bittensor_prepare_action(args) {
+  const res = await callServer("/api/bittensor/actions/quote", "POST", {
+    action: args.action,
+    netuid: args.netuid,
+    amountTao: args.amountTao,
+    validatorHotkey: args.validatorHotkey,
+    recipient: args.recipient,
+  });
+  return {
+    success: true,
+    quote: res.quote,
+    execution: "quote_only_external_signature_required",
+  };
+}
+
+// =========================================================
 // MCP tools schema
 // =========================================================
 const tools = [
@@ -530,6 +594,13 @@ const tools = [
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
   { name: "pm_getEvent", description: "Get full Polymarket event details", inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"] } },
   { name: "pm_getOrderbook", description: "Get orderbook for a Polymarket market", inputSchema: { type: "object", properties: { marketId: { type: "string" }, limit: { type: "number" } }, required: ["marketId"] } },
+
+  // -- bittensor --
+  { name: "bittensor_list_subnets", description: "List Bittensor subnets with plain-English utility summaries.", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } } } },
+  { name: "bittensor_explain_subnet", description: "Explain a Bittensor subnet by netuid, including utility, metagraph context, risks, and links.", inputSchema: { type: "object", properties: { netuid: { type: "number" } }, required: ["netuid"] } },
+  { name: "bittensor_compare_subnets", description: "Compare multiple Bittensor subnets by utility, price, emissions, metagraph size, and provider freshness.", inputSchema: { type: "object", properties: { netuids: { type: "array", items: { type: "number" } } }, required: ["netuids"] } },
+  { name: "bittensor_get_wallet_positions", description: "Read watch-only Bittensor wallet balance and subnet stake positions for an SS58 coldkey public address.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
+  { name: "bittensor_prepare_action", description: "Prepare a quote-only Bittensor action. Returns warnings and requires an external Bittensor-compatible signer.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "transfer", "compare"] }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, recipient: { type: "string" } }, required: ["action"] } },
 
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
@@ -634,6 +705,13 @@ function handleMessage(msg) {
         case "pm_searchEvents": return pm_searchEvents(args.query, args.limit).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getEvent": return pm_getEvent(args.eventId).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getOrderbook": return pm_getOrderbook(args.marketId, args.limit).then(r => respond(textResult(r))).catch(catchErr);
+
+        // bittensor
+        case "bittensor_list_subnets": return bittensor_list_subnets({ query: args.query, limit: args.limit }).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_explain_subnet": return bittensor_explain_subnet(args.netuid).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_compare_subnets": return bittensor_compare_subnets(args.netuids).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_wallet_positions": return bittensor_get_wallet_positions(args.ss58Address).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_prepare_action": return bittensor_prepare_action(args).then(r => respond(textResult(r))).catch(catchErr);
 
         // portfolio / batch
         case "crypto_getPortfolio": {

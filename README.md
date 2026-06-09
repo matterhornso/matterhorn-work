@@ -27,12 +27,19 @@ Matterhorn Work is a practical control surface for agentic work with crypto-nati
 | **Wallet connect** | Connect MetaMask, Coinbase Wallet, or any injected provider via wagmi v2 + viem |
 | **On-chain transactions** | Agent proposes a TX → user approves in-workspace → TX broadcasts to Base or Base Sepolia |
 | **Chain context** | Every agent session inherits the connected wallet's address and chain (Base 8453 / Base Sepolia 84532) |
+| **Bittensor workspace** | Watch-only SS58 wallet view, subnet explorer, subnet utility summaries, and quote-only TAO action prep |
 | **Web3 skill pack** | 24 MCP skills covering DeFi protocols (Uniswap, Aave, Pendle), bridges (deBridge), DePIN (Akash, Helium, Render), and payments (x402, RBF Protocol) |
 | **Agent marketplace** | Browse, hire, and deploy agents to DePIN compute — credentialled with ERC-8004 passports |
 | **Background job scheduling** | Cron-based agent execution without keeping the workspace open |
 | **ENS address book** | Resolve and manage ENS names with favorites and groups |
 | **Token price feeds** | Real-time pricing via CoinGecko API |
 | **Multi-protocol DeFi** | Aave V3 (borrow/repay/withdraw), CoW Swap (limit orders), cross-chain bridging |
+
+---
+
+### Optional Bittensor data
+
+Set `TAO_APP_API_KEY` on the Matterhorn Work server to unlock TAO.app portfolio endpoints. Without it, subnet browsing still uses available public/fallback data and wallet portfolio views show a provider-unavailable state. Matterhorn Work never asks for Bittensor seed phrases or private keys.
 
 ---
 
