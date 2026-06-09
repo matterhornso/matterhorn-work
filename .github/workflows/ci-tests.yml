@@ -1,4 +1,4 @@
-name: OpenWork Tests
+name: Matterhorn Work Tests
 
 on:
   pull_request:

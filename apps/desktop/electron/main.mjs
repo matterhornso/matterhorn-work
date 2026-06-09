@@ -37,10 +37,10 @@ const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
 const DEV_APP_IDENTIFIER = "com.differentai.openwork.dev";
 const DESKTOP_PROTOCOL_SCHEME = "openwork";
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
-const APP_NAME = isDevMode ? "OpenWork - Dev" : "OpenWork";
+const APP_NAME = isDevMode ? "Matterhorn - Dev" : "Matterhorn";
 const APP_IDENTIFIER = isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER;
-const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/different-ai/openwork/releases/latest/download";
-const RELEASE_PAGE_URL = "https://github.com/different-ai/openwork/releases/latest";
+const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest/download";
+const RELEASE_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest";
 const DOCS_PAGE_URL = "https://openworklabs.com/docs";
 const BROWSER_PLUGIN = "opencode-chrome-devtools";
 const COMPUTER_USE_HELPER_APP_NAME = "OpenWork Computer Use.app";
@@ -247,7 +247,6 @@ function platformDownloadSlug() {
 }
 
 function downloadAssetArch(arch) {
-  if (process.platform === "linux" && arch === "x64") return "x86_64";
   return arch;
 }
 
@@ -323,7 +322,7 @@ async function resolveArchitectureInfo() {
   const systemArch = resolveSystemArch();
   const version = app.getVersion();
   const targetArch = systemArch === "arm64" || systemArch === "x64" ? systemArch : appArch;
-  const assetName = `openwork-${platformDownloadSlug()}-${downloadAssetArch(targetArch)}-${version}.${downloadAssetExtension()}`;
+  const assetName = `matterhorn-${platformDownloadSlug()}-${downloadAssetArch(targetArch)}-${version}.${downloadAssetExtension()}`;
   const latestDownloadUrl = await resolveCorrectArchitectureDownloadUrl(targetArch);
   const hasCorrectArchitectureDownload = Boolean(latestDownloadUrl);
   return {

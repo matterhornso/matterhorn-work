@@ -1,18 +1,18 @@
 pkgname=openwork
 pkgver=0.13.12
-pkgrel=1 # pkgrel should change when PKGBUILD does. Standard is to change back to 1 next time. Any interger is valid.
-pkgdesc="An Open source alternative to Claude Cowork"
+pkgrel=1 # pkgrel should change when PKGBUILD does. Standard is to change back to 1 next time. Any integer is valid.
+pkgdesc="Matterhorn Work desktop agentic workspace"
 arch=('x86_64' 'aarch64')
-url="https://github.com/different-ai/openwork"
+url="https://github.com/matterhornso/matterhorn-work"
 license=('MIT')
 depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'xdg-utils' 'at-spi2-core' 'libdrm' 'libxkbcommon' 'mesa' 'dbus' 'hicolor-icon-theme')
 options=(!strip)
 
 # Architecture-specific sources and checksums
-source_x86_64=("${pkgname}-${pkgver}-x64.tar.gz::${url}/releases/download/v${pkgver}/openwork-linux-x64-${pkgver}.tar.gz")
+source_x86_64=("${pkgname}-${pkgver}-x64.tar.gz::https://github.com/different-ai/openwork/releases/download/v${pkgver}/openwork-linux-x64-${pkgver}.tar.gz")
 sha256sums_x86_64=('d073778a41fcb7118460a17907b5be1f538d2dfcc8e922d3f612e1d47a38ccbe')
 
-source_aarch64=("${pkgname}-${pkgver}-arm64.tar.gz::${url}/releases/download/v${pkgver}/openwork-linux-arm64-${pkgver}.tar.gz")
+source_aarch64=("${pkgname}-${pkgver}-arm64.tar.gz::https://github.com/different-ai/openwork/releases/download/v${pkgver}/openwork-linux-arm64-${pkgver}.tar.gz")
 sha256sums_aarch64=('940a681cab33158972536835429f3d26663aedbf3f2ade2428722d891e98c00c')
 
 package() {
@@ -21,36 +21,51 @@ package() {
   local bundle_dir
   case "${CARCH}" in
     x86_64)
-      bundle_dir="openwork-linux-x64-${pkgver}"
+      bundle_dir="matterhorn-linux-x64-${pkgver}"
       ;;
     aarch64)
-      bundle_dir="openwork-linux-arm64-${pkgver}"
+      bundle_dir="matterhorn-linux-arm64-${pkgver}"
       ;;
     *)
       echo "Unsupported architecture: ${CARCH}" >&2
       return 1
       ;;
   esac
+  if [[ ! -d "${bundle_dir}" ]]; then
+    bundle_dir="${bundle_dir/matterhorn/openwork}"
+  fi
 
   install -d "${pkgdir}/opt/openwork"
   cp -a "${bundle_dir}/." "${pkgdir}/opt/openwork/"
 
-  install -d "${pkgdir}/usr/bin"
-  ln -s /opt/openwork/@openworkdesktop "${pkgdir}/usr/bin/openwork"
+  local desktop_binary="/opt/openwork/matterhorn"
+  if [[ ! -e "${pkgdir}${desktop_binary}" ]]; then
+    desktop_binary="/opt/openwork/Matterhorn"
+  fi
+  if [[ ! -e "${pkgdir}${desktop_binary}" ]]; then
+    desktop_binary="/opt/openwork/@openworkdesktop"
+  fi
 
-  install -Dm644 "${pkgdir}/opt/openwork/resources/app-dist/openwork-logo-square.svg" \
+  install -d "${pkgdir}/usr/bin"
+  ln -s "${desktop_binary}" "${pkgdir}/usr/bin/openwork"
+
+  local icon_path="${pkgdir}/opt/openwork/resources/app-dist/matterhorn-logo-square.svg"
+  if [[ ! -f "${icon_path}" ]]; then
+    icon_path="${pkgdir}/opt/openwork/resources/app-dist/openwork-logo-square.svg"
+  fi
+  install -Dm644 "${icon_path}" \
     "${pkgdir}/usr/share/icons/hicolor/scalable/apps/openwork.svg"
 
   install -d "${pkgdir}/usr/share/applications"
   cat > "${pkgdir}/usr/share/applications/openwork.desktop" <<'EOF'
 [Desktop Entry]
-Name=OpenWork
+Name=Matterhorn Work
 Comment=Run agents, skills, and MCP workflows
 Exec=openwork %U
 Terminal=false
 Type=Application
 Icon=openwork
-StartupWMClass=OpenWork
+StartupWMClass=Matterhorn
 Categories=Development;Utility;
 MimeType=x-scheme-handler/openwork;
 EOF

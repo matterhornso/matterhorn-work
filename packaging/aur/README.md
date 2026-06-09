@@ -1,13 +1,13 @@
 # Arch Linux package
 
-Use this directory to build and install the OpenWork package locally on Arch Linux without Docker.
+Use this directory to build and install the Matterhorn Work package locally on Arch Linux without Docker.
 
 ## What this packaging does
 
 - Targets `x86_64` and `aarch64` Arch Linux.
 - Downloads the published Electron GitHub release asset for the current architecture.
 - Installs the Electron bundle under `/opt/openwork`.
-- Adds `/usr/bin/openwork`, a desktop entry, and the OpenWork icon.
+- Adds `/usr/bin/openwork`, a desktop entry, and the Matterhorn Work icon.
 
 ## Prerequisites
 
@@ -36,7 +36,7 @@ That will:
 2. build an Arch package such as `openwork-<version>-1-x86_64.pkg.tar.zst`
 3. install it locally with `pacman`
 
-After install, `openwork` is available as the desktop launcher. The bundled sidecars remain inside `/opt/openwork`; the package does not claim the standalone `opencode` command.
+After install, `openwork` is available as the legacy desktop launcher command. The bundled sidecars remain inside `/opt/openwork`; the package does not claim the standalone `opencode` command.
 
 ## Update the package to a newer release
 

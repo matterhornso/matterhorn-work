@@ -59,7 +59,7 @@ function resolveFallbackBaseUrl(version) {
   if (override) {
     return override.replace(/\/$/, "")
   }
-  return `https://github.com/different-ai/openwork/releases/download/openwork-orchestrator-v${version}`
+  return `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v${version}`
 }
 
 async function downloadFallbackBinary() {

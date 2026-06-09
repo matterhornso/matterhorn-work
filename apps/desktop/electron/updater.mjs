@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const ELECTRON_UPDATER_CHANNEL_FILENAME = "electron-updater-channel.v1.json";
 
 // In dev mode, app.getVersion() returns the Electron framework version
-// (e.g. "35.7.5") instead of the OpenWork app version. Read from
+// (e.g. "35.7.5") instead of the Matterhorn app version. Read from
 // package.json so the UI always shows the correct version.
 const __updater_dirname = path.dirname(fileURLToPath(import.meta.url));
 let _cachedAppVersion = null;
@@ -29,8 +29,8 @@ function resolveAppVersion(app) {
   return _cachedAppVersion;
 }
 const ELECTRON_UPDATER_FEEDS = Object.freeze({
-  stable: "https://github.com/different-ai/openwork/releases/latest/download",
-  alpha: "https://github.com/different-ai/openwork/releases/download/alpha-macos-latest",
+  stable: "https://github.com/matterhornso/matterhorn-work/releases/latest/download",
+  alpha: "https://github.com/matterhornso/matterhorn-work/releases/download/alpha-macos-latest",
 });
 
 function normalizeElectronUpdaterChannel(value) {

@@ -29,10 +29,11 @@ if [[ "$TAG" != v* ]]; then
 fi
 
 VERSION="${TAG#v}"
-ASSET_NAME_AMD64="${AUR_ASSET_NAME:-openwork-linux-x64-${VERSION}.tar.gz}"
-ASSET_NAME_ARM64="openwork-linux-arm64-${VERSION}.tar.gz"
-ASSET_URL_AMD64="https://github.com/different-ai/openwork/releases/download/${TAG}/${ASSET_NAME_AMD64}"
-ASSET_URL_ARM64="https://github.com/different-ai/openwork/releases/download/${TAG}/${ASSET_NAME_ARM64}"
+RELEASE_REPO="${AUR_RELEASE_REPO:-matterhornso/matterhorn-work}"
+ASSET_NAME_AMD64="${AUR_ASSET_NAME:-matterhorn-linux-x64-${VERSION}.tar.gz}"
+ASSET_NAME_ARM64="${AUR_ASSET_NAME_ARM64:-matterhorn-linux-arm64-${VERSION}.tar.gz}"
+ASSET_URL_AMD64="https://github.com/${RELEASE_REPO}/releases/download/${TAG}/${ASSET_NAME_AMD64}"
+ASSET_URL_ARM64="https://github.com/${RELEASE_REPO}/releases/download/${TAG}/${ASSET_NAME_ARM64}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -44,7 +45,7 @@ curl -fsSL -o "${TMP_DIR}/${ASSET_NAME_ARM64}" "$ASSET_URL_ARM64"
 SHA256_AMD64=$(sha256sum "${TMP_DIR}/${ASSET_NAME_AMD64}" | awk '{print $1}')
 SHA256_ARM64=$(sha256sum "${TMP_DIR}/${ASSET_NAME_ARM64}" | awk '{print $1}')
 
-$PYTHON_BIN - "$PKGBUILD" "$VERSION" "$SHA256_AMD64" "$SHA256_ARM64" <<'PY'
+$PYTHON_BIN - "$PKGBUILD" "$VERSION" "$SHA256_AMD64" "$SHA256_ARM64" "$ASSET_URL_AMD64" "$ASSET_URL_ARM64" <<'PY'
 import pathlib
 import re
 import sys
@@ -53,10 +54,25 @@ path = pathlib.Path(sys.argv[1])
 version = sys.argv[2]
 sha_amd64 = sys.argv[3]
 sha_arm64 = sys.argv[4]
+url_amd64 = sys.argv[5]
+url_arm64 = sys.argv[6]
 
 text = path.read_text()
 text = re.sub(r"^pkgver=.*$", f"pkgver={version}", text, flags=re.M)
 text = re.sub(r"^(pkgrel=)\d+", r"\g<1>1", text, flags=re.M)
+text = re.sub(r"^url=.*$", 'url="https://github.com/matterhornso/matterhorn-work"', text, flags=re.M)
+text = re.sub(
+    r"^source_x86_64=.*$",
+    f'source_x86_64=("${{pkgname}}-${{pkgver}}-x64.tar.gz::{url_amd64}")',
+    text,
+    flags=re.M,
+)
+text = re.sub(
+    r"^source_aarch64=.*$",
+    f'source_aarch64=("${{pkgname}}-${{pkgver}}-arm64.tar.gz::{url_arm64}")',
+    text,
+    flags=re.M,
+)
 text = re.sub(r"^sha256sums_x86_64=.*$", f"sha256sums_x86_64=('{sha_amd64}')", text, flags=re.M)
 text = re.sub(r"^sha256sums_aarch64=.*$", f"sha256sums_aarch64=('{sha_arm64}')", text, flags=re.M)
 path.write_text(text)
@@ -87,6 +103,7 @@ renamed_arm64 = f"{pkgname}-{version}-arm64.tar.gz"
 text = srcinfo_path.read_text()
 text = re.sub(r"^\s*pkgver = .*", f"\tpkgver = {version}", text, flags=re.M)
 text = re.sub(r"^\s*pkgrel = .*", "\tpkgrel = 1", text, flags=re.M)
+text = re.sub(r"^\s*url = .*", "\turl = https://github.com/matterhornso/matterhorn-work", text, flags=re.M)
 text = re.sub(r"^\s*noextract = .*\n?", "", text, flags=re.M)
 text = re.sub(
     r"^\s*source_x86_64 = .*",
