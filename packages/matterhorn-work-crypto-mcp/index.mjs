@@ -7,19 +7,37 @@
  */
 
 import { createServer } from "node:http";
-import { createPublicClient, http } from "viem";
-import { base, baseSepolia, mainnet } from "viem/chains";
 
 // =========================================================
 // Clients
 // =========================================================
-const clients = {
-  8453: createPublicClient({ chain: base, transport: http() }),
-  84532: createPublicClient({ chain: baseSepolia, transport: http() }),
-};
-const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+let viemClientsPromise = null;
 
-function getClient(chainId) { return clients[chainId] ?? null; }
+async function getViemClients() {
+  if (!viemClientsPromise) {
+    viemClientsPromise = Promise.all([import("viem"), import("viem/chains")]).then(
+      ([{ createPublicClient, http }, { base, baseSepolia, mainnet }]) => {
+        const clients = {
+          8453: createPublicClient({ chain: base, transport: http() }),
+          84532: createPublicClient({ chain: baseSepolia, transport: http() }),
+        };
+        const mainnetClient = createPublicClient({ chain: mainnet, transport: http() });
+        return { clients, mainnetClient };
+      },
+    );
+  }
+  return viemClientsPromise;
+}
+
+async function getClient(chainId) {
+  const { clients } = await getViemClients();
+  return clients[chainId] ?? null;
+}
+
+async function getMainnetClient() {
+  const { mainnetClient } = await getViemClients();
+  return mainnetClient;
+}
 
 // Server proxy for tools that live in apps/server
 const SERVER = process.env.MATTERHORN_SERVER_URL || "http://localhost:8787";
@@ -199,7 +217,7 @@ async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, sli
 // Transaction simulation via viem read-only clients
 // =========================================================
 async function simulateTransaction({ chainId, to, data, value = "0", from }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { error: `Unsupported chainId: ${chainId}` };
   try {
     await client.call({ to, data, value: BigInt(value), account: from });
@@ -224,7 +242,7 @@ const erc20ApproveAbi = [
 ];
 
 async function getTokenMeta(chainId, tokenAddress) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return null;
   try {
     const [symbol, name, decimals] = await Promise.all([
@@ -237,7 +255,7 @@ async function getTokenMeta(chainId, tokenAddress) {
 }
 
 async function getAllowance({ chainId, tokenAddress, owner, spender }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
   try {
     const [allowance, meta] = await Promise.all([
@@ -332,6 +350,7 @@ async function decodeCalldata(data) {
 // =========================================================
 async function resolveEnsName(name) {
   try {
+    const mainnetClient = await getMainnetClient();
     const address = await mainnetClient.getEnsAddress({ name });
     return { success: true, name, address: address ?? null, resolved: address !== null };
   } catch (err) {
@@ -341,6 +360,7 @@ async function resolveEnsName(name) {
 
 async function lookupEnsAddress(address) {
   try {
+    const mainnetClient = await getMainnetClient();
     const ensName = await mainnetClient.getEnsName({ address });
     return { success: true, address, ensName: ensName ?? null, resolved: ensName !== null };
   } catch (err) {
@@ -358,7 +378,7 @@ async function getGasPriceCached(chainId) {
   const now = Date.now();
   const cached = gasPriceCache[chainId];
   if (cached && now - cached.timestamp < GAS_PRICE_TTL_MS) return cached.price;
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return null;
   try {
     const price = await client.getGasPrice();
@@ -368,7 +388,7 @@ async function getGasPriceCached(chainId) {
 }
 
 async function estimateGas({ chainId, to, data, value = "0", from }) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
   try {
     const [gas, gasPrice] = await Promise.all([
@@ -492,6 +512,140 @@ async function pm_getOrderbook(marketId, limit = 5) {
 }
 
 // =========================================================
+// Bittensor Research and Quote-only Actions
+// =========================================================
+function filterSubnets(subnets, query, limit) {
+  const q = String(query || "").trim().toLowerCase();
+  const filtered = q
+    ? subnets.filter((s) => `${s.netuid} ${s.name} ${s.symbol} ${s.category} ${s.benefitSummary}`.toLowerCase().includes(q))
+    : subnets;
+  return filtered.slice(0, Number.isFinite(limit) && limit > 0 ? limit : 20);
+}
+
+async function bittensor_list_subnets({ query, limit } = {}) {
+  const res = await callServer("/api/bittensor/subnets");
+  return { success: true, subnets: filterSubnets(res.subnets || [], query, limit), source: "matterhorn-server" };
+}
+
+async function bittensor_explain_subnet(netuid) {
+  const res = await callServer(`/api/bittensor/subnets/${encodeURIComponent(String(netuid))}`);
+  return {
+    success: true,
+    subnet: res.subnet,
+    guidance: "Use this as read-only context. Bittensor stake, unstake, and transfer operations require an external Bittensor-compatible signer.",
+  };
+}
+
+async function bittensor_compare_subnets(netuids) {
+  const ids = Array.isArray(netuids) ? netuids : [];
+  const subnets = await Promise.all(ids.slice(0, 6).map((netuid) => bittensor_explain_subnet(netuid).then((r) => r.subnet)));
+  return {
+    success: true,
+    subnets,
+    comparison: subnets.map((s) => ({
+      netuid: s.netuid,
+      name: s.name,
+      category: s.category,
+      priceTao: s.priceTao,
+      emission: s.emission,
+      neurons: s.metagraphSummary?.neurons ?? null,
+      benefitSummary: s.benefitSummary,
+      providerSource: s.source,
+    })),
+  };
+}
+
+async function bittensor_get_wallet_positions(ss58Address) {
+  const res = await callServer(`/api/bittensor/wallet/${encodeURIComponent(String(ss58Address || ""))}`);
+  return { success: true, wallet: res.wallet };
+}
+
+async function bittensor_prepare_action(args) {
+  const res = await callServer("/api/bittensor/actions/quote", "POST", {
+    action: args.action,
+    netuid: args.netuid,
+    amountTao: args.amountTao,
+    validatorHotkey: args.validatorHotkey,
+    recipient: args.recipient,
+  });
+  return {
+    success: true,
+    quote: res.quote,
+    execution: "quote_only_external_signature_required",
+  };
+}
+
+async function bittensor_plan_from_chat(args) {
+  const res = await callServer("/api/bittensor/chat/plan", "POST", {
+    message: args.message,
+    ss58Address: args.ss58Address,
+  });
+  return { success: true, plan: res.plan };
+}
+
+async function bittensor_find_subnets_for_goal(args) {
+  const [plan, subnetsRes] = await Promise.all([
+    bittensor_plan_from_chat({ message: args.goal || args.query || "Find useful Bittensor subnets" }),
+    callServer("/api/bittensor/subnets"),
+  ]);
+  const q = String(args.goal || args.query || "").toLowerCase();
+  const subnets = filterSubnets(subnetsRes.subnets || [], q, args.limit || 8);
+  return {
+    success: true,
+    goal: args.goal || args.query || "",
+    plan: plan.plan,
+    subnets,
+  };
+}
+
+async function bittensor_get_subnet_capabilities(args) {
+  if (Number.isFinite(args.netuid)) {
+    const res = await callServer(`/api/bittensor/capabilities/${encodeURIComponent(String(args.netuid))}`);
+    return { success: true, capability: res.capability };
+  }
+  const res = await callServer("/api/bittensor/capabilities");
+  return { success: true, capabilities: res.capabilities };
+}
+
+async function bittensor_prepare_extrinsic(args) {
+  const res = await callServer("/api/bittensor/extrinsics/prepare", "POST", args);
+  return {
+    success: true,
+    preview: res.preview,
+    execution: "external_signature_required",
+  };
+}
+
+async function bittensor_submit_signed_extrinsic(args) {
+  const res = await callServer("/api/bittensor/extrinsics/submit", "POST", {
+    preview: args.preview,
+    signature: args.signature,
+    signerAddress: args.signerAddress,
+  });
+  return { success: true, result: res.result };
+}
+
+async function bittensor_invoke_subnet(args) {
+  const res = await callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/invoke`, "POST", {
+    intent: args.intent,
+    task: args.task,
+    ss58Address: args.ss58Address,
+  });
+  return { success: true, invocation: res.invocation };
+}
+
+async function bittensor_create_watch(args) {
+  const res = await callServer("/api/bittensor/monitoring/watchlist", "POST", {
+    kind: args.kind,
+    label: args.label,
+    netuid: args.netuid,
+    ss58Address: args.ss58Address,
+    threshold: args.threshold,
+  });
+  return { success: true, watch: res.watch, watches: res.watches };
+}
+
+// =========================================================
 // MCP tools schema
 // =========================================================
 const tools = [
@@ -530,6 +684,20 @@ const tools = [
   { name: "pm_searchEvents", description: "Search Polymarket events by keyword", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
   { name: "pm_getEvent", description: "Get full Polymarket event details", inputSchema: { type: "object", properties: { eventId: { type: "string" } }, required: ["eventId"] } },
   { name: "pm_getOrderbook", description: "Get orderbook for a Polymarket market", inputSchema: { type: "object", properties: { marketId: { type: "string" }, limit: { type: "number" } }, required: ["marketId"] } },
+
+  // -- bittensor --
+  { name: "bittensor_list_subnets", description: "List Bittensor subnets with plain-English utility summaries.", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } } } },
+  { name: "bittensor_explain_subnet", description: "Explain a Bittensor subnet by netuid, including utility, metagraph context, risks, and links.", inputSchema: { type: "object", properties: { netuid: { type: "number" } }, required: ["netuid"] } },
+  { name: "bittensor_compare_subnets", description: "Compare multiple Bittensor subnets by utility, price, emissions, metagraph size, and provider freshness.", inputSchema: { type: "object", properties: { netuids: { type: "array", items: { type: "number" } } }, required: ["netuids"] } },
+  { name: "bittensor_get_wallet_positions", description: "Read watch-only Bittensor wallet balance and subnet stake positions for an SS58 coldkey public address.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
+  { name: "bittensor_prepare_action", description: "Prepare a quote-only Bittensor action. Returns warnings and requires an external Bittensor-compatible signer.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "transfer", "compare"] }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, recipient: { type: "string" } }, required: ["action"] } },
+  { name: "bittensor_plan_from_chat", description: "Parse an ordinary user request into a safe Bittensor chat workflow plan.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" } }, required: ["message"] } },
+  { name: "bittensor_find_subnets_for_goal", description: "Find Bittensor subnets that match a plain-English goal such as image generation, data search, compute, or agent tools.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
+  { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
+  { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
+  { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
+  { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
+  { name: "bittensor_create_watch", description: "Create a Bittensor watch for a subnet, wallet, validator, emissions, or slippage condition.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] }, label: { type: "string" }, netuid: { type: "number" }, ss58Address: { type: "string" }, threshold: { type: "number" } } } },
 
   // -- portfolio / batch --
   { name: "crypto_getPortfolio", description: "Get aggregated portfolio for an address: balances, positions, yields.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, address: { type: "string" } }, required: ["chainId", "address"] } },
@@ -635,27 +803,42 @@ function handleMessage(msg) {
         case "pm_getEvent": return pm_getEvent(args.eventId).then(r => respond(textResult(r))).catch(catchErr);
         case "pm_getOrderbook": return pm_getOrderbook(args.marketId, args.limit).then(r => respond(textResult(r))).catch(catchErr);
 
+        // bittensor
+        case "bittensor_list_subnets": return bittensor_list_subnets({ query: args.query, limit: args.limit }).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_explain_subnet": return bittensor_explain_subnet(args.netuid).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_compare_subnets": return bittensor_compare_subnets(args.netuids).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_wallet_positions": return bittensor_get_wallet_positions(args.ss58Address).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_prepare_action": return bittensor_prepare_action(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_plan_from_chat": return bittensor_plan_from_chat(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_find_subnets_for_goal": return bittensor_find_subnets_for_goal(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_subnet_capabilities": return bittensor_get_subnet_capabilities(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_invoke_subnet": return bittensor_invoke_subnet(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_create_watch": return bittensor_create_watch(args).then(r => respond(textResult(r))).catch(catchErr);
+
         // portfolio / batch
         case "crypto_getPortfolio": {
-          const pclient = getClient(args.chainId);
-          if (!pclient) return respond(textResult({ success: false, error: "Unsupported chainId" }));
-          const registry = { 8453: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", WETH: "0x4200000000000000000000000000000000000006" }, 84532: { USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", WETH: "0x4200000000000000000000000000000000000006" } };
-          const tok = Object.entries(registry[args.chainId] || {});
-          Promise.all([
-            pclient.getBalance({ address: args.address }).catch(() => null),
-            Promise.all(tok.map(([sym, addr]) =>
-              pclient.readContract({
-                address: addr,
-                abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }],
-                functionName: "balanceOf",
-                args: [args.address],
-              }).catch(() => 0n).then((bal) => {
-                const dec = sym === "USDC" ? 6 : 18;
-                return { symbol: sym, raw: bal.toString(), formatted: Number(bal) / 10 ** dec };
-              })
-            )),
-            hl_getPositions(args.address).catch(() => null),
-          ]).then(([native, tokenBalances, hl]) => {
+          (async () => {
+            const pclient = await getClient(args.chainId);
+            if (!pclient) return respond(textResult({ success: false, error: "Unsupported chainId" }));
+            const registry = { 8453: { USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", WETH: "0x4200000000000000000000000000000000000006" }, 84532: { USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", WETH: "0x4200000000000000000000000000000000000006" } };
+            const tok = Object.entries(registry[args.chainId] || {});
+            const [native, tokenBalances, hl] = await Promise.all([
+              pclient.getBalance({ address: args.address }).catch(() => null),
+              Promise.all(tok.map(([sym, addr]) =>
+                pclient.readContract({
+                  address: addr,
+                  abi: [{ name: "balanceOf", type: "function", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }], stateMutability: "view" }],
+                  functionName: "balanceOf",
+                  args: [args.address],
+                }).catch(() => 0n).then((bal) => {
+                  const dec = sym === "USDC" ? 6 : 18;
+                  return { symbol: sym, raw: bal.toString(), formatted: Number(bal) / 10 ** dec };
+                })
+              )),
+              hl_getPositions(args.address).catch(() => null),
+            ]);
             return respond(textResult({
               success: true,
               address: args.address,
@@ -664,7 +847,7 @@ function handleMessage(msg) {
               tokens: tokenBalances,
               hyperliquid: hl,
             }));
-          }).catch((err) => respond(textResult({ success: false, error: err.message || "Portfolio fetch failed" })));
+          })().catch((err) => respond(textResult({ success: false, error: err.message || "Portfolio fetch failed" })));
           return;
         }
         case "crypto_buildBatch": {

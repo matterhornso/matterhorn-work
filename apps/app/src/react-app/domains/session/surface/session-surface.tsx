@@ -893,6 +893,35 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [props.sessionId, setComposerDraft]);
 
   useEffect(() => {
+    const handleBittensorChatHandoff = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (!detail || typeof detail !== "object" || Array.isArray(detail)) return;
+      const record = detail as { prompt?: unknown; text?: unknown; message?: unknown };
+      const text =
+        typeof record.prompt === "string" ? record.prompt :
+        typeof record.text === "string" ? record.text :
+        typeof record.message === "string" ? record.message :
+        "";
+      if (!text.trim()) return;
+      void typeComposerText(text);
+      props.onDraftChange(buildDraft(text, attachments));
+      setNotice({ title: "Bittensor prompt ready", description: "Review or send it from the chat composer.", tone: "info" });
+      recordInspectorEvent("bittensor.chat_handoff.applied", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        length: text.length,
+      });
+    };
+    window.addEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
+    window.addEventListener("matterhorn:bittensor-agent-prompt", handleBittensorChatHandoff);
+    return () => {
+      window.removeEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
+      window.removeEventListener("matterhorn:bittensor-agent-prompt", handleBittensorChatHandoff);
+    };
+  }, [attachments, buildDraft, props.onDraftChange, props.sessionId, props.workspaceId, typeComposerText]);
+
+  useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
       const detail: unknown = event.detail;
