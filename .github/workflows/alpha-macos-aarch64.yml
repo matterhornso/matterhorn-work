@@ -125,8 +125,37 @@ jobs:
           }
           NODE
 
-      - name: Write notary API key
+      - name: Resolve alpha signing config
+        id: alpha-signing
         if: env.MACOS_NOTARIZE == 'true'
+        shell: bash
+        env:
+          APPLE_CODESIGN_CERT_P12_BASE64: ${{ secrets.APPLE_CODESIGN_CERT_P12_BASE64 }}
+          APPLE_CODESIGN_CERT_PASSWORD: ${{ secrets.APPLE_CODESIGN_CERT_PASSWORD }}
+          APPLE_NOTARY_API_KEY_ID: ${{ secrets.APPLE_NOTARY_API_KEY_ID }}
+          APPLE_NOTARY_API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_API_ISSUER_ID }}
+          APPLE_NOTARY_API_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$APPLE_CODESIGN_CERT_P12_BASE64" ] || missing+=("APPLE_CODESIGN_CERT_P12_BASE64")
+          [ -n "$APPLE_CODESIGN_CERT_PASSWORD" ] || missing+=("APPLE_CODESIGN_CERT_PASSWORD")
+          [ -n "$APPLE_NOTARY_API_KEY_ID" ] || missing+=("APPLE_NOTARY_API_KEY_ID")
+          [ -n "$APPLE_NOTARY_API_ISSUER_ID" ] || missing+=("APPLE_NOTARY_API_ISSUER_ID")
+          [ -n "$APPLE_NOTARY_API_KEY_P8_BASE64" ] || missing+=("APPLE_NOTARY_API_KEY_P8_BASE64")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            joined="$(IFS=,; echo "${missing[*]}")"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "missing=$joined" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping signed Electron alpha packaging because required Apple signing secrets are missing: $joined"
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Write notary API key
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
         env:
           APPLE_NOTARY_API_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_P8_BASE64 }}
         run: |
@@ -152,8 +181,20 @@ jobs:
           TARGET: aarch64-apple-darwin
         run: pnpm --filter @matterhorn-work/desktop build:electron
 
+      - name: Skip signed Electron alpha publish
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
+        shell: bash
+        run: |
+          {
+            echo "### Signed Electron alpha publish skipped"
+            echo
+            echo "The Electron app build completed, but signed packaging and release publishing were skipped because Apple signing secrets are not configured."
+            echo
+            echo "Missing secrets: \`${{ steps.alpha-signing.outputs.missing }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Package Electron alpha (macOS, signed + notarized)
-        if: env.MACOS_NOTARIZE == 'true'
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
         env:
           CSC_LINK: ${{ secrets.APPLE_CODESIGN_CERT_P12_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CODESIGN_CERT_PASSWORD }}
@@ -170,7 +211,7 @@ jobs:
             --publish never
 
       - name: Create immutable alpha prerelease
-        if: env.MACOS_NOTARIZE == 'true'
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -191,7 +232,7 @@ jobs:
             --prerelease
 
       - name: Upload Electron alpha updater assets
-        if: env.MACOS_NOTARIZE == 'true'
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ALPHA_RUN_RELEASE_TAG: ${{ steps.alpha-version.outputs.release_tag }}
@@ -213,7 +254,7 @@ jobs:
             --clobber
 
       - name: Update alpha updater pointer
-        if: env.MACOS_NOTARIZE == 'true'
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
