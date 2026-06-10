@@ -131,6 +131,33 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
+    res.end(JSON.stringify({
+      success: true,
+      plan: {
+        intent: "discover",
+        confidence: 0.82,
+        summary: "Mock Bittensor discover workflow",
+        userGoal: "which subnet is useful for image generation?",
+        netuids: [],
+        ss58Address: null,
+        steps: ["Find matching subnets"],
+        suggestedToolNames: ["bittensor_chat"],
+        safetyNotes: ["External signer required for signed actions."],
+        responseCards: ["subnet_comparison"],
+        requiresClarification: false,
+        clarificationQuestion: null,
+      },
+      responseText: "I found 1 Bittensor subnet candidate for image generation.",
+      cards: [subnetCard],
+      data: { discovery: { goal: "image generation" } },
+      warnings: ["External signer required for signed actions."],
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities") {
     res.end(JSON.stringify({
       success: true,
@@ -456,6 +483,7 @@ try {
     "bittensor_get_wallet_positions",
     "bittensor_prepare_action",
     "bittensor_plan_from_chat",
+    "bittensor_chat",
     "bittensor_find_subnets_for_goal",
     "bittensor_get_subnet_capabilities",
     "bittensor_get_sidecar_status",
@@ -495,7 +523,13 @@ try {
   const plan = await ask({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "bittensor_plan_from_chat", arguments: { message: "Find compute subnets" } } });
   assert.equal(JSON.parse(plan.result.content[0].text).plan.intent, "discover");
 
-  const find = await ask({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "bittensor_find_subnets_for_goal", arguments: { goal: "compute", limit: 3 } } });
+  const chat = await ask({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "bittensor_chat", arguments: { message: "which subnet is useful for image generation?", limit: 5 } } });
+  const chatPayload = JSON.parse(chat.result.content[0].text);
+  assert.equal(chatPayload.execution, "answered");
+  assert.equal(chatPayload.cards[0].kind, "subnet_comparison");
+  assert.equal(/seed|private|mnemonic/i.test(JSON.stringify(chatPayload)), false);
+
+  const find = await ask({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "bittensor_find_subnets_for_goal", arguments: { goal: "compute", limit: 3 } } });
   assert.equal(JSON.parse(find.result.content[0].text).subnets.length, 1);
   assert.equal(JSON.parse(find.result.content[0].text).matches[0].score, 12);
 

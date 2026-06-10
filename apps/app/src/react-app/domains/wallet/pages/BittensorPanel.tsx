@@ -63,6 +63,58 @@ function writeFavorites(favorites: number[]): void {
   }
 }
 
+function contextValue(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  return null;
+}
+
+function buildBittensorChatPrompt(prompt: string, context: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const add = (label: string, value: unknown) => {
+    const formatted = contextValue(value);
+    if (formatted) lines.push(`- ${label}: ${formatted}`);
+  };
+
+  add("ss58Address", context.ss58Address);
+  add("netuid", context.netuid);
+  add("amountTao", context.amountTao);
+  add("validatorHotkey", context.validatorHotkey);
+  add("recipient", context.recipient);
+  add("destination", context.destination);
+  add("action", context.action);
+
+  const subnet = context.subnet as Partial<BittensorSubnetSummary> | null | undefined;
+  if (subnet && typeof subnet === "object") {
+    add("subnet.netuid", subnet.netuid);
+    add("subnet.name", subnet.name);
+    add("subnet.category", subnet.category);
+    add("subnet.source", subnet.source);
+  }
+
+  const wallet = context.wallet as Partial<BittensorWalletSnapshot> | null | undefined;
+  if (wallet && typeof wallet === "object") {
+    add("wallet.ss58Address", wallet.ss58Address);
+    add("wallet.taoBalance", wallet.taoBalance);
+    add("wallet.positions", Array.isArray(wallet.stakePositions) ? wallet.stakePositions.length : null);
+    add("wallet.source", wallet.source);
+    add("wallet.freshness", wallet.freshness);
+  }
+
+  const quote = context.quote as Partial<BittensorActionQuote> | null | undefined;
+  if (quote && typeof quote === "object") {
+    add("quote.action", quote.action);
+    add("quote.netuid", quote.netuid);
+    add("quote.amountTao", quote.amountTao);
+    add("quote.expectedAlpha", quote.expectedAlpha);
+    add("quote.feeTao", quote.feeTao);
+    add("quote.slippageBps", quote.slippageBps);
+    add("quote.source", quote.source);
+  }
+
+  return lines.length ? `${prompt}\n\nBittensor context:\n${lines.join("\n")}` : prompt;
+}
+
 export default function BittensorPanel() {
   const [tab, setTab] = useState<Tab>("overview");
   const [subnets, setSubnets] = useState<BittensorSubnetSummary[]>([]);
@@ -87,7 +139,7 @@ export default function BittensorPanel() {
   const [quote, setQuote] = useState<BittensorActionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
-  const [agentPromptCopied, setAgentPromptCopied] = useState(false);
+  const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
   const loadSubnets = useCallback(async () => {
@@ -250,18 +302,16 @@ export default function BittensorPanel() {
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>) => {
+    const expandedPrompt = buildBittensorChatPrompt(prompt, context);
     window.dispatchEvent(new CustomEvent("matterhorn:bittensor-chat-handoff", {
       detail: {
-        prompt,
+        prompt: expandedPrompt,
         context,
         source: "bittensor-panel",
       },
     }));
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(prompt).catch(() => undefined);
-    }
-    setAgentPromptCopied(true);
-    window.setTimeout(() => setAgentPromptCopied(false), 2000);
+    setAgentPromptReady(true);
+    window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
@@ -280,7 +330,15 @@ export default function BittensorPanel() {
   const askAgentAboutQuote = async () => {
     if (!quote) return;
     const prompt = `Use Bittensor chat mode. Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
-    await sendToChat(prompt, { quote });
+    await sendToChat(prompt, {
+      action: quote.action,
+      netuid: quote.netuid,
+      amountTao: quote.amountTao,
+      validatorHotkey,
+      recipient,
+      destination: recipient,
+      quote,
+    });
   };
 
   return (
@@ -444,7 +502,7 @@ export default function BittensorPanel() {
             <SubnetDetailCard
               detail={detail}
               loading={detailLoading}
-              agentPromptCopied={agentPromptCopied}
+              agentPromptReady={agentPromptReady}
               onAskAgent={askAgentAboutSubnet}
             />
           </div>
@@ -469,7 +527,7 @@ export default function BittensorPanel() {
                 </Button>
                 <Button variant="outline" className="w-full gap-1.5" onClick={askAgentAboutWallet} disabled={!watchAddress.trim()}>
                   <BrainCircuit className="size-4" />
-                  {agentPromptCopied ? "Sent to Chat" : "Ask in Chat"}
+                  {agentPromptReady ? "Sent to Chat" : "Ask in Chat"}
                 </Button>
                 {walletError && <p className="text-xs text-red-300">{walletError}</p>}
               </div>
@@ -578,7 +636,7 @@ export default function BittensorPanel() {
                   </div>
                   <Button variant="outline" className="w-full gap-1.5" onClick={askAgentAboutQuote}>
                     <BrainCircuit className="size-4" />
-                    {agentPromptCopied ? "Sent to Chat" : "Review in Chat"}
+                    {agentPromptReady ? "Sent to Chat" : "Review in Chat"}
                   </Button>
                 </div>
               </Section>
@@ -684,12 +742,12 @@ function SubnetRow({
 function SubnetDetailCard({
   detail,
   loading,
-  agentPromptCopied,
+  agentPromptReady,
   onAskAgent,
 }: {
   detail: BittensorSubnetDetail | null;
   loading: boolean;
-  agentPromptCopied: boolean;
+  agentPromptReady: boolean;
   onAskAgent: (subnet: BittensorSubnetSummary) => void;
 }) {
   if (loading) return <LoadingLabel label="Loading subnet detail" />;
@@ -711,7 +769,7 @@ function SubnetDetailCard({
         </div>
         <Button size="sm" className="shrink-0 gap-1.5 bg-sky-500 text-white hover:bg-sky-600" onClick={() => onAskAgent(detail)}>
           <BrainCircuit className="size-3.5" />
-          {agentPromptCopied ? "Copied" : "Ask Agent"}
+          {agentPromptReady ? "Sent to Chat" : "Ask in Chat"}
         </Button>
       </div>
 

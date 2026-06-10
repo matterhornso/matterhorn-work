@@ -35,6 +35,7 @@ import {
   createBittensorSigningHandoff,
   createBittensorWatch,
   evaluateBittensorWatches,
+  executeBittensorChatWorkflow,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorSignerStatus,
@@ -47,6 +48,7 @@ import {
   prepareBittensorExtrinsic,
   submitSignedBittensorExtrinsic,
   type BittensorActionQuoteInput,
+  type BittensorChatExecutionInput,
   type BittensorExtrinsicAction,
   type BittensorExtrinsicPreview,
   type BittensorSubnetInvocation,
@@ -3582,6 +3584,31 @@ function createRoutes(
     const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address : null;
     const plan = planBittensorChat({ message, ss58Address });
     return jsonResponse({ success: true, plan, cards: buildBittensorPlanCards(plan) });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/chat/execute", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "";
+    if (!message.trim()) {
+      throw new ApiError(400, "invalid_message", "message is required");
+    }
+    const strategy = typeof body.strategy === "string" && ["balanced", "yield", "safety"].includes(body.strategy)
+      ? body.strategy as BittensorChatExecutionInput["strategy"]
+      : null;
+    const result = await executeBittensorChatWorkflow({
+      message,
+      ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+      netuid: body.netuid === null || body.netuid === undefined || body.netuid === "" ? null : Number(body.netuid),
+      amountTao: body.amountTao === undefined ? null : String(body.amountTao),
+      validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
+      coldkey: typeof body.coldkey === "string" ? body.coldkey : null,
+      recipient: typeof body.recipient === "string" ? body.recipient : null,
+      destination: typeof body.destination === "string" ? body.destination : null,
+      limit: body.limit === null || body.limit === undefined || body.limit === "" ? null : Number(body.limit),
+      strategy,
+      rateTolerance: body.rateTolerance === null || body.rateTolerance === undefined || body.rateTolerance === "" ? null : Number(body.rateTolerance),
+    });
+    return jsonResponse({ success: true, ...result });
   });
 
   addRoute(routes, "GET", "/api/bittensor/capabilities", "client", async () => {

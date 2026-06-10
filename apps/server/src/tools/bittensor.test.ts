@@ -17,6 +17,7 @@ import {
   createBittensorSigningHandoff,
   createBittensorWatch,
   evaluateBittensorWatch,
+  executeBittensorChatWorkflow,
   getConfiguredSubnetAdapter,
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
@@ -240,6 +241,305 @@ describe("TaoAppBittensorProvider", () => {
         process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
       }
     }
+  });
+});
+
+async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<void> {
+  const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+  const previousFetch = globalThis.fetch;
+  process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://matterhorn-five-prompt-sidecar.test";
+
+  const json = (body: unknown) => new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/subnets")) {
+      return json({
+        source: "matterhorn-five-prompt-mock",
+        subnets: [
+          {
+            netuid: 77,
+            name: "Image subnet",
+            symbol: "SN77",
+            category: "Creative AI",
+            description: "Generate image and media outputs.",
+            priceTao: 0.25,
+            emission: 0.2,
+            tempo: 360,
+            source: "matterhorn-five-prompt-mock",
+            block: 777,
+            freshness: "fresh",
+          },
+          {
+            netuid: 14,
+            name: "TAOHash",
+            symbol: "SN14",
+            category: "Compute and infrastructure",
+            description: "Compute subnet.",
+            priceTao: 0.5,
+            emission: 0.1,
+            tempo: 360,
+            source: "matterhorn-five-prompt-mock",
+            block: 777,
+            freshness: "fresh",
+          },
+        ],
+      });
+    }
+    if (url.endsWith("/subnets/77/dynamic")) {
+      return json({
+        netuid: 77,
+        name: "Image subnet",
+        symbol: "SN77",
+        description: "Generate image and media outputs.",
+        priceTao: 0.25,
+        emission: 0.2,
+        tempo: 360,
+        source: "matterhorn-five-prompt-mock",
+        block: 778,
+        freshness: "fresh",
+      });
+    }
+    if (url.endsWith("/subnets/77/metagraph")) {
+      return json({
+        netuid: 77,
+        source: "matterhorn-five-prompt-mock",
+        block: 778,
+        n: 2,
+        totalStake: 900,
+        neurons: [
+          {
+            uid: 9,
+            hotkey: VALID_SS58,
+            coldkey: VALID_SS58,
+            stake: 600,
+            trust: 0.88,
+            dividends: 0.2,
+          },
+          {
+            uid: 10,
+            hotkey: "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z",
+            coldkey: VALID_SS58,
+            stake: 300,
+            trust: 0.7,
+            dividends: 0.12,
+          },
+        ],
+      });
+    }
+    if (url.includes("/wallet/")) {
+      return json({
+        ss58Address: VALID_SS58,
+        taoBalance: 3,
+        estimatedValueTao: 10,
+        providerStatus: "ok",
+        source: "matterhorn-five-prompt-mock",
+        block: 778,
+        freshness: "fresh",
+        stakePositions: [
+          {
+            netuid: 77,
+            subnetName: "Image subnet",
+            validatorHotkey: VALID_SS58,
+            alphaAmount: 8,
+            taoValue: 2,
+            slippageRisk: "low",
+          },
+          {
+            netuid: 14,
+            subnetName: "TAOHash",
+            validatorHotkey: "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z",
+            alphaAmount: 20,
+            taoValue: 5,
+            slippageRisk: "medium",
+          },
+        ],
+      });
+    }
+    if (url.endsWith("/extrinsics/quote")) {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      if (body.action !== "transfer") expect(body.netuid).toBe(77);
+      return json({
+        action: body.action ?? "stake",
+        netuid: body.netuid ?? null,
+        amountTao: Number(body.amountTao ?? 1),
+        priceTao: 0.25,
+        idealAlpha: 4,
+        expectedAlpha: 3.98,
+        feeTao: 0.0001,
+        slippageBps: 50,
+        rateTolerance: 0.005,
+        source: "matterhorn-five-prompt-mock",
+        block: 778,
+        freshness: "fresh",
+        warnings: ["Mock sidecar quote."],
+        requiresExternalSignature: true,
+      });
+    }
+    if (url.endsWith("/extrinsics/prepare")) {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      return json({
+        unsignedPayload: {
+          chain: "bittensor",
+          network: "finney",
+          action: body.action,
+          netuid: body.netuid,
+          amountTao: body.amountTao,
+          hotkey: body.hotkey,
+          destination: body.destination,
+        },
+        feeTao: 0.0001,
+        slippageBps: 50,
+        expectedAlpha: 3.98,
+        warnings: ["Mock sidecar prepare."],
+      });
+    }
+    return json({});
+  }) as typeof fetch;
+
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousSidecar === undefined) {
+      delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    } else {
+      process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
+    }
+  }
+}
+
+describe("executeBittensorChatWorkflow", () => {
+  test("answers arbitrary Bittensor learning prompts", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "explain coldkeys, hotkeys, alpha, and Dynamic TAO like I am new" });
+    expect(result.execution).toBe("answered");
+    expect(result.plan.intent).toBe("learn");
+    expect(result.cards[0]?.title).toBe("Bittensor explainer");
+    expect(result.cards[0]?.items.some((item) => item.label === "Alpha")).toBe(true);
+  });
+
+  test("explains any named subnet through the chat executor", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "explain subnet 77 and how it benefits my work" });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("subnet_result");
+      expect(result.responseText).toContain("Image subnet");
+    });
+  });
+
+  test("asks one clarification question for show my TAO without SS58", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "show my TAO" });
+    expect(result.execution).toBe("clarification_required");
+    expect(result.requiresClarification).toBe(true);
+    expect(result.clarificationQuestion).toContain("SS58");
+    expect(result.cards[0]?.kind).toBe("subnet_result");
+  });
+
+  test("answers show my TAO with a wallet snapshot card", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("wallet");
+      expect(result.cards[0]?.kind).toBe("wallet_snapshot");
+      expect(result.responseText).toContain("3");
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("answers where am I staked with sorted stake-position context", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "where am I staked?", ss58Address: VALID_SS58 });
+      const stakeCard = result.cards.find((card) => card.title === "Stake positions");
+      const positions = stakeCard?.data?.positions as Array<{ netuid: number }> | undefined;
+      expect(result.execution).toBe("answered");
+      expect(stakeCard?.kind).toBe("wallet_snapshot");
+      expect(positions?.[0]?.netuid).toBe(14);
+    });
+  });
+
+  test("discovers image-generation subnets with comparison cards", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "which subnet is useful for image generation?" });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("discover");
+      expect(result.cards[0]?.kind).toBe("subnet_comparison");
+      expect(result.cards[0]?.title).toContain("Image");
+    });
+  });
+
+  test("discovers arbitrary subnet goals without special-casing the prompt", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "find Bittensor subnets for decentralized media workflows", limit: 3 });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("discover");
+      expect(result.cards[0]?.kind).toBe("subnet_comparison");
+    });
+  });
+
+  test("compares validators on a requested subnet", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("validator_selection");
+      expect(result.responseText).toContain("subnet 77");
+    });
+  });
+
+  test("creates monitoring watches from ordinary chat prompts", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "monitor subnet 77 emissions" });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("monitor");
+      expect(result.cards[0]?.kind).toBe("watchlist");
+      expect(result.responseText).toContain("subnet 77");
+    });
+  });
+
+  test("clarifies staking preview when validator hotkey is missing", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "prepare staking 1 TAO on subnet 77" });
+      expect(result.execution).toBe("clarification_required");
+      expect(result.clarificationQuestion).toContain("validator hotkey");
+      expect(result.cards[0]?.kind).toBe("validator_selection");
+    });
+  });
+
+  test("returns unsigned staking preview when required context exists", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: "prepare staking 1 TAO on subnet 77",
+        ss58Address: VALID_SS58,
+        validatorHotkey: VALID_SS58,
+      });
+      expect(result.execution).toBe("unsigned_preview");
+      expect(result.cards[0]?.kind).toBe("signed_action_review");
+      expect(result.responseText).toContain("external signing");
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("clarifies unstake previews instead of guessing validator context", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "unstake 0.5 TAO from subnet 77" });
+      expect(result.execution).toBe("clarification_required");
+      expect(result.clarificationQuestion).toContain("validator hotkey");
+    });
+  });
+
+  test("returns unsigned transfer previews when recipient context exists", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: "transfer 1 TAO safely",
+        ss58Address: VALID_SS58,
+        recipient: "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z",
+      });
+      expect(result.execution).toBe("unsigned_preview");
+      expect(result.cards[0]?.kind).toBe("signed_action_review");
+      expect((result.data.preview as { action?: string; destination?: string }).action).toBe("transfer");
+    });
   });
 });
 
