@@ -34,7 +34,7 @@ FORBIDDEN_KEY_PARTS = (
 def read_payload() -> dict[str, Any]:
     raw = sys.stdin.read().strip()
     if not raw:
-      return {}
+        return {}
     return json.loads(raw)
 
 
@@ -82,6 +82,181 @@ def get_subtensor():
         return bt.subtensor(network)
 
 
+def to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    for attr in ("tao", "rao"):
+        nested = getattr(value, attr, None)
+        if nested is not None and nested is not value:
+            try:
+                parsed = float(nested)
+                return parsed / 1_000_000_000 if attr == "rao" else parsed
+            except Exception:
+                pass
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def get_any(value: Any, names: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        for name in names:
+            if name in value:
+                return value[name]
+    for name in names:
+        if hasattr(value, name):
+            try:
+                return getattr(value, name)
+            except Exception:
+                pass
+    return None
+
+
+def string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text and text != "None" else None
+
+
+def current_block(subtensor: Any) -> int | None:
+    for name in ("get_current_block", "block"):
+        method = getattr(subtensor, name, None)
+        if callable(method):
+            try:
+                return int(method())
+            except Exception:
+                pass
+        elif method is not None:
+            try:
+                return int(method)
+            except Exception:
+                pass
+    return None
+
+
+def sdk_meta(source: str, subtensor: Any | None = None) -> dict[str, Any]:
+    return {
+        "network": os.environ.get("BITTENSOR_NETWORK", "finney"),
+        "source": source,
+        "fetchedAt": None,
+        "block": current_block(subtensor) if subtensor is not None else None,
+        "freshness": "live",
+    }
+
+
+def health(_: dict[str, Any]) -> dict[str, Any]:
+    subtensor = get_subtensor()
+    return {
+        "ok": True,
+        "status": "healthy",
+        "mode": "python",
+        "network": os.environ.get("BITTENSOR_NETWORK", "finney"),
+        "sdkAvailable": True,
+        "canRead": True,
+        "canPrepare": True,
+        "canSubmit": False,
+        "block": current_block(subtensor),
+        "message": "Official Bittensor SDK is available for public Finney reads. Submission remains disabled.",
+    }
+
+
+def get_dynamic_info(subtensor: Any, netuid: int) -> Any | None:
+    attempts = (
+        lambda: subtensor.subnet(netuid=netuid),
+        lambda: subtensor.subnet(netuid),
+        lambda: subtensor.get_subnet_dynamic_info(netuid=netuid),
+        lambda: subtensor.get_subnet_dynamic_info(netuid),
+    )
+    for attempt in attempts:
+        try:
+            value = attempt()
+            if value is not None:
+                return value
+        except Exception:
+            pass
+    return None
+
+
+def serialize_dynamic_info(info: Any, netuid: int, subtensor: Any | None = None) -> dict[str, Any]:
+    name = string_or_none(get_any(info, ("subnet_name", "name", "display_name"))) or f"Subnet {netuid}"
+    symbol = string_or_none(get_any(info, ("symbol", "subnet_symbol", "ticker"))) or f"SN{netuid}"
+    price = to_float(get_any(info, ("price", "moving_price", "alpha_price", "subnet_price")))
+    description = string_or_none(get_any(info, ("description", "summary", "emission_summary"))) or ""
+    return {
+        **sdk_meta("bittensor-python-sdk", subtensor),
+        "netuid": netuid,
+        "name": name,
+        "symbol": symbol,
+        "category": "Live Bittensor subnet",
+        "description": description,
+        "priceTao": price,
+        "emission": to_float(get_any(info, ("emission", "subnet_emission", "alpha_out_emission", "tao_in_emission"))),
+        "tempo": to_float(get_any(info, ("tempo",))),
+        "alphaIn": to_float(get_any(info, ("alpha_in", "alphaIn"))),
+        "alphaOut": to_float(get_any(info, ("alpha_out", "alphaOut"))),
+        "taoIn": to_float(get_any(info, ("tao_in", "taoIn"))),
+        "ownerColdkey": string_or_none(get_any(info, ("owner_coldkey", "ownerColdkey", "coldkey"))),
+        "ownerHotkey": string_or_none(get_any(info, ("owner_hotkey", "ownerHotkey", "hotkey"))),
+        "warnings": [],
+    }
+
+
+def subnets(_: dict[str, Any]) -> dict[str, Any]:
+    subtensor = get_subtensor()
+    rows: list[Any] = []
+    for attempt in (
+        lambda: subtensor.all_subnets(),
+        lambda: subtensor.get_all_subnets_info(),
+    ):
+        try:
+            value = attempt()
+            if value:
+                rows = list(value.values()) if isinstance(value, dict) else list(value)
+                break
+        except Exception:
+            pass
+    normalized = []
+    for index, row in enumerate(rows[:512]):
+        raw_netuid = get_any(row, ("netuid", "uid", "id"))
+        try:
+            netuid = int(raw_netuid if raw_netuid is not None else index)
+        except Exception:
+            netuid = index
+        normalized.append(serialize_dynamic_info(row, netuid, subtensor))
+    return {
+        **sdk_meta("bittensor-python-sdk", subtensor),
+        "subnets": normalized,
+        "warnings": [] if normalized else ["The SDK did not return subnet dynamic info for this network."],
+    }
+
+
+def dynamic_subnet(payload: dict[str, Any]) -> dict[str, Any]:
+    netuid = int(payload.get("netuid", 0))
+    subtensor = get_subtensor()
+    info = get_dynamic_info(subtensor, netuid)
+    if info is None:
+        return {
+            **sdk_meta("bittensor-python-sdk", subtensor),
+            "netuid": netuid,
+            "name": f"Subnet {netuid}",
+            "symbol": f"SN{netuid}",
+            "category": "Live Bittensor subnet",
+            "description": "",
+            "priceTao": None,
+            "emission": None,
+            "tempo": None,
+            "alphaIn": None,
+            "alphaOut": None,
+            "taoIn": None,
+            "ownerColdkey": None,
+            "ownerHotkey": None,
+            "warnings": ["The SDK did not return Dynamic TAO data for this subnet."],
+        }
+    return serialize_dynamic_info(info, netuid, subtensor)
+
+
 def metagraph(payload: dict[str, Any]) -> dict[str, Any]:
     netuid = int(payload.get("netuid", 0))
     subtensor = get_subtensor()
@@ -114,12 +289,14 @@ def metagraph(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
+        **sdk_meta("bittensor-python-sdk", subtensor),
         "network": os.environ.get("BITTENSOR_NETWORK", "finney"),
         "netuid": netuid,
         "block": int(getattr(mg, "block", 0) or 0),
         "n": int(getattr(mg, "n", len(neurons)) or len(neurons)),
         "neurons": neurons,
-        "source": "bittensor-python-sdk",
+        "totalStake": sum(item["stake"] for item in neurons if item.get("stake") is not None),
+        "warnings": [],
     }
 
 
@@ -129,18 +306,79 @@ def wallet(payload: dict[str, Any]) -> dict[str, Any]:
     balance = None
     try:
         raw_balance = subtensor.get_balance(ss58)
-        balance = float(getattr(raw_balance, "tao", raw_balance))
+        balance = to_float(raw_balance)
     except Exception:
         balance = None
+    stake_positions = []
+    for attempt in (
+        lambda: subtensor.get_stake_info_for_coldkey(coldkey_ss58=ss58),
+        lambda: subtensor.get_stake_info_for_coldkey(ss58),
+        lambda: subtensor.get_stake(coldkey_ss58=ss58),
+        lambda: subtensor.get_stake(ss58),
+    ):
+        try:
+            raw_stakes = attempt()
+            if raw_stakes:
+                rows = raw_stakes.values() if isinstance(raw_stakes, dict) else raw_stakes
+                for row in rows:
+                    netuid_raw = get_any(row, ("netuid", "subnet_netuid", "subnet_id"))
+                    try:
+                        netuid = int(netuid_raw)
+                    except Exception:
+                        netuid = 0
+                    stake_tao = to_float(get_any(row, ("stake", "tao_stake", "taoValue", "tao_value")))
+                    stake_positions.append(
+                        {
+                            "netuid": netuid,
+                            "subnetName": f"Subnet {netuid}",
+                            "validatorHotkey": string_or_none(get_any(row, ("hotkey", "hotkey_ss58", "delegate_ss58"))),
+                            "coldkey": ss58,
+                            "alphaAmount": to_float(get_any(row, ("alpha", "alpha_stake", "stake"))),
+                            "taoValue": stake_tao,
+                            "slippageRisk": "unknown",
+                            "source": "bittensor-python-sdk",
+                        }
+                    )
+                break
+        except Exception:
+            pass
+    staked_tao = sum(item["taoValue"] for item in stake_positions if item.get("taoValue") is not None)
     return {
+        **sdk_meta("bittensor-python-sdk", subtensor),
         "ss58Address": ss58,
         "taoBalance": balance,
-        "stakePositions": [],
-        "estimatedValueTao": balance,
+        "freeTao": balance,
+        "stakedTao": staked_tao,
+        "stakePositions": stake_positions,
+        "estimatedValueTao": (balance or 0) + staked_tao if balance is not None or staked_tao else balance,
         "providerStatus": "ok",
         "updatedAt": None,
-        "message": "Loaded public wallet balance from the official Bittensor SDK. Stake-position expansion is handled by the sidecar contract and can be extended per SDK version.",
+        "message": "Loaded public wallet balance and stake exposure from the official Bittensor SDK where available.",
+        "warnings": [] if stake_positions else ["Stake positions were unavailable or empty from the installed SDK/network."],
     }
+
+
+def balance_from_tao(amount_tao: float) -> Any:
+    try:
+        bt = import_bittensor()
+        balance_cls = getattr(bt, "Balance", None)
+        if balance_cls is not None and hasattr(balance_cls, "from_tao"):
+            return balance_cls.from_tao(amount_tao)
+    except Exception:
+        pass
+    return amount_tao
+
+
+def call_alpha_quote(info: Any, method_name: str, amount_tao: float) -> Any:
+    method = getattr(info, method_name, None)
+    if not callable(method):
+        return None
+    for amount in (balance_from_tao(amount_tao), amount_tao):
+        try:
+            return method(amount)
+        except Exception:
+            pass
+    return None
 
 
 def quote(payload: dict[str, Any]) -> dict[str, Any]:
@@ -149,15 +387,52 @@ def quote(payload: dict[str, Any]) -> dict[str, Any]:
         amount_tao = float(amount) if amount is not None else None
     except Exception:
         amount_tao = None
+    netuid = payload.get("netuid")
+    try:
+        netuid_int = int(netuid) if netuid is not None else None
+    except Exception:
+        netuid_int = None
+    subtensor = get_subtensor()
+    info = get_dynamic_info(subtensor, netuid_int) if netuid_int is not None else None
+    dynamic = serialize_dynamic_info(info, netuid_int, subtensor) if info is not None and netuid_int is not None else None
+    ideal_alpha = None
+    expected_alpha = None
+    slippage_bps = None
+    if info is not None and amount_tao is not None:
+        ideal = call_alpha_quote(info, "tao_to_alpha", amount_tao)
+        ideal_alpha = to_float(ideal)
+        with_slippage = call_alpha_quote(info, "tao_to_alpha_with_slippage", amount_tao)
+        if isinstance(with_slippage, (list, tuple)) and with_slippage:
+            expected_alpha = to_float(with_slippage[0])
+            if len(with_slippage) > 1:
+                slippage_value = to_float(with_slippage[1])
+                slippage_bps = slippage_value * 10_000 if slippage_value is not None and slippage_value < 1 else slippage_value
+        else:
+            expected_alpha = to_float(with_slippage)
+        if expected_alpha is None:
+            expected_alpha = ideal_alpha
+    if expected_alpha is None and amount_tao is not None and dynamic and dynamic.get("priceTao"):
+        price = float(dynamic["priceTao"])
+        if price > 0:
+            expected_alpha = amount_tao / price
+            ideal_alpha = expected_alpha
     return {
+        **sdk_meta("bittensor-python-sdk", subtensor),
         "action": payload.get("action", "stake"),
-        "netuid": payload.get("netuid"),
+        "netuid": netuid_int,
         "amountTao": amount_tao,
-        "expectedAlpha": None,
+        "priceTao": dynamic.get("priceTao") if dynamic else None,
+        "idealAlpha": ideal_alpha,
+        "expectedAlpha": expected_alpha,
         "feeTao": None,
-        "slippageBps": None,
+        "slippageBps": slippage_bps,
+        "rateTolerance": payload.get("rateTolerance", 0.005),
+        "dynamic": dynamic,
         "warnings": [
-            "Python SDK quote bridge is enabled, but exact Dynamic TAO quote expansion depends on the installed SDK version.",
+            "Python SDK quote bridge is enabled. Verify price and slippage in the external signer before acting.",
+            "Build an unsigned extrinsic preview and verify in an external signer before acting.",
+        ] if info is not None else [
+            "Dynamic TAO subnet data was unavailable for this quote.",
             "Build an unsigned extrinsic preview and verify in an external signer before acting.",
         ],
         "requiresExternalSignature": True,
@@ -206,6 +481,9 @@ def main() -> int:
         raise RuntimeError(f"Request contains forbidden key material field: {forbidden}")
 
     handlers = {
+        "health": health,
+        "subnets": subnets,
+        "dynamic_subnet": dynamic_subnet,
         "metagraph": metagraph,
         "wallet": wallet,
         "quote": quote,

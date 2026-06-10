@@ -103,6 +103,144 @@ describe("TaoAppBittensorProvider", () => {
     expect(wallet.message).toContain("TAO_APP_API_KEY");
     if (previous !== undefined) process.env.TAO_APP_API_KEY = previous;
   });
+
+  test("uses configured sidecar for live-read shaped subnet, wallet, and quote data", async () => {
+    const previousSidecar = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const previousFetch = globalThis.fetch;
+    process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = "http://matterhorn-sidecar.test";
+
+    const json = (body: unknown) => new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/subnets")) {
+        return json({
+          source: "matterhorn-sidecar-mock",
+          subnets: [{
+            netuid: 77,
+            name: "Image subnet",
+            symbol: "SN77",
+            category: "Creative AI",
+            description: "Generate image and media outputs.",
+            priceTao: 0.25,
+            emission: 0.2,
+            tempo: 360,
+            source: "matterhorn-sidecar-mock",
+            block: 123,
+            freshness: "mock",
+          }],
+        });
+      }
+      if (url.endsWith("/subnets/77/dynamic")) {
+        return json({
+          netuid: 77,
+          name: "Image subnet",
+          symbol: "SN77",
+          description: "Generate image and media outputs.",
+          priceTao: 0.25,
+          emission: 0.2,
+          tempo: 360,
+          source: "matterhorn-sidecar-mock",
+          block: 124,
+          freshness: "mock",
+        });
+      }
+      if (url.endsWith("/subnets/77/metagraph")) {
+        return json({
+          netuid: 77,
+          source: "matterhorn-sidecar-mock",
+          block: 124,
+          n: 1,
+          totalStake: 500,
+          neurons: [{
+            uid: 9,
+            hotkey: VALID_SS58,
+            coldkey: VALID_SS58,
+            stake: 500,
+            trust: 0.8,
+            dividends: 0.2,
+            validator_permit: true,
+          }],
+        });
+      }
+      if (url.includes("/wallet/")) {
+        return json({
+          ss58Address: VALID_SS58,
+          taoBalance: 3,
+          stakedTao: 2,
+          estimatedValueTao: 5,
+          providerStatus: "ok",
+          source: "matterhorn-sidecar-mock",
+          block: 124,
+          freshness: "mock",
+          stakePositions: [{
+            netuid: 77,
+            subnetName: "Image subnet",
+            validatorHotkey: VALID_SS58,
+            alphaAmount: 8,
+            taoValue: 2,
+            slippageRisk: "low",
+          }],
+        });
+      }
+      if (url.endsWith("/extrinsics/quote")) {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        expect(body.netuid).toBe(77);
+        return json({
+          action: "stake",
+          netuid: 77,
+          amountTao: 1,
+          priceTao: 0.25,
+          idealAlpha: 4,
+          expectedAlpha: 3.98,
+          feeTao: 0.0001,
+          slippageBps: 50,
+          rateTolerance: 0.005,
+          source: "matterhorn-sidecar-mock",
+          block: 124,
+          freshness: "mock",
+          warnings: ["Mock sidecar quote."],
+          requiresExternalSignature: true,
+        });
+      }
+      return json({});
+    }) as typeof fetch;
+
+    try {
+      const provider = new TaoAppBittensorProvider();
+      const subnets = await provider.listSubnets();
+      expect(subnets[0]?.netuid).toBe(77);
+      expect(subnets[0]?.source).toBe("matterhorn-sidecar-mock");
+
+      const detail = await provider.getSubnet(77);
+      expect(detail.priceTao).toBe(0.25);
+      expect(detail.metagraphSummary.block).toBe(124);
+      expect(detail.topValidators[0]?.hotkey).toBe(VALID_SS58);
+
+      const wallet = await provider.getWallet(VALID_SS58);
+      expect(wallet.providerStatus).toBe("ok");
+      expect(wallet.source).toBe("matterhorn-sidecar-mock");
+      expect(wallet.stakePositions[0]?.netuid).toBe(77);
+      expect(buildBittensorWalletCard(wallet).items.some((item) => item.label === "Source")).toBe(true);
+
+      const quote = await provider.quoteAction({ action: "stake", netuid: 77, amountTao: "1", validatorHotkey: VALID_SS58 });
+      expect(quote.priceTao).toBe(0.25);
+      expect(quote.idealAlpha).toBe(4);
+      expect(quote.expectedAlpha).toBe(3.98);
+      expect(quote.source).toBe("matterhorn-sidecar-mock");
+      expect(buildBittensorQuoteCard(quote).items.some((item) => item.label === "Ideal alpha")).toBe(true);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousSidecar === undefined) {
+        delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+      } else {
+        process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previousSidecar;
+      }
+    }
+  });
 });
 
 describe("planBittensorChat", () => {

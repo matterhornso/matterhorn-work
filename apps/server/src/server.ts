@@ -48,7 +48,9 @@ import {
   submitSignedBittensorExtrinsic,
   type BittensorActionQuoteInput,
   type BittensorExtrinsicAction,
+  type BittensorExtrinsicPreview,
   type BittensorSubnetInvocation,
+  type BittensorWatch,
 } from "./tools/bittensor.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -3643,7 +3645,8 @@ function createRoutes(
       throw new ApiError(400, "invalid_preview", "preview is required");
     }
     try {
-      const handoff = createBittensorSigningHandoff(body.preview);
+      const preview = body.preview as BittensorExtrinsicPreview;
+      const handoff = createBittensorSigningHandoff(preview);
       return jsonResponse({ success: true, handoff, cards: [buildBittensorSigningHandoffCard(handoff)] });
     } catch (err) {
       throw new ApiError(400, "invalid_handoff", err instanceof Error ? err.message : "Could not create Bittensor signing handoff");
@@ -3655,8 +3658,9 @@ function createRoutes(
     if (!body.preview || typeof body.preview !== "object") {
       throw new ApiError(400, "invalid_preview", "preview is required");
     }
+    const preview = body.preview as BittensorExtrinsicPreview;
     const result = await submitSignedBittensorExtrinsic({
-      preview: body.preview,
+      preview,
       signature: typeof body.signature === "string" ? body.signature : null,
       signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
     });
@@ -3710,8 +3714,12 @@ function createRoutes(
 
   addRoute(routes, "POST", "/api/bittensor/monitoring/watchlist", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
+    const watchKind: BittensorWatch["kind"] =
+      typeof body.kind === "string" && ["subnet", "wallet", "validator", "emissions", "slippage"].includes(body.kind)
+        ? (body.kind as BittensorWatch["kind"])
+        : "subnet";
     const watch = createBittensorWatch({
-      kind: typeof body.kind === "string" ? body.kind : "subnet",
+      kind: watchKind,
       label: typeof body.label === "string" ? body.label : undefined,
       netuid: body.netuid === null || body.netuid === undefined || body.netuid === "" ? null : Number(body.netuid),
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,

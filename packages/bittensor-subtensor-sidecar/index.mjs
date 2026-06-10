@@ -47,6 +47,11 @@ function positiveAmount(value) {
   return parsed && parsed > 0 ? parsed : null;
 }
 
+function firstNumberForHealth(record, key) {
+  if (!record || typeof record !== "object") return null;
+  return numberOrNull(record[key]);
+}
+
 function forbiddenKeyPath(value, path = []) {
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
@@ -64,13 +69,97 @@ function forbiddenKeyPath(value, path = []) {
   return null;
 }
 
-function mockMetagraph(netuid) {
-  const now = new Date().toISOString();
+function liveMeta(source = MODE === "mock" ? "matterhorn-sidecar-mock" : "bittensor-python-sdk") {
   return {
     network: NETWORK,
-    netuid,
+    source,
+    fetchedAt: new Date().toISOString(),
     block: 123456,
+    freshness: MODE === "mock" ? "mock" : "live",
+  };
+}
+
+function mockDynamicSubnet(netuid) {
+  const known = {
+    0: {
+      name: "Root Network",
+      symbol: "ROOT",
+      category: "Network coordination",
+      description: "Coordinates Bittensor network-level incentives and delegation context.",
+      priceTao: null,
+      emission: 0,
+      tempo: 360,
+    },
+    1: {
+      name: "Subnet 1",
+      symbol: "SN1",
+      category: "Intelligence market",
+      description: "General Bittensor subnet used for capability discovery tests.",
+      priceTao: 1,
+      emission: 0.08,
+      tempo: 360,
+    },
+    14: {
+      name: "TAOHash",
+      symbol: "SN14",
+      category: "Compute and infrastructure",
+      description: "Compute and infrastructure subnet sample for validator and staking previews.",
+      priceTao: 0.5,
+      emission: 0.15,
+      tempo: 360,
+    },
+    22: {
+      name: "Creative Media",
+      symbol: "SN22",
+      category: "Creative AI",
+      description: "Creative/media-oriented sample for image-generation discovery prompts.",
+      priceTao: 0.8,
+      emission: 0.11,
+      tempo: 360,
+    },
+  };
+  const row = known[netuid] ?? {
+    name: `Subnet ${netuid}`,
+    symbol: `SN${netuid}`,
+    category: "Intelligence market",
+    description: "Bittensor subnet sample. Verify live SDK metadata before relying on current utility.",
+    priceTao: 1,
+    emission: null,
+    tempo: null,
+  };
+  return {
+    ...liveMeta(),
+    netuid,
+    name: row.name,
+    symbol: row.symbol,
+    category: row.category,
+    description: row.description,
+    priceTao: row.priceTao,
+    emission: row.emission,
+    tempo: row.tempo,
+    alphaIn: row.priceTao === null ? null : 20000,
+    alphaOut: row.priceTao === null ? null : 10000,
+    taoIn: row.priceTao === null ? null : 5000,
+    ownerColdkey: null,
+    ownerHotkey: null,
+    warnings: ["Mock sidecar data. Use Python SDK mode for live Finney reads."],
+  };
+}
+
+function mockSubnets() {
+  return {
+    ...liveMeta(),
+    subnets: [0, 1, 14, 22].map(mockDynamicSubnet),
+    warnings: ["Mock subnet list. Use Python SDK mode for live Finney subnet metadata."],
+  };
+}
+
+function mockMetagraph(netuid) {
+  return {
+    ...liveMeta(),
+    netuid,
     n: 3,
+    totalStake: 1760,
     neurons: [
       {
         uid: 1,
@@ -109,45 +198,60 @@ function mockMetagraph(netuid) {
         validator_permit: false,
       },
     ],
-    updatedAt: now,
-    source: "matterhorn-sidecar-mock",
+    warnings: ["Mock metagraph sample. Use Python SDK mode for live validator/miner state."],
   };
 }
 
 function mockWallet(ss58Address) {
   return {
+    ...liveMeta(),
     ss58Address,
     taoBalance: 12.345,
+    freeTao: 12.345,
+    stakedTao: 12.345,
     stakePositions: [
       {
         netuid: 14,
         subnetName: "TAOHash",
         validatorHotkey: "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF",
+        coldkey: ss58Address,
         alphaAmount: 24.69,
         taoValue: 12.345,
         slippageRisk: "low",
+        source: "matterhorn-sidecar-mock",
       },
     ],
     estimatedValueTao: 24.69,
     providerStatus: "ok",
     updatedAt: new Date().toISOString(),
     message: "Loaded from Matterhorn mock Subtensor sidecar.",
+    warnings: ["Mock wallet exposure. Use Python SDK mode for live Finney wallet and stake reads."],
   };
 }
 
 function quote(input) {
   const amountTao = positiveAmount(input.amountTao);
   const netuid = Number.isInteger(input.netuid) ? input.netuid : numberOrNull(input.netuid);
-  const priceTao = netuid === 14 ? 0.5 : 1;
+  const dynamic = mockDynamicSubnet(netuid ?? 1);
+  const priceTao = dynamic.priceTao && dynamic.priceTao > 0 ? dynamic.priceTao : 1;
   const expectedAlpha = amountTao ? amountTao / priceTao : null;
+  const idealAlpha = expectedAlpha;
   const slippageBps = amountTao === null ? null : amountTao > 10 ? 150 : amountTao > 1 ? 75 : 25;
+  const alphaWithSlippage = expectedAlpha === null || slippageBps === null
+    ? null
+    : expectedAlpha * (1 - slippageBps / 10_000);
   return {
+    ...liveMeta(),
     action: input.action || "stake",
     netuid,
     amountTao,
-    expectedAlpha,
+    priceTao,
+    idealAlpha,
+    expectedAlpha: alphaWithSlippage ?? expectedAlpha,
     feeTao: 0.0001,
     slippageBps,
+    rateTolerance: numberOrNull(input.rateTolerance) ?? 0.005,
+    dynamic,
     warnings: [
       "Mock sidecar quote. Use live Subtensor SDK mode before relying on chain economics.",
       "Signing remains external; the sidecar does not need seed phrases, mnemonics, or private keys.",
@@ -226,18 +330,37 @@ function pythonBridge(action, payload) {
 async function dispatch(req, res) {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
   if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/status")) {
+    const bridgeHealth = MODE === "python"
+      ? await pythonBridge("health", {}).catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Python SDK health check failed." }))
+      : null;
+    const sdkAvailable = MODE === "mock" || Boolean(bridgeHealth?.ok);
     return json(res, 200, {
       ok: true,
-      status: "healthy",
+      status: sdkAvailable ? "healthy" : "degraded",
       mode: MODE,
       network: NETWORK,
-      canRead: true,
-      canPrepare: true,
-      canSubmit: MODE === "python" && process.env.BITTENSOR_ENABLE_SUBMIT === "1",
+      sdkAvailable,
+      canRead: sdkAvailable,
+      canPrepare: sdkAvailable,
+      canSubmit: false,
+      block: firstNumberForHealth(bridgeHealth, "block") ?? 123456,
+      fetchedAt: new Date().toISOString(),
       message: MODE === "mock"
         ? "Matterhorn mock Subtensor sidecar is running. Broadcast submission is disabled."
-        : "Matterhorn Subtensor sidecar is running in Python SDK mode.",
+        : bridgeHealth?.message ?? "Matterhorn Subtensor sidecar is running in Python SDK mode.",
     });
+  }
+
+  if (req.method === "GET" && url.pathname === "/subnets") {
+    const data = MODE === "python" ? await pythonBridge("subnets", {}) : mockSubnets();
+    return json(res, 200, data);
+  }
+
+  const dynamicMatch = url.pathname.match(/^\/subnets\/(\d+)\/dynamic$/);
+  if (req.method === "GET" && dynamicMatch) {
+    const netuid = Number(dynamicMatch[1]);
+    const data = MODE === "python" ? await pythonBridge("dynamic_subnet", { netuid }) : mockDynamicSubnet(netuid);
+    return json(res, 200, data);
   }
 
   const metagraphMatch = url.pathname.match(/^\/subnets\/(\d+)\/metagraph$/);

@@ -239,8 +239,9 @@ Shared safety rules:
 
 1. Finish Bittensor readiness audit and remove blockers.
 2. Build Bittensor Subtensor sidecar contract/tests and live health probe. Delivered in PR #3 with `packages/bittensor-subtensor-sidecar`, deterministic mock mode, optional Python SDK bridge, health/status endpoints, metagraph/wallet reads, unsigned extrinsic previews, submit-disabled safety behavior, and no-secret contract tests.
-3. Build Hyperliquid read-only chat tools.
-4. Build Hyperliquid order previews, not submission.
-5. Build Polymarket read-only chat tools.
-6. Build Polymarket bet previews, not submission.
-7. Only after preview tests and no-secret audits pass, add signed submission flows.
+3. Promote TAO sidecar reads from contract-ready to live-read-ready: sidecar-first subnet list/detail, Dynamic TAO metadata, wallet/stake exposure, quote enrichment, source/freshness labels, and CI-safe mocked live-read tests.
+4. Build Hyperliquid read-only chat tools.
+5. Build Hyperliquid order previews, not submission.
+6. Build Polymarket read-only chat tools.
+7. Build Polymarket bet previews, not submission.
+8. Only after preview tests and no-secret audits pass, add signed submission flows.

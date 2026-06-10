@@ -30,6 +30,8 @@ export BITTENSOR_SUBTENSOR_SIDECAR_URL=http://127.0.0.1:9876
 Default mode. It provides deterministic development responses for:
 
 - sidecar health
+- subnet list
+- Dynamic TAO subnet info
 - subnet metagraph
 - wallet snapshot
 - Dynamic TAO-style quote shape
@@ -47,7 +49,16 @@ export BITTENSOR_SIDECAR_MODE=python
 
 This mode calls `python_bridge.py`, which expects the official `bittensor` Python package to be installed in the selected Python environment.
 
-The bridge currently supports public metagraph and wallet-balance reads defensively. Dynamic TAO exact quote expansion and signed-payload submission are intentionally conservative until SDK-version-specific tests are added.
+The bridge supports public read paths defensively:
+
+- sidecar health and SDK availability
+- subnet list via SDK subnet metadata where available
+- Dynamic TAO subnet info
+- metagraph reads
+- wallet balance and stake-position reads where the installed SDK exposes them
+- Dynamic TAO quote enrichment where the installed SDK exposes conversion helpers
+
+Signed-payload submission remains disabled until SDK-version-specific signed-payload verification tests are added.
 
 ## Endpoints
 
@@ -55,9 +66,28 @@ The bridge currently supports public metagraph and wallet-balance reads defensiv
 
 Returns sanitized sidecar status. Does not expose endpoint URLs or secrets.
 
+Submission is reported as disabled in this milestone. The sidecar is for live reads and unsigned previews first.
+
 ### `GET /status`
 
 Alias for `/health`.
+
+### `GET /subnets`
+
+Returns live-shaped subnet metadata:
+
+- `network`
+- `source`
+- `fetchedAt`
+- `block`
+- `freshness`
+- `subnets[]`
+
+Each subnet may include Dynamic TAO fields such as `priceTao`, `emission`, `tempo`, `alphaIn`, `alphaOut`, and `taoIn`.
+
+### `GET /subnets/:netuid/dynamic`
+
+Returns Dynamic TAO-style metadata for one subnet, including source and freshness fields.
 
 ### `GET /subnets/:netuid/metagraph`
 
@@ -86,6 +116,8 @@ Each neuron may include:
 
 Returns a watch-only wallet snapshot. The address must be a public SS58 address.
 
+The response may include `source`, `block`, `freshness`, `freeTao`, `stakedTao`, `stakePositions[]`, and `warnings`.
+
 ### `POST /extrinsics/quote`
 
 Returns quote shape compatible with Matterhorn:
@@ -93,9 +125,15 @@ Returns quote shape compatible with Matterhorn:
 - `action`
 - `netuid`
 - `amountTao`
+- `priceTao`
+- `idealAlpha`
 - `expectedAlpha`
 - `feeTao`
 - `slippageBps`
+- `rateTolerance`
+- `source`
+- `block`
+- `freshness`
 - `warnings`
 - `requiresExternalSignature`
 
@@ -116,4 +154,3 @@ Future SDK submission must only accept already-signed payloads and must include 
 - Mock mode must never pretend to broadcast.
 - Matterhorn remains non-custodial.
 - Every signed Bittensor action must be reviewed and signed externally.
-
