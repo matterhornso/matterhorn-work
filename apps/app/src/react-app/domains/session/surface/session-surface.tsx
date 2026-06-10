@@ -60,6 +60,15 @@ import {
   getComposerPasteParts,
   useComposerStateStore,
 } from "./composer-state-store";
+import {
+  addBittensorContextToResolvedText,
+  describeBittensorSessionContext,
+  getBittensorSessionContext,
+  mergeBittensorSessionContexts,
+  readBittensorContextFromEventDetail,
+  useBittensorSessionContextStore,
+  type BittensorSessionContext,
+} from "./bittensor-context-store";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
@@ -411,6 +420,26 @@ function SessionErrorCard({ error, onDismiss, onChangeModel, onOpenModelPicker }
   );
 }
 
+function BittensorContextStrip(props: { context: BittensorSessionContext; onClear: () => void }) {
+  return (
+    <div className="border-b border-dls-border bg-dls-surface/70 px-4 py-2">
+      <div className="flex min-w-0 items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="font-medium text-dls-text">Bittensor context active</div>
+          <div className="truncate text-dls-secondary">{describeBittensorSessionContext(props.context)}</div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }) {
   if (!attachment.previewUrl) return;
   URL.revokeObjectURL(attachment.previewUrl);
@@ -432,6 +461,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const setComposerMentions = useComposerStateStore((state) => state.setMentions);
   const setComposerPasteParts = useComposerStateStore((state) => state.setPasteParts);
   const clearComposerSession = useComposerStateStore((state) => state.clearSession);
+  const bittensorContext = useBittensorSessionContextStore((state) => getBittensorSessionContext(state, props.sessionId));
+  const setBittensorContext = useBittensorSessionContextStore((state) => state.setContext);
+  const clearBittensorContext = useBittensorSessionContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
@@ -699,7 +731,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
     isError: snapshotQuery.isError || Boolean(error),
   });
 
-  const buildDraft = useCallback((text: string, nextAttachments: ComposerAttachment[]): ComposerDraft => {
+  const buildDraft = useCallback((
+    text: string,
+    nextAttachments: ComposerAttachment[],
+    options?: { resolvedText?: string },
+  ): ComposerDraft => {
     const parts: ComposerPart[] = text.split(/(\[pasted text [^\]]+\]|@[^\s@]+)/).flatMap((segment) => {
       if (!segment) return [] as ComposerDraft["parts"];
       const pasteMatch = segment.match(/^\[pasted text (.+)\]$/);
@@ -719,7 +755,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     });
     // Expand paste placeholders in resolvedText so the model receives
     // the actual pasted content instead of "[pasted text <label>]".
-    let resolved = text;
+    let resolved = options?.resolvedText ?? text;
     for (const part of pasteParts) {
       resolved = resolved.replace(`[pasted text ${part.label}]`, part.text);
     }
@@ -763,7 +799,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setAwaitingAssistantBaseline(renderedMessages.length);
     setNoVisibleAssistantOutputBaseline(null);
     try {
-      const nextDraft = buildDraft(text, attachments);
+      const resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
+      const nextDraft = buildDraft(text, attachments, { resolvedText });
+      if (resolvedText !== text) {
+        recordInspectorEvent("bittensor.context.resolved_text_attached", {
+          workspaceId: props.workspaceId,
+          sessionId: props.sessionId,
+          contextId: bittensorContext?.id,
+        });
+      }
       await props.onSendDraft(nextDraft);
       attachments.forEach(revokeAttachmentPreview);
       clearComposerSession(props.sessionId);
@@ -778,7 +822,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [attachments, buildDraft, clearComposerSession, draft, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [attachments, bittensorContext, buildDraft, clearComposerSession, draft, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
@@ -893,24 +937,47 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [props.sessionId, setComposerDraft]);
 
   useEffect(() => {
+    const handleBittensorContextUpdated = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const context = readBittensorContextFromEventDetail(event.detail);
+      if (!context) return;
+      setBittensorContext(props.sessionId, context);
+      recordInspectorEvent("bittensor.context.updated", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        contextId: context.id,
+      });
+    };
+    window.addEventListener("matterhorn:bittensor-context-updated", handleBittensorContextUpdated);
+    return () => window.removeEventListener("matterhorn:bittensor-context-updated", handleBittensorContextUpdated);
+  }, [props.sessionId, props.workspaceId, setBittensorContext]);
+
+  useEffect(() => {
     const handleBittensorChatHandoff = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
       const detail: unknown = event.detail;
       if (!detail || typeof detail !== "object" || Array.isArray(detail)) return;
       const record = detail as { prompt?: unknown; text?: unknown; message?: unknown };
+      const incomingContext = readBittensorContextFromEventDetail(detail);
+      const mergedContext = mergeBittensorSessionContexts(bittensorContext, incomingContext);
       const text =
         typeof record.prompt === "string" ? record.prompt :
         typeof record.text === "string" ? record.text :
         typeof record.message === "string" ? record.message :
         "";
       if (!text.trim()) return;
+      if (incomingContext) {
+        setBittensorContext(props.sessionId, incomingContext);
+      }
+      const resolvedText = addBittensorContextToResolvedText(text, mergedContext);
       void typeComposerText(text);
-      props.onDraftChange(buildDraft(text, attachments));
+      props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
       setNotice({ title: "Bittensor prompt ready", description: "Review or send it from the chat composer.", tone: "info" });
       recordInspectorEvent("bittensor.chat_handoff.applied", {
         workspaceId: props.workspaceId,
         sessionId: props.sessionId,
         length: text.length,
+        contextId: mergedContext?.id,
       });
     };
     window.addEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
@@ -919,7 +986,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       window.removeEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
       window.removeEventListener("matterhorn:bittensor-agent-prompt", handleBittensorChatHandoff);
     };
-  }, [attachments, buildDraft, props.onDraftChange, props.sessionId, props.workspaceId, typeComposerText]);
+  }, [attachments, bittensorContext, buildDraft, props.onDraftChange, props.sessionId, props.workspaceId, setBittensorContext, typeComposerText]);
 
   useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {
@@ -1133,6 +1200,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
     },
   }), [props.sessionId, renderedMessages]);
   useControlAction(sessionReadTranscriptControlAction);
+
+  const hasTodoContent = (props.todos ?? []).some((todo) => todo.content.trim());
+  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || bittensorContext);
 
   return (
     <DevProfiler id="SessionSurface">
@@ -1353,9 +1423,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
         isRemoteWorkspace={props.isRemoteWorkspace}
           isSandboxWorkspace={props.isSandboxWorkspace}
           onUploadInboxFiles={props.onUploadInboxFiles ?? handleUploadInboxFiles}
-          compactTopSpacing={Boolean(props.activeQuestion || (props.todos ?? []).some((todo) => todo.content.trim()) || props.activePermission)}
+          compactTopSpacing={hasComposerTopAccessory}
           topAccessory={
-            props.activeQuestion || (props.todos ?? []).some((todo) => todo.content.trim()) || props.activePermission ? (
+            hasComposerTopAccessory ? (
               <div>
                 {props.activeQuestion ? (
                   <QuestionPanel
@@ -1376,6 +1446,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     busy={props.permissionReplyBusy}
                     respondPermission={props.respondPermission}
                     safeStringify={props.safeStringify}
+                  />
+                ) : null}
+                {bittensorContext ? (
+                  <BittensorContextStrip
+                    context={bittensorContext}
+                    onClear={() => {
+                      clearBittensorContext(props.sessionId);
+                      setNotice({ title: "Bittensor context cleared", tone: "info" });
+                    }}
                   />
                 ) : null}
               </div>
