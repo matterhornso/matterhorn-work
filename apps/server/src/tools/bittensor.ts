@@ -30,6 +30,8 @@ export interface BittensorSubnetSummary {
   tempo: number | null;
   updatedAt: string;
   source: string;
+  block?: number | null;
+  freshness?: string | null;
 }
 
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
@@ -68,15 +70,25 @@ export interface BittensorWalletSnapshot {
   providerStatus: BittensorProviderStatus;
   updatedAt: string;
   message?: string;
+  source?: string;
+  block?: number | null;
+  freshness?: string | null;
+  warnings?: string[];
 }
 
 export interface BittensorActionQuote {
   action: "stake" | "unstake" | "transfer" | "compare";
   netuid: number | null;
   amountTao: number | null;
+  priceTao?: number | null;
+  idealAlpha?: number | null;
   expectedAlpha: number | null;
   feeTao: number | null;
   slippageBps: number | null;
+  rateTolerance?: number | null;
+  source?: string;
+  block?: number | null;
+  freshness?: string | null;
   warnings: string[];
   requiresExternalSignature: true;
 }
@@ -526,22 +538,23 @@ export function getSubtensorSidecarStatus(): BittensorSubtensorSidecarStatus {
     network: bittensorNetwork(),
     canRead: configured,
     canPrepare: configured,
-    canSubmit: configured,
+    canSubmit: false,
     message: configured
-      ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation while keeping signing external."
+      ? "Subtensor sidecar is configured. Matterhorn can request live chain reads and unsigned payload preparation while keeping signing external; submission remains disabled for this TAO milestone."
       : "Subtensor sidecar is not configured. Matterhorn will use TAO.app analytics and local safe fallbacks.",
   };
 }
 
-async function probeSidecarPath(baseUrl: string, path: string): Promise<boolean> {
+async function probeSidecarPath(baseUrl: string, path: string): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(`${baseUrl}${path}`, {
       headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(3_000),
     });
-    return res.ok;
+    if (!res.ok) return null;
+    return asRecord(await res.json());
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -560,7 +573,8 @@ export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorS
   }
 
   const started = Date.now();
-  const reachable = await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
+  const payload = await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
+  const reachable = Boolean(payload);
   const latencyMs = Date.now() - started;
   return {
     ...baseStatus,
@@ -568,11 +582,11 @@ export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorS
     status: reachable ? "healthy" : "unreachable",
     latencyMs,
     checkedAt,
-    canRead: reachable,
-    canPrepare: reachable,
-    canSubmit: reachable,
+    canRead: reachable && payload?.["canRead"] !== false,
+    canPrepare: reachable && payload?.["canPrepare"] !== false,
+    canSubmit: reachable && payload?.["canSubmit"] === true,
     message: reachable
-      ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and signed-payload submission while keeping signing external."
+      ? "Subtensor sidecar is configured and reachable. Matterhorn can use it for live chain reads and unsigned payload preparation while keeping signing external."
       : "Subtensor sidecar is configured but not reachable. Matterhorn will fall back to TAO.app analytics and local safe behavior.",
   };
 }
@@ -597,6 +611,14 @@ class SubtensorSidecarClient {
 
   async getSubnetMetagraph(netuid: number): Promise<unknown | null> {
     return this.request(`/subnets/${encodeURIComponent(String(netuid))}/metagraph`);
+  }
+
+  async listSubnets(): Promise<Record<string, unknown> | null> {
+    return this.request("/subnets");
+  }
+
+  async getSubnetDynamic(netuid: number): Promise<Record<string, unknown> | null> {
+    return this.request(`/subnets/${encodeURIComponent(String(netuid))}/dynamic`);
   }
 
   async getWallet(ss58Address: string): Promise<Record<string, unknown> | null> {
@@ -788,7 +810,7 @@ function benefitFor(category: string, description: string): string {
   return benefits[category] ?? "A Bittensor subnet. Verify live metadata before relying on its current utility.";
 }
 
-function normalizeSubnet(value: unknown): BittensorSubnetSummary | null {
+function normalizeSubnet(value: unknown, sourceOverride?: string): BittensorSubnetSummary | null {
   const record = asRecord(value);
   const netuid = firstNumber(record, ["netuid", "net_uid", "uid", "subnet_id", "id"]);
   if (netuid === null) return null;
@@ -803,8 +825,9 @@ function normalizeSubnet(value: unknown): BittensorSubnetSummary | null {
     firstString(record, ["description", "subtitle", "summary", "emission_summary", "subnet_description"]) ?? "";
   const category = inferCategory(name, description);
   const updatedAt =
-    firstString(record, ["updated_at", "timestamp", "created_at"]) ??
+    firstString(record, ["updatedAt", "updated_at", "timestamp", "created_at", "fetchedAt", "fetched_at"]) ??
     nowIso();
+  const source = sourceOverride ?? firstString(record, ["source", "provider", "dataSource", "data_source"]) ?? "tao.app";
 
   return {
     netuid,
@@ -814,11 +837,13 @@ function normalizeSubnet(value: unknown): BittensorSubnetSummary | null {
     benefitSummary: benefitFor(category, description),
     ownerColdkey: firstString(record, ["owner_coldkey", "ownerColdkey", "coldkey"]),
     ownerHotkey: firstString(record, ["owner_hotkey", "ownerHotkey", "hotkey"]),
-    priceTao: firstNumber(record, ["price", "price_tao", "moving_price", "alpha_price", "subnet_price"]),
+    priceTao: firstNumber(record, ["priceTao", "price_tao", "price", "moving_price", "alpha_price", "subnet_price"]),
     emission: firstNumber(record, ["emission", "subnet_emission", "alpha_out_emission", "tao_in_emission"]),
     tempo: firstNumber(record, ["tempo"]),
     updatedAt,
-    source: "tao.app",
+    source,
+    block: firstNumber(record, ["block", "blockNumber", "block_number"]),
+    freshness: firstString(record, ["freshness", "dataFreshness", "data_freshness"]),
   };
 }
 
@@ -939,9 +964,15 @@ export function buildBittensorQuote(input: BittensorActionQuoteInput, subnet?: B
     action: input.action,
     netuid,
     amountTao,
+    priceTao: price,
+    idealAlpha: expectedAlpha,
     expectedAlpha,
     feeTao: input.action === "compare" ? null : 0.0001,
     slippageBps,
+    rateTolerance: null,
+    source: subnet?.source ?? "matterhorn-local-quote",
+    block: subnet?.block ?? null,
+    freshness: subnet?.freshness ?? null,
     warnings,
     requiresExternalSignature: true,
   };
@@ -1220,10 +1251,10 @@ export function getBittensorSignerStatus(address?: string | null): BittensorSign
       mode: "sidecar",
       available: true,
       canSign: false,
-      canSubmit: true,
+      canSubmit: false,
       network: bittensorNetwork(),
       address: address && isValidSs58Address(address) ? address : null,
-      message: "Subtensor sidecar is configured for signed payload submission. Signing still happens outside Matterhorn.",
+      message: "Subtensor sidecar is configured for live reads and unsigned payload preparation. Submission stays disabled until signed-payload verification is tested.",
     };
   }
   return {
@@ -2071,8 +2102,10 @@ export function buildBittensorWalletCard(wallet: BittensorWalletSnapshot): Bitte
       cardItem("Staked value", `${formatMetric(stakeTotal)} TAO`),
       cardItem("Positions", wallet.stakePositions.length),
       cardItem("Highest risk", riskiest ? `${riskiest.subnetName}: ${riskiest.slippageRisk}` : "Unavailable", riskiest?.slippageRisk === "high" ? "warning" : "muted"),
+      cardItem("Source", wallet.source ?? "provider", wallet.source?.includes("mock") ? "warning" : "muted"),
+      cardItem("Block", wallet.block ?? "Unavailable", wallet.block === null || wallet.block === undefined ? "muted" : "default"),
     ],
-    warnings: wallet.providerStatus === "ok" ? [] : [wallet.message ?? "Wallet provider data is unavailable."],
+    warnings: wallet.providerStatus === "ok" ? wallet.warnings ?? [] : [wallet.message ?? "Wallet provider data is unavailable."],
     data: { wallet },
   };
 }
@@ -2086,9 +2119,12 @@ export function buildBittensorQuoteCard(quote: BittensorActionQuote): BittensorC
     tone: quote.warnings.length ? "warning" : "default",
     items: [
       cardItem("Amount", quote.amountTao === null ? "Unavailable" : `${formatMetric(quote.amountTao)} TAO`),
+      cardItem("Price", quote.priceTao === null || quote.priceTao === undefined ? "Unavailable" : `${formatMetric(quote.priceTao)} TAO`),
+      cardItem("Ideal alpha", formatMetric(quote.idealAlpha)),
       cardItem("Expected alpha", formatMetric(quote.expectedAlpha)),
       cardItem("Estimated fee", quote.feeTao === null ? "Unavailable" : `${formatMetric(quote.feeTao, " TAO", 6)}`),
       cardItem("Slippage", formatPercentFromBps(quote.slippageBps), quote.slippageBps && quote.slippageBps > 100 ? "warning" : "default"),
+      cardItem("Source", quote.source ?? "provider", quote.source?.includes("mock") ? "warning" : "muted"),
     ],
     actions: [{
       label: "Review in chat",
@@ -2416,16 +2452,29 @@ function normalizeSidecarWalletSnapshot(
     estimatedValueTao,
     providerStatus: "ok",
     updatedAt: firstString(source, ["updatedAt", "updated_at", "timestamp"]) ?? nowIso(),
-    message: "Loaded from configured Subtensor sidecar.",
+    message: `Loaded from configured Subtensor sidecar${firstString(source, ["source"]) ? ` (${firstString(source, ["source"])})` : ""}.`,
+    source: firstString(source, ["source", "provider", "dataSource", "data_source"]) ?? "subtensor-sidecar",
+    block: firstNumber(source, ["block", "blockNumber", "block_number"]),
+    freshness: firstString(source, ["freshness", "dataFreshness", "data_freshness"]),
+    warnings: arrayFrom(source["warnings"]).filter((item): item is string => typeof item === "string" && item.trim().length > 0),
   };
 }
 
 export class TaoAppBittensorProvider implements BittensorProvider {
   async listSubnets(): Promise<BittensorSubnetSummary[]> {
-    return cached("bittensor:subnets", async () => {
+    return cached(`bittensor:subnets:${sidecarBaseUrl() || "tao-app"}`, async () => {
+      const sidecar = subtensorSidecarClient();
+      if (sidecar) {
+        const data = await sidecar.listSubnets();
+        const normalized = arrayFrom(data?.["subnets"] ?? data)
+          .map((row) => normalizeSubnet(row, firstString(asRecord(row), ["source"]) ?? "subtensor-sidecar"))
+          .filter(Boolean) as BittensorSubnetSummary[];
+        if (normalized.length) return normalized.sort((a, b) => a.netuid - b.netuid);
+      }
+
       try {
         const data = await taoAppClient().get("/api/beta/analytics/subnets/info");
-        const normalized = arrayFrom(data).map(normalizeSubnet).filter(Boolean) as BittensorSubnetSummary[];
+        const normalized = arrayFrom(data).map((row) => normalizeSubnet(row, "tao.app")).filter(Boolean) as BittensorSubnetSummary[];
         return normalized.length ? normalized.sort((a, b) => a.netuid - b.netuid) : FALLBACK_SUBNETS;
       } catch {
         return FALLBACK_SUBNETS;
@@ -2438,15 +2487,23 @@ export class TaoAppBittensorProvider implements BittensorProvider {
       const subnets = await this.listSubnets();
       let summary = subnets.find((item) => item.netuid === netuid) ?? fallbackSubnet(netuid);
       let metagraphRaw: unknown = null;
+      const sidecar = subtensorSidecarClient();
 
-      try {
-        const data = await taoAppClient().get(`/api/beta/analytics/subnets/info/${netuid}`);
-        summary = normalizeSubnet(data) ?? summary;
-      } catch {
-        // Keep list/fallback summary.
+      if (sidecar) {
+        const dynamicRaw = await sidecar.getSubnetDynamic(netuid);
+        const dynamicSummary = dynamicRaw ? normalizeSubnet(dynamicRaw, firstString(dynamicRaw, ["source"]) ?? "subtensor-sidecar") : null;
+        if (dynamicSummary) summary = dynamicSummary;
       }
 
-      const sidecar = subtensorSidecarClient();
+      if (!summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
+        try {
+          const data = await taoAppClient().get(`/api/beta/analytics/subnets/info/${netuid}`);
+          summary = normalizeSubnet(data, "tao.app") ?? summary;
+        } catch {
+          // Keep list/fallback summary.
+        }
+      }
+
       if (sidecar) {
         metagraphRaw = await sidecar.getSubnetMetagraph(netuid);
       }
@@ -2553,17 +2610,23 @@ export class TaoAppBittensorProvider implements BittensorProvider {
   async quoteAction(input: BittensorActionQuoteInput): Promise<BittensorActionQuote> {
     const netuid = typeof input.netuid === "number" && Number.isFinite(input.netuid) ? input.netuid : null;
     const subnet = netuid === null ? undefined : await this.getSubnet(netuid).catch(() => fallbackSubnet(netuid));
-  const local = buildBittensorQuote(input, subnet);
-  const sidecar = subtensorSidecarClient();
-  if (!sidecar) return local;
-  const sidecarQuote = await sidecar.quoteAction(input);
-  if (!sidecarQuote) return local;
-  const sidecarWarnings = arrayFrom(sidecarQuote["warnings"]).filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    const local = buildBittensorQuote(input, subnet);
+    const sidecar = subtensorSidecarClient();
+    if (!sidecar) return local;
+    const sidecarQuote = await sidecar.quoteAction(input);
+    if (!sidecarQuote) return local;
+    const sidecarWarnings = arrayFrom(sidecarQuote["warnings"]).filter((item): item is string => typeof item === "string" && item.trim().length > 0);
     return {
       ...local,
+      priceTao: firstNumber(sidecarQuote, ["priceTao", "price_tao", "price"]) ?? local.priceTao,
+      idealAlpha: firstNumber(sidecarQuote, ["idealAlpha", "ideal_alpha"]) ?? local.idealAlpha,
       expectedAlpha: firstNumber(sidecarQuote, ["expectedAlpha", "expected_alpha", "alphaOut", "alpha_out"]) ?? local.expectedAlpha,
       feeTao: firstNumber(sidecarQuote, ["feeTao", "fee_tao", "partialFeeTao", "partial_fee_tao"]) ?? local.feeTao,
       slippageBps: firstNumber(sidecarQuote, ["slippageBps", "slippage_bps", "priceImpactBps", "price_impact_bps"]) ?? local.slippageBps,
+      rateTolerance: firstNumber(sidecarQuote, ["rateTolerance", "rate_tolerance"]) ?? local.rateTolerance,
+      source: firstString(sidecarQuote, ["source", "provider", "dataSource", "data_source"]) ?? local.source,
+      block: firstNumber(sidecarQuote, ["block", "blockNumber", "block_number"]) ?? local.block,
+      freshness: firstString(sidecarQuote, ["freshness", "dataFreshness", "data_freshness"]) ?? local.freshness,
       warnings: [...local.warnings, "Quote enriched by configured Subtensor sidecar.", ...sidecarWarnings],
     };
   }

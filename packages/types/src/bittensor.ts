@@ -13,6 +13,8 @@ export type BittensorSubnetSummary = {
   tempo: number | null;
   updatedAt: string;
   source: string;
+  block?: number | null;
+  freshness?: string | null;
 };
 
 export type BittensorSubnetDetail = BittensorSubnetSummary & {
@@ -51,15 +53,25 @@ export type BittensorWalletSnapshot = {
   providerStatus: BittensorProviderStatus;
   updatedAt: string;
   message?: string;
+  source?: string;
+  block?: number | null;
+  freshness?: string | null;
+  warnings?: string[];
 };
 
 export type BittensorActionQuote = {
   action: "stake" | "unstake" | "transfer" | "compare";
   netuid: number | null;
   amountTao: number | null;
+  priceTao?: number | null;
+  idealAlpha?: number | null;
   expectedAlpha: number | null;
   feeTao: number | null;
   slippageBps: number | null;
+  rateTolerance?: number | null;
+  source?: string;
+  block?: number | null;
+  freshness?: string | null;
   warnings: string[];
   requiresExternalSignature: true;
 };
