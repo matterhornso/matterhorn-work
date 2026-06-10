@@ -332,6 +332,29 @@ export interface BittensorChatCard {
   data?: Record<string, unknown>;
 }
 
+export type BittensorChatExecutionInput = {
+  message: string;
+  ss58Address?: string | null;
+  netuid?: number | null;
+  amountTao?: number | string | null;
+  validatorHotkey?: string | null;
+  coldkey?: string | null;
+  limit?: number | null;
+  strategy?: BittensorValidatorComparison["strategy"] | null;
+  rateTolerance?: number | null;
+};
+
+export type BittensorChatExecutionResult = {
+  plan: BittensorPlan;
+  responseText: string;
+  cards: BittensorChatCard[];
+  data: Record<string, unknown>;
+  warnings: string[];
+  requiresClarification: boolean;
+  clarificationQuestion: string | null;
+  execution: "answered" | "clarification_required" | "unsigned_preview" | "unsupported";
+};
+
 export type BittensorExtrinsicPrepareInput = {
   action: BittensorExtrinsicAction;
   netuid?: number | null;
@@ -1000,9 +1023,9 @@ function classifyBittensorIntent(text: string): { intent: BittensorChatIntent; c
   const lower = text.toLowerCase();
   if (/(watch|alert|monitor|notify|track)/.test(lower)) return { intent: "monitor", confidence: 0.86 };
   if (/(i'?m new|explain|what is|teach me|learn|beginner)/.test(lower)) return { intent: "learn", confidence: 0.86 };
-  if (/(stake|unstake|delegate|delegat|transfer|move stake|hotkey|coldkey|validator|slippage|alpha)/.test(lower)) return { intent: "stake_plan", confidence: 0.9 };
+  if (/(stake|staking|unstake|delegate|delegat|transfer|move stake|hotkey|coldkey|validator|slippage|alpha)/.test(lower)) return { intent: "stake_plan", confidence: 0.9 };
   if (/(wallet|balance|position|portfolio|my tao|show me my tao|allocation)/.test(lower)) return { intent: "wallet", confidence: 0.88 };
-  if (/(use|run|call|invoke|ask subnet|submit.*to subnet|send.*to subnet)/.test(lower)) return { intent: "subnet_use", confidence: 0.78 };
+  if (/\b(use|run|call|invoke)\b|ask subnet|submit.*to subnet|send.*to subnet/.test(lower)) return { intent: "subnet_use", confidence: 0.78 };
   if (/(find|which|compare|best|recommend|discover|image|video|data|compute|agent|tool|subnet)/.test(lower)) return { intent: "discover", confidence: 0.82 };
   return { intent: "learn", confidence: /bittensor|tao|subnet/.test(lower) ? 0.8 : 0.55 };
 }
@@ -1090,6 +1113,289 @@ export function planBittensorChat(input: { message: string; ss58Address?: string
       : needsStakeDetails
         ? "Which subnet netuid should this staking plan use?"
         : null,
+  };
+}
+
+function uniqueWarnings(...groups: Array<Array<string | null | undefined> | undefined>): string[] {
+  const seen = new Set<string>();
+  const warnings: string[] = [];
+  for (const group of groups) {
+    for (const item of group ?? []) {
+      const warning = typeof item === "string" ? item.trim() : "";
+      if (!warning || seen.has(warning)) continue;
+      seen.add(warning);
+      warnings.push(warning);
+    }
+  }
+  return warnings;
+}
+
+function resolveExecutionSs58(input: BittensorChatExecutionInput, plan: BittensorPlan): string | null {
+  if (input.ss58Address && isValidSs58Address(input.ss58Address)) return input.ss58Address;
+  if (input.coldkey && isValidSs58Address(input.coldkey)) return input.coldkey;
+  if (plan.ss58Address && isValidSs58Address(plan.ss58Address)) return plan.ss58Address;
+  return extractSs58(input.message);
+}
+
+function resolveExecutionNetuid(input: BittensorChatExecutionInput, plan: BittensorPlan): number | null {
+  if (typeof input.netuid === "number" && Number.isInteger(input.netuid) && input.netuid >= 0) return input.netuid;
+  return plan.netuids[0] ?? null;
+}
+
+function resolveExecutionLimit(input: BittensorChatExecutionInput, fallback: number): number {
+  const parsed = Number(input.limit);
+  return Number.isFinite(parsed) ? Math.min(12, Math.max(1, Math.floor(parsed))) : fallback;
+}
+
+function resolveExecutionStrategy(input: BittensorChatExecutionInput): BittensorValidatorComparison["strategy"] {
+  return input.strategy === "yield" || input.strategy === "safety" || input.strategy === "balanced"
+    ? input.strategy
+    : "balanced";
+}
+
+function resolveExecutionHotkey(input: BittensorChatExecutionInput): string | null {
+  return input.validatorHotkey && isValidSs58Address(input.validatorHotkey) ? input.validatorHotkey : null;
+}
+
+function extractExecutionAmountTao(input: BittensorChatExecutionInput): string | null {
+  const explicit = parseAmountTao(input.amountTao);
+  if (explicit !== null) return String(explicit);
+  const message = input.message;
+  const taoMatch = message.match(/\b(\d+(?:\.\d+)?)\s*TAO\b/i);
+  if (taoMatch && parseAmountTao(taoMatch[1]) !== null) return taoMatch[1];
+  const actionMatch = message.match(/\b(?:stake|staking|unstake|transfer)\s+(\d+(?:\.\d+)?)\b/i);
+  if (actionMatch && parseAmountTao(actionMatch[1]) !== null) return actionMatch[1];
+  return null;
+}
+
+function isWalletQuestion(message: string, plan: BittensorPlan): boolean {
+  return plan.intent === "wallet" || /\b(show|check|read|what'?s|where).*?\b(my\s+)?TAO\b/i.test(message);
+}
+
+function isStakePositionQuestion(message: string): boolean {
+  return /\b(where|how|what).*?\bstaked\b/i.test(message) ||
+    /\b(stake positions|where am i staked|where i am staked|validator exposure|allocation)\b/i.test(message);
+}
+
+function isImageDiscoveryQuestion(message: string, plan: BittensorPlan): boolean {
+  return plan.intent === "discover" && /(image|media|creative|art|render|vision|design|generate)/i.test(message);
+}
+
+function isValidatorComparisonQuestion(message: string): boolean {
+  return /\b(compare|rank|find|show|which|best)\b.*\bvalidators?\b/i.test(message) ||
+    /\bvalidators?\b.*\b(compare|rank|selection|shortlist)\b/i.test(message);
+}
+
+function isStakePreviewQuestion(message: string, plan: BittensorPlan): boolean {
+  return plan.intent === "stake_plan" || /\b(stake|staking|unstake|move stake|transfer)\b/i.test(message);
+}
+
+function buildStakePositionsCard(wallet: BittensorWalletSnapshot): BittensorChatCard {
+  const positions = [...wallet.stakePositions].sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0));
+  const total = positions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0);
+  const highestRisk = positions.find((position) => position.slippageRisk === "high")
+    ?? positions.find((position) => position.slippageRisk === "medium")
+    ?? positions[0]
+    ?? null;
+  return {
+    kind: "wallet_snapshot",
+    title: "Stake positions",
+    subtitle: shortSs58(wallet.ss58Address),
+    summary: positions.length
+      ? `Top stake positions sorted by TAO value. Total sampled stake value: ${formatMetric(total)} TAO.`
+      : "No subnet stake positions were returned by the current wallet provider.",
+    tone: wallet.providerStatus === "ok" && positions.length ? "default" : "warning",
+    items: [
+      cardItem("Positions", positions.length),
+      cardItem("Total staked value", `${formatMetric(total)} TAO`),
+      cardItem("Highest slippage risk", highestRisk ? `${highestRisk.subnetName}: ${highestRisk.slippageRisk}` : "Unavailable", highestRisk?.slippageRisk === "high" ? "warning" : "muted"),
+      cardItem("Source", wallet.source ?? "provider", wallet.source?.includes("fallback") ? "warning" : "muted"),
+      cardItem("Block", wallet.block ?? "Unavailable", wallet.block === null || wallet.block === undefined ? "muted" : "default"),
+      cardItem("Freshness", wallet.freshness ?? "Unavailable", wallet.freshness ? "default" : "muted"),
+    ],
+    warnings: wallet.providerStatus === "ok" ? wallet.warnings ?? [] : [wallet.message ?? "Wallet provider data is unavailable."],
+    data: { wallet, positions: positions.slice(0, 8) },
+  };
+}
+
+function clarificationResult(
+  plan: BittensorPlan,
+  question: string,
+  cards: BittensorChatCard[] = buildBittensorPlanCards({ ...plan, requiresClarification: true, clarificationQuestion: question }),
+  warnings: string[] = [],
+  data: Record<string, unknown> = {},
+): BittensorChatExecutionResult {
+  return {
+    plan: { ...plan, requiresClarification: true, clarificationQuestion: question },
+    responseText: question,
+    cards,
+    data,
+    warnings: uniqueWarnings(plan.safetyNotes, warnings),
+    requiresClarification: true,
+    clarificationQuestion: question,
+    execution: "clarification_required",
+  };
+}
+
+export async function executeBittensorChatWorkflow(input: BittensorChatExecutionInput): Promise<BittensorChatExecutionResult> {
+  const message = String(input.message ?? "").trim();
+  const plan = planBittensorChat({ message, ss58Address: input.ss58Address ?? input.coldkey ?? null });
+  const answeredPlan = { ...plan, requiresClarification: false, clarificationQuestion: null };
+  const warnings = [...plan.safetyNotes];
+
+  if (!message) {
+    return clarificationResult(plan, "What would you like to do with Bittensor?");
+  }
+
+  if (isStakePositionQuestion(message) || isWalletQuestion(message, plan)) {
+    const ss58Address = resolveExecutionSs58(input, plan);
+    if (!ss58Address) {
+      return clarificationResult(plan, "I can show your TAO and stake exposure, but I need your SS58 coldkey public address.");
+    }
+    const wallet = await bittensorProvider.getWallet(ss58Address);
+    const cards = [buildBittensorWalletCard(wallet)];
+    if (isStakePositionQuestion(message) || wallet.stakePositions.length) cards.push(buildStakePositionsCard(wallet));
+    const stakeTotal = wallet.stakePositions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0);
+    return {
+      plan: { ...answeredPlan, intent: "wallet", responseCards: ["wallet_snapshot"] },
+      responseText: wallet.providerStatus === "ok"
+        ? `Loaded watch-only TAO wallet context for ${shortSs58(ss58Address)}: ${formatMetric(wallet.taoBalance)} free TAO, ${formatMetric(stakeTotal)} TAO staked across ${wallet.stakePositions.length} position(s).`
+        : wallet.message ?? `I could not load wallet data for ${shortSs58(ss58Address)} from the current provider.`,
+      cards,
+      data: { wallet },
+      warnings: uniqueWarnings(warnings, wallet.warnings, wallet.providerStatus === "ok" ? [] : [wallet.message]),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isImageDiscoveryQuestion(message, plan) || (plan.intent === "discover" && !isValidatorComparisonQuestion(message))) {
+    const goal = isImageDiscoveryQuestion(message, plan) ? "image generation" : message;
+    const discovery = await findBittensorSubnetsForGoal({ goal, limit: resolveExecutionLimit(input, isImageDiscoveryQuestion(message, plan) ? 5 : 8) });
+    const sourceWarnings = discovery.matches.some((match) => match.subnet.source === "curated-fallback")
+      ? ["Some matches use fallback metadata because live provider data was unavailable."]
+      : [];
+    return {
+      plan: { ...answeredPlan, intent: "discover", responseCards: ["subnet_comparison"] },
+      responseText: discovery.matches.length
+        ? `I found ${discovery.matches.length} Bittensor subnet candidate(s) for ${goal}. Treat this as discovery context, not financial advice.`
+        : `I could not find a strong Bittensor subnet match for ${goal} from the current provider data.`,
+      cards: discovery.cards,
+      data: { discovery },
+      warnings: uniqueWarnings(warnings, sourceWarnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isValidatorComparisonQuestion(message)) {
+    const netuid = resolveExecutionNetuid(input, plan);
+    if (netuid === null) {
+      return clarificationResult(plan, "Which subnet netuid should I use to compare validators?");
+    }
+    const comparison = await compareBittensorValidators({
+      netuid,
+      strategy: resolveExecutionStrategy(input),
+      limit: resolveExecutionLimit(input, 6),
+    });
+    const fallbackWarnings = comparison.source === "curated-fallback"
+      ? ["Live provider data was unavailable; this validator comparison is fallback-only and incomplete."]
+      : [];
+    return {
+      plan: { ...answeredPlan, responseCards: ["validator_selection"] },
+      responseText: `Compared validator candidates for subnet ${netuid} using a ${comparison.strategy} strategy. This is an informational shortlist, not a staking recommendation.`,
+      cards: buildBittensorValidatorComparisonCards(comparison),
+      data: { comparison },
+      warnings: uniqueWarnings(warnings, comparison.warnings, fallbackWarnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isStakePreviewQuestion(message, plan)) {
+    const amountTao = extractExecutionAmountTao(input);
+    const netuid = resolveExecutionNetuid(input, plan);
+    const hotkey = resolveExecutionHotkey(input);
+    if (!amountTao) {
+      return clarificationResult(plan, "How much TAO should I use for this staking preview?");
+    }
+    if (netuid === null) {
+      return clarificationResult(plan, "Which subnet netuid should this staking preview use?");
+    }
+    if (!hotkey) {
+      const comparison = await compareBittensorValidators({
+        netuid,
+        strategy: resolveExecutionStrategy(input),
+        limit: resolveExecutionLimit(input, 6),
+      });
+      return clarificationResult(
+        plan,
+        "Which validator hotkey should I use for the unsigned staking preview?",
+        buildBittensorValidatorComparisonCards(comparison),
+        comparison.warnings,
+        { comparison, amountTao, netuid },
+      );
+    }
+
+    const coldkey = input.coldkey && isValidSs58Address(input.coldkey)
+      ? input.coldkey
+      : input.ss58Address && isValidSs58Address(input.ss58Address)
+        ? input.ss58Address
+        : plan.ss58Address;
+    const preview = await prepareBittensorExtrinsic({
+      action: "stake",
+      netuid,
+      amountTao,
+      coldkey,
+      hotkey,
+      rateTolerance: input.rateTolerance ?? null,
+    });
+    return {
+      plan: { ...answeredPlan, intent: "stake_plan", responseCards: ["signed_action_review"] },
+      responseText: `${preview.consequenceSummary} This is unsigned and requires external signing before anything can move.`,
+      cards: [buildBittensorExtrinsicPreviewCard(preview)],
+      data: { preview },
+      warnings: uniqueWarnings(warnings, preview.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "unsigned_preview",
+    };
+  }
+
+  if (plan.intent === "subnet_use") {
+    const netuid = resolveExecutionNetuid(input, plan);
+    if (netuid === null) {
+      return clarificationResult(plan, "Which subnet netuid should I inspect or use?");
+    }
+    const invocation = await invokeBittensorSubnet(netuid, {
+      intent: "service_call",
+      task: message,
+      ss58Address: resolveExecutionSs58(input, plan),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["subnet_result"] },
+      responseText: invocation.message,
+      cards: [buildBittensorInvocationCard(invocation)],
+      data: { invocation },
+      warnings: uniqueWarnings(warnings, invocation.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: invocation.supported ? "answered" : "unsupported",
+    };
+  }
+
+  return {
+    plan: plan.requiresClarification ? plan : answeredPlan,
+    responseText: plan.summary,
+    cards: buildBittensorPlanCards(plan),
+    data: { plan },
+    warnings: uniqueWarnings(warnings),
+    requiresClarification: plan.requiresClarification,
+    clarificationQuestion: plan.clarificationQuestion,
+    execution: plan.requiresClarification ? "clarification_required" : "answered",
   };
 }
 

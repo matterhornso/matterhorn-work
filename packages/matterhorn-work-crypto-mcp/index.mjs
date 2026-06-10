@@ -599,6 +599,31 @@ async function bittensor_plan_from_chat(args) {
   return { success: true, plan: res.plan, cards: res.cards || [] };
 }
 
+async function bittensor_chat(args) {
+  const res = await callServer("/api/bittensor/chat/execute", "POST", {
+    message: args.message,
+    ss58Address: args.ss58Address,
+    netuid: args.netuid,
+    amountTao: args.amountTao,
+    validatorHotkey: args.validatorHotkey,
+    coldkey: args.coldkey,
+    limit: args.limit,
+    strategy: args.strategy,
+    rateTolerance: args.rateTolerance,
+  });
+  return {
+    success: true,
+    plan: res.plan,
+    responseText: res.responseText,
+    cards: res.cards || [],
+    data: res.data || {},
+    warnings: res.warnings || [],
+    requiresClarification: Boolean(res.requiresClarification),
+    clarificationQuestion: res.clarificationQuestion ?? null,
+    execution: res.execution,
+  };
+}
+
 async function bittensor_find_subnets_for_goal(args) {
   const goal = args.goal || args.query || "Find useful Bittensor subnets";
   const [plan, discovery] = await Promise.all([
@@ -760,6 +785,7 @@ const tools = [
   { name: "bittensor_get_wallet_positions", description: "Read watch-only Bittensor wallet balance and subnet stake positions for an SS58 coldkey public address.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
   { name: "bittensor_prepare_action", description: "Prepare a quote-only Bittensor action. Returns warnings and requires an external Bittensor-compatible signer.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "transfer", "compare"] }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, recipient: { type: "string" } }, required: ["action"] } },
   { name: "bittensor_plan_from_chat", description: "Parse an ordinary user request into a safe Bittensor chat workflow plan.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" } }, required: ["message"] } },
+  { name: "bittensor_chat", description: "Execute the safe deterministic Bittensor chat workflow for ordinary requests such as show my TAO, where am I staked, image subnet discovery, validator comparison, or unsigned staking preview.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, coldkey: { type: "string" }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] }, rateTolerance: { type: "number" } }, required: ["message"] } },
   { name: "bittensor_find_subnets_for_goal", description: "Find Bittensor subnets that match a plain-English goal such as image generation, data search, compute, or agent tools.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
   { name: "bittensor_get_sidecar_status", description: "Report whether the configured Bittensor Subtensor sidecar can read, prepare, and submit externally signed payloads.", inputSchema: { type: "object", properties: {} } },
@@ -885,6 +911,7 @@ function handleMessage(msg) {
         case "bittensor_get_wallet_positions": return bittensor_get_wallet_positions(args.ss58Address).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_action": return bittensor_prepare_action(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_plan_from_chat": return bittensor_plan_from_chat(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_chat": return bittensor_chat(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_find_subnets_for_goal": return bittensor_find_subnets_for_goal(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_capabilities": return bittensor_get_subnet_capabilities(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_sidecar_status": return bittensor_get_sidecar_status().then(r => respond(textResult(r))).catch(catchErr);

@@ -298,6 +298,29 @@ export type BittensorChatCard = {
   data?: Record<string, unknown>;
 };
 
+export type BittensorChatExecutionInput = {
+  message: string;
+  ss58Address?: string | null;
+  netuid?: number | null;
+  amountTao?: number | string | null;
+  validatorHotkey?: string | null;
+  coldkey?: string | null;
+  limit?: number | null;
+  strategy?: "balanced" | "yield" | "safety" | null;
+  rateTolerance?: number | null;
+};
+
+export type BittensorChatExecutionResult = {
+  plan: BittensorPlan;
+  responseText: string;
+  cards: BittensorChatCard[];
+  data: Record<string, unknown>;
+  warnings: string[];
+  requiresClarification: boolean;
+  clarificationQuestion: string | null;
+  execution: "answered" | "clarification_required" | "unsigned_preview" | "unsupported";
+};
+
 export type BittensorSubtensorSidecarStatus = {
   configured: boolean;
   network: "finney" | "test" | "local";
