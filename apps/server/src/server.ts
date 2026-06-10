@@ -38,6 +38,7 @@ import {
   executeBittensorChatWorkflow,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
+  getBittensorChatContext,
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
   invokeBittensorSubnet,
@@ -3597,6 +3598,10 @@ function createRoutes(
       : null;
     const result = await executeBittensorChatWorkflow({
       message,
+      contextId: typeof body.contextId === "string" ? body.contextId : null,
+      context: body.context && typeof body.context === "object" && !Array.isArray(body.context)
+        ? body.context as BittensorChatExecutionInput["context"]
+        : null,
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
       netuid: body.netuid === null || body.netuid === undefined || body.netuid === "" ? null : Number(body.netuid),
       amountTao: body.amountTao === undefined ? null : String(body.amountTao),
@@ -3609,6 +3614,14 @@ function createRoutes(
       rateTolerance: body.rateTolerance === null || body.rateTolerance === undefined || body.rateTolerance === "" ? null : Number(body.rateTolerance),
     });
     return jsonResponse({ success: true, ...result });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/chat/context/:contextId", "client", async (ctx) => {
+    const context = getBittensorChatContext(ctx.params.contextId);
+    if (!context) {
+      throw new ApiError(404, "context_not_found", "Bittensor chat context was not found or has expired.");
+    }
+    return jsonResponse({ success: true, context });
   });
 
   addRoute(routes, "GET", "/api/bittensor/capabilities", "client", async () => {

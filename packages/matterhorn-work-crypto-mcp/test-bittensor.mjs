@@ -155,6 +155,20 @@ const server = createServer(async (req, res) => {
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
+      context: {
+        id: "bt-chat-mockcontext",
+        ss58Address: null,
+        netuid: 14,
+        amountTao: null,
+        validatorHotkey: null,
+        coldkey: null,
+        recipient: null,
+        destination: null,
+        lastIntent: "discover",
+        lastExecution: "answered",
+        updatedAt: "2026-06-09T00:00:00.000Z",
+        warnings: [],
+      },
     }));
     return;
   }
@@ -166,12 +180,17 @@ const server = createServer(async (req, res) => {
         name: "TAOHash",
         category: "Compute and infrastructure",
         utilitySummary: subnet.benefitSummary,
+        capabilityLevel: "adapter_required",
+        userBenefits: ["Inspect compute-oriented subnet context."],
+        examplePrompts: ["Explain subnet 14."],
         supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "subnet_use", "monitor"],
         serviceAdapter: "compute",
         requiredAuth: "unknown",
         costModel: "unknown",
         requestSchema: {},
         resultSchema: {},
+        dataFreshness: { source: "mock", block: null, freshness: null, updatedAt: "2026-06-09T00:00:00.000Z", liveReadReady: true },
+        adapterStatus: { configured: false, adapter: "compute", message: "No compute adapter configured.", requiredAuth: "unknown", costModel: "unknown" },
         safetyNotes: ["External signer required."],
       }],
     }));
@@ -185,12 +204,17 @@ const server = createServer(async (req, res) => {
         name: "TAOHash",
         category: "Compute and infrastructure",
         utilitySummary: subnet.benefitSummary,
+        capabilityLevel: "adapter_required",
+        userBenefits: ["Inspect compute-oriented subnet context."],
+        examplePrompts: ["Explain subnet 14."],
         supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "subnet_use", "monitor"],
         serviceAdapter: "compute",
         requiredAuth: "unknown",
         costModel: "unknown",
         requestSchema: {},
         resultSchema: {},
+        dataFreshness: { source: "mock", block: null, freshness: null, updatedAt: "2026-06-09T00:00:00.000Z", liveReadReady: true },
+        adapterStatus: { configured: false, adapter: "compute", message: "No compute adapter configured.", requiredAuth: "unknown", costModel: "unknown" },
         safetyNotes: ["External signer required."],
       },
     }));
@@ -527,6 +551,7 @@ try {
   const chatPayload = JSON.parse(chat.result.content[0].text);
   assert.equal(chatPayload.execution, "answered");
   assert.equal(chatPayload.cards[0].kind, "subnet_comparison");
+  assert.equal(chatPayload.context.id, "bt-chat-mockcontext");
   assert.equal(/seed|private|mnemonic/i.test(JSON.stringify(chatPayload)), false);
 
   const find = await ask({ jsonrpc: "2.0", id: 22, method: "tools/call", params: { name: "bittensor_find_subnets_for_goal", arguments: { goal: "compute", limit: 3 } } });

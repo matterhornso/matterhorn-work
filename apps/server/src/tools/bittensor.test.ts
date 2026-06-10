@@ -19,6 +19,7 @@ import {
   evaluateBittensorWatch,
   executeBittensorChatWorkflow,
   getConfiguredSubnetAdapter,
+  getBittensorChatContext,
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
   isValidSs58Address,
@@ -445,7 +446,23 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.plan.intent).toBe("wallet");
       expect(result.cards[0]?.kind).toBe("wallet_snapshot");
       expect(result.responseText).toContain("3");
+      expect(result.context?.ss58Address).toBe(VALID_SS58);
+      expect(result.context?.id).toContain("bt-chat");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("reuses public chat context for follow-up wallet prompts", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const first = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
+      const contextId = first.context?.id ?? "";
+      expect(getBittensorChatContext(contextId)?.ss58Address).toBe(VALID_SS58);
+
+      const followUp = await executeBittensorChatWorkflow({ message: "where am I staked?", contextId });
+      expect(followUp.execution).toBe("answered");
+      expect(followUp.cards.some((card) => card.title === "Stake positions")).toBe(true);
+      expect(followUp.context?.id).toBe(contextId);
+      expect(followUp.context?.lastIntent).toBe("wallet");
     });
   });
 
@@ -519,6 +536,36 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.responseText).toContain("external signing");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     });
+  });
+
+  test("uses previous public netuid context for follow-up staking previews", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const validators = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77" });
+      expect(validators.context?.netuid).toBe(77);
+
+      const result = await executeBittensorChatWorkflow({
+        message: "prepare staking 1 TAO",
+        contextId: validators.context?.id,
+        ss58Address: VALID_SS58,
+        validatorHotkey: VALID_SS58,
+      });
+      expect(result.execution).toBe("unsigned_preview");
+      expect((result.data.preview as { netuid?: number }).netuid).toBe(77);
+      expect(result.context?.netuid).toBe(77);
+    });
+  });
+
+  test("does not store unexpected inline context fields", async () => {
+    const result = await executeBittensorChatWorkflow({
+      message: "show my TAO",
+      context: {
+        id: "bt-chat-inlinecontext",
+        ss58Address: VALID_SS58,
+        seedPhrase: "do-not-store",
+      } as unknown as Parameters<typeof executeBittensorChatWorkflow>[0]["context"],
+    });
+    expect(result.context?.ss58Address).toBe(VALID_SS58);
+    expect("seedPhrase" in (result.context as Record<string, unknown>)).toBe(false);
   });
 
   test("clarifies unstake previews instead of guessing validator context", async () => {
@@ -599,7 +646,7 @@ describe("Bittensor chat cards", () => {
 });
 
 describe("capabilityFromSubnet", () => {
-  test("creates a universal capability manifest without requiring auth for read flows", () => {
+  test("creates a Phase 3/4 capability manifest with benefits, examples, and adapter readiness", () => {
     const capability = capabilityFromSubnet({
       netuid: 14,
       name: "TAOHash",
@@ -617,6 +664,11 @@ describe("capabilityFromSubnet", () => {
     expect(capability.netuid).toBe(14);
     expect(capability.supportedChatIntents).toContain("subnet_use");
     expect(capability.serviceAdapter).toBe("compute");
+    expect(capability.capabilityLevel).toBe("adapter_required");
+    expect(capability.userBenefits.length).toBeGreaterThan(1);
+    expect(capability.examplePrompts.join(" ")).toContain("subnet 14");
+    expect(capability.adapterStatus.configured).toBe(false);
+    expect(capability.dataFreshness.source).toBe("test");
   });
 
   test("reflects configured service adapters without exposing auth values", () => {
@@ -649,6 +701,9 @@ describe("capabilityFromSubnet", () => {
     });
 
     expect(adapter?.name).toBe("Mock compute adapter");
+    expect(capability.capabilityLevel).toBe("adapter_ready");
+    expect(capability.adapterStatus.configured).toBe(true);
+    expect(capability.adapterStatus.message).toContain("Mock compute adapter");
     expect(capability.requiredAuth).toBe("api_key");
     expect(capability.costModel).toBe("provider_priced");
     expect(JSON.stringify(capability)).not.toContain("BITTENSOR_MOCK_ADAPTER_TOKEN");
@@ -719,6 +774,8 @@ describe("auditBittensorReadiness", () => {
     const report = await auditBittensorReadiness();
     expect(["pass", "warning", "fail"]).toContain(report.status);
     expect(report.checks.some((check) => check.id === "chat_intents")).toBe(true);
+    expect(report.checks.some((check) => check.id === "chat_context")).toBe(true);
+    expect(report.checks.some((check) => check.id === "live_read_freshness")).toBe(true);
     expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
     const card = buildBittensorReadinessCard(report);
     expect(card.kind).toBe("readiness_report");

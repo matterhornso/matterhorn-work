@@ -1,5 +1,48 @@
 # Bittensor Handoff And V2 Plan
 
+## Phase 3/4 Stacked Branch
+
+- Branch: `codex/bittensor-phase3-4`
+- Base branch: `codex/bittensor-five-prompt-chat`
+- Purpose: continue the generalized Bittensor chat executor with reusable public chat context and a richer subnet capability registry.
+
+### What Phase 3 Adds
+
+- `bittensor_chat` now returns a reusable public `context` object and accepts `contextId` or inline public context on follow-up turns.
+- Context can remember public SS58, selected netuid, amount, validator hotkey, coldkey label, recipient, destination, last intent, last execution state, and warnings.
+- Context is in-memory and intentionally public-state only. It does not store signing material and ignores unexpected fields.
+- New API:
+  - `GET /api/bittensor/chat/context/:contextId`
+- Chat follow-ups can now work naturally:
+  - `show my TAO` with an SS58 address returns context.
+  - `where am I staked?` can reuse that context without repeating the address.
+  - `compare validators on subnet 14` stores the netuid.
+  - `prepare staking 1 TAO` can reuse the netuid while still requiring an explicit validator hotkey.
+
+### What Phase 4 Adds
+
+- Capability manifests now expose:
+  - `capabilityLevel`: `universal_read`, `adapter_ready`, `adapter_required`, or `unsupported`.
+  - `userBenefits`: beginner-friendly value summary for the subnet/category.
+  - `examplePrompts`: prompts Matterhorn can hand to chat.
+  - `dataFreshness`: source, block, freshness, updatedAt, and live-read readiness.
+  - `adapterStatus`: whether a direct subnet service adapter is configured, without exposing endpoint tokens.
+- Subnet comparison cards now show capability level, adapter state, freshness, and source.
+- Readiness audit now checks public chat context and live-read freshness in addition to existing chat, wallet, signer, capability, validator, monitoring, and sidecar checks.
+
+### Phase 3/4 Verification
+
+Run from the repo root unless noted:
+
+```bash
+cd apps/server && bun test src/tools/bittensor.test.ts
+cd apps/server && bun test src/bittensor-chat-routes.e2e.test.ts
+pnpm --dir packages/types build
+pnpm --filter matterhorn-work-server build
+pnpm --filter @matterhorn-work/app typecheck
+node packages/matterhorn-work-crypto-mcp/test-bittensor.mjs
+```
+
 ## Current Phase 2 PR
 
 - PR: https://github.com/matterhornso/matterhorn-work/pull/3
