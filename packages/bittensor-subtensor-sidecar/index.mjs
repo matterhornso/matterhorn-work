@@ -333,14 +333,15 @@ async function dispatch(req, res) {
     const bridgeHealth = MODE === "python"
       ? await pythonBridge("health", {}).catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Python SDK health check failed." }))
       : null;
+    const sdkAvailable = MODE === "mock" || Boolean(bridgeHealth?.ok);
     return json(res, 200, {
       ok: true,
-      status: "healthy",
+      status: sdkAvailable ? "healthy" : "degraded",
       mode: MODE,
       network: NETWORK,
-      sdkAvailable: MODE === "mock" ? true : Boolean(bridgeHealth?.ok),
-      canRead: true,
-      canPrepare: true,
+      sdkAvailable,
+      canRead: sdkAvailable,
+      canPrepare: sdkAvailable,
       canSubmit: false,
       block: firstNumberForHealth(bridgeHealth, "block") ?? 123456,
       fetchedAt: new Date().toISOString(),
