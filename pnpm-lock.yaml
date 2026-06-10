@@ -372,6 +372,8 @@ importers:
         specifier: ^7.1.12
         version: 7.3.1(@types/node@25.6.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/bittensor-subtensor-sidecar: {}
+
   packages/email:
     dependencies:
       '@react-email/components':

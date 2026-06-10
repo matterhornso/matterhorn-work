@@ -46,6 +46,24 @@ The session transcript recognizes `output.cards` from Bittensor tool calls and r
 
 Set `BITTENSOR_SUBTENSOR_SIDECAR_URL` to enable sidecar-backed reads and unsigned payload preparation.
 
+PR #3 now includes a runnable sidecar contract package at `packages/bittensor-subtensor-sidecar`.
+
+Run it locally:
+
+```bash
+pnpm --dir packages/bittensor-subtensor-sidecar start
+```
+
+Default sidecar mode is deterministic `mock`, which is intended for development and CI contract tests. It exposes the same endpoint contract Matterhorn expects, but never broadcasts signed extrinsics.
+
+Optional live SDK mode:
+
+```bash
+export BITTENSOR_SIDECAR_MODE=python
+```
+
+Python SDK mode uses `python_bridge.py` and requires the official `bittensor` Python package in the selected Python environment. It supports public metagraph and wallet-balance reads defensively; signed-payload submission remains intentionally disabled until SDK-version-specific signed-payload verification tests are added.
+
 When configured, Matterhorn can request:
 
 - subnet metagraph data

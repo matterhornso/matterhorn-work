@@ -238,10 +238,9 @@ Shared safety rules:
 ## Execution Order
 
 1. Finish Bittensor readiness audit and remove blockers.
-2. Build Bittensor Subtensor sidecar contract/tests and live health probe.
+2. Build Bittensor Subtensor sidecar contract/tests and live health probe. Delivered in PR #3 with `packages/bittensor-subtensor-sidecar`, deterministic mock mode, optional Python SDK bridge, health/status endpoints, metagraph/wallet reads, unsigned extrinsic previews, submit-disabled safety behavior, and no-secret contract tests.
 3. Build Hyperliquid read-only chat tools.
 4. Build Hyperliquid order previews, not submission.
 5. Build Polymarket read-only chat tools.
 6. Build Polymarket bet previews, not submission.
 7. Only after preview tests and no-secret audits pass, add signed submission flows.
-
