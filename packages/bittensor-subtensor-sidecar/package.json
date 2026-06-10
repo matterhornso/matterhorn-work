@@ -1,0 +1,14 @@
+{
+  "name": "@matterhorn-work/bittensor-subtensor-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "matterhorn-bittensor-sidecar": "index.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node test.mjs"
+  },
+  "license": "MIT"
+}

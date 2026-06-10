@@ -1,0 +1,303 @@
+export type BittensorProviderStatus = "ok" | "provider_unavailable";
+
+export type BittensorSubnetSummary = {
+  netuid: number;
+  name: string;
+  symbol: string;
+  category: string;
+  benefitSummary: string;
+  ownerColdkey: string | null;
+  ownerHotkey: string | null;
+  priceTao: number | null;
+  emission: number | null;
+  tempo: number | null;
+  updatedAt: string;
+  source: string;
+};
+
+export type BittensorSubnetDetail = BittensorSubnetSummary & {
+  metagraphSummary: {
+    neurons: number | null;
+    totalStake: number | null;
+    block: number | null;
+  };
+  topValidators: Array<{
+    uid: number | null;
+    hotkey: string | null;
+    coldkey: string | null;
+    stake: number | null;
+    trust: number | null;
+    dividends: number | null;
+  }>;
+  knownUseCases: string[];
+  risks: string[];
+  links: Array<{ label: string; url: string }>;
+};
+
+export type BittensorStakePosition = {
+  netuid: number;
+  subnetName: string;
+  validatorHotkey: string | null;
+  alphaAmount: number | null;
+  taoValue: number | null;
+  slippageRisk: "unknown" | "low" | "medium" | "high";
+};
+
+export type BittensorWalletSnapshot = {
+  ss58Address: string;
+  taoBalance: number | null;
+  stakePositions: BittensorStakePosition[];
+  estimatedValueTao: number | null;
+  providerStatus: BittensorProviderStatus;
+  updatedAt: string;
+  message?: string;
+};
+
+export type BittensorActionQuote = {
+  action: "stake" | "unstake" | "transfer" | "compare";
+  netuid: number | null;
+  amountTao: number | null;
+  expectedAlpha: number | null;
+  feeTao: number | null;
+  slippageBps: number | null;
+  warnings: string[];
+  requiresExternalSignature: true;
+};
+
+export type BittensorChatIntent =
+  | "learn"
+  | "discover"
+  | "wallet"
+  | "stake_plan"
+  | "subnet_use"
+  | "monitor";
+
+export type BittensorPlan = {
+  intent: BittensorChatIntent;
+  confidence: number;
+  summary: string;
+  userGoal: string;
+  netuids: number[];
+  ss58Address: string | null;
+  steps: string[];
+  suggestedToolNames: string[];
+  safetyNotes: string[];
+  responseCards: Array<
+    | "subnet_comparison"
+    | "wallet_snapshot"
+    | "validator_selection"
+    | "staking_quote"
+    | "signed_action_review"
+    | "subnet_result"
+    | "watchlist"
+  >;
+  requiresClarification: boolean;
+  clarificationQuestion: string | null;
+};
+
+export type BittensorCapabilityManifest = {
+  netuid: number;
+  name: string;
+  category: string;
+  utilitySummary: string;
+  supportedChatIntents: BittensorChatIntent[];
+  serviceAdapter:
+    | "universal"
+    | "inference"
+    | "data_search"
+    | "compute"
+    | "creative_media"
+    | "agent_tooling"
+    | "unsupported";
+  requiredAuth: "none" | "api_key" | "external_wallet" | "unknown";
+  costModel: "free_read" | "tao_fee" | "provider_priced" | "unknown";
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  safetyNotes: string[];
+};
+
+export type BittensorSignerStatus = {
+  mode: "read_only" | "injected_substrate" | "desktop_handoff" | "sidecar";
+  available: boolean;
+  canSign: boolean;
+  canSubmit: boolean;
+  network: "finney" | "test" | "local";
+  address: string | null;
+  message: string;
+};
+
+export type BittensorExtrinsicPreview = {
+  action:
+    | "stake"
+    | "unstake"
+    | "move_stake"
+    | "transfer"
+    | "set_child_hotkey"
+    | "register"
+    | "serve";
+  network: "finney" | "test" | "local";
+  netuid: number | null;
+  amountTao: number | null;
+  coldkey: string | null;
+  hotkey: string | null;
+  destination: string | null;
+  feeTao: number | null;
+  slippageBps: number | null;
+  expectedAlpha: number | null;
+  unsignedPayload: Record<string, unknown>;
+  signer: BittensorSignerStatus;
+  warnings: string[];
+  consequenceSummary: string;
+  requiresExternalSignature: true;
+};
+
+export type BittensorSignedResult = {
+  status: "submitted" | "sidecar_unavailable" | "rejected" | "invalid_signature";
+  txHash: string | null;
+  blockHash: string | null;
+  message: string;
+  explorerUrl: string | null;
+};
+
+export type BittensorSigningHandoff = {
+  id: string;
+  action: BittensorExtrinsicPreview["action"];
+  network: BittensorExtrinsicPreview["network"];
+  netuid: number | null;
+  payload: Record<string, unknown>;
+  payloadJson: string;
+  payloadSha256: string;
+  suggestedFilename: string;
+  signerMode: BittensorSignerStatus["mode"];
+  createdAt: string;
+  expiresAt: string;
+  instructions: string[];
+  warnings: string[];
+  consequenceSummary: string;
+};
+
+export type BittensorSubnetInvocation = {
+  netuid: number;
+  intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";
+  adapter: BittensorCapabilityManifest["serviceAdapter"];
+  supported: boolean;
+  result: Record<string, unknown>;
+  message: string;
+  warnings: string[];
+};
+
+export type BittensorValidatorCandidate = {
+  netuid: number;
+  subnetName: string;
+  uid: number | null;
+  hotkey: string | null;
+  coldkey: string | null;
+  stake: number | null;
+  trust: number | null;
+  dividends: number | null;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+  source: string;
+};
+
+export type BittensorValidatorComparison = {
+  netuid: number;
+  subnetName: string;
+  strategy: "balanced" | "yield" | "safety";
+  candidates: BittensorValidatorCandidate[];
+  warnings: string[];
+  source: string;
+  updatedAt: string;
+};
+
+export type BittensorWatch = {
+  id: string;
+  kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
+  label: string;
+  netuid: number | null;
+  ss58Address: string | null;
+  threshold: number | null;
+  createdAt: string;
+};
+
+export type BittensorWatchEvaluation = {
+  watch: BittensorWatch;
+  status: "ok" | "warning" | "unavailable";
+  summary: string;
+  observedValue: number | string | null;
+  threshold: number | null;
+  source: string;
+  checkedAt: string;
+};
+
+export type BittensorReadinessCheck = {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  summary: string;
+  details?: Record<string, unknown>;
+};
+
+export type BittensorReadinessReport = {
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  checks: BittensorReadinessCheck[];
+  blockers: string[];
+  warnings: string[];
+  nextActions: string[];
+};
+
+export type BittensorChatCardKind =
+  | "subnet_comparison"
+  | "wallet_snapshot"
+  | "validator_selection"
+  | "staking_quote"
+  | "signed_action_review"
+  | "subnet_result"
+  | "watchlist"
+  | "signer_status"
+  | "signing_handoff"
+  | "unsupported_adapter"
+  | "readiness_report";
+
+export type BittensorChatCardItem = {
+  label: string;
+  value: string;
+  tone?: "default" | "good" | "warning" | "danger" | "muted";
+};
+
+export type BittensorChatCardAction = {
+  label: string;
+  kind: "copy_payload" | "open_url" | "sign_externally" | "send_to_chat";
+  href?: string | null;
+  payload?: Record<string, unknown> | null;
+};
+
+export type BittensorChatCard = {
+  kind: BittensorChatCardKind;
+  title: string;
+  subtitle?: string | null;
+  summary?: string | null;
+  tone?: "default" | "good" | "warning" | "danger";
+  items: BittensorChatCardItem[];
+  actions?: BittensorChatCardAction[];
+  warnings?: string[];
+  data?: Record<string, unknown>;
+};
+
+export type BittensorSubtensorSidecarStatus = {
+  configured: boolean;
+  network: "finney" | "test" | "local";
+  canRead: boolean;
+  canPrepare: boolean;
+  canSubmit: boolean;
+  message: string;
+};
+
+export type BittensorSubtensorSidecarHealth = BittensorSubtensorSidecarStatus & {
+  reachable: boolean;
+  status: "healthy" | "unreachable" | "unconfigured";
+  latencyMs: number | null;
+  checkedAt: string;
+};
