@@ -43,7 +43,10 @@ import {
   isLocalhostBrowserTarget,
   type OpenTarget,
 } from "../artifacts/open-target";
-import { readBittensorContextFromToolOutput } from "./bittensor-context-store";
+import {
+  buildBittensorCardActionContext,
+  readBittensorContextFromToolOutput,
+} from "./bittensor-context-store";
 
 type TranscriptPart = Part;
 
@@ -771,7 +774,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
   }
 }
 
-function BittensorCardActionButton(props: { action: NonNullable<BittensorChatCard["actions"]>[number] }) {
+function BittensorCardActionButton(props: { card: BittensorChatCard; action: NonNullable<BittensorChatCard["actions"]>[number] }) {
   const label = props.action.label?.trim() || "Action";
   const payload = props.action.payload ?? null;
   const copyPayload = async () => {
@@ -782,8 +785,9 @@ function BittensorCardActionButton(props: { action: NonNullable<BittensorChatCar
     const prompt = typeof payload?.prompt === "string" && payload.prompt.trim()
       ? payload.prompt.trim()
       : label;
+    const context = buildBittensorCardActionContext(props.card, props.action);
     window.dispatchEvent(new CustomEvent("matterhorn:bittensor-chat-handoff", {
-      detail: { prompt, context: payload ?? {} },
+      detail: { prompt, context, source: "bittensor-card-action" },
     }));
   };
 
@@ -882,7 +886,7 @@ function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
                 {actions.length ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {actions.map((action, actionIndex) => (
-                      <BittensorCardActionButton key={`${action.kind ?? "action"}:${action.label ?? actionIndex}`} action={action} />
+                      <BittensorCardActionButton key={`${action.kind ?? "action"}:${action.label ?? actionIndex}`} card={card} action={action} />
                     ))}
                   </div>
                 ) : null}
