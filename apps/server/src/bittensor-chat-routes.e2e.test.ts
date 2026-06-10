@@ -228,8 +228,16 @@ describe("Bittensor chat execute route", () => {
     const wallet = await postExecute(base, { message: "show my TAO", ss58Address: VALID_SS58 });
     expect(wallet.execution).toBe("answered");
     expect(wallet.cards[0]?.kind).toBe("wallet_snapshot");
+    expect(wallet.context?.ss58Address).toBe(VALID_SS58);
 
-    const staked = await postExecute(base, { message: "where am I staked?", ss58Address: VALID_SS58 });
+    const contextRes = await nativeFetch(`${base}/api/bittensor/chat/context/${wallet.context.id}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(contextRes.status).toBe(200);
+    const contextPayload = await contextRes.json();
+    expect(contextPayload.context.ss58Address).toBe(VALID_SS58);
+
+    const staked = await postExecute(base, { message: "where am I staked?", contextId: wallet.context.id });
     expect(staked.cards.some((card: { title?: string }) => card.title === "Stake positions")).toBe(true);
 
     const image = await postExecute(base, { message: "which subnet is useful for image generation?", limit: 5 });
@@ -237,13 +245,15 @@ describe("Bittensor chat execute route", () => {
 
     const validators = await postExecute(base, { message: "compare validators on subnet 14" });
     expect(validators.cards[0]?.kind).toBe("validator_selection");
+    expect(validators.context?.netuid).toBe(14);
 
     const incompleteStake = await postExecute(base, { message: "prepare staking 1 TAO on subnet 14" });
     expect(incompleteStake.execution).toBe("clarification_required");
     expect(incompleteStake.clarificationQuestion).toContain("validator hotkey");
 
     const preview = await postExecute(base, {
-      message: "prepare staking 1 TAO on subnet 14",
+      message: "prepare staking 1 TAO",
+      contextId: validators.context.id,
       ss58Address: VALID_SS58,
       validatorHotkey: HOTKEY,
     });

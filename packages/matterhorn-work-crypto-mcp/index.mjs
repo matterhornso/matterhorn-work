@@ -602,6 +602,8 @@ async function bittensor_plan_from_chat(args) {
 async function bittensor_chat(args) {
   const res = await callServer("/api/bittensor/chat/execute", "POST", {
     message: args.message,
+    contextId: args.contextId,
+    context: args.context,
     ss58Address: args.ss58Address,
     netuid: args.netuid,
     amountTao: args.amountTao,
@@ -623,6 +625,7 @@ async function bittensor_chat(args) {
     requiresClarification: Boolean(res.requiresClarification),
     clarificationQuestion: res.clarificationQuestion ?? null,
     execution: res.execution,
+    context: res.context ?? null,
   };
 }
 
@@ -787,7 +790,7 @@ const tools = [
   { name: "bittensor_get_wallet_positions", description: "Read watch-only Bittensor wallet balance and subnet stake positions for an SS58 coldkey public address.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
   { name: "bittensor_prepare_action", description: "Prepare a quote-only Bittensor action. Returns warnings and requires an external Bittensor-compatible signer.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "transfer", "compare"] }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, recipient: { type: "string" } }, required: ["action"] } },
   { name: "bittensor_plan_from_chat", description: "Parse an ordinary user request into a safe Bittensor chat workflow plan.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" } }, required: ["message"] } },
-  { name: "bittensor_chat", description: "Execute the safe deterministic Bittensor chat workflow for ordinary Bittensor requests: learn, discover, wallet reads, stake/unstake/transfer previews, subnet use, validator comparison, and monitoring.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, coldkey: { type: "string" }, recipient: { type: "string" }, destination: { type: "string" }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] }, rateTolerance: { type: "number" } }, required: ["message"] } },
+  { name: "bittensor_chat", description: "Execute the safe deterministic Bittensor chat workflow for ordinary Bittensor requests: learn, discover, wallet reads, stake/unstake/transfer previews, subnet use, validator comparison, monitoring, and follow-up prompts using public context.", inputSchema: { type: "object", properties: { message: { type: "string" }, contextId: { type: "string" }, context: { type: "object" }, ss58Address: { type: "string" }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, coldkey: { type: "string" }, recipient: { type: "string" }, destination: { type: "string" }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] }, rateTolerance: { type: "number" } }, required: ["message"] } },
   { name: "bittensor_find_subnets_for_goal", description: "Find Bittensor subnets that match a plain-English goal such as image generation, data search, compute, or agent tools.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_get_subnet_capabilities", description: "Return the chat and service capability manifest for one subnet, or all subnets when netuid is omitted.", inputSchema: { type: "object", properties: { netuid: { type: "number" } } } },
   { name: "bittensor_get_sidecar_status", description: "Report whether the configured Bittensor Subtensor sidecar can read, prepare, and submit externally signed payloads.", inputSchema: { type: "object", properties: {} } },

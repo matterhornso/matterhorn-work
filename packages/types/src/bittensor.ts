@@ -112,6 +112,9 @@ export type BittensorCapabilityManifest = {
   name: string;
   category: string;
   utilitySummary: string;
+  capabilityLevel: "universal_read" | "adapter_ready" | "adapter_required" | "unsupported";
+  userBenefits: string[];
+  examplePrompts: string[];
   supportedChatIntents: BittensorChatIntent[];
   serviceAdapter:
     | "universal"
@@ -125,6 +128,20 @@ export type BittensorCapabilityManifest = {
   costModel: "free_read" | "tao_fee" | "provider_priced" | "unknown";
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
+  dataFreshness: {
+    source: string;
+    block: number | null;
+    freshness: string | null;
+    updatedAt: string;
+    liveReadReady: boolean;
+  };
+  adapterStatus: {
+    configured: boolean;
+    adapter: BittensorCapabilityManifest["serviceAdapter"];
+    message: string;
+    requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+    costModel: BittensorCapabilityManifest["costModel"];
+  };
   safetyNotes: string[];
 };
 
@@ -298,8 +315,31 @@ export type BittensorChatCard = {
   data?: Record<string, unknown>;
 };
 
+export type BittensorChatExecutionStatus =
+  | "answered"
+  | "clarification_required"
+  | "unsigned_preview"
+  | "unsupported";
+
+export type BittensorChatContext = {
+  id: string;
+  ss58Address: string | null;
+  netuid: number | null;
+  amountTao: string | null;
+  validatorHotkey: string | null;
+  coldkey: string | null;
+  recipient: string | null;
+  destination: string | null;
+  lastIntent: BittensorChatIntent | null;
+  lastExecution: BittensorChatExecutionStatus | null;
+  updatedAt: string;
+  warnings: string[];
+};
+
 export type BittensorChatExecutionInput = {
   message: string;
+  contextId?: string | null;
+  context?: Partial<BittensorChatContext> | null;
   ss58Address?: string | null;
   netuid?: number | null;
   amountTao?: number | string | null;
@@ -320,7 +360,8 @@ export type BittensorChatExecutionResult = {
   warnings: string[];
   requiresClarification: boolean;
   clarificationQuestion: string | null;
-  execution: "answered" | "clarification_required" | "unsigned_preview" | "unsupported";
+  execution: BittensorChatExecutionStatus;
+  context?: BittensorChatContext | null;
 };
 
 export type BittensorSubtensorSidecarStatus = {

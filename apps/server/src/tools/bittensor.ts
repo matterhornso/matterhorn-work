@@ -144,6 +144,9 @@ export interface BittensorCapabilityManifest {
   name: string;
   category: string;
   utilitySummary: string;
+  capabilityLevel: "universal_read" | "adapter_ready" | "adapter_required" | "unsupported";
+  userBenefits: string[];
+  examplePrompts: string[];
   supportedChatIntents: BittensorChatIntent[];
   serviceAdapter:
     | "universal"
@@ -157,6 +160,20 @@ export interface BittensorCapabilityManifest {
   costModel: "free_read" | "tao_fee" | "provider_priced" | "unknown";
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
+  dataFreshness: {
+    source: string;
+    block: number | null;
+    freshness: string | null;
+    updatedAt: string;
+    liveReadReady: boolean;
+  };
+  adapterStatus: {
+    configured: boolean;
+    adapter: BittensorCapabilityManifest["serviceAdapter"];
+    message: string;
+    requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+    costModel: BittensorCapabilityManifest["costModel"];
+  };
   safetyNotes: string[];
 }
 
@@ -332,8 +349,31 @@ export interface BittensorChatCard {
   data?: Record<string, unknown>;
 }
 
+export type BittensorChatExecutionStatus =
+  | "answered"
+  | "clarification_required"
+  | "unsigned_preview"
+  | "unsupported";
+
+export type BittensorChatContext = {
+  id: string;
+  ss58Address: string | null;
+  netuid: number | null;
+  amountTao: string | null;
+  validatorHotkey: string | null;
+  coldkey: string | null;
+  recipient: string | null;
+  destination: string | null;
+  lastIntent: BittensorChatIntent | null;
+  lastExecution: BittensorChatExecutionStatus | null;
+  updatedAt: string;
+  warnings: string[];
+};
+
 export type BittensorChatExecutionInput = {
   message: string;
+  contextId?: string | null;
+  context?: Partial<BittensorChatContext> | null;
   ss58Address?: string | null;
   netuid?: number | null;
   amountTao?: number | string | null;
@@ -354,7 +394,8 @@ export type BittensorChatExecutionResult = {
   warnings: string[];
   requiresClarification: boolean;
   clarificationQuestion: string | null;
-  execution: "answered" | "clarification_required" | "unsigned_preview" | "unsupported";
+  execution: BittensorChatExecutionStatus;
+  context?: BittensorChatContext | null;
 };
 
 export type BittensorExtrinsicPrepareInput = {
@@ -432,6 +473,7 @@ type CacheEntry<T> = { at: number; data: T };
 
 const cache = new Map<string, CacheEntry<unknown>>();
 const watchlist = new Map<string, BittensorWatch>();
+const chatContexts = new Map<string, BittensorChatContext>();
 let watchlistLoadedFromDisk = false;
 
 const FALLBACK_SUBNETS: BittensorSubnetSummary[] = [
@@ -1266,6 +1308,142 @@ function labelForWatch(message: string, kind: BittensorWatch["kind"], netuid: nu
   return `Bittensor ${kind} watch`;
 }
 
+function createBittensorChatContextId(): string {
+  return `bt-chat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeContextId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^bt-chat-[a-z0-9-]{6,96}$/i.test(trimmed) ? trimmed : null;
+}
+
+function normalizeContextNetuid(value: unknown): number | null {
+  const numberValue = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : null;
+}
+
+function normalizeContextAmount(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const parsed = parseAmountTao(value);
+  return parsed === null ? null : String(value).trim();
+}
+
+function normalizeContextSs58(value: unknown): string | null {
+  return typeof value === "string" && isValidSs58Address(value.trim()) ? value.trim() : null;
+}
+
+function normalizeContextWarnings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).slice(0, 8)
+    : [];
+}
+
+function sanitizeBittensorChatContext(value: unknown): BittensorChatContext | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const id = normalizeContextId(record.id) ?? createBittensorChatContextId();
+  const updatedAt = typeof record.updatedAt === "string" && record.updatedAt.trim()
+    ? record.updatedAt
+    : nowIso();
+  const lastIntent = typeof record.lastIntent === "string" && ["learn", "discover", "wallet", "stake_plan", "subnet_use", "monitor"].includes(record.lastIntent)
+    ? record.lastIntent as BittensorChatIntent
+    : null;
+  const lastExecution = typeof record.lastExecution === "string" && ["answered", "clarification_required", "unsigned_preview", "unsupported"].includes(record.lastExecution)
+    ? record.lastExecution as BittensorChatExecutionStatus
+    : null;
+  return {
+    id,
+    ss58Address: normalizeContextSs58(record.ss58Address),
+    netuid: normalizeContextNetuid(record.netuid),
+    amountTao: normalizeContextAmount(record.amountTao),
+    validatorHotkey: normalizeContextSs58(record.validatorHotkey),
+    coldkey: normalizeContextSs58(record.coldkey),
+    recipient: normalizeContextSs58(record.recipient),
+    destination: normalizeContextSs58(record.destination),
+    lastIntent,
+    lastExecution,
+    updatedAt,
+    warnings: normalizeContextWarnings(record.warnings),
+  };
+}
+
+function mergeBittensorChatContexts(
+  stored: BittensorChatContext | null,
+  inline: BittensorChatContext | null,
+): BittensorChatContext | null {
+  if (!stored && !inline) return null;
+  const base = stored ?? inline!;
+  return {
+    ...base,
+    ...(inline ?? {}),
+    id: stored?.id ?? inline?.id ?? createBittensorChatContextId(),
+    ss58Address: inline?.ss58Address ?? stored?.ss58Address ?? null,
+    netuid: inline?.netuid ?? stored?.netuid ?? null,
+    amountTao: inline?.amountTao ?? stored?.amountTao ?? null,
+    validatorHotkey: inline?.validatorHotkey ?? stored?.validatorHotkey ?? null,
+    coldkey: inline?.coldkey ?? stored?.coldkey ?? null,
+    recipient: inline?.recipient ?? stored?.recipient ?? null,
+    destination: inline?.destination ?? stored?.destination ?? inline?.recipient ?? stored?.recipient ?? null,
+    warnings: uniqueWarnings(stored?.warnings, inline?.warnings),
+  };
+}
+
+export function getBittensorChatContext(contextId: string): BittensorChatContext | null {
+  const normalized = normalizeContextId(contextId);
+  return normalized ? chatContexts.get(normalized) ?? null : null;
+}
+
+function resolveBittensorChatContext(input: BittensorChatExecutionInput): BittensorChatContext | null {
+  const storedId = normalizeContextId(input.contextId);
+  const stored = storedId ? chatContexts.get(storedId) ?? null : null;
+  const inline = sanitizeBittensorChatContext(input.context);
+  return mergeBittensorChatContexts(stored, inline);
+}
+
+function hydrateBittensorChatInput(input: BittensorChatExecutionInput, context: BittensorChatContext | null): BittensorChatExecutionInput {
+  if (!context) return input;
+  return {
+    ...input,
+    ss58Address: input.ss58Address ?? context.ss58Address,
+    netuid: input.netuid ?? context.netuid,
+    amountTao: input.amountTao ?? context.amountTao,
+    validatorHotkey: input.validatorHotkey ?? context.validatorHotkey,
+    coldkey: input.coldkey ?? context.coldkey,
+    recipient: input.recipient ?? context.recipient,
+    destination: input.destination ?? context.destination ?? context.recipient,
+  };
+}
+
+function buildBittensorChatContext(
+  input: BittensorChatExecutionInput,
+  result: BittensorChatExecutionResult,
+  previous: BittensorChatContext | null,
+): BittensorChatContext {
+  const planNetuid = result.plan.netuids.find((netuid) => Number.isInteger(netuid) && netuid >= 0) ?? null;
+  const context: BittensorChatContext = {
+    id: previous?.id ?? normalizeContextId(input.contextId) ?? normalizeContextId(input.context?.id) ?? createBittensorChatContextId(),
+    ss58Address: normalizeContextSs58(input.ss58Address) ?? previous?.ss58Address ?? normalizeContextSs58(result.plan.ss58Address),
+    netuid: normalizeContextNetuid(input.netuid) ?? previous?.netuid ?? planNetuid,
+    amountTao: normalizeContextAmount(input.amountTao) ?? extractExecutionAmountTao(input) ?? previous?.amountTao ?? null,
+    validatorHotkey: normalizeContextSs58(input.validatorHotkey) ?? previous?.validatorHotkey ?? null,
+    coldkey: normalizeContextSs58(input.coldkey) ?? previous?.coldkey ?? normalizeContextSs58(input.ss58Address),
+    recipient: normalizeContextSs58(input.recipient) ?? previous?.recipient ?? null,
+    destination: normalizeContextSs58(input.destination) ?? normalizeContextSs58(input.recipient) ?? previous?.destination ?? previous?.recipient ?? null,
+    lastIntent: result.plan.intent,
+    lastExecution: result.execution,
+    updatedAt: nowIso(),
+    warnings: uniqueWarnings(previous?.warnings, result.warnings).slice(0, 8),
+  };
+  chatContexts.set(context.id, context);
+  while (chatContexts.size > 128) {
+    const firstKey = chatContexts.keys().next().value;
+    if (!firstKey) break;
+    chatContexts.delete(firstKey);
+  }
+  return context;
+}
+
 function buildStakePositionsCard(wallet: BittensorWalletSnapshot): BittensorChatCard {
   const positions = [...wallet.stakePositions].sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0));
   const total = positions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0);
@@ -1314,6 +1492,14 @@ function clarificationResult(
 }
 
 export async function executeBittensorChatWorkflow(input: BittensorChatExecutionInput): Promise<BittensorChatExecutionResult> {
+  const previousContext = resolveBittensorChatContext(input);
+  const hydratedInput = hydrateBittensorChatInput(input, previousContext);
+  const result = await executeBittensorChatWorkflowCore(hydratedInput);
+  const context = buildBittensorChatContext(hydratedInput, result, previousContext);
+  return { ...result, context };
+}
+
+async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInput): Promise<BittensorChatExecutionResult> {
   const message = String(input.message ?? "").trim();
   const plan = planBittensorChat({ message, ss58Address: input.ss58Address ?? input.coldkey ?? null });
   const answeredPlan = { ...plan, requiresClarification: false, clarificationQuestion: null };
@@ -1566,20 +1752,110 @@ function adapterForCategory(category: string): BittensorCapabilityManifest["serv
   return "universal";
 }
 
+function capabilityLevelFor(
+  adapter: BittensorCapabilityManifest["serviceAdapter"],
+  configuredAdapter: BittensorConfiguredSubnetAdapter | null,
+): BittensorCapabilityManifest["capabilityLevel"] {
+  if (configuredAdapter?.serviceAdapter !== "unsupported" && configuredAdapter && adapter !== "unsupported") return "adapter_ready";
+  if (adapter === "unsupported") return "unsupported";
+  if (adapter === "universal") return "universal_read";
+  return "adapter_required";
+}
+
+function benefitsForCapability(subnet: BittensorSubnetSummary, adapter: BittensorCapabilityManifest["serviceAdapter"]): string[] {
+  const categoryBenefits: Record<string, string[]> = {
+    "Creative AI": [
+      "Find subnets that may help generate, transform, or evaluate images and media.",
+      "Compare price, emissions, and adapter readiness before trying a creative workflow.",
+    ],
+    "Compute and infrastructure": [
+      "Inspect compute-oriented subnet health, validator context, and staking exposure.",
+      "Monitor emissions or slippage before allocating TAO into compute markets.",
+    ],
+    "Data and knowledge": [
+      "Discover data, search, retrieval, or knowledge subnets for research-heavy tasks.",
+      "Track subnet freshness and service-readiness before depending on a data source.",
+    ],
+    "Agent tools": [
+      "Identify subnets that may extend agent workflows, automation, or tool execution.",
+      "Separate staking into a subnet from actually invoking its service adapter.",
+    ],
+    "Intelligence market": [
+      "Explore inference or model-market subnets in beginner language.",
+      "Compare visible validator context before preparing any staking preview.",
+    ],
+  };
+  return [
+    subnet.benefitSummary,
+    ...(categoryBenefits[subnet.category] ?? [
+      "Explain what this subnet appears to do and how it may fit a user goal.",
+      "Read public network, wallet, stake, and monitoring context where provider data exists.",
+    ]),
+    adapter === "universal"
+      ? "Matterhorn can explain, compare, monitor, and guide staking for this subnet now."
+      : "Direct service execution depends on a configured subnet adapter.",
+  ].filter(Boolean).slice(0, 4);
+}
+
+function examplePromptsForCapability(subnet: BittensorSubnetSummary): string[] {
+  return [
+    `Explain subnet ${subnet.netuid} in beginner language.`,
+    `Is subnet ${subnet.netuid} useful for my current task?`,
+    `Compare validators on subnet ${subnet.netuid}.`,
+    `Monitor subnet ${subnet.netuid} emissions.`,
+    `Prepare staking 1 TAO on subnet ${subnet.netuid} after I choose a validator hotkey.`,
+  ];
+}
+
+function adapterStatusForCapability(
+  adapter: BittensorCapabilityManifest["serviceAdapter"],
+  configuredAdapter: BittensorConfiguredSubnetAdapter | null,
+): BittensorCapabilityManifest["adapterStatus"] {
+  if (configuredAdapter?.serviceAdapter !== "unsupported" && configuredAdapter && adapter !== "unsupported") {
+    return {
+      configured: true,
+      adapter,
+      message: `Direct service adapter configured: ${configuredAdapter.name}.`,
+      requiredAuth: configuredAdapter.requiredAuth,
+      costModel: configuredAdapter.costModel,
+    };
+  }
+  if (adapter === "universal") {
+    return {
+      configured: false,
+      adapter,
+      message: "Universal read, explanation, comparison, monitoring, and unsigned preview workflows are available.",
+      requiredAuth: "none",
+      costModel: "free_read",
+    };
+  }
+  return {
+    configured: false,
+    adapter,
+    message: `No ${adapter.replace(/_/g, " ")} service adapter is configured yet; Matterhorn can still explain, compare, monitor, and prepare safe previews.`,
+    requiredAuth: "unknown",
+    costModel: "unknown",
+  };
+}
+
 export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorCapabilityManifest {
   const configuredAdapter = getConfiguredSubnetAdapter(subnet.netuid);
   const adapter = configuredAdapter?.serviceAdapter === "unsupported"
     ? adapterForCategory(subnet.category)
     : configuredAdapter?.serviceAdapter ?? adapterForCategory(subnet.category);
+  const adapterStatus = adapterStatusForCapability(adapter, configuredAdapter);
   return {
     netuid: subnet.netuid,
     name: subnet.name,
     category: subnet.category,
     utilitySummary: subnet.benefitSummary,
+    capabilityLevel: capabilityLevelFor(adapter, configuredAdapter),
+    userBenefits: benefitsForCapability(subnet, adapter),
+    examplePrompts: examplePromptsForCapability(subnet),
     supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "monitor", "subnet_use"],
     serviceAdapter: adapter,
-    requiredAuth: configuredAdapter?.requiredAuth ?? (adapter === "universal" ? "none" : "unknown"),
-    costModel: configuredAdapter?.costModel ?? (adapter === "universal" ? "free_read" : "unknown"),
+    requiredAuth: adapterStatus.requiredAuth,
+    costModel: adapterStatus.costModel,
     requestSchema: {
       type: "object",
       properties: {
@@ -1596,13 +1872,17 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
         warnings: { type: "array", items: { type: "string" } },
       },
     },
+    dataFreshness: {
+      source: subnet.source,
+      block: subnet.block ?? null,
+      freshness: subnet.freshness ?? null,
+      updatedAt: subnet.updatedAt,
+      liveReadReady: subnet.source !== "curated-fallback",
+    },
+    adapterStatus,
     safetyNotes: [
       "Universal support covers explanation, metagraph, staking guidance, wallet context, and monitoring.",
-      configuredAdapter
-        ? `Direct service adapter configured: ${configuredAdapter.name}.`
-        : adapter === "universal"
-        ? "No direct service adapter is configured for this subnet yet."
-        : "Direct service calls require a subnet-specific adapter and may need auth or payment.",
+      adapterStatus.message,
       ...(configuredAdapter?.safetyNotes ?? []),
       "Signed Bittensor actions require an external signer.",
     ],
@@ -2322,10 +2602,28 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
     checks.push({ id: "chat_intents", label: "Chat intent planner", status: "fail", summary: err instanceof Error ? err.message : "Intent planner failed." });
   }
 
+  try {
+    const result = await executeBittensorChatWorkflow({ message: "explain Bittensor context memory" });
+    const disallowed = secretFieldPath(result.context);
+    checks.push({
+      id: "chat_context",
+      label: "Public chat context",
+      status: result.context && !disallowed ? "pass" : "fail",
+      summary: result.context && !disallowed
+        ? "Bittensor chat returns reusable public context without signing-material fields."
+        : "Bittensor chat context was missing or carried a disallowed field.",
+      details: { contextId: result.context?.id ?? null, disallowed },
+    });
+  } catch (err) {
+    checks.push({ id: "chat_context", label: "Public chat context", status: "fail", summary: err instanceof Error ? err.message : "Chat context audit failed." });
+  }
+
   let subnets: BittensorSubnetSummary[] = [];
   try {
     subnets = await bittensorProvider.listSubnets();
     const fallbackOnly = subnets.length > 0 && subnets.every((subnet) => subnet.source === "curated-fallback");
+    const providerBacked = subnets.filter((subnet) => subnet.source !== "curated-fallback");
+    const providerBackedWithFreshness = providerBacked.filter((subnet) => (subnet.block !== null && subnet.block !== undefined) || Boolean(subnet.freshness));
     checks.push({
       id: "subnet_discovery",
       label: "Subnet discovery",
@@ -2336,6 +2634,21 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
           : "Subnet discovery returned live or provider-backed subnet metadata."
         : "Subnet discovery returned no subnets.",
       details: { count: subnets.length, sources: [...new Set(subnets.map((subnet) => subnet.source))] },
+    });
+    checks.push({
+      id: "live_read_freshness",
+      label: "Live-read freshness",
+      status: providerBacked.length === 0 ? "warning" : providerBackedWithFreshness.length ? "pass" : "warning",
+      summary: providerBacked.length === 0
+        ? "No provider-backed subnet freshness was available; Matterhorn will label fallback data clearly."
+        : providerBackedWithFreshness.length
+          ? "Provider-backed subnet metadata includes block or freshness labels for chat cards."
+          : "Provider-backed subnet metadata is available but does not include block or freshness labels.",
+      details: {
+        providerBacked: providerBacked.length,
+        withFreshness: providerBackedWithFreshness.length,
+        fallback: subnets.length - providerBacked.length,
+      },
     });
   } catch (err) {
     checks.push({ id: "subnet_discovery", label: "Subnet discovery", status: "fail", summary: err instanceof Error ? err.message : "Subnet discovery failed." });
@@ -2350,16 +2663,33 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       !capability.supportedChatIntents.includes("stake_plan") ||
       !capability.supportedChatIntents.includes("monitor")
     );
+    const missingV2Fields = capabilities.filter((capability) =>
+      !capability.capabilityLevel ||
+      !Array.isArray(capability.userBenefits) ||
+      !capability.userBenefits.length ||
+      !Array.isArray(capability.examplePrompts) ||
+      !capability.examplePrompts.length ||
+      !capability.adapterStatus ||
+      !capability.dataFreshness
+    );
     checks.push({
       id: "capabilities",
       label: "Subnet capability registry",
-      status: missingUniversal.length ? "fail" : capabilities.length ? "pass" : "warning",
+      status: missingUniversal.length || missingV2Fields.length ? "fail" : capabilities.length ? "pass" : "warning",
       summary: missingUniversal.length
         ? "Some capability manifests are missing universal chat support."
+        : missingV2Fields.length
+          ? "Some capability manifests are missing Phase 3/4 capability metadata."
         : capabilities.length
-          ? "Capability manifests include universal Bittensor chat support."
+          ? "Capability manifests include universal Bittensor chat support, adapter readiness, examples, and freshness labels."
           : "No capability manifests were available to audit.",
-      details: { count: capabilities.length, missingNetuids: missingUniversal.map((capability) => capability.netuid) },
+      details: {
+        count: capabilities.length,
+        missingNetuids: missingUniversal.map((capability) => capability.netuid),
+        missingV2Netuids: missingV2Fields.map((capability) => capability.netuid),
+        adapterReady: capabilities.filter((capability) => capability.capabilityLevel === "adapter_ready").length,
+        adapterRequired: capabilities.filter((capability) => capability.capabilityLevel === "adapter_required").length,
+      },
     });
   } catch (err) {
     checks.push({ id: "capabilities", label: "Subnet capability registry", status: "fail", summary: err instanceof Error ? err.message : "Capability audit failed." });
@@ -2525,26 +2855,38 @@ export function buildBittensorPlanCards(plan: BittensorPlan): BittensorChatCard[
 }
 
 export function buildBittensorSubnetCards(subnets: BittensorSubnetSummary[]): BittensorChatCard[] {
-  return subnets.slice(0, 6).map((subnet) => ({
-    kind: "subnet_comparison",
-    title: `${subnet.name} (${subnet.symbol})`,
-    subtitle: `Subnet ${subnet.netuid} · ${subnet.category}`,
-    summary: subnet.benefitSummary,
-    tone: subnet.source === "curated-fallback" ? "warning" : "default",
-    items: [
-      cardItem("Price", subnet.priceTao === null ? "Unavailable" : `${formatMetric(subnet.priceTao)} TAO`),
-      cardItem("Emission", formatMetric(subnet.emission)),
-      cardItem("Tempo", formatMetric(subnet.tempo)),
-      cardItem("Source", subnet.source, subnet.source === "curated-fallback" ? "warning" : "muted"),
-    ],
-    actions: [{
-      label: "Inspect subnet",
-      kind: "send_to_chat",
-      payload: { prompt: `Explain Bittensor subnet ${subnet.netuid} (${subnet.name}) and how it can help my work.` },
-    }],
-    warnings: subnet.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
-    data: { subnet },
-  }));
+  return subnets.slice(0, 6).map((subnet) => {
+    const capability = capabilityFromSubnet(subnet);
+    const adapterWarning = capability.capabilityLevel === "adapter_required"
+      ? "Matterhorn can explain and monitor this subnet, but direct service execution needs a configured subnet adapter."
+      : null;
+    return {
+      kind: "subnet_comparison",
+      title: `${subnet.name} (${subnet.symbol})`,
+      subtitle: `Subnet ${subnet.netuid} · ${subnet.category}`,
+      summary: subnet.benefitSummary,
+      tone: subnet.source === "curated-fallback" ? "warning" : "default",
+      items: [
+        cardItem("Price", subnet.priceTao === null ? "Unavailable" : `${formatMetric(subnet.priceTao)} TAO`),
+        cardItem("Emission", formatMetric(subnet.emission)),
+        cardItem("Tempo", formatMetric(subnet.tempo)),
+        cardItem("Capability", titleCase(capability.capabilityLevel.replace(/_/g, " ")), capability.capabilityLevel === "adapter_ready" ? "good" : capability.capabilityLevel === "adapter_required" ? "warning" : "default"),
+        cardItem("Adapter", capability.adapterStatus.configured ? capability.serviceAdapter.replace(/_/g, " ") : "Not configured", capability.adapterStatus.configured ? "good" : "muted"),
+        cardItem("Freshness", subnet.freshness ?? "Unavailable", subnet.freshness ? "default" : "muted"),
+        cardItem("Source", subnet.source, subnet.source === "curated-fallback" ? "warning" : "muted"),
+      ],
+      actions: [{
+        label: "Inspect subnet",
+        kind: "send_to_chat",
+        payload: { prompt: `Explain Bittensor subnet ${subnet.netuid} (${subnet.name}) and how it can help my work.` },
+      }],
+      warnings: uniqueWarnings(
+        subnet.source === "curated-fallback" ? ["Live provider data was unavailable for this subnet."] : [],
+        adapterWarning ? [adapterWarning] : [],
+      ),
+      data: { subnet, capability },
+    } satisfies BittensorChatCard;
+  });
 }
 
 export function buildBittensorWalletCard(wallet: BittensorWalletSnapshot): BittensorChatCard {
