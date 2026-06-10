@@ -80,6 +80,8 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
   add("netuid", context.netuid);
   add("amountTao", context.amountTao);
   add("validatorHotkey", context.validatorHotkey);
+  add("recipient", context.recipient);
+  add("destination", context.destination);
   add("action", context.action);
 
   const subnet = context.subnet as Partial<BittensorSubnetSummary> | null | undefined;
@@ -333,6 +335,8 @@ export default function BittensorPanel() {
       netuid: quote.netuid,
       amountTao: quote.amountTao,
       validatorHotkey,
+      recipient,
+      destination: recipient,
       quote,
     });
   };

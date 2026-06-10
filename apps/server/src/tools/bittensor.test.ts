@@ -361,11 +361,11 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
     }
     if (url.endsWith("/extrinsics/quote")) {
       const body = JSON.parse(String(init?.body ?? "{}"));
-      expect(body.netuid).toBe(77);
+      if (body.action !== "transfer") expect(body.netuid).toBe(77);
       return json({
-        action: "stake",
-        netuid: 77,
-        amountTao: 1,
+        action: body.action ?? "stake",
+        netuid: body.netuid ?? null,
+        amountTao: Number(body.amountTao ?? 1),
         priceTao: 0.25,
         idealAlpha: 4,
         expectedAlpha: 3.98,
@@ -381,15 +381,15 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
     }
     if (url.endsWith("/extrinsics/prepare")) {
       const body = JSON.parse(String(init?.body ?? "{}"));
-      expect(body.action).toBe("stake");
       return json({
         unsignedPayload: {
           chain: "bittensor",
           network: "finney",
-          action: "stake",
+          action: body.action,
           netuid: body.netuid,
           amountTao: body.amountTao,
           hotkey: body.hotkey,
+          destination: body.destination,
         },
         feeTao: 0.0001,
         slippageBps: 50,
@@ -413,6 +413,23 @@ async function withMockedFivePromptSidecar(run: () => Promise<void>): Promise<vo
 }
 
 describe("executeBittensorChatWorkflow", () => {
+  test("answers arbitrary Bittensor learning prompts", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "explain coldkeys, hotkeys, alpha, and Dynamic TAO like I am new" });
+    expect(result.execution).toBe("answered");
+    expect(result.plan.intent).toBe("learn");
+    expect(result.cards[0]?.title).toBe("Bittensor explainer");
+    expect(result.cards[0]?.items.some((item) => item.label === "Alpha")).toBe(true);
+  });
+
+  test("explains any named subnet through the chat executor", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "explain subnet 77 and how it benefits my work" });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("subnet_result");
+      expect(result.responseText).toContain("Image subnet");
+    });
+  });
+
   test("asks one clarification question for show my TAO without SS58", async () => {
     const result = await executeBittensorChatWorkflow({ message: "show my TAO" });
     expect(result.execution).toBe("clarification_required");
@@ -453,11 +470,30 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("discovers arbitrary subnet goals without special-casing the prompt", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "find Bittensor subnets for decentralized media workflows", limit: 3 });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("discover");
+      expect(result.cards[0]?.kind).toBe("subnet_comparison");
+    });
+  });
+
   test("compares validators on a requested subnet", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("validator_selection");
+      expect(result.responseText).toContain("subnet 77");
+    });
+  });
+
+  test("creates monitoring watches from ordinary chat prompts", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "monitor subnet 77 emissions" });
+      expect(result.execution).toBe("answered");
+      expect(result.plan.intent).toBe("monitor");
+      expect(result.cards[0]?.kind).toBe("watchlist");
       expect(result.responseText).toContain("subnet 77");
     });
   });
@@ -482,6 +518,27 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.cards[0]?.kind).toBe("signed_action_review");
       expect(result.responseText).toContain("external signing");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("clarifies unstake previews instead of guessing validator context", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "unstake 0.5 TAO from subnet 77" });
+      expect(result.execution).toBe("clarification_required");
+      expect(result.clarificationQuestion).toContain("validator hotkey");
+    });
+  });
+
+  test("returns unsigned transfer previews when recipient context exists", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: "transfer 1 TAO safely",
+        ss58Address: VALID_SS58,
+        recipient: "5FHneW46xGXgs5mUiveU4sbTyGBzmtoW4h4KYxqsdXw4nq8Z",
+      });
+      expect(result.execution).toBe("unsigned_preview");
+      expect(result.cards[0]?.kind).toBe("signed_action_review");
+      expect((result.data.preview as { action?: string; destination?: string }).action).toBe("transfer");
     });
   });
 });

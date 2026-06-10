@@ -3602,6 +3602,8 @@ function createRoutes(
       amountTao: body.amountTao === undefined ? null : String(body.amountTao),
       validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
       coldkey: typeof body.coldkey === "string" ? body.coldkey : null,
+      recipient: typeof body.recipient === "string" ? body.recipient : null,
+      destination: typeof body.destination === "string" ? body.destination : null,
       limit: body.limit === null || body.limit === undefined || body.limit === "" ? null : Number(body.limit),
       strategy,
       rateTolerance: body.rateTolerance === null || body.rateTolerance === undefined || body.rateTolerance === "" ? null : Number(body.rateTolerance),

@@ -103,7 +103,7 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - pm_getOrderbook(marketId, limit?) — Get bids/asks for a market.
 
 **Bittensor (bittensor_*)**
-- bittensor_chat(message, ss58Address?, netuid?, amountTao?, validatorHotkey?, coldkey?, limit?, strategy?, rateTolerance?) — Execute the safe deterministic chat workflow for ordinary Bittensor requests. Use this first for “show my TAO”, “where am I staked?”, “which subnet helps with image generation?”, “compare validators on subnet 14”, and “prepare staking 1 TAO”.
+- bittensor_chat(message, ss58Address?, netuid?, amountTao?, validatorHotkey?, coldkey?, recipient?, destination?, limit?, strategy?, rateTolerance?) — Execute the safe deterministic chat workflow for ordinary Bittensor requests. Use this first for learning, subnet discovery, wallet reads, staking/unstaking/transfer previews, validator comparison, subnet service attempts, and monitoring.
 - bittensor_plan_from_chat(message, ss58Address?) — Turn ordinary Bittensor requests into a safe workflow plan. Use this when you need planning detail after bittensor_chat, or when you are debugging a Bittensor route.
 - bittensor_list_subnets(query?, limit?) — List subnets with plain-English utility summaries.
 - bittensor_find_subnets_for_goal(goal, limit?) — Find subnets for a user goal like image generation, data search, compute, inference, or agent tooling.
@@ -157,8 +157,8 @@ When the user asks about swaps, yields, perps, or prediction markets, follow a s
 4. Summarize opportunities in chat. Do NOT place bets without approval.
 
 **"I want to use Bittensor or a Bittensor subnet"
-1. bittensor_chat(user message, plus any visible SS58/netuid/amount/hotkey context) → get the deterministic answer, clarification, cards, or unsigned preview.
-2. If bittensor_chat asks for clarification, ask exactly that one question. Do not guess a wallet address, subnet, validator hotkey, or amount.
+1. bittensor_chat(user message, plus any visible SS58/netuid/amount/hotkey/recipient context) → get the deterministic answer, clarification, cards, unsupported-adapter explanation, watch, or unsigned preview.
+2. If bittensor_chat asks for clarification, ask exactly that one question. Do not guess a wallet address, subnet, validator hotkey, recipient, or amount.
 3. If learning: explain in beginner language and define TAO, subnet, coldkey, hotkey, validator, miner, alpha, metagraph, and Dynamic TAO only as needed.
 4. If deeper follow-up is needed after bittensor_chat: use lower-level tools such as bittensor_find_subnets_for_goal, bittensor_get_wallet_positions, bittensor_compare_validators, bittensor_prepare_extrinsic, or bittensor_invoke_subnet.
 5. When the user is ready to sign externally: bittensor_create_signing_handoff(preview) → give them the checksumed handoff bundle and review steps.

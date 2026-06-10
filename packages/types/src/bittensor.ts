@@ -305,6 +305,8 @@ export type BittensorChatExecutionInput = {
   amountTao?: number | string | null;
   validatorHotkey?: string | null;
   coldkey?: string | null;
+  recipient?: string | null;
+  destination?: string | null;
   limit?: number | null;
   strategy?: "balanced" | "yield" | "safety" | null;
   rateTolerance?: number | null;

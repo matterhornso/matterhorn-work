@@ -214,8 +214,12 @@ afterEach(async () => {
 });
 
 describe("Bittensor chat execute route", () => {
-  test("returns chat-ready results for the five prompt milestone", async () => {
+  test("returns chat-ready results for general Bittensor prompts", async () => {
     const { base } = await boot();
+
+    const learn = await postExecute(base, { message: "explain alpha and coldkeys in Bittensor" });
+    expect(learn.execution).toBe("answered");
+    expect(learn.cards[0]?.title).toBe("Bittensor explainer");
 
     const missingWallet = await postExecute(base, { message: "show my TAO" });
     expect(missingWallet.execution).toBe("clarification_required");
