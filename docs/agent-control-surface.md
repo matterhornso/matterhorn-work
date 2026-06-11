@@ -1,0 +1,64 @@
+# Matterhorn Work Agent Control Surface
+
+Matterhorn Work should be usable from agent environments such as Claude Code, Codex, Cursor, Claude Desktop, and other MCP-capable clients. The control surface is intentionally layered so agents can choose the safest interface for the job.
+
+## Layers
+
+| Layer | Package or API | Primary Use |
+| --- | --- | --- |
+| Unified server MCP | `matterhorn-work-mcp` | Server status, workspaces, approvals, file sessions, and Bittensor chat |
+| Desktop UI MCP | `matterhorn-work-ui-mcp` | Read visible UI state and run desktop actions |
+| Crypto MCP | `matterhorn-work-crypto-mcp` | Crypto research, Bittensor tools, quote/preparation flows |
+| Wallet MCP | `matterhorn-work-wallet-mcp` | EVM wallet reads and transaction/signature handoffs |
+| CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, and file sessions |
+| HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
+
+## First Agent Flow
+
+1. Start a local server:
+
+   ```bash
+   matterhorn-work start --workspace /path/to/workspace --approval manual
+   ```
+
+2. Copy the client token and host token from startup output.
+
+3. Configure an MCP client:
+
+   ```json
+   {
+     "mcpServers": {
+       "matterhorn-work": {
+         "command": "npx",
+         "args": ["-y", "matterhorn-work-mcp"],
+         "env": {
+           "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
+           "MATTERHORN_WORK_TOKEN": "<client-token>",
+           "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+         }
+       }
+     }
+   }
+   ```
+
+4. Use `matterhorn_status` to confirm the server.
+
+5. Use `matterhorn_list_workspaces`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
+
+6. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+
+7. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
+
+## Safety
+
+- Keep seed phrases, mnemonics, private keys, and wallet exports out of every MCP/API/CLI schema.
+- Keep host approval tools behind `MATTERHORN_WORK_HOST_TOKEN`.
+- Prefer read-only file sessions until the user asks for a write.
+- Keep Bittensor signed actions non-custodial: preview first, sign externally, submit only through the configured safe path.
+
+## Next Build Steps
+
+1. Add Matterhorn CLI helpers that print MCP-ready config blocks for Claude Code/Codex.
+2. Add OpenAPI-style documentation for the local server APIs used by `matterhorn-work-mcp`.
+3. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
+4. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.

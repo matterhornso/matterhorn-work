@@ -1,0 +1,76 @@
+# Matterhorn Work MCP
+
+Unified MCP server for controlling a running Matterhorn Work server from Claude Code, Codex, Cursor, Claude Desktop, or another MCP-capable agent.
+
+This package is the server/control complement to:
+
+- `matterhorn-work-ui-mcp` for desktop UI control
+- `matterhorn-work-crypto-mcp` for crypto and Bittensor tools
+- `matterhorn-work-wallet-mcp` for EVM wallet reads and approval handoffs
+
+## Install
+
+```bash
+npm install -g matterhorn-work-mcp
+```
+
+Or run it without installing:
+
+```bash
+npx matterhorn-work-mcp
+```
+
+## Configure
+
+Point the MCP server at a running Matterhorn Work server:
+
+```bash
+export MATTERHORN_WORK_SERVER_URL="http://127.0.0.1:8787"
+export MATTERHORN_WORK_TOKEN="<client-token>"
+export MATTERHORN_WORK_HOST_TOKEN="<host-token>" # only needed for approval tools
+```
+
+Legacy env fallbacks are still accepted:
+
+- `OPENWORK_SERVER_URL`
+- `OPENWORK_TOKEN`
+- `OPENWORK_HOST_TOKEN`
+
+## MCP Config
+
+```json
+{
+  "mcpServers": {
+    "matterhorn-work": {
+      "command": "npx",
+      "args": ["-y", "matterhorn-work-mcp"],
+      "env": {
+        "MATTERHORN_WORK_SERVER_URL": "http://127.0.0.1:8787",
+        "MATTERHORN_WORK_TOKEN": "<client-token>",
+        "MATTERHORN_WORK_HOST_TOKEN": "<host-token>"
+      }
+    }
+  }
+}
+```
+
+## Tools
+
+- `matterhorn_status` — health, status, and server capabilities
+- `matterhorn_list_workspaces` — visible workspaces
+- `matterhorn_create_file_session` — create a file session
+- `matterhorn_file_catalog` — list files in a file session
+- `matterhorn_read_files` — read files and decode text content
+- `matterhorn_write_files` — write files through a writable session
+- `matterhorn_close_file_session` — close a file session
+- `matterhorn_list_approvals` — list pending host approval requests
+- `matterhorn_reply_approval` — allow or deny an approval request
+- `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
+- `matterhorn_bittensor_readiness` — run Bittensor readiness checks
+
+## Safety
+
+- No seed phrases, mnemonics, private keys, or wallet exports are accepted by any tool schema.
+- Approval tools require the host token separately from the normal client token.
+- Write tools go through Matterhorn Work file-session APIs and existing approval policy.
+- Bittensor actions remain non-custodial and rely on the existing unsigned-preview/external-signing flow.

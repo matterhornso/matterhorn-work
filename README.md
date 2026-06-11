@@ -57,6 +57,7 @@ apps/
   desktop/      Electron shell
   server/       Matterhorn Work agent server
 packages/
+  matterhorn-work-mcp/          Unified server-control MCP for Codex/Claude
   matterhorn-work-wallet-mcp/   Wallet MCP server (stdio transport)
   matterhorn-work-ui-mcp/       UI control MCP server
   ui/                           Shared component library
@@ -67,6 +68,8 @@ packages/
 Every session carries wallet context. The agent can propose on-chain actions, and the wallet panel surfaces them for user approval — no extension popups, no copy-pasting addresses.
 
 For the naming boundary between the product-facing **Matterhorn Work engine** and the underlying OpenCode runtime, see [docs/opencode-runtime-abstraction.md](docs/opencode-runtime-abstraction.md).
+
+For Claude Code, Codex, Cursor, and other external agent control, see [docs/agent-control-surface.md](docs/agent-control-surface.md).
 
 ---
 
