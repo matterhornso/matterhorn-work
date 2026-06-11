@@ -33,6 +33,10 @@ That's it. HandsFree can now list your sessions, read transcripts, type into the
 - `ui_list_actions` — get every action the app currently exposes (session controls, composer, navigation, etc.).
 - `ui_execute_action` — run an action by ID, e.g. `session.create_task`, `composer.set_text`, `composer.send`.
 - `ui_status` — check if Matterhorn Work is running and the bridge is reachable.
+- `browser_list_actions` — list only semantic `browser.*` actions published by Matterhorn Work.
+- `browser_snapshot` — run the published `browser.snapshot` action when available.
+- `browser_open` — open a URL through a published `browser.open` or `browser.navigate` action.
+- `browser_execute_action` — execute a published `browser.*` action by ID, with explicit confirmation required for high-risk actions.
 
 ## Install
 
@@ -85,7 +89,7 @@ Both use the same MCP config shape. Add to your `claude_desktop_config.json` or 
 }
 ```
 
-Restart the app. The four tools (`ui_status`, `ui_snapshot`, `ui_list_actions`, `ui_execute_action`) will appear in the tool list.
+Restart the app. The UI tools (`ui_status`, `ui_snapshot`, `ui_list_actions`, `ui_execute_action`) and semantic browser tools (`browser_list_actions`, `browser_snapshot`, `browser_open`, `browser_execute_action`) will appear in the tool list.
 
 ## Add to your own MCP client
 
@@ -118,6 +122,49 @@ await client.callTool({
 ```
 
 ## Tool reference
+
+### Browser action tools
+
+Matterhorn Work browser/control tools are semantic wrappers over the same action model as `ui_list_actions`. They never invent click coordinates or DOM selectors. If the desktop app has not published a matching `browser.*` action, the tool returns a clear unsupported response.
+
+Use them in this order:
+
+1. Call `browser_list_actions`.
+2. Use `browser_snapshot` or `browser_open` when those actions are listed.
+3. Use `browser_execute_action` for other listed `browser.*` actions.
+4. Fall back to a generic browser automation tool only for safe read-only inspection, and never for destructive, financial, signing, broadcast, or external actions.
+
+#### `browser_list_actions`
+
+List the semantic `browser.*` actions currently published by Matterhorn Work. The output includes labels, descriptions, arguments, side-effect policy, disabled state, and example args where the app provides them.
+
+**No arguments.**
+
+#### `browser_snapshot`
+
+Execute `browser.snapshot` if Matterhorn Work exposes it. This is a read-only semantic browser inspection action. If no `browser.snapshot` action is available, the tool refuses instead of falling back to screenshots or coordinates.
+
+**No arguments.**
+
+#### `browser_open`
+
+Open or navigate a browser target through a published `browser.open` or `browser.navigate` action.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `url` | string | URL to open or navigate to |
+| `newTab` | boolean (optional) | Request a new tab when the published action supports it |
+| `confirmed` | boolean (optional) | Required only when the published action declares external side effects or confirmation |
+
+#### `browser_execute_action`
+
+Execute one listed semantic `browser.*` action by id. This tool refuses non-browser action ids. If a browser action declares `requiresConfirmation: true` or `sideEffect: "external"`, pass `confirmed: true` only after the user explicitly approves the consequence.
+
+| Argument | Type | Description |
+|----------|------|-------------|
+| `actionId` | string | Published action id from `browser_list_actions` |
+| `args` | object (optional) | JSON action arguments |
+| `confirmed` | boolean (optional) | Explicit user confirmation for high-risk actions |
 
 ### `ui_status`
 

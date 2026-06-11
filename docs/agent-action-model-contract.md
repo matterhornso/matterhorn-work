@@ -177,6 +177,7 @@ Current desktop UI bridge tools map directly to this model:
 | `ui_snapshot` | returns `MatterhornControlSnapshot` |
 | `ui_list_actions` | returns `MatterhornControlActionMetadata[]` |
 | `ui_execute_action` | accepts `MatterhornControlExecutionRequest` without `dryRun` today |
+| `browser_list_actions`, `browser_snapshot`, `browser_open`, `browser_execute_action` | browser-focused wrappers that only operate on published `browser.*` actions |
 
 Next UI bridge work should:
 
@@ -204,7 +205,7 @@ Server actions must enforce the same token scopes as the dedicated route they wr
 Browser/control tools should use this contract as a planning layer before low-level browser actions:
 
 1. Inspect app/server state through `matterhorn_status`, `matterhorn_get_session_snapshot`, or `ui_snapshot`.
-2. List semantic actions.
+2. List semantic actions, using `browser_list_actions` for browser-specific work when the UI MCP is available.
 3. Execute semantic actions when available.
 4. Fall back to browser DOM/click/type only when no semantic action exists.
 5. Never use coordinates for destructive, external, or financial actions.
