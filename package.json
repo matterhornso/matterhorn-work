@@ -29,6 +29,7 @@
     "test:e2e": "pnpm --filter @matterhorn-work/app test:e2e",
     "test:agent-control-mcp": "node packages/matterhorn-work-mcp/test-smoke.mjs",
     "test:mcp-config-cli": "node scripts/mcp-config-cli.test.mjs",
+    "test:agent-control-api-docs": "node scripts/agent-control-api-docs.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
     "test:opencode-abstraction-copy": "node scripts/opencode-abstraction-copy.test.mjs",
     "test:orchestrator": "pnpm --filter matterhorn-work-orchestrator test:router",

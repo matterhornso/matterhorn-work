@@ -13,6 +13,8 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 | CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, and file sessions |
 | HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
 
+See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`.
+
 ## First Agent Flow
 
 1. Start a local server:
@@ -69,7 +71,6 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 
 ## Next Build Steps
 
-1. Add OpenAPI-style documentation for the local server APIs used by `matterhorn-work-mcp`.
-2. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
-3. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
-4. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
+1. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
+2. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+3. Add install docs for each target app once their Matterhorn MCP config paths are finalized.

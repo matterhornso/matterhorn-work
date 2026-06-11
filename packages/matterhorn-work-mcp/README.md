@@ -56,6 +56,8 @@ Legacy env fallbacks are still accepted:
 
 ## Tools
 
+The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md).
+
 - `matterhorn_status` — health, status, and server capabilities
 - `matterhorn_list_workspaces` — visible workspaces
 - `matterhorn_create_file_session` — create a file session
