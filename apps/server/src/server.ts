@@ -2073,6 +2073,35 @@ function createRoutes(
     return jsonResponse({ items });
   });
 
+  addRoute(routes, "POST", "/workspace/:id/sessions", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const title = typeof body.title === "string" && body.title.trim() ? body.title.trim() : undefined;
+    const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const item = buildSession(unwrapOpencodeResult(
+      await opencode.session.create({
+        ...(title ? { title } : {}),
+        ...(directory ? { directory } : {}),
+      }),
+      "/session",
+    ));
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "session.create",
+      target: item.id,
+      summary: "Created chat session",
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ item }, 201);
+  });
+
   addRoute(routes, "GET", "/workspace/:id/sessions", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const items = await listWorkspaceSessions(config, workspace, {
@@ -2092,6 +2121,61 @@ function createRoutes(
     }
     const item = await readWorkspaceSession(config, workspace, sessionId);
     return jsonResponse({ item });
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_payload", "sessionId is required");
+    }
+    const body = await readJsonBody(ctx.request);
+    const parts = parseSessionPromptParts(body);
+    const model = parseSessionPromptModel(body);
+    const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const sessionApi = opencode.session as typeof opencode.session & {
+      promptAsync: (parameters: Record<string, unknown>) => Promise<OpencodeClientResult<unknown, unknown>>;
+    };
+
+    await requireApproval(ctx, {
+      workspaceId: workspace.id,
+      action: "session.prompt",
+      summary: `Submit prompt to session ${sessionId}`,
+      paths: [workspace.path],
+    });
+
+    unwrapOpencodeResult(
+      await sessionApi.promptAsync({
+        sessionID: sessionId,
+        ...(directory ? { directory } : {}),
+        ...(typeof body.messageID === "string" && body.messageID.trim() ? { messageID: body.messageID.trim() } : {}),
+        ...(model ? { model } : {}),
+        ...(typeof body.agent === "string" && body.agent.trim() ? { agent: body.agent.trim() } : {}),
+        ...(typeof body.variant === "string" && body.variant.trim() ? { variant: body.variant.trim() } : {}),
+        ...(typeof body.noReply === "boolean" ? { noReply: body.noReply } : {}),
+        ...(isBooleanRecord(body.tools) ? { tools: body.tools } : {}),
+        ...(typeof body.system === "string" && body.system.trim() ? { system: body.system } : {}),
+        ...(typeof body.reasoning_effort === "string" && body.reasoning_effort.trim() ? { reasoning_effort: body.reasoning_effort.trim() } : {}),
+        ...(typeof body.reasoningEffort === "string" && body.reasoningEffort.trim() ? { reasoning_effort: body.reasoningEffort.trim() } : {}),
+        parts,
+      }),
+      `/session/${encodeURIComponent(sessionId)}/prompt_async`,
+    );
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "session.prompt",
+      target: sessionId,
+      summary: "Submitted prompt to chat session",
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ ok: true, accepted: true, sessionId }, 202);
   });
 
   addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/messages", "client", async (ctx) => {
@@ -3909,6 +3993,39 @@ function createRoutes(
   });
 
   return routes;
+}
+
+function isBooleanRecord(value: unknown): value is Record<string, boolean> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "boolean");
+}
+
+function parseSessionPromptParts(body: Record<string, unknown>): unknown[] {
+  if (Array.isArray(body.parts) && body.parts.length > 0) {
+    return body.parts;
+  }
+  if (typeof body.message === "string" && body.message.trim()) {
+    return [{ type: "text", text: body.message }];
+  }
+  throw new ApiError(400, "invalid_payload", "message or non-empty parts is required");
+}
+
+function parseSessionPromptModel(body: Record<string, unknown>): { providerID: string; modelID: string } | undefined {
+  if (isRecord(body.model)) {
+    const providerID = typeof body.model.providerID === "string" ? body.model.providerID.trim() : "";
+    const modelID = typeof body.model.modelID === "string" ? body.model.modelID.trim() : "";
+    if (!providerID && !modelID) return undefined;
+    if (!providerID || !modelID) {
+      throw new ApiError(400, "invalid_payload", "model requires providerID and modelID");
+    }
+    return { providerID, modelID };
+  }
+  const providerID = typeof body.providerID === "string" ? body.providerID.trim() : "";
+  const modelID = typeof body.modelID === "string" ? body.modelID.trim() : "";
+  if (!providerID && !modelID) return undefined;
+  if (!providerID || !modelID) {
+    throw new ApiError(400, "invalid_payload", "providerID and modelID must be provided together");
+  }
+  return { providerID, modelID };
 }
 
 function remapSessionReadError(error: unknown): never {

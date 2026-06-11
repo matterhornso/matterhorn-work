@@ -52,8 +52,10 @@ Common status codes:
 | --- | --- |
 | `matterhorn_status` | `GET /health`, `GET /status`, `GET /capabilities` |
 | `matterhorn_list_workspaces` | `GET /workspaces` |
+| pending MCP tool | `POST /workspace/:workspaceId/sessions` |
 | `matterhorn_list_sessions` | `GET /workspace/:workspaceId/sessions` |
 | `matterhorn_get_session` | `GET /workspace/:workspaceId/sessions/:sessionId` |
+| pending MCP tool | `POST /workspace/:workspaceId/sessions/:sessionId/messages` |
 | `matterhorn_get_session_messages` | `GET /workspace/:workspaceId/sessions/:sessionId/messages` |
 | `matterhorn_get_session_snapshot` | `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` |
 | `matterhorn_delete_session` | `DELETE /workspace/:workspaceId/sessions/:sessionId` |
@@ -123,6 +125,31 @@ Returns all workspaces visible to the token.
 
 Chat session routes expose stable read-side access to the Matterhorn Work engine's sessions through the Matterhorn Work server. Agents should use these routes to inspect existing work before opening file sessions or asking the user to approve changes.
 
+### `POST /workspace/:workspaceId/sessions`
+
+Auth: `client`
+
+Creates a chat session. This requires writable server mode and at least collaborator token scope.
+
+Request:
+
+```json
+{
+  "title": "Investigate Bittensor wallet flow"
+}
+```
+
+Response:
+
+```json
+{
+  "item": {
+    "id": "ses_123",
+    "title": "Investigate Bittensor wallet flow"
+  }
+}
+```
+
 ### `GET /workspace/:workspaceId/sessions`
 
 Auth: `client`
@@ -163,6 +190,60 @@ Returns one chat session.
   }
 }
 ```
+
+### `POST /workspace/:workspaceId/sessions/:sessionId/messages`
+
+Auth: `client`
+
+Submits a prompt to an existing chat session without going through the raw engine proxy. This requires writable server mode, at least collaborator token scope, and the normal Matterhorn approval policy.
+
+Request with plain text:
+
+```json
+{
+  "message": "Summarize the current Bittensor flow",
+  "model": {
+    "providerID": "openai",
+    "modelID": "gpt-4.1"
+  },
+  "agent": "build",
+  "noReply": true
+}
+```
+
+Request with explicit parts:
+
+```json
+{
+  "parts": [
+    { "type": "text", "text": "Summarize the current Bittensor flow" }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "accepted": true,
+  "sessionId": "ses_123"
+}
+```
+
+Supported optional fields:
+
+| Name | Type | Notes |
+| --- | --- | --- |
+| `messageID` | string | Optional client-provided message id |
+| `model` | object | `{ "providerID": "...", "modelID": "..." }` |
+| `providerID` / `modelID` | string | Top-level model alias; both must be supplied together |
+| `agent` | string | Optional agent name |
+| `variant` | string | Optional model variant |
+| `noReply` | boolean | Ask the engine not to continue with an assistant response when supported |
+| `tools` | object | Tool-name to boolean map |
+| `system` | string | Optional system override |
+| `reasoningEffort` | string | Also accepts `reasoning_effort` |
 
 ### `GET /workspace/:workspaceId/sessions/:sessionId/messages`
 
@@ -459,10 +540,6 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
 
 ## Not Yet Stable
 
-Chat session creation, prompt submission, browser control, and desktop UI automation are not part of this HTTP contract yet. The next server contract should add safe endpoints for:
+Browser control and desktop UI automation are not part of this HTTP contract yet.
 
-- `POST /workspace/:workspaceId/sessions` to create a session.
-- `POST /workspace/:workspaceId/sessions/:sessionId/messages` to submit a user prompt.
-- A polling or event route for session execution status.
-
-Those should be added before `matterhorn-work-mcp` exposes agent-side prompt submission.
+The next Agent Control Surface increment should expose the stable chat-session creation and prompt-submission routes through `matterhorn-work-mcp`, then add a polling or event route for session execution status.

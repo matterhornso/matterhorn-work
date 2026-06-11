@@ -36,17 +36,32 @@ function auth(token: string) {
 }
 
 function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promise<void> }) {
-  const requests: Array<{ pathname: string; search: string; directory: string | null }> = [];
+  const requests: Array<{ pathname: string; search: string; directory: string | null; method: string; body: unknown }> = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const url = new URL(request.url);
+      const body = request.method === "GET" || request.method === "HEAD"
+        ? null
+        : await request.json().catch(() => null);
       requests.push({
         pathname: url.pathname,
         search: url.search,
         directory: request.headers.get("x-opencode-directory"),
+        method: request.method,
+        body,
       });
+
+      if (url.pathname === "/session" && request.method === "POST") {
+        return Response.json({
+          id: "ses_created",
+          title: typeof body === "object" && body && "title" in body ? String(body.title) : "Created",
+          slug: "created",
+          directory: request.headers.get("x-opencode-directory"),
+          time: { created: 300, updated: 300 },
+        });
+      }
 
       if (url.pathname === "/session") {
         if (input?.invalidList) {
@@ -114,6 +129,10 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
         return Response.json({ ok: true });
       }
 
+      if (url.pathname === "/session/ses_1/prompt_async" && request.method === "POST") {
+        return Response.json({ ok: true });
+      }
+
       return Response.json({ code: "not_found", message: "Not found" }, { status: 404 });
     },
   }) as Served;
@@ -121,7 +140,7 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
   return { server, requests };
 }
 
-async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseUrl?: string }) {
+async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseUrl?: string; readOnly?: boolean }) {
   const config: ServerConfig = {
     host: "127.0.0.1",
     port: 0,
@@ -140,7 +159,7 @@ async function startOpenworkServer(input: { workspaceRoot: string; opencodeBaseU
       },
     ],
     authorizedRoots: [input.workspaceRoot],
-    readOnly: true,
+    readOnly: input.readOnly ?? true,
     startedAt: Date.now(),
     tokenSource: "cli",
     hostTokenSource: "cli",
@@ -254,6 +273,76 @@ describe("workspace session read APIs", () => {
     expect(body.items[0]?.id).toBe("ses_1");
     expect(body.items[0]?.directory).toBe(workspaceRoot);
     expect(mock.requests.find((request) => request.pathname === "/session")?.directory).toBe(workspaceRoot);
+  });
+
+  test("creates sessions and submits prompts through stable workspace routes", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const base = `http://127.0.0.1:${openwork.server.port}`;
+    const createResponse = await fetch(`${base}/workspace/ws_1/sessions`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "Agent session" }),
+    });
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    expect(createBody.item.id).toBe("ses_created");
+    expect(createBody.item.title).toBe("Agent session");
+
+    const createRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session");
+    expect(createRequest?.directory).toBe(workspaceRoot);
+    expect(createRequest?.body).toMatchObject({ title: "Agent session" });
+
+    const promptResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "Summarize this workspace",
+        model: { providerID: "openai", modelID: "gpt-4.1" },
+        agent: "build",
+        noReply: true,
+      }),
+    });
+    expect(promptResponse.status).toBe(202);
+    await expect(promptResponse.json()).resolves.toMatchObject({ ok: true, accepted: true, sessionId: "ses_1" });
+
+    const promptRequest = mock.requests.find((request) => request.method === "POST" && request.pathname === "/session/ses_1/prompt_async");
+    expect(promptRequest?.directory).toBe(workspaceRoot);
+    expect(promptRequest?.body).toMatchObject({
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "Summarize this workspace" }],
+    });
+  });
+
+  test("rejects empty session prompts before calling upstream", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+      readOnly: false,
+    });
+
+    const response = await fetch(`http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/messages`, {
+      method: "POST",
+      headers: { ...auth(openwork.token), "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "   " }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "invalid_payload",
+      message: "message or non-empty parts is required",
+    });
+    expect(mock.requests.some((request) => request.pathname === "/session/ses_1/prompt_async")).toBe(false);
   });
 
   test("encodes non-ASCII workspace directory headers for session reads", async () => {

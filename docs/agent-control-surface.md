@@ -71,7 +71,7 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 ## Next Build Steps
 
-1. Add safe chat session creation and prompt-submission HTTP endpoints outside the engine proxy.
-2. Add MCP prompt-submission tools only after those stable server endpoints exist.
+1. Add MCP tools for the stable chat session creation and prompt-submission routes.
+2. Add a polling or event route for session execution status.
 3. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
 4. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
