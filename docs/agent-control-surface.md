@@ -10,7 +10,7 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 | Desktop UI MCP | `matterhorn-work-ui-mcp` | Read visible UI state and run desktop actions |
 | Crypto MCP | `matterhorn-work-crypto-mcp` | Crypto research, Bittensor tools, quote/preparation flows |
 | Wallet MCP | `matterhorn-work-wallet-mcp` | EVM wallet reads and transaction/signature handoffs |
-| CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, and file sessions |
+| CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, chat progress, and file sessions |
 | HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
 
 See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Work Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Work Agent Browser Control](./agent-browser-control.md) and [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow.
@@ -65,6 +65,8 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 9. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
 
 10. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
+
+11. When MCP is unavailable, use `matterhorn-work sessions events <session-id> --workspace-id <id> --json` as the CLI fallback for bounded progress batches.
 
 ## Safety
 

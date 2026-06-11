@@ -169,6 +169,22 @@ matterhorn-work mcp config \
 
 Use `--profile server` to include only the unified `matterhorn-work-mcp` server-control MCP. Use `--target env` to print shell exports instead of JSON. Flags override `MATTERHORN_WORK_*` environment variables, with legacy `OPENWORK_*` variables preserved as fallbacks.
 
+## Chat session events
+
+Read bounded progress events for a Matterhorn Work chat session:
+
+```bash
+matterhorn-work sessions events <session-id> \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --workspace-id <workspace-id> \
+  --snapshot \
+  --max-events 10 \
+  --json
+```
+
+Use the returned `nextSince` value with `--since <cursor>` to resume from the latest observed event. The command uses the same Server-Sent Events envelope as `matterhorn_watch_session_events`.
+
 ## Approvals (manual mode)
 
 ```bash
