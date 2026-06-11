@@ -46,7 +46,10 @@ function parseManualAuthInput(value: string) {
     const routeSegments = routePath.split("/").filter(Boolean);
     const routeTail = routeSegments[routeSegments.length - 1] ?? "";
     if (
-      (protocol === "matterhorn:" || protocol === "matterhorn-dev:") &&
+      (protocol === "matterhorn-work:" ||
+        protocol === "matterhorn-work-dev:" ||
+        protocol === "matterhorn:" ||
+        protocol === "matterhorn-dev:") &&
       (routeHost === "den-auth" ||
         routePath === "den-auth" ||
         routeTail === "den-auth")

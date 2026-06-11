@@ -108,6 +108,8 @@ export function ServerProvider({ children, defaultUrl }: ServerProviderProps) {
       !isDesktopRuntime() &&
       isWebDeployment() &&
       (import.meta.env.PROD ||
+        (typeof import.meta.env?.VITE_MATTERHORN_WORK_URL === "string" &&
+          import.meta.env.VITE_MATTERHORN_WORK_URL.trim().length > 0) ||
         (typeof import.meta.env?.VITE_OPENWORK_URL === "string" &&
           import.meta.env.VITE_OPENWORK_URL.trim().length > 0));
 

@@ -376,11 +376,38 @@ export type MatterhornReloadEvent = {
 // with the persisted runtime-discovered port once the host reports it.
 export const DEFAULT_OPENWORK_SERVER_PORT = 8787;
 
-const STORAGE_URL_OVERRIDE = "openwork.server.urlOverride";
-const STORAGE_PORT_OVERRIDE = "openwork.server.port";
-const STORAGE_TOKEN = "openwork.server.token";
-const STORAGE_HOST_AUTH_KEY = "openwork.server.hostToken";
-const STORAGE_REMOTE_ACCESS = "openwork.server.remoteAccessEnabled";
+const STORAGE_URL_OVERRIDE = "matterhorn-work.server.urlOverride";
+const STORAGE_PORT_OVERRIDE = "matterhorn-work.server.port";
+const STORAGE_TOKEN = "matterhorn-work.server.token";
+const STORAGE_HOST_AUTH_KEY = "matterhorn-work.server.hostToken";
+const STORAGE_REMOTE_ACCESS = "matterhorn-work.server.remoteAccessEnabled";
+const LEGACY_STORAGE_URL_OVERRIDE = "openwork.server.urlOverride";
+const LEGACY_STORAGE_PORT_OVERRIDE = "openwork.server.port";
+const LEGACY_STORAGE_TOKEN = "openwork.server.token";
+const LEGACY_STORAGE_HOST_AUTH_KEY = "openwork.server.hostToken";
+const LEGACY_STORAGE_REMOTE_ACCESS = "openwork.server.remoteAccessEnabled";
+
+function getMigratingLocalStorageValue(key: string, legacyKey: string): string | null {
+  const current = window.localStorage.getItem(key);
+  if (current !== null) return current;
+  const legacy = window.localStorage.getItem(legacyKey);
+  if (legacy !== null) {
+    window.localStorage.setItem(key, legacy);
+  }
+  return legacy;
+}
+
+function removeLocalStorageAlias(key: string, legacyKey: string) {
+  window.localStorage.removeItem(key);
+  window.localStorage.removeItem(legacyKey);
+}
+
+function readViteEnv(primary: string, legacy: string): string {
+  const env = import.meta.env as Record<string, unknown> | undefined;
+  const primaryValue = typeof env?.[primary] === "string" ? env[primary].trim() : "";
+  if (primaryValue) return primaryValue;
+  return typeof env?.[legacy] === "string" ? env[legacy].trim() : "";
+}
 
 export function normalizeMatterhornServerUrl(input: string) {
   const trimmed = input.trim();
@@ -546,13 +573,13 @@ export function readMatterhornServerSettings(): MatterhornServerSettings {
   if (typeof window === "undefined") return {};
   try {
     const urlOverride = normalizeMatterhornServerUrl(
-      window.localStorage.getItem(STORAGE_URL_OVERRIDE) ?? "",
+      getMigratingLocalStorageValue(STORAGE_URL_OVERRIDE, LEGACY_STORAGE_URL_OVERRIDE) ?? "",
     );
-    const portRaw = window.localStorage.getItem(STORAGE_PORT_OVERRIDE) ?? "";
+    const portRaw = getMigratingLocalStorageValue(STORAGE_PORT_OVERRIDE, LEGACY_STORAGE_PORT_OVERRIDE) ?? "";
     const portOverride = portRaw ? Number(portRaw) : undefined;
-    const token = window.localStorage.getItem(STORAGE_TOKEN) ?? undefined;
-    const hostToken = window.localStorage.getItem(STORAGE_HOST_AUTH_KEY) ?? undefined;
-    const remoteAccessRaw = window.localStorage.getItem(STORAGE_REMOTE_ACCESS) ?? "";
+    const token = getMigratingLocalStorageValue(STORAGE_TOKEN, LEGACY_STORAGE_TOKEN) ?? undefined;
+    const hostToken = getMigratingLocalStorageValue(STORAGE_HOST_AUTH_KEY, LEGACY_STORAGE_HOST_AUTH_KEY) ?? undefined;
+    const remoteAccessRaw = getMigratingLocalStorageValue(STORAGE_REMOTE_ACCESS, LEGACY_STORAGE_REMOTE_ACCESS) ?? "";
     return {
       urlOverride: urlOverride ?? undefined,
       portOverride: Number.isNaN(portOverride) ? undefined : portOverride,
@@ -577,31 +604,31 @@ export function writeMatterhornServerSettings(next: MatterhornServerSettings): M
     if (urlOverride) {
       window.localStorage.setItem(STORAGE_URL_OVERRIDE, urlOverride);
     } else {
-      window.localStorage.removeItem(STORAGE_URL_OVERRIDE);
+      removeLocalStorageAlias(STORAGE_URL_OVERRIDE, LEGACY_STORAGE_URL_OVERRIDE);
     }
 
     if (typeof portOverride === "number" && !Number.isNaN(portOverride)) {
       window.localStorage.setItem(STORAGE_PORT_OVERRIDE, String(portOverride));
     } else {
-      window.localStorage.removeItem(STORAGE_PORT_OVERRIDE);
+      removeLocalStorageAlias(STORAGE_PORT_OVERRIDE, LEGACY_STORAGE_PORT_OVERRIDE);
     }
 
     if (token) {
       window.localStorage.setItem(STORAGE_TOKEN, token);
     } else {
-      window.localStorage.removeItem(STORAGE_TOKEN);
+      removeLocalStorageAlias(STORAGE_TOKEN, LEGACY_STORAGE_TOKEN);
     }
 
     if (hostToken) {
       window.localStorage.setItem(STORAGE_HOST_AUTH_KEY, hostToken);
     } else {
-      window.localStorage.removeItem(STORAGE_HOST_AUTH_KEY);
+      removeLocalStorageAlias(STORAGE_HOST_AUTH_KEY, LEGACY_STORAGE_HOST_AUTH_KEY);
     }
 
     if (remoteAccessEnabled) {
       window.localStorage.setItem(STORAGE_REMOTE_ACCESS, "1");
     } else {
-      window.localStorage.removeItem(STORAGE_REMOTE_ACCESS);
+      removeLocalStorageAlias(STORAGE_REMOTE_ACCESS, LEGACY_STORAGE_REMOTE_ACCESS);
     }
 
     return readMatterhornServerSettings();
@@ -613,18 +640,10 @@ export function writeMatterhornServerSettings(next: MatterhornServerSettings): M
 export function hydrateMatterhornServerSettingsFromEnv() {
   if (typeof window === "undefined") return;
 
-  const envUrl = typeof import.meta.env?.VITE_OPENWORK_URL === "string"
-    ? import.meta.env.VITE_OPENWORK_URL.trim()
-    : "";
-  const envPort = typeof import.meta.env?.VITE_OPENWORK_PORT === "string"
-    ? import.meta.env.VITE_OPENWORK_PORT.trim()
-    : "";
-  const envToken = typeof import.meta.env?.VITE_OPENWORK_TOKEN === "string"
-    ? import.meta.env.VITE_OPENWORK_TOKEN.trim()
-    : "";
-  const envHostToken = typeof import.meta.env?.VITE_OPENWORK_HOST_TOKEN === "string"
-    ? import.meta.env.VITE_OPENWORK_HOST_TOKEN.trim()
-    : "";
+  const envUrl = readViteEnv("VITE_MATTERHORN_WORK_URL", "VITE_OPENWORK_URL");
+  const envPort = readViteEnv("VITE_MATTERHORN_WORK_PORT", "VITE_OPENWORK_PORT");
+  const envToken = readViteEnv("VITE_MATTERHORN_WORK_TOKEN", "VITE_OPENWORK_TOKEN");
+  const envHostToken = readViteEnv("VITE_MATTERHORN_WORK_HOST_TOKEN", "VITE_OPENWORK_HOST_TOKEN");
 
   if (!envUrl && !envPort && !envToken && !envHostToken) return;
 
@@ -672,6 +691,11 @@ export function clearMatterhornServerSettings() {
     window.localStorage.removeItem(STORAGE_TOKEN);
     window.localStorage.removeItem(STORAGE_HOST_AUTH_KEY);
     window.localStorage.removeItem(STORAGE_REMOTE_ACCESS);
+    window.localStorage.removeItem(LEGACY_STORAGE_URL_OVERRIDE);
+    window.localStorage.removeItem(LEGACY_STORAGE_PORT_OVERRIDE);
+    window.localStorage.removeItem(LEGACY_STORAGE_TOKEN);
+    window.localStorage.removeItem(LEGACY_STORAGE_HOST_AUTH_KEY);
+    window.localStorage.removeItem(LEGACY_STORAGE_REMOTE_ACCESS);
   } catch {
     // ignore
   }

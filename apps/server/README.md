@@ -25,7 +25,7 @@ Add `--verbose` to print resolved config details on startup. Use `--version` to 
 
 ## Config file
 
-Defaults to `~/.config/openwork/server.json` (override with `OPENWORK_SERVER_CONFIG` or `--config`).
+Defaults to `~/.config/openwork/server.json` (override with `MATTERHORN_WORK_SERVER_CONFIG`, legacy `OPENWORK_SERVER_CONFIG`, or `--config`).
 
 ```json
 {
@@ -148,7 +148,8 @@ All writes are gated by host approval.
 
 Host APIs accept either:
 
-- `X-OpenWork-Host-Token: <token>` (legacy host token), or
+- `X-Matterhorn-Host-Token: <token>` (preferred host token header),
+- `X-OpenWork-Host-Token: <token>` (legacy host token header), or
 - `Authorization: Bearer <token>` where the token scope is `owner`.
 
 Approvals endpoints:

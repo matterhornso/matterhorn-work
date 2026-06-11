@@ -101,7 +101,7 @@ const kindDesc: Record<ExtensionKind, string> = {
   plugin: "Extends Matterhorn with additional capabilities managed by your organization.",
   skill: "A reusable workflow that your agent can execute on demand.",
   "ui-control": "Lets another MCP client inspect and drive this Matterhorn Work desktop UI through a local stdio wrapper.",
-  extension: "An Matterhorn extension that adds tools, providers, or integrations to your workspace.",
+  extension: "A Matterhorn extension that adds tools, providers, or integrations to your workspace.",
 };
 
 const uiControlClientConfig = `{
@@ -568,7 +568,7 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
                     Production discovery file
                   </TableCell>
                   <TableCell className="py-2 whitespace-normal">
-                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.differentai.openwork/openwork-ui-control.json</span>
+                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.matterhorn.work/matterhorn-work-ui-control.json</span>
                   </TableCell>
                 </TableRow>
                 <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
@@ -576,7 +576,15 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
                     Dev discovery file
                   </TableCell>
                   <TableCell className="py-2 whitespace-normal">
-                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.differentai.openwork.dev/openwork-ui-control.json</span>
+                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.matterhorn.work.dev/matterhorn-work-ui-control.json</span>
+                  </TableCell>
+                </TableRow>
+                <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
+                  <TableCell className="bg-muted/50 py-2 text-xs font-medium">
+                    Legacy discovery file
+                  </TableCell>
+                  <TableCell className="py-2 whitespace-normal">
+                    <span className="font-mono text-xs break-all">~/Library/Application Support/com.differentai.openwork/openwork-ui-control.json</span>
                   </TableCell>
                 </TableRow>
                 <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
@@ -584,16 +592,18 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
                     Override
                   </TableCell>
                   <TableCell className="py-2 whitespace-normal">
-                    <span className="font-mono text-xs break-all">OPENWORK_UI_CONTROL_DISCOVERY=/path/to/openwork-ui-control.json</span>
+                    <span className="font-mono text-xs break-all">MATTERHORN_WORK_UI_CONTROL_DISCOVERY=/path/to/matterhorn-work-ui-control.json</span>
                   </TableCell>
                 </TableRow>
-                {props.environment?.OPENWORK_UI_CONTROL_DISCOVERY ? (
+                {props.environment?.MATTERHORN_WORK_UI_CONTROL_DISCOVERY || props.environment?.OPENWORK_UI_CONTROL_DISCOVERY ? (
                   <TableRow className="*:border-border hover:bg-transparent [&>:not(:last-child)]:border-r">
                     <TableCell className="bg-muted/50 py-2 text-xs font-medium">
                       Current override
                     </TableCell>
                     <TableCell className="py-2 whitespace-normal">
-                      <span className="font-mono text-xs break-all">{props.environment.OPENWORK_UI_CONTROL_DISCOVERY}</span>
+                      <span className="font-mono text-xs break-all">
+                        {props.environment.MATTERHORN_WORK_UI_CONTROL_DISCOVERY ?? props.environment.OPENWORK_UI_CONTROL_DISCOVERY}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ) : null}

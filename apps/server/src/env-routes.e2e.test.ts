@@ -47,8 +47,8 @@ async function boot() {
   };
 }
 
-function hostAuth() {
-  return { "x-openwork-host-token": HOST_TOKEN, "content-type": "application/json" };
+function hostAuth(headerName: "x-matterhorn-host-token" | "x-openwork-host-token" = "x-openwork-host-token") {
+  return { [headerName]: HOST_TOKEN, "content-type": "application/json" };
 }
 
 beforeEach(() => {
@@ -106,6 +106,15 @@ describe("env routes", () => {
       headers: { authorization: `Bearer ${body.token}` },
     });
     expect(response.status).toBe(401);
+  });
+
+  test("accepts the Matterhorn host token header alias", async () => {
+    const { base } = await boot();
+    const response = await fetch(`${base}/env/keys`, {
+      headers: hostAuth("x-matterhorn-host-token"),
+    });
+
+    expect(response.status).toBe(200);
   });
 
   test("CORS preflight allows PUT", async () => {

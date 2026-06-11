@@ -35,7 +35,7 @@ const NATIVE_MENU_OPEN_SETTINGS_EVENT = "openwork:native-menu:open-settings";
 const NATIVE_MENU_TOGGLE_SIDEBAR_EVENT = "openwork:native-menu:toggle-sidebar";
 const TAURI_APP_IDENTIFIER = "com.differentai.openwork";
 const DEV_APP_IDENTIFIER = "com.differentai.openwork.dev";
-const DESKTOP_PROTOCOL_SCHEME = "openwork";
+const DESKTOP_PROTOCOL_SCHEMES = ["matterhorn-work", "openwork"];
 const isDevMode = process.env.OPENWORK_DEV_MODE === "1";
 const APP_NAME = isDevMode ? "Matterhorn - Dev" : "Matterhorn";
 const APP_IDENTIFIER = isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER;
@@ -173,7 +173,9 @@ async function openComputerUseSetupApp() {
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_IDENTIFIER);
 if (app.isPackaged) {
-  app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME);
+  for (const scheme of DESKTOP_PROTOCOL_SCHEMES) {
+    app.setAsDefaultProtocolClient(scheme);
+  }
 }
 const userDataOverride = process.env.OPENWORK_ELECTRON_USERDATA?.trim();
 if (userDataOverride) {
@@ -463,7 +465,7 @@ const IDLE_ROUTER_INFO = Object.freeze({
 let mainWindow = null;
 const pendingDeepLinks = [];
 let uiControlServer = null;
-let uiControlDiscoveryPath = null;
+let uiControlDiscoveryPaths = [];
 const uiControlToken = randomBytes(32).toString("hex");
 
 function isLocalRendererOrigin(origin) {
@@ -1175,6 +1177,8 @@ function forwardedDeepLinks(argv) {
       (entry) =>
         entry.startsWith("openwork://") ||
         entry.startsWith("openwork-dev://") ||
+        entry.startsWith("matterhorn-work://") ||
+        entry.startsWith("matterhorn-work-dev://") ||
         entry.startsWith("https://") ||
         entry.startsWith("http://"),
     );
@@ -2456,12 +2460,15 @@ async function handleDesktopInvoke(event, command, ...args) {
         openworkDevMode: process.env.OPENWORK_DEV_MODE === "1",
       };
     case "getUiControlBridgeInfo":
-      try {
-        const raw = await readFile(path.join(app.getPath("userData"), "openwork-ui-control.json"), "utf8");
-        return JSON.parse(raw);
-      } catch {
-        return null;
+      for (const discoveryFile of ["matterhorn-work-ui-control.json", "openwork-ui-control.json"]) {
+        try {
+          const raw = await readFile(path.join(app.getPath("userData"), discoveryFile), "utf8");
+          return JSON.parse(raw);
+        } catch {
+          // Try the next compatibility path.
+        }
       }
+      return null;
     case "getOpenworkUiMcpCommand": {
       if (process.env.OPENWORK_DEV_MODE === "1") {
         return ["node", path.resolve(__dirname, "../../..", "packages/openwork-ui-mcp/index.mjs")];
@@ -2487,8 +2494,11 @@ async function handleDesktopInvoke(event, command, ...args) {
       return checkComputerUsePermissions();
     }
     case "getOpenworkUiMcpEnvironment": {
+      const matterhornDiscovery = path.join(app.getPath("userData"), "matterhorn-work-ui-control.json");
+      const legacyDiscovery = path.join(app.getPath("userData"), "openwork-ui-control.json");
       return {
-        OPENWORK_UI_CONTROL_DISCOVERY: path.join(app.getPath("userData"), "openwork-ui-control.json"),
+        MATTERHORN_WORK_UI_CONTROL_DISCOVERY: matterhornDiscovery,
+        OPENWORK_UI_CONTROL_DISCOVERY: legacyDiscovery,
       };
     }
     case "getDesktopBootstrapConfig":
@@ -2824,18 +2834,18 @@ async function startUiControlServer() {
   const address = uiControlServer.address();
   const port = typeof address === "object" && address ? address.port : null;
   if (!port) throw new Error("Could not start OpenWork UI control bridge.");
-  uiControlDiscoveryPath = path.join(app.getPath("userData"), "openwork-ui-control.json");
-  await writeFile(
-    uiControlDiscoveryPath,
-    `${JSON.stringify({ version: 1, app: APP_NAME, identifier: APP_IDENTIFIER, platform: process.platform, baseUrl: `http://127.0.0.1:${port}`, token: uiControlToken }, null, 2)}\n`,
-    "utf8",
-  );
+  const discoveryPayload = `${JSON.stringify({ version: 1, app: APP_NAME, identifier: APP_IDENTIFIER, platform: process.platform, baseUrl: `http://127.0.0.1:${port}`, token: uiControlToken }, null, 2)}\n`;
+  uiControlDiscoveryPaths = [
+    path.join(app.getPath("userData"), "matterhorn-work-ui-control.json"),
+    path.join(app.getPath("userData"), "openwork-ui-control.json"),
+  ];
+  await Promise.all(uiControlDiscoveryPaths.map((discoveryPath) => writeFile(discoveryPath, discoveryPayload, "utf8")));
 }
 
 async function stopUiControlServer() {
-  if (uiControlDiscoveryPath) {
-    await rm(uiControlDiscoveryPath, { force: true }).catch(() => undefined);
-    uiControlDiscoveryPath = null;
+  if (uiControlDiscoveryPaths.length > 0) {
+    await Promise.all(uiControlDiscoveryPaths.map((discoveryPath) => rm(discoveryPath, { force: true }).catch(() => undefined)));
+    uiControlDiscoveryPaths = [];
   }
   if (!uiControlServer) return;
   await new Promise((resolve) => uiControlServer.close(() => resolve(undefined)));

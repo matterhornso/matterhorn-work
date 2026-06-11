@@ -407,6 +407,16 @@ function parseList(value?: string): string[] {
     .filter(Boolean);
 }
 
+function readMatterhornEnv(envKey?: string): string | undefined {
+  if (!envKey) return undefined;
+  if (envKey.startsWith("OPENWORK_")) {
+    const matterhornKey = `MATTERHORN_WORK_${envKey.slice("OPENWORK_".length)}`;
+    const matterhornValue = process.env[matterhornKey];
+    if (matterhornValue !== undefined) return matterhornValue;
+  }
+  return process.env[envKey];
+}
+
 function readFlag(
   flags: Map<string, string | boolean>,
   key: string,
@@ -431,7 +441,7 @@ function readBool(
     if (["true", "1", "yes"].includes(normalized)) return true;
   }
 
-  const envValue = envKey ? process.env[envKey] : undefined;
+  const envValue = readMatterhornEnv(envKey);
   if (envValue) {
     const normalized = envValue.toLowerCase();
     if (["false", "0", "no"].includes(normalized)) return false;
@@ -463,7 +473,7 @@ function readNumber(
     if (!Number.isNaN(parsed)) return parsed;
   }
   if (envKey) {
-    const envValue = process.env[envKey];
+    const envValue = readMatterhornEnv(envKey);
     if (envValue) {
       const parsed = Number(envValue);
       if (!Number.isNaN(parsed)) return parsed;
@@ -524,8 +534,7 @@ function readBinarySource(
   fallback: BinarySourcePreference,
   envKey?: string,
 ): BinarySourcePreference {
-  const raw =
-    readFlag(flags, key) ?? (envKey ? process.env[envKey] : undefined);
+  const raw = readFlag(flags, key) ?? readMatterhornEnv(envKey);
   if (!raw) return fallback;
   const normalized = String(raw).trim().toLowerCase();
   if (
@@ -547,8 +556,7 @@ function readLogFormat(
   fallback: LogFormat,
   envKey?: string,
 ): LogFormat {
-  const raw =
-    readFlag(flags, key) ?? (envKey ? process.env[envKey] : undefined);
+  const raw = readFlag(flags, key) ?? readMatterhornEnv(envKey);
   if (!raw) return fallback;
   const normalized = String(raw).trim().toLowerCase();
   if (normalized === "json") return "json";
@@ -567,8 +575,7 @@ function readSandboxMode(
   fallback: SandboxMode,
   envKey?: string,
 ): SandboxMode {
-  const raw =
-    readFlag(flags, key) ?? (envKey ? process.env[envKey] : undefined);
+  const raw = readFlag(flags, key) ?? readMatterhornEnv(envKey);
   if (!raw) return fallback;
   const normalized = String(raw).trim().toLowerCase();
   if (
@@ -1248,12 +1255,12 @@ function resolveManagedOpencodeCredentials(args: ParsedArgs): {
   const requestedUsername =
     typeof explicitUsernameFlag === "string"
       ? explicitUsernameFlag
-      : process.env.OPENWORK_OPENCODE_USERNAME ??
+      : readMatterhornEnv("OPENWORK_OPENCODE_USERNAME") ??
         process.env.OPENCODE_SERVER_USERNAME;
   const requestedPassword =
     typeof explicitPasswordFlag === "string"
       ? explicitPasswordFlag
-      : process.env.OPENWORK_OPENCODE_PASSWORD ??
+      : readMatterhornEnv("OPENWORK_OPENCODE_PASSWORD") ??
         process.env.OPENCODE_SERVER_PASSWORD;
   const allowInjectedCredentials =
     (process.env[INTERNAL_OPENCODE_CREDENTIALS_ENV] ?? "").trim() === "1";
@@ -1725,9 +1732,10 @@ function resolveExtraPathEntries(): string[] {
 
 // Resolves ~/.config/openwork/env.json (or %APPDATA%\openwork\env.json on
 // Windows) — must agree byte-for-byte with apps/server/src/env-file.ts and
-// apps/desktop/src-tauri/src/env_file.rs. Honor OPENWORK_ENV_STORE override.
+// apps/desktop/src-tauri/src/env_file.rs. Honor MATTERHORN_WORK_ENV_STORE and
+// legacy OPENWORK_ENV_STORE overrides.
 function resolveUserEnvFilePath(): string {
-  const override = (process.env.OPENWORK_ENV_STORE ?? "").trim();
+  const override = (readMatterhornEnv("OPENWORK_ENV_STORE") ?? "").trim();
   if (override) return resolve(override);
   if (platform() === "win32") {
     const appData = (process.env.APPDATA ?? "").trim();
@@ -1737,7 +1745,7 @@ function resolveUserEnvFilePath(): string {
   return join(homedir(), ".config", "openwork", "env.json");
 }
 
-const USER_ENV_RESERVED_PREFIXES = ["OPENWORK_", "OPENCODE_"] as const;
+const USER_ENV_RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 // Synchronous, best-effort, never throws. Absent or malformed files return {}.
 // Reads on every spawn so UI edits are picked up on the next child start.
@@ -4901,7 +4909,7 @@ async function verifyOpenworkServer(input: {
     throw new Error("OpenWork server OpenCode password mismatch.");
   }
 
-  const hostHeaders = { "X-OpenWork-Host-Token": input.hostToken };
+  const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
   await fetchJson(`${input.baseUrl}/approvals`, { headers: hostHeaders });
 
   return actualVersion;
@@ -4949,7 +4957,7 @@ async function runChecks(input: {
 }) {
   const baseUrl = input.openworkUrl.replace(/\/$/, "");
   const headers = { Authorization: `Bearer ${input.openworkToken}` };
-  const hostHeaders = { "X-OpenWork-Host-Token": input.hostToken };
+  const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
   const workspaces = await fetchJson(`${baseUrl}/workspaces`, { headers });
   if (!workspaces?.items?.length) {
     throw new Error("OpenWork server returned no workspaces");
@@ -5065,7 +5073,7 @@ async function runSandboxChecks(input: {
 }) {
   const baseUrl = input.openworkUrl.replace(/\/$/, "");
   const headers = { Authorization: `Bearer ${input.openworkToken}` };
-  const hostHeaders = { "X-OpenWork-Host-Token": input.hostToken };
+  const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
 
   // 1. Server health
   const health = await fetchJson(`${baseUrl}/health`);
@@ -5172,6 +5180,7 @@ async function issueOpenworkOwnerToken(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "X-Matterhorn-Host-Token": hostToken,
       "X-OpenWork-Host-Token": hostToken,
     },
     body: JSON.stringify({ scope: "owner", label }),
@@ -5335,7 +5344,8 @@ function isSensitiveAttributeKey(key?: string): boolean {
   const normalized = trimmed.toLowerCase();
   if (SENSITIVE_ATTRIBUTE_KEYS.has(normalized)) return true;
   return (
-    (trimmed.startsWith("OPENWORK_") ||
+    (trimmed.startsWith("MATTERHORN_WORK_") ||
+      trimmed.startsWith("OPENWORK_") ||
       trimmed.startsWith("OPENCODE_") ||
       trimmed.startsWith("DEN_")) &&
     /TOKEN|PASSWORD|USERNAME|AUTHORIZATION/.test(trimmed)
@@ -6460,13 +6470,13 @@ function readOpenworkClientAuth(args: ParsedArgs): {
 } {
   const openworkUrl =
     readFlag(args.flags, "openwork-url") ??
-    process.env.OPENWORK_URL ??
-    process.env.OPENWORK_SERVER_URL ??
+    readMatterhornEnv("OPENWORK_URL") ??
+    readMatterhornEnv("OPENWORK_SERVER_URL") ??
     "";
   const token =
     readFlag(args.flags, "token") ??
     readFlag(args.flags, "openwork-token") ??
-    process.env.OPENWORK_TOKEN ??
+    readMatterhornEnv("OPENWORK_TOKEN") ??
     "";
 
   if (!openworkUrl || !token) {
@@ -6748,11 +6758,11 @@ async function runApprovals(args: ParsedArgs) {
 
   const openworkUrl =
     readFlag(args.flags, "openwork-url") ??
-    process.env.OPENWORK_URL ??
-    process.env.OPENWORK_SERVER_URL ??
+    readMatterhornEnv("OPENWORK_URL") ??
+    readMatterhornEnv("OPENWORK_SERVER_URL") ??
     "";
   const hostToken =
-    readFlag(args.flags, "host-token") ?? process.env.OPENWORK_HOST_TOKEN ?? "";
+    readFlag(args.flags, "host-token") ?? readMatterhornEnv("OPENWORK_HOST_TOKEN") ?? "";
 
   if (!openworkUrl || !hostToken) {
     throw new Error("openwork-url and host-token are required for approvals");
@@ -6760,6 +6770,7 @@ async function runApprovals(args: ParsedArgs) {
 
   const headers = {
     "Content-Type": "application/json",
+    "X-Matterhorn-Host-Token": hostToken,
     "X-OpenWork-Host-Token": hostToken,
   };
 
@@ -6805,7 +6816,7 @@ async function runApprovals(args: ParsedArgs) {
 
 async function runStatus(args: ParsedArgs) {
   const openworkUrl =
-    readFlag(args.flags, "openwork-url") ?? process.env.OPENWORK_URL ?? "";
+    readFlag(args.flags, "openwork-url") ?? readMatterhornEnv("OPENWORK_URL") ?? "";
   const opencodeUrl =
     readFlag(args.flags, "opencode-url") ?? process.env.OPENCODE_URL ?? "";
   const username =
@@ -7098,15 +7109,15 @@ async function runStart(args: ParsedArgs) {
   );
   const openworkToken =
     readFlag(args.flags, "openwork-token") ??
-    process.env.OPENWORK_TOKEN ??
+    readMatterhornEnv("OPENWORK_TOKEN") ??
     randomUUID();
   const openworkHostToken =
     readFlag(args.flags, "openwork-host-token") ??
-    process.env.OPENWORK_HOST_TOKEN ??
+    readMatterhornEnv("OPENWORK_HOST_TOKEN") ??
     randomUUID();
   const approvalMode =
     (readFlag(args.flags, "approval") as ApprovalMode | undefined) ??
-    (process.env.OPENWORK_APPROVAL_MODE as ApprovalMode | undefined) ??
+    (readMatterhornEnv("OPENWORK_APPROVAL_MODE") as ApprovalMode | undefined) ??
     "manual";
   const approvalTimeoutMs = readNumber(
     args.flags,
@@ -7798,6 +7809,7 @@ async function runStart(args: ParsedArgs) {
           const url = `${openworkBaseUrl.replace(/\/$/, "")}/opencode-router/identities/telegram`;
           const result = await fetchJson(url, {
             headers: {
+              "X-Matterhorn-Host-Token": openworkHostToken,
               "X-OpenWork-Host-Token": openworkHostToken,
             },
           });
@@ -7808,6 +7820,7 @@ async function runStart(args: ParsedArgs) {
           const url = `${openworkBaseUrl.replace(/\/$/, "")}/opencode-router/identities/slack`;
           const result = await fetchJson(url, {
             headers: {
+              "X-Matterhorn-Host-Token": openworkHostToken,
               "X-OpenWork-Host-Token": openworkHostToken,
             },
           });
@@ -7821,6 +7834,7 @@ async function runStart(args: ParsedArgs) {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "X-Matterhorn-Host-Token": openworkHostToken,
                 "X-OpenWork-Host-Token": openworkHostToken,
               },
               body: JSON.stringify({ enabled }),
@@ -7840,6 +7854,7 @@ async function runStart(args: ParsedArgs) {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "X-Matterhorn-Host-Token": openworkHostToken,
                 "X-OpenWork-Host-Token": openworkHostToken,
               },
               body: JSON.stringify({ id: "default", token, enabled: true }),
@@ -7859,6 +7874,7 @@ async function runStart(args: ParsedArgs) {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "X-Matterhorn-Host-Token": openworkHostToken,
                 "X-OpenWork-Host-Token": openworkHostToken,
               },
               body: JSON.stringify({

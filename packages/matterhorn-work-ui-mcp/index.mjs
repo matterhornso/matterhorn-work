@@ -31,7 +31,8 @@ import { z } from "zod";
 
 // ── Bridge discovery ──
 
-const DISCOVERY_FILE = "openwork-ui-control.json";
+const DISCOVERY_FILE = "matterhorn-work-ui-control.json";
+const LEGACY_DISCOVERY_FILE = "openwork-ui-control.json";
 const BRIDGE_CACHE_MS = 2_000;
 const BRIDGE_TIMEOUT_MS = 5_000;
 let cachedBridge = null;
@@ -45,9 +46,14 @@ function userAppDataDir() {
 
 function discoveryPaths() {
   return [
+    process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
     process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(userAppDataDir(), "com.matterhorn.work", DISCOVERY_FILE),
+    join(userAppDataDir(), "com.matterhorn.work.dev", DISCOVERY_FILE),
     join(userAppDataDir(), "com.differentai.openwork", DISCOVERY_FILE),
     join(userAppDataDir(), "com.differentai.openwork.dev", DISCOVERY_FILE),
+    join(userAppDataDir(), "com.differentai.openwork", LEGACY_DISCOVERY_FILE),
+    join(userAppDataDir(), "com.differentai.openwork.dev", LEGACY_DISCOVERY_FILE),
   ].filter(Boolean);
 }
 

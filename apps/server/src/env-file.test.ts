@@ -34,7 +34,8 @@ describe("env-file", () => {
     expect(isValidEnvKey("")).toBe(false);
   });
 
-  test("isReservedEnvKey blocks OPENWORK_ / OPENCODE_ prefixes", () => {
+  test("isReservedEnvKey blocks MATTERHORN_WORK_ / OPENWORK_ / OPENCODE_ prefixes", () => {
+    expect(isReservedEnvKey("MATTERHORN_WORK_TOKEN")).toBe(true);
     expect(isReservedEnvKey("OPENWORK_TOKEN")).toBe(true);
     expect(isReservedEnvKey("OPENCODE_SERVER_PASSWORD")).toBe(true);
     expect(isReservedEnvKey("ANTHROPIC_API_KEY")).toBe(false);
@@ -137,6 +138,7 @@ describe("env-file", () => {
         schemaVersion: 1,
         updatedAt: Date.now(),
         variables: [
+          { key: "MATTERHORN_WORK_TOKEN", value: "stolen2" },
           { key: "OPENWORK_TOKEN", value: "stolen" },
           { key: "ANTHROPIC_API_KEY", value: "sk-ant" },
         ],
