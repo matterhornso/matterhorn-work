@@ -3723,6 +3723,11 @@ function printHelp(): void {
     "  matterhorn-work approvals list --openwork-url <url> --host-token <token>",
     "  matterhorn-work approvals reply <id> --allow|--deny --openwork-url <url> --host-token <token>",
     "  matterhorn-work files <action> [options]",
+    "  matterhorn-work sessions list --workspace-id <id> [options]",
+    "  matterhorn-work sessions create --workspace-id <id> [options]",
+    "  matterhorn-work sessions prompt <session-id> --workspace-id <id> --message <text>",
+    "  matterhorn-work sessions status <session-id> --workspace-id <id>",
+    "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
@@ -3739,7 +3744,7 @@ function printHelp(): void {
     "  approvals list           List pending approval requests",
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
-    "  sessions events         Read bounded chat session progress events",
+    "  sessions                Manage chat sessions and read progress events",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
     "",
@@ -3766,6 +3771,12 @@ function printHelp(): void {
     "  --openwork-host-token <t> Host token for approvals",
     "  --workspace-id <id>       Workspace id for file session commands",
     "  --session-id <id>         File or chat session id for session commands",
+    "  --title <text>            Chat session title for sessions create",
+    "  --message <text>          Prompt text for sessions prompt",
+    "  --provider-id <id>        Model provider id for sessions prompt",
+    "  --model-id <id>           Model id for sessions prompt",
+    "  --agent <name>            Agent name for sessions prompt",
+    "  --skip-reply              Ask the engine not to continue when supported",
     "  --path <path>             Workspace-relative file path",
     "  --paths <list>            Comma-separated list of workspace-relative file paths",
     "  --ttl-seconds <n>         File session TTL in seconds",
@@ -6579,12 +6590,143 @@ async function runSessions(args: ParsedArgs) {
   const subcommand = args.positionals[1] ?? "";
   const { openworkUrl, token } = readOpenworkClientAuth(args);
   const baseUrl = openworkUrl.replace(/\/$/, "");
-  const headers = {
+  const jsonHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+  const streamHeaders = {
     Authorization: `Bearer ${token}`,
     Accept: "text/event-stream",
   };
 
   try {
+    if (subcommand === "list" || subcommand === "ls") {
+      const workspaceId = readWorkspaceId(args, 2);
+      const params = new URLSearchParams();
+      const roots = readOptionalBool(readFlag(args.flags, "roots"));
+      const start = readNumber(args.flags, "start", undefined);
+      const limit = readNumber(args.flags, "limit", undefined);
+      const search = readFlag(args.flags, "search");
+      if (typeof roots === "boolean") params.set("roots", String(roots));
+      if (typeof start === "number") params.set("start", String(start));
+      if (typeof limit === "number") params.set("limit", String(limit));
+      if (search?.trim()) params.set("search", search.trim());
+      const query = params.toString();
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions${query ? `?${query}` : ""}`,
+        { headers: jsonHeaders },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "create" || subcommand === "new") {
+      const workspaceId = readWorkspaceId(args, 2);
+      const title =
+        readFlag(args.flags, "title") ??
+        args.positionals.slice(3).join(" ").trim();
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions`,
+        {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            ...(title?.trim() ? { title: title.trim() } : {}),
+          }),
+        },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "get" || subcommand === "show") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}`,
+        { headers: jsonHeaders },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "messages") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const params = new URLSearchParams();
+      const limit = readNumber(args.flags, "limit", undefined);
+      if (typeof limit === "number") params.set("limit", String(limit));
+      const query = params.toString();
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages${query ? `?${query}` : ""}`,
+        { headers: jsonHeaders },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "status") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/status`,
+        { headers: jsonHeaders },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "snapshot") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const params = new URLSearchParams();
+      const limit = readNumber(args.flags, "limit", undefined);
+      if (typeof limit === "number") params.set("limit", String(limit));
+      const query = params.toString();
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/snapshot${query ? `?${query}` : ""}`,
+        { headers: jsonHeaders },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "prompt" || subcommand === "send" || subcommand === "submit") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        "";
+      if (!message.trim()) {
+        throw new Error("message is required for sessions prompt");
+      }
+      const providerID = readFlag(args.flags, "provider-id") ?? readFlag(args.flags, "providerID");
+      const modelID = readFlag(args.flags, "model-id") ?? readFlag(args.flags, "modelID");
+      const noReply = args.flags.has("skip-reply")
+        ? readBool(args.flags, "skip-reply", true)
+        : args.flags.has("noReply")
+          ? readBool(args.flags, "noReply", true)
+          : args.flags.get("reply") === false
+            ? true
+            : undefined;
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/messages`,
+        {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            message: message.trim(),
+            ...(providerID && modelID ? { model: { providerID, modelID } } : {}),
+            ...(readFlag(args.flags, "agent") ? { agent: readFlag(args.flags, "agent") } : {}),
+            ...(typeof noReply === "boolean" ? { noReply } : {}),
+          }),
+        },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "events" || subcommand === "watch") {
       const sessionId = readSessionId(args, 2);
       const workspaceId = readWorkspaceId(args, 3);
@@ -6604,7 +6746,7 @@ async function runSessions(args: ParsedArgs) {
       const query = params.toString();
       const response = await fetch(
         `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ""}`,
-        { headers },
+        { headers: streamHeaders },
       );
       const text = await response.text();
       if (!response.ok) {
@@ -6629,7 +6771,21 @@ async function runSessions(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("sessions requires events|watch");
+    if (subcommand === "delete" || subcommand === "remove" || subcommand === "rm") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const result = await fetchJson(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}`,
+        {
+          method: "DELETE",
+          headers: jsonHeaders,
+        },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    throw new Error("sessions requires list|create|get|messages|status|snapshot|prompt|events|delete");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

@@ -171,6 +171,30 @@ Use `--profile server` to include only the unified `matterhorn-work-mcp` server-
 
 ## Chat session events
 
+Create a chat session, submit a prompt, and inspect status through the stable Matterhorn Work server routes:
+
+```bash
+matterhorn-work sessions create \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --workspace-id <workspace-id> \
+  --title "Agent session" \
+  --json
+
+matterhorn-work sessions prompt <session-id> \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --workspace-id <workspace-id> \
+  --message "Summarize this workspace" \
+  --json
+
+matterhorn-work sessions status <session-id> \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --workspace-id <workspace-id> \
+  --json
+```
+
 Read bounded progress events for a Matterhorn Work chat session:
 
 ```bash

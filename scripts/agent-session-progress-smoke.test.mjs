@@ -15,6 +15,25 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function readJson(req) {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      if (!raw) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
 function eventFrame(id, event, payload) {
   return `id: ${id}\nevent: ${event}\ndata: ${JSON.stringify({
     type: event,
@@ -44,14 +63,16 @@ function writeSessionEvents(res) {
   }));
 }
 
-const server = createServer((req, res) => {
+const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  const body = req.method === "POST" ? await readJson(req) : {};
   requests.push({
     method: req.method,
     path: url.pathname,
     query: Object.fromEntries(url.searchParams.entries()),
     authorization: req.headers.authorization,
     accept: req.headers.accept,
+    body,
   });
 
   if (req.method === "GET" && url.pathname === "/health") {
@@ -60,6 +81,44 @@ const server = createServer((req, res) => {
 
   if (req.headers.authorization !== `Bearer ${CLIENT_TOKEN}`) {
     return json(res, 401, { error: "unauthorized" });
+  }
+
+  if (req.method === "GET" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions`) {
+    assert.equal(url.searchParams.get("limit"), "2");
+    assert.equal(url.searchParams.get("search"), "demo");
+    return json(res, 200, { items: [{ id: SESSION_ID, title: "Demo session" }] });
+  }
+
+  if (req.method === "POST" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions`) {
+    assert.equal(body.title, "Agent session");
+    return json(res, 200, { item: { id: SESSION_ID, title: "Agent session" } });
+  }
+
+  if (req.method === "GET" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}`) {
+    return json(res, 200, { item: { id: SESSION_ID, title: "Demo session" } });
+  }
+
+  if (req.method === "GET" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}/messages`) {
+    assert.equal(url.searchParams.get("limit"), "5");
+    return json(res, 200, { items: [{ id: "msg_1", role: "assistant", content: "hello" }] });
+  }
+
+  if (req.method === "GET" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}/status`) {
+    return json(res, 200, { item: { session: { id: SESSION_ID }, status: { type: "busy" }, busy: true } });
+  }
+
+  if (req.method === "GET" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}/snapshot`) {
+    assert.equal(url.searchParams.get("limit"), "5");
+    return json(res, 200, { item: { session: { id: SESSION_ID }, messages: [{ id: "msg_1" }], todos: [], status: { type: "idle" } } });
+  }
+
+  if (req.method === "POST" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}/messages`) {
+    assert.equal(body.message, "Summarize this workspace");
+    assert.equal(body.model.providerID, "openai");
+    assert.equal(body.model.modelID, "gpt-4.1");
+    assert.equal(body.agent, "build");
+    assert.equal(body.noReply, true);
+    return json(res, 200, { ok: true, accepted: true, sessionId: SESSION_ID });
   }
 
   if (
@@ -71,6 +130,10 @@ const server = createServer((req, res) => {
     assert.equal(url.searchParams.get("details"), "true");
     assert.equal(url.searchParams.get("maxEvents"), "3");
     return writeSessionEvents(res);
+  }
+
+  if (req.method === "DELETE" && url.pathname === `/workspace/${WORKSPACE_ID}/sessions/${SESSION_ID}`) {
+    return json(res, 200, { ok: true });
   }
 
   return json(res, 404, { error: "not_found", path: url.pathname });
@@ -158,25 +221,15 @@ function createMcp(baseUrl) {
   return { child, ask };
 }
 
-function runCli(baseUrl) {
+function runCli(baseUrl, args) {
   const cliPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "apps", "orchestrator", "src", "cli.ts");
   const child = spawn("bun", [
     cliPath,
-    "sessions",
-    "events",
-    SESSION_ID,
-    "--workspace-id",
-    WORKSPACE_ID,
+    ...args,
     "--openwork-url",
     baseUrl,
     "--token",
     CLIENT_TOKEN,
-    "--snapshot",
-    "--details",
-    "--max-events",
-    "3",
-    "--since",
-    "3",
     "--json",
   ], { stdio: ["ignore", "pipe", "pipe"] });
 
@@ -230,18 +283,119 @@ try {
   assert.equal(mcpEvents.nextSince, "12");
   assert.equal(mcpEvents.events[1].event, "message.created");
 
-  const cliEvents = await runCli(baseUrl);
+  const cliCreated = await runCli(baseUrl, [
+    "sessions",
+    "create",
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--title",
+    "Agent session",
+  ]);
+  assert.equal(cliCreated.item.id, SESSION_ID);
+
+  const cliList = await runCli(baseUrl, [
+    "sessions",
+    "list",
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--limit",
+    "2",
+    "--search",
+    "demo",
+  ]);
+  assert.equal(cliList.items[0].id, SESSION_ID);
+
+  const cliGet = await runCli(baseUrl, [
+    "sessions",
+    "get",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+  ]);
+  assert.equal(cliGet.item.title, "Demo session");
+
+  const cliMessages = await runCli(baseUrl, [
+    "sessions",
+    "messages",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--limit",
+    "5",
+  ]);
+  assert.equal(cliMessages.items[0].id, "msg_1");
+
+  const cliStatus = await runCli(baseUrl, [
+    "sessions",
+    "status",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+  ]);
+  assert.equal(cliStatus.item.busy, true);
+
+  const cliPrompt = await runCli(baseUrl, [
+    "sessions",
+    "prompt",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--message",
+    "Summarize this workspace",
+    "--provider-id",
+    "openai",
+    "--model-id",
+    "gpt-4.1",
+    "--agent",
+    "build",
+    "--skip-reply",
+  ]);
+  assert.equal(cliPrompt.accepted, true);
+
+  const cliSnapshot = await runCli(baseUrl, [
+    "sessions",
+    "snapshot",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--limit",
+    "5",
+  ]);
+  assert.equal(cliSnapshot.item.session.id, SESSION_ID);
+
+  const cliEvents = await runCli(baseUrl, [
+    "sessions",
+    "events",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+    "--snapshot",
+    "--details",
+    "--max-events",
+    "3",
+    "--since",
+    "3",
+  ]);
   assert.equal(cliEvents.count, 3);
   assert.equal(cliEvents.nextSince, "12");
   assert.equal(cliEvents.events[0].event, "session.snapshot");
   assert.equal(cliEvents.events[1].data.payload.messageId, "msg_1");
+
+  const cliDeleted = await runCli(baseUrl, [
+    "sessions",
+    "delete",
+    SESSION_ID,
+    "--workspace-id",
+    WORKSPACE_ID,
+  ]);
+  assert.equal(cliDeleted.ok, true);
 
   const sinceValues = requests
     .filter((request) => request.path.endsWith("/events"))
     .map((request) => request.query.since);
   assert.deepEqual(sinceValues, ["1", "2", "3"]);
 
-  console.log("Matterhorn session progress HTTP/MCP/CLI smoke test passed.");
+  console.log("Matterhorn session control HTTP/MCP/CLI smoke test passed.");
 } finally {
   mcp.child.kill();
   server.close();
