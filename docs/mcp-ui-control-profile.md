@@ -295,3 +295,5 @@ The exact list depends on the current Matterhorn Work route and state. Common ac
 4. The bridge calls `window.__openworkControl` inside the Electron renderer to snapshot state and execute actions.
 
 The bridge and discovery file are implementation details — you never need to touch them directly. Just point your MCP client at `matterhorn-work-ui-mcp`.
+
+For the agent-facing browser workflow and smoke-test checklist, see [Matterhorn Work Agent Browser Control](./agent-browser-control.md).
