@@ -38,7 +38,7 @@ for (const doc of [api, surface, mcpReadme]) {
   assert.ok(doc.includes("agent-session-event-stream.md"), "related docs should link the session event stream contract");
 }
 
-assert.ok(api.includes("future `matterhorn_watch_session_events`"), "API docs should reserve the future MCP event tool name");
+assert.ok(api.includes("`matterhorn_watch_session_events`"), "API docs should document the MCP event watch tool name");
 assert.ok(api.includes("GET /workspace/:workspaceId/sessions/:sessionId/events"), "API docs should reserve the session event route");
 
 const lower = contract.toLowerCase();

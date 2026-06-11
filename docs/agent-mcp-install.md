@@ -180,7 +180,7 @@ After connecting any client:
 1. Call `matterhorn_status`.
 2. Call `matterhorn_list_workspaces`.
 3. Call `matterhorn_list_sessions` with a workspace id.
-4. For chat control, call `matterhorn_create_session`, `matterhorn_submit_session_prompt`, then poll `matterhorn_get_session_status`.
+4. For chat control, call `matterhorn_create_session`, `matterhorn_submit_session_prompt`, then use `matterhorn_watch_session_events` for bounded progress updates or `matterhorn_get_session_status` for simple polling.
 5. For Bittensor, call `matterhorn_bittensor_chat` with a read-only prompt such as `show my TAO`.
 
 ## Troubleshooting

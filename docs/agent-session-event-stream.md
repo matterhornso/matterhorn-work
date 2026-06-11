@@ -135,7 +135,7 @@ Client recovery:
 5. Render deltas and status events as they arrive.
 6. Fetch `matterhorn_get_session_snapshot` when the session becomes idle, after reconnects, or before taking write actions.
 
-MCP clients that cannot expose streaming responses should keep using `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`. A future MCP tool may expose `matterhorn_watch_session_events` as a bounded watch that returns the next batch of events by calling this route with `maxEvents`.
+MCP clients that cannot expose streaming responses can use `matterhorn_watch_session_events` as a bounded watch. It returns the next batch of events by calling this route with `maxEvents`. Clients can still fall back to `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
 
 ## Safety And Privacy
 

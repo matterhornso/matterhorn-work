@@ -57,6 +57,7 @@ for (const snippet of [
   "## Cursor",
   "## Generic MCP Clients",
   "matterhorn_get_session_status",
+  "matterhorn_watch_session_events",
   "matterhorn_bittensor_chat",
 ]) {
   assert.ok(installDocs.includes(snippet), `missing MCP install docs snippet: ${snippet}`);
