@@ -22,9 +22,10 @@ Run:
 pnpm test:agent-browser-control-guide
 pnpm test:agent-action-model-contract
 pnpm --dir packages/matterhorn-work-ui-mcp test
+pnpm test:agent-browser-live-probe
 ```
 
-The UI MCP package test starts a fake localhost bridge, so restricted sandboxes may need localhost bind permission.
+The UI MCP package test starts a fake localhost bridge, so restricted sandboxes may need localhost bind permission. `test:agent-browser-live-probe` talks to the real desktop discovery file when Matterhorn Work is running; it exits as `SKIP` in headless CI. Set `MATTERHORN_WORK_BROWSER_LIVE_REQUIRE=1` or pass `--require` to fail when the live desktop bridge is unavailable. Set `MATTERHORN_WORK_BROWSER_LIVE_OPEN_URL=https://matterhorn.so` or pass `--open-url <url>` to include a real browser navigation check.
 
 ## Manual QA Script
 
@@ -41,6 +42,7 @@ Expected:
 - The tool reports Matterhorn Work as connected.
 - The bridge URL is local.
 - No token value is printed.
+- If running the automated probe, `pnpm test:agent-browser-live-probe -- --require` passes.
 
 ### 2. Inspect App State
 
