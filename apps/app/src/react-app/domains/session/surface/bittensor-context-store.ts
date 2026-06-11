@@ -14,6 +14,14 @@ export type BittensorSessionContextStore = {
   clearContext: (sessionId: string) => void;
 };
 
+export type BittensorCardActionLike = {
+  payload?: Record<string, unknown> | null;
+};
+
+export type BittensorCardLike = {
+  data?: Record<string, unknown>;
+};
+
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const CHAT_CONTEXT_ID_RE = /^bt-chat-[a-z0-9-]{6,96}$/i;
 const INTENTS: BittensorChatIntent[] = ["learn", "discover", "wallet", "stake_plan", "subnet_use", "monitor"];
@@ -27,6 +35,24 @@ function createBittensorChatContextId(): string {
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function setIfContextValue(target: Record<string, unknown>, key: string, value: unknown) {
+  if (value === null || value === undefined || value === "") return;
+  if (typeof value === "string" || typeof value === "number") {
+    target[key] = value;
+  }
+}
+
+function copyPublicContextFields(target: Record<string, unknown>, source: Record<string, unknown>) {
+  setIfContextValue(target, "ss58Address", source.ss58Address);
+  setIfContextValue(target, "netuid", source.netuid);
+  setIfContextValue(target, "amountTao", source.amountTao);
+  setIfContextValue(target, "validatorHotkey", source.validatorHotkey);
+  setIfContextValue(target, "coldkey", source.coldkey);
+  setIfContextValue(target, "recipient", source.recipient);
+  setIfContextValue(target, "destination", source.destination);
+  setIfContextValue(target, "id", source.id ?? source.contextId);
 }
 
 function normalizeContextId(value: unknown): string | null {
@@ -101,7 +127,7 @@ export function sanitizeBittensorSessionContext(value: unknown): BittensorSessio
   const recipient = normalizeSs58(value.recipient);
   const destination = normalizeSs58(value.destination);
   return {
-    id: normalizeContextId(value.id) ?? createBittensorChatContextId(),
+    id: normalizeContextId(value.id) ?? normalizeContextId(value.contextId) ?? createBittensorChatContextId(),
     ss58Address,
     netuid: normalizeNetuid(value.netuid),
     amountTao: normalizeAmountTao(value.amountTao),
@@ -164,6 +190,81 @@ export function readBittensorContextFromToolOutput(output: unknown): BittensorSe
 export function readBittensorContextFromEventDetail(detail: unknown): BittensorSessionContext | null {
   if (!isRecordValue(detail)) return null;
   return sanitizeBittensorSessionContext(detail.context) ?? sanitizeBittensorSessionContext(detail);
+}
+
+export function buildBittensorCardActionContext(
+  card: BittensorCardLike,
+  action: BittensorCardActionLike,
+): Record<string, unknown> {
+  const context: Record<string, unknown> = {};
+  const data = isRecordValue(card.data) ? card.data : {};
+  const payload = isRecordValue(action.payload) ? action.payload : {};
+
+  const subnet = isRecordValue(data.subnet) ? data.subnet : null;
+  if (subnet) {
+    setIfContextValue(context, "netuid", subnet.netuid);
+  }
+
+  const capability = isRecordValue(data.capability) ? data.capability : null;
+  if (capability) {
+    setIfContextValue(context, "netuid", capability.netuid);
+  }
+
+  const wallet = isRecordValue(data.wallet) ? data.wallet : null;
+  if (wallet) {
+    setIfContextValue(context, "ss58Address", wallet.ss58Address);
+    setIfContextValue(context, "coldkey", wallet.ss58Address);
+  }
+
+  const quote = isRecordValue(data.quote) ? data.quote : null;
+  if (quote) {
+    setIfContextValue(context, "netuid", quote.netuid);
+    setIfContextValue(context, "amountTao", quote.amountTao);
+    setIfContextValue(context, "validatorHotkey", quote.validatorHotkey);
+    setIfContextValue(context, "recipient", quote.recipient);
+    setIfContextValue(context, "destination", quote.destination ?? quote.recipient);
+  }
+
+  const preview = isRecordValue(data.preview) ? data.preview : null;
+  if (preview) {
+    setIfContextValue(context, "netuid", preview.netuid);
+    setIfContextValue(context, "amountTao", preview.amountTao);
+    setIfContextValue(context, "validatorHotkey", preview.hotkey ?? preview.validatorHotkey);
+    setIfContextValue(context, "coldkey", preview.coldkey);
+    setIfContextValue(context, "recipient", preview.recipient);
+    setIfContextValue(context, "destination", preview.destination ?? preview.recipient);
+  }
+
+  const candidate = isRecordValue(data.candidate) ? data.candidate : null;
+  if (candidate) {
+    setIfContextValue(context, "netuid", candidate.netuid);
+    setIfContextValue(context, "validatorHotkey", candidate.hotkey ?? candidate.validatorHotkey);
+  }
+
+  const comparison = isRecordValue(data.comparison) ? data.comparison : null;
+  if (comparison) {
+    setIfContextValue(context, "netuid", comparison.netuid);
+  }
+
+  const invocation = isRecordValue(data.invocation) ? data.invocation : null;
+  if (invocation) {
+    setIfContextValue(context, "netuid", invocation.netuid);
+  }
+
+  const signer = isRecordValue(data.signer) ? data.signer : null;
+  if (signer) {
+    setIfContextValue(context, "ss58Address", signer.address);
+    setIfContextValue(context, "coldkey", signer.address);
+  }
+
+  const watch = isRecordValue(data.watch) ? data.watch : null;
+  if (watch) {
+    setIfContextValue(context, "netuid", watch.netuid);
+    setIfContextValue(context, "ss58Address", watch.ss58Address);
+  }
+
+  copyPublicContextFields(context, payload);
+  return context;
 }
 
 export function looksLikeBittensorPrompt(text: string): boolean {

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import {
   addBittensorContextToResolvedText,
+  buildBittensorCardActionContext,
   describeBittensorSessionContext,
   getBittensorSessionContext,
   readBittensorContextFromEventDetail,
@@ -98,5 +99,70 @@ describe("Bittensor session context", () => {
     expect(merged?.validatorHotkey).toBe(VALID_HOTKEY);
     expect(describeBittensorSessionContext(merged!)).toContain("wallet 5Grwva...jY9uQF");
     expect(describeBittensorSessionContext(merged!)).toContain("subnet 14");
+  });
+
+  test("builds structured chat context from validator card actions", () => {
+    const context = buildBittensorCardActionContext({
+      data: {
+        candidate: { netuid: 14, hotkey: VALID_HOTKEY },
+        comparison: { netuid: 14, strategy: "balanced" },
+      },
+    }, {
+      payload: { prompt: "Plan stake for this validator" },
+    });
+
+    expect(context).toEqual({
+      netuid: 14,
+      validatorHotkey: VALID_HOTKEY,
+    });
+  });
+
+  test("builds structured chat context from quote and wallet cards", () => {
+    const quoteContext = buildBittensorCardActionContext({
+      data: {
+        quote: {
+          netuid: 77,
+          amountTao: "1.5",
+          validatorHotkey: VALID_HOTKEY,
+        },
+      },
+    }, {
+      payload: { prompt: "Review this quote" },
+    });
+
+    expect(quoteContext).toEqual({
+      netuid: 77,
+      amountTao: "1.5",
+      validatorHotkey: VALID_HOTKEY,
+    });
+
+    const walletContext = buildBittensorCardActionContext({
+      data: { wallet: { ss58Address: VALID_SS58, taoBalance: 3 } },
+    }, {
+      payload: { prompt: "Where am I staked?" },
+    });
+
+    expect(walletContext).toEqual({
+      ss58Address: VALID_SS58,
+      coldkey: VALID_SS58,
+    });
+  });
+
+  test("lets explicit action payload context override card data", () => {
+    const context = buildBittensorCardActionContext({
+      data: { candidate: { netuid: 14, hotkey: VALID_HOTKEY } },
+    }, {
+      payload: {
+        prompt: "Plan stake",
+        netuid: 21,
+        amountTao: "2",
+      },
+    });
+
+    expect(context).toEqual({
+      netuid: 21,
+      validatorHotkey: VALID_HOTKEY,
+      amountTao: "2",
+    });
   });
 });
