@@ -9,7 +9,7 @@ GET /workspace/:workspaceId/sessions/:sessionId/status
 GET /workspace/:workspaceId/sessions/:sessionId/snapshot
 ```
 
-The planned streaming path is:
+The streaming path is:
 
 ```text
 GET /workspace/:workspaceId/sessions/:sessionId/events
@@ -48,6 +48,8 @@ Query parameters:
 | --- | --- | --- |
 | `since` | number or string | Optional cursor for replaying events after a disconnect |
 | `snapshot` | boolean | Optional `true` to request an initial `session.snapshot` event |
+| `maxEvents` | number | Optional positive event cap for tests and bounded clients |
+| `heartbeatMs` | number | Optional positive keepalive interval; the server clamps very low values |
 
 Headers:
 
@@ -133,7 +135,7 @@ Client recovery:
 5. Render deltas and status events as they arrive.
 6. Fetch `matterhorn_get_session_snapshot` when the session becomes idle, after reconnects, or before taking write actions.
 
-MCP clients that cannot expose streaming responses should keep using `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`. A future MCP tool may expose `matterhorn_watch_session_events` as a bounded watch that returns the next batch of events instead of a never-ending stream.
+MCP clients that cannot expose streaming responses should keep using `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`. A future MCP tool may expose `matterhorn_watch_session_events` as a bounded watch that returns the next batch of events by calling this route with `maxEvents`.
 
 ## Safety And Privacy
 
@@ -148,5 +150,5 @@ MCP clients that cannot expose streaming responses should keep using `matterhorn
 
 - The existing `GET /workspace/:workspaceId/events` route remains a workspace reload/config event route.
 - The session event route should be session-scoped and should not replace the workspace event route.
-- The first implementation can bridge existing Matterhorn Work engine session events into this envelope, then add richer message/tool deltas as they become stable.
+- The first implementation emits `session.snapshot`, `session.status`, `heartbeat`, and recoverable `cursor_expired` events. It should add richer message/tool deltas as those upstream events become stable.
 - If native SSE is unavailable in an agent client, expose a bounded batch route or MCP watch tool with the same envelope and cursor semantics.

@@ -179,6 +179,24 @@ function deferred() {
   return { promise, resolve };
 }
 
+function parseSseEvents(text: string) {
+  return text
+    .trim()
+    .split(/\n\n+/)
+    .filter(Boolean)
+    .map((block) => {
+      const lines = block.split("\n");
+      const id = lines.find((line) => line.startsWith("id: "))?.slice("id: ".length);
+      const event = lines.find((line) => line.startsWith("event: "))?.slice("event: ".length);
+      const dataLine = lines.find((line) => line.startsWith("data: "));
+      return {
+        id,
+        event,
+        data: dataLine ? JSON.parse(dataLine.slice("data: ".length)) : null,
+      };
+    });
+}
+
 async function waitUntil(predicate: () => boolean) {
   for (let index = 0; index < 20; index++) {
     if (predicate()) return true;
@@ -265,6 +283,80 @@ describe("workspace session read APIs", () => {
     expect(listRequest?.search).toContain("search=host");
     expect(listRequest?.search).toContain("start=10");
 
+  });
+
+  test("streams bounded session events with snapshot and status frames", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/events?snapshot=true&maxEvents=2`,
+      { headers: { ...auth(openwork.token), Accept: "text/event-stream" } },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const events = parseSseEvents(await response.text());
+    expect(events.map((event) => event.event)).toEqual(["session.snapshot", "session.status"]);
+    expect(events[0]?.data).toMatchObject({
+      type: "session.snapshot",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      source: "matterhorn-work-server",
+      payload: {
+        session: { id: "ses_1" },
+        status: { type: "busy" },
+      },
+    });
+    expect(events[1]?.data).toMatchObject({
+      type: "session.status",
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      payload: {
+        session: { id: "ses_1" },
+        status: { type: "busy" },
+        busy: true,
+      },
+    });
+  });
+
+  test("streams a recoverable cursor-expired event when replay is unavailable", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/events?since=41&maxEvents=2`,
+      { headers: auth(openwork.token) },
+    );
+    expect(response.status).toBe(200);
+
+    const events = parseSseEvents(await response.text());
+    expect(events.map((event) => event.event)).toEqual(["error", "session.status"]);
+    expect(events[0]?.id).toBe("42");
+    expect(events[0]?.data).toMatchObject({
+      type: "error",
+      cursor: "42",
+      payload: {
+        code: "cursor_expired",
+        recoverable: true,
+      },
+    });
+    expect(events[1]?.data).toMatchObject({
+      type: "session.status",
+      cursor: "43",
+      payload: {
+        status: { type: "busy" },
+        busy: true,
+      },
+    });
   });
 
   test("accepts guest-side rem_ workspace aliases for session reads", async () => {
