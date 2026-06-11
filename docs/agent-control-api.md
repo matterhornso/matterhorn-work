@@ -308,11 +308,11 @@ Returns a combined snapshot with the session, messages, todos, and status data w
 }
 ```
 
-### Future `GET /workspace/:workspaceId/sessions/:sessionId/events`
+### `GET /workspace/:workspaceId/sessions/:sessionId/events`
 
 Auth: `client`
 
-This planned route streams session progress over Server-Sent Events using the envelope in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md). It is not implemented by `matterhorn-work-mcp` yet. Until it lands, agents should keep using `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight polling and `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` for recovery.
+Streams session progress over Server-Sent Events using the envelope in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md). `matterhorn-work-mcp` does not expose a streaming tool yet, so MCP agents should keep using `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight polling and `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` for recovery.
 
 ### `DELETE /workspace/:workspaceId/sessions/:sessionId`
 
@@ -568,4 +568,4 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
 
 ## Not Yet Stable
 
-Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md), but the stable MCP tool still uses polling through `GET /workspace/:workspaceId/sessions/:sessionId/status` and recovery through `GET /workspace/:workspaceId/sessions/:sessionId/snapshot`.
+Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md), but the stable MCP package still uses polling through `GET /workspace/:workspaceId/sessions/:sessionId/status` and recovery through `GET /workspace/:workspaceId/sessions/:sessionId/snapshot`.

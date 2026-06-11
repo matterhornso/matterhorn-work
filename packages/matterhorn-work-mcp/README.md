@@ -58,7 +58,7 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 
 ## Tools
 
-The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md). The planned session-progress stream is documented in [`docs/agent-session-event-stream.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-session-event-stream.md); until that route ships, use `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
+The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md). The session-progress stream is documented in [`docs/agent-session-event-stream.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-session-event-stream.md); until the MCP package exposes a stream/watch tool, use `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
 
 - `matterhorn_status` — health, status, and server capabilities
 - `matterhorn_list_workspaces` — visible workspaces

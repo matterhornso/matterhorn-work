@@ -815,6 +815,97 @@ function jsonResponse(data: unknown, status = 200) {
   });
 }
 
+type SessionStreamEventInput = {
+  request: Request;
+  workspaceId: string;
+  sessionId: string;
+  snapshot: unknown | null;
+  status: unknown;
+  sinceCursor: string | null;
+  maxEvents?: number;
+  heartbeatMs?: number;
+};
+
+function sessionEventStreamResponse(input: SessionStreamEventInput) {
+  const encoder = new TextEncoder();
+  const startedAt = Date.now();
+  const heartbeatMs = Math.max(input.heartbeatMs ?? 15_000, 250);
+  let index = Number.isFinite(Number(input.sinceCursor)) ? Number(input.sinceCursor) : 0;
+  let sent = 0;
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+
+  const nextCursor = () => String(index > 0 ? ++index : startedAt + ++index);
+  const close = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (closed) return;
+    closed = true;
+    if (heartbeat) clearInterval(heartbeat);
+    try {
+      controller.close();
+    } catch {
+      // The client may have closed the connection first.
+    }
+  };
+  const emit = (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    type: string,
+    payload: Record<string, unknown>,
+  ) => {
+    if (closed) return;
+    const cursor = nextCursor();
+    const event = {
+      type,
+      cursor,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
+      observedAt: Date.now(),
+      source: "matterhorn-work-server",
+      payload,
+    };
+    controller.enqueue(encoder.encode(`id: ${cursor}\nevent: ${type}\ndata: ${JSON.stringify(event)}\n\n`));
+    sent += 1;
+    if (input.maxEvents && sent >= input.maxEvents) {
+      close(controller);
+    }
+  };
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (input.sinceCursor) {
+        emit(controller, "error", {
+          code: "cursor_expired",
+          message: "Event cursor replay is not available yet; fetch a snapshot.",
+          recoverable: true,
+        });
+      }
+      if (input.snapshot) {
+        emit(controller, "session.snapshot", input.snapshot as Record<string, unknown>);
+      }
+      emit(controller, "session.status", input.status as Record<string, unknown>);
+      if (!closed) {
+        heartbeat = setInterval(() => {
+          emit(controller, "heartbeat", { intervalMs: heartbeatMs });
+        }, heartbeatMs);
+      }
+      input.request.signal.addEventListener("abort", () => close(controller), { once: true });
+    },
+    cancel() {
+      closed = true;
+      if (heartbeat) clearInterval(heartbeat);
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 function withCors(response: Response, request: Request, config: ServerConfig) {
   const origin = request.headers.get("origin");
   const allowedOrigins = config.corsOrigins;
@@ -2218,6 +2309,36 @@ function createRoutes(
       limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
     });
     return jsonResponse({ item });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/events", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_payload", "sessionId is required");
+    }
+    const includeSnapshot = parseOptionalBoolean(ctx.url.searchParams.get("snapshot"), "snapshot") ?? false;
+    const maxEvents = parseOptionalPositiveInteger(ctx.url.searchParams.get("maxEvents"), "maxEvents");
+    const heartbeatMs = parseOptionalPositiveInteger(ctx.url.searchParams.get("heartbeatMs"), "heartbeatMs");
+    const sinceCursor = ctx.request.headers.get("last-event-id") ?? ctx.url.searchParams.get("since");
+    const [snapshot, status] = await Promise.all([
+      includeSnapshot
+        ? readWorkspaceSessionSnapshot(config, workspace, sessionId, {
+          limit: parseOptionalPositiveInteger(ctx.url.searchParams.get("limit"), "limit"),
+        })
+        : Promise.resolve(null),
+      readWorkspaceSessionExecutionStatus(config, workspace, sessionId),
+    ]);
+    return sessionEventStreamResponse({
+      request: ctx.request,
+      workspaceId: workspace.id,
+      sessionId,
+      snapshot,
+      status,
+      sinceCursor,
+      maxEvents,
+      heartbeatMs,
+    });
   });
 
   addRoute(routes, "DELETE", "/workspace/:id/sessions/:sessionId", "client", async (ctx) => {
