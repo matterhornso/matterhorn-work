@@ -138,6 +138,18 @@ Client recovery:
 
 MCP clients that cannot expose streaming responses can use `matterhorn_watch_session_events` as a bounded watch. It returns the next batch of events by calling this route with `maxEvents`. Clients can still fall back to `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
 
+## Verification
+
+Use the narrow checks first, then the end-to-end smoke when changing more than one layer:
+
+```bash
+pnpm test:agent-session-event-stream-contract
+bun test apps/server/src/session-read-model.e2e.test.ts
+pnpm test:agent-session-progress-smoke
+```
+
+`test:agent-session-progress-smoke` runs a mock Matterhorn Work server and verifies the same session-progress stream through direct HTTP, `matterhorn_watch_session_events`, and the `matterhorn-work sessions events` CLI fallback.
+
 ## Safety And Privacy
 
 - Do not stream custody material, wallet exports, private keys, seed phrases, mnemonics, host tokens, or raw signer payloads.
