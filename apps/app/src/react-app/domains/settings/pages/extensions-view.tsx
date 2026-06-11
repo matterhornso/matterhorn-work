@@ -93,12 +93,12 @@ export function ExtensionsView(props: ExtensionsViewProps) {
           {/* Runtime extensions: MCPs + skills + marketplace imports in one view */}
           {props.mcpView}
 
-          {/* OpenCode plugins -- advanced, collapsed */}
+          {/* Underlying engine runtime plugins -- advanced, collapsed */}
           {pluginCount > 0 ? (
             <details className="group">
               <summary className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-2 text-sm font-medium text-dls-secondary transition-colors hover:text-dls-text">
                 <Cpu size={14} />
-                <span>OpenCode Plugins</span>
+                <span>Engine plugins</span>
                 <span className="text-[11px] text-dls-secondary">({pluginCount})</span>
               </summary>
               <div className="mt-3">

@@ -1274,14 +1274,14 @@ function resolveManagedOpencodeCredentials(args: ParsedArgs): {
       (!requestedUsername && requestedPassword))
   ) {
     throw new Error(
-      "OpenCode credentials must include both username and password.",
+      "Matterhorn Work engine credentials must include both username and password.",
     );
   }
 
   if (requestedUsername && requestedPassword && hasExplicitCredentialFlags) {
     if (!allowInjectedCredentials) {
       throw new Error(
-        "OpenCode credentials are managed by OpenWork. Custom --opencode-username/--opencode-password values are not supported.",
+        "Matterhorn Work engine credentials are managed by Matterhorn Work. Custom --opencode-username/--opencode-password values are not supported.",
       );
     }
     return {
@@ -1309,7 +1309,7 @@ function assertManagedOpencodeAuth(args: ParsedArgs) {
   );
   if (!authEnabled) {
     throw new Error(
-      "OpenCode basic auth is always enabled when OpenWork launches OpenCode.",
+      "Matterhorn Work engine basic auth is always enabled when Matterhorn Work launches the underlying OpenCode runtime.",
     );
   }
 }
@@ -1319,7 +1319,7 @@ function resolveManagedOpencodeHost(requestedHost?: string): string {
   if (!normalized) return "127.0.0.1";
   if (!isLoopbackHost(normalized)) {
     throw new Error(
-      `OpenCode must stay on loopback. Unsupported --opencode-host value: ${normalized}`,
+      `The Matterhorn Work engine must stay on loopback. Unsupported --opencode-host value: ${normalized}`,
     );
   }
   return normalized === "localhost" ? "127.0.0.1" : normalized;
@@ -3658,7 +3658,7 @@ async function waitForOpencodeHealthy(
 
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
-  throw new Error(lastError ?? "Timed out waiting for OpenCode health");
+  throw new Error(lastError ?? "Timed out waiting for Matterhorn Work engine health");
 }
 
 /**
@@ -3706,27 +3706,30 @@ async function waitForHealthyViaProxy(
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
   throw new Error(
-    lastError ?? "Timed out waiting for OpenCode health via proxy",
+    lastError ?? "Timed out waiting for Matterhorn Work engine health via proxy",
   );
 }
 
 function printHelp(): void {
   const message = [
-    "openwork",
+    "matterhorn-work",
     "",
     "Usage:",
-    "  openwork start [--workspace <path>] [options]",
-    "  openwork serve [--workspace <path>] [options]",
-    "  openwork daemon [run|start|stop|status] [options]",
-    "  openwork workspace <action> [options]",
-    "  openwork instance dispose <id> [options]",
-    "  openwork approvals list --openwork-url <url> --host-token <token>",
-    "  openwork approvals reply <id> --allow|--deny --openwork-url <url> --host-token <token>",
-    "  openwork files <action> [options]",
-    "  openwork status [--openwork-url <url>] [--opencode-url <url>]",
+    "  matterhorn-work start [--workspace <path>] [options]",
+    "  matterhorn-work serve [--workspace <path>] [options]",
+    "  matterhorn-work daemon [run|start|stop|status] [options]",
+    "  matterhorn-work workspace <action> [options]",
+    "  matterhorn-work instance dispose <id> [options]",
+    "  matterhorn-work approvals list --openwork-url <url> --host-token <token>",
+    "  matterhorn-work approvals reply <id> --allow|--deny --openwork-url <url> --host-token <token>",
+    "  matterhorn-work files <action> [options]",
+    "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
+    "",
+    "Legacy command:",
+    "  openwork               Compatibility shim for matterhorn-work",
     "",
     "Commands:",
-    "  start                   Start OpenCode + OpenWork server + OpenCodeRouter",
+    "  start                   Start Matterhorn Work engine + server + OpenCodeRouter",
     "  serve                   Start services and stream logs (no TUI)",
     "  daemon                  Run orchestrator router daemon (multi-workspace)",
     "  workspace               Manage workspaces (add/list/switch/path)",
@@ -3734,27 +3737,27 @@ function printHelp(): void {
     "  approvals list           List pending approval requests",
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
-    "  status                  Check OpenCode/OpenWork health",
+    "  status                  Check Matterhorn Work engine/server health",
     "",
     "Options:",
     "  --workspace <path>        Workspace directory (default: cwd)",
     "  --data-dir <path>         Data dir for orchestrator router state",
     "  --daemon-host <host>      Host for orchestrator router daemon (default: 127.0.0.1)",
     "  --daemon-port <port>      Port for orchestrator router daemon (default: random)",
-    "  --opencode-bin <path>     Path to opencode binary (requires --allow-external)",
-    "  --opencode-host <host>    Bind host for opencode serve (loopback only, default: 127.0.0.1)",
-    "  --opencode-port <port>    Port for opencode serve (default: random)",
+    "  --opencode-bin <path>     Path to underlying opencode binary (requires --allow-external)",
+    "  --opencode-host <host>    Bind host for underlying opencode serve (loopback only, default: 127.0.0.1)",
+    "  --opencode-port <port>    Port for underlying opencode serve (default: random)",
     "  --opencode-workdir <p>    Workdir for router-managed opencode serve",
     "  --opencode-log-level <l>  Log level for opencode serve (DEBUG, INFO, WARN, ERROR; default: opencode default)",
-    "  --opencode-auth           OpenCode basic auth is always enabled",
-    "  --opencode-hot-reload     Enable OpenCode hot reload (default: true)",
+    "  --opencode-auth           Matterhorn Work engine basic auth is always enabled",
+    "  --opencode-hot-reload     Enable Matterhorn Work engine hot reload (default: true)",
     "  --opencode-hot-reload-debounce-ms <ms>  Debounce window for hot reload triggers (default: 700)",
     "  --opencode-hot-reload-cooldown-ms <ms>  Minimum interval between hot reloads (default: 1500)",
-    "  --opencode-username <u>   Internal-only override for managed OpenCode auth username",
-    "  --opencode-password <p>   Internal-only override for managed OpenCode auth password",
+    "  --opencode-username <u>   Internal-only override for managed engine auth username",
+    "  --opencode-password <p>   Internal-only override for managed engine auth password",
     "  --openwork-host <host>    Bind host for openwork-server (default: 127.0.0.1)",
     "  --openwork-port <port>    Port for openwork-server (default: 8787)",
-    "  --remote-access           Expose OpenWork on 0.0.0.0 for remote sharing",
+    "  --remote-access           Expose Matterhorn Work on 0.0.0.0 for remote sharing",
     "  --openwork-token <token>  Client token for openwork-server",
     "  --openwork-host-token <t> Host token for approvals",
     "  --workspace-id <id>       Workspace id for file session commands",
@@ -3773,7 +3776,7 @@ function printHelp(): void {
     "  --recursive               Recursive delete for files delete",
     "  --approval <mode>         manual | auto (default: manual)",
     "  --approval-timeout <ms>   Approval timeout in ms",
-    "  --read-only               Start OpenWork server in read-only mode",
+    "  --read-only               Start Matterhorn Work server in read-only mode",
     "  --cors <origins>          Comma-separated CORS origins or *",
     "  --connect-host <host>     Override LAN host used for pairing URLs",
     "  --matterhorn-work-server-bin <p> Path to Matterhorn Work server binary (requires --allow-external)",
@@ -4830,7 +4833,7 @@ async function verifyOpencodeVersion(
   const actual = await readCliVersion(binary.bin);
   // When the binary was explicitly provided via --opencode-bin (source "external"),
   // a strict version check would break desktop app users whenever a new opencode
-  // release ships on GitHub before OpenWork updates its bundled binary. Log a
+  // release ships on GitHub before Matterhorn Work updates its bundled binary. Log a
   // warning instead of throwing so the caller can still proceed.
   if (
     binary.source === "external" &&
@@ -4876,7 +4879,7 @@ async function verifyOpenworkServer(input: {
     ? (workspaces.items as Array<Record<string, unknown>>)
     : [];
   if (!items.length) {
-    throw new Error("OpenWork server returned no workspaces");
+    throw new Error("Matterhorn Work server returned no workspaces");
   }
 
   const expectedPath = normalizeWorkspacePath(input.expectedWorkspace);
@@ -4899,7 +4902,7 @@ async function verifyOpenworkServer(input: {
 
   if (!matched) {
     throw new Error(
-      `OpenWork server workspace mismatch. Expected ${expectedPath}.`,
+      `Matterhorn Work server workspace mismatch. Expected ${expectedPath}.`,
     );
   }
 
@@ -4909,7 +4912,7 @@ async function verifyOpenworkServer(input: {
     opencode?.baseUrl !== input.expectedOpencodeBaseUrl
   ) {
     throw new Error(
-      `OpenWork server OpenCode base URL mismatch: expected ${input.expectedOpencodeBaseUrl}, got ${opencode?.baseUrl ?? "<missing>"}.`,
+      `Matterhorn Work server engine base URL mismatch: expected ${input.expectedOpencodeBaseUrl}, got ${opencode?.baseUrl ?? "<missing>"}.`,
     );
   }
   if (
@@ -4917,20 +4920,20 @@ async function verifyOpenworkServer(input: {
     opencode?.directory !== input.expectedOpencodeDirectory
   ) {
     throw new Error(
-      `OpenWork server OpenCode directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
+      `Matterhorn Work server engine directory mismatch: expected ${input.expectedOpencodeDirectory}, got ${opencode?.directory ?? "<missing>"}.`,
     );
   }
   if (
     input.expectedOpencodeUsername &&
     opencode?.username !== input.expectedOpencodeUsername
   ) {
-    throw new Error("OpenWork server OpenCode username mismatch.");
+    throw new Error("Matterhorn Work server engine username mismatch.");
   }
   if (
     input.expectedOpencodePassword &&
     opencode?.password !== input.expectedOpencodePassword
   ) {
-    throw new Error("OpenWork server OpenCode password mismatch.");
+    throw new Error("Matterhorn Work server engine password mismatch.");
   }
 
   const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
@@ -4984,7 +4987,7 @@ async function runChecks(input: {
   const hostHeaders = { "X-Matterhorn-Host-Token": input.hostToken, "X-OpenWork-Host-Token": input.hostToken };
   const workspaces = await fetchJson(`${baseUrl}/workspaces`, { headers });
   if (!workspaces?.items?.length) {
-    throw new Error("OpenWork server returned no workspaces");
+    throw new Error("Matterhorn Work server returned no workspaces");
   }
 
   const workspaceId = workspaces.items[0].id as string;
@@ -5037,7 +5040,7 @@ async function runChecks(input: {
   }
 
   const created = await input.opencodeClient.session.create({
-    title: "OpenWork headless check",
+    title: "Matterhorn Work headless check",
   });
   const createdSession = unwrap(created);
   unwrap(
@@ -5068,7 +5071,7 @@ async function runChecks(input: {
 
     unwrap(
       await input.opencodeClient.session.create({
-        title: "OpenWork headless check events",
+        title: "Matterhorn Work headless check events",
       }),
     );
     await new Promise((resolve) => setTimeout(resolve, 1200));
@@ -5198,7 +5201,7 @@ async function fetchJson(url: string, init?: RequestInit): Promise<any> {
 async function issueOpenworkOwnerToken(
   baseUrl: string,
   hostToken: string,
-  label = "OpenWork owner token",
+  label = "Matterhorn Work owner token",
 ): Promise<string> {
   const payload = await fetchJson(`${baseUrl.replace(/\/$/, "")}/tokens`, {
     method: "POST",
@@ -5211,7 +5214,7 @@ async function issueOpenworkOwnerToken(
   });
   const token = typeof payload?.token === "string" ? payload.token.trim() : "";
   if (!token) {
-    throw new Error("OpenWork server did not return an owner token");
+    throw new Error("Matterhorn Work server did not return an owner token");
   }
   return token;
 }
@@ -6889,7 +6892,7 @@ async function runStatus(args: ParsedArgs) {
         error?: string;
       };
       console.log(
-        `OpenWork server: ${openwork.ok ? "ok" : "error"} (${openwork.url})`,
+        `Matterhorn Work server: ${openwork.ok ? "ok" : "error"} (${openwork.url})`,
       );
       if (openwork.error) console.log(`  ${openwork.error}`);
     }
@@ -6900,7 +6903,7 @@ async function runStatus(args: ParsedArgs) {
         error?: string;
       };
       console.log(
-        `OpenCode server: ${opencode.ok ? "ok" : "error"} (${opencode.url})`,
+        `Matterhorn Work engine: ${opencode.ok ? "ok" : "error"} (${opencode.url})`,
       );
       if (opencode.error) console.log(`  ${opencode.error}`);
     }
@@ -7326,7 +7329,7 @@ async function runStart(args: ParsedArgs) {
 
   const attachCommand =
     sandboxMode !== "none"
-      ? `OpenCode is proxied via ${opencodeConnectUrl} (requires OpenWork token)`
+      ? `Matterhorn Work engine is proxied via ${opencodeConnectUrl} (requires Matterhorn Work token)`
       : buildAttachCommand({
           url: opencodeConnectUrl,
           workspace: resolvedWorkspace,
@@ -7744,10 +7747,10 @@ async function runStart(args: ParsedArgs) {
             `Stop: ${sandboxStopCommand} ${sandboxContainerName}`,
           ]
         : []),
-      `OpenWork URL: ${openworkConnectUrl}`,
+      `Matterhorn Work URL: ${openworkConnectUrl}`,
       "Credentials withheld from detached stdout.",
-      ...(openworkOwnerToken ? ["OpenWork owner token issued."] : []),
-      `OpenCode URL: ${opencodeConnectUrl}`,
+      ...(openworkOwnerToken ? ["Matterhorn Work owner token issued."] : []),
+      `Matterhorn Work engine URL: ${opencodeConnectUrl}`,
       `Attach: ${redactSensitiveString(attachCommand)}`,
       "Use `--json` only when you explicitly need the raw tokens or passwords in command output.",
     ].join("\n");
@@ -8263,7 +8266,7 @@ async function runStart(args: ParsedArgs) {
       openworkOwnerToken = await issueOpenworkOwnerToken(
         openworkBaseUrl,
         openworkHostToken,
-        "OpenWork sandbox owner token",
+        "Matterhorn Work sandbox owner token",
       );
       tui?.setConnectInfo({ ownerToken: openworkOwnerToken });
       logVerbose(
@@ -8504,7 +8507,7 @@ async function runStart(args: ParsedArgs) {
       openworkOwnerToken = await issueOpenworkOwnerToken(
         openworkBaseUrl,
         openworkHostToken,
-        "OpenWork owner token",
+        "Matterhorn Work owner token",
       );
       tui?.setConnectInfo({ ownerToken: openworkOwnerToken });
       logVerbose(
@@ -8700,25 +8703,25 @@ async function runStart(args: ParsedArgs) {
         "openwork-orchestrator",
       );
     } else {
-      console.log("OpenWork orchestrator running");
+      console.log("Matterhorn Work orchestrator running");
       console.log(`Run ID: ${runId}`);
       console.log(`Workspace: ${payload.workspace}`);
-      console.log(`OpenCode: ${payload.opencode.baseUrl}`);
-      console.log(`OpenCode connect URL: ${payload.opencode.connectUrl}`);
+      console.log(`Matterhorn Work engine: ${payload.opencode.baseUrl}`);
+      console.log(`Matterhorn Work engine connect URL: ${payload.opencode.connectUrl}`);
       if (payload.opencode.username && payload.opencode.password) {
-        console.log("OpenCode auth: managed credentials configured (withheld from stdout)");
+        console.log("Matterhorn Work engine auth: managed credentials configured (withheld from stdout)");
       }
-      console.log(`OpenWork server: ${payload.openwork.baseUrl}`);
-      console.log(`OpenWork connect URL: ${payload.openwork.connectUrl}`);
-      console.log("OpenWork collaborator token: issued (withheld from stdout)");
+      console.log(`Matterhorn Work server: ${payload.openwork.baseUrl}`);
+      console.log(`Matterhorn Work connect URL: ${payload.openwork.connectUrl}`);
+      console.log("Matterhorn Work collaborator token: issued (withheld from stdout)");
       console.log("  Routine remote access for shared workers.");
       if (payload.openwork.ownerToken) {
-        console.log("OpenWork owner token: issued (withheld from stdout)");
+        console.log("Matterhorn Work owner token: issued (withheld from stdout)");
         console.log(
           "  Use this when the remote client must answer permission prompts.",
         );
       }
-      console.log("OpenWork host admin token: issued (withheld from stdout)");
+      console.log("Matterhorn Work host admin token: issued (withheld from stdout)");
       console.log(
         "  Internal host/admin token for approvals CLI and host-only APIs.",
       );

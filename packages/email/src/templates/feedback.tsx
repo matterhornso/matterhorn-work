@@ -44,7 +44,7 @@ export function FeedbackEmail({
     ["Deployment", deployment],
     ["App version", appVersion],
     ["Matterhorn server", matterhornServerVersion],
-    ["OpenCode", opencodeVersion],
+    ["Matterhorn Work engine", opencodeVersion],
     ["Orchestrator", orchestratorVersion],
     ["Router", opencodeRouterVersion],
     ["OS", osLabel],

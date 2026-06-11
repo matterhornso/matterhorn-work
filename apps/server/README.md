@@ -129,12 +129,12 @@ Toy UI (static assets served by the server):
 - `GET /w/:id/ui`
 - `GET /ui/assets/*`
 
-OpenCode proxy:
+Matterhorn Work engine proxy (underlying OpenCode runtime):
 
 - `GET|POST|... /opencode/*`
 - `GET|POST|... /w/:id/opencode/*`
 
-OpenCode Router proxy:
+OpenCodeRouter proxy:
 
 - `GET|POST|... /opencode-router/*`
 - `GET|POST|... /w/:id/opencode-router/*`

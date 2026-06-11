@@ -12,7 +12,7 @@ Matterhorn Work is a practical control surface for agentic work with crypto-nati
 
 - **Local-first agentic workspace** — run agent workflows from one place with full tool execution and streaming
 - **Desktop + server mode** — Electron shell for interactive use, headless API for remote clients
-- **OpenCode integration** — agent loop with tool execution, permission gating, template workflows
+- **Matterhorn Work engine** — OpenCode-backed agent loop with tool execution, permission gating, template workflows
 - **MCP extensions** — installable modules for new capabilities, registered via `opencode.jsonc`
 - **Session streaming** — SSE-based real-time updates so users can watch agent execution live
 - **Crypto-native** — every session carries wallet + chain context; agents propose on-chain actions, user approves in-workspace
@@ -45,7 +45,7 @@ pnpm install
 pnpm dev
 ```
 
-Requires pnpm 10+. The desktop app launches with an Electron shell connected to an OpenCode agent instance.
+Requires pnpm 10+. The desktop app launches with an Electron shell connected to the Matterhorn Work engine.
 
 ---
 
@@ -55,7 +55,7 @@ Requires pnpm 10+. The desktop app launches with an Electron shell connected to 
 apps/
   app/          React 19 UI (Vite SPA, Tailwind, shadcn/ui)
   desktop/      Electron shell
-  server/       OpenCode agent server
+  server/       Matterhorn Work agent server
 packages/
   matterhorn-work-wallet-mcp/   Wallet MCP server (stdio transport)
   matterhorn-work-ui-mcp/       UI control MCP server
@@ -65,6 +65,8 @@ packages/
 ```
 
 Every session carries wallet context. The agent can propose on-chain actions, and the wallet panel surfaces them for user approval — no extension popups, no copy-pasting addresses.
+
+For the naming boundary between the product-facing **Matterhorn Work engine** and the underlying OpenCode runtime, see [docs/opencode-runtime-abstraction.md](docs/opencode-runtime-abstraction.md).
 
 ---
 
