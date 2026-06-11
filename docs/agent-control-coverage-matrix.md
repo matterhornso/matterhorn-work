@@ -40,16 +40,15 @@ The goal is to keep every stable capability available through at least one safe 
 | --- | --- | --- | --- | --- |
 | List approvals | `GET /approvals` | `matterhorn_list_approvals` | `matterhorn-work approvals list` | `test:agent-control-mcp` |
 | Reply to approval | `POST /approvals/:approvalId` | `matterhorn_reply_approval` | `matterhorn-work approvals reply` | `test:agent-control-mcp` |
-| Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | Not yet | `test:agent-control-mcp`, Bittensor server tests |
-| Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | Not yet | `test:agent-control-mcp` |
+| Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | `matterhorn-work bittensor chat` | `test:agent-control-mcp`, Bittensor server tests, `test:bittensor-cli-fallback` |
+| Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | `matterhorn-work bittensor readiness` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Not yet | `test:agent-browser-control-guide`, `test:agent-browser-live-qa` |
 
 ## Current Gaps
 
-1. Add CLI fallbacks for Bittensor chat/readiness if users need non-MCP shell access.
-2. Add a live desktop smoke path for browser actions when the desktop bridge is available.
-3. Add file-session event watching to the unified MCP only if agents need file catalog deltas over MCP.
-4. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
+1. Add a live desktop smoke path for browser actions when the desktop bridge is available.
+2. Add file-session event watching to the unified MCP only if agents need file catalog deltas over MCP.
+3. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
 
 ## Required Checks
 
@@ -60,6 +59,7 @@ pnpm test:agent-control-coverage-matrix
 pnpm test:agent-control-api-docs
 pnpm test:mcp-config-cli
 pnpm test:agent-session-progress-smoke
+pnpm test:bittensor-cli-fallback
 ```
 
 The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.

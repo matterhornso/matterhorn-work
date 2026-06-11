@@ -27,8 +27,8 @@ const rows = [
   ["DELETE /files/sessions/:sessionId", "matterhorn_close_file_session", "matterhorn-work files session close"],
   ["GET /approvals", "matterhorn_list_approvals", "matterhorn-work approvals list"],
   ["POST /approvals/:approvalId", "matterhorn_reply_approval", "matterhorn-work approvals reply"],
-  ["POST /api/bittensor/chat/execute", "matterhorn_bittensor_chat", "Not yet"],
-  ["GET /api/bittensor/readiness", "matterhorn_bittensor_readiness", "Not yet"],
+  ["POST /api/bittensor/chat/execute", "matterhorn_bittensor_chat", "matterhorn-work bittensor chat"],
+  ["GET /api/bittensor/readiness", "matterhorn_bittensor_readiness", "matterhorn-work bittensor readiness"],
 ];
 
 for (const [route, tool, command] of rows) {
@@ -47,6 +47,8 @@ for (const command of [
   "sessions events",
   "files session",
   "approvals list",
+  "bittensor chat",
+  "bittensor readiness",
 ]) {
   assert.ok(cli.includes(command), `CLI help or implementation missing command listed by coverage matrix: ${command}`);
 }
