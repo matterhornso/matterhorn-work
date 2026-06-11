@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * openwork-ui-mcp
+ * matterhorn-work-ui-mcp
  *
  * MCP server that exposes Matterhorn Work's UI control surface as MCP tools.
  * Speaks MCP stdio and proxies to the Matterhorn Work desktop bridge HTTP API.
@@ -9,14 +9,14 @@
  * Requires Matterhorn Work desktop running with the local UI control bridge active.
  *
  * Usage:
- *   npx openwork-ui-mcp
+ *   npx matterhorn-work-ui-mcp
  *
  * MCP config (OpenCode / Claude Desktop / Cursor / etc.):
  *   {
  *     "mcpServers": {
- *       "openwork-ui": {
+ *       "matterhorn-work-ui": {
  *         "command": "npx",
- *         "args": ["-y", "openwork-ui-mcp"]
+ *         "args": ["-y", "matterhorn-work-ui-mcp"]
  *       }
  *     }
  *   }
@@ -161,7 +161,7 @@ function formatExecutionResult(actionId, result) {
 // ── MCP Server ──
 
 const server = new McpServer({
-  name: "openwork-ui",
+  name: "matterhorn-work-ui",
   version: "0.1.0",
 });
 
