@@ -34,6 +34,7 @@
     "test:agent-action-model-contract": "node scripts/agent-action-model-contract.test.mjs",
     "test:agent-browser-control-guide": "node scripts/agent-browser-control-guide.test.mjs",
     "test:agent-browser-live-qa": "node scripts/agent-browser-live-qa.test.mjs",
+    "test:agent-browser-live-probe": "node scripts/agent-browser-live-probe.mjs",
     "test:agent-session-event-stream-contract": "node scripts/agent-session-event-stream-contract.test.mjs",
     "test:agent-session-progress-smoke": "node scripts/agent-session-progress-smoke.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",

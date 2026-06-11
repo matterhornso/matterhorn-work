@@ -7,6 +7,8 @@ const guide = readFileSync("docs/agent-browser-control.md", "utf8");
 const surface = readFileSync("docs/agent-control-surface.md", "utf8");
 const uiMcp = readFileSync("packages/matterhorn-work-ui-mcp/index.mjs", "utf8");
 const uiMcpTest = readFileSync("packages/matterhorn-work-ui-mcp/test-browser-actions.mjs", "utf8");
+const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+const liveProbe = readFileSync("scripts/agent-browser-live-probe.mjs", "utf8");
 
 for (const snippet of [
   "# Matterhorn Work Browser Control Live QA",
@@ -27,6 +29,9 @@ for (const snippet of [
   "pnpm test:agent-browser-control-guide",
   "pnpm test:agent-action-model-contract",
   "pnpm --dir packages/matterhorn-work-ui-mcp test",
+  "pnpm test:agent-browser-live-probe",
+  "MATTERHORN_WORK_BROWSER_LIVE_REQUIRE=1",
+  "MATTERHORN_WORK_BROWSER_LIVE_OPEN_URL",
   "localhost bind permission",
   "No token value is printed",
   "No secrets are requested",
@@ -46,6 +51,20 @@ for (const tool of [
 
 assert.ok(guide.includes("./agent-browser-live-qa.md"), "browser-control guide should link live QA checklist");
 assert.ok(surface.includes("./agent-browser-live-qa.md"), "agent control surface should link live QA checklist");
+assert.ok(packageJson.scripts["test:agent-browser-live-probe"], "package.json should expose live browser probe");
+
+for (const snippet of [
+  "matterhorn-work-ui-mcp/index.mjs",
+  "ui_status",
+  "ui_snapshot",
+  "browser_list_actions",
+  "browser_open",
+  "--require",
+  "--open-url",
+  "SKIP:",
+]) {
+  assert.ok(liveProbe.includes(snippet), `missing live probe snippet: ${snippet}`);
+}
 
 const qaLower = qa.toLowerCase();
 for (const forbidden of ["privatekey accepted", "privatekey allowed", "seed phrase accepted", "wallet export accepted"]) {
