@@ -14,6 +14,7 @@ for (const snippet of [
   "async function runSessions(args: ParsedArgs)",
   "parseSessionSseEvents",
   "text/event-stream",
+  "--details",
   "/sessions/${encodeURIComponent(sessionId)}/events",
   "function buildMcpServersConfig(args: ParsedArgs)",
   '"matterhorn-work-mcp"',

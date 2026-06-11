@@ -822,6 +822,7 @@ type SessionStreamEventInput = {
   snapshot: unknown | null;
   status: unknown;
   sinceCursor: string | null;
+  includeDetails?: boolean;
   maxEvents?: number;
   heartbeatMs?: number;
 };
@@ -868,6 +869,25 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
       close(controller);
     }
   };
+  const emitSnapshotDetails = (controller: ReadableStreamDefaultController<Uint8Array>, snapshot: unknown) => {
+    if (!isRecord(snapshot)) return;
+    const messages = Array.isArray(snapshot.messages) ? snapshot.messages : [];
+    for (const message of messages) {
+      if (!isRecord(message) || !isRecord(message.info)) continue;
+      const messageId = typeof message.info.id === "string" ? message.info.id : "";
+      if (!messageId) continue;
+      emit(controller, "message.created", {
+        messageId,
+        role: typeof message.info.role === "string" ? message.info.role : "unknown",
+        parentId: typeof message.info.parentID === "string" ? message.info.parentID : null,
+        createdAt: isRecord(message.info.time) && typeof message.info.time.created === "number" ? message.info.time.created : null,
+      });
+    }
+    const todos = Array.isArray(snapshot.todos) ? snapshot.todos : [];
+    if (todos.length) {
+      emit(controller, "todo.updated", { todos });
+    }
+  };
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -880,6 +900,9 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
       }
       if (input.snapshot) {
         emit(controller, "session.snapshot", input.snapshot as Record<string, unknown>);
+        if (input.includeDetails) {
+          emitSnapshotDetails(controller, input.snapshot);
+        }
       }
       emit(controller, "session.status", input.status as Record<string, unknown>);
       if (!closed) {
@@ -2320,6 +2343,7 @@ function createRoutes(
     const includeSnapshot = parseOptionalBoolean(ctx.url.searchParams.get("snapshot"), "snapshot") ?? false;
     const maxEvents = parseOptionalPositiveInteger(ctx.url.searchParams.get("maxEvents"), "maxEvents");
     const heartbeatMs = parseOptionalPositiveInteger(ctx.url.searchParams.get("heartbeatMs"), "heartbeatMs");
+    const includeDetails = parseOptionalBoolean(ctx.url.searchParams.get("details"), "details") ?? false;
     const sinceCursor = ctx.request.headers.get("last-event-id") ?? ctx.url.searchParams.get("since");
     const [snapshot, status] = await Promise.all([
       includeSnapshot
@@ -2336,6 +2360,7 @@ function createRoutes(
       snapshot,
       status,
       sinceCursor,
+      includeDetails,
       maxEvents,
       heartbeatMs,
     });

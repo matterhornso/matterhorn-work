@@ -3776,6 +3776,7 @@ function printHelp(): void {
     "  --max-events <n>          Maximum chat session events to read (default: 10)",
     "  --since <cursor>          Session event cursor for reconnect/backfill",
     "  --snapshot                Include an initial chat session snapshot event",
+    "  --details                 Include message and todo events from the initial snapshot",
     "  --heartbeat-ms <n>        Session event heartbeat interval",
     "  --from <path>             Source path for rename",
     "  --to <path>               Destination path for rename",
@@ -6593,11 +6594,13 @@ async function runSessions(args: ParsedArgs) {
       const limit = readNumber(args.flags, "limit", undefined);
       const since = readFlag(args.flags, "since");
       const snapshot = readBool(args.flags, "snapshot", false);
+      const details = readBool(args.flags, "details", false);
       params.set("maxEvents", String(maxEvents));
       if (typeof heartbeatMs === "number") params.set("heartbeatMs", String(heartbeatMs));
       if (typeof limit === "number") params.set("limit", String(limit));
       if (since?.trim()) params.set("since", since.trim());
       if (snapshot) params.set("snapshot", "true");
+      if (details) params.set("details", "true");
       const query = params.toString();
       const response = await fetch(
         `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ""}`,
