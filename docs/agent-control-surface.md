@@ -13,7 +13,7 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 | CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, and file sessions |
 | HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
 
-See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup.
+See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Work Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools.
 
 ## First Agent Flow
 
@@ -75,5 +75,5 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 ## Next Build Steps
 
-1. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+1. Add browser/control tools against the shared action model.
 2. Add event streaming for session progress if polling status proves too coarse for agent clients.

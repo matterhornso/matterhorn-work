@@ -37,16 +37,16 @@ That's it. HandsFree can now list your sessions, read transcripts, type into the
 ## Install
 
 ```bash
-npm install -g openwork-ui-mcp
+npm install -g matterhorn-work-ui-mcp
 ```
 
 Or run without installing:
 
 ```bash
-npx openwork-ui-mcp
+npx matterhorn-work-ui-mcp
 ```
 
-> The package is [`openwork-ui-mcp` on npm](https://www.npmjs.com/package/openwork-ui-mcp).
+> The package is `matterhorn-work-ui-mcp`. Legacy `openwork-ui-mcp` package names may still appear in older installs as compatibility shims.
 
 ## Add to Matterhorn Work Engine
 
@@ -55,9 +55,9 @@ Add the MCP server to your workspace or global `opencode.json`. This is the unde
 ```json
 {
   "mcp": {
-    "openwork-ui": {
+    "matterhorn-work-ui": {
       "type": "local",
-      "command": ["npx", "-y", "openwork-ui-mcp"],
+      "command": ["npx", "-y", "matterhorn-work-ui-mcp"],
       "enabled": true
     }
   }
@@ -77,9 +77,9 @@ Both use the same MCP config shape. Add to your `claude_desktop_config.json` or 
 ```json
 {
   "mcpServers": {
-    "openwork-ui": {
+    "matterhorn-work-ui": {
       "command": "npx",
-      "args": ["-y", "openwork-ui-mcp"]
+      "args": ["-y", "matterhorn-work-ui-mcp"]
     }
   }
 }
@@ -97,7 +97,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const transport = new StdioClientTransport({
   command: "npx",
-  args: ["-y", "openwork-ui-mcp"],
+  args: ["-y", "matterhorn-work-ui-mcp"],
 });
 const client = new Client({ name: "my-app", version: "1.0.0" });
 await client.connect(transport);
@@ -224,7 +224,7 @@ The exact list depends on the current Matterhorn Work route and state. Common ac
 
 ```
 ┌─────────────┐     MCP stdio      ┌──────────────────┐     HTTP localhost     ┌──────────────┐
-│  MCP client  │ ←────────────────→ │  openwork-ui-mcp │ ←───────────────────→ │  Matterhorn   │
+│  MCP client  │ ←────────────────→ │matterhorn-work-ui│ ←───────────────────→ │  Matterhorn   │
 │  (HandsFree, │                    │  (Node.js)       │                       │  (Electron)   │
 │   Engine,    │                    │                  │                       │   Work app    │
 │   Codex)     │                    └──────────────────┘                       └──────────────┘
@@ -232,8 +232,8 @@ The exact list depends on the current Matterhorn Work route and state. Common ac
 ```
 
 1. Matterhorn Work desktop starts a private localhost HTTP bridge on a random port, protected by a bearer token.
-2. It writes a discovery file with the port and token so `openwork-ui-mcp` can find it.
-3. `openwork-ui-mcp` reads the discovery file, proxies MCP tool calls to the bridge, and returns structured results.
+2. It writes a discovery file with the port and token so `matterhorn-work-ui-mcp` can find it.
+3. `matterhorn-work-ui-mcp` reads the discovery file, proxies MCP tool calls to the bridge, and returns structured results.
 4. The bridge calls `window.__openworkControl` inside the Electron renderer to snapshot state and execute actions.
 
-The bridge and discovery file are implementation details — you never need to touch them directly. Just point your MCP client at `openwork-ui-mcp`.
+The bridge and discovery file are implementation details — you never need to touch them directly. Just point your MCP client at `matterhorn-work-ui-mcp`.
