@@ -1,6 +1,6 @@
 # Matterhorn Work Orchestrator
 
-Host orchestrator for opencode + Matterhorn Work server + opencode-router. This is a CLI-first way to run host mode without the desktop UI.
+Host orchestrator for the Matterhorn Work engine, Matterhorn Work server, and opencode-router. This is a CLI-first way to run host mode without the desktop UI. The engine is backed by the underlying OpenCode runtime.
 
 Published on npm as `openwork-orchestrator` for compatibility. It installs the
 canonical `matterhorn-work` command plus the legacy `openwork` shim.
@@ -38,7 +38,7 @@ apply the same policies via env vars.
 By default the manifest is fetched from
 `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v<version>/openwork-orchestrator-sidecars.json`.
 
-OpenCode Router is optional. If it exits, `matterhorn-work` continues running unless you pass
+OpenCodeRouter is optional. If it exits, `matterhorn-work` continues running unless you pass
 `--opencode-router-required` or set `OPENWORK_OPENCODE_ROUTER_REQUIRED=1`.
 
 For development overrides only, set `OPENWORK_ALLOW_EXTERNAL=1` or pass `--allow-external` to use
@@ -46,7 +46,7 @@ locally installed `matterhorn-work-server`, legacy `openwork-server`, or `openco
 
 Add `--verbose` (or `OPENWORK_VERBOSE=1`) to print extra diagnostics about resolved binaries.
 
-OpenCode hot reload is enabled by default when launched via `matterhorn-work`.
+Matterhorn Work engine hot reload is enabled by default when launched via `matterhorn-work`.
 Tune it with:
 
 - `--opencode-hot-reload` / `--no-opencode-hot-reload`
@@ -69,7 +69,7 @@ pnpm --filter matterhorn-work-orchestrator dev -- \
   start --workspace /path/to/workspace --approval auto --allow-external
 ```
 
-When `OPENWORK_DEV_MODE=1` is set, orchestrator uses an isolated OpenCode dev state for config, auth, data, cache, and state. Matterhorn Work's repo-level `pnpm dev` commands enable this automatically so local development does not reuse your personal OpenCode environment.
+When `OPENWORK_DEV_MODE=1` is set, orchestrator uses an isolated engine dev state for config, auth, data, cache, and state. Matterhorn Work's repo-level `pnpm dev` commands enable this automatically so local development does not reuse your personal OpenCode environment.
 
 The command prints pairing URLs by default and withholds live credentials from stdout to avoid leaking them into shell history or collected logs. Use `--json` only when you explicitly need the raw pairing secrets in command output.
 
@@ -117,7 +117,7 @@ Override with `OPENWORK_SANDBOX_MOUNT_ALLOWLIST`.
 
 ## Logging
 
-`matterhorn-work` emits a unified log stream from OpenCode, Matterhorn Work server, and opencode-router. Use JSON format for
+`matterhorn-work` emits a unified log stream from the Matterhorn Work engine, Matterhorn Work server, and opencode-router. Use JSON format for
 structured, OpenTelemetry-friendly logs and a stable run id for correlation.
 
 ```bash
@@ -126,7 +126,7 @@ OPENWORK_LOG_FORMAT=json matterhorn-work start --workspace /path/to/workspace
 
 Use `--run-id` or `OPENWORK_RUN_ID` to supply your own correlation id.
 
-OpenCode runs at `INFO` by default, which produces large log files in
+The underlying OpenCode runtime runs at `INFO` by default, which produces large log files in
 `~/.local/share/opencode/log/`. Pass `--opencode-log-level <DEBUG|INFO|WARN|ERROR>` (or set
 `OPENWORK_OPENCODE_LOG_LEVEL`) to forward `--log-level` to managed `opencode serve` and reduce log
 volume.
@@ -136,7 +136,7 @@ Matterhorn Work server logs every request with method, path, status, and duratio
 
 ## Router daemon (multi-workspace)
 
-The router keeps a single OpenCode process alive and switches workspaces JIT using the `directory` parameter.
+The router keeps a single Matterhorn Work engine process alive and switches workspaces JIT using the `directory` parameter.
 
 ```bash
 matterhorn-work daemon start
@@ -152,7 +152,7 @@ Use `OPENWORK_DATA_DIR` or `--data-dir` to isolate router state in tests.
 ## Pairing notes
 
 - Use the **Matterhorn Work connect URL** and **client token** to connect a remote Matterhorn Work client.
-- The Matterhorn Work server advertises the **OpenCode connect URL** plus optional basic auth credentials to the client.
+- The Matterhorn Work server advertises the **engine connect URL** plus optional basic auth credentials to the client.
 
 ## Approvals (manual mode)
 

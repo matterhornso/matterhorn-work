@@ -260,7 +260,7 @@ function describeTaskCreateError(error: unknown) {
     lower.includes("internal_error") ||
     lower.includes("unexpected server error")
   ) {
-    return "OpenCode is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Work if the problem continues.";
+    return "The Matterhorn Work engine is unavailable for this workspace. Retry once it restarts, or restart Matterhorn Work if the problem continues.";
   }
   return message;
 }
@@ -2409,7 +2409,7 @@ export function SessionRoute() {
       setRouteError(message);
       setErrorsByWorkspaceId((current) => ({ ...current, [workspaceId]: message }));
       showToast({
-        title: "OpenCode unavailable",
+        title: "Matterhorn Work engine unavailable",
         description: message,
         tone: "error",
         actionLabel: "Retry",

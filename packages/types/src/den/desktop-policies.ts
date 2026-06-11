@@ -35,9 +35,9 @@ export const desktopPolicyDefinitions = [
   },
   {
     id: "allowZenModel",
-    name: "Enable OpenCode Zen Models",
-    description: "Allow users to use the built in models provided by OpenCode.",
-    userNotice: "Your administrator has disabled access to OpenCode Models.",
+    name: "Enable Matterhorn Work hosted models",
+    description: "Allow users to use the built-in models provided through Matterhorn Work.",
+    userNotice: "Your administrator has disabled access to Matterhorn Work hosted models.",
     defaultValue: true,
   },
   {
