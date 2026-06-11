@@ -13,7 +13,9 @@ permissions:
 
 jobs:
   i18n-audit:
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    # Use GitHub-hosted Ubuntu so this required check does not wait forever
+    # when Blacksmith runners are unavailable.
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
