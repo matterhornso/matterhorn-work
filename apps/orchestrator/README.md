@@ -179,6 +179,7 @@ matterhorn-work sessions events <session-id> \
   --token <client-token> \
   --workspace-id <workspace-id> \
   --snapshot \
+  --details \
   --max-events 10 \
   --json
 ```

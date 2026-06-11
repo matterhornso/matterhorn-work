@@ -48,6 +48,7 @@ Query parameters:
 | --- | --- | --- |
 | `since` | number or string | Optional cursor for replaying events after a disconnect |
 | `snapshot` | boolean | Optional `true` to request an initial `session.snapshot` event |
+| `details` | boolean | Optional `true` to emit `message.created` and `todo.updated` events derived from the initial snapshot |
 | `maxEvents` | number | Optional positive event cap for tests and bounded clients |
 | `heartbeatMs` | number | Optional positive keepalive interval; the server clamps very low values |
 
@@ -150,5 +151,5 @@ MCP clients that cannot expose streaming responses can use `matterhorn_watch_ses
 
 - The existing `GET /workspace/:workspaceId/events` route remains a workspace reload/config event route.
 - The session event route should be session-scoped and should not replace the workspace event route.
-- The first implementation emits `session.snapshot`, `session.status`, `heartbeat`, and recoverable `cursor_expired` events. It should add richer message/tool deltas as those upstream events become stable.
+- The first implementation emits `session.snapshot`, `session.status`, `heartbeat`, and recoverable `cursor_expired` events. With `details=true`, it also emits `message.created` and `todo.updated` events derived from the initial snapshot. It should add richer tool and delta events as those upstream events become stable.
 - If native SSE is unavailable in an agent client, expose a bounded batch route or MCP watch tool with the same envelope and cursor semantics.

@@ -91,6 +91,7 @@ const server = createServer(async (req, res) => {
     assert.equal(req.headers.accept, "text/event-stream");
     assert.equal(url.searchParams.get("maxEvents"), "2");
     assert.equal(url.searchParams.get("snapshot"), "true");
+    assert.equal(url.searchParams.get("details"), "true");
     assert.equal(url.searchParams.get("since"), "7");
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.write(
@@ -312,7 +313,7 @@ try {
 
   const sessionEvents = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_watch_session_events",
-    arguments: { workspaceId: "ws_1", sessionId: "ses_1", snapshot: true, maxEvents: 2, since: "7" },
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1", snapshot: true, details: true, maxEvents: 2, since: "7" },
   }));
   assert.equal(sessionEvents.count, 2);
   assert.equal(sessionEvents.lastCursor, "9");

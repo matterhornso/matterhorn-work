@@ -359,6 +359,49 @@ describe("workspace session read APIs", () => {
     });
   });
 
+  test("streams optional message and todo detail events from the initial snapshot", async () => {
+    const workspaceRoot = await createWorkspaceRoot();
+    const mock = startMockOpencode();
+    const openwork = await startOpenworkServer({
+      workspaceRoot,
+      opencodeBaseUrl: `http://127.0.0.1:${mock.server.port}`,
+    });
+
+    const response = await fetch(
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/events?snapshot=true&details=true&maxEvents=4`,
+      { headers: auth(openwork.token) },
+    );
+    expect(response.status).toBe(200);
+
+    const events = parseSseEvents(await response.text());
+    expect(events.map((event) => event.event)).toEqual([
+      "session.snapshot",
+      "message.created",
+      "todo.updated",
+      "session.status",
+    ]);
+    expect(events[1]?.data).toMatchObject({
+      type: "message.created",
+      payload: {
+        messageId: "msg_1",
+        role: "assistant",
+        createdAt: 200,
+      },
+    });
+    expect(events[2]?.data).toMatchObject({
+      type: "todo.updated",
+      payload: {
+        todos: [
+          {
+            content: "Validate session reads",
+            status: "completed",
+            priority: "high",
+          },
+        ],
+      },
+    });
+  });
+
   test("accepts guest-side rem_ workspace aliases for session reads", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();

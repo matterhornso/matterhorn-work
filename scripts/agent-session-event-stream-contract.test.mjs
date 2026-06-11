@@ -13,6 +13,7 @@ for (const snippet of [
   "text/event-stream",
   "Authorization: Bearer <client-token>",
   "Last-Event-ID",
+  "details",
   "MatterhornSessionEvent",
   "session.snapshot",
   "session.status",
