@@ -147,7 +147,7 @@ const ensureOpenworkServer = async () => {
         "[dev:headless-web] Auto-build disabled (OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=0)",
       );
       logLine(
-        "[dev:headless-web] Run: pnpm --filter openwork-server build:bin",
+        "[dev:headless-web] Run: pnpm --filter matterhorn-work-server build:bin",
       );
       logLine(
         "[dev:headless-web] Or unset/enable OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD to auto-build.",
@@ -159,10 +159,10 @@ const ensureOpenworkServer = async () => {
       `[dev:headless-web] Missing OpenWork server binary at ${openworkServerBin}`,
     );
     logLine(
-      "[dev:headless-web] Auto-building: pnpm --filter openwork-server build:bin",
+      "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",
     );
     try {
-      await runCommand("pnpm", ["--filter", "openwork-server", "build:bin"]);
+      await runCommand("pnpm", ["--filter", "matterhorn-work-server", "build:bin"]);
       await access(openworkServerBin);
     } catch (error) {
       logLine(
@@ -287,7 +287,7 @@ const headlessProcess = spawnLogged(
   "pnpm",
   [
     "--filter",
-    "openwork-orchestrator",
+    "matterhorn-work-orchestrator",
     "dev",
     "--",
     "start",
@@ -296,8 +296,15 @@ const headlessProcess = spawnLogged(
     "--approval",
     "auto",
     "--allow-external",
+    "--sidecar-source",
+    "external",
+    "--openwork-server-bin",
+    openworkServerBin,
     "--opencode-router",
     opencodeRouterEnabled ? "true" : "false",
+    ...(opencodeRouterEnabled
+      ? ["--opencode-router-bin", opencodeRouterBin]
+      : []),
     ...(opencodeRouterRequired ? ["--opencode-router-required"] : []),
     ...(remoteAccessEnabled ? ["--remote-access"] : []),
     "--openwork-port",

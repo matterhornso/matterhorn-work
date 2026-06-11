@@ -1495,6 +1495,7 @@ function prefixStream(
   level: "stdout" | "stderr",
   logger: Logger,
   pid?: number,
+  tapLine?: (line: string, level: "stdout" | "stderr") => void,
 ): void {
   if (!stream) return;
   stream.setEncoding("utf8");
@@ -1505,6 +1506,7 @@ function prefixStream(
     buffer = lines.pop() ?? "";
     for (const line of lines) {
       if (!line.trim()) continue;
+      tapLine?.(line, level);
       if (
         logger.output === "stdout" &&
         logger.format === "json" &&
@@ -1519,6 +1521,7 @@ function prefixStream(
   });
   stream.on("end", () => {
     if (!buffer.trim()) return;
+    tapLine?.(buffer, level);
     if (
       logger.output === "stdout" &&
       logger.format === "json" &&
@@ -1530,6 +1533,25 @@ function prefixStream(
     const severity: LogLevel = level === "stderr" ? "error" : "info";
     logger.log(severity, buffer, { stream: level, pid }, label);
   });
+}
+
+const childOutputTails = new WeakMap<ChildProcess, string[]>();
+const childOutputTailLimit = 20;
+
+function rememberChildOutput(
+  child: ChildProcess,
+  stream: "stdout" | "stderr",
+  line: string,
+): void {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+  const safeLine = redactSensitiveString(trimmed).slice(0, 1_000);
+  const tail = childOutputTails.get(child) ?? [];
+  tail.push(`${stream}: ${safeLine}`);
+  if (tail.length > childOutputTailLimit) {
+    tail.splice(0, tail.length - childOutputTailLimit);
+  }
+  childOutputTails.set(child, tail);
 }
 
 function shouldUseBun(bin: string): boolean {
@@ -3981,6 +4003,7 @@ async function startOpenworkServer(options: {
     "stdout",
     options.logger,
     child.pid ?? undefined,
+    (line, stream) => rememberChildOutput(child, stream, line),
   );
   prefixStream(
     child.stderr,
@@ -3988,6 +4011,7 @@ async function startOpenworkServer(options: {
     "stderr",
     options.logger,
     child.pid ?? undefined,
+    (line, stream) => rememberChildOutput(child, stream, line),
   );
 
   return child;
@@ -7876,14 +7900,34 @@ async function runStart(args: ParsedArgs) {
     }
     const reason =
       code !== null ? `code ${code}` : signal ? `signal ${signal}` : "unknown";
+    const child =
+      name === "opencode"
+        ? opencodeChild
+        : name === "openwork-server"
+          ? openworkChild
+          : name === "opencode-router"
+            ? opencodeRouterChild
+            : null;
+    const recentOutput = child ? childOutputTails.get(child) : undefined;
+    const latestOutput = recentOutput?.at(-1)?.slice(0, 240);
+    const message = latestOutput ? `${reason}; ${latestOutput}` : reason;
     const services =
       name === "sandbox"
         ? ["opencode", "openwork-server", "router"]
         : [tuiServiceName(name)];
     for (const service of services) {
-      tui?.updateService(service, { status: "stopped", message: reason });
+      tui?.updateService(service, { status: "stopped", message });
     }
-    logger.error("Process exited", { reason, code, signal }, name);
+    logger.error(
+      `Process exited (${message})`,
+      {
+        reason,
+        code,
+        signal,
+        ...(recentOutput?.length ? { recentOutput } : {}),
+      },
+      name,
+    );
     void shutdown().then(() => process.exit(code ?? 1));
   };
 
