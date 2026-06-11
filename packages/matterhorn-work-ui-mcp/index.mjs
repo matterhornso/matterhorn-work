@@ -158,6 +158,65 @@ function formatExecutionResult(actionId, result) {
   return `Executed ${actionId}.`;
 }
 
+function actionListFromBridgeResult(result) {
+  if (Array.isArray(result?.actions)) return result.actions;
+  if (Array.isArray(result?.snapshot?.actions)) return result.snapshot.actions;
+  if (Array.isArray(result?.item?.actions)) return result.item.actions;
+  return [];
+}
+
+function isBrowserAction(action) {
+  return typeof action?.id === "string" && action.id.startsWith("browser.");
+}
+
+function isConfirmationRequired(action) {
+  return action?.requiresConfirmation === true || action?.sideEffect === "external";
+}
+
+async function listBridgeActions() {
+  const result = await bridgeRequest("/actions");
+  return { result, actions: actionListFromBridgeResult(result) };
+}
+
+function browserActionUnavailableText(actionId) {
+  return [
+    `No semantic ${actionId} action is available from Matterhorn Work right now.`,
+    "Use browser_list_actions to inspect published browser.* actions, or use the generic ui_* tools.",
+    "Do not fall back to raw coordinates for destructive, external, financial, or signing actions.",
+  ].join("\n");
+}
+
+async function findBrowserAction(actionId) {
+  const { result, actions } = await listBridgeActions();
+  if (!result.ok && result.error) return { error: result.error, action: null };
+  return { action: actions.find((action) => action?.id === actionId && isBrowserAction(action)) ?? null };
+}
+
+async function executeSemanticBrowserAction(action, args, confirmed) {
+  if (!action || !isBrowserAction(action)) {
+    return { ok: false, error: "Only semantic browser.* actions can be executed with browser control tools." };
+  }
+  if (action.disabled) {
+    return { ok: false, error: `Action is disabled: ${action.label || action.id}` };
+  }
+  if (action.busy) {
+    return { ok: false, error: `Action is busy: ${action.label || action.id}` };
+  }
+  if (isConfirmationRequired(action) && confirmed !== true) {
+    return {
+      ok: false,
+      error: [
+        `${action.id} requires explicit confirmation before execution.`,
+        action.description ? `Consequence: ${action.description}` : "Consequence: this action may affect external state.",
+      ].join("\n"),
+    };
+  }
+  return bridgeRequest("/execute", {
+    method: "POST",
+    body: { actionId: action.id, args: args ?? {} },
+  });
+}
+
 // ── MCP Server ──
 
 const server = new McpServer({
@@ -223,6 +282,105 @@ server.tool(
       method: "POST",
       body: { actionId, args: args ?? {} },
     });
+    if (!result.ok && result.error) {
+      return { content: [{ type: "text", text: `Error executing ${actionId}: ${result.error}` }], isError: true };
+    }
+    return { content: [{ type: "text", text: formatExecutionResult(actionId, result) }] };
+  }
+);
+
+// ── browser.list_actions ──
+server.tool(
+  "browser_list_actions",
+  "List semantic browser.* actions currently published by Matterhorn Work. Use this before browser_snapshot, browser_open, or browser_execute_action.",
+  {},
+  async () => {
+    const { result, actions } = await listBridgeActions();
+    if (!result.ok && result.error) {
+      return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+    }
+    const browserActions = actions.filter(isBrowserAction);
+    if (browserActions.length === 0) {
+      return {
+        content: [{
+          type: "text",
+          text: [
+            "No semantic browser.* actions are currently published by Matterhorn Work.",
+            "Use ui_snapshot and ui_list_actions for app control. Use low-level browser fallback only for safe read-only inspection when no semantic action exists.",
+          ].join("\n"),
+        }],
+      };
+    }
+    return {
+      content: [{
+        type: "text",
+        text: `${browserActions.length} semantic browser actions:\n\n${browserActions.map(formatActionLine).join("\n\n")}`,
+      }],
+    };
+  }
+);
+
+// ── browser.snapshot ──
+server.tool(
+  "browser_snapshot",
+  "Run the published browser.snapshot action when Matterhorn Work exposes one. This refuses coordinate or DOM fallbacks.",
+  {},
+  async () => {
+    const { error, action } = await findBrowserAction("browser.snapshot");
+    if (error) return { content: [{ type: "text", text: `Error: ${error}` }], isError: true };
+    if (!action) return { content: [{ type: "text", text: browserActionUnavailableText("browser.snapshot") }], isError: true };
+    const result = await executeSemanticBrowserAction(action, {}, false);
+    if (!result.ok && result.error) {
+      return { content: [{ type: "text", text: `Error executing browser.snapshot: ${result.error}` }], isError: true };
+    }
+    return { content: [{ type: "text", text: formatExecutionResult("browser.snapshot", result) }] };
+  }
+);
+
+// ── browser.open ──
+server.tool(
+  "browser_open",
+  "Open or navigate a browser target using Matterhorn Work's semantic browser.open or browser.navigate action. Refuses raw coordinate fallback.",
+  {
+    url: z.string().describe("The URL to open or navigate to."),
+    newTab: z.boolean().optional().describe("When supported by the published action, open in a new tab."),
+    confirmed: z.boolean().optional().describe("Required only when the published browser action declares external side effects or confirmation."),
+  },
+  async ({ url, newTab, confirmed }) => {
+    const { result, actions } = await listBridgeActions();
+    if (!result.ok && result.error) {
+      return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
+    }
+    const action = actions.find((candidate) => candidate?.id === "browser.open" && isBrowserAction(candidate))
+      ?? actions.find((candidate) => candidate?.id === "browser.navigate" && isBrowserAction(candidate));
+    if (!action) {
+      return { content: [{ type: "text", text: browserActionUnavailableText("browser.open or browser.navigate") }], isError: true };
+    }
+    const execution = await executeSemanticBrowserAction(action, { url, newTab }, confirmed);
+    if (!execution.ok && execution.error) {
+      return { content: [{ type: "text", text: `Error executing ${action.id}: ${execution.error}` }], isError: true };
+    }
+    return { content: [{ type: "text", text: formatExecutionResult(action.id, execution) }] };
+  }
+);
+
+// ── browser.execute_action ──
+server.tool(
+  "browser_execute_action",
+  "Execute one published semantic browser.* action by id. Use browser_list_actions first; high-risk browser actions require confirmed=true.",
+  {
+    actionId: z.string().describe("The semantic browser action id from browser_list_actions, e.g. browser.snapshot or browser.open."),
+    args: z.record(z.unknown()).optional().describe("JSON arguments for the action, if required."),
+    confirmed: z.boolean().optional().describe("Set true only after explicit user confirmation for external or confirmation-required actions."),
+  },
+  async ({ actionId, args, confirmed }) => {
+    if (!actionId.startsWith("browser.")) {
+      return { content: [{ type: "text", text: "browser_execute_action only accepts semantic browser.* action ids." }], isError: true };
+    }
+    const { error, action } = await findBrowserAction(actionId);
+    if (error) return { content: [{ type: "text", text: `Error: ${error}` }], isError: true };
+    if (!action) return { content: [{ type: "text", text: browserActionUnavailableText(actionId) }], isError: true };
+    const result = await executeSemanticBrowserAction(action, args ?? {}, confirmed);
     if (!result.ok && result.error) {
       return { content: [{ type: "text", text: `Error executing ${actionId}: ${result.error}` }], isError: true };
     }

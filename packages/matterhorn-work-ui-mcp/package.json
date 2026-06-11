@@ -13,7 +13,7 @@
   ],
   "scripts": {
     "check": "node --check index.mjs",
-    "test": "node --check index.mjs"
+    "test": "node --check index.mjs && node test-browser-actions.mjs"
   },
   "repository": {
     "type": "git",
