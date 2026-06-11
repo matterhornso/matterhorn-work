@@ -77,6 +77,16 @@ const server = createServer(async (req, res) => {
     assert.equal(url.searchParams.get("limit"), "5");
     return json(res, 200, { items: [{ id: "msg_1", role: "user", content: "hello" }] });
   }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/status") {
+    return json(res, 200, {
+      item: {
+        session: { id: "ses_1", title: "Demo session" },
+        status: { type: "busy" },
+        busy: true,
+        observedAt: 123,
+      },
+    });
+  }
   if (req.method === "POST" && url.pathname === "/workspace/ws_1/sessions/ses_1/messages") {
     assert.equal(body.message, "Summarize this workspace");
     assert.equal(body.model.providerID, "openai");
@@ -215,6 +225,7 @@ try {
     "matterhorn_list_sessions",
     "matterhorn_get_session",
     "matterhorn_get_session_messages",
+    "matterhorn_get_session_status",
     "matterhorn_submit_session_prompt",
     "matterhorn_get_session_snapshot",
     "matterhorn_delete_session",
@@ -260,6 +271,13 @@ try {
     arguments: { workspaceId: "ws_1", sessionId: "ses_1", limit: 5 },
   }));
   assert.equal(sessionMessages.items[0].id, "msg_1");
+
+  const sessionStatus = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_get_session_status",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1" },
+  }));
+  assert.equal(sessionStatus.item.status.type, "busy");
+  assert.equal(sessionStatus.item.busy, true);
 
   const submittedPrompt = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_submit_session_prompt",

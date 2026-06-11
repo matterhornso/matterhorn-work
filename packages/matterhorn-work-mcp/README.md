@@ -64,6 +64,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_list_sessions` — list chat sessions in a workspace
 - `matterhorn_get_session` — read one chat session
 - `matterhorn_get_session_messages` — read chat session messages
+- `matterhorn_get_session_status` — poll a chat session's current execution status
 - `matterhorn_submit_session_prompt` — submit a prompt through the stable server route and normal approval policy
 - `matterhorn_get_session_snapshot` — read a combined session/messages/todos/status snapshot
 - `matterhorn_delete_session` — delete a chat session with a writable collaborator/owner token

@@ -118,6 +118,18 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_get_session_status",
+    description: "Poll the current execution status for a Matterhorn Work chat session without fetching the full snapshot.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
     name: "matterhorn_get_session_snapshot",
     description: "Read a combined Matterhorn Work chat session snapshot with session, messages, todos, and statuses.",
     inputSchema: {
@@ -407,6 +419,8 @@ async function handleTool(name, args = {}) {
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/messages`, {
         query: { limit: args.limit },
       });
+    case "matterhorn_get_session_status":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/status`);
     case "matterhorn_submit_session_prompt": {
       const body = {
         ...(typeof args.message === "string" ? { message: args.message } : {}),

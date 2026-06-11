@@ -57,6 +57,7 @@ Common status codes:
 | `matterhorn_get_session` | `GET /workspace/:workspaceId/sessions/:sessionId` |
 | `matterhorn_submit_session_prompt` | `POST /workspace/:workspaceId/sessions/:sessionId/messages` |
 | `matterhorn_get_session_messages` | `GET /workspace/:workspaceId/sessions/:sessionId/messages` |
+| `matterhorn_get_session_status` | `GET /workspace/:workspaceId/sessions/:sessionId/status` |
 | `matterhorn_get_session_snapshot` | `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` |
 | `matterhorn_delete_session` | `DELETE /workspace/:workspaceId/sessions/:sessionId` |
 | `matterhorn_create_file_session` | `POST /workspace/:workspaceId/files/sessions` |
@@ -269,6 +270,26 @@ Response:
 }
 ```
 
+### `GET /workspace/:workspaceId/sessions/:sessionId/status`
+
+Auth: `client`
+
+Returns a lightweight execution-status record for polling after a prompt submission. Use this before fetching a full snapshot when an agent only needs to know whether the session is still busy.
+
+```json
+{
+  "item": {
+    "session": {
+      "id": "ses_123",
+      "title": "Investigate Bittensor wallet flow"
+    },
+    "status": { "type": "busy" },
+    "busy": true,
+    "observedAt": 1781180000000
+  }
+}
+```
+
 ### `GET /workspace/:workspaceId/sessions/:sessionId/snapshot`
 
 Auth: `client`
@@ -281,7 +302,7 @@ Returns a combined snapshot with the session, messages, todos, and status data w
     "session": { "id": "ses_123" },
     "messages": [],
     "todos": [],
-    "statuses": []
+    "status": { "type": "idle" }
   }
 }
 ```
@@ -540,6 +561,4 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
 
 ## Not Yet Stable
 
-Browser control and desktop UI automation are not part of this HTTP contract yet.
-
-The next Agent Control Surface increment should expose the stable chat-session creation and prompt-submission routes through `matterhorn-work-mcp`, then add a polling or event route for session execution status.
+Browser control and desktop UI automation are not part of this HTTP contract yet. Event streaming for session progress is also not part of this contract yet; clients should poll `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight execution status.

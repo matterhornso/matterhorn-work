@@ -101,7 +101,15 @@ import {
   type WorkspaceImportPlan,
   workspaceImportPreviewApprovalPaths,
 } from "./workspace-import-preview.js";
-import { buildSession, buildSessionList, buildSessionMessages, buildSessionSnapshot, buildSessionStatuses, buildSessionTodos } from "./session-read-model.js";
+import {
+  buildSession,
+  buildSessionExecutionStatus,
+  buildSessionList,
+  buildSessionMessages,
+  buildSessionSnapshot,
+  buildSessionStatuses,
+  buildSessionTodos,
+} from "./session-read-model.js";
 import {
   collectWorkspaceExportWarnings,
   stripSensitiveWorkspaceExportData,
@@ -2190,6 +2198,16 @@ function createRoutes(
     return jsonResponse({ items });
   });
 
+  addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/status", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const sessionId = (ctx.params.sessionId ?? "").trim();
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_payload", "sessionId is required");
+    }
+    const item = await readWorkspaceSessionExecutionStatus(config, workspace, sessionId);
+    return jsonResponse({ item });
+  });
+
   addRoute(routes, "GET", "/workspace/:id/sessions/:sessionId/snapshot", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     const sessionId = (ctx.params.sessionId ?? "").trim();
@@ -4119,6 +4137,21 @@ async function readWorkspaceSessionStatuses(config: ServerConfig, workspace: Wor
     return buildSessionStatuses(
       unwrapOpencodeResult(await opencode.session.status(), "/session/status"),
     );
+  } catch (error) {
+    remapSessionReadError(error);
+  }
+}
+
+async function readWorkspaceSessionExecutionStatus(config: ServerConfig, workspace: WorkspaceInfo, sessionId: string) {
+  try {
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const [session, statuses] = await Promise.all([
+      opencode.session
+        .get({ sessionID: sessionId })
+        .then((result) => unwrapOpencodeResult(result, `/session/${encodeURIComponent(sessionId)}`)),
+      opencode.session.status().then((result) => unwrapOpencodeResult(result, "/session/status")),
+    ]);
+    return buildSessionExecutionStatus({ session, statuses });
   } catch (error) {
     remapSessionReadError(error);
   }

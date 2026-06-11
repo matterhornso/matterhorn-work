@@ -232,6 +232,16 @@ describe("workspace session read APIs", () => {
     expect(messagesBody.items[0]?.info.id).toBe("msg_1");
     expect(messagesBody.items[0]?.parts[0]?.text).toBe("hostname: mock-host");
 
+    const statusResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/status`, {
+      headers: auth(openwork.token),
+    });
+    expect(statusResponse.status).toBe(200);
+    const statusBody = await statusResponse.json();
+    expect(statusBody.item.session.id).toBe("ses_1");
+    expect(statusBody.item.status).toEqual({ type: "busy" });
+    expect(statusBody.item.busy).toBe(true);
+    expect(typeof statusBody.item.observedAt).toBe("number");
+
     const snapshotResponse = await fetch(`${base}/workspace/ws_1/sessions/ses_1/snapshot?limit=5`, {
       headers: auth(openwork.token),
     });
