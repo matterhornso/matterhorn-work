@@ -3723,6 +3723,7 @@ function printHelp(): void {
     "  matterhorn-work approvals list --openwork-url <url> --host-token <token>",
     "  matterhorn-work approvals reply <id> --allow|--deny --openwork-url <url> --host-token <token>",
     "  matterhorn-work files <action> [options]",
+    "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
     "",
@@ -3738,6 +3739,7 @@ function printHelp(): void {
     "  approvals list           List pending approval requests",
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
+    "  sessions events         Read bounded chat session progress events",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
     "",
@@ -3763,7 +3765,7 @@ function printHelp(): void {
     "  --openwork-token <token>  Client token for openwork-server",
     "  --openwork-host-token <t> Host token for approvals",
     "  --workspace-id <id>       Workspace id for file session commands",
-    "  --session-id <id>         File session id for file session commands",
+    "  --session-id <id>         File or chat session id for session commands",
     "  --path <path>             Workspace-relative file path",
     "  --paths <list>            Comma-separated list of workspace-relative file paths",
     "  --ttl-seconds <n>         File session TTL in seconds",
@@ -3771,6 +3773,10 @@ function printHelp(): void {
     "  --content-base64 <b64>    Base64 content for file writes",
     "  --file <path>             Local file path for file writes",
     "  --if-match <revision>     Revision precondition for file writes",
+    "  --max-events <n>          Maximum chat session events to read (default: 10)",
+    "  --since <cursor>          Session event cursor for reconnect/backfill",
+    "  --snapshot                Include an initial chat session snapshot event",
+    "  --heartbeat-ms <n>        Session event heartbeat interval",
     "  --from <path>             Source path for rename",
     "  --to <path>               Destination path for rename",
     "  --write                   Request writable file session",
@@ -6530,6 +6536,103 @@ function readSessionId(args: ParsedArgs, fallbackIndex: number): string {
   return trimmed;
 }
 
+function readWorkspaceId(args: ParsedArgs, fallbackIndex: number): string {
+  const workspaceId =
+    readFlag(args.flags, "workspace-id") ?? args.positionals[fallbackIndex] ?? "";
+  const trimmed = workspaceId.trim();
+  if (!trimmed) {
+    throw new Error("workspace-id is required");
+  }
+  return trimmed;
+}
+
+function parseSessionSseEvents(text: string) {
+  return text
+    .trim()
+    .split(/\n\n+/)
+    .filter(Boolean)
+    .map((block) => {
+      const entry: {
+        id?: string;
+        event?: string;
+        data?: unknown;
+      } = {};
+      for (const line of block.split("\n")) {
+        if (line.startsWith("id: ")) entry.id = line.slice("id: ".length);
+        if (line.startsWith("event: ")) entry.event = line.slice("event: ".length);
+        if (line.startsWith("data: ")) {
+          const raw = line.slice("data: ".length);
+          try {
+            entry.data = JSON.parse(raw);
+          } catch {
+            entry.data = raw;
+          }
+        }
+      }
+      return entry;
+    });
+}
+
+async function runSessions(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "text/event-stream",
+  };
+
+  try {
+    if (subcommand === "events" || subcommand === "watch") {
+      const sessionId = readSessionId(args, 2);
+      const workspaceId = readWorkspaceId(args, 3);
+      const params = new URLSearchParams();
+      const maxEvents = readNumber(args.flags, "max-events", 10);
+      const heartbeatMs = readNumber(args.flags, "heartbeat-ms", undefined);
+      const limit = readNumber(args.flags, "limit", undefined);
+      const since = readFlag(args.flags, "since");
+      const snapshot = readBool(args.flags, "snapshot", false);
+      params.set("maxEvents", String(maxEvents));
+      if (typeof heartbeatMs === "number") params.set("heartbeatMs", String(heartbeatMs));
+      if (typeof limit === "number") params.set("limit", String(limit));
+      if (since?.trim()) params.set("since", since.trim());
+      if (snapshot) params.set("snapshot", "true");
+      const query = params.toString();
+      const response = await fetch(
+        `${baseUrl}/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}/events${query ? `?${query}` : ""}`,
+        { headers },
+      );
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`session events failed: HTTP ${response.status}${text ? ` ${text}` : ""}`);
+      }
+      const events = parseSessionSseEvents(text);
+      const last = events.at(-1);
+      const lastCursor =
+        last?.id ??
+        (last?.data && typeof last.data === "object" && "cursor" in last.data
+          ? String((last.data as { cursor?: unknown }).cursor ?? "")
+          : "");
+      outputResult({
+        ok: true,
+        workspaceId,
+        sessionId,
+        events,
+        count: events.length,
+        lastCursor: lastCursor || null,
+        nextSince: lastCursor || null,
+      }, outputJson);
+      return;
+    }
+
+    throw new Error("sessions requires events|watch");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runFiles(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -8952,6 +9055,10 @@ async function main() {
   }
   if (command === "files") {
     await runFiles(args);
+    return;
+  }
+  if (command === "sessions" || command === "session") {
+    await runSessions(args);
     return;
   }
   if (command === "mcp") {
