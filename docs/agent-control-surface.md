@@ -56,7 +56,7 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 5. Use `matterhorn_status` to confirm the server.
 
-6. Use `matterhorn_list_workspaces`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
+6. Use `matterhorn_list_workspaces`, `matterhorn_list_sessions`, `matterhorn_get_session_snapshot`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
 
 7. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
 
@@ -71,6 +71,7 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 ## Next Build Steps
 
-1. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
-2. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
-3. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
+1. Add safe chat session creation and prompt-submission HTTP endpoints outside the engine proxy.
+2. Add MCP prompt-submission tools only after those stable server endpoints exist.
+3. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+4. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
