@@ -89,11 +89,19 @@ const sessionSnapshotSchema = z.object({
   status: sessionStatusSchema,
 });
 
+const sessionExecutionStatusSchema = z.object({
+  session: sessionInfoSchema,
+  status: sessionStatusSchema,
+  busy: z.boolean(),
+  observedAt: z.number(),
+});
+
 export type SessionInfoReadModel = z.infer<typeof sessionInfoSchema>;
 export type SessionMessageReadModel = z.infer<typeof sessionMessageSchema>;
 export type SessionTodoReadModel = z.infer<typeof sessionTodoSchema>;
 export type SessionStatusReadModel = z.infer<typeof sessionStatusSchema>;
 export type SessionSnapshotReadModel = z.infer<typeof sessionSnapshotSchema>;
+export type SessionExecutionStatusReadModel = z.infer<typeof sessionExecutionStatusSchema>;
 
 const IDLE_STATUS: SessionStatusReadModel = { type: "idle" };
 
@@ -123,6 +131,26 @@ export function buildSessionTodos(value: SessionTodoResponse): SessionTodoReadMo
 
 export function buildSessionStatuses(value: SessionStatusResponse): Record<string, SessionStatusReadModel> {
   return parseOrThrow(sessionStatusesSchema, value, "session statuses");
+}
+
+export function buildSessionExecutionStatus(input: {
+  session: SessionGetResponse;
+  statuses: SessionStatusResponse;
+  observedAt?: number;
+}): SessionExecutionStatusReadModel {
+  const session = buildSession(input.session);
+  const statuses = buildSessionStatuses(input.statuses);
+  const status = statuses[session.id] ?? IDLE_STATUS;
+  return parseOrThrow(
+    sessionExecutionStatusSchema,
+    {
+      session,
+      status,
+      busy: status.type !== "idle",
+      observedAt: input.observedAt ?? Date.now(),
+    },
+    "session execution status",
+  );
 }
 
 export function buildSessionSnapshot(input: {

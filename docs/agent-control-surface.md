@@ -60,9 +60,11 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 7. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Work to act in chat. Prompt submission still goes through the server route and normal approval policy.
 
-8. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+8. Use `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
 
-9. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
+9. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+
+10. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
 
 ## Safety
 
@@ -73,6 +75,6 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 ## Next Build Steps
 
-1. Add a polling or event route for session execution status.
-2. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
-3. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
+1. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+2. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
+3. Add event streaming for session progress if polling status proves too coarse for agent clients.
