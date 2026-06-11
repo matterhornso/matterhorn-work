@@ -2,33 +2,35 @@
 
 Host orchestrator for opencode + Matterhorn Work server + opencode-router. This is a CLI-first way to run host mode without the desktop UI.
 
-Published on npm as `openwork-orchestrator` and installs the `openwork` command.
+Published on npm as `openwork-orchestrator` for compatibility. It installs the
+canonical `matterhorn-work` command plus the legacy `openwork` shim.
 
 ## Quick start
 
 ```bash
 npm install -g openwork-orchestrator
-openwork start --workspace /path/to/workspace --approval auto
+matterhorn-work start --workspace /path/to/workspace --approval auto
 ```
 
-When run in a TTY, `openwork` shows an interactive status dashboard with service health, ports, and
-connection details. Use `openwork serve` or `--no-tui` for log-only mode.
+When run in a TTY, `matterhorn-work` shows an interactive status dashboard with service health, ports, and
+connection details. Use `matterhorn-work serve` or `--no-tui` for log-only mode.
 
 ```bash
-openwork serve --workspace /path/to/workspace
+matterhorn-work serve --workspace /path/to/workspace
 ```
 
-`openwork` ships as a compiled binary, so Bun is not required at runtime.
+`matterhorn-work` ships as a compiled binary, so Bun is not required at runtime.
+The legacy `openwork` command remains available as a compatibility shim.
 
 If npm skips the optional platform package, `postinstall` falls back to downloading the matching
 binary from the `openwork-orchestrator-v<version>` GitHub release. Override the download host with
 `OPENWORK_ORCHESTRATOR_DOWNLOAD_BASE_URL` when you need to use a mirror.
 
-`openwork` downloads and caches the `openwork-server`, `opencode-router`, and `opencode` sidecars on
+`matterhorn-work` downloads and caches the `matterhorn-work-server`/legacy `openwork-server`, `opencode-router`, and `opencode` sidecars on
 first run using a SHA-256 manifest. Use `--sidecar-dir` or `OPENWORK_SIDECAR_DIR` to control the
 cache location, and `--sidecar-base-url` / `--sidecar-manifest` to point at a custom host.
 
-Use `--sidecar-source` to control where `openwork-server` and `opencode-router` are resolved
+Use `--sidecar-source` to control where `matterhorn-work-server`/`openwork-server` and `opencode-router` are resolved
 (`auto` | `bundled` | `downloaded` | `external`), and `--opencode-source` to control
 `opencode` resolution. Set `OPENWORK_SIDECAR_SOURCE` / `OPENWORK_OPENCODE_SOURCE` to
 apply the same policies via env vars.
@@ -36,15 +38,15 @@ apply the same policies via env vars.
 By default the manifest is fetched from
 `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v<version>/openwork-orchestrator-sidecars.json`.
 
-OpenCode Router is optional. If it exits, `openwork` continues running unless you pass
+OpenCode Router is optional. If it exits, `matterhorn-work` continues running unless you pass
 `--opencode-router-required` or set `OPENWORK_OPENCODE_ROUTER_REQUIRED=1`.
 
 For development overrides only, set `OPENWORK_ALLOW_EXTERNAL=1` or pass `--allow-external` to use
-locally installed `openwork-server` or `opencode-router` binaries.
+locally installed `matterhorn-work-server`, legacy `openwork-server`, or `opencode-router` binaries.
 
 Add `--verbose` (or `OPENWORK_VERBOSE=1`) to print extra diagnostics about resolved binaries.
 
-OpenCode hot reload is enabled by default when launched via `openwork`.
+OpenCode hot reload is enabled by default when launched via `matterhorn-work`.
 Tune it with:
 
 - `--opencode-hot-reload` / `--no-opencode-hot-reload`
@@ -63,7 +65,7 @@ Equivalent env vars:
 Or from source:
 
 ```bash
-pnpm --filter openwork-orchestrator dev -- \
+pnpm --filter matterhorn-work-orchestrator dev -- \
   start --workspace /path/to/workspace --approval auto --allow-external
 ```
 
@@ -76,16 +78,16 @@ Matterhorn Work URL and a redacted `opencode attach` command, while keeping live
 
 ## Sandbox mode (Docker / Apple container)
 
-`openwork` can run the sidecars inside a Linux container boundary while still mounting your workspace
+`matterhorn-work` can run the sidecars inside a Linux container boundary while still mounting your workspace
 from the host.
 
 ```bash
 # Auto-pick sandbox backend (prefers Apple container on supported Macs)
-openwork start --sandbox auto --workspace /path/to/workspace --approval auto
+matterhorn-work start --sandbox auto --workspace /path/to/workspace --approval auto
 
 # Explicit backends
-openwork start --sandbox docker --workspace /path/to/workspace --approval auto
-openwork start --sandbox container --workspace /path/to/workspace --approval auto
+matterhorn-work start --sandbox docker --workspace /path/to/workspace --approval auto
+matterhorn-work start --sandbox container --workspace /path/to/workspace --approval auto
 ```
 
 Notes:
@@ -104,7 +106,7 @@ Notes:
 You can add explicit, validated mounts into `/workspace/extra/*`:
 
 ```bash
-openwork start --sandbox auto --sandbox-mount "/path/on/host:datasets:ro" --workspace /path/to/workspace
+matterhorn-work start --sandbox auto --sandbox-mount "/path/on/host:datasets:ro" --workspace /path/to/workspace
 ```
 
 Additional mounts are blocked unless you create an allowlist at:
@@ -115,11 +117,11 @@ Override with `OPENWORK_SANDBOX_MOUNT_ALLOWLIST`.
 
 ## Logging
 
-`openwork` emits a unified log stream from OpenCode, Matterhorn Work server, and opencode-router. Use JSON format for
+`matterhorn-work` emits a unified log stream from OpenCode, Matterhorn Work server, and opencode-router. Use JSON format for
 structured, OpenTelemetry-friendly logs and a stable run id for correlation.
 
 ```bash
-OPENWORK_LOG_FORMAT=json openwork start --workspace /path/to/workspace
+OPENWORK_LOG_FORMAT=json matterhorn-work start --workspace /path/to/workspace
 ```
 
 Use `--run-id` or `OPENWORK_RUN_ID` to supply your own correlation id.
@@ -130,19 +132,19 @@ OpenCode runs at `INFO` by default, which produces large log files in
 volume.
 
 Matterhorn Work server logs every request with method, path, status, and duration. Disable this when running
-`openwork-server` directly by setting `OPENWORK_LOG_REQUESTS=0` or passing `--no-log-requests`.
+`matterhorn-work-server` directly by setting `OPENWORK_LOG_REQUESTS=0` or passing `--no-log-requests`.
 
 ## Router daemon (multi-workspace)
 
 The router keeps a single OpenCode process alive and switches workspaces JIT using the `directory` parameter.
 
 ```bash
-openwork daemon start
-openwork workspace add /path/to/workspace-a
-openwork workspace add /path/to/workspace-b
-openwork workspace list --json
-openwork workspace path <id>
-openwork instance dispose <id>
+matterhorn-work daemon start
+matterhorn-work workspace add /path/to/workspace-a
+matterhorn-work workspace add /path/to/workspace-b
+matterhorn-work workspace list --json
+matterhorn-work workspace path <id>
+matterhorn-work instance dispose <id>
 ```
 
 Use `OPENWORK_DATA_DIR` or `--data-dir` to isolate router state in tests.
@@ -155,11 +157,11 @@ Use `OPENWORK_DATA_DIR` or `--data-dir` to isolate router state in tests.
 ## Approvals (manual mode)
 
 ```bash
-openwork approvals list \
+matterhorn-work approvals list \
   --openwork-url http://<host>:8787 \
   --host-token <token>
 
-openwork approvals reply <id> --allow \
+matterhorn-work approvals reply <id> --allow \
   --openwork-url http://<host>:8787 \
   --host-token <token>
 ```
@@ -167,7 +169,7 @@ openwork approvals reply <id> --allow \
 ## Health checks
 
 ```bash
-openwork status \
+matterhorn-work status \
   --openwork-url http://<host>:8787 \
   --opencode-url http://<host>:4096
 ```
@@ -178,7 +180,7 @@ Create a short-lived workspace file session and sync files in batches:
 
 ```bash
 # Create writable session
-openwork files session create \
+matterhorn-work files session create \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --workspace-id <workspace-id> \
@@ -186,36 +188,36 @@ openwork files session create \
   --json
 
 # Fetch catalog snapshot
-openwork files catalog <session-id> \
+matterhorn-work files catalog <session-id> \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --limit 200 \
   --json
 
 # Read one or more files
-openwork files read <session-id> \
+matterhorn-work files read <session-id> \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --paths "README.md,notes/todo.md" \
   --json
 
 # Write a file (inline content or --file)
-openwork files write <session-id> \
+matterhorn-work files write <session-id> \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --path notes/todo.md \
-  --content "hello from openwork" \
+  --content "hello from Matterhorn Work" \
   --json
 
 # Watch change events and close session
-openwork files events <session-id> --openwork-url http://<host>:8787 --token <client-token> --since 0 --json
-openwork files session close <session-id> --openwork-url http://<host>:8787 --token <client-token> --json
+matterhorn-work files events <session-id> --openwork-url http://<host>:8787 --token <client-token> --since 0 --json
+matterhorn-work files session close <session-id> --openwork-url http://<host>:8787 --token <client-token> --json
 ```
 
 ## Smoke checks
 
 ```bash
-openwork start --workspace /path/to/workspace --check --check-events
+matterhorn-work start --workspace /path/to/workspace --check --check-events
 ```
 
 This starts the services, verifies health + SSE events, then exits cleanly.
@@ -225,9 +227,9 @@ This starts the services, verifies health + SSE events, then exits cleanly.
 Point to source CLIs for fast iteration:
 
 ```bash
-openwork start \
+matterhorn-work start \
   --workspace /path/to/workspace \
   --allow-external \
-  --openwork-server-bin apps/server/src/cli.ts \
+  --matterhorn-work-server-bin apps/server/src/cli.ts \
   --opencode-router-bin apps/opencode-router/dist/cli.js
 ```

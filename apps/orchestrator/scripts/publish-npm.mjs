@@ -11,7 +11,7 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 const version = String(pkg.version || "").trim()
 if (!version) {
-  throw new Error("openwork-orchestrator version missing in apps/orchestrator/package.json")
+  throw new Error("matterhorn-work-orchestrator version missing in apps/orchestrator/package.json")
 }
 
 const outroot = join(root, "dist", "npm")
@@ -66,31 +66,35 @@ for (const target of targets) {
   optionalDependencies[name] = version
 
   const ext = target.id.startsWith("windows") ? ".exe" : ""
-  const src = join(root, "dist", "bin", `openwork-${target.bun}${ext}`)
+  const src = join(root, "dist", "bin", `matterhorn-work-${target.bun}${ext}`)
   if (!existsSync(src)) {
-    throw new Error(`Missing openwork binary at ${src}. Run: pnpm --filter openwork-orchestrator build:bin:all`)
+    throw new Error(`Missing matterhorn-work binary at ${src}. Run: pnpm --filter matterhorn-work-orchestrator build:bin:all`)
   }
 
   const dir = join(outroot, name)
   const bindir = join(dir, "bin")
   mkdirSync(bindir, { recursive: true })
 
-  const dest = join(bindir, `openwork${ext}`)
-  copyFileSync(src, dest)
+  const canonicalDest = join(bindir, `matterhorn-work${ext}`)
+  const legacyDest = join(bindir, `openwork${ext}`)
+  copyFileSync(src, canonicalDest)
+  copyFileSync(src, legacyDest)
   if (!target.id.startsWith("windows")) {
-    chmodSync(dest, 0o755)
+    chmodSync(canonicalDest, 0o755)
+    chmodSync(legacyDest, 0o755)
   }
 
   writeJson(join(dir, "package.json"), {
     name,
     version,
-    description: "Platform binary for openwork-orchestrator",
+    description: "Platform binary for the Matterhorn Work orchestrator",
     license: "MIT",
     os: [target.os],
     cpu: [target.cpu],
     bin: {
+      "matterhorn-work": `./bin/matterhorn-work${ext}`,
       openwork: `./bin/openwork${ext}`,
-      "openwork-orchestrator": `./bin/openwork${ext}`,
+      "openwork-orchestrator": `./bin/matterhorn-work${ext}`,
     },
     files: ["bin"],
   })
@@ -101,11 +105,17 @@ for (const target of targets) {
 const meta = join(outroot, "openwork-orchestrator")
 mkdirSync(join(meta, "bin"), { recursive: true })
 
-const wrapperSrc = join(root, "bin", "openwork")
-if (!existsSync(wrapperSrc)) {
-  throw new Error(`Missing wrapper at ${wrapperSrc}`)
+const canonicalWrapperSrc = join(root, "bin", "matterhorn-work")
+const legacyWrapperSrc = join(root, "bin", "openwork")
+if (!existsSync(canonicalWrapperSrc)) {
+  throw new Error(`Missing wrapper at ${canonicalWrapperSrc}`)
 }
-copyFileSync(wrapperSrc, join(meta, "bin", "openwork"))
+if (!existsSync(legacyWrapperSrc)) {
+  throw new Error(`Missing wrapper at ${legacyWrapperSrc}`)
+}
+copyFileSync(canonicalWrapperSrc, join(meta, "bin", "matterhorn-work"))
+copyFileSync(legacyWrapperSrc, join(meta, "bin", "openwork"))
+chmodSync(join(meta, "bin", "matterhorn-work"), 0o755)
 chmodSync(join(meta, "bin", "openwork"), 0o755)
 
 const postinstallSrc = join(root, "scripts", "postinstall.mjs")
@@ -118,11 +128,12 @@ copyFileSync(constantsSrc, join(meta, "constants.json"))
 writeJson(join(meta, "package.json"), {
   name: "openwork-orchestrator",
   version,
-  description: "OpenWork host orchestrator for opencode + OpenWork server + opencode-router",
+  description: "Matterhorn Work host orchestrator for opencode + Matterhorn Work server + opencode-router",
   license: "MIT",
   bin: {
+    "matterhorn-work": "./bin/matterhorn-work",
     openwork: "./bin/openwork",
-    "openwork-orchestrator": "./bin/openwork",
+    "openwork-orchestrator": "./bin/matterhorn-work",
   },
   scripts: {
     postinstall: "node ./postinstall.mjs",

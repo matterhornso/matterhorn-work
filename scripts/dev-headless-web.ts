@@ -126,10 +126,18 @@ const openworkPort = await resolvePort(process.env.OPENWORK_PORT, "127.0.0.1");
 const webPort = await resolvePort(process.env.OPENWORK_WEB_PORT, "127.0.0.1");
 const openworkToken = process.env.OPENWORK_TOKEN ?? randomUUID();
 const openworkHostToken = process.env.OPENWORK_HOST_TOKEN ?? randomUUID();
-const openworkServerBin = path.join(
+const canonicalOpenworkServerBin = path.join(
+  cwd,
+  "apps/server/dist/bin/matterhorn-work-server",
+);
+const legacyOpenworkServerBin = path.join(
   cwd,
   "apps/server/dist/bin/openwork-server",
 );
+let openworkServerBin =
+  process.env.MATTERHORN_WORK_SERVER_BIN ??
+  process.env.OPENWORK_SERVER_BIN ??
+  canonicalOpenworkServerBin;
 const opencodeRouterBin = path.join(
   cwd,
   "apps/opencode-router/dist/bin/opencode-router",
@@ -139,9 +147,18 @@ const ensureOpenworkServer = async () => {
   try {
     await access(openworkServerBin);
   } catch {
+    if (openworkServerBin === canonicalOpenworkServerBin) {
+      try {
+        await access(legacyOpenworkServerBin);
+        openworkServerBin = legacyOpenworkServerBin;
+        return;
+      } catch {
+        // Continue to the build path below.
+      }
+    }
     if (!autoBuildEnabled) {
       logLine(
-        `[dev:headless-web] Missing OpenWork server binary at ${openworkServerBin}`,
+        `[dev:headless-web] Missing Matterhorn Work server binary at ${openworkServerBin}`,
       );
       logLine(
         "[dev:headless-web] Auto-build disabled (OPENWORK_DEV_HEADLESS_WEB_AUTOBUILD=0)",
@@ -156,14 +173,17 @@ const ensureOpenworkServer = async () => {
     }
 
     logLine(
-      `[dev:headless-web] Missing OpenWork server binary at ${openworkServerBin}`,
+      `[dev:headless-web] Missing Matterhorn Work server binary at ${openworkServerBin}`,
     );
     logLine(
       "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",
     );
     try {
       await runCommand("pnpm", ["--filter", "matterhorn-work-server", "build:bin"]);
-      await access(openworkServerBin);
+      await access(openworkServerBin).catch(async () => {
+        await access(legacyOpenworkServerBin);
+        openworkServerBin = legacyOpenworkServerBin;
+      });
     } catch (error) {
       logLine(
         `[dev:headless-web] Auto-build failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -241,12 +261,15 @@ const headlessEnv = {
   OPENWORK_PORT: String(openworkPort),
   OPENWORK_TOKEN: openworkToken,
   OPENWORK_HOST_TOKEN: openworkHostToken,
+  MATTERHORN_WORK_SERVER_BIN: openworkServerBin,
   OPENWORK_SERVER_BIN: openworkServerBin,
   OPENWORK_SIDECAR_SOURCE: process.env.OPENWORK_SIDECAR_SOURCE ?? "external",
   OPENCODE_ROUTER_BIN: process.env.OPENCODE_ROUTER_BIN ?? opencodeRouterBin,
 };
 
 await ensureOpenworkServer();
+headlessEnv.MATTERHORN_WORK_SERVER_BIN = openworkServerBin;
+headlessEnv.OPENWORK_SERVER_BIN = openworkServerBin;
 if (opencodeRouterEnabled) {
   await ensureOpencodeRouter();
 }
@@ -301,7 +324,7 @@ const headlessProcess = spawnLogged(
     "--allow-external",
     "--sidecar-source",
     "external",
-    "--openwork-server-bin",
+    "--matterhorn-work-server-bin",
     openworkServerBin,
     "--opencode-router",
     opencodeRouterEnabled ? "true" : "false",

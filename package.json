@@ -27,6 +27,7 @@
     "test:session-switch": "pnpm --filter @matterhorn-work/app test:session-switch",
     "test:fs-engine": "pnpm --filter @matterhorn-work/app test:fs-engine",
     "test:e2e": "pnpm --filter @matterhorn-work/app test:e2e",
+    "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
     "test:orchestrator": "pnpm --filter matterhorn-work-orchestrator test:router",
     "bump:patch": "pnpm --filter @matterhorn-work/app bump:patch",
     "bump:minor": "pnpm --filter @matterhorn-work/app bump:minor",

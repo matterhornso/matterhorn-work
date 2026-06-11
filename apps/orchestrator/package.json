@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "OPENWORK_DEV_MODE=1 bun src/cli.ts",
     "build": "tsc -p tsconfig.json",
-    "build:bin": "node scripts/clean-dist.mjs && bun ./script/build.ts --outdir dist/bin --filename openwork",
-    "build:bin:all": "node scripts/clean-dist.mjs && bun ./script/build.ts --outdir dist/bin --filename openwork --target bun-darwin-arm64 --target bun-darwin-x64 --target bun-linux-x64 --target bun-linux-arm64 --target bun-windows-x64",
-    "build:bin:bundled": "node scripts/clean-dist.mjs && node ../desktop/scripts/prepare-sidecar.mjs --outdir dist && bun ./script/build.ts --outdir dist --filename openwork && bun scripts/build-bin.ts",
+    "build:bin": "node scripts/clean-dist.mjs && bun ./script/build.ts --outdir dist/bin --filename matterhorn-work",
+    "build:bin:all": "node scripts/clean-dist.mjs && bun ./script/build.ts --outdir dist/bin --filename matterhorn-work --target bun-darwin-arm64 --target bun-darwin-x64 --target bun-linux-x64 --target bun-linux-arm64 --target bun-windows-x64",
+    "build:bin:bundled": "node scripts/clean-dist.mjs && node ../desktop/scripts/prepare-sidecar.mjs --outdir dist && bun ./script/build.ts --outdir dist --filename matterhorn-work && bun scripts/build-bin.ts",
     "build:sidecars": "node scripts/build-sidecars.mjs",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test:router": "pnpm build && node scripts/router.mjs",
@@ -48,7 +48,7 @@
     "@opentui/core": "0.1.77",
     "@opentui/solid": "0.1.77",
     "opencode-router": "0.13.12",
-    "openwork-server": "0.13.12",
+    "matterhorn-work-server": "0.13.12",
     "solid-js": "1.9.9"
   },
   "devDependencies": {

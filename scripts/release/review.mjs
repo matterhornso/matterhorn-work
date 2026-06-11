@@ -140,7 +140,7 @@ if (existsSync(sidecarManifestPath)) {
   }
 } else {
   addWarning(
-    "Sidecar manifest missing (run pnpm --filter openwork-orchestrator build:sidecars).",
+    "Sidecar manifest missing (run pnpm --filter matterhorn-work-orchestrator build:sidecars).",
   );
 }
 
