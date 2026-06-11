@@ -41,6 +41,18 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_create_session",
+    description: "Create a Matterhorn Work chat session in a workspace. Requires a collaborator/owner token and server write access.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        title: { type: "string", description: "Optional initial session title." },
+      },
+      required: ["workspaceId"],
+    },
+  },
+  {
     name: "matterhorn_list_sessions",
     description: "List Matterhorn Work chat sessions in a workspace.",
     inputSchema: {
@@ -76,6 +88,31 @@ const tools = [
         workspaceId: { type: "string" },
         sessionId: { type: "string" },
         limit: { type: "number", description: "Optional positive message limit." },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
+    name: "matterhorn_submit_session_prompt",
+    description: "Submit a prompt to a Matterhorn Work chat session through the stable server route and normal approval policy.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+        message: { type: "string", description: "Plain user prompt text." },
+        parts: { type: "array", description: "Optional structured message parts." },
+        messageID: { type: "string", description: "Optional caller-supplied message id." },
+        model: { type: "object", description: "Optional provider/model selection object." },
+        providerID: { type: "string", description: "Optional provider id for compatibility with existing clients." },
+        modelID: { type: "string", description: "Optional model id for compatibility with existing clients." },
+        agent: { type: "string", description: "Optional Matterhorn Work agent mode." },
+        variant: { type: "string", description: "Optional prompt variant." },
+        noReply: { type: "boolean", description: "When true, enqueue the user message without asking the engine for a reply." },
+        tools: { type: "object", description: "Optional tool-mode overrides accepted by the Matterhorn Work server." },
+        system: { type: "string", description: "Optional system instruction accepted by the Matterhorn Work server." },
+        reasoningEffort: { type: "string", description: "Optional reasoning-effort hint." },
+        reasoning_effort: { type: "string", description: "Optional reasoning-effort hint for snake_case clients." },
       },
       required: ["workspaceId", "sessionId"],
     },
@@ -350,6 +387,11 @@ async function handleTool(name, args = {}) {
       return matterhornStatus();
     case "matterhorn_list_workspaces":
       return callServer("/workspaces");
+    case "matterhorn_create_session":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions`, {
+        method: "POST",
+        body: { title: args.title },
+      });
     case "matterhorn_list_sessions":
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions`, {
         query: {
@@ -365,6 +407,27 @@ async function handleTool(name, args = {}) {
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/messages`, {
         query: { limit: args.limit },
       });
+    case "matterhorn_submit_session_prompt": {
+      const body = {
+        ...(typeof args.message === "string" ? { message: args.message } : {}),
+        ...(Array.isArray(args.parts) ? { parts: args.parts } : {}),
+        ...(typeof args.messageID === "string" ? { messageID: args.messageID } : {}),
+        ...(args.model && typeof args.model === "object" ? { model: args.model } : {}),
+        ...(typeof args.providerID === "string" ? { providerID: args.providerID } : {}),
+        ...(typeof args.modelID === "string" ? { modelID: args.modelID } : {}),
+        ...(typeof args.agent === "string" ? { agent: args.agent } : {}),
+        ...(typeof args.variant === "string" ? { variant: args.variant } : {}),
+        ...(typeof args.noReply === "boolean" ? { noReply: args.noReply } : {}),
+        ...(args.tools && typeof args.tools === "object" ? { tools: args.tools } : {}),
+        ...(typeof args.system === "string" ? { system: args.system } : {}),
+        ...(typeof args.reasoningEffort === "string" ? { reasoningEffort: args.reasoningEffort } : {}),
+        ...(typeof args.reasoning_effort === "string" ? { reasoning_effort: args.reasoning_effort } : {}),
+      };
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/messages`, {
+        method: "POST",
+        body,
+      });
+    }
     case "matterhorn_get_session_snapshot":
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/snapshot`, {
         query: { limit: args.limit },

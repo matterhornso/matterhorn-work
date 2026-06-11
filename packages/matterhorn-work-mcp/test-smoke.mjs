@@ -61,6 +61,10 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/workspaces") {
     return json(res, 200, { items: [{ id: "ws_1", name: "Demo", path: "/workspace" }], activeId: "ws_1" });
   }
+  if (req.method === "POST" && url.pathname === "/workspace/ws_1/sessions") {
+    assert.equal(body.title, "Agent session");
+    return json(res, 200, { item: { id: "ses_created", title: "Agent session" } });
+  }
   if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions") {
     assert.equal(url.searchParams.get("limit"), "3");
     assert.equal(url.searchParams.get("search"), "demo");
@@ -72,6 +76,14 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/messages") {
     assert.equal(url.searchParams.get("limit"), "5");
     return json(res, 200, { items: [{ id: "msg_1", role: "user", content: "hello" }] });
+  }
+  if (req.method === "POST" && url.pathname === "/workspace/ws_1/sessions/ses_1/messages") {
+    assert.equal(body.message, "Summarize this workspace");
+    assert.equal(body.model.providerID, "openai");
+    assert.equal(body.model.modelID, "gpt-4.1");
+    assert.equal(body.agent, "build");
+    assert.equal(body.noReply, true);
+    return json(res, 200, { ok: true, accepted: true, sessionId: "ses_1" });
   }
   if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/snapshot") {
     assert.equal(url.searchParams.get("limit"), "5");
@@ -199,9 +211,11 @@ try {
   for (const expected of [
     "matterhorn_status",
     "matterhorn_list_workspaces",
+    "matterhorn_create_session",
     "matterhorn_list_sessions",
     "matterhorn_get_session",
     "matterhorn_get_session_messages",
+    "matterhorn_submit_session_prompt",
     "matterhorn_get_session_snapshot",
     "matterhorn_delete_session",
     "matterhorn_create_file_session",
@@ -223,6 +237,12 @@ try {
   const workspaces = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_list_workspaces", arguments: {} }));
   assert.equal(workspaces.items[0].id, "ws_1");
 
+  const createdSession = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_create_session",
+    arguments: { workspaceId: "ws_1", title: "Agent session" },
+  }));
+  assert.equal(createdSession.item.id, "ses_created");
+
   const sessions = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_list_sessions",
     arguments: { workspaceId: "ws_1", limit: 3, search: "demo" },
@@ -240,6 +260,19 @@ try {
     arguments: { workspaceId: "ws_1", sessionId: "ses_1", limit: 5 },
   }));
   assert.equal(sessionMessages.items[0].id, "msg_1");
+
+  const submittedPrompt = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_submit_session_prompt",
+    arguments: {
+      workspaceId: "ws_1",
+      sessionId: "ses_1",
+      message: "Summarize this workspace",
+      model: { providerID: "openai", modelID: "gpt-4.1" },
+      agent: "build",
+      noReply: true,
+    },
+  }));
+  assert.equal(submittedPrompt.accepted, true);
 
   const sessionSnapshot = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_get_session_snapshot",
