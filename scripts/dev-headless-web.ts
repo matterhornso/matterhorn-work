@@ -159,7 +159,7 @@ const ensureOpenworkServer = async () => {
       `[dev:headless-web] Missing OpenWork server binary at ${openworkServerBin}`,
     );
     logLine(
-      "[dev:headless-web] Auto-building: pnpm --filter openwork-server build:bin",
+      "[dev:headless-web] Auto-building: pnpm --filter matterhorn-work-server build:bin",
     );
     try {
       await runCommand("pnpm", ["--filter", "matterhorn-work-server", "build:bin"]);
@@ -296,8 +296,15 @@ const headlessProcess = spawnLogged(
     "--approval",
     "auto",
     "--allow-external",
+    "--sidecar-source",
+    "external",
+    "--openwork-server-bin",
+    openworkServerBin,
     "--opencode-router",
     opencodeRouterEnabled ? "true" : "false",
+    ...(opencodeRouterEnabled
+      ? ["--opencode-router-bin", opencodeRouterBin]
+      : []),
     ...(opencodeRouterRequired ? ["--opencode-router-required"] : []),
     ...(remoteAccessEnabled ? ["--remote-access"] : []),
     "--openwork-port",
