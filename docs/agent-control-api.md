@@ -59,6 +59,7 @@ Common status codes:
 | `matterhorn_get_session_messages` | `GET /workspace/:workspaceId/sessions/:sessionId/messages` |
 | `matterhorn_get_session_status` | `GET /workspace/:workspaceId/sessions/:sessionId/status` |
 | `matterhorn_get_session_snapshot` | `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` |
+| future `matterhorn_watch_session_events` | `GET /workspace/:workspaceId/sessions/:sessionId/events` |
 | `matterhorn_delete_session` | `DELETE /workspace/:workspaceId/sessions/:sessionId` |
 | `matterhorn_create_file_session` | `POST /workspace/:workspaceId/files/sessions` |
 | `matterhorn_file_catalog` | `GET /files/sessions/:sessionId/catalog/snapshot` |
@@ -306,6 +307,12 @@ Returns a combined snapshot with the session, messages, todos, and status data w
   }
 }
 ```
+
+### Future `GET /workspace/:workspaceId/sessions/:sessionId/events`
+
+Auth: `client`
+
+This planned route streams session progress over Server-Sent Events using the envelope in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md). It is not implemented by `matterhorn-work-mcp` yet. Until it lands, agents should keep using `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight polling and `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` for recovery.
 
 ### `DELETE /workspace/:workspaceId/sessions/:sessionId`
 
@@ -561,4 +568,4 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
 
 ## Not Yet Stable
 
-Browser control and desktop UI automation are not part of this HTTP contract yet. Event streaming for session progress is also not part of this contract yet; clients should poll `GET /workspace/:workspaceId/sessions/:sessionId/status` for lightweight execution status.
+Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md), but the stable MCP tool still uses polling through `GET /workspace/:workspaceId/sessions/:sessionId/status` and recovery through `GET /workspace/:workspaceId/sessions/:sessionId/snapshot`.
