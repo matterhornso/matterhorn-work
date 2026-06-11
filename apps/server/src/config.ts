@@ -50,6 +50,12 @@ const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_LOG_FORMAT: LogFormat = "pretty";
 const DEFAULT_LOG_REQUESTS = true;
 
+function readMatterhornEnv(suffix: string): string | undefined {
+  const matterhornValue = process.env[`MATTERHORN_WORK_${suffix}`];
+  if (matterhornValue !== undefined) return matterhornValue;
+  return process.env[`OPENWORK_${suffix}`];
+}
+
 function normalizeLogFormat(value: string | undefined): LogFormat | undefined {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
@@ -207,12 +213,12 @@ async function loadFileConfig(configPath: string): Promise<FileConfig> {
 }
 
 export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
-  const envConfigPath = process.env.OPENWORK_SERVER_CONFIG;
+  const envConfigPath = readMatterhornEnv("SERVER_CONFIG");
   const configPath = cli.configPath ?? envConfigPath ?? resolve(homedir(), ".config", "openwork", "server.json");
   const fileConfig = await loadFileConfig(configPath);
   const configDir = dirname(configPath);
 
-  const envWorkspaces = parseList(process.env.OPENWORK_WORKSPACES);
+  const envWorkspaces = parseList(readMatterhornEnv("WORKSPACES"));
   let workspaceConfigs: WorkspaceConfig[] =
     cli.workspaces.length > 0
       ? cli.workspaces.map((path) => ({ path }))
@@ -220,10 +226,10 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
         ? envWorkspaces.map((path) => ({ path }))
         : fileConfig.workspaces ?? [];
 
-  const envOpencodeBaseUrl = process.env.OPENWORK_OPENCODE_BASE_URL;
-  const envOpencodeDirectory = process.env.OPENWORK_OPENCODE_DIRECTORY;
-  const envOpencodeUsername = process.env.OPENWORK_OPENCODE_USERNAME;
-  const envOpencodePassword = process.env.OPENWORK_OPENCODE_PASSWORD;
+  const envOpencodeBaseUrl = readMatterhornEnv("OPENCODE_BASE_URL");
+  const envOpencodeDirectory = readMatterhornEnv("OPENCODE_DIRECTORY");
+  const envOpencodeUsername = readMatterhornEnv("OPENCODE_USERNAME");
+  const envOpencodePassword = readMatterhornEnv("OPENCODE_PASSWORD");
   const opencodeBaseUrl = cli.opencodeBaseUrl ?? envOpencodeBaseUrl ?? fileConfig.opencodeBaseUrl;
   const opencodeDirectory = cli.opencodeDirectory ?? envOpencodeDirectory ?? fileConfig.opencodeDirectory;
   const opencodeUsername = cli.opencodeUsername ?? envOpencodeUsername ?? fileConfig.opencodeUsername;
@@ -246,8 +252,8 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
 
   const workspaces = buildWorkspaceInfos(workspaceConfigs, configDir);
 
-  const tokenFromEnv = process.env.OPENWORK_TOKEN;
-  const hostTokenFromEnv = process.env.OPENWORK_HOST_TOKEN;
+  const tokenFromEnv = readMatterhornEnv("TOKEN");
+  const hostTokenFromEnv = readMatterhornEnv("HOST_TOKEN");
 
   const token = cli.token ?? tokenFromEnv ?? fileConfig.token ?? shortId();
   const hostToken = cli.hostToken ?? hostTokenFromEnv ?? fileConfig.hostToken ?? shortId();
@@ -270,13 +276,13 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
 
   const approvalMode =
     cli.approvalMode ??
-    (process.env.OPENWORK_APPROVAL_MODE as ApprovalMode | undefined) ??
+    (readMatterhornEnv("APPROVAL_MODE") as ApprovalMode | undefined) ??
     fileConfig.approval?.mode ??
     "manual";
 
   const approvalTimeoutMs =
     cli.approvalTimeoutMs ??
-    (process.env.OPENWORK_APPROVAL_TIMEOUT_MS ? Number(process.env.OPENWORK_APPROVAL_TIMEOUT_MS) : undefined) ??
+    (readMatterhornEnv("APPROVAL_TIMEOUT_MS") ? Number(readMatterhornEnv("APPROVAL_TIMEOUT_MS")) : undefined) ??
     fileConfig.approval?.timeoutMs ??
     DEFAULT_TIMEOUT_MS;
 
@@ -285,7 +291,7 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
     timeoutMs: Number.isNaN(approvalTimeoutMs) ? DEFAULT_TIMEOUT_MS : approvalTimeoutMs,
   };
 
-  const envCorsOrigins = process.env.OPENWORK_CORS_ORIGINS;
+  const envCorsOrigins = readMatterhornEnv("CORS_ORIGINS");
   const parsedEnvCors = envCorsOrigins ? parseList(envCorsOrigins) : null;
   const corsOrigins = cli.corsOrigins ?? parsedEnvCors ?? fileConfig.corsOrigins ?? ["*"];
 

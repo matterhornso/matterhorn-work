@@ -12,7 +12,7 @@ import { clearOpenworkEnvSystemContextCache } from "../../session/sync/env-conte
 import type { EnvironmentVariableItem } from "./environment-variable-table";
 
 const KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const RESERVED_PREFIXES = ["OPENWORK_", "OPENCODE_"] as const;
+const RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 export type ApplyEnvironmentChangesResult = { statusMessage?: string } | void;
 

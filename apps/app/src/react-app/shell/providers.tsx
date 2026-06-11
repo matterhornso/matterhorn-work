@@ -24,9 +24,12 @@ function resolveDefaultServerUrl(): string {
   if (isDesktopRuntime()) return "http://127.0.0.1:4096";
 
   const matterhornUrl =
-    typeof import.meta.env?.VITE_OPENWORK_URL === "string"
+    (typeof import.meta.env?.VITE_MATTERHORN_WORK_URL === "string"
+      ? import.meta.env.VITE_MATTERHORN_WORK_URL.trim()
+      : "") ||
+    (typeof import.meta.env?.VITE_OPENWORK_URL === "string"
       ? import.meta.env.VITE_OPENWORK_URL.trim()
-      : "";
+      : "");
   if (matterhornUrl) {
     return `${matterhornUrl.replace(/\/+$/, "")}/opencode`;
   }

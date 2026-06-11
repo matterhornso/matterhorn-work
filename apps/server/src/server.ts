@@ -739,6 +739,7 @@ async function proxyOpencodeRequest(input: {
   const targetUrl = buildOpencodeProxyUrl(baseUrl, proxyPath, input.url.search);
   const headers = new Headers(input.request.headers);
   headers.delete("authorization");
+  headers.delete("x-matterhorn-host-token");
   headers.delete("x-openwork-host-token");
   headers.delete("x-openwork-client-id");
   headers.delete("host");
@@ -844,7 +845,7 @@ async function requireClient(request: Request, config: ServerConfig, tokens: Tok
 }
 
 function requireHostToken(request: Request, config: ServerConfig): Actor {
-  const hostToken = request.headers.get("x-openwork-host-token");
+  const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && hostToken === config.hostToken) {
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }
@@ -852,7 +853,7 @@ function requireHostToken(request: Request, config: ServerConfig): Actor {
 }
 
 async function requireHost(request: Request, config: ServerConfig, tokens: TokenService): Promise<Actor> {
-  const hostToken = request.headers.get("x-openwork-host-token");
+  const hostToken = request.headers.get("x-matterhorn-host-token") ?? request.headers.get("x-openwork-host-token");
   if (hostToken && hostToken === config.hostToken) {
     return { type: "host", tokenHash: hashToken(hostToken), scope: "owner" };
   }

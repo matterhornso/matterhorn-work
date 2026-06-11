@@ -6,6 +6,7 @@ productName: Matterhorn
 protocols:
   - name: Matterhorn
     schemes:
+      - matterhorn-work
       - openwork
 directories:
   output: dist-electron

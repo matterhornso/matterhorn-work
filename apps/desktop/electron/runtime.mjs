@@ -389,9 +389,10 @@ async function fetchJson(url, options = {}, timeoutMs = 3000) {
 
 // Resolves ~/.config/openwork/env.json (or %APPDATA%\openwork\env.json on
 // Windows) — must agree byte-for-byte with apps/server/src/env-file.ts and
-// apps/desktop/src-tauri/src/env_file.rs. Honor OPENWORK_ENV_STORE override.
+// apps/desktop/src-tauri/src/env_file.rs. Honor MATTERHORN_WORK_ENV_STORE and
+// legacy OPENWORK_ENV_STORE overrides.
 function resolveUserEnvFilePath() {
-  const override = String(process.env.OPENWORK_ENV_STORE ?? "").trim();
+  const override = String(process.env.MATTERHORN_WORK_ENV_STORE ?? process.env.OPENWORK_ENV_STORE ?? "").trim();
   if (override) return path.resolve(override);
   if (process.platform === "win32") {
     const appData = String(process.env.APPDATA ?? "").trim();

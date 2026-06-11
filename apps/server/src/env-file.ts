@@ -18,7 +18,7 @@ const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 // We refuse writes to these and strip them when reading for injection, so a
 // tampered file cannot shadow auth credentials, token paths, or process
 // identity.
-const RESERVED_PREFIXES = ["OPENWORK_", "OPENCODE_"] as const;
+const RESERVED_PREFIXES = ["MATTERHORN_WORK_", "OPENWORK_", "OPENCODE_"] as const;
 
 export type EnvRecord = {
   key: string;
@@ -44,7 +44,7 @@ export function isReservedEnvKey(key: string): boolean {
 // Do NOT key this off ServerConfig.configPath — the shell resolves the path
 // before the server config exists, and must agree with us byte-for-byte.
 export function resolveDefaultEnvStorePath(): string {
-  const override = (process.env.OPENWORK_ENV_STORE ?? "").trim();
+  const override = (process.env.MATTERHORN_WORK_ENV_STORE ?? process.env.OPENWORK_ENV_STORE ?? "").trim();
   if (override) return resolve(override);
 
   if (platform() === "win32") {

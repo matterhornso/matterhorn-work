@@ -16,7 +16,16 @@ export type DenAuthDeepLink = {
 
 function isSupportedDeepLinkProtocol(protocol: string): boolean {
   const normalized = protocol.toLowerCase();
-  return normalized === "openwork:" || normalized === "openwork-dev:" || normalized === "https:" || normalized === "http:";
+  return (
+    normalized === "matterhorn-work:" ||
+    normalized === "matterhorn-work-dev:" ||
+    normalized === "matterhorn:" ||
+    normalized === "matterhorn-dev:" ||
+    normalized === "openwork:" ||
+    normalized === "openwork-dev:" ||
+    normalized === "https:" ||
+    normalized === "http:"
+  );
 }
 
 export function parseRemoteConnectDeepLink(rawUrl: string): RemoteWorkspaceDefaults | null {
@@ -136,7 +145,7 @@ function normalizeDebugDeepLinkInput(rawValue: string): string {
   const trimmed = rawValue.trim();
   if (!trimmed) return "";
 
-  const directMatch = trimmed.match(/(?:matterhorn-dev|matterhorn|https?):\/\/[^\s"'<>]+/i);
+  const directMatch = trimmed.match(/(?:matterhorn-work-dev|matterhorn-work|openwork-dev|openwork|matterhorn-dev|matterhorn|https?):\/\/[^\s"'<>]+/i);
   if (directMatch) return directMatch[0];
 
   return trimmed;
