@@ -171,7 +171,7 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 Pick any folder on your machine to create a workspace.
               </OnboardingStep>
               <OnboardingStep number="2" title="Chat">
-                Describe what you need. OpenWork handles the rest.
+                Describe what you need. Matterhorn Work handles the rest.
               </OnboardingStep>
               <OnboardingStep number="3" title="Interact">
                 Review results, approve actions, and iterate.

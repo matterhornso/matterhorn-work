@@ -1,6 +1,6 @@
-# Help Translate OpenWork
+# Help Translate Matterhorn Work
 
-We are actively looking for contributors to translate OpenWork to your own native language.
+We are actively looking for contributors to translate Matterhorn Work to your own native language.
 
 ## README translations
 

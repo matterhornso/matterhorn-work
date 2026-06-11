@@ -1975,7 +1975,7 @@ export function createExtensionsStore(options: {
         ...current,
         pluginStatus: "Matterhorn Work server unavailable. Connect to manage plugins.",
         pluginList: [],
-        sidebarPluginStatus: "Connect an Matterhorn Work server to load plugins.",
+        sidebarPluginStatus: "Connect a Matterhorn Work server to load plugins.",
         sidebarPluginList: [],
       }));
       refreshPluginsInFlight = false;

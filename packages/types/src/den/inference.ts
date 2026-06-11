@@ -56,31 +56,31 @@ export const INFERENCE_WINDOW_DURATIONS_MS: Record<
 export const INFERENCE_MODEL_ALIASES = {
   "tencent/hy3-preview": {
     upstreamModel: "tencent/hy3-preview",
-    displayName: "OpenWork: Hy3 Preview",
+    displayName: "Matterhorn Work: Hy3 Preview",
     enabled: true,
     usageFactor: 1,
   },
   "moonshotai/kimi-k2.6": {
     upstreamModel: "moonshotai/kimi-k2.6",
-    displayName: "OpenWork: Kimi K2.6",
+    displayName: "Matterhorn Work: Kimi K2.6",
     enabled: true,
     usageFactor: 1,
   },
   "deepseek/deepseek-v4-flash": {
     upstreamModel: "deepseek/deepseek-v4-flash",
-    displayName: "OpenWork: DeepSeek V4 Flash",
+    displayName: "Matterhorn Work: DeepSeek V4 Flash",
     enabled: true,
     usageFactor: 1,
   },
   "minimax/minimax-m2.7": {
     upstreamModel: "minimax/minimax-m2.7",
-    displayName: "OpenWork: MiniMax M2.7",
+    displayName: "Matterhorn Work: MiniMax M2.7",
     enabled: true,
     usageFactor: 1,
   },
   "z-ai/glm-5.1": {
     upstreamModel: "z-ai/glm-5.1",
-    displayName: "OpenWork: GLM-5.1",
+    displayName: "Matterhorn Work: GLM-5.1",
     enabled: true,
     usageFactor: 1,
   },

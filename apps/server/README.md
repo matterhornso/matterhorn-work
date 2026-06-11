@@ -1,6 +1,6 @@
-# OpenWork Server
+# Matterhorn Work Server
 
-Filesystem-backed API for OpenWork remote clients. This package provides the OpenWork server layer described in `apps/app/pr/openwork-server.md` and is intentionally independent from the desktop app.
+Filesystem-backed API for Matterhorn Work remote clients. This package provides the Matterhorn Work server layer described in `apps/app/pr/openwork-server.md` and is intentionally independent from the desktop app.
 
 ## Quick start
 
