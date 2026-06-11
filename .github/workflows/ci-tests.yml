@@ -13,12 +13,19 @@ permissions:
 
 jobs:
   openwork-tests:
+    name: openwork-tests (${{ matrix.check_name }})
     runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-4vcpu-ubuntu-2204, macos-14]
+        include:
+          # Keep the historical required-check display name while running on
+          # GitHub-hosted Ubuntu when Blacksmith runners are unavailable.
+          - os: ubuntu-22.04
+            check_name: blacksmith-4vcpu-ubuntu-2204
+          - os: macos-14
+            check_name: macos-14
 
     steps:
       - name: Checkout
