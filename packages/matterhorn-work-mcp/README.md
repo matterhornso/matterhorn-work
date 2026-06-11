@@ -73,6 +73,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_delete_session` — delete a chat session with a writable collaborator/owner token
 - `matterhorn_create_file_session` — create a file session
 - `matterhorn_file_catalog` — list files in a file session
+- `matterhorn_watch_file_events` — read file catalog change events for a file session
 - `matterhorn_read_files` — read files and decode text content
 - `matterhorn_write_files` — write files through a writable session
 - `matterhorn_close_file_session` — close a file session

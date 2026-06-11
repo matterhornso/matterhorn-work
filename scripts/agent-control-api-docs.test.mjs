@@ -23,6 +23,7 @@ const endpointContracts = [
   ["matterhorn_delete_session", "DELETE /workspace/:workspaceId/sessions/:sessionId"],
   ["matterhorn_create_file_session", "POST /workspace/:workspaceId/files/sessions"],
   ["matterhorn_file_catalog", "GET /files/sessions/:sessionId/catalog/snapshot"],
+  ["matterhorn_watch_file_events", "GET /files/sessions/:sessionId/catalog/events"],
   ["matterhorn_read_files", "POST /files/sessions/:sessionId/read-batch"],
   ["matterhorn_write_files", "POST /files/sessions/:sessionId/write-batch"],
   ["matterhorn_close_file_session", "DELETE /files/sessions/:sessionId"],
@@ -60,6 +61,7 @@ for (const routePath of [
   "/events",
   "/snapshot",
   "/files/sessions/",
+  "/catalog/events",
   "/api/bittensor/chat/execute",
   "/api/bittensor/readiness",
 ]) {

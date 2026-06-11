@@ -22,6 +22,7 @@ const rows = [
   ["DELETE /workspace/:workspaceId/sessions/:sessionId", "matterhorn_delete_session", "matterhorn-work sessions delete"],
   ["POST /workspace/:workspaceId/files/sessions", "matterhorn_create_file_session", "matterhorn-work files session create"],
   ["GET /files/sessions/:sessionId/catalog/snapshot", "matterhorn_file_catalog", "matterhorn-work files catalog"],
+  ["GET /files/sessions/:sessionId/catalog/events", "matterhorn_watch_file_events", "matterhorn-work files events"],
   ["POST /files/sessions/:sessionId/read-batch", "matterhorn_read_files", "matterhorn-work files read"],
   ["POST /files/sessions/:sessionId/write-batch", "matterhorn_write_files", "matterhorn-work files write"],
   ["DELETE /files/sessions/:sessionId", "matterhorn_close_file_session", "matterhorn-work files session close"],

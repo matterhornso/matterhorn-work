@@ -201,6 +201,18 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_watch_file_events",
+    description: "Read file catalog change events for an existing Matterhorn Work file session.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        since: { type: "number", description: "Optional file catalog event cursor." },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
     name: "matterhorn_read_files",
     description: "Read one or more workspace files through an existing file session. Text files are decoded for agent use.",
     inputSchema: {
@@ -555,6 +567,10 @@ async function handleTool(name, args = {}) {
           limit: args.limit,
           includeDirs: args.includeDirs,
         },
+      });
+    case "matterhorn_watch_file_events":
+      return callServer(`/files/sessions/${encodeURIComponent(args.sessionId)}/catalog/events`, {
+        query: { since: args.since },
       });
     case "matterhorn_read_files": {
       const result = await callServer(`/files/sessions/${encodeURIComponent(args.sessionId)}/read-batch`, {

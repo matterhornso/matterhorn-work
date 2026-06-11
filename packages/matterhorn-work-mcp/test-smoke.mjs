@@ -140,6 +140,13 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/files/sessions/fs_1/catalog/snapshot") {
     return json(res, 200, { items: [{ path: "README.md", kind: "file", bytes: 12 }], total: 1 });
   }
+  if (req.method === "GET" && url.pathname === "/files/sessions/fs_1/catalog/events") {
+    assert.equal(url.searchParams.get("since"), "4");
+    return json(res, 200, {
+      cursor: 5,
+      events: [{ cursor: 5, type: "changed", path: "README.md" }],
+    });
+  }
   if (req.method === "POST" && url.pathname === "/files/sessions/fs_1/read-batch") {
     assert.deepEqual(body.paths, ["README.md"]);
     return json(res, 200, {
@@ -264,6 +271,7 @@ try {
     "matterhorn_create_file_session",
     "matterhorn_read_files",
     "matterhorn_write_files",
+    "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_bittensor_chat",
   ]) {
@@ -350,6 +358,13 @@ try {
     arguments: { sessionId: "fs_1", limit: 10 },
   }));
   assert.equal(catalog.items[0].path, "README.md");
+
+  const fileEvents = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_watch_file_events",
+    arguments: { sessionId: "fs_1", since: 4 },
+  }));
+  assert.equal(fileEvents.cursor, 5);
+  assert.equal(fileEvents.events[0].path, "README.md");
 
   const read = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_read_files",
