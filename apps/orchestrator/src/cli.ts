@@ -3723,6 +3723,7 @@ function printHelp(): void {
     "  matterhorn-work approvals list --openwork-url <url> --host-token <token>",
     "  matterhorn-work approvals reply <id> --allow|--deny --openwork-url <url> --host-token <token>",
     "  matterhorn-work files <action> [options]",
+    "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
     "",
     "Legacy command:",
@@ -3737,6 +3738,7 @@ function printHelp(): void {
     "  approvals list           List pending approval requests",
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
+    "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
     "",
     "Options:",
@@ -3783,6 +3785,11 @@ function printHelp(): void {
     "  --openwork-server-bin <p> Legacy alias for --matterhorn-work-server-bin",
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
+    "  --target <name>          MCP config target: codex | claude | cursor | json | env",
+    "  --profile <name>         MCP config profile: server | full (default: full)",
+    "  --server-url <url>       Matterhorn Work server URL for MCP config",
+    "  --token <token>          Matterhorn Work client token for MCP config",
+    "  --host-token <token>     Matterhorn Work host token for approval MCP tools",
     "  --opencode-router                Enable opencodeRouter sidecar (default from workspace messaging config)",
     "  --no-opencode-router             Disable opencodeRouter sidecar",
     "  --opencode-router-required       Exit if opencodeRouter stops",
@@ -6910,6 +6917,119 @@ async function runStatus(args: ParsedArgs) {
   }
 }
 
+type McpConfigEntry = {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+};
+
+function placeholder(value: string | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed || fallback;
+}
+
+function buildMcpServersConfig(args: ParsedArgs): Record<string, McpConfigEntry> {
+  const profile = (readFlag(args.flags, "profile") ?? "full").trim().toLowerCase();
+  if (profile !== "server" && profile !== "full") {
+    throw new Error("mcp config --profile must be server or full");
+  }
+
+  const runner = readFlag(args.flags, "runner") ?? "npx";
+  const runnerArgs = runner === "npx" ? ["-y"] : [];
+  const serverUrl = placeholder(
+    readFlag(args.flags, "server-url") ??
+      readMatterhornEnv("OPENWORK_URL") ??
+      readMatterhornEnv("OPENWORK_SERVER_URL"),
+    "http://127.0.0.1:8787",
+  );
+  const clientToken = placeholder(
+    readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
+    "<client-token>",
+  );
+  const hostToken = placeholder(
+    readFlag(args.flags, "host-token") ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"),
+    "<host-token>",
+  );
+
+  const servers: Record<string, McpConfigEntry> = {
+    "matterhorn-work": {
+      command: runner,
+      args: [...runnerArgs, "matterhorn-work-mcp"],
+      env: {
+        MATTERHORN_WORK_SERVER_URL: serverUrl,
+        MATTERHORN_WORK_TOKEN: clientToken,
+        MATTERHORN_WORK_HOST_TOKEN: hostToken,
+      },
+    },
+  };
+
+  if (profile === "full") {
+    servers["matterhorn-work-ui"] = {
+      command: runner,
+      args: [...runnerArgs, "matterhorn-work-ui-mcp"],
+    };
+    servers["matterhorn-work-crypto"] = {
+      command: runner,
+      args: [...runnerArgs, "matterhorn-work-crypto-mcp"],
+      env: {
+        MATTERHORN_SERVER_URL: serverUrl,
+        MATTERHORN_WORK_SERVER_URL: serverUrl,
+      },
+    };
+    servers["matterhorn-work-wallet"] = {
+      command: runner,
+      args: [...runnerArgs, "matterhorn-work-wallet-mcp"],
+    };
+  }
+
+  return servers;
+}
+
+function printMcpEnv(args: ParsedArgs) {
+  const serverUrl = placeholder(
+    readFlag(args.flags, "server-url") ??
+      readMatterhornEnv("OPENWORK_URL") ??
+      readMatterhornEnv("OPENWORK_SERVER_URL"),
+    "http://127.0.0.1:8787",
+  );
+  const clientToken = placeholder(
+    readFlag(args.flags, "token") ?? readMatterhornEnv("OPENWORK_TOKEN"),
+    "<client-token>",
+  );
+  const hostToken = placeholder(
+    readFlag(args.flags, "host-token") ?? readMatterhornEnv("OPENWORK_HOST_TOKEN"),
+    "<host-token>",
+  );
+  console.log([
+    `export MATTERHORN_WORK_SERVER_URL=${JSON.stringify(serverUrl)}`,
+    `export MATTERHORN_WORK_TOKEN=${JSON.stringify(clientToken)}`,
+    `export MATTERHORN_WORK_HOST_TOKEN=${JSON.stringify(hostToken)}`,
+    `export MATTERHORN_SERVER_URL=${JSON.stringify(serverUrl)}`,
+  ].join("\n"));
+}
+
+function printMcpConfig(args: ParsedArgs) {
+  const target = (readFlag(args.flags, "target") ?? "json").trim().toLowerCase();
+  if (target === "env") {
+    printMcpEnv(args);
+    return;
+  }
+  if (!["json", "codex", "claude", "claude-desktop", "cursor"].includes(target)) {
+    throw new Error("mcp config --target must be json, codex, claude, claude-desktop, cursor, or env");
+  }
+
+  const mcpServers = buildMcpServersConfig(args);
+  console.log(JSON.stringify({ mcpServers }, null, 2));
+}
+
+async function runMcpCommand(args: ParsedArgs) {
+  const subcommand = args.positionals[1] ?? "config";
+  if (subcommand !== "config") {
+    throw new Error("mcp requires 'config'");
+  }
+  printMcpConfig(args);
+}
+
 async function runStart(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const checkOnly = readBool(args.flags, "check", false);
@@ -8832,6 +8952,10 @@ async function main() {
   }
   if (command === "files") {
     await runFiles(args);
+    return;
+  }
+  if (command === "mcp") {
+    await runMcpCommand(args);
     return;
   }
   if (command === "status") {

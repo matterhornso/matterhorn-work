@@ -154,6 +154,21 @@ Use `OPENWORK_DATA_DIR` or `--data-dir` to isolate router state in tests.
 - Use the **Matterhorn Work connect URL** and **client token** to connect a remote Matterhorn Work client.
 - The Matterhorn Work server advertises the **engine connect URL** plus optional basic auth credentials to the client.
 
+## Agent MCP config
+
+Print ready-to-paste MCP config for Claude Code, Codex, Cursor, Claude Desktop, or any client that accepts the common `mcpServers` shape:
+
+```bash
+matterhorn-work mcp config \
+  --target codex \
+  --profile full \
+  --server-url http://127.0.0.1:8787 \
+  --token <client-token> \
+  --host-token <host-token>
+```
+
+Use `--profile server` to include only the unified `matterhorn-work-mcp` server-control MCP. Use `--target env` to print shell exports instead of JSON. Flags override `MATTERHORN_WORK_*` environment variables, with legacy `OPENWORK_*` variables preserved as fallbacks.
+
 ## Approvals (manual mode)
 
 ```bash
