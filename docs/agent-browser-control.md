@@ -112,7 +112,9 @@ The smoke test binds a local fake bridge. In restricted sandboxes, run it with l
 
 ## Live Desktop Check
 
-With Matterhorn Work desktop running:
+For the complete live desktop checklist, see [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md).
+
+Quick pass with Matterhorn Work desktop running:
 
 1. Add `matterhorn-work-ui-mcp` to the MCP client.
 2. Open any Matterhorn Work session.
@@ -126,5 +128,6 @@ With Matterhorn Work desktop running:
 
 - [Matterhorn Work Agent Control Surface](./agent-control-surface.md)
 - [Matterhorn Work Agent Action Model](./agent-action-model-contract.md)
+- [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md)
 - [Matterhorn Work MCP Install Guide](./agent-mcp-install.md)
 - [Control Matterhorn Work from any MCP client](./mcp-ui-control-profile.md)
