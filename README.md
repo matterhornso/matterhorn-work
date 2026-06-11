@@ -69,7 +69,7 @@ Every session carries wallet context. The agent can propose on-chain actions, an
 
 For the naming boundary between the product-facing **Matterhorn Work engine** and the underlying OpenCode runtime, see [docs/opencode-runtime-abstraction.md](docs/opencode-runtime-abstraction.md).
 
-For Claude Code, Codex, Cursor, and other external agent control, see [docs/agent-control-surface.md](docs/agent-control-surface.md).
+For Claude Code, Codex, Cursor, and other external agent control, see [docs/agent-control-surface.md](docs/agent-control-surface.md) and [docs/agent-mcp-install.md](docs/agent-mcp-install.md).
 
 ---
 

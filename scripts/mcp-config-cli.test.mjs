@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const cli = readFileSync("apps/orchestrator/src/cli.ts", "utf8");
 const docs = readFileSync("docs/agent-control-surface.md", "utf8");
+const installDocs = readFileSync("docs/agent-mcp-install.md", "utf8");
 const orchestratorReadme = readFileSync("apps/orchestrator/README.md", "utf8");
 
 for (const snippet of [
@@ -42,6 +43,23 @@ for (const forbidden of [
 }
 
 assert.ok(docs.includes("matterhorn-work mcp config"), "agent control docs should mention mcp config");
+assert.ok(docs.includes("./agent-mcp-install.md"), "agent control docs should link the MCP install guide");
 assert.ok(orchestratorReadme.includes("## Agent MCP config"), "orchestrator README should document MCP config helper");
+
+for (const snippet of [
+  "## Codex",
+  "codex mcp add matterhorn-work",
+  "~/.codex/config.toml",
+  "## Claude Code",
+  "claude mcp add --transport stdio",
+  "## Claude Desktop",
+  "claude_desktop_config.json",
+  "## Cursor",
+  "## Generic MCP Clients",
+  "matterhorn_get_session_status",
+  "matterhorn_bittensor_chat",
+]) {
+  assert.ok(installDocs.includes(snippet), `missing MCP install docs snippet: ${snippet}`);
+}
 
 console.log("Matterhorn MCP config CLI static check passed.");
