@@ -52,6 +52,11 @@ Common status codes:
 | --- | --- |
 | `matterhorn_status` | `GET /health`, `GET /status`, `GET /capabilities` |
 | `matterhorn_list_workspaces` | `GET /workspaces` |
+| `matterhorn_list_sessions` | `GET /workspace/:workspaceId/sessions` |
+| `matterhorn_get_session` | `GET /workspace/:workspaceId/sessions/:sessionId` |
+| `matterhorn_get_session_messages` | `GET /workspace/:workspaceId/sessions/:sessionId/messages` |
+| `matterhorn_get_session_snapshot` | `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` |
+| `matterhorn_delete_session` | `DELETE /workspace/:workspaceId/sessions/:sessionId` |
 | `matterhorn_create_file_session` | `POST /workspace/:workspaceId/files/sessions` |
 | `matterhorn_file_catalog` | `GET /files/sessions/:sessionId/catalog/snapshot` |
 | `matterhorn_read_files` | `POST /files/sessions/:sessionId/read-batch` |
@@ -111,6 +116,104 @@ Returns all workspaces visible to the token.
   ],
   "workspaces": [],
   "activeId": "ws_1"
+}
+```
+
+## Chat Session Routes
+
+Chat session routes expose stable read-side access to the Matterhorn Work engine's sessions through the Matterhorn Work server. Agents should use these routes to inspect existing work before opening file sessions or asking the user to approve changes.
+
+### `GET /workspace/:workspaceId/sessions`
+
+Auth: `client`
+
+Query parameters:
+
+| Name | Type | Notes |
+| --- | --- | --- |
+| `roots` | boolean | Optional root-session expansion where supported |
+| `start` | number | Optional non-negative pagination offset |
+| `search` | string | Optional search filter |
+| `limit` | number | Optional positive item limit |
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "ses_123",
+      "title": "Investigate Bittensor wallet flow"
+    }
+  ]
+}
+```
+
+### `GET /workspace/:workspaceId/sessions/:sessionId`
+
+Auth: `client`
+
+Returns one chat session.
+
+```json
+{
+  "item": {
+    "id": "ses_123",
+    "title": "Investigate Bittensor wallet flow"
+  }
+}
+```
+
+### `GET /workspace/:workspaceId/sessions/:sessionId/messages`
+
+Auth: `client`
+
+Query parameters:
+
+| Name | Type | Notes |
+| --- | --- | --- |
+| `limit` | number | Optional positive message limit |
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "msg_123",
+      "role": "user",
+      "content": "show my TAO"
+    }
+  ]
+}
+```
+
+### `GET /workspace/:workspaceId/sessions/:sessionId/snapshot`
+
+Auth: `client`
+
+Returns a combined snapshot with the session, messages, todos, and status data where the underlying engine provides them.
+
+```json
+{
+  "item": {
+    "session": { "id": "ses_123" },
+    "messages": [],
+    "todos": [],
+    "statuses": []
+  }
+}
+```
+
+### `DELETE /workspace/:workspaceId/sessions/:sessionId`
+
+Auth: `client`
+
+Deletes a chat session. This requires writable server mode and at least collaborator token scope.
+
+```json
+{
+  "ok": true
 }
 ```
 
@@ -356,4 +459,10 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
 
 ## Not Yet Stable
 
-Session creation, prompt submission, browser control, and desktop UI automation are not part of this HTTP contract yet. Those should be added as separate stable endpoints before expanding `matterhorn-work-mcp` beyond status, workspaces, files, approvals, and Bittensor chat.
+Chat session creation, prompt submission, browser control, and desktop UI automation are not part of this HTTP contract yet. The next server contract should add safe endpoints for:
+
+- `POST /workspace/:workspaceId/sessions` to create a session.
+- `POST /workspace/:workspaceId/sessions/:sessionId/messages` to submit a user prompt.
+- A polling or event route for session execution status.
+
+Those should be added before `matterhorn-work-mcp` exposes agent-side prompt submission.

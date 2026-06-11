@@ -61,6 +61,25 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/workspaces") {
     return json(res, 200, { items: [{ id: "ws_1", name: "Demo", path: "/workspace" }], activeId: "ws_1" });
   }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions") {
+    assert.equal(url.searchParams.get("limit"), "3");
+    assert.equal(url.searchParams.get("search"), "demo");
+    return json(res, 200, { items: [{ id: "ses_1", title: "Demo session" }] });
+  }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1") {
+    return json(res, 200, { item: { id: "ses_1", title: "Demo session" } });
+  }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/messages") {
+    assert.equal(url.searchParams.get("limit"), "5");
+    return json(res, 200, { items: [{ id: "msg_1", role: "user", content: "hello" }] });
+  }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/snapshot") {
+    assert.equal(url.searchParams.get("limit"), "5");
+    return json(res, 200, { item: { session: { id: "ses_1" }, messages: [{ id: "msg_1" }], todos: [], statuses: [] } });
+  }
+  if (req.method === "DELETE" && url.pathname === "/workspace/ws_1/sessions/ses_1") {
+    return json(res, 200, { ok: true });
+  }
   if (req.method === "POST" && url.pathname === "/workspace/ws_1/files/sessions") {
     assert.equal(body.write, false);
     return json(res, 200, { session: { id: "fs_1", workspaceId: "ws_1", canWrite: false } });
@@ -180,6 +199,11 @@ try {
   for (const expected of [
     "matterhorn_status",
     "matterhorn_list_workspaces",
+    "matterhorn_list_sessions",
+    "matterhorn_get_session",
+    "matterhorn_get_session_messages",
+    "matterhorn_get_session_snapshot",
+    "matterhorn_delete_session",
     "matterhorn_create_file_session",
     "matterhorn_read_files",
     "matterhorn_write_files",
@@ -198,6 +222,30 @@ try {
 
   const workspaces = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_list_workspaces", arguments: {} }));
   assert.equal(workspaces.items[0].id, "ws_1");
+
+  const sessions = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_list_sessions",
+    arguments: { workspaceId: "ws_1", limit: 3, search: "demo" },
+  }));
+  assert.equal(sessions.items[0].id, "ses_1");
+
+  const sessionItem = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_get_session",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1" },
+  }));
+  assert.equal(sessionItem.item.id, "ses_1");
+
+  const sessionMessages = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_get_session_messages",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1", limit: 5 },
+  }));
+  assert.equal(sessionMessages.items[0].id, "msg_1");
+
+  const sessionSnapshot = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_get_session_snapshot",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1", limit: 5 },
+  }));
+  assert.equal(sessionSnapshot.item.session.id, "ses_1");
 
   const session = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_create_file_session",
@@ -252,6 +300,12 @@ try {
     name: "matterhorn_close_file_session",
     arguments: { sessionId: "fs_1" },
   });
+
+  const deletedSession = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_delete_session",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1" },
+  }));
+  assert.equal(deletedSession.ok, true);
 
   assert.ok(requests.some((request) => request.hostToken === HOST_TOKEN && request.path === "/approvals"));
   assert.ok(requests.some((request) => request.authorization === `Bearer ${CLIENT_TOKEN}` && request.path === "/workspaces"));

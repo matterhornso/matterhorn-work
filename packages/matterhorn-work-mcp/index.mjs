@@ -41,6 +41,71 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_list_sessions",
+    description: "List Matterhorn Work chat sessions in a workspace.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        roots: { type: "boolean", description: "When true, include root sessions where the server supports it." },
+        start: { type: "number", description: "Optional non-negative pagination offset." },
+        search: { type: "string", description: "Optional search filter." },
+        limit: { type: "number", description: "Optional positive item limit." },
+      },
+      required: ["workspaceId"],
+    },
+  },
+  {
+    name: "matterhorn_get_session",
+    description: "Read one Matterhorn Work chat session by workspace and session id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
+    name: "matterhorn_get_session_messages",
+    description: "Read messages for a Matterhorn Work chat session.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+        limit: { type: "number", description: "Optional positive message limit." },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
+    name: "matterhorn_get_session_snapshot",
+    description: "Read a combined Matterhorn Work chat session snapshot with session, messages, todos, and statuses.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+        limit: { type: "number", description: "Optional positive message limit." },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
+    name: "matterhorn_delete_session",
+    description: "Delete a Matterhorn Work chat session. Requires a collaborator/owner token and server write access.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
     name: "matterhorn_create_file_session",
     description: "Create a short-lived file session for a workspace. Use readOnly=true unless writes are explicitly needed.",
     inputSchema: {
@@ -285,6 +350,27 @@ async function handleTool(name, args = {}) {
       return matterhornStatus();
     case "matterhorn_list_workspaces":
       return callServer("/workspaces");
+    case "matterhorn_list_sessions":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions`, {
+        query: {
+          roots: args.roots,
+          start: args.start,
+          search: args.search,
+          limit: args.limit,
+        },
+      });
+    case "matterhorn_get_session":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}`);
+    case "matterhorn_get_session_messages":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/messages`, {
+        query: { limit: args.limit },
+      });
+    case "matterhorn_get_session_snapshot":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/snapshot`, {
+        query: { limit: args.limit },
+      });
+    case "matterhorn_delete_session":
+      return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}`, { method: "DELETE" });
     case "matterhorn_create_file_session":
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/files/sessions`, {
         method: "POST",
