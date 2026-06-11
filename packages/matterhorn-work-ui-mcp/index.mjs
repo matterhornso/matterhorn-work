@@ -3,10 +3,10 @@
 /**
  * openwork-ui-mcp
  *
- * MCP server that exposes OpenWork's UI control surface as MCP tools.
- * Speaks MCP stdio and proxies to the OpenWork desktop bridge HTTP API.
+ * MCP server that exposes Matterhorn Work's UI control surface as MCP tools.
+ * Speaks MCP stdio and proxies to the Matterhorn Work desktop bridge HTTP API.
  *
- * Requires OpenWork desktop running with the local UI control bridge active.
+ * Requires Matterhorn Work desktop running with the local UI control bridge active.
  *
  * Usage:
  *   npx openwork-ui-mcp
@@ -80,8 +80,8 @@ async function bridgeRequest(path, options = {}) {
   if (!bridge) {
     return {
       ok: false,
-      error: "OpenWork is not running. Launch the OpenWork desktop app first.",
-      hint: "The MCP server connects to a running OpenWork instance via its local bridge.",
+      error: "Matterhorn Work is not running. Launch the Matterhorn Work desktop app first.",
+      hint: "The MCP server connects to a running Matterhorn Work instance via its local bridge.",
     };
   }
   const url = `${bridge.baseUrl}${path}`;
@@ -162,7 +162,7 @@ const server = new McpServer({
 // ── ui.snapshot ──
 server.tool(
   "ui_snapshot",
-  "Get a snapshot of the current OpenWork UI state: active route, narration, visible actions, and status. Use this before taking action to understand what the user sees.",
+  "Get a snapshot of the current Matterhorn Work UI state: active route, narration, visible actions, and status. Use this before taking action to understand what the user sees.",
   {},
   async () => {
     const result = await bridgeRequest("/snapshot");
@@ -182,14 +182,14 @@ server.tool(
         lines.push(`  ${action.id} — ${action.label || action.description || ""}${args}`);
       }
     }
-    return { content: [{ type: "text", text: lines.join("\n") || "OpenWork is reachable, but it did not return visible UI state." }] };
+    return { content: [{ type: "text", text: lines.join("\n") || "Matterhorn Work is reachable, but it did not return visible UI state." }] };
   }
 );
 
 // ── ui.list_actions ──
 server.tool(
   "ui_list_actions",
-  "List all UI control actions currently available in OpenWork: session navigation, composer control, transcript access, and more. Each action has an id you can pass to ui_execute_action.",
+  "List all UI control actions currently available in Matterhorn Work: session navigation, composer control, transcript access, and more. Each action has an id you can pass to ui_execute_action.",
   {},
   async () => {
     const result = await bridgeRequest("/actions");
@@ -197,7 +197,7 @@ server.tool(
       return { content: [{ type: "text", text: `Error: ${result.error}` }], isError: true };
     }
     if (!Array.isArray(result.actions) || result.actions.length === 0) {
-      return { content: [{ type: "text", text: "No actions available. Is OpenWork on the main screen?" }] };
+      return { content: [{ type: "text", text: "No actions available. Is Matterhorn Work on the main screen?" }] };
     }
     const text = result.actions.map(formatActionLine).join("\n\n");
     return { content: [{ type: "text", text: `${result.actions.length} actions:\n\n${text}` }] };
@@ -207,7 +207,7 @@ server.tool(
 // ── ui.execute_action ──
 server.tool(
   "ui_execute_action",
-  "Execute an OpenWork UI action by its id. Use ui_list_actions first to see available actions and their required arguments.",
+  "Execute a Matterhorn Work UI action by its id. Use ui_list_actions first to see available actions and their required arguments.",
   {
     actionId: z.string().describe("The action id from ui_list_actions, e.g. 'session.create_task' or 'composer.set_text'"),
     args: z.record(z.unknown()).optional().describe("JSON arguments for the action, if required"),
@@ -227,20 +227,20 @@ server.tool(
 // ── ui.status ──
 server.tool(
   "ui_status",
-  "Check if OpenWork is running and the bridge is reachable. Returns connection status and app info.",
+  "Check if Matterhorn Work is running and the bridge is reachable. Returns connection status and app info.",
   {},
   async () => {
     const bridge = await discoverBridge();
     if (!bridge) {
-      return { content: [{ type: "text", text: "OpenWork is not running.\nLaunch the OpenWork desktop app to enable UI control." }], isError: true };
+      return { content: [{ type: "text", text: "Matterhorn Work is not running.\nLaunch the Matterhorn Work desktop app to enable UI control." }], isError: true };
     }
     try {
       const response = await fetch(`${bridge.baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
       const data = await response.json();
-      return { content: [{ type: "text", text: `Connected to ${data.app || "OpenWork"}\nBridge: ${bridge.baseUrl}\nVersion: ${data.version ?? "?"}` }] };
+      return { content: [{ type: "text", text: `Connected to ${data.app || "Matterhorn Work"}\nBridge: ${bridge.baseUrl}\nVersion: ${data.version ?? "?"}` }] };
     } catch (error) {
       clearBridgeCache();
-      return { content: [{ type: "text", text: `Bridge file found but not reachable: ${error.message}\nOpenWork may have quit. Relaunch it.` }], isError: true };
+      return { content: [{ type: "text", text: `Bridge file found but not reachable: ${error.message}\nMatterhorn Work may have quit. Relaunch it.` }], isError: true };
     }
   }
 );
