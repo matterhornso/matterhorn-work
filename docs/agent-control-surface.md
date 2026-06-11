@@ -23,7 +23,18 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 
 2. Copy the client token and host token from startup output.
 
-3. Configure an MCP client:
+3. Generate an MCP client config:
+
+   ```bash
+   matterhorn-work mcp config \
+     --target codex \
+     --profile full \
+     --server-url http://127.0.0.1:8787 \
+     --token <client-token> \
+     --host-token <host-token>
+   ```
+
+4. Or configure an MCP client manually:
 
    ```json
    {
@@ -41,13 +52,13 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
    }
    ```
 
-4. Use `matterhorn_status` to confirm the server.
+5. Use `matterhorn_status` to confirm the server.
 
-5. Use `matterhorn_list_workspaces`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
+6. Use `matterhorn_list_workspaces`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
 
-6. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+7. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
 
-7. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
+8. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
 
 ## Safety
 
@@ -58,7 +69,7 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 
 ## Next Build Steps
 
-1. Add Matterhorn CLI helpers that print MCP-ready config blocks for Claude Code/Codex.
-2. Add OpenAPI-style documentation for the local server APIs used by `matterhorn-work-mcp`.
-3. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
-4. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+1. Add OpenAPI-style documentation for the local server APIs used by `matterhorn-work-mcp`.
+2. Add session-control tools once the server exposes stable session creation/prompt endpoints outside the engine proxy.
+3. Add browser/control tools only after the desktop UI bridge and server bridge have one consistent action model.
+4. Add install docs for each target app once their Matterhorn MCP config paths are finalized.
