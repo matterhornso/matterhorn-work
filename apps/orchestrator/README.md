@@ -210,6 +210,32 @@ matterhorn-work sessions events <session-id> \
 
 Use the returned `nextSince` value with `--since <cursor>` to resume from the latest observed event. The command uses the same Server-Sent Events envelope as `matterhorn_watch_session_events`.
 
+## Bittensor
+
+Run the chat-first Bittensor workflow from shell-only agent environments:
+
+```bash
+matterhorn-work bittensor chat \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --message "which subnet is useful for image generation?" \
+  --json
+
+matterhorn-work bittensor chat \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --message "show my TAO" \
+  --ss58-address <public-ss58-address> \
+  --json
+
+matterhorn-work bittensor readiness \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --json
+```
+
+The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, or wallet exports.
+
 ## Approvals (manual mode)
 
 ```bash

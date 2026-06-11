@@ -3729,6 +3729,8 @@ function printHelp(): void {
     "  matterhorn-work sessions status <session-id> --workspace-id <id>",
     "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
+    "  matterhorn-work bittensor chat --message <text> [options]",
+    "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
     "",
@@ -3745,6 +3747,7 @@ function printHelp(): void {
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
     "  sessions                Manage chat sessions and read progress events",
+    "  bittensor               Run Bittensor chat/readiness workflows",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
     "",
@@ -3773,6 +3776,16 @@ function printHelp(): void {
     "  --session-id <id>         File or chat session id for session commands",
     "  --title <text>            Chat session title for sessions create",
     "  --message <text>          Prompt text for sessions prompt",
+    "  --ss58-address <addr>     Bittensor public SS58 address for wallet reads",
+    "  --context-id <id>         Bittensor chat context id for follow-up prompts",
+    "  --netuid <n>              Bittensor subnet netuid",
+    "  --amount-tao <amount>     TAO amount for Bittensor previews",
+    "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
+    "  --coldkey <key>           Bittensor coldkey public address label",
+    "  --recipient <addr>        Bittensor transfer recipient",
+    "  --destination <addr>      Bittensor destination hotkey/coldkey where applicable",
+    "  --strategy <name>         Bittensor validator strategy: balanced | yield | safety",
+    "  --rate-tolerance <n>      Bittensor rate/slippage tolerance",
     "  --provider-id <id>        Model provider id for sessions prompt",
     "  --model-id <id>           Model id for sessions prompt",
     "  --agent <name>            Agent name for sessions prompt",
@@ -6792,6 +6805,69 @@ async function runSessions(args: ParsedArgs) {
   }
 }
 
+async function runBittensor(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "chat";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  try {
+    if (subcommand === "readiness" || subcommand === "ready") {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/readiness`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        args.positionals.slice(2).join(" ").trim();
+      if (!message.trim()) {
+        throw new Error("message is required for bittensor chat");
+      }
+      const netuid = readNumber(args.flags, "netuid", undefined);
+      const limit = readNumber(args.flags, "limit", undefined);
+      const rateTolerance = readNumber(args.flags, "rate-tolerance", undefined);
+      const strategy = readFlag(args.flags, "strategy");
+      if (strategy && !["balanced", "yield", "safety"].includes(strategy)) {
+        throw new Error("strategy must be balanced, yield, or safety");
+      }
+      const result = await fetchJson(`${baseUrl}/api/bittensor/chat/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: message.trim(),
+          ...(readFlag(args.flags, "context-id") ? { contextId: readFlag(args.flags, "context-id") } : {}),
+          ...(readFlag(args.flags, "ss58-address") ? { ss58Address: readFlag(args.flags, "ss58-address") } : {}),
+          ...(typeof netuid === "number" ? { netuid } : {}),
+          ...(readFlag(args.flags, "amount-tao") ? { amountTao: readFlag(args.flags, "amount-tao") } : {}),
+          ...(readFlag(args.flags, "validator-hotkey") ? { validatorHotkey: readFlag(args.flags, "validator-hotkey") } : {}),
+          ...(readFlag(args.flags, "coldkey") ? { coldkey: readFlag(args.flags, "coldkey") } : {}),
+          ...(readFlag(args.flags, "recipient") ? { recipient: readFlag(args.flags, "recipient") } : {}),
+          ...(readFlag(args.flags, "destination") ? { destination: readFlag(args.flags, "destination") } : {}),
+          ...(typeof limit === "number" ? { limit } : {}),
+          ...(strategy ? { strategy } : {}),
+          ...(typeof rateTolerance === "number" ? { rateTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    throw new Error("bittensor requires chat|readiness");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runFiles(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -9218,6 +9294,10 @@ async function main() {
   }
   if (command === "sessions" || command === "session") {
     await runSessions(args);
+    return;
+  }
+  if (command === "bittensor" || command === "tao") {
+    await runBittensor(args);
     return;
   }
   if (command === "mcp") {

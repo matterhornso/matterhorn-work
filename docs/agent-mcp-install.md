@@ -185,6 +185,8 @@ After connecting any client:
 
 If the MCP client is unavailable, the CLI fallback for chat control is `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events`.
 
+For Bittensor without MCP, use `matterhorn-work bittensor chat --message "<prompt>"` and `matterhorn-work bittensor readiness`. These CLI commands call the same non-custodial server routes as `matterhorn_bittensor_chat` and `matterhorn_bittensor_readiness`.
+
 ## Troubleshooting
 
 - If the server does not start, run `npx -y matterhorn-work-mcp` manually with the same environment variables.
