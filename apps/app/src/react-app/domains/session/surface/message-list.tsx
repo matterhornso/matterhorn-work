@@ -43,6 +43,7 @@ import {
   isLocalhostBrowserTarget,
   type OpenTarget,
 } from "../artifacts/open-target";
+import { readBittensorContextFromToolOutput } from "./bittensor-context-store";
 
 type TranscriptPart = Part;
 
@@ -910,12 +911,20 @@ function StepRow(props: {
     : undefined;
   const toolOutput = toolState.output;
   const bittensorCards = useMemo(() => readBittensorCards(toolOutput), [toolOutput]);
+  const bittensorContext = useMemo(() => readBittensorContextFromToolOutput(toolOutput), [toolOutput]);
   const toolError = typeof toolState.error === "string" ? toolState.error : null;
   const expandable =
     props.part.type === "tool" &&
     (hasStructuredValue(toolInput) || hasStructuredValue(toolOutput) || Boolean(toolError));
   const headline = summary.title?.trim() || "Step updates progress";
   const statusText = toolStatusText(summary.status);
+
+  useEffect(() => {
+    if (!bittensorContext) return;
+    window.dispatchEvent(new CustomEvent("matterhorn:bittensor-context-updated", {
+      detail: { context: bittensorContext },
+    }));
+  }, [bittensorContext]);
 
   if (props.part.type === "reasoning") {
     const raw = typeof (props.part as { text?: unknown }).text === "string"
