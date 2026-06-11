@@ -5,7 +5,7 @@ const LazyWalletShell = lazy(() => import("./LazyWalletShell"));
 
 export function LazyWalletProvider({ children }: { children: ReactNode }) {
   return (
-    <Suspense fallback={children}>
+    <Suspense fallback={null}>
       <LazyWalletShell>{children}</LazyWalletShell>
     </Suspense>
   );
