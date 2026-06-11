@@ -164,7 +164,7 @@ Use these action id prefixes:
 | `files.*` | File-session domain | `files.read_batch`, `files.write_batch` |
 | `approval.*` | Host approval domain | `approval.list`, `approval.reply` |
 | `bittensor.*` | Bittensor domain | `bittensor.chat`, `bittensor.readiness` |
-| `browser.*` | Browser/control domain | `browser.open`, `browser.snapshot`, `browser.click` |
+| `browser.*` | Browser/control domain | `browser.open_panel`, `browser.open`, `browser.snapshot`, `browser.navigate` |
 
 Avoid legacy `openwork.*` prefixes for new public action ids. Legacy MCP names may remain as compatibility shims, but public docs should use Matterhorn names.
 
@@ -211,6 +211,17 @@ Browser/control tools should use this contract as a planning layer before low-le
 5. Never use coordinates for destructive, external, or financial actions.
 
 Browser actions should publish `sideEffect` accurately. For example, `browser.snapshot` is `none`, `browser.navigate` is `navigation`, `browser.type` is `mutation`, and any action that submits a trade or external transaction is `external`.
+
+Initial desktop browser actions:
+
+| Action | Availability | Side effect | Notes |
+| --- | --- | --- | --- |
+| `browser.open_panel` | Session shell, desktop browser bridge available | `navigation` | Reveals the built-in browser side panel. |
+| `browser.open` | Session shell, desktop browser bridge available | `navigation` | Opens a URL in a new built-in browser tab by default; `newTab: false` navigates the active tab. |
+| `browser.snapshot` | Browser panel mounted | `none` | Reads current URL, title, loading/navigation state, active tab, and tabs. |
+| `browser.navigate` | Browser panel mounted | `navigation` | Navigates the active browser tab to a URL. |
+| `browser.back` / `browser.forward` / `browser.reload` | Browser panel mounted | `navigation` | Mirrors toolbar actions and publishes disabled state for unavailable history directions. |
+| `browser.close_panel` | Browser panel mounted | `navigation` | Hides the browser side panel. |
 
 ## Safety Requirements
 

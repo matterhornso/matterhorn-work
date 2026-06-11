@@ -140,6 +140,17 @@ List the semantic `browser.*` actions currently published by Matterhorn Work. Th
 
 **No arguments.**
 
+Common browser actions:
+
+| Action | When available | Description |
+|--------|----------------|-------------|
+| `browser.open_panel` | Session shell, desktop bridge available | Reveal the built-in browser side panel |
+| `browser.open` | Session shell, desktop bridge available | Open a URL in the built-in browser, creating a new tab by default |
+| `browser.snapshot` | Browser panel mounted | Read active URL, title, loading/navigation state, and tabs |
+| `browser.navigate` | Browser panel mounted | Navigate the active browser tab |
+| `browser.back` / `browser.forward` / `browser.reload` | Browser panel mounted | Mirror toolbar navigation controls |
+| `browser.close_panel` | Browser panel mounted | Hide the browser side panel |
+
 #### `browser_snapshot`
 
 Execute `browser.snapshot` if Matterhorn Work exposes it. This is a read-only semantic browser inspection action. If no `browser.snapshot` action is available, the tool refuses instead of falling back to screenshots or coordinates.
