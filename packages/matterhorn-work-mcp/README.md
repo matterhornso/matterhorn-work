@@ -38,6 +38,8 @@ Legacy env fallbacks are still accepted:
 
 ## MCP Config
 
+For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generic MCP clients, see [`docs/agent-mcp-install.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-mcp-install.md).
+
 ```json
 {
   "mcpServers": {
