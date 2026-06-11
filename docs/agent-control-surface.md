@@ -60,7 +60,7 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 7. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Work to act in chat. Prompt submission still goes through the server route and normal approval policy.
 
-8. Use `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
+8. Use `matterhorn_watch_session_events` for bounded session progress batches, or `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
 
 9. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
 
@@ -75,5 +75,5 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 ## Next Build Steps
 
-1. Implement the session event stream or bounded watch tool described in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md).
+1. Add richer message/tool deltas to the session event stream as the underlying Matterhorn Work engine events stabilize.
 2. Keep browser-control live QA current as new desktop actions are added.

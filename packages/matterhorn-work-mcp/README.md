@@ -58,7 +58,7 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 
 ## Tools
 
-The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md). The session-progress stream is documented in [`docs/agent-session-event-stream.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-session-event-stream.md); until the MCP package exposes a stream/watch tool, use `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
+The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md). The session-progress stream is documented in [`docs/agent-session-event-stream.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-session-event-stream.md); use `matterhorn_watch_session_events` for bounded progress batches when the client cannot hold an open Server-Sent Events stream directly.
 
 - `matterhorn_status` — health, status, and server capabilities
 - `matterhorn_list_workspaces` — visible workspaces
@@ -67,6 +67,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_get_session` — read one chat session
 - `matterhorn_get_session_messages` — read chat session messages
 - `matterhorn_get_session_status` — poll a chat session's current execution status
+- `matterhorn_watch_session_events` — read a bounded batch of session progress events
 - `matterhorn_submit_session_prompt` — submit a prompt through the stable server route and normal approval policy
 - `matterhorn_get_session_snapshot` — read a combined session/messages/todos/status snapshot
 - `matterhorn_delete_session` — delete a chat session with a writable collaborator/owner token

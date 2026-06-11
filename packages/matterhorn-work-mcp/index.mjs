@@ -130,6 +130,23 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_watch_session_events",
+    description: "Read a bounded batch of Matterhorn Work session progress events from the session event stream.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string" },
+        sessionId: { type: "string" },
+        maxEvents: { type: "number", description: "Positive event cap. Defaults to 10 and is capped at 50." },
+        snapshot: { type: "boolean", description: "When true, request an initial session.snapshot event." },
+        since: { type: "string", description: "Optional reconnect cursor." },
+        limit: { type: "number", description: "Optional message limit for the initial snapshot." },
+        heartbeatMs: { type: "number", description: "Optional heartbeat interval for the bounded stream." },
+      },
+      required: ["workspaceId", "sessionId"],
+    },
+  },
+  {
     name: "matterhorn_get_session_snapshot",
     description: "Read a combined Matterhorn Work chat session snapshot with session, messages, todos, and statuses.",
     inputSchema: {
@@ -351,6 +368,79 @@ async function callServer(path, { method = "GET", auth = "client", body = null, 
   }
 }
 
+function parsePositiveInteger(value, fallback, max) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("maxEvents must be a positive integer.");
+  }
+  return max ? Math.min(parsed, max) : parsed;
+}
+
+function parseSseEvents(text) {
+  return text
+    .trim()
+    .split(/\n\n+/)
+    .filter(Boolean)
+    .map((block) => {
+      const event = {};
+      for (const line of block.split("\n")) {
+        if (line.startsWith("id: ")) event.id = line.slice("id: ".length);
+        if (line.startsWith("event: ")) event.event = line.slice("event: ".length);
+        if (line.startsWith("data: ")) {
+          const raw = line.slice("data: ".length);
+          try {
+            event.data = JSON.parse(raw);
+          } catch {
+            event.data = raw;
+          }
+        }
+      }
+      return event;
+    });
+}
+
+async function callSessionEventStream(args) {
+  const maxEvents = parsePositiveInteger(args.maxEvents, 10, 50);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const path = `/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/events`;
+  const url = buildUrl(path, {
+    maxEvents,
+    snapshot: args.snapshot,
+    since: args.since,
+    limit: args.limit,
+    heartbeatMs: args.heartbeatMs,
+  });
+  try {
+    const headers = headersFor("client");
+    headers.Accept = "text/event-stream";
+    const response = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      headers,
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`GET ${url.pathname} failed: ${text || `HTTP ${response.status}`}`);
+    }
+    const events = parseSseEvents(text);
+    const lastCursor = events.length ? events[events.length - 1]?.id ?? events[events.length - 1]?.data?.cursor ?? null : null;
+    return {
+      ok: true,
+      workspaceId: args.workspaceId,
+      sessionId: args.sessionId,
+      maxEvents,
+      events,
+      count: events.length,
+      lastCursor,
+      nextSince: lastCursor,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function decodeFileItem(item) {
   if (!item?.ok || typeof item.contentBase64 !== "string") return item;
   const bytes = Buffer.from(item.contentBase64, "base64");
@@ -421,6 +511,8 @@ async function handleTool(name, args = {}) {
       });
     case "matterhorn_get_session_status":
       return callServer(`/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}/status`);
+    case "matterhorn_watch_session_events":
+      return callSessionEventStream(args);
     case "matterhorn_submit_session_prompt": {
       const body = {
         ...(typeof args.message === "string" ? { message: args.message } : {}),

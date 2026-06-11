@@ -87,6 +87,36 @@ const server = createServer(async (req, res) => {
       },
     });
   }
+  if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/events") {
+    assert.equal(req.headers.accept, "text/event-stream");
+    assert.equal(url.searchParams.get("maxEvents"), "2");
+    assert.equal(url.searchParams.get("snapshot"), "true");
+    assert.equal(url.searchParams.get("since"), "7");
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(
+      `id: 8\nevent: session.snapshot\ndata: ${JSON.stringify({
+        type: "session.snapshot",
+        cursor: "8",
+        workspaceId: "ws_1",
+        sessionId: "ses_1",
+        observedAt: 123,
+        source: "matterhorn-work-server",
+        payload: { session: { id: "ses_1" }, status: { type: "busy" } },
+      })}\n\n`,
+    );
+    res.end(
+      `id: 9\nevent: session.status\ndata: ${JSON.stringify({
+        type: "session.status",
+        cursor: "9",
+        workspaceId: "ws_1",
+        sessionId: "ses_1",
+        observedAt: 124,
+        source: "matterhorn-work-server",
+        payload: { status: { type: "busy" }, busy: true },
+      })}\n\n`,
+    );
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/workspace/ws_1/sessions/ses_1/messages") {
     assert.equal(body.message, "Summarize this workspace");
     assert.equal(body.model.providerID, "openai");
@@ -226,6 +256,7 @@ try {
     "matterhorn_get_session",
     "matterhorn_get_session_messages",
     "matterhorn_get_session_status",
+    "matterhorn_watch_session_events",
     "matterhorn_submit_session_prompt",
     "matterhorn_get_session_snapshot",
     "matterhorn_delete_session",
@@ -278,6 +309,15 @@ try {
   }));
   assert.equal(sessionStatus.item.status.type, "busy");
   assert.equal(sessionStatus.item.busy, true);
+
+  const sessionEvents = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_watch_session_events",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1", snapshot: true, maxEvents: 2, since: "7" },
+  }));
+  assert.equal(sessionEvents.count, 2);
+  assert.equal(sessionEvents.lastCursor, "9");
+  assert.equal(sessionEvents.events[0].event, "session.snapshot");
+  assert.equal(sessionEvents.events[1].data.payload.busy, true);
 
   const submittedPrompt = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_submit_session_prompt",
