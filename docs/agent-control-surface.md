@@ -66,7 +66,7 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 10. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
 
-11. When MCP is unavailable, use `matterhorn-work sessions events <session-id> --workspace-id <id> --json` as the CLI fallback for bounded progress batches.
+11. When MCP is unavailable, use `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events` as the CLI fallback for the same session-control loop.
 
 12. When changing the session-progress path, run `pnpm test:agent-session-progress-smoke` to verify direct HTTP, MCP watch, and CLI fallback behavior against the same event-stream envelope.
 

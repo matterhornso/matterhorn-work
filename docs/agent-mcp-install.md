@@ -183,7 +183,7 @@ After connecting any client:
 4. For chat control, call `matterhorn_create_session`, `matterhorn_submit_session_prompt`, then use `matterhorn_watch_session_events` for bounded progress updates or `matterhorn_get_session_status` for simple polling.
 5. For Bittensor, call `matterhorn_bittensor_chat` with a read-only prompt such as `show my TAO`.
 
-If the MCP client is unavailable, the CLI fallback for chat progress is `matterhorn-work sessions events <session-id> --workspace-id <workspace-id> --json`.
+If the MCP client is unavailable, the CLI fallback for chat control is `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events`.
 
 ## Troubleshooting
 

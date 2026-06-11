@@ -9,12 +9,21 @@ const orchestratorReadme = readFileSync("apps/orchestrator/README.md", "utf8");
 
 for (const snippet of [
   "matterhorn-work mcp config [--target <name>] [--profile <name>]",
+  "matterhorn-work sessions list --workspace-id <id>",
+  "matterhorn-work sessions create --workspace-id <id>",
+  "matterhorn-work sessions prompt <session-id> --workspace-id <id> --message <text>",
   "matterhorn-work sessions events <session-id> --workspace-id <id>",
   "mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
   "async function runSessions(args: ParsedArgs)",
   "parseSessionSseEvents",
   "text/event-stream",
+  "sessions create",
+  "sessions prompt",
+  "sessions status",
+  "sessions snapshot",
   "--details",
+  "/sessions/${encodeURIComponent(sessionId)}/messages",
+  "/sessions/${encodeURIComponent(sessionId)}/status",
   "/sessions/${encodeURIComponent(sessionId)}/events",
   "function buildMcpServersConfig(args: ParsedArgs)",
   '"matterhorn-work-mcp"',
@@ -50,6 +59,7 @@ for (const forbidden of [
 
 assert.ok(docs.includes("matterhorn-work mcp config"), "agent control docs should mention mcp config");
 assert.ok(docs.includes("matterhorn-work sessions events"), "agent control docs should mention session event CLI fallback");
+assert.ok(docs.includes("matterhorn-work sessions prompt"), "agent control docs should mention session prompt CLI fallback");
 assert.ok(docs.includes("./agent-mcp-install.md"), "agent control docs should link the MCP install guide");
 assert.ok(orchestratorReadme.includes("## Agent MCP config"), "orchestrator README should document MCP config helper");
 assert.ok(orchestratorReadme.includes("## Chat session events"), "orchestrator README should document chat session events");

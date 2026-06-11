@@ -148,7 +148,7 @@ bun test apps/server/src/session-read-model.e2e.test.ts
 pnpm test:agent-session-progress-smoke
 ```
 
-`test:agent-session-progress-smoke` runs a mock Matterhorn Work server and verifies the same session-progress stream through direct HTTP, `matterhorn_watch_session_events`, and the `matterhorn-work sessions events` CLI fallback.
+`test:agent-session-progress-smoke` runs a mock Matterhorn Work server and verifies the session-control loop through direct HTTP, `matterhorn_watch_session_events`, and the `matterhorn-work sessions create|prompt|status|snapshot|events` CLI fallback.
 
 ## Safety And Privacy
 
