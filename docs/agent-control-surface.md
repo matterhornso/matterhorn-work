@@ -68,6 +68,8 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 11. When MCP is unavailable, use `matterhorn-work sessions events <session-id> --workspace-id <id> --json` as the CLI fallback for bounded progress batches.
 
+12. When changing the session-progress path, run `pnpm test:agent-session-progress-smoke` to verify direct HTTP, MCP watch, and CLI fallback behavior against the same event-stream envelope.
+
 ## Safety
 
 - Keep seed phrases, mnemonics, private keys, and wallet exports out of every MCP/API/CLI schema.

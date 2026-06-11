@@ -34,6 +34,7 @@
     "test:agent-browser-control-guide": "node scripts/agent-browser-control-guide.test.mjs",
     "test:agent-browser-live-qa": "node scripts/agent-browser-live-qa.test.mjs",
     "test:agent-session-event-stream-contract": "node scripts/agent-session-event-stream-contract.test.mjs",
+    "test:agent-session-progress-smoke": "node scripts/agent-session-progress-smoke.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
     "test:opencode-abstraction-copy": "node scripts/opencode-abstraction-copy.test.mjs",
     "test:orchestrator": "pnpm --filter matterhorn-work-orchestrator test:router",
