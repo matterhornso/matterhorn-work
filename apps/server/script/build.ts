@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const bunRuntime = (globalThis as typeof globalThis & {
@@ -26,7 +26,7 @@ function readArgs(argv: string[]): BuildOptions {
   const options: BuildOptions = {
     targets: [],
     outdir: resolve("dist", "bin"),
-    filename: "openwork-server",
+    filename: "matterhorn-work-server",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -100,6 +100,16 @@ async function buildOnce(entrypoint: string, outdir: string, filename: string, t
   const result = spawnSync("bun", args, { stdio: "inherit" });
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
+  }
+
+  if (filename === "matterhorn-work-server") {
+    const legacyOutfile = join(outdir, outputName("openwork-server", target));
+    if (legacyOutfile !== outfile) {
+      copyFileSync(outfile, legacyOutfile);
+      if (!legacyOutfile.endsWith(".exe")) {
+        chmodSync(legacyOutfile, 0o755);
+      }
+    }
   }
 }
 

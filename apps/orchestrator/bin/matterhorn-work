@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+
+const childProcess = require("child_process")
+const fs = require("fs")
+const os = require("os")
+const path = require("path")
+
+function run(target) {
+  const result = childProcess.spawnSync(target, process.argv.slice(2), {
+    stdio: "inherit",
+  })
+  if (result.error) {
+    console.error(result.error.message)
+    process.exit(1)
+  }
+  const code = typeof result.status === "number" ? result.status : 0
+  process.exit(code)
+}
+
+const envPath =
+  process.env.MATTERHORN_WORK_ORCHESTRATOR_BIN_PATH ||
+  process.env.OPENWORK_ORCHESTRATOR_BIN_PATH
+if (envPath) {
+  run(envPath)
+}
+
+const platformMap = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+}
+
+const archMap = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+}
+
+let platform = platformMap[os.platform()]
+if (!platform) {
+  platform = os.platform()
+}
+
+let arch = archMap[os.arch()]
+if (!arch) {
+  arch = os.arch()
+}
+
+const pkg = `openwork-orchestrator-${platform}-${arch}`
+const executableExt = platform === "windows" ? ".exe" : ""
+const canonicalBinary = `matterhorn-work${executableExt}`
+const legacyBinary = `openwork${executableExt}`
+const fallbackCandidates = [
+  path.join(__dirname, "..", "dist", "bin", canonicalBinary),
+  path.join(__dirname, "..", "dist", "bin", legacyBinary),
+]
+
+let pkgJsonPath
+try {
+  pkgJsonPath = require.resolve(`${pkg}/package.json`)
+} catch {
+  for (const fallback of fallbackCandidates) {
+    if (fs.existsSync(fallback)) {
+      run(fallback)
+    }
+  }
+  console.error(
+    `matterhorn-work: no prebuilt binary package found for ${platform}/${arch}.\n` +
+      `Try reinstalling matterhorn-work-orchestrator or installing the platform package manually: ${pkg}`,
+  )
+  process.exit(1)
+}
+
+const pkgBinDir = path.join(path.dirname(pkgJsonPath), "bin")
+for (const binary of [canonicalBinary, legacyBinary]) {
+  const resolved = path.join(pkgBinDir, binary)
+  if (fs.existsSync(resolved)) {
+    run(resolved)
+  }
+}
+
+console.error(
+  `matterhorn-work: prebuilt package ${pkg} did not contain ${canonicalBinary}. Try reinstalling matterhorn-work-orchestrator.`,
+)
+process.exit(1)

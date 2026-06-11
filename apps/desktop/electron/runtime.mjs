@@ -1131,9 +1131,12 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const opencodePort = await findFreePort("127.0.0.1");
     const [username, password] = generateManagedCredentials();
 
-    const orchestratorProgram = resolveBinary("openwork-orchestrator") ?? resolveBinary("openwork");
+    const orchestratorProgram =
+      resolveBinary("matterhorn-work") ??
+      resolveBinary("openwork-orchestrator") ??
+      resolveBinary("openwork");
     if (!orchestratorProgram) {
-      throw new Error("Failed to locate openwork-orchestrator.");
+      throw new Error("Failed to locate Matterhorn Work orchestrator.");
     }
 
     const opencodeBinary = resolveOpencodeBinary(options.opencodeBinPath);
@@ -1633,9 +1636,12 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     const token = String(options.openworkToken ?? randomUUID()).trim();
     const hostToken = String(options.openworkHostToken ?? randomUUID()).trim();
     const openworkUrl = `http://127.0.0.1:${port}`;
-    const program = resolveBinary("openwork-orchestrator") ?? resolveBinary("openwork");
+    const program =
+      resolveBinary("matterhorn-work") ??
+      resolveBinary("openwork-orchestrator") ??
+      resolveBinary("openwork");
     if (!program) {
-      throw new Error("Failed to locate openwork orchestrator.");
+      throw new Error("Failed to locate Matterhorn Work orchestrator.");
     }
 
     const args = [

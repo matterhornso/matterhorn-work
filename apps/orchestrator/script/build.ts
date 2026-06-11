@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin";
 
@@ -26,7 +26,7 @@ function readArgs(argv: string[]): BuildOptions {
   const options: BuildOptions = {
     targets: [],
     outdir: resolve("dist", "bin"),
-    filename: "openwork",
+    filename: "matterhorn-work",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -138,6 +138,16 @@ async function buildOnce(entrypoint: string, outdir: string, filename: string, t
       console.error(log);
     }
     process.exit(1);
+  }
+
+  if (filename === "matterhorn-work") {
+    const legacyOutfile = join(outdir, outputName("openwork", target));
+    if (legacyOutfile !== outfile) {
+      copyFileSync(outfile, legacyOutfile);
+      if (!legacyOutfile.endsWith(".exe")) {
+        chmodSync(legacyOutfile, 0o755);
+      }
+    }
   }
 }
 

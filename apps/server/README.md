@@ -5,16 +5,17 @@ Filesystem-backed API for Matterhorn Work remote clients. This package provides 
 ## Quick start
 
 ```bash
-npm install -g openwork-server
-openwork-server --workspace /path/to/workspace --approval auto
+npm install -g matterhorn-work-server
+matterhorn-work-server --workspace /path/to/workspace --approval auto
 ```
 
-`openwork-server` ships as a compiled binary, so Bun is not required at runtime.
+`matterhorn-work-server` ships as a compiled binary, so Bun is not required at runtime.
+The legacy `openwork-server` command remains available as a compatibility shim.
 
 Or from source:
 
 ```bash
-pnpm --filter openwork-server dev -- \
+pnpm --filter matterhorn-work-server dev -- \
   --workspace /path/to/workspace \
   --approval auto
 ```

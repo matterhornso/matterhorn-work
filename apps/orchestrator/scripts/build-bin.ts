@@ -13,7 +13,8 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const repoRoot = resolve(root, "..", "..");
 const targetDir = resolve(root, "dist");
 
-const serverBin = resolve(root, "..", "server", "dist", "bin", "openwork-server");
+const canonicalServerBin = resolve(root, "..", "server", "dist", "bin", "matterhorn-work-server");
+const legacyServerBin = resolve(root, "..", "server", "dist", "bin", "openwork-server");
 const routerRepo = process.env.OPENCODE_ROUTER_DIR?.trim() || resolve(repoRoot, "apps", "opencode-router");
 if (!existsSync(resolve(routerRepo, "package.json"))) {
   throw new Error("OpenCodeRouter package not found. Expected apps/opencode-router in the monorepo.");
@@ -26,6 +27,13 @@ const serverPkg = JSON.parse(
 const routerPkg = JSON.parse(await readFile(resolve(routerRepo, "package.json"), "utf8")) as { version: string };
 
 await mkdir(targetDir, { recursive: true });
+const serverBin = existsSync(canonicalServerBin) ? canonicalServerBin : legacyServerBin;
+if (!existsSync(serverBin)) {
+  throw new Error(
+    `Matterhorn Work server binary not found. Expected ${canonicalServerBin} or legacy ${legacyServerBin}.`,
+  );
+}
+await copyFile(serverBin, resolve(targetDir, "matterhorn-work-server"));
 await copyFile(serverBin, resolve(targetDir, "openwork-server"));
 await copyFile(routerBin, resolve(targetDir, "opencode-router"));
 
@@ -35,6 +43,10 @@ const sha256 = async (path: string) => {
 };
 
 const versions = {
+  "matterhorn-work-server": {
+    version: serverPkg.version,
+    sha256: await sha256(resolve(targetDir, "matterhorn-work-server")),
+  },
   "openwork-server": {
     version: serverPkg.version,
     sha256: await sha256(resolve(targetDir, "openwork-server")),

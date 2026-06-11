@@ -1563,7 +1563,7 @@ function rememberChildOutput(
 
 function shouldUseBun(bin: string): boolean {
   if (!bin.endsWith(`${join("dist", "cli.js")}`)) return false;
-  if (bin.includes("openwork-server")) return true;
+  if (bin.includes("matterhorn-work-server") || bin.includes("openwork-server")) return true;
   return bin.includes(`${join("packages", "server")}`);
 }
 
@@ -1586,8 +1586,8 @@ function resolveBinCommand(bin: string): {
 async function readVersionManifest(): Promise<VersionManifest | null> {
   const binDir = dirname(process.execPath);
   const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const envManifestPath = process.env.OPENWORK_VERSION_MANIFEST?.trim();
-  const envSidecarDir = process.env.OPENWORK_BUNDLED_SIDECAR_DIR?.trim();
+  const envManifestPath = readMatterhornEnv("OPENWORK_VERSION_MANIFEST")?.trim();
+  const envSidecarDir = readMatterhornEnv("OPENWORK_BUNDLED_SIDECAR_DIR")?.trim();
   const candidates = [
     ...(envManifestPath
       ? [
@@ -1663,7 +1663,7 @@ function resolveExtraPathEntries(): string[] {
 
   const entries: string[] = [];
   const sidecarOverride =
-    process.env.OPENWRK_SIDECAR_DIR ?? process.env.OPENWORK_SIDECAR_DIR;
+    process.env.OPENWRK_SIDECAR_DIR ?? readMatterhornEnv("OPENWORK_SIDECAR_DIR");
   const sidecarCandidates = [
     sidecarOverride,
     dirname(process.execPath),
@@ -1928,7 +1928,7 @@ function sandboxEnvPassThroughNames(userEnv: Record<string, string>): string[] {
 
 function resolveSidecarDir(flags: Map<string, string | boolean>): string {
   const override =
-    readFlag(flags, "sidecar-dir") ?? process.env.OPENWORK_SIDECAR_DIR;
+    readFlag(flags, "sidecar-dir") ?? readMatterhornEnv("OPENWORK_SIDECAR_DIR");
   if (override && override.trim()) return resolve(override.trim());
   return join(resolveRouterDataDir(flags), "sidecars");
 }
@@ -1939,7 +1939,7 @@ function resolveSidecarBaseUrl(
 ): string {
   const override =
     readFlag(flags, "sidecar-base-url") ??
-    process.env.OPENWORK_SIDECAR_BASE_URL;
+    readMatterhornEnv("OPENWORK_SIDECAR_BASE_URL");
   if (override && override.trim()) return override.trim();
   return `https://github.com/matterhornso/matterhorn-work/releases/download/openwork-orchestrator-v${cliVersion}`;
 }
@@ -1950,7 +1950,7 @@ function resolveSidecarManifestUrl(
 ): string {
   const override =
     readFlag(flags, "sidecar-manifest") ??
-    process.env.OPENWORK_SIDECAR_MANIFEST_URL;
+    readMatterhornEnv("OPENWORK_SIDECAR_MANIFEST_URL");
   if (override && override.trim()) return override.trim();
   return `${baseUrl.replace(/\/$/, "")}/openwork-orchestrator-sidecars.json`;
 }
@@ -2331,6 +2331,13 @@ async function resolveExpectedVersion(
   const require = createRequire(import.meta.url);
   if (name === "openwork-server") {
     try {
+      const pkgPath = require.resolve("matterhorn-work-server/package.json");
+      const version = await readPackageVersion(pkgPath);
+      if (version) return version;
+    } catch {
+      // ignore
+    }
+    try {
       const pkgPath = require.resolve("openwork-server/package.json");
       const version = await readPackageVersion(pkgPath);
       if (version) return version;
@@ -2530,7 +2537,7 @@ async function resolveOpenworkServerBin(options: {
   source: BinarySourcePreference;
 }): Promise<ResolvedBinary> {
   if (options.explicit && !options.allowExternal) {
-    throw new Error("openwork-server-bin requires --allow-external");
+    throw new Error("matterhorn-work-server-bin/openwork-server-bin requires --allow-external");
   }
   if (
     options.explicit &&
@@ -2538,7 +2545,7 @@ async function resolveOpenworkServerBin(options: {
     options.source !== "external"
   ) {
     throw new Error(
-      "openwork-server-bin requires --sidecar-source external or auto",
+      "matterhorn-work-server-bin/openwork-server-bin requires --sidecar-source external or auto",
     );
   }
 
@@ -2556,12 +2563,30 @@ async function resolveOpenworkServerBin(options: {
         (resolved.includes("/") || resolved.startsWith(".")) &&
         !(await fileExists(resolved))
       ) {
-        throw new Error(`openwork-server-bin not found: ${resolved}`);
+        throw new Error(`matterhorn-work-server-bin/openwork-server-bin not found: ${resolved}`);
       }
       return { bin: resolved, source: "external", expectedVersion };
     }
 
     const require = createRequire(import.meta.url);
+    try {
+      const pkgPath = require.resolve("matterhorn-work-server/package.json");
+      const pkgDir = dirname(pkgPath);
+      const binaryPath = join(pkgDir, "dist", "bin", "matterhorn-work-server");
+      if (await isExecutable(binaryPath)) {
+        return { bin: binaryPath, source: "external", expectedVersion };
+      }
+      const legacyBinaryPath = join(pkgDir, "dist", "bin", "openwork-server");
+      if (await isExecutable(legacyBinaryPath)) {
+        return { bin: legacyBinaryPath, source: "external", expectedVersion };
+      }
+      const cliPath = join(pkgDir, "dist", "cli.js");
+      if (await isExecutable(cliPath)) {
+        return { bin: cliPath, source: "external", expectedVersion };
+      }
+    } catch {
+      // ignore
+    }
     try {
       const pkgPath = require.resolve("openwork-server/package.json");
       const pkgDir = dirname(pkgPath);
@@ -2577,17 +2602,16 @@ async function resolveOpenworkServerBin(options: {
       // ignore
     }
 
-    return { bin: "openwork-server", source: "external", expectedVersion };
+    return { bin: "matterhorn-work-server", source: "external", expectedVersion };
   };
 
   if (options.source === "bundled") {
-    const bundled = await resolveBundledBinary(
-      options.manifest,
-      "openwork-server",
-    );
+    const bundled =
+      (await resolveBundledBinary(options.manifest, "matterhorn-work-server")) ??
+      (await resolveBundledBinary(options.manifest, "openwork-server"));
     if (!bundled) {
       throw new Error(
-        "Bundled openwork-server binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
+        "Bundled Matterhorn Work server binary missing. Build with pnpm --filter matterhorn-work-orchestrator build:bin:bundled.",
       );
     }
     return { bin: bundled, source: "bundled", expectedVersion };
@@ -2600,7 +2624,7 @@ async function resolveOpenworkServerBin(options: {
     });
     if (!downloaded) {
       throw new Error(
-        "openwork-server download failed. Check sidecar manifest or base URL.",
+        "Matterhorn Work server download failed. Check sidecar manifest or base URL.",
       );
     }
     return downloaded;
@@ -2610,10 +2634,9 @@ async function resolveOpenworkServerBin(options: {
     return resolveExternal();
   }
 
-  const bundled = await resolveBundledBinary(
-    options.manifest,
-    "openwork-server",
-  );
+  const bundled =
+    (await resolveBundledBinary(options.manifest, "matterhorn-work-server")) ??
+    (await resolveBundledBinary(options.manifest, "openwork-server"));
   if (bundled && !(options.allowExternal && options.explicit)) {
     return { bin: bundled, source: "bundled", expectedVersion };
   }
@@ -2630,7 +2653,7 @@ async function resolveOpenworkServerBin(options: {
 
   if (!options.allowExternal) {
     throw new Error(
-      "Bundled openwork-server binary missing and download failed. Use --allow-external or --sidecar-source external.",
+      "Bundled Matterhorn Work server binary missing and download failed. Use --allow-external or --sidecar-source external.",
     );
   }
 
@@ -2680,7 +2703,7 @@ async function resolveOpencodeBin(options: {
     const bundled = await resolveBundledBinary(options.manifest, "opencode");
     if (!bundled) {
       throw new Error(
-        "Bundled opencode binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
+        "Bundled opencode binary missing. Build with pnpm --filter matterhorn-work-orchestrator build:bin:bundled.",
       );
     }
     return { bin: bundled, source: "bundled", expectedVersion };
@@ -2821,7 +2844,7 @@ async function resolveOpenCodeRouterBin(options: {
     );
     if (!bundled) {
       throw new Error(
-        "Bundled opencodeRouter binary missing. Build with pnpm --filter openwork-orchestrator build:bin:bundled.",
+        "Bundled opencodeRouter binary missing. Build with pnpm --filter matterhorn-work-orchestrator build:bin:bundled.",
       );
     }
     return { bin: bundled, source: "bundled", expectedVersion };
@@ -3753,7 +3776,8 @@ function printHelp(): void {
     "  --read-only               Start OpenWork server in read-only mode",
     "  --cors <origins>          Comma-separated CORS origins or *",
     "  --connect-host <host>     Override LAN host used for pairing URLs",
-    "  --openwork-server-bin <p> Path to openwork-server binary (requires --allow-external)",
+    "  --matterhorn-work-server-bin <p> Path to Matterhorn Work server binary (requires --allow-external)",
+    "  --openwork-server-bin <p> Legacy alias for --matterhorn-work-server-bin",
     "  --opencode-router-bin <path>     Path to opencodeRouter binary (requires --allow-external)",
     "  --opencode-router-health-port <p> Health server port for opencodeRouter (default: random)",
     "  --opencode-router                Enable opencodeRouter sidecar (default from workspace messaging config)",
@@ -7047,8 +7071,9 @@ async function runStart(args: ParsedArgs) {
   const explicitOpencodeBin =
     readFlag(args.flags, "opencode-bin") ?? process.env.OPENWORK_OPENCODE_BIN;
   const explicitOpenworkServerBin =
+    readFlag(args.flags, "matterhorn-work-server-bin") ??
     readFlag(args.flags, "openwork-server-bin") ??
-    process.env.OPENWORK_SERVER_BIN;
+    readMatterhornEnv("OPENWORK_SERVER_BIN");
   const explicitOpenCodeRouterBin =
     readFlag(args.flags, "opencode-router-bin") ??
     process.env.OPENCODE_ROUTER_BIN;
