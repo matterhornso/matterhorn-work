@@ -1,0 +1,65 @@
+# Matterhorn Work Agent Control Coverage Matrix
+
+This matrix tracks the current local agent-control surface for Codex, Claude Code, Cursor, Claude Desktop, and other MCP-capable clients.
+
+The goal is to keep every stable capability available through at least one safe agent path, and preferably through all three layers:
+
+- HTTP API for direct integrations.
+- `matterhorn-work-mcp` for MCP clients.
+- `matterhorn-work` CLI for shell fallback and debugging.
+
+## Session Control
+
+| Capability | HTTP | MCP | CLI | Verification |
+| --- | --- | --- | --- | --- |
+| Health/status/capabilities | `GET /health`, `GET /status`, `GET /capabilities` | `matterhorn_status` | `matterhorn-work status` | `test:agent-control-mcp`, `test:agent-control-api-docs` |
+| List workspaces | `GET /workspaces` | `matterhorn_list_workspaces` | `matterhorn-work workspace list` | `test:agent-control-mcp` |
+| Create chat session | `POST /workspace/:workspaceId/sessions` | `matterhorn_create_session` | `matterhorn-work sessions create` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| List chat sessions | `GET /workspace/:workspaceId/sessions` | `matterhorn_list_sessions` | `matterhorn-work sessions list` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Read chat session | `GET /workspace/:workspaceId/sessions/:sessionId` | `matterhorn_get_session` | `matterhorn-work sessions get` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Read chat messages | `GET /workspace/:workspaceId/sessions/:sessionId/messages` | `matterhorn_get_session_messages` | `matterhorn-work sessions messages` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Submit prompt | `POST /workspace/:workspaceId/sessions/:sessionId/messages` | `matterhorn_submit_session_prompt` | `matterhorn-work sessions prompt` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Poll session status | `GET /workspace/:workspaceId/sessions/:sessionId/status` | `matterhorn_get_session_status` | `matterhorn-work sessions status` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Read session snapshot | `GET /workspace/:workspaceId/sessions/:sessionId/snapshot` | `matterhorn_get_session_snapshot` | `matterhorn-work sessions snapshot` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+| Watch session events | `GET /workspace/:workspaceId/sessions/:sessionId/events` | `matterhorn_watch_session_events` | `matterhorn-work sessions events` | `test:agent-session-event-stream-contract`, `test:agent-session-progress-smoke` |
+| Delete chat session | `DELETE /workspace/:workspaceId/sessions/:sessionId` | `matterhorn_delete_session` | `matterhorn-work sessions delete` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
+
+## Workspace Files
+
+| Capability | HTTP | MCP | CLI | Verification |
+| --- | --- | --- | --- | --- |
+| Create file session | `POST /workspace/:workspaceId/files/sessions` | `matterhorn_create_file_session` | `matterhorn-work files session create` | `test:agent-control-mcp` |
+| List file catalog | `GET /files/sessions/:sessionId/catalog/snapshot` | `matterhorn_file_catalog` | `matterhorn-work files catalog` | `test:agent-control-mcp` |
+| Read files | `POST /files/sessions/:sessionId/read-batch` | `matterhorn_read_files` | `matterhorn-work files read` | `test:agent-control-mcp` |
+| Write files | `POST /files/sessions/:sessionId/write-batch` | `matterhorn_write_files` | `matterhorn-work files write` | `test:agent-control-mcp` |
+| Close file session | `DELETE /files/sessions/:sessionId` | `matterhorn_close_file_session` | `matterhorn-work files session close` | `test:agent-control-mcp` |
+
+## Approvals, Browser, And Bittensor
+
+| Capability | HTTP | MCP | CLI | Verification |
+| --- | --- | --- | --- | --- |
+| List approvals | `GET /approvals` | `matterhorn_list_approvals` | `matterhorn-work approvals list` | `test:agent-control-mcp` |
+| Reply to approval | `POST /approvals/:approvalId` | `matterhorn_reply_approval` | `matterhorn-work approvals reply` | `test:agent-control-mcp` |
+| Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | Not yet | `test:agent-control-mcp`, Bittensor server tests |
+| Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | Not yet | `test:agent-control-mcp` |
+| Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Not yet | `test:agent-browser-control-guide`, `test:agent-browser-live-qa` |
+
+## Current Gaps
+
+1. Add CLI fallbacks for Bittensor chat/readiness if users need non-MCP shell access.
+2. Add a live desktop smoke path for browser actions when the desktop bridge is available.
+3. Add file-session event watching to the unified MCP only if agents need file catalog deltas over MCP.
+4. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
+
+## Required Checks
+
+Run these when changing this control surface:
+
+```bash
+pnpm test:agent-control-coverage-matrix
+pnpm test:agent-control-api-docs
+pnpm test:mcp-config-cli
+pnpm test:agent-session-progress-smoke
+```
+
+The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.
