@@ -399,6 +399,45 @@ export function SessionPage(props: SessionPageProps) {
   const openBrowserRailPane = useCallback(() => {
     toggleCurrentSidePanel("browser");
   }, [toggleCurrentSidePanel]);
+  const canExposeBrowserControlActions = isElectronRuntime() && Boolean(window.__OPENWORK_ELECTRON__?.browser);
+  const openBrowserPanelControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.open_panel",
+    label: "Open browser panel",
+    description: "Open the built-in Matterhorn Work browser side panel.",
+    sideEffect: "navigation",
+    execute: () => {
+      setCurrentSidePanel("browser");
+      return { ok: true };
+    },
+  }), [setCurrentSidePanel]);
+  useControlAction(canExposeBrowserControlActions ? openBrowserPanelControlAction : null);
+
+  const openBrowserUrlControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.open",
+    label: "Open browser URL",
+    description: "Open a URL in the built-in Matterhorn Work browser and reveal the browser panel.",
+    sideEffect: "navigation",
+    requiresArgs: true,
+    args: [
+      { name: "url", type: "string", required: true, description: "URL to open in the built-in browser." },
+      { name: "newTab", type: "boolean", required: false, description: "When false, navigate the active tab instead of creating a new tab." },
+    ],
+    previewArgs: { url: "https://matterhorn.so", newTab: true },
+    execute: async (args) => {
+      const payload = args && typeof args === "object" ? args as { url?: unknown; newTab?: unknown } : {};
+      const url = typeof payload.url === "string" ? payload.url.trim() : "";
+      if (!url) return { ok: false, error: "browser.open requires a non-empty url." };
+      setCurrentSidePanel("browser");
+      if (payload.newTab === false) {
+        await window.__OPENWORK_ELECTRON__?.browser?.navigate?.(url);
+        return { url, newTab: false };
+      }
+      const tab = await window.__OPENWORK_ELECTRON__?.browser?.createTab?.(url);
+      return { url, newTab: true, tabId: tab?.tabId ?? null };
+    },
+  }), [setCurrentSidePanel]);
+  useControlAction(canExposeBrowserControlActions ? openBrowserUrlControlAction : null);
+
   const openArtifactRailPane = useCallback(() => {
     if (!hasArtifactTargets) return;
     if (!artifactRailActive) {

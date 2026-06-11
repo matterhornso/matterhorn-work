@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useLayoutEffect, useRef, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent } from "react";
 import { ArrowLeft, ArrowRight, Globe, Loader2, Plus, RotateCw, X } from "lucide-react";
 import { useDragControls } from "motion/react";
 import { isElectronRuntime } from "@/app/utils";
@@ -17,6 +17,7 @@ import {
   type BrowserTabInfo,
   useBrowserState,
 } from "./use-browser-state";
+import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 
 type BrowserPanelProps = { onClose: () => void };
 
@@ -348,6 +349,121 @@ export function BrowserPanel({ onClose }: BrowserPanelProps) {
 
   const activeTab = getActiveTab(state);
   const browser = getElectronBrowser();
+  const canControlBrowser = isElectronRuntime() && Boolean(browser);
+
+  const browserSnapshotControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.snapshot",
+    label: "Snapshot browser",
+    description: "Read the current built-in browser tab, URL, title, loading state, navigation state, and tab list.",
+    sideEffect: "none",
+    execute: async () => {
+      const nextState = await getElectronBrowser()?.getState?.();
+      return nextState ?? {
+        url: activeTab.url,
+        title: activeTab.title,
+        canGoBack: activeTab.canGoBack,
+        canGoForward: activeTab.canGoForward,
+        isLoading: activeTab.isLoading,
+        activeTabId: state.activeTabId,
+        tabs: state.tabs,
+      };
+    },
+  }), [activeTab.canGoBack, activeTab.canGoForward, activeTab.isLoading, activeTab.title, activeTab.url, state.activeTabId, state.tabs]);
+  useControlAction(canControlBrowser ? browserSnapshotControlAction : null);
+
+  const browserNavigateControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.navigate",
+    label: "Navigate browser",
+    description: "Navigate the active built-in browser tab to a URL.",
+    sideEffect: "navigation",
+    requiresArgs: true,
+    args: [{ name: "url", type: "string", required: true, description: "URL to open in the active browser tab." }],
+    previewArgs: { url: "https://matterhorn.so" },
+    execute: async (args) => {
+      const payload = args && typeof args === "object" ? args as { url?: unknown } : {};
+      const url = typeof payload.url === "string" ? payload.url.trim() : "";
+      if (!url) return { ok: false, error: "browser.navigate requires a non-empty url." };
+      await getElectronBrowser()?.navigate?.(url);
+      return { url };
+    },
+  }), []);
+  useControlAction(canControlBrowser ? browserNavigateControlAction : null);
+
+  const browserCreateTabControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.open",
+    label: "Open browser tab",
+    description: "Open a URL in a new built-in browser tab.",
+    sideEffect: "navigation",
+    requiresArgs: true,
+    args: [
+      { name: "url", type: "string", required: true, description: "URL to open in a new browser tab." },
+      { name: "newTab", type: "boolean", required: false, description: "When false, navigate the active tab instead." },
+    ],
+    previewArgs: { url: "https://matterhorn.so", newTab: true },
+    execute: async (args) => {
+      const payload = args && typeof args === "object" ? args as { url?: unknown; newTab?: unknown } : {};
+      const url = typeof payload.url === "string" ? payload.url.trim() : "";
+      if (!url) return { ok: false, error: "browser.open requires a non-empty url." };
+      if (payload.newTab === false) {
+        await getElectronBrowser()?.navigate?.(url);
+        return { url, newTab: false };
+      }
+      const tab = await getElectronBrowser()?.createTab?.(url);
+      return { url, newTab: true, tabId: tab?.tabId ?? null };
+    },
+  }), []);
+  useControlAction(canControlBrowser ? browserCreateTabControlAction : null);
+
+  const browserBackControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.back",
+    label: "Go back",
+    description: "Go back in the active built-in browser tab.",
+    sideEffect: "navigation",
+    disabled: !activeTab.canGoBack,
+    execute: async () => {
+      await getElectronBrowser()?.back?.();
+      return { ok: true };
+    },
+  }), [activeTab.canGoBack]);
+  useControlAction(canControlBrowser ? browserBackControlAction : null);
+
+  const browserForwardControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.forward",
+    label: "Go forward",
+    description: "Go forward in the active built-in browser tab.",
+    sideEffect: "navigation",
+    disabled: !activeTab.canGoForward,
+    execute: async () => {
+      await getElectronBrowser()?.forward?.();
+      return { ok: true };
+    },
+  }), [activeTab.canGoForward]);
+  useControlAction(canControlBrowser ? browserForwardControlAction : null);
+
+  const browserReloadControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.reload",
+    label: "Reload browser",
+    description: "Reload the active built-in browser tab.",
+    sideEffect: "navigation",
+    execute: async () => {
+      await getElectronBrowser()?.reload?.();
+      return { ok: true };
+    },
+  }), []);
+  useControlAction(canControlBrowser ? browserReloadControlAction : null);
+
+  const browserClosePanelControlAction = useMemo<MatterhornControlAction>(() => ({
+    id: "browser.close_panel",
+    label: "Close browser panel",
+    description: "Close the built-in browser side panel.",
+    sideEffect: "navigation",
+    execute: async () => {
+      onClose();
+      await getElectronBrowser()?.hide?.();
+      return { ok: true };
+    },
+  }), [onClose]);
+  useControlAction(canControlBrowser ? browserClosePanelControlAction : null);
 
   if (!isElectronRuntime() || !browser) {
     return (

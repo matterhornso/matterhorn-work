@@ -6,6 +6,8 @@ const contract = readFileSync("docs/agent-action-model-contract.md", "utf8");
 const surface = readFileSync("docs/agent-control-surface.md", "utf8");
 const uiProfile = readFileSync("docs/mcp-ui-control-profile.md", "utf8");
 const controlProvider = readFileSync("apps/app/src/react-app/shell/control/control-provider.tsx", "utf8");
+const sessionPage = readFileSync("apps/app/src/react-app/domains/session/chat/session-page.tsx", "utf8");
+const browserPanel = readFileSync("apps/app/src/react-app/domains/session/browser/browser-panel.tsx", "utf8");
 const uiMcp = readFileSync("packages/matterhorn-work-ui-mcp/index.mjs", "utf8");
 const uiPackage = readFileSync("packages/matterhorn-work-ui-mcp/package.json", "utf8");
 
@@ -24,6 +26,8 @@ for (const snippet of [
   "browser_snapshot",
   "browser_open",
   "browser_execute_action",
+  "browser.open_panel",
+  "browser.navigate",
   "GET /workspace/:workspaceId/actions",
   "POST /workspace/:workspaceId/actions/execute",
   "browser.snapshot",
@@ -60,6 +64,20 @@ assert.ok(surface.includes("./agent-action-model-contract.md"), "agent control s
 assert.ok(uiProfile.includes("matterhorn-work-ui-mcp"), "UI control profile should document the Matterhorn Work UI MCP package");
 assert.ok(uiMcp.includes('name: "matterhorn-work-ui"'), "UI MCP server should use Matterhorn Work naming");
 assert.ok(uiPackage.includes('"directory": "packages/matterhorn-work-ui-mcp"'), "UI MCP package metadata should use Matterhorn Work package path");
+
+for (const browserAction of [
+  'id: "browser.open_panel"',
+  'id: "browser.open"',
+  'id: "browser.snapshot"',
+  'id: "browser.navigate"',
+  'id: "browser.back"',
+  'id: "browser.forward"',
+  'id: "browser.reload"',
+  'id: "browser.close_panel"',
+]) {
+  const source = browserAction.includes("open_panel") ? sessionPage : `${sessionPage}\n${browserPanel}`;
+  assert.ok(source.includes(browserAction), `missing desktop browser action registration: ${browserAction}`);
+}
 
 const contractLower = contract.toLowerCase();
 assert.equal(contractLower.includes("privatekey"), false, "contract should not mention privateKey fields");
