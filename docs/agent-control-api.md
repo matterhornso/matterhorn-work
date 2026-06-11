@@ -63,6 +63,7 @@ Common status codes:
 | `matterhorn_delete_session` | `DELETE /workspace/:workspaceId/sessions/:sessionId` |
 | `matterhorn_create_file_session` | `POST /workspace/:workspaceId/files/sessions` |
 | `matterhorn_file_catalog` | `GET /files/sessions/:sessionId/catalog/snapshot` |
+| `matterhorn_watch_file_events` | `GET /files/sessions/:sessionId/catalog/events` |
 | `matterhorn_read_files` | `POST /files/sessions/:sessionId/read-batch` |
 | `matterhorn_write_files` | `POST /files/sessions/:sessionId/write-batch` |
 | `matterhorn_close_file_session` | `DELETE /files/sessions/:sessionId` |
@@ -374,6 +375,18 @@ Query parameters:
 | `includeDirs` | boolean | Defaults to `true`; set `false` to omit directories |
 
 Response includes `items`, `total`, `truncated`, and `nextAfter`.
+
+### `GET /files/sessions/:sessionId/catalog/events`
+
+Auth: `client`
+
+Query parameters:
+
+| Name | Type | Notes |
+| --- | --- | --- |
+| `since` | number | Optional file catalog event cursor |
+
+Returns file catalog change events after the optional cursor. MCP agents can use `matterhorn_watch_file_events` when they need lightweight file-change deltas instead of repeatedly fetching full catalog snapshots.
 
 ### `POST /files/sessions/:sessionId/read-batch`
 

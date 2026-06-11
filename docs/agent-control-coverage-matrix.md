@@ -30,6 +30,7 @@ The goal is to keep every stable capability available through at least one safe 
 | --- | --- | --- | --- | --- |
 | Create file session | `POST /workspace/:workspaceId/files/sessions` | `matterhorn_create_file_session` | `matterhorn-work files session create` | `test:agent-control-mcp` |
 | List file catalog | `GET /files/sessions/:sessionId/catalog/snapshot` | `matterhorn_file_catalog` | `matterhorn-work files catalog` | `test:agent-control-mcp` |
+| Watch file catalog events | `GET /files/sessions/:sessionId/catalog/events` | `matterhorn_watch_file_events` | `matterhorn-work files events` | `test:agent-control-mcp` |
 | Read files | `POST /files/sessions/:sessionId/read-batch` | `matterhorn_read_files` | `matterhorn-work files read` | `test:agent-control-mcp` |
 | Write files | `POST /files/sessions/:sessionId/write-batch` | `matterhorn_write_files` | `matterhorn-work files write` | `test:agent-control-mcp` |
 | Close file session | `DELETE /files/sessions/:sessionId` | `matterhorn_close_file_session` | `matterhorn-work files session close` | `test:agent-control-mcp` |
@@ -47,8 +48,7 @@ The goal is to keep every stable capability available through at least one safe 
 ## Current Gaps
 
 1. Add a live desktop smoke path for browser actions when the desktop bridge is available.
-2. Add file-session event watching to the unified MCP only if agents need file catalog deltas over MCP.
-3. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
+2. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
 
 ## Required Checks
 
