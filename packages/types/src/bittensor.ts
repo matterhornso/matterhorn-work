@@ -410,6 +410,9 @@ export type BittensorWatchEvaluation = {
   threshold: number | null;
   alertLevel?: BittensorRiskLevel;
   actionPrompt?: string | null;
+  copilotActions?: BittensorCopilotAction[];
+  alertKey?: string;
+  shouldNotify?: boolean;
   source: string;
   checkedAt: string;
 };

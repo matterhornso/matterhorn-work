@@ -578,10 +578,24 @@ describe("executeBittensorChatWorkflow", () => {
         reason: "Test alert prompt",
       });
       const result = await executeBittensorChatWorkflow({ message: "check my Bittensor alerts" });
-      const evaluations = result.data.evaluations as Array<{ actionPrompt?: string | null; status: string }> | undefined;
+      const evaluations = result.data.evaluations as Array<{
+        actionPrompt?: string | null;
+        alertKey?: string;
+        copilotActions?: Array<{ label?: string; prompt?: string; riskLevel?: string }>;
+        shouldNotify?: boolean;
+        status: string;
+      }> | undefined;
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("watchlist");
       expect(evaluations?.some((evaluation) => evaluation.status === "warning" && evaluation.actionPrompt)).toBe(true);
+      expect(evaluations?.some((evaluation) => evaluation.status === "warning" && evaluation.shouldNotify === true)).toBe(true);
+      expect(evaluations?.some((evaluation) => evaluation.alertKey?.includes("slippage"))).toBe(true);
+      expect(evaluations?.some((evaluation) => evaluation.copilotActions?.some((action) => action.label === "Prepare fresh preview"))).toBe(true);
+      const alertCard = result.cards.find((card) =>
+        card.actions?.some((action) => String(action.payload?.prompt ?? "").includes("fresh unsigned Bittensor staking preview")),
+      );
+      expect(alertCard?.items.some((item) => item.label === "Next actions")).toBe(true);
+      expect(alertCard?.actions?.some((action) => String(action.payload?.alertKey ?? "").includes("slippage"))).toBe(true);
     });
   });
 
@@ -1012,9 +1026,15 @@ describe("signer and watch helpers", () => {
     const evaluation = await evaluateBittensorWatch(watch);
     expect(evaluation.watch.id).toBe(watch.id);
     expect(["ok", "warning", "unavailable"]).toContain(evaluation.status);
+    expect(evaluation.alertKey).toContain("wallet");
+    expect(evaluation.copilotActions?.length).toBeGreaterThan(0);
+    expect(evaluation.copilotActions?.some((action) => action.label === "Explain wallet exposure")).toBe(true);
+    expect(evaluation.shouldNotify).toBe(evaluation.status !== "ok");
     const card = buildBittensorWatchEvaluationCards([evaluation])[0];
     expect(card?.kind).toBe("watchlist");
     expect(card?.items.some((item) => item.label === "Status")).toBe(true);
+    expect(card?.items.some((item) => item.label === "Notify")).toBe(true);
+    expect(card?.actions?.some((action) => String(action.payload?.alertKey ?? "").includes("wallet"))).toBe(true);
   });
 
   test("reports sidecar mode from configuration without exposing endpoint details", () => {

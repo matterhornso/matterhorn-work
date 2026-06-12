@@ -128,6 +128,7 @@ Current implementation:
 - Chat can create watches from wallet/subnet/validator intelligence suggestions.
 - Watches persist validator hotkey, wallet scope, threshold, reason, and last-alert timestamp where available.
 - Watch checks return actionable alert prompts that can send the user back into subnet analysis, wallet intelligence, or validator deep dives.
+- Watch evaluations now expose an alert key, notification intent, and multiple copilot actions so chat, MCP clients, and future UI alerts can route the user into the safest next step.
 
 ## Build Order
 
