@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   analyzeBittensorSubnetIntelligence,
+  analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
@@ -9,13 +10,16 @@ import {
   buildBittensorReadinessCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSidecarHealthCard,
+  buildBittensorStakingPlanCard,
   buildBittensorValidatorComparisonCards,
+  buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletCard,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchEvaluationCards,
   buildBittensorQuote,
   capabilityFromSubnet,
+  buildBittensorStakingPlan,
   compareBittensorValidators,
   checkSubtensorSidecarHealth,
   createBittensorSigningHandoff,
@@ -549,6 +553,68 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("creates actionable watches from riskiest wallet exposure", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: "create watches for my riskiest Bittensor positions",
+        ss58Address: VALID_SS58,
+      });
+      const watches = result.data.watches as Array<{ kind: string; validatorHotkey?: string | null }> | undefined;
+      expect(result.execution).toBe("answered");
+      expect(result.cards.some((card) => card.kind === "watchlist")).toBe(true);
+      expect(watches?.length).toBeGreaterThan(0);
+      expect(watches?.some((watch) => watch.kind === "validator" && Boolean(watch.validatorHotkey && isValidSs58Address(watch.validatorHotkey)))).toBe(true);
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("checks configured watches with actionable alert prompts", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      createBittensorWatch({
+        kind: "slippage",
+        netuid: 77,
+        label: "Slippage alert",
+        threshold: 0.1,
+        reason: "Test alert prompt",
+      });
+      const result = await executeBittensorChatWorkflow({ message: "check my Bittensor alerts" });
+      const evaluations = result.data.evaluations as Array<{ actionPrompt?: string | null; status: string }> | undefined;
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("watchlist");
+      expect(evaluations?.some((evaluation) => evaluation.status === "warning" && evaluation.actionPrompt)).toBe(true);
+    });
+  });
+
+  test("deep dives a validator hotkey on a subnet", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: `deep dive validator ${VALID_SS58} on subnet 77`,
+      });
+      const intelligence = result.data.intelligence as { kind?: string; foundInSample?: boolean; watchSuggestions?: unknown[] } | undefined;
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("intelligence_report");
+      expect(intelligence?.kind).toBe("validator");
+      expect(intelligence?.foundInSample).toBe(true);
+      expect(intelligence?.watchSuggestions?.length).toBeGreaterThan(0);
+    });
+  });
+
+  test("builds an advanced unsigned staking allocation plan", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({
+        message: "I have 10 TAO. Build a low-risk Bittensor staking plan for image generation.",
+        ss58Address: VALID_SS58,
+        strategy: "safety",
+      });
+      const stakingPlan = result.data.stakingPlan as { kind?: string; steps?: unknown[]; unsignedPreviews?: unknown[] } | undefined;
+      expect(result.execution).toBe("unsigned_preview");
+      expect(result.cards[0]?.kind).toBe("intelligence_report");
+      expect(stakingPlan?.kind).toBe("staking_plan");
+      expect(stakingPlan?.steps?.length).toBeGreaterThan(0);
+      expect(stakingPlan?.unsignedPreviews?.length).toBeGreaterThan(0);
+    });
+  });
+
   test("clarifies staking preview when validator hotkey is missing", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "prepare staking 1 TAO on subnet 77" });
@@ -832,6 +898,35 @@ describe("compareBittensorValidators", () => {
     expect(comparison.candidates).toEqual([]);
     expect(comparison.warnings.join(" ")).toContain("requested validator hotkeys");
     expect(buildBittensorValidatorComparisonCards(comparison)[0]?.tone).toBe("warning");
+  });
+});
+
+describe("Bittensor advanced copilot engines", () => {
+  test("builds validator intelligence cards without secrets", async () => {
+    const report = await analyzeBittensorValidatorIntelligence({ netuid: 14, validatorHotkey: VALID_SS58 });
+    expect(report.kind).toBe("validator");
+    expect(report.validatorHotkey).toBe(VALID_SS58);
+    expect(report.watchSuggestions[0]?.kind).toBe("validator");
+    const card = buildBittensorValidatorIntelligenceCard(report);
+    expect(card.kind).toBe("intelligence_report");
+    expect(card.actions?.some((action) => String(action.payload?.prompt ?? "").includes("Monitor validator"))).toBe(true);
+    expect(JSON.stringify({ report, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+  });
+
+  test("builds unsigned staking plan cards", async () => {
+    const plan = await buildBittensorStakingPlan({
+      message: "I have 2 TAO. Build a safety staking plan for compute exposure.",
+      amountTao: "2",
+      coldkey: VALID_SS58,
+      strategy: "safety",
+      limit: 2,
+    });
+    expect(plan.kind).toBe("staking_plan");
+    expect(plan.totalAmountTao).toBe(2);
+    expect(plan.unsignedPreviews.every((preview) => preview.requiresExternalSignature)).toBe(true);
+    const card = buildBittensorStakingPlanCard(plan);
+    expect(card.kind).toBe("intelligence_report");
+    expect(JSON.stringify({ plan, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
   });
 });
 

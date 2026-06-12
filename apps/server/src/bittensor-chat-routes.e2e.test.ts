@@ -257,6 +257,45 @@ describe("Bittensor chat execute route", () => {
     expect(subnetIntel.cards[0]?.kind).toBe("intelligence_report");
     expect(subnetIntel.data.intelligence.netuid).toBe(14);
 
+    const validatorIntel = await postExecute(base, { message: `deep dive validator ${HOTKEY} on subnet 14` });
+    expect(validatorIntel.execution).toBe("answered");
+    expect(validatorIntel.cards[0]?.kind).toBe("intelligence_report");
+    expect(validatorIntel.data.intelligence.kind).toBe("validator");
+
+    const watchResult = await postExecute(base, { message: "create watches for my riskiest Bittensor positions", ss58Address: VALID_SS58 });
+    expect(watchResult.execution).toBe("answered");
+    expect(watchResult.cards.some((card: { kind?: string }) => card.kind === "watchlist")).toBe(true);
+    expect(watchResult.data.watches.length).toBeGreaterThan(0);
+
+    const watchCheck = await postExecute(base, { message: "check my Bittensor alerts" });
+    expect(watchCheck.execution).toBe("answered");
+    expect(watchCheck.cards[0]?.kind).toBe("watchlist");
+
+    const stakingPlan = await postExecute(base, {
+      message: "I have 3 TAO. Build a low-risk Bittensor staking plan for image generation.",
+      ss58Address: VALID_SS58,
+      strategy: "safety",
+    });
+    expect(stakingPlan.execution).toBe("unsigned_preview");
+    expect(stakingPlan.data.stakingPlan.kind).toBe("staking_plan");
+    expect(stakingPlan.cards[0]?.kind).toBe("intelligence_report");
+
+    const validatorRoute = await nativeFetch(`${base}/api/bittensor/intelligence/validator/14/${HOTKEY}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(validatorRoute.status).toBe(200);
+    const validatorPayload = await validatorRoute.json();
+    expect(validatorPayload.report.kind).toBe("validator");
+
+    const stakingPlanRoute = await nativeFetch(`${base}/api/bittensor/staking/plan`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Build a safety staking plan for image generation.", amountTao: "2", ss58Address: VALID_SS58, strategy: "safety" }),
+    });
+    expect(stakingPlanRoute.status).toBe(200);
+    const stakingPlanPayload = await stakingPlanRoute.json();
+    expect(stakingPlanPayload.plan.kind).toBe("staking_plan");
+
     const incompleteStake = await postExecute(base, { message: "prepare staking 1 TAO on subnet 14" });
     expect(incompleteStake.execution).toBe("clarification_required");
     expect(incompleteStake.clarificationQuestion).toContain("validator hotkey");
