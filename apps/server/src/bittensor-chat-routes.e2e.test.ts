@@ -230,6 +230,11 @@ describe("Bittensor chat execute route", () => {
     expect(wallet.cards[0]?.kind).toBe("wallet_snapshot");
     expect(wallet.context?.ss58Address).toBe(VALID_SS58);
 
+    const walletIntel = await postExecute(base, { message: "analyze my TAO portfolio risk", ss58Address: VALID_SS58 });
+    expect(walletIntel.execution).toBe("answered");
+    expect(walletIntel.cards[0]?.kind).toBe("intelligence_report");
+    expect(walletIntel.data.intelligence.kind).toBe("wallet");
+
     const contextRes = await nativeFetch(`${base}/api/bittensor/chat/context/${wallet.context.id}`, {
       headers: { Authorization: `Bearer ${TOKEN}` },
     });
@@ -246,6 +251,11 @@ describe("Bittensor chat execute route", () => {
     const validators = await postExecute(base, { message: "compare validators on subnet 14" });
     expect(validators.cards[0]?.kind).toBe("validator_selection");
     expect(validators.context?.netuid).toBe(14);
+
+    const subnetIntel = await postExecute(base, { message: "analyze subnet 14 risk" });
+    expect(subnetIntel.execution).toBe("answered");
+    expect(subnetIntel.cards[0]?.kind).toBe("intelligence_report");
+    expect(subnetIntel.data.intelligence.netuid).toBe(14);
 
     const incompleteStake = await postExecute(base, { message: "prepare staking 1 TAO on subnet 14" });
     expect(incompleteStake.execution).toBe("clarification_required");

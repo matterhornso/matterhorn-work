@@ -218,6 +218,85 @@ Supported strategy labels:
 - `yield`;
 - `safety`.
 
+## 7. Analyze A Subnet
+
+Phase 1 of the advanced Bittensor interface adds explainable public-data intelligence reports. Use this when a user asks whether a subnet looks healthy, risky, stale, concentrated, adapter-ready, or worth investigating further.
+
+CLI through chat:
+
+```bash
+matterhorn-work bittensor chat \
+  --message "Analyze subnet 14 risk and explain the weak spots." \
+  --netuid 14 \
+  --json
+```
+
+Direct API:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN" \
+  "$MATTERHORN_WORK_SERVER_URL/api/bittensor/intelligence/subnet/14" | python -m json.tool
+```
+
+MCP:
+
+```json
+{
+  "tool": "bittensor_analyze_subnet",
+  "arguments": {
+    "netuid": 14
+  }
+}
+```
+
+Expected behavior:
+
+- output includes an `intelligence_report` card;
+- the score is explainable and sourced from public/provider data;
+- market, metagraph, validator concentration, capability readiness, source, freshness, and mechanism-awareness status are visible;
+- the answer is clearly not financial advice;
+- unsupported or missing provider fields are warnings, not invented facts.
+
+## 8. Analyze Wallet Exposure
+
+Use this when a user asks about portfolio risk, stake exposure, concentration, slippage, or weak spots in their Bittensor wallet.
+
+CLI through chat:
+
+```bash
+matterhorn-work bittensor chat \
+  --message "Analyze my TAO portfolio risk and weak spots." \
+  --ss58-address "<public-ss58-address>" \
+  --json
+```
+
+Direct API:
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN" \
+  "$MATTERHORN_WORK_SERVER_URL/api/bittensor/intelligence/wallet/<public-ss58-address>" | python -m json.tool
+```
+
+MCP:
+
+```json
+{
+  "tool": "bittensor_analyze_wallet",
+  "arguments": {
+    "ss58Address": "<public-ss58-address>"
+  }
+}
+```
+
+Expected behavior:
+
+- output includes an `intelligence_report` card;
+- Matterhorn shows free TAO, visible staked TAO, subnet count, validator hotkey count, largest-position share, slippage risk, source, block, and freshness where available;
+- missing wallet context returns one clarification question;
+- Matterhorn never asks for seed phrases, mnemonics, private keys, wallet exports, or signed payloads.
+
 ## 7. Prepare Staking 1 TAO Safely
 
 Staking preparation needs explicit public context. Matterhorn must not guess the netuid or validator hotkey.

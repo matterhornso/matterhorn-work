@@ -102,6 +102,19 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (body.message === "analyze my TAO portfolio risk") {
+      assert.equal(body.contextId, "bt-chat-1");
+      assert.equal(body.ss58Address, VALID_SS58);
+      return json(res, 200, {
+        success: true,
+        execution: "answered",
+        plan: { intent: "wallet" },
+        responseText: "Wallet intelligence ready.",
+        cards: [card("intelligence_report", "Wallet intelligence")],
+        context: { id: "bt-chat-1", ss58Address: VALID_SS58, lastIntent: "wallet", lastExecution: "answered" },
+      });
+    }
+
     if (body.message === "which Bittensor subnet is useful for image generation?") {
       assert.equal(body.limit, 5);
       return json(res, 200, {
@@ -110,6 +123,17 @@ const server = createServer(async (req, res) => {
         plan: { intent: "discover" },
         responseText: "Found image subnets.",
         cards: [card("subnet_comparison", "Image subnet")],
+      });
+    }
+
+    if (body.message === "analyze subnet 14 risk") {
+      assert.equal(body.netuid, 14);
+      return json(res, 200, {
+        success: true,
+        execution: "answered",
+        plan: { intent: "discover" },
+        responseText: "Subnet intelligence ready.",
+        cards: [card("intelligence_report", "Subnet intelligence")],
       });
     }
 
@@ -155,7 +179,7 @@ const server = createServer(async (req, res) => {
         execution: "unsupported",
         plan: { intent: "subnet_use" },
         responseText: "No service adapter configured.",
-        cards: [card("subnet_result", "Unsupported adapter")],
+        cards: [card("unsupported_adapter", "Unsupported adapter")],
         data: { invocation: { netuid: 14, supported: false, adapter: null } },
       });
     }
@@ -222,7 +246,9 @@ try {
     "bittensor.wallet.clarification",
     "bittensor.wallet.snapshot",
     "bittensor.wallet.stake_positions",
+    "bittensor.wallet.intelligence",
     "bittensor.discover.image",
+    "bittensor.subnet.intelligence",
     "bittensor.validators.compare",
     "bittensor.stake.clarification",
     "bittensor.stake.unsigned_preview",
@@ -232,12 +258,14 @@ try {
   }
   assert.equal(report.artifacts.bittensorContextId, "bt-chat-1");
   assert.equal(report.artifacts.validatorContextId, "bt-chat-2");
-  assert.equal(report.requestCount, 10);
+  assert.equal(report.requestCount, 12);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
       "GET /api/bittensor/readiness",
+      "POST /api/bittensor/chat/execute",
+      "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",

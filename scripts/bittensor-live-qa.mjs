@@ -214,15 +214,38 @@ async function runChatCore() {
         cards: cardKinds(result.body),
       };
     });
+
+    await runStep("bittensor.wallet.intelligence", "Analyze watch-only wallet risk and exposure", async () => {
+      const result = await chat("analyze my TAO portfolio risk", walletContextId ? { contextId: walletContextId, ss58Address: config.ss58Address } : { ss58Address: config.ss58Address });
+      expectExecution(result.body, "answered");
+      expectCard(result.body, "intelligence_report");
+      return {
+        latencyMs: result.latencyMs,
+        execution: result.body?.execution,
+        cards: cardKinds(result.body),
+      };
+    });
   } else {
     add("skip", "bittensor.wallet.snapshot", "Read watch-only TAO wallet snapshot", { hint: "Pass --ss58-address with a public coldkey address to test wallet reads." });
     add("skip", "bittensor.wallet.stake_positions", "Read stake positions from public wallet context", { hint: "Pass --ss58-address with a public coldkey address to test stake-position reads." });
+    add("skip", "bittensor.wallet.intelligence", "Analyze watch-only wallet risk and exposure", { hint: "Pass --ss58-address with a public coldkey address to test wallet intelligence." });
   }
 
   await runStep("bittensor.discover.image", "Discover image-generation subnets", async () => {
     const result = await chat("which Bittensor subnet is useful for image generation?", { limit: config.limit });
     expectExecution(result.body, "answered");
     expectCard(result.body, "subnet_comparison");
+    return {
+      latencyMs: result.latencyMs,
+      execution: result.body?.execution,
+      cards: cardKinds(result.body),
+    };
+  });
+
+  await runStep("bittensor.subnet.intelligence", "Analyze subnet risk and live-data quality", async () => {
+    const result = await chat(`analyze subnet ${config.netuid} risk`, { netuid: config.netuid });
+    expectExecution(result.body, "answered");
+    expectCard(result.body, "intelligence_report");
     return {
       latencyMs: result.latencyMs,
       execution: result.body?.execution,
@@ -297,7 +320,7 @@ async function runChatCore() {
     if (!["unsupported", "answered"].includes(result.body?.execution)) {
       throw new Error(`expected unsupported or answered service-call execution, received ${result.body?.execution || "missing"}`);
     }
-    expectCard(result.body, "subnet_result");
+    expectCard(result.body, result.body?.execution === "unsupported" ? "unsupported_adapter" : "subnet_result");
     const invocation = result.body?.data?.invocation || {};
     return {
       status: result.body?.execution === "unsupported" || invocation.supported === false ? "pass" : "warn",

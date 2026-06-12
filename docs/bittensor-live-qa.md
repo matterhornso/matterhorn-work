@@ -13,7 +13,9 @@ It validates the Bittensor product behavior that matters most for operators:
 - `show my TAO` asks for an SS58 public address when one is missing;
 - optional watch-only wallet reads return wallet cards when a public address is supplied;
 - optional follow-up stake-position reads reuse public Bittensor context;
+- optional wallet intelligence returns an explainable risk/exposure report when a public address is supplied;
 - image-generation subnet discovery returns subnet comparison cards;
+- subnet intelligence returns an explainable report for the selected subnet;
 - validator comparison returns validator selection cards;
 - incomplete staking prompts ask for a validator hotkey instead of guessing;
 - complete staking prompts return unsigned previews that require external signing;
@@ -29,7 +31,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-This basic run does not need a wallet address. It checks readiness, beginner explanation, missing-address clarification, discovery, validator comparison, staking clarification, and unsupported-adapter behavior.
+This basic run does not need a wallet address. It checks readiness, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, and unsupported-adapter behavior.
 
 ## Full Wallet And Preview Run
 
@@ -47,7 +49,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-The full run still does not sign or broadcast anything. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
+The full run still does not sign or broadcast anything. It adds watch-only wallet snapshot, stake-position, and wallet-intelligence checks. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
 
 ## Useful Options
 

@@ -85,6 +85,65 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/intelligence/subnet/14") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "subnet",
+        netuid: 14,
+        name: "TAOHash",
+        category: "Compute and infrastructure",
+        score: 72,
+        rating: "usable_with_caveats",
+        mechanismSummary: { available: false, count: null, note: "Mechanism-specific fields are not exposed by this mock provider." },
+        market: { priceTao: 0.5, emission: 12.5, tempo: 360, source: "mock", block: 123, freshness: "mock" },
+        metagraph: { neurons: 128, totalStake: 1000, validatorsSampled: 1, topValidatorStakeShare: 1, concentrationRisk: "high", dataQuality: "low" },
+        capability: { capabilityLevel: "adapter_required", serviceAdapter: "compute", adapterStatus: { configured: false, adapter: "compute", message: "No compute adapter configured.", requiredAuth: "unknown", costModel: "unknown" }, userBenefits: ["Inspect compute-oriented subnet context."] },
+        signals: [{ label: "Provider quality", value: "Live-shaped", tone: "good", explanation: "Mock signal." }],
+        warnings: ["Public-data intelligence, not financial advice."],
+        nextQuestions: ["Compare validators on subnet 14."],
+        updatedAt: "2026-06-09T00:00:00.000Z",
+      },
+      cards: [{
+        kind: "intelligence_report",
+        title: "TAOHash intelligence",
+        items: [{ label: "Score", value: "72/100" }],
+      }],
+    }));
+    return;
+  }
+  if (req.method === "GET" && url.pathname.startsWith("/api/bittensor/intelligence/wallet/")) {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "wallet",
+        ss58Address: decodeURIComponent(url.pathname.split("/").pop() ?? ""),
+        freeTao: null,
+        stakeTotalTao: null,
+        estimatedValueTao: null,
+        subnetCount: 0,
+        validatorCount: 0,
+        largestPositionShare: null,
+        concentrationRisk: "unknown",
+        slippageRisk: "unknown",
+        staleDataRisk: "high",
+        largestPositions: [],
+        signals: [{ label: "Data freshness", value: "Unavailable", tone: "danger", explanation: "Mock signal." }],
+        warnings: ["Mock provider unavailable"],
+        nextQuestions: ["Where am I staked?"],
+        source: "mock",
+        block: null,
+        freshness: null,
+        updatedAt: "2026-06-09T00:00:00.000Z",
+      },
+      cards: [{
+        kind: "intelligence_report",
+        title: "Bittensor wallet intelligence",
+        items: [{ label: "Subnet spread", value: "0 subnets" }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/actions/quote") {
     res.end(JSON.stringify({
       success: true,
@@ -505,6 +564,8 @@ try {
     "bittensor_explain_subnet",
     "bittensor_compare_subnets",
     "bittensor_get_wallet_positions",
+    "bittensor_analyze_subnet",
+    "bittensor_analyze_wallet",
     "bittensor_prepare_action",
     "bittensor_plan_from_chat",
     "bittensor_chat",
@@ -539,6 +600,14 @@ try {
 
   const wallet = await ask({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "bittensor_get_wallet_positions", arguments: { ss58Address: VALID_SS58 } } });
   assert.equal(JSON.parse(wallet.result.content[0].text).wallet.providerStatus, "provider_unavailable");
+
+  const subnetIntel = await ask({ jsonrpc: "2.0", id: 23, method: "tools/call", params: { name: "bittensor_analyze_subnet", arguments: { netuid: 14 } } });
+  assert.equal(JSON.parse(subnetIntel.result.content[0].text).report.score, 72);
+  assert.equal(JSON.parse(subnetIntel.result.content[0].text).cards[0].kind, "intelligence_report");
+
+  const walletIntel = await ask({ jsonrpc: "2.0", id: 24, method: "tools/call", params: { name: "bittensor_analyze_wallet", arguments: { ss58Address: VALID_SS58 } } });
+  assert.equal(JSON.parse(walletIntel.result.content[0].text).report.kind, "wallet");
+  assert.equal(JSON.parse(walletIntel.result.content[0].text).cards[0].kind, "intelligence_report");
 
   const quote = await ask({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "bittensor_prepare_action", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   assert.equal(JSON.parse(quote.result.content[0].text).quote.requiresExternalSignature, true);

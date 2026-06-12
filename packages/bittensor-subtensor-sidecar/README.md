@@ -62,9 +62,17 @@ Signed-payload submission remains disabled until SDK-version-specific signed-pay
 
 ## Endpoints
 
+### `GET /liveness`
+
+Returns a fast process-level readiness response without doing a live Subtensor RPC.
+The Matterhorn server uses this first so Finney RPC latency does not make a
+running sidecar appear unreachable.
+
 ### `GET /health`
 
 Returns sanitized sidecar status. Does not expose endpoint URLs or secrets.
+In Python SDK mode, SDK health is cached briefly so repeated health probes do
+not re-fetch the chain head on every request.
 
 Submission is reported as disabled in this milestone. The sidecar is for live reads and unsigned previews first.
 
