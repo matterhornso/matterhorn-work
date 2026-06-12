@@ -397,6 +397,14 @@ Expected behavior when no adapter exists:
 - output says Matterhorn can explain, compare, monitor, and prepare guidance for that subnet;
 - output does not pretend it called the subnet service.
 
+For lower-level MCP/API use, service calls should follow a preview-confirm-invoke sequence:
+
+1. Preview the subnet invocation and inspect adapter support, auth, cost, safety notes, warnings, and the request SHA-256.
+2. Ask the user to confirm the exact preview, including the request SHA-256.
+3. Invoke only when the adapter is configured and pass the preview request SHA-256 back as `previewRequestSha256`.
+
+This keeps direct adapter execution explicit while letting Matterhorn explain unsupported subnets without pretending a service call happened.
+
 ## 10. MCP Sequence For Bittensor Operators
 
 Ask Codex or Claude to follow this exact Bittensor sequence:
@@ -425,8 +433,9 @@ Use the Matterhorn Work MCP server for Bittensor.
      "coldkey": "<public-coldkey-label-or-address>",
      "rateTolerance": 0.01
    }
-9. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-10. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+9. For direct subnet service use, call `bittensor_preview_subnet_invocation` first, ask the user to confirm the request SHA-256, then call `bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+10. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+11. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 11. What Good Looks Like
