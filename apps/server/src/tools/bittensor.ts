@@ -284,6 +284,33 @@ export interface BittensorIntelligenceSignal {
   explanation: string;
 }
 
+export interface BittensorCopilotAction {
+  label: string;
+  prompt: string;
+  reason: string;
+  riskLevel: BittensorRiskLevel;
+}
+
+export interface BittensorWatchSuggestion {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid: number | null;
+  ss58Address: string | null;
+  validatorHotkey?: string | null;
+  threshold: number | null;
+  reason: string;
+}
+
+export interface BittensorValidatorExposureInsight {
+  validatorHotkey: string;
+  taoValue: number | null;
+  subnetCount: number;
+  netuids: number[];
+  share: number | null;
+  risk: BittensorRiskLevel;
+  prompt: string;
+}
+
 export interface BittensorSubnetIntelligenceReport {
   kind: "subnet";
   netuid: number;
@@ -316,6 +343,8 @@ export interface BittensorSubnetIntelligenceReport {
   signals: BittensorIntelligenceSignal[];
   warnings: string[];
   nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
   updatedAt: string;
 }
 
@@ -332,9 +361,12 @@ export interface BittensorWalletIntelligenceReport {
   slippageRisk: BittensorRiskLevel;
   staleDataRisk: BittensorRiskLevel;
   largestPositions: BittensorStakePosition[];
+  validatorExposure: BittensorValidatorExposureInsight[];
   signals: BittensorIntelligenceSignal[];
   warnings: string[];
   nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
   source: string;
   block: number | null;
   freshness: string | null;
@@ -2558,6 +2590,30 @@ function riskTone(risk: BittensorRiskLevel): BittensorChatCardItem["tone"] {
   return "muted";
 }
 
+function copilotAction(label: string, prompt: string, reason: string, riskLevel: BittensorRiskLevel): BittensorCopilotAction {
+  return { label, prompt, reason, riskLevel };
+}
+
+function watchSuggestion(input: {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid?: number | null;
+  ss58Address?: string | null;
+  validatorHotkey?: string | null;
+  threshold?: number | null;
+  reason: string;
+}): BittensorWatchSuggestion {
+  return {
+    kind: input.kind,
+    label: input.label,
+    netuid: input.netuid ?? null,
+    ss58Address: input.ss58Address ?? null,
+    validatorHotkey: input.validatorHotkey ?? null,
+    threshold: input.threshold ?? null,
+    reason: input.reason,
+  };
+}
+
 function reportRating(score: number): BittensorSubnetIntelligenceReport["rating"] {
   if (score >= 75) return "strong_public_context";
   if (score >= 50) return "usable_with_caveats";
@@ -2647,6 +2703,47 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
       explanation: "Uses Dynamic TAO-style pricing fields when the provider exposes them.",
     },
   ];
+  const copilotActions = [
+    copilotAction(
+      "Compare validators",
+      `Compare validators on subnet ${detail.netuid} with a balanced strategy.`,
+      "Validator comparison is the safest next step before any staking preview.",
+      concentrationRisk,
+    ),
+    copilotAction(
+      "Monitor subnet",
+      `Monitor subnet ${detail.netuid} emissions and slippage.`,
+      "A watch lets Matterhorn track public subnet changes without custody or signing.",
+      dataQualityRisk === "high" ? "medium" : "low",
+    ),
+    copilotAction(
+      "Prepare preview later",
+      `Prepare staking 1 TAO on subnet ${detail.netuid} after I choose a validator hotkey.`,
+      "Matterhorn should not guess validator hotkeys; previews stay unsigned and external-signer-only.",
+      "medium",
+    ),
+  ];
+  const watchSuggestions = [
+    watchSuggestion({
+      kind: "subnet",
+      label: `Subnet ${detail.netuid} health`,
+      netuid: detail.netuid,
+      reason: "Track provider freshness, metagraph availability, and subnet-level market context.",
+    }),
+    watchSuggestion({
+      kind: "emissions",
+      label: `Subnet ${detail.netuid} emissions`,
+      netuid: detail.netuid,
+      threshold: detail.emission,
+      reason: "Watch emission changes before interpreting validator or staking context.",
+    }),
+    watchSuggestion({
+      kind: "slippage",
+      label: `Subnet ${detail.netuid} Dynamic TAO slippage`,
+      netuid: detail.netuid,
+      reason: "Dynamic TAO price and liquidity can change staking preview outcomes.",
+    }),
+  ];
 
   return {
     kind: "subnet",
@@ -2691,6 +2788,8 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
       `Monitor subnet ${detail.netuid} emissions and slippage.`,
       `Prepare staking 1 TAO on subnet ${detail.netuid} after I choose a validator hotkey.`,
     ],
+    copilotActions,
+    watchSuggestions,
     updatedAt: nowIso(),
   };
 }
@@ -2712,6 +2811,30 @@ export async function analyzeBittensorWalletIntelligence(ss58Address: string): P
       ? "medium"
       : "low";
   const largestPositions = [...positions]
+    .sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0))
+    .slice(0, 5);
+  const validatorExposureMap = new Map<string, { taoValue: number; netuids: Set<number> }>();
+  for (const position of positions) {
+    if (!position.validatorHotkey) continue;
+    const existing = validatorExposureMap.get(position.validatorHotkey) ?? { taoValue: 0, netuids: new Set<number>() };
+    existing.taoValue += position.taoValue ?? 0;
+    existing.netuids.add(position.netuid);
+    validatorExposureMap.set(position.validatorHotkey, existing);
+  }
+  const validatorExposure = [...validatorExposureMap.entries()]
+    .map(([validatorHotkey, exposure]) => {
+      const share = stakeTotalTao && stakeTotalTao > 0 ? exposure.taoValue / stakeTotalTao : null;
+      const netuids = [...exposure.netuids].sort((a, b) => a - b);
+      return {
+        validatorHotkey,
+        taoValue: stakeValues.length ? exposure.taoValue : null,
+        subnetCount: netuids.length,
+        netuids,
+        share,
+        risk: riskFromShare(share),
+        prompt: `Compare validator ${validatorHotkey} on subnet ${netuids[0] ?? 0}.`,
+      };
+    })
     .sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0))
     .slice(0, 5);
   const warnings = uniqueWarnings(
@@ -2750,6 +2873,68 @@ export async function analyzeBittensorWalletIntelligence(ss58Address: string): P
       explanation: "Uses provider freshness and block labels where available.",
     },
   ];
+  const topPosition = largestPositions[0] ?? null;
+  const topValidator = validatorExposure[0] ?? null;
+  const copilotActions = [
+    copilotAction(
+      "Show stake positions",
+      "Where am I staked?",
+      "Start by inspecting the visible positions that drive this wallet report.",
+      staleDataRisk,
+    ),
+    ...(topPosition ? [
+      copilotAction(
+        "Compare largest subnet",
+        `Compare validators on subnet ${topPosition.netuid} with a balanced strategy.`,
+        "The largest visible subnet exposure is the best first place to inspect validator options.",
+        concentrationRisk,
+      ),
+    ] : []),
+    ...(topValidator ? [
+      copilotAction(
+        "Inspect top validator",
+        `Compare validator ${topValidator.validatorHotkey} on subnet ${topValidator.netuids[0] ?? topPosition?.netuid ?? 0}.`,
+        "This validator has the largest visible share of the wallet's staked TAO exposure.",
+        topValidator.risk,
+      ),
+    ] : []),
+    copilotAction(
+      "Create watches",
+      "Create watches for my riskiest Bittensor positions.",
+      "Watches preserve context and track public changes without signing or custody.",
+      concentrationRisk === "unknown" ? staleDataRisk : concentrationRisk,
+    ),
+  ];
+  const watchSuggestions = [
+    watchSuggestion({
+      kind: "wallet",
+      label: `Wallet ${shortSs58(wallet.ss58Address)} exposure`,
+      ss58Address: wallet.ss58Address,
+      threshold: wallet.estimatedValueTao,
+      reason: "Track wallet-level public balance and stake-position availability.",
+    }),
+    ...(topPosition ? [
+      watchSuggestion({
+        kind: topPosition.slippageRisk === "high" || topPosition.slippageRisk === "medium" ? "slippage" as const : "subnet" as const,
+        label: `Subnet ${topPosition.netuid} largest position`,
+        netuid: topPosition.netuid,
+        ss58Address: wallet.ss58Address,
+        threshold: topPosition.taoValue,
+        reason: "Largest visible position by TAO value.",
+      }),
+    ] : []),
+    ...(topValidator ? [
+      watchSuggestion({
+        kind: "validator",
+        label: `Validator ${shortSs58(topValidator.validatorHotkey)} exposure`,
+        netuid: topValidator.netuids[0] ?? null,
+        ss58Address: wallet.ss58Address,
+        validatorHotkey: topValidator.validatorHotkey,
+        threshold: topValidator.share,
+        reason: "Largest visible validator hotkey exposure.",
+      }),
+    ] : []),
+  ];
 
   return {
     kind: "wallet",
@@ -2764,6 +2949,7 @@ export async function analyzeBittensorWalletIntelligence(ss58Address: string): P
     slippageRisk,
     staleDataRisk,
     largestPositions,
+    validatorExposure,
     signals,
     warnings,
     nextQuestions: [
@@ -2771,6 +2957,8 @@ export async function analyzeBittensorWalletIntelligence(ss58Address: string): P
       "Create watches for my riskiest Bittensor positions.",
       "Compare validators for my largest subnet exposure.",
     ],
+    copilotActions,
+    watchSuggestions,
     source: wallet.source ?? "provider",
     block: wallet.block ?? null,
     freshness: wallet.freshness ?? null,
@@ -3297,25 +3485,21 @@ export function buildBittensorSubnetIntelligenceCard(report: BittensorSubnetInte
       cardItem("Concentration", report.metagraph.concentrationRisk, riskTone(report.metagraph.concentrationRisk)),
       cardItem("Mechanisms", report.mechanismSummary.available ? String(report.mechanismSummary.count ?? "Available") : "Not exposed", report.mechanismSummary.available ? "good" : "muted"),
       cardItem("Adapter", report.capability.adapterStatus.configured ? report.capability.serviceAdapter.replace(/_/g, " ") : "Not configured", report.capability.adapterStatus.configured ? "good" : "muted"),
+      cardItem("Copilot actions", report.copilotActions.length),
+      cardItem("Watch suggestions", report.watchSuggestions.length),
     ],
-    actions: [
-      {
-        label: "Compare validators",
-        kind: "send_to_chat",
-        payload: { prompt: `Compare validators on subnet ${report.netuid}.` },
-      },
-      {
-        label: "Create watch",
-        kind: "send_to_chat",
-        payload: { prompt: `Monitor subnet ${report.netuid} emissions and slippage.` },
-      },
-    ],
+    actions: report.copilotActions.slice(0, 3).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel },
+    })),
     warnings: report.warnings,
     data: { report },
   };
 }
 
 export function buildBittensorWalletIntelligenceCard(report: BittensorWalletIntelligenceReport): BittensorChatCard {
+  const topValidator = report.validatorExposure[0] ?? null;
   return {
     kind: "intelligence_report",
     title: "Bittensor wallet intelligence",
@@ -3328,22 +3512,18 @@ export function buildBittensorWalletIntelligenceCard(report: BittensorWalletInte
       cardItem("Largest position", report.largestPositionShare === null ? "Unknown" : `${Math.round(report.largestPositionShare * 100)}%`, riskTone(report.concentrationRisk)),
       cardItem("Concentration", report.concentrationRisk, riskTone(report.concentrationRisk)),
       cardItem("Slippage", report.slippageRisk, riskTone(report.slippageRisk)),
+      cardItem("Top validator", topValidator ? shortSs58(topValidator.validatorHotkey) : "Unavailable", topValidator ? riskTone(topValidator.risk) : "muted"),
       cardItem("Freshness", report.freshness ?? "Unavailable", riskTone(report.staleDataRisk)),
       cardItem("Source", report.source, report.source.includes("fallback") ? "warning" : "muted"),
       cardItem("Block", report.block ?? "Unavailable", report.block === null ? "muted" : "default"),
+      cardItem("Copilot actions", report.copilotActions.length),
+      cardItem("Watch suggestions", report.watchSuggestions.length),
     ],
-    actions: [
-      {
-        label: "Show stake positions",
-        kind: "send_to_chat",
-        payload: { prompt: "Where am I staked?" },
-      },
-      {
-        label: "Create watches",
-        kind: "send_to_chat",
-        payload: { prompt: "Create watches for my riskiest Bittensor positions." },
-      },
-    ],
+    actions: report.copilotActions.slice(0, 4).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel },
+    })),
     warnings: report.warnings,
     data: { report },
   };

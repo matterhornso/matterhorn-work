@@ -486,7 +486,11 @@ describe("executeBittensorChatWorkflow", () => {
       const result = await executeBittensorChatWorkflow({ message: "analyze risk on subnet 77" });
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("intelligence_report");
-      expect((result.data.intelligence as { score?: number }).score).toBeGreaterThan(0);
+      const intelligence = result.data.intelligence as { score?: number; copilotActions?: unknown[]; watchSuggestions?: unknown[] };
+      expect(intelligence.score).toBeGreaterThan(0);
+      expect(intelligence.copilotActions?.length).toBeGreaterThan(0);
+      expect(intelligence.watchSuggestions?.length).toBeGreaterThan(0);
+      expect(result.cards[0]?.actions?.[0]?.payload?.prompt).toContain("Compare validators");
       expect(result.responseText).toContain("public Bittensor data");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     });
@@ -497,7 +501,12 @@ describe("executeBittensorChatWorkflow", () => {
       const result = await executeBittensorChatWorkflow({ message: "analyze my TAO portfolio risk", ss58Address: VALID_SS58 });
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("intelligence_report");
-      expect((result.data.intelligence as { subnetCount?: number }).subnetCount).toBe(2);
+      const intelligence = result.data.intelligence as { subnetCount?: number; validatorExposure?: unknown[]; copilotActions?: unknown[]; watchSuggestions?: unknown[] };
+      expect(intelligence.subnetCount).toBe(2);
+      expect(intelligence.validatorExposure?.length).toBeGreaterThan(0);
+      expect(intelligence.copilotActions?.length).toBeGreaterThan(0);
+      expect(intelligence.watchSuggestions?.length).toBeGreaterThan(0);
+      expect(result.cards[0]?.actions?.some((action) => String(action.payload?.prompt ?? "").includes("Where am I staked"))).toBe(true);
       expect(result.warnings.join(" ")).toContain("watch-only");
     });
   });

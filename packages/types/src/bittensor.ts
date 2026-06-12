@@ -250,6 +250,33 @@ export type BittensorIntelligenceSignal = {
   explanation: string;
 };
 
+export type BittensorCopilotAction = {
+  label: string;
+  prompt: string;
+  reason: string;
+  riskLevel: BittensorRiskLevel;
+};
+
+export type BittensorWatchSuggestion = {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid: number | null;
+  ss58Address: string | null;
+  validatorHotkey?: string | null;
+  threshold: number | null;
+  reason: string;
+};
+
+export type BittensorValidatorExposureInsight = {
+  validatorHotkey: string;
+  taoValue: number | null;
+  subnetCount: number;
+  netuids: number[];
+  share: number | null;
+  risk: BittensorRiskLevel;
+  prompt: string;
+};
+
 export type BittensorSubnetIntelligenceReport = {
   kind: "subnet";
   netuid: number;
@@ -282,6 +309,8 @@ export type BittensorSubnetIntelligenceReport = {
   signals: BittensorIntelligenceSignal[];
   warnings: string[];
   nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
   updatedAt: string;
 };
 
@@ -298,9 +327,12 @@ export type BittensorWalletIntelligenceReport = {
   slippageRisk: BittensorRiskLevel;
   staleDataRisk: BittensorRiskLevel;
   largestPositions: BittensorStakePosition[];
+  validatorExposure: BittensorValidatorExposureInsight[];
   signals: BittensorIntelligenceSignal[];
   warnings: string[];
   nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
   source: string;
   block: number | null;
   freshness: string | null;
