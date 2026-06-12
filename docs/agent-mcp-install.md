@@ -4,6 +4,8 @@ This guide shows how to connect Matterhorn Work to Codex, Claude Code, Claude De
 
 The default setup uses local stdio MCP servers launched by the client. The server-control MCP (`matterhorn-work-mcp`) talks to a running Matterhorn Work server over `MATTERHORN_WORK_SERVER_URL`.
 
+After setup, use [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude loop: doctor, session, prompt, event watch, file reads/writes, approvals, and Bittensor chat.
+
 ## Prerequisites
 
 Start Matterhorn Work locally and copy the client and host tokens from the startup output:
