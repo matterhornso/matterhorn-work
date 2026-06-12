@@ -71,6 +71,51 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
+    assert.equal(body.action, "stake");
+    assert.equal(body.netuid, 14);
+    assert.equal(body.amountTao, "1");
+    assert.equal(body.hotkey, "5ValidatorHotkey");
+    assert.equal(body.coldkey, "5ColdkeyPublic");
+    assert.equal(body.rateTolerance, 0.01);
+    return json(res, 200, {
+      success: true,
+      preview: {
+        action: "stake",
+        netuid: 14,
+        requiresExternalSignature: true,
+        unsignedPayload: { call: "stake", netuid: 14 },
+      },
+      cards: [],
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/handoff") {
+    assert.equal(body.preview.action, "stake");
+    assert.equal(body.preview.netuid, 14);
+    return json(res, 200, {
+      success: true,
+      handoff: {
+        payloadSha256: "e".repeat(64),
+        suggestedFilename: "bittensor-stake-subnet-14.json",
+      },
+      receipt: { status: "awaiting_signature" },
+      cards: [],
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/submit") {
+    assert.equal(body.preview.action, "stake");
+    assert.equal(body.signature, "0x1234567890abcdef");
+    assert.equal(body.signerAddress, "5SignerPublic");
+    return json(res, 200, {
+      success: true,
+      result: { status: "sidecar_unavailable", txHash: null },
+      receipt: { status: "submitted_to_sidecar" },
+      cards: [],
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
     assert.equal(body.intent, "service_call");
     assert.equal(body.task, "mock subnet service task");
@@ -211,6 +256,51 @@ try {
   assert.equal(readiness.success, true);
   assert.equal(readiness.report.ready, true);
 
+  const extrinsicPrepare = await runCli(baseUrl, [
+    "bittensor",
+    "extrinsic",
+    "prepare",
+    "--action",
+    "stake",
+    "--netuid",
+    "14",
+    "--amount-tao",
+    "1",
+    "--validator-hotkey",
+    "5ValidatorHotkey",
+    "--coldkey",
+    "5ColdkeyPublic",
+    "--rate-tolerance",
+    "0.01",
+  ]);
+  assert.equal(extrinsicPrepare.success, true);
+  assert.equal(extrinsicPrepare.preview.requiresExternalSignature, true);
+
+  const previewJson = JSON.stringify(extrinsicPrepare.preview);
+  const extrinsicHandoff = await runCli(baseUrl, [
+    "bittensor",
+    "extrinsic",
+    "handoff",
+    "--preview-json",
+    previewJson,
+  ]);
+  assert.equal(extrinsicHandoff.success, true);
+  assert.equal(extrinsicHandoff.handoff.payloadSha256.length, 64);
+
+  const extrinsicSubmit = await runCli(baseUrl, [
+    "bittensor",
+    "extrinsic",
+    "submit",
+    "--preview-json",
+    previewJson,
+    "--signature",
+    "0x1234567890abcdef",
+    "--signer-address",
+    "5SignerPublic",
+  ]);
+  assert.equal(extrinsicSubmit.success, true);
+  assert.equal(extrinsicSubmit.result.status, "sidecar_unavailable");
+
   const subnetPreview = await runCli(baseUrl, [
     "bittensor",
     "subnet-preview",
@@ -270,6 +360,9 @@ try {
     [
       "POST /api/bittensor/chat/execute",
       "GET /api/bittensor/readiness",
+      "POST /api/bittensor/extrinsics/prepare",
+      "POST /api/bittensor/extrinsics/handoff",
+      "POST /api/bittensor/extrinsics/submit",
       "POST /api/bittensor/subnets/14/preview",
       "POST /api/bittensor/subnets/14/invoke",
       "GET /api/bittensor/monitoring/watchlist",
