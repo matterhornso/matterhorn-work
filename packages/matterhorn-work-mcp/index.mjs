@@ -321,6 +321,35 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_bittensor_preview_subnet_invocation",
+    description: "Preview a Bittensor subnet adapter call before invocation, including request hash, auth/cost context, warnings, and confirmation text.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        netuid: { type: "number" },
+        intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] },
+        task: { type: "string" },
+        ss58Address: { type: "string" },
+      },
+      required: ["netuid"],
+    },
+  },
+  {
+    name: "matterhorn_bittensor_invoke_subnet",
+    description: "Invoke a supported Bittensor subnet adapter after explicit preview confirmation. Requires the preview request SHA-256.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        netuid: { type: "number" },
+        intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] },
+        task: { type: "string" },
+        ss58Address: { type: "string" },
+        previewRequestSha256: { type: "string" },
+      },
+      required: ["netuid", "previewRequestSha256"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_create_watch",
     description: "Create a public-data Bittensor watch for subnet, wallet, validator, emissions, or slippage monitoring.",
     inputSchema: {
@@ -864,6 +893,10 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
       return callServer("/api/bittensor/readiness");
+    case "matterhorn_bittensor_preview_subnet_invocation":
+      return callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/preview`, { method: "POST", body: args });
+    case "matterhorn_bittensor_invoke_subnet":
+      return callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/invoke`, { method: "POST", body: args });
     case "matterhorn_bittensor_create_watch":
       return callServer("/api/bittensor/monitoring/watchlist", { method: "POST", body: args });
     case "matterhorn_bittensor_list_watches":
