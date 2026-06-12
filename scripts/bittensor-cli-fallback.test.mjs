@@ -103,6 +103,46 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    return json(res, 200, {
+      success: true,
+      watches: [],
+      cards: [],
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    assert.equal(body.kind, "slippage");
+    assert.equal(body.netuid, 14);
+    assert.equal(body.threshold, 0.35);
+    assert.equal(body.label, "Subnet 14 slippage");
+    assert.equal(body.reason, "Alert before staking preview");
+    return json(res, 200, {
+      success: true,
+      watch: {
+        id: "bt-watch-cli",
+        kind: "slippage",
+        netuid: 14,
+        threshold: 0.35,
+        label: "Subnet 14 slippage",
+      },
+      watches: [],
+      cards: [],
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
+    return json(res, 200, {
+      success: true,
+      evaluations: [{
+        watch: { id: "bt-watch-cli", kind: "slippage", netuid: 14 },
+        status: "ok",
+        summary: "Mock slippage watch ok.",
+      }],
+      cards: [],
+    });
+  }
+
   return json(res, 404, { error: "not_found", path: url.pathname });
 });
 
@@ -199,6 +239,32 @@ try {
   assert.equal(subnetInvoke.success, true);
   assert.equal(subnetInvoke.invocation.supported, false);
 
+  const watchList = await runCli(baseUrl, ["bittensor", "watch", "list"]);
+  assert.equal(watchList.success, true);
+  assert.equal(watchList.watches.length, 0);
+
+  const watchCreate = await runCli(baseUrl, [
+    "bittensor",
+    "watch",
+    "create",
+    "--kind",
+    "slippage",
+    "--netuid",
+    "14",
+    "--threshold",
+    "0.35",
+    "--label",
+    "Subnet 14 slippage",
+    "--reason",
+    "Alert before staking preview",
+  ]);
+  assert.equal(watchCreate.success, true);
+  assert.equal(watchCreate.watch.id, "bt-watch-cli");
+
+  const watchCheck = await runCli(baseUrl, ["bittensor", "watch", "check"]);
+  assert.equal(watchCheck.success, true);
+  assert.equal(watchCheck.evaluations[0].status, "ok");
+
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
@@ -206,6 +272,9 @@ try {
       "GET /api/bittensor/readiness",
       "POST /api/bittensor/subnets/14/preview",
       "POST /api/bittensor/subnets/14/invoke",
+      "GET /api/bittensor/monitoring/watchlist",
+      "POST /api/bittensor/monitoring/watchlist",
+      "GET /api/bittensor/monitoring/check",
     ],
   );
 
