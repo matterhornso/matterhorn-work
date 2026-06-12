@@ -3819,7 +3819,7 @@ function printHelp(): void {
     "  --max-events <n>          Maximum chat session events to read (default: 10)",
     "  --since <cursor>          Session event cursor for reconnect/backfill",
     "  --snapshot                Include an initial chat session snapshot event",
-    "  --details                 Include message and todo events from the initial snapshot",
+    "  --details                 Include message, tool, and todo events from the initial snapshot",
     "  --heartbeat-ms <n>        Session event heartbeat interval",
     "  --from <path>             Source path for rename",
     "  --to <path>               Destination path for rename",

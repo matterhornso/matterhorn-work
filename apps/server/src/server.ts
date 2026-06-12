@@ -876,18 +876,103 @@ function sessionEventStreamResponse(input: SessionStreamEventInput) {
       if (!isRecord(message) || !isRecord(message.info)) continue;
       const messageId = typeof message.info.id === "string" ? message.info.id : "";
       if (!messageId) continue;
+      const role = typeof message.info.role === "string" ? message.info.role : "unknown";
       emit(controller, "message.created", {
         messageId,
-        role: typeof message.info.role === "string" ? message.info.role : "unknown",
+        role,
         parentId: typeof message.info.parentID === "string" ? message.info.parentID : null,
         createdAt: isRecord(message.info.time) && typeof message.info.time.created === "number" ? message.info.time.created : null,
       });
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      for (const part of parts) {
+        if (!isRecord(part)) continue;
+        emitSessionPartEvents(controller, messageId, role, part);
+      }
+      if (isRecord(message.info.time) && typeof message.info.time.completed === "number") {
+        emit(controller, "message.completed", {
+          messageId,
+          role,
+          completedAt: message.info.time.completed,
+        });
+      }
     }
     const todos = Array.isArray(snapshot.todos) ? snapshot.todos : [];
     if (todos.length) {
       emit(controller, "todo.updated", { todos });
     }
   };
+
+  function emitSessionPartEvents(
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    messageId: string,
+    role: string,
+    part: Record<string, unknown>,
+  ) {
+    const partId = typeof part.id === "string" ? part.id : null;
+    const partType = typeof part.type === "string" ? part.type : "unknown";
+    const text = typeof part.text === "string" ? part.text : typeof part.content === "string" ? part.content : "";
+    if (text) {
+      emit(controller, "message.delta", {
+        messageId,
+        role,
+        partId,
+        partType,
+        delta: text,
+      });
+    }
+
+    const toolName =
+      typeof part.tool === "string"
+        ? part.tool
+        : typeof part.name === "string"
+          ? part.name
+          : typeof part.toolName === "string"
+            ? part.toolName
+            : typeof part.functionName === "string"
+              ? part.functionName
+              : "";
+    const explicitToolCallId =
+      typeof part.callID === "string"
+        ? part.callID
+        : typeof part.callId === "string"
+          ? part.callId
+          : typeof part.toolCallID === "string"
+            ? part.toolCallID
+            : typeof part.toolCallId === "string"
+              ? part.toolCallId
+              : "";
+    const isToolPart = partType.includes("tool") || Boolean(toolName || explicitToolCallId);
+    if (!isToolPart) return;
+
+    const name = toolName || partType;
+    const toolCallId = explicitToolCallId || partId;
+    const status = typeof part.status === "string" ? part.status : typeof part.state === "string" ? part.state : null;
+    emit(controller, "tool.started", {
+      messageId,
+      partId,
+      toolCallId,
+      name,
+      status,
+    });
+
+    const error = typeof part.error === "string" ? part.error : null;
+    const hasResult =
+      Object.prototype.hasOwnProperty.call(part, "output") ||
+      Object.prototype.hasOwnProperty.call(part, "result") ||
+      Object.prototype.hasOwnProperty.call(part, "error");
+    const completedStatuses = new Set(["completed", "complete", "done", "failed", "error"]);
+    if (hasResult || (status && completedStatuses.has(status))) {
+      emit(controller, "tool.completed", {
+        messageId,
+        partId,
+        toolCallId,
+        name,
+        ok: !error && status !== "failed" && status !== "error",
+        status,
+        error,
+      });
+    }
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
