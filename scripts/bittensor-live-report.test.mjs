@@ -28,14 +28,15 @@ const sample = {
   ok: true,
   serverUrl: "http://127.0.0.1:8787",
   checkedAt: "2026-06-12T07:20:00.000Z",
-  summary: { pass: 7, warn: 1, fail: 0, skip: 2 },
-  requestCount: 8,
+  summary: { pass: 8, warn: 1, fail: 0, skip: 2 },
+  requestCount: 9,
   artifacts: {
     readinessStatus: "ready",
     capabilityCount: 1,
     selectedCapabilityLevel: "adapter_required",
     bittensorContextId: "bt-chat-1",
     signingHandoffPayloadSha256: "d".repeat(64),
+    watchAlertCount: 1,
   },
   stages: [
     { id: "bittensor.readiness", label: "Read Bittensor readiness", status: "pass", readinessStatus: "ready" },
@@ -45,6 +46,7 @@ const sample = {
     { id: "bittensor.wallet.snapshot", label: "Read watch-only TAO wallet snapshot", status: "skip", hint: "Pass --ss58-address with a public coldkey address to test wallet reads." },
     { id: "bittensor.subnet.unsupported_adapter", label: "Handle unsupported subnet service calls honestly", status: "warn", hint: "A subnet adapter is configured, so the unsupported-adapter fallback was not exercised in this environment." },
     { id: "bittensor.subnet.invocation_preview", label: "Preview subnet adapter request before invocation", status: "pass", requestSha256: "c".repeat(64), requiresConfirmation: true, adapterSupported: false },
+    { id: "bittensor.monitoring.watch_check", label: "Evaluate Bittensor monitoring watches", status: "pass", evaluationCount: 1, alertCount: 1, alertKey: "slippage:14", notificationIntent: "review_slippage" },
   ],
   nextSteps: ["Run the full wallet preview path with a public SS58 address."],
 };
@@ -59,6 +61,8 @@ assert.ok(fromStdin.stdout.includes("payload sha256:"));
 assert.ok(fromStdin.stdout.includes("capabilities: 1"));
 assert.ok(fromStdin.stdout.includes("capability: adapter_required"));
 assert.ok(fromStdin.stdout.includes("requires confirmation: true"));
+assert.ok(fromStdin.stdout.includes("alert key: slippage:14"));
+assert.ok(fromStdin.stdout.includes("notification: review_slippage"));
 assert.ok(fromStdin.stdout.includes("Skipped Coverage"));
 assert.ok(fromStdin.stdout.includes("Run the full wallet preview path with a public SS58 address."));
 assert.equal(/seed phrase field|private key field|wallet export field/i.test(fromStdin.stdout), false);

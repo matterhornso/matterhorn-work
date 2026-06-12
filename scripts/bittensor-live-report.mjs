@@ -122,6 +122,12 @@ function stageDetail(stage) {
   if (stage.requiresConfirmation !== undefined) parts.push(`requires confirmation: ${stage.requiresConfirmation}`);
   if (stage.requestSha256) parts.push(`request sha256: ${stage.requestSha256}`);
   if (stage.adapterSupported !== undefined && stage.adapterSupported !== null) parts.push(`adapter supported: ${stage.adapterSupported}`);
+  if (stage.watchId) parts.push(`watch: ${stage.watchId}`);
+  if (stage.watchCount !== undefined) parts.push(`watches: ${stage.watchCount}`);
+  if (stage.evaluationCount !== undefined) parts.push(`evaluations: ${stage.evaluationCount}`);
+  if (stage.alertCount !== undefined) parts.push(`alerts: ${stage.alertCount}`);
+  if (stage.alertKey) parts.push(`alert key: ${stage.alertKey}`);
+  if (stage.notificationIntent) parts.push(`notification: ${stage.notificationIntent}`);
   if (stage.clarificationQuestion) parts.push(`question: ${stage.clarificationQuestion}`);
   return parts.join("; ") || "-";
 }

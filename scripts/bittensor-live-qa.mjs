@@ -459,6 +459,73 @@ async function runChatCore() {
       cards: cardKinds(result.body),
     };
   });
+
+  await runStep("bittensor.monitoring.watch_create", "Create Bittensor monitoring watch", async () => {
+    const result = await request("/api/bittensor/monitoring/watchlist", {
+      method: "POST",
+      body: {
+        kind: "slippage",
+        label: `Live QA slippage watch for subnet ${config.netuid}`,
+        netuid: config.netuid,
+        threshold: config.rateTolerance,
+        reason: "Verify Bittensor watch creation and alert routing.",
+      },
+    });
+    const watch = result.body?.watch || {};
+    if (result.body?.success !== true) {
+      throw new Error("watch create response success was not true");
+    }
+    if (!watch.id) {
+      throw new Error("watch create response did not include a watch id");
+    }
+    artifacts.watchId = watch.id;
+    return {
+      latencyMs: result.latencyMs,
+      watchId: watch.id,
+      kind: watch.kind || null,
+      cards: cardKinds(result.body),
+    };
+  });
+
+  await runStep("bittensor.monitoring.watch_list", "List Bittensor monitoring watches", async () => {
+    const result = await request("/api/bittensor/monitoring/watchlist");
+    const watches = Array.isArray(result.body?.watches) ? result.body.watches : [];
+    if (result.body?.success !== true) {
+      throw new Error("watch list response success was not true");
+    }
+    if (!watches.length) {
+      throw new Error("watch list response did not include any watches");
+    }
+    artifacts.watchCount = watches.length;
+    return {
+      latencyMs: result.latencyMs,
+      watchCount: watches.length,
+      cards: cardKinds(result.body),
+    };
+  });
+
+  await runStep("bittensor.monitoring.watch_check", "Evaluate Bittensor monitoring watches", async () => {
+    const result = await request("/api/bittensor/monitoring/check");
+    const evaluations = Array.isArray(result.body?.evaluations) ? result.body.evaluations : [];
+    if (result.body?.success !== true) {
+      throw new Error("watch check response success was not true");
+    }
+    if (!evaluations.length) {
+      throw new Error("watch check response did not include evaluations");
+    }
+    const alertCount = evaluations.filter((evaluation) => evaluation?.status === "alert").length;
+    const firstAlert = evaluations.find((evaluation) => evaluation?.alertKey || evaluation?.notificationIntent) || {};
+    artifacts.watchEvaluationCount = evaluations.length;
+    artifacts.watchAlertCount = alertCount;
+    return {
+      latencyMs: result.latencyMs,
+      evaluationCount: evaluations.length,
+      alertCount,
+      alertKey: firstAlert.alertKey || null,
+      notificationIntent: firstAlert.notificationIntent || null,
+      cards: cardKinds(result.body),
+    };
+  });
 }
 
 function summarize() {
