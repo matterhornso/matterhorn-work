@@ -23,6 +23,7 @@ import {
   buildBittensorSignerCard,
   buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
+  buildBittensorSigningReceiptCard,
   buildBittensorSignedResultCard,
   buildBittensorStakingPlanCard,
   buildBittensorSubnetIntelligenceCard,
@@ -41,6 +42,7 @@ import {
   checkSubtensorSidecarHealth,
   compareBittensorValidators,
   createBittensorSigningHandoff,
+  createBittensorSigningReceipt,
   createBittensorWatch,
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
@@ -4091,7 +4093,13 @@ function createRoutes(
     try {
       const preview = body.preview as BittensorExtrinsicPreview;
       const handoff = createBittensorSigningHandoff(preview);
-      return jsonResponse({ success: true, handoff, cards: [buildBittensorSigningHandoffCard(handoff)] });
+      const receipt = createBittensorSigningReceipt({ preview, handoff });
+      return jsonResponse({
+        success: true,
+        handoff,
+        receipt,
+        cards: [buildBittensorSigningHandoffCard(handoff), buildBittensorSigningReceiptCard(receipt)],
+      });
     } catch (err) {
       throw new ApiError(400, "invalid_handoff", err instanceof Error ? err.message : "Could not create Bittensor signing handoff");
     }
@@ -4108,7 +4116,13 @@ function createRoutes(
       signature: typeof body.signature === "string" ? body.signature : null,
       signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
     });
-    return jsonResponse({ success: true, result, cards: [buildBittensorSignedResultCard(result)] });
+    const receipt = createBittensorSigningReceipt({
+      preview,
+      result,
+      signature: typeof body.signature === "string" ? body.signature : null,
+      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
+    });
+    return jsonResponse({ success: true, result, receipt, cards: [buildBittensorSignedResultCard(result), buildBittensorSigningReceiptCard(receipt)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/subnets/:netuid/invoke", "client", async (ctx) => {

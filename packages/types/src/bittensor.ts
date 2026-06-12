@@ -206,6 +206,33 @@ export type BittensorSigningHandoff = {
   consequenceSummary: string;
 };
 
+export type BittensorSigningReceiptStatus =
+  | "awaiting_signature"
+  | "signed_payload_received"
+  | BittensorSignedResult["status"];
+
+export type BittensorSigningReceipt = {
+  id: string;
+  handoffId: string | null;
+  action: BittensorExtrinsicPreview["action"];
+  network: BittensorExtrinsicPreview["network"];
+  netuid: number | null;
+  payloadSha256: string;
+  signatureSha256: string | null;
+  signerMode: BittensorSignerStatus["mode"];
+  signerAddress: string | null;
+  status: BittensorSigningReceiptStatus;
+  txHash: string | null;
+  blockHash: string | null;
+  explorerUrl: string | null;
+  message: string;
+  consequenceSummary: string;
+  warnings: string[];
+  nextActions: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type BittensorSubnetInvocation = {
   netuid: number;
   intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";

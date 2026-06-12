@@ -87,6 +87,7 @@ Current implementation:
 
 - Signing remains external-only.
 - Unsigned previews can be turned into checksumed handoff JSON with expiry and plain-English consequences.
+- Handoffs and submit attempts now create signing receipts with payload hash, signature hash, signer address, status, explorer fields, warnings, and next safe actions.
 - The sidecar submit path remains gated by configured external signed payloads; Matterhorn still never stores or requests seed phrases, private keys, mnemonics, keyfiles, or SURI material.
 
 ## Phase 5: Subnet Service Marketplace
