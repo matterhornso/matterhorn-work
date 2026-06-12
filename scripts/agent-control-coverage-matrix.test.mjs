@@ -61,6 +61,7 @@ for (const scriptName of [
   "test:agent-operator-workflow",
   "test:bittensor-operator-playbook",
   "test:bittensor-live-qa",
+  "test:bittensor-live-report",
   "test:agent-control-doctor",
   "test:agent-control-live-qa",
   "test:agent-control-api-docs",
