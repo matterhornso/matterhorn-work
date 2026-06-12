@@ -14,7 +14,7 @@ The goal is to keep every stable capability available through at least one safe 
 | --- | --- | --- | --- | --- |
 | Agent operator workflow | Stable server/session/file/Bittensor routes | Copy-paste Codex/Claude tool sequence | Copy-paste CLI fallback loop | `test:agent-operator-workflow` |
 | Upstream OpenWork intake | Sync playbook and remote-aware checker output | Agent can run checker through shell/MCP terminal | `pnpm upstream:openwork:check` | `test:upstream-openwork-sync` |
-| Bittensor operator playbook | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness` | `matterhorn_bittensor_chat`, `matterhorn_bittensor_readiness` | `matterhorn-work bittensor chat`, `matterhorn-work bittensor readiness` | `test:bittensor-operator-playbook`, `test:bittensor-cli-fallback` |
+| Bittensor operator playbook | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness`, Bittensor monitoring routes | `matterhorn_bittensor_chat`, `matterhorn_bittensor_readiness`, `matterhorn_bittensor_*_watch*` | `matterhorn-work bittensor chat`, `matterhorn-work bittensor readiness`, `matterhorn-work bittensor watch` | `test:bittensor-operator-playbook`, `test:bittensor-cli-fallback` |
 | Bittensor live QA harness | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness`, `POST /api/bittensor/subnets/:netuid/preview` | Uses MCP-compatible Bittensor contracts | `node scripts/bittensor-live-qa.mjs` | `test:bittensor-live-qa`, `test:bittensor-live-report` |
 | Unified readiness doctor | Aggregates stable local routes | `matterhorn_doctor` | `matterhorn-work doctor` | `test:agent-control-doctor`, `test:agent-control-mcp`, `test:agent-control-coverage-matrix` |
 | End-to-end agent QA harness | Stable server/session/file/Bittensor routes | Uses MCP-compatible contracts | `node scripts/agent-control-live-qa.mjs` | `test:agent-control-live-qa` |
@@ -49,6 +49,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Reply to approval | `POST /approvals/:approvalId` | `matterhorn_reply_approval` | `matterhorn-work approvals reply` | `test:agent-control-mcp` |
 | Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | `matterhorn-work bittensor chat` | `test:agent-control-mcp`, Bittensor server tests, `test:bittensor-cli-fallback` |
 | Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | `matterhorn-work bittensor readiness` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
+| Bittensor monitoring watches | `GET/POST /api/bittensor/monitoring/watchlist`, `GET /api/bittensor/monitoring/check` | `matterhorn_bittensor_create_watch`, `matterhorn_bittensor_list_watches`, `matterhorn_bittensor_check_watches` | `matterhorn-work bittensor watch create/list/check` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Doctor reports bridge availability | `test:agent-browser-control-guide`, `test:agent-browser-live-qa`, `test:agent-browser-live-probe` |
 
 ## Current Gaps

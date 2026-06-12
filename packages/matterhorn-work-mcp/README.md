@@ -82,6 +82,9 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_reply_approval` — allow or deny an approval request
 - `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
 - `matterhorn_bittensor_readiness` — run Bittensor readiness checks
+- `matterhorn_bittensor_create_watch` — create a public Bittensor watch
+- `matterhorn_bittensor_list_watches` — list configured Bittensor watches
+- `matterhorn_bittensor_check_watches` — evaluate Bittensor watches and return alert cards
 
 ## Safety
 

@@ -183,6 +183,27 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     return json(res, 200, { success: true, ready: true });
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    return json(res, 200, { success: true, watches: [], cards: [] });
+  }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    assert.equal(body.kind, "slippage");
+    assert.equal(body.netuid, 14);
+    assert.equal(body.threshold, 0.4);
+    return json(res, 200, {
+      success: true,
+      watch: { id: "bt-watch-mcp", kind: "slippage", netuid: 14, threshold: 0.4 },
+      watches: [],
+      cards: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
+    return json(res, 200, {
+      success: true,
+      evaluations: [{ watch: { id: "bt-watch-mcp", kind: "slippage", netuid: 14 }, status: "ok" }],
+      cards: [],
+    });
+  }
 
   return json(res, 404, { error: "not_found", path: url.pathname });
 });
@@ -279,6 +300,9 @@ try {
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_bittensor_chat",
+    "matterhorn_bittensor_create_watch",
+    "matterhorn_bittensor_list_watches",
+    "matterhorn_bittensor_check_watches",
   ]) {
     assert.ok(toolNames.includes(expected), `missing ${expected}`);
   }
@@ -417,6 +441,24 @@ try {
     arguments: {},
   }));
   assert.equal(readiness.ready, true);
+
+  const watchCreate = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_create_watch",
+    arguments: { kind: "slippage", netuid: 14, threshold: 0.4 },
+  }));
+  assert.equal(watchCreate.watch.id, "bt-watch-mcp");
+
+  const watchList = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_list_watches",
+    arguments: {},
+  }));
+  assert.equal(watchList.watches.length, 0);
+
+  const watchCheck = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_check_watches",
+    arguments: {},
+  }));
+  assert.equal(watchCheck.evaluations[0].status, "ok");
 
   await mcp.ask("tools/call", {
     name: "matterhorn_close_file_session",
