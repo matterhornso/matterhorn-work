@@ -47,6 +47,18 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
+    if (body.message === "Analyze validator 5ValidatorHotkey on subnet 14.") {
+      assert.equal(body.netuid, 14);
+      assert.equal(body.validatorHotkey, "5ValidatorHotkey");
+      assert.equal("ss58Address" in body, false);
+      return json(res, 200, {
+        success: true,
+        execution: "answered",
+        responseText: "Validator alert analysis ready.",
+        cards: [],
+        warnings: [],
+      });
+    }
     assert.equal(body.message, "show my TAO");
     assert.equal(body.ss58Address, "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX");
     assert.equal(body.netuid, 14);
@@ -424,6 +436,20 @@ try {
   assert.equal(watchDigest.alerts[0].notificationIntent, "review_validator");
   assert.equal(watchDigest.alerts[0].prompt, "Analyze validator 5ValidatorHotkey on subnet 14.");
 
+  const watchAct = await runCli(baseUrl, [
+    "bittensor",
+    "watch",
+    "act",
+    "--alert-key",
+    "validator:14:bt-watch-alert",
+  ]);
+  assert.equal(watchAct.success, true);
+  assert.equal(watchAct.selectedAlert.alertKey, "validator:14:bt-watch-alert");
+  assert.equal(watchAct.selectedAlert.validatorHotkey, "5ValidatorHotkey");
+  assert.equal(watchAct.action.prompt, "Analyze validator 5ValidatorHotkey on subnet 14.");
+  assert.equal(watchAct.chat.execution, "answered");
+  assert.equal(watchAct.chat.responseText, "Validator alert analysis ready.");
+
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
@@ -440,6 +466,8 @@ try {
       "POST /api/bittensor/monitoring/watchlist",
       "GET /api/bittensor/monitoring/check",
       "GET /api/bittensor/monitoring/check",
+      "GET /api/bittensor/monitoring/check",
+      "POST /api/bittensor/chat/execute",
     ],
   );
 
