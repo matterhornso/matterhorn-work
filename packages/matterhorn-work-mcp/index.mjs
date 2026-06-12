@@ -501,6 +501,17 @@ const tools = [
     description: "Check Bittensor watches and return current alert evaluations/cards.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "matterhorn_bittensor_watch_digest",
+    description: "Check Bittensor watches and return a compact agent-facing alert digest with next prompts/actions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        maxAlerts: { type: "number", description: "Optional positive alert cap. Defaults to 10 and is capped at 50." },
+        includeOk: { type: "boolean", description: "When true, include ok evaluations after alert entries." },
+      },
+    },
+  },
 ];
 
 function jsonRpc(id, result) {
@@ -808,11 +819,11 @@ async function matterhornDoctor(args = {}) {
   };
 }
 
-function parsePositiveInteger(value, fallback, max) {
+function parsePositiveInteger(value, fallback, max, label = "maxEvents") {
   if (value === undefined || value === null || value === "") return fallback;
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error("maxEvents must be a positive integer.");
+    throw new Error(`${label} must be a positive integer.`);
   }
   return max ? Math.min(parsed, max) : parsed;
 }
@@ -1006,6 +1017,55 @@ function matterhornUpstreamOpenWorkCheck(args = {}) {
   };
 }
 
+function summarizeWatchEvaluation(evaluation) {
+  const watch = evaluation?.watch || {};
+  const copilotActions = Array.isArray(evaluation?.copilotActions) ? evaluation.copilotActions : [];
+  const firstAction = copilotActions[0] || {};
+  return {
+    status: evaluation?.status || "unknown",
+    alertKey: evaluation?.alertKey || null,
+    notificationIntent: evaluation?.notificationIntent || null,
+    watchId: watch.id || evaluation?.watchId || null,
+    kind: watch.kind || evaluation?.kind || null,
+    label: watch.label || evaluation?.label || null,
+    netuid: watch.netuid ?? evaluation?.netuid ?? null,
+    ss58Address: watch.ss58Address || evaluation?.ss58Address || null,
+    validatorHotkey: watch.validatorHotkey || evaluation?.validatorHotkey || null,
+    reason: evaluation?.reason || watch.reason || null,
+    prompt: firstAction.prompt || evaluation?.prompt || null,
+    actionLabel: firstAction.label || null,
+  };
+}
+
+async function matterhornBittensorWatchDigest(args = {}) {
+  const result = await callServer("/api/bittensor/monitoring/check");
+  const evaluations = Array.isArray(result?.evaluations) ? result.evaluations : [];
+  const maxAlerts = parsePositiveInteger(args.maxAlerts, 10, 50, "maxAlerts");
+  const statusCounts = evaluations.reduce((counts, evaluation) => {
+    const status = evaluation?.status || "unknown";
+    counts[status] = (counts[status] || 0) + 1;
+    return counts;
+  }, {});
+  const alertLike = evaluations.filter((evaluation) => {
+    const status = evaluation?.status;
+    return status && status !== "ok";
+  });
+  const okLike = args.includeOk === true
+    ? evaluations.filter((evaluation) => (evaluation?.status || "unknown") === "ok")
+    : [];
+  const queue = [...alertLike, ...okLike].slice(0, maxAlerts).map(summarizeWatchEvaluation);
+  return {
+    ok: result?.success !== false,
+    checkedAt: new Date().toISOString(),
+    total: evaluations.length,
+    alertCount: alertLike.length,
+    statusCounts,
+    alerts: queue,
+    cards: result?.cards || [],
+    source: "matterhorn_bittensor_check_watches",
+  };
+}
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1131,6 +1191,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/monitoring/watchlist");
     case "matterhorn_bittensor_check_watches":
       return callServer("/api/bittensor/monitoring/check");
+    case "matterhorn_bittensor_watch_digest":
+      return matterhornBittensorWatchDigest(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
