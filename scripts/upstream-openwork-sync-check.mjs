@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 
-const DEFAULTS = {
+export const DEFAULTS = {
   upstreamUrl: process.env.OPENWORK_UPSTREAM_REMOTE || "https://github.com/different-ai/openwork.git",
   upstreamBranch: process.env.OPENWORK_UPSTREAM_BRANCH || "main",
   baseBranch: process.env.MATTERHORN_WORK_BASE_BRANCH || "dev",
 };
 
-const CONFLICT_ZONES = [
+export const CONFLICT_ZONES = [
   {
     name: "Branding and i18n",
     paths: ["apps/app/src/i18n", "README.md", "docs"],
@@ -45,7 +46,7 @@ const CONFLICT_ZONES = [
   },
 ];
 
-const VERIFICATION_COMMANDS = [
+export const VERIFICATION_COMMANDS = [
   "pnpm test:upstream-openwork-sync",
   "pnpm test:cli-packaging-rename",
   "pnpm test:opencode-abstraction-copy",
@@ -55,7 +56,7 @@ const VERIFICATION_COMMANDS = [
   "pnpm test:bittensor-live-qa",
 ];
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const parsed = {
     upstreamUrl: DEFAULTS.upstreamUrl,
     upstreamBranch: DEFAULTS.upstreamBranch,
@@ -91,7 +92,7 @@ function parseArgs(argv) {
   return parsed;
 }
 
-function branchDateSlug(date) {
+export function branchDateSlug(date) {
   const slug = String(date)
     .trim()
     .replace(/[^0-9A-Za-z]+/g, "-")
@@ -99,7 +100,7 @@ function branchDateSlug(date) {
   return slug || new Date().toISOString().slice(0, 10);
 }
 
-function inspectRemote(upstreamUrl, upstreamBranch) {
+export function inspectRemote(upstreamUrl, upstreamBranch) {
   try {
     const output = execFileSync("git", ["ls-remote", "--heads", upstreamUrl, upstreamBranch], {
       encoding: "utf8",
@@ -124,7 +125,7 @@ function inspectRemote(upstreamUrl, upstreamBranch) {
   }
 }
 
-function buildPlan(options) {
+export function buildPlan(options) {
   const syncBranch = `codex/sync-openwork-${branchDateSlug(options.date)}`;
   const remoteStatus = options.remote
     ? inspectRemote(options.upstreamUrl, options.upstreamBranch)
@@ -153,7 +154,7 @@ function buildPlan(options) {
   };
 }
 
-function printHuman(plan) {
+export function printHuman(plan) {
   console.log("Matterhorn Work upstream OpenWork sync intake");
   console.log("");
   console.log(`Upstream: ${plan.upstreamUrl} (${plan.upstreamBranch})`);
@@ -177,7 +178,7 @@ function printHuman(plan) {
   }
 }
 
-function printHelp() {
+export function printHelp() {
   console.log(`Usage: node scripts/upstream-openwork-sync-check.mjs [options]
 
 Options:
@@ -191,19 +192,26 @@ Options:
 `);
 }
 
-try {
-  const options = parseArgs(process.argv.slice(2));
-  if (options.help) {
-    printHelp();
-    process.exit(0);
+export function runCli(argv = process.argv.slice(2)) {
+  try {
+    const options = parseArgs(argv);
+    if (options.help) {
+      printHelp();
+      return 0;
+    }
+    const plan = buildPlan(options);
+    if (options.json) {
+      console.log(JSON.stringify(plan, null, 2));
+    } else {
+      printHuman(plan);
+    }
+    return 0;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
   }
-  const plan = buildPlan(options);
-  if (options.json) {
-    console.log(JSON.stringify(plan, null, 2));
-  } else {
-    printHuman(plan);
-  }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(runCli());
 }
