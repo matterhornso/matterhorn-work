@@ -113,6 +113,9 @@ function stageDetail(stage) {
   if (stage.execution) parts.push(`execution: ${stage.execution}`);
   if (stage.cards) parts.push(`cards: ${formatValue(stage.cards)}`);
   if (stage.readinessStatus) parts.push(`readiness: ${stage.readinessStatus}`);
+  if (stage.capabilityCount !== undefined) parts.push(`capabilities: ${stage.capabilityCount}`);
+  if (stage.capabilityLevel) parts.push(`capability: ${stage.capabilityLevel}`);
+  if (stage.serviceAdapter) parts.push(`adapter: ${stage.serviceAdapter}`);
   if (stage.contextId) parts.push(`context: ${stage.contextId}`);
   if (stage.requiresExternalSignature !== undefined) parts.push(`external signature: ${stage.requiresExternalSignature}`);
   if (stage.payloadSha256) parts.push(`payload sha256: ${stage.payloadSha256}`);
