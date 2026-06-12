@@ -363,7 +363,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_chat",
-    description: "Run the safe Matterhorn Work Bittensor chat workflow against the configured server.",
+    description: "Default first Matterhorn Work tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
     inputSchema: {
       type: "object",
       properties: {
@@ -391,12 +391,12 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_list_capabilities",
-    description: "List Bittensor subnet capability manifests from the configured Matterhorn Work server.",
+    description: "List Bittensor subnet capability manifests from the configured Matterhorn Work server. Use before previewing or invoking any direct subnet service.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "matterhorn_bittensor_get_subnet_capability",
-    description: "Read one Bittensor subnet capability manifest by netuid.",
+    description: "Read one Bittensor subnet capability manifest by netuid. Use before previewing or invoking any direct subnet service.",
     inputSchema: {
       type: "object",
       properties: {
@@ -448,7 +448,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_preview_subnet_invocation",
-    description: "Preview a Bittensor subnet adapter call before invocation, including request hash, auth/cost context, warnings, and confirmation text.",
+    description: "Preview a Bittensor subnet adapter call before invocation. First inspect the subnet capability manifest for adapter support, auth, cost, schemas, benefits, and safety notes; this preview returns request hash, warnings, and confirmation text.",
     inputSchema: {
       type: "object",
       properties: {
@@ -462,7 +462,7 @@ const tools = [
   },
   {
     name: "matterhorn_bittensor_invoke_subnet",
-    description: "Invoke a supported Bittensor subnet adapter after explicit preview confirmation. Requires the preview request SHA-256.",
+    description: "Invoke a supported Bittensor subnet adapter only after capability inspection, preview, explicit confirmation, and request SHA-256 verification.",
     inputSchema: {
       type: "object",
       properties: {

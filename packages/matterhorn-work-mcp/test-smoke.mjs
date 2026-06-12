@@ -392,6 +392,12 @@ try {
 
   const schemaText = JSON.stringify(listed.result.tools);
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
+  const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
+  assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
+  assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
+  assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
+  assert.match(descriptionFor("matterhorn_bittensor_preview_subnet_invocation"), /First inspect the subnet capability manifest/i);
+  assert.match(descriptionFor("matterhorn_bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
 
   const status = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_status", arguments: {} }));
   assert.equal(status.health.ok, true);
