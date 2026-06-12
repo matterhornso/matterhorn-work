@@ -258,6 +258,9 @@ export type BittensorSubnetInvocationPreview = {
     task: string | null;
     ss58Address: string | null;
   };
+  requestJson: string;
+  requestSha256: string;
+  confirmationPrompt: string;
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
   safetyNotes: string[];

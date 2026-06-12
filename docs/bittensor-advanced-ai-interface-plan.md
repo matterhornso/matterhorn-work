@@ -110,8 +110,9 @@ Use the best Bittensor subnet available to help with this task.
 Current implementation:
 
 - Chat-first subnet use now prepares a service review card before any configured adapter call.
-- The preview shows adapter support, auth requirement, cost model, request context, schemas, warnings, and confirmation action.
+- The preview shows adapter support, auth requirement, cost model, request context, request hash, schemas, warnings, and confirmation action.
 - Direct adapter invocation remains a lower-level explicit API path; ordinary chat does not silently call service adapters.
+- Explicit invoke calls can pass the reviewed request hash so Matterhorn rejects mismatched service-call confirmations.
 
 ## Phase 6: Autonomous Monitoring And Bittensor Agent Ops
 
