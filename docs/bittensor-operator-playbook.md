@@ -297,7 +297,7 @@ Expected behavior:
 - missing wallet context returns one clarification question;
 - Matterhorn never asks for seed phrases, mnemonics, private keys, wallet exports, or signed payloads.
 
-## 7. Prepare Staking 1 TAO Safely
+## 9. Prepare Staking 1 TAO Safely
 
 Staking preparation needs explicit public context. Matterhorn must not guess the netuid or validator hotkey.
 
@@ -424,7 +424,7 @@ Expected behavior:
 - submit accepts only an externally signed payload plus public signer metadata;
 - Matterhorn still does not import keys, custody funds, or ask for raw signing material.
 
-## 8. Follow-Up Context
+## 10. Follow-Up Context
 
 Matterhorn can return reusable public Bittensor context. Use `contextId` for follow-ups when present.
 
@@ -448,7 +448,39 @@ matterhorn-work bittensor chat \
 
 Context may remember public values such as SS58 address, netuid, amount, validator hotkey, coldkey label, recipient, destination, last intent, and warnings. Context must not store or expose signing material.
 
-## 9. Unsupported Subnet Service Calls
+## 11. Monitoring Watches And Alert Digest
+
+Matterhorn watches are the bridge from one-off Bittensor answers to an ongoing copilot loop. Use them when a user asks to monitor subnet health, wallet exposure, validator drift, emissions, stale data, or slippage warnings.
+
+Create a watch through chat when possible:
+
+```bash
+matterhorn-work bittensor chat \
+  --message "Watch subnet 14 for validator concentration and stale data." \
+  --netuid 14 \
+  --json
+```
+
+For agent operators, use the watch digest after watches exist:
+
+```json
+{
+  "tool": "matterhorn_bittensor_watch_digest",
+  "arguments": {
+    "maxAlerts": 5
+  }
+}
+```
+
+Expected behavior:
+
+- output summarizes total watches, alert counts, and status counts;
+- alert entries include watch id, kind, label, netuid, wallet or validator context when available, alert key, notification intent, reason, and a suggested next prompt/action;
+- `maxAlerts` keeps the operator loop compact;
+- `includeOk` can be enabled for full status sweeps;
+- digest output is read-only and never requests signing material.
+
+## 12. Unsupported Subnet Service Calls
 
 When the user asks to “use subnet X for this task,” Matterhorn should try the supported subnet adapter path only when a service adapter is configured.
 
@@ -502,7 +534,7 @@ For lower-level MCP/API use, service calls should follow a preview-confirm-invok
 
 This keeps direct adapter execution explicit while letting Matterhorn explain unsupported subnets without pretending a service call happened.
 
-## 10. MCP Sequence For Bittensor Operators
+## 13. MCP Sequence For Bittensor Operators
 
 Ask Codex or Claude to follow this exact Bittensor sequence:
 
@@ -534,11 +566,13 @@ Use the Matterhorn Work MCP server for Bittensor.
 10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
 11. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
 12. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-13. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-14. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+13. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+14. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+15. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+16. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
-## 11. What Good Looks Like
+## 14. What Good Looks Like
 
 A good Bittensor operator response:
 

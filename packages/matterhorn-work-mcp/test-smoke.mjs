@@ -275,7 +275,16 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
     return json(res, 200, {
       success: true,
-      evaluations: [{ watch: { id: "bt-watch-mcp", kind: "slippage", netuid: 14 }, status: "ok" }],
+      evaluations: [
+        { watch: { id: "bt-watch-mcp", kind: "slippage", netuid: 14 }, status: "ok" },
+        {
+          watch: { id: "bt-watch-alert", kind: "validator", netuid: 14, validatorHotkey: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX", label: "Validator drift" },
+          status: "alert",
+          alertKey: "validator:14:bt-watch-alert",
+          notificationIntent: "review_validator",
+          copilotActions: [{ label: "Analyze validator", prompt: "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14." }],
+        },
+      ],
       cards: [],
     });
   }
@@ -386,6 +395,7 @@ try {
     "matterhorn_bittensor_create_watch",
     "matterhorn_bittensor_list_watches",
     "matterhorn_bittensor_check_watches",
+    "matterhorn_bittensor_watch_digest",
   ]) {
     assert.ok(toolNames.includes(expected), `missing ${expected}`);
   }
@@ -605,6 +615,17 @@ try {
     arguments: {},
   }));
   assert.equal(watchCheck.evaluations[0].status, "ok");
+
+  const watchDigest = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_watch_digest",
+    arguments: { maxAlerts: 2 },
+  }));
+  assert.equal(watchDigest.total, 2);
+  assert.equal(watchDigest.alertCount, 1);
+  assert.equal(watchDigest.statusCounts.alert, 1);
+  assert.equal(watchDigest.alerts[0].alertKey, "validator:14:bt-watch-alert");
+  assert.equal(watchDigest.alerts[0].notificationIntent, "review_validator");
+  assert.equal(watchDigest.alerts[0].prompt, "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.");
 
   await mcp.ask("tools/call", {
     name: "matterhorn_close_file_session",

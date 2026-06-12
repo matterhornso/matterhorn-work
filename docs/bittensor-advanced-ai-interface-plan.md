@@ -137,6 +137,7 @@ Current implementation:
 - Watches persist validator hotkey, wallet scope, threshold, reason, and last-alert timestamp where available.
 - Watch checks return actionable alert prompts that can send the user back into subnet analysis, wallet intelligence, or validator deep dives.
 - Watch evaluations now expose an alert key, notification intent, and multiple copilot actions so chat, MCP clients, and future UI alerts can route the user into the safest next step.
+- `matterhorn_bittensor_watch_digest` gives MCP agents a compact alert queue with watch ids, alert keys, notification intents, and next prompts/actions.
 
 ## Cross-Cutting: Upstream OpenWork Update Intake
 
