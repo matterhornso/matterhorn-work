@@ -246,6 +246,17 @@ matterhorn-work bittensor readiness \
   --openwork-url http://<host>:8787 \
   --token <client-token> \
   --json
+
+matterhorn-work bittensor capabilities \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --json
+
+matterhorn-work bittensor capability \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --netuid 14 \
+  --json
 ```
 
 For no-custody Bittensor action flows, prepare an unsigned preview first, then create an external-signing handoff from that preview. Submit only after an external signer returns a signed payload:
