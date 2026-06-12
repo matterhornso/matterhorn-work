@@ -4,6 +4,8 @@ This playbook is the Bittensor-specific workflow for Codex, Claude Code, Claude 
 
 Use the general [Agent Operator Workflow](./agent-operator-workflow.md) first to start Matterhorn Work, run the doctor, configure MCP, and confirm the server is healthy. Then use this playbook for Bittensor tasks.
 
+For a repeatable pass/fail probe of this playbook, run [Matterhorn Work Bittensor Live QA](./bittensor-live-qa.md).
+
 The product rule is:
 
 ```text

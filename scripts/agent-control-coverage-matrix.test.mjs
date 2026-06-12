@@ -60,6 +60,7 @@ for (const scriptName of [
   "test:agent-control-coverage-matrix",
   "test:agent-operator-workflow",
   "test:bittensor-operator-playbook",
+  "test:bittensor-live-qa",
   "test:agent-control-doctor",
   "test:agent-control-live-qa",
   "test:agent-control-api-docs",
@@ -82,9 +83,12 @@ for (const forbidden of [
 assert.ok(surface.includes("./agent-control-coverage-matrix.md"), "agent control surface should link the coverage matrix");
 assert.ok(surface.includes("./agent-operator-workflow.md"), "agent control surface should link the operator workflow");
 assert.ok(surface.includes("./bittensor-operator-playbook.md"), "agent control surface should link the Bittensor operator playbook");
+assert.ok(surface.includes("./bittensor-live-qa.md"), "agent control surface should link the Bittensor live QA harness");
 assert.ok(surface.includes("./agent-control-live-qa.md"), "agent control surface should link the live QA harness");
 assert.ok(matrix.includes("Agent operator workflow"), "coverage matrix should list the operator workflow");
 assert.ok(matrix.includes("Bittensor operator playbook"), "coverage matrix should list the Bittensor operator playbook");
+assert.ok(matrix.includes("Bittensor live QA harness"), "coverage matrix should list the Bittensor live QA harness");
+assert.ok(matrix.includes("node scripts/bittensor-live-qa.mjs"), "coverage matrix should list the Bittensor live QA command");
 assert.ok(matrix.includes("node scripts/agent-control-live-qa.mjs"), "coverage matrix should list the live QA harness");
 assert.ok(api.includes("GET /api/bittensor/readiness"), "API docs should include the Bittensor readiness route used by live QA");
 
