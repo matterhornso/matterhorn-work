@@ -6,6 +6,8 @@ The harness calls the same non-custodial server routes used by MCP and CLI agent
 
 - `GET /api/bittensor/readiness`
 - `POST /api/bittensor/chat/execute`
+- `POST /api/bittensor/extrinsics/prepare`
+- `POST /api/bittensor/extrinsics/handoff`
 - `POST /api/bittensor/subnets/:netuid/preview`
 
 It validates the Bittensor product behavior that matters most for operators:
@@ -20,6 +22,7 @@ It validates the Bittensor product behavior that matters most for operators:
 - validator comparison returns validator selection cards;
 - incomplete staking prompts ask for a validator hotkey instead of guessing;
 - complete staking prompts return unsigned previews that require external signing;
+- lower-level extrinsic prepare and signing handoff routes return unsigned previews plus checksumed handoff payloads;
 - unsupported subnet service calls explain that no adapter is configured yet;
 - direct subnet adapter previews return a request SHA-256 and require confirmation without invoking the adapter;
 - no request or report contains secret-shaped fields.
@@ -51,7 +54,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-The full run still does not sign or broadcast anything. It adds watch-only wallet snapshot, stake-position, and wallet-intelligence checks. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
+The full run still does not sign or broadcast anything. It adds watch-only wallet snapshot, stake-position, wallet-intelligence, lower-level unsigned extrinsic preview, and external-signing handoff checks. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
 
 ## Useful Options
 
@@ -81,6 +84,7 @@ The JSON report is intentionally compact:
   "artifacts": {
     "readinessStatus": "ready",
     "bittensorContextId": "bt-chat-...",
+    "signingHandoffPayloadSha256": "...",
     "subnetPreviewRequestSha256": "..."
   },
   "nextSteps": []

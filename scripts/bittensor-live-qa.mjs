@@ -285,6 +285,7 @@ async function runChatCore() {
   });
 
   if (config.validatorHotkey && (config.coldkey || config.ss58Address)) {
+    let extrinsicPreview = null;
     await runStep("bittensor.stake.unsigned_preview", "Prepare unsigned external-signer staking preview", async () => {
       const result = await chat(`prepare staking ${config.amountTao} TAO on subnet ${config.netuid}`, {
         ss58Address: config.ss58Address || config.coldkey,
@@ -307,9 +308,68 @@ async function runChatCore() {
         cards: cardKinds(result.body),
       };
     });
+
+    await runStep("bittensor.extrinsic.prepare", "Prepare lower-level unsigned extrinsic preview", async () => {
+      const result = await request("/api/bittensor/extrinsics/prepare", {
+        method: "POST",
+        body: {
+          action: "stake",
+          netuid: config.netuid,
+          amountTao: config.amountTao,
+          coldkey: config.coldkey || config.ss58Address,
+          hotkey: config.validatorHotkey,
+          rateTolerance: config.rateTolerance,
+        },
+      });
+      const preview = result.body?.preview || {};
+      if (result.body?.success !== true) {
+        throw new Error("extrinsic prepare response success was not true");
+      }
+      if (preview.requiresExternalSignature !== true) {
+        throw new Error("extrinsic preview did not require an external signature");
+      }
+      extrinsicPreview = preview;
+      artifacts.extrinsicPreviewAction = preview.action || null;
+      return {
+        latencyMs: result.latencyMs,
+        action: preview.action || null,
+        requiresExternalSignature: preview.requiresExternalSignature,
+        cards: cardKinds(result.body),
+      };
+    });
+
+    await runStep("bittensor.extrinsic.handoff", "Create checksumed external-signing handoff", async () => {
+      if (!extrinsicPreview) {
+        throw new Error("extrinsic preview was not available");
+      }
+      const result = await request("/api/bittensor/extrinsics/handoff", {
+        method: "POST",
+        body: { preview: extrinsicPreview },
+      });
+      const handoff = result.body?.handoff || {};
+      const payloadSha256 = String(handoff.payloadSha256 || "");
+      if (result.body?.success !== true) {
+        throw new Error("extrinsic handoff response success was not true");
+      }
+      if (payloadSha256.length !== 64) {
+        throw new Error("extrinsic handoff did not return a 64-character payload SHA-256");
+      }
+      artifacts.signingHandoffPayloadSha256 = payloadSha256;
+      return {
+        latencyMs: result.latencyMs,
+        payloadSha256,
+        cards: cardKinds(result.body),
+      };
+    });
   } else {
     add("skip", "bittensor.stake.unsigned_preview", "Prepare unsigned external-signer staking preview", {
       hint: "Pass --ss58-address or --coldkey plus --validator-hotkey to test the complete unsigned staking preview path.",
+    });
+    add("skip", "bittensor.extrinsic.prepare", "Prepare lower-level unsigned extrinsic preview", {
+      hint: "Pass --ss58-address or --coldkey plus --validator-hotkey to test lower-level extrinsic preview generation.",
+    });
+    add("skip", "bittensor.extrinsic.handoff", "Create checksumed external-signing handoff", {
+      hint: "Pass --ss58-address or --coldkey plus --validator-hotkey to test external-signing handoff creation.",
     });
   }
 
