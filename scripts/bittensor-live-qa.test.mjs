@@ -258,6 +258,51 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    assert.equal(body.kind, "slippage");
+    assert.equal(body.netuid, 14);
+    assert.equal(body.threshold, 0.01);
+    return json(res, 200, {
+      success: true,
+      watch: {
+        id: "watch-live-qa",
+        kind: "slippage",
+        label: body.label,
+        netuid: 14,
+        threshold: 0.01,
+      },
+      watches: [],
+      cards: [card("watchlist", "Watch created")],
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/watchlist") {
+    return json(res, 200, {
+      success: true,
+      watches: [{
+        id: "watch-live-qa",
+        kind: "slippage",
+        label: "Live QA slippage watch for subnet 14",
+        netuid: 14,
+        threshold: 0.01,
+      }],
+      cards: [card("watchlist", "Watch list")],
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
+    return json(res, 200, {
+      success: true,
+      evaluations: [{
+        watch: { id: "watch-live-qa", kind: "slippage", netuid: 14 },
+        status: "alert",
+        alertKey: "slippage:14",
+        notificationIntent: "review_slippage",
+      }],
+      cards: [card("watchlist", "Watch check")],
+    });
+  }
+
   return json(res, 404, { error: "not_found", path: url.pathname });
 });
 
@@ -331,6 +376,9 @@ try {
     "bittensor.extrinsic.handoff",
     "bittensor.subnet.unsupported_adapter",
     "bittensor.subnet.invocation_preview",
+    "bittensor.monitoring.watch_create",
+    "bittensor.monitoring.watch_list",
+    "bittensor.monitoring.watch_check",
   ]) {
     assert.ok(report.stages.some((stage) => stage.id === expected && stage.status === "pass"), `missing passing stage: ${expected}`);
   }
@@ -341,7 +389,11 @@ try {
   assert.equal(report.artifacts.extrinsicPreviewAction, "stake");
   assert.equal(report.artifacts.signingHandoffPayloadSha256, "d".repeat(64));
   assert.equal(report.artifacts.subnetPreviewRequestSha256, "c".repeat(64));
-  assert.equal(report.requestCount, 17);
+  assert.equal(report.artifacts.watchId, "watch-live-qa");
+  assert.equal(report.artifacts.watchCount, 1);
+  assert.equal(report.artifacts.watchEvaluationCount, 1);
+  assert.equal(report.artifacts.watchAlertCount, 1);
+  assert.equal(report.requestCount, 20);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
@@ -363,6 +415,9 @@ try {
       "POST /api/bittensor/extrinsics/handoff",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/subnets/14/preview",
+      "POST /api/bittensor/monitoring/watchlist",
+      "GET /api/bittensor/monitoring/watchlist",
+      "GET /api/bittensor/monitoring/check",
     ],
   );
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export|keyfile|suri/i.test(JSON.stringify(requests)), false);

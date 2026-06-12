@@ -11,6 +11,8 @@ The harness calls the same non-custodial server routes used by MCP and CLI agent
 - `POST /api/bittensor/extrinsics/prepare`
 - `POST /api/bittensor/extrinsics/handoff`
 - `POST /api/bittensor/subnets/:netuid/preview`
+- `GET/POST /api/bittensor/monitoring/watchlist`
+- `GET /api/bittensor/monitoring/check`
 
 It validates the Bittensor product behavior that matters most for operators:
 
@@ -28,6 +30,7 @@ It validates the Bittensor product behavior that matters most for operators:
 - lower-level extrinsic prepare and signing handoff routes return unsigned previews plus checksumed handoff payloads;
 - unsupported subnet service calls explain that no adapter is configured yet;
 - direct subnet adapter previews return a request SHA-256 and require confirmation without invoking the adapter;
+- monitoring watch create/list/check paths return watch IDs, evaluation counts, alert counts, and alert-routing hints;
 - no request or report contains secret-shaped fields.
 
 ## Basic Run
@@ -39,7 +42,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-This basic run does not need a wallet address. It checks readiness, subnet capability registry reads, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, unsupported-adapter behavior, and direct subnet adapter preview safety.
+This basic run does not need a wallet address. It checks readiness, subnet capability registry reads, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, unsupported-adapter behavior, direct subnet adapter preview safety, and monitoring watch create/list/check behavior.
 
 ## Full Wallet And Preview Run
 
@@ -82,7 +85,7 @@ The JSON report is intentionally compact:
 ```json
 {
   "ready": true,
-  "summary": { "pass": 9, "warn": 0, "fail": 0, "skip": 2 },
+  "summary": { "pass": 12, "warn": 0, "fail": 0, "skip": 2 },
   "stages": [],
   "artifacts": {
     "readinessStatus": "ready",
@@ -90,7 +93,9 @@ The JSON report is intentionally compact:
     "selectedCapabilityLevel": "adapter_required",
     "bittensorContextId": "bt-chat-...",
     "signingHandoffPayloadSha256": "...",
-    "subnetPreviewRequestSha256": "..."
+    "subnetPreviewRequestSha256": "...",
+    "watchId": "watch-...",
+    "watchAlertCount": 0
   },
   "nextSteps": []
 }
