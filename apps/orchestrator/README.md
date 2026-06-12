@@ -169,6 +169,20 @@ matterhorn-work mcp config \
 
 Use `--profile server` to include only the unified `matterhorn-work-mcp` server-control MCP. Use `--target env` to print shell exports instead of JSON. Flags override `MATTERHORN_WORK_*` environment variables, with legacy `OPENWORK_*` variables preserved as fallbacks.
 
+## Agent doctor
+
+Run one read-only readiness report before driving Matterhorn Work from Codex, Claude Code, or another agent:
+
+```bash
+matterhorn-work doctor \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --host-token <host-token> \
+  --json
+```
+
+Add `--workspace-id <id> --session-id <id>` to probe chat status/snapshot/event routes for a real session. Add `--file-session-id <id>` to probe file catalog/event routes. Add `--require-browser` only when the task depends on the desktop browser panel, and `--strict` when automation should exit nonzero if required checks fail.
+
 ## Chat session events
 
 Create a chat session, submit a prompt, and inspect status through the stable Matterhorn Work server routes:

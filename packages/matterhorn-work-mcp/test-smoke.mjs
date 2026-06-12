@@ -89,10 +89,12 @@ const server = createServer(async (req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/events") {
     assert.equal(req.headers.accept, "text/event-stream");
-    assert.equal(url.searchParams.get("maxEvents"), "2");
+    assert.ok(["1", "2"].includes(url.searchParams.get("maxEvents")), "unexpected maxEvents for session event route");
     assert.equal(url.searchParams.get("snapshot"), "true");
-    assert.equal(url.searchParams.get("details"), "true");
-    assert.equal(url.searchParams.get("since"), "7");
+    if (url.searchParams.get("maxEvents") === "2") {
+      assert.equal(url.searchParams.get("details"), "true");
+      assert.equal(url.searchParams.get("since"), "7");
+    }
     res.writeHead(200, { "content-type": "text/event-stream" });
     res.write(
       `id: 8\nevent: session.snapshot\ndata: ${JSON.stringify({
@@ -141,7 +143,9 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { items: [{ path: "README.md", kind: "file", bytes: 12 }], total: 1 });
   }
   if (req.method === "GET" && url.pathname === "/files/sessions/fs_1/catalog/events") {
-    assert.equal(url.searchParams.get("since"), "4");
+    if (url.searchParams.has("since")) {
+      assert.equal(url.searchParams.get("since"), "4");
+    }
     return json(res, 200, {
       cursor: 5,
       events: [{ cursor: 5, type: "changed", path: "README.md" }],
@@ -257,6 +261,7 @@ try {
   const listed = await mcp.ask("tools/list");
   const toolNames = listed.result.tools.map((tool) => tool.name);
   for (const expected of [
+    "matterhorn_doctor",
     "matterhorn_status",
     "matterhorn_list_workspaces",
     "matterhorn_create_session",
@@ -284,6 +289,16 @@ try {
   const status = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_status", arguments: {} }));
   assert.equal(status.health.ok, true);
   assert.equal(status.status.ok, true);
+
+  const doctor = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_doctor",
+    arguments: { workspaceId: "ws_1", sessionId: "ses_1", fileSessionId: "fs_1" },
+  }));
+  assert.equal(doctor.ready, true);
+  assert.equal(doctor.summary.fail, 0);
+  assert.ok(doctor.checks.some((check) => check.id === "bittensor.readiness" && check.status === "pass"));
+  assert.ok(doctor.checks.some((check) => check.id === "session.events" && check.status === "pass"));
+  assert.ok(doctor.checks.some((check) => check.id === "files.events" && check.status === "pass"));
 
   const workspaces = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_list_workspaces", arguments: {} }));
   assert.equal(workspaces.items[0].id, "ws_1");

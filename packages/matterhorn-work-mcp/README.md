@@ -60,6 +60,7 @@ For app-specific setup in Codex, Claude Code, Claude Desktop, Cursor, and generi
 
 The HTTP routes used by these tools are documented in [`docs/agent-control-api.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-control-api.md). The session-progress stream is documented in [`docs/agent-session-event-stream.md`](https://github.com/matterhornso/matterhorn-work/blob/dev/docs/agent-session-event-stream.md); use `matterhorn_watch_session_events` for bounded progress batches when the client cannot hold an open Server-Sent Events stream directly.
 
+- `matterhorn_doctor` — one readiness report across server health, client token, workspaces, optional session/file probes, approvals, desktop browser bridge, and Bittensor readiness
 - `matterhorn_status` — health, status, and server capabilities
 - `matterhorn_list_workspaces` — visible workspaces
 - `matterhorn_create_session` — create a chat session with a writable collaborator/owner token

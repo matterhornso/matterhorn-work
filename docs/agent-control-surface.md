@@ -54,23 +54,39 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
    }
    ```
 
-5. Use `matterhorn_status` to confirm the server.
+5. Use `matterhorn_doctor` to confirm the server, token, workspaces, Bittensor readiness, optional session/file routes, approval access, and desktop browser bridge state in one report.
 
-6. Use `matterhorn_list_workspaces`, `matterhorn_list_sessions`, `matterhorn_get_session_snapshot`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
+6. Use `matterhorn_status` when you only need raw health/status/capability payloads.
 
-7. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Work to act in chat. Prompt submission still goes through the server route and normal approval policy.
+7. Use `matterhorn_list_workspaces`, `matterhorn_list_sessions`, `matterhorn_get_session_snapshot`, `matterhorn_create_file_session`, `matterhorn_file_catalog`, and `matterhorn_read_files` to inspect a workspace.
 
-8. Use `matterhorn_watch_session_events` for bounded session progress batches, or `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
+8. Use `matterhorn_create_session` and `matterhorn_submit_session_prompt` when the user wants Matterhorn Work to act in chat. Prompt submission still goes through the server route and normal approval policy.
 
-9. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
+9. Use `matterhorn_watch_session_events` for bounded session progress batches, or `matterhorn_get_session_status` to poll whether a submitted prompt is still running before fetching another session snapshot.
 
-10. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
+10. Use `matterhorn_write_files` only when the user explicitly wants edits. Writes still go through Matterhorn Work file-session APIs and approval policy.
 
-11. When MCP is unavailable, use `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events` as the CLI fallback for the same session-control loop.
+11. Use `matterhorn_bittensor_chat` for ordinary Bittensor requests before lower-level Bittensor tools.
 
-12. For Bittensor without MCP, use `matterhorn-work bittensor chat --message "<prompt>"` and `matterhorn-work bittensor readiness` as the CLI fallback for the same non-custodial server routes.
+12. When MCP is unavailable, use `matterhorn-work doctor` first, then `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events` as the CLI fallback for the same session-control loop.
 
-13. When changing the session-progress path, run `pnpm test:agent-session-progress-smoke` to verify direct HTTP, MCP watch, and CLI fallback behavior against the same event-stream envelope.
+13. For Bittensor without MCP, use `matterhorn-work bittensor chat --message "<prompt>"` and `matterhorn-work bittensor readiness` as the CLI fallback for the same non-custodial server routes.
+
+14. When changing the session-progress path, run `pnpm test:agent-session-progress-smoke` to verify direct HTTP, MCP watch, and CLI fallback behavior against the same event-stream envelope.
+
+## Doctor Readiness
+
+`matterhorn_doctor` and `matterhorn-work doctor` are read-only readiness aggregators. They check:
+
+- public server health;
+- client token presence plus `/status`, `/capabilities`, and `/workspaces`;
+- Bittensor readiness through `/api/bittensor/readiness`;
+- optional chat session status/snapshot/event routes when a workspace and session id are supplied;
+- optional file catalog/event routes when a file session id is supplied;
+- optional approval listing when a host token is configured;
+- optional desktop browser bridge health when the desktop app publishes a UI-control discovery file.
+
+Use `requireBrowser` in MCP or `--require-browser` in CLI only when the task truly depends on the desktop browser panel. Use `--strict` in CLI automation when a non-ready report should exit with a nonzero status.
 
 ## Safety
 
@@ -83,3 +99,4 @@ See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-st
 
 1. Add richer message/tool deltas to the session event stream as the underlying Matterhorn Work engine events stabilize.
 2. Keep browser-control live QA current as new desktop actions are added.
+3. Keep `matterhorn_doctor` current as new stable MCP/API/CLI surfaces are added.

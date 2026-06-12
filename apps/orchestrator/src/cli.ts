@@ -159,6 +159,19 @@ type ParsedArgs = {
   flags: Map<string, string | boolean>;
 };
 
+type DoctorCheckStatus = "pass" | "warn" | "fail" | "skip";
+
+type DoctorCheck = {
+  id: string;
+  label: string;
+  status: DoctorCheckStatus;
+  required: boolean;
+  latencyMs?: number;
+  details?: unknown;
+  error?: string;
+  hint?: string;
+};
+
 type ChildHandle = {
   name: string;
   child: ReturnType<typeof spawn>;
@@ -3731,6 +3744,7 @@ function printHelp(): void {
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work bittensor chat --message <text> [options]",
     "  matterhorn-work bittensor readiness [options]",
+    "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
     "",
@@ -3748,6 +3762,7 @@ function printHelp(): void {
     "  files                   Manage file sessions and batch file sync",
     "  sessions                Manage chat sessions and read progress events",
     "  bittensor               Run Bittensor chat/readiness workflows",
+    "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
     "",
@@ -3774,6 +3789,10 @@ function printHelp(): void {
     "  --openwork-host-token <t> Host token for approvals",
     "  --workspace-id <id>       Workspace id for file session commands",
     "  --session-id <id>         File or chat session id for session commands",
+    "  --file-session-id <id>    File session id for doctor file checks",
+    "  --require-browser         Make doctor fail when desktop browser bridge is unavailable",
+    "  --strict                  Exit nonzero when doctor required checks fail",
+    "  --timeout-ms <n>          Per-check timeout for doctor HTTP probes",
     "  --title <text>            Chat session title for sessions create",
     "  --message <text>          Prompt text for sessions prompt",
     "  --ss58-address <addr>     Bittensor public SS58 address for wallet reads",
@@ -6551,6 +6570,410 @@ function readOpenworkClientAuth(args: ParsedArgs): {
   return { openworkUrl, token };
 }
 
+function readOpenworkBaseUrl(args: ParsedArgs): string {
+  return (
+    readFlag(args.flags, "openwork-url") ??
+    readMatterhornEnv("OPENWORK_URL") ??
+    readMatterhornEnv("OPENWORK_SERVER_URL") ??
+    "http://127.0.0.1:8787"
+  ).replace(/\/$/, "");
+}
+
+function readOpenworkClientToken(args: ParsedArgs): string {
+  return (
+    readFlag(args.flags, "token") ??
+    readFlag(args.flags, "openwork-token") ??
+    readMatterhornEnv("OPENWORK_TOKEN") ??
+    ""
+  );
+}
+
+function readOpenworkHostToken(args: ParsedArgs): string {
+  return (
+    readFlag(args.flags, "host-token") ??
+    readFlag(args.flags, "openwork-host-token") ??
+    readMatterhornEnv("OPENWORK_HOST_TOKEN") ??
+    ""
+  );
+}
+
+function doctorStatusRank(status: DoctorCheckStatus): number {
+  if (status === "fail") return 3;
+  if (status === "warn") return 2;
+  if (status === "skip") return 1;
+  return 0;
+}
+
+function summarizeDoctorChecks(checks: DoctorCheck[]) {
+  return checks.reduce(
+    (summary, check) => {
+      summary[check.status] += 1;
+      return summary;
+    },
+    { pass: 0, warn: 0, fail: 0, skip: 0 } as Record<DoctorCheckStatus, number>,
+  );
+}
+
+async function doctorHttpCheck(input: {
+  id: string;
+  label: string;
+  baseUrl: string;
+  path: string;
+  required: boolean;
+  token?: string;
+  hostToken?: string;
+  accept?: string;
+  timeoutMs: number;
+  ok?: (payload: any) => boolean;
+  hint?: string;
+}): Promise<DoctorCheck> {
+  const start = Date.now();
+  const headers: Record<string, string> = {};
+  if (input.token) headers.Authorization = `Bearer ${input.token}`;
+  if (input.hostToken) {
+    headers["X-Matterhorn-Host-Token"] = input.hostToken;
+    headers["X-OpenWork-Host-Token"] = input.hostToken;
+  }
+  if (input.accept) headers.Accept = input.accept;
+  try {
+    const response = await fetch(`${input.baseUrl}${input.path}`, {
+      headers,
+      signal: AbortSignal.timeout(input.timeoutMs),
+    });
+    let payload: any = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const latencyMs = Date.now() - start;
+    if (!response.ok) {
+      return {
+        id: input.id,
+        label: input.label,
+        status: input.required ? "fail" : "warn",
+        required: input.required,
+        latencyMs,
+        error: payload?.message ?? payload?.error ?? `HTTP ${response.status}`,
+        hint: input.hint,
+      };
+    }
+    const passed = input.ok ? input.ok(payload) : true;
+    return {
+      id: input.id,
+      label: input.label,
+      status: passed ? "pass" : input.required ? "fail" : "warn",
+      required: input.required,
+      latencyMs,
+      details: payload,
+      ...(passed ? {} : { error: "Response did not satisfy doctor contract" }),
+      hint: input.hint,
+    };
+  } catch (error) {
+    return {
+      id: input.id,
+      label: input.label,
+      status: input.required ? "fail" : "warn",
+      required: input.required,
+      latencyMs: Date.now() - start,
+      error: error instanceof Error ? error.message : String(error),
+      hint: input.hint,
+    };
+  }
+}
+
+function doctorSkip(
+  id: string,
+  label: string,
+  required: boolean,
+  hint: string,
+): DoctorCheck {
+  return { id, label, status: required ? "fail" : "skip", required, hint };
+}
+
+async function findMatterhornUiBridge(): Promise<{
+  baseUrl: string;
+  path: string;
+} | null> {
+  const appData =
+    platform() === "darwin"
+      ? join(homedir(), "Library", "Application Support")
+      : platform() === "win32"
+        ? process.env.APPDATA || join(homedir(), "AppData", "Roaming")
+        : process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  const candidates = [
+    process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
+    process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(appData, "com.matterhorn.work", "matterhorn-work-ui-control.json"),
+    join(appData, "com.matterhorn.work.dev", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork.dev", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork", "openwork-ui-control.json"),
+    join(appData, "com.differentai.openwork.dev", "openwork-ui-control.json"),
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(await readFile(candidate, "utf8"));
+      if (typeof parsed.baseUrl === "string" && typeof parsed.token === "string") {
+        return { baseUrl: parsed.baseUrl.replace(/\/$/, ""), path: candidate };
+      }
+    } catch {
+      // Try the next discovery file.
+    }
+  }
+  return null;
+}
+
+async function runDoctorReport(args: ParsedArgs) {
+  const baseUrl = readOpenworkBaseUrl(args);
+  const token = readOpenworkClientToken(args);
+  const hostToken = readOpenworkHostToken(args);
+  const workspaceId = readFlag(args.flags, "workspace-id") ?? "";
+  const sessionId =
+    readFlag(args.flags, "session-id") ?? args.positionals[1] ?? "";
+  const fileSessionId = readFlag(args.flags, "file-session-id") ?? "";
+  const timeoutMs = readNumber(args.flags, "timeout-ms", 5_000) ?? 5_000;
+  const requireBrowser = readBool(args.flags, "require-browser", false);
+
+  const checks: DoctorCheck[] = [];
+  checks.push(
+    await doctorHttpCheck({
+      id: "server.health",
+      label: "Matterhorn Work server health",
+      baseUrl,
+      path: "/health",
+      required: true,
+      timeoutMs,
+      ok: (payload) => payload?.ok === true || payload?.service === "matterhorn-work-server",
+      hint: "Start Matterhorn Work with `matterhorn-work start` or pass --openwork-url.",
+    }),
+  );
+
+  if (!token) {
+    checks.push(doctorSkip("auth.client", "Client token configured", true, "Pass --token or set MATTERHORN_WORK_TOKEN."));
+  } else {
+    checks.push({
+      id: "auth.client",
+      label: "Client token configured",
+      status: "pass",
+      required: true,
+    });
+    checks.push(
+      await doctorHttpCheck({
+        id: "server.status",
+        label: "Server status route",
+        baseUrl,
+        path: "/status",
+        required: true,
+        token,
+        timeoutMs,
+      }),
+      await doctorHttpCheck({
+        id: "server.capabilities",
+        label: "Server capabilities route",
+        baseUrl,
+        path: "/capabilities",
+        required: true,
+        token,
+        timeoutMs,
+      }),
+      await doctorHttpCheck({
+        id: "workspaces.list",
+        label: "Workspace listing route",
+        baseUrl,
+        path: "/workspaces",
+        required: true,
+        token,
+        timeoutMs,
+        ok: (payload) => Array.isArray(payload?.items) || Array.isArray(payload?.workspaces),
+      }),
+      await doctorHttpCheck({
+        id: "bittensor.readiness",
+        label: "Bittensor readiness route",
+        baseUrl,
+        path: "/api/bittensor/readiness",
+        required: true,
+        token,
+        timeoutMs,
+        ok: (payload) => payload?.success === true || payload?.ready === true || payload?.report,
+        hint: "Bittensor remains non-custodial; this route should only expose read/preview readiness.",
+      }),
+    );
+  }
+
+  if (workspaceId && sessionId && token) {
+    const sessionPath = `/workspace/${encodeURIComponent(workspaceId)}/sessions/${encodeURIComponent(sessionId)}`;
+    checks.push(
+      await doctorHttpCheck({
+        id: "session.status",
+        label: "Chat session status route",
+        baseUrl,
+        path: `${sessionPath}/status`,
+        required: false,
+        token,
+        timeoutMs,
+      }),
+      await doctorHttpCheck({
+        id: "session.snapshot",
+        label: "Chat session snapshot route",
+        baseUrl,
+        path: `${sessionPath}/snapshot?limit=5`,
+        required: false,
+        token,
+        timeoutMs,
+      }),
+      await doctorHttpCheck({
+        id: "session.events",
+        label: "Chat session event stream route",
+        baseUrl,
+        path: `${sessionPath}/events?maxEvents=1&snapshot=true`,
+        required: false,
+        token,
+        accept: "text/event-stream",
+        timeoutMs,
+      }),
+    );
+  } else {
+    checks.push(
+      doctorSkip(
+        "session.routes",
+        "Chat session route probes",
+        false,
+        "Pass --workspace-id and --session-id to probe status/snapshot/events for a real session.",
+      ),
+    );
+  }
+
+  if (fileSessionId && token) {
+    checks.push(
+      await doctorHttpCheck({
+        id: "files.catalog",
+        label: "File catalog route",
+        baseUrl,
+        path: `/files/sessions/${encodeURIComponent(fileSessionId)}/catalog/snapshot?limit=5`,
+        required: false,
+        token,
+        timeoutMs,
+      }),
+      await doctorHttpCheck({
+        id: "files.events",
+        label: "File event route",
+        baseUrl,
+        path: `/files/sessions/${encodeURIComponent(fileSessionId)}/catalog/events`,
+        required: false,
+        token,
+        timeoutMs,
+      }),
+    );
+  } else {
+    checks.push(
+      doctorSkip(
+        "files.routes",
+        "File-session route probes",
+        false,
+        "Pass --file-session-id to probe catalog and file-event routes.",
+      ),
+    );
+  }
+
+  if (hostToken) {
+    checks.push(
+      await doctorHttpCheck({
+        id: "approvals.list",
+        label: "Host approval listing route",
+        baseUrl,
+        path: "/approvals",
+        required: false,
+        hostToken,
+        timeoutMs,
+      }),
+    );
+  } else {
+    checks.push(
+      doctorSkip(
+        "approvals.host-token",
+        "Host approval token configured",
+        false,
+        "Pass --host-token or set MATTERHORN_WORK_HOST_TOKEN to probe approvals.",
+      ),
+    );
+  }
+
+  const bridge = await findMatterhornUiBridge();
+  if (bridge) {
+    checks.push(
+      await doctorHttpCheck({
+        id: "browser.bridge",
+        label: "Desktop UI/browser bridge",
+        baseUrl: bridge.baseUrl,
+        path: "/health",
+        required: requireBrowser,
+        timeoutMs,
+        ok: (payload) => payload?.ok !== false,
+        hint: `Discovery file: ${bridge.path}`,
+      }),
+    );
+  } else {
+    checks.push(
+      doctorSkip(
+        "browser.bridge",
+        "Desktop UI/browser bridge",
+        requireBrowser,
+        "Launch the desktop app or set MATTERHORN_WORK_UI_CONTROL_DISCOVERY. Browser bridge is optional for server-only agents.",
+      ),
+    );
+  }
+
+  const requiredFailures = checks.filter((check) => check.required && check.status === "fail");
+  const warnings = checks
+    .filter((check) => check.status === "warn")
+    .map((check) => `${check.label}: ${check.error ?? check.hint ?? "warning"}`);
+  const nextSteps = checks
+    .filter((check) => check.status === "fail" || check.status === "skip")
+    .map((check) => check.hint)
+    .filter((hint): hint is string => Boolean(hint));
+
+  return {
+    ok: requiredFailures.length === 0,
+    ready: requiredFailures.length === 0,
+    checkedAt: new Date().toISOString(),
+    serverUrl: baseUrl,
+    summary: summarizeDoctorChecks(checks),
+    checks: checks.sort((a, b) => doctorStatusRank(b.status) - doctorStatusRank(a.status)),
+    warnings,
+    nextSteps: Array.from(new Set(nextSteps)),
+  };
+}
+
+function printDoctorReport(report: Awaited<ReturnType<typeof runDoctorReport>>): void {
+  console.log(`Matterhorn Work doctor: ${report.ready ? "ready" : "not ready"}`);
+  console.log(`Server: ${report.serverUrl}`);
+  console.log(
+    `Checks: ${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail, ${report.summary.skip} skip`,
+  );
+  for (const check of report.checks) {
+    const latency = typeof check.latencyMs === "number" ? ` ${check.latencyMs}ms` : "";
+    console.log(`- ${check.status.toUpperCase()} ${check.label}${latency}`);
+    if (check.error) console.log(`  ${check.error}`);
+    if (check.hint && check.status !== "pass") console.log(`  ${check.hint}`);
+  }
+}
+
+async function runDoctor(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const strict = readBool(args.flags, "strict", false);
+  const report = await runDoctorReport(args);
+  if (outputJson) {
+    outputResult(report, true);
+  } else {
+    printDoctorReport(report);
+  }
+  if (strict && !report.ready) {
+    process.exitCode = 1;
+  }
+}
+
 function readSessionId(args: ParsedArgs, fallbackIndex: number): string {
   const sessionId =
     readFlag(args.flags, "session-id") ?? args.positionals[fallbackIndex] ?? "";
@@ -9298,6 +9721,10 @@ async function main() {
   }
   if (command === "bittensor" || command === "tao") {
     await runBittensor(args);
+    return;
+  }
+  if (command === "doctor" || command === "diagnose") {
+    await runDoctor(args);
     return;
   }
   if (command === "mcp") {

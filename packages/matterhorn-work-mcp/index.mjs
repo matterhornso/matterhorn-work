@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import { readFile } from "node:fs/promises";
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
+
 /**
  * matterhorn-work-mcp
  *
@@ -30,6 +34,19 @@ const REQUEST_TIMEOUT_MS = Number(process.env.MATTERHORN_WORK_MCP_TIMEOUT_MS || 
 const MAX_TEXT_BYTES = Number(process.env.MATTERHORN_WORK_MCP_MAX_TEXT_BYTES || 512_000);
 
 const tools = [
+  {
+    name: "matterhorn_doctor",
+    description: "Run one unified Matterhorn Work agent-readiness report across server, sessions, files, approvals, browser bridge, and Bittensor.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workspaceId: { type: "string", description: "Optional workspace id used to probe session routes." },
+        sessionId: { type: "string", description: "Optional chat session id used with workspaceId for status/snapshot/event probes." },
+        fileSessionId: { type: "string", description: "Optional file session id used for catalog/event probes." },
+        requireBrowser: { type: "boolean", description: "When true, treat a missing desktop browser bridge as a failed required check." },
+      },
+    },
+  },
   {
     name: "matterhorn_status",
     description: "Read Matterhorn Work server health, status, and capability summary.",
@@ -351,15 +368,17 @@ function buildUrl(path, query = null) {
   return url;
 }
 
-async function callServer(path, { method = "GET", auth = "client", body = null, query = null } = {}) {
+async function callServer(path, { method = "GET", auth = "client", body = null, query = null, accept = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const url = buildUrl(path, query);
   try {
+    const headers = headersFor(auth, Boolean(body));
+    if (accept) headers.Accept = accept;
     const response = await fetch(url, {
       method,
       signal: controller.signal,
-      headers: headersFor(auth, Boolean(body)),
+      headers,
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
     const text = await response.text();
@@ -379,6 +398,225 @@ async function callServer(path, { method = "GET", auth = "client", body = null, 
   } finally {
     clearTimeout(timer);
   }
+}
+
+function doctorRank(status) {
+  if (status === "fail") return 3;
+  if (status === "warn") return 2;
+  if (status === "skip") return 1;
+  return 0;
+}
+
+function doctorSummary(checks) {
+  return checks.reduce((summary, check) => {
+    summary[check.status] += 1;
+    return summary;
+  }, { pass: 0, warn: 0, fail: 0, skip: 0 });
+}
+
+function doctorSkip(id, label, required, hint) {
+  return { id, label, status: required ? "fail" : "skip", required, hint };
+}
+
+async function doctorServerCheck({ id, label, path, required, auth = "client", accept = null, ok, hint }) {
+  const started = Date.now();
+  try {
+    const details = await callServer(path, { auth, accept });
+    const passed = typeof ok === "function" ? ok(details) : true;
+    return {
+      id,
+      label,
+      status: passed ? "pass" : required ? "fail" : "warn",
+      required,
+      latencyMs: Date.now() - started,
+      details,
+      ...(passed ? {} : { error: "Response did not satisfy doctor contract" }),
+      ...(hint ? { hint } : {}),
+    };
+  } catch (error) {
+    return {
+      id,
+      label,
+      status: required ? "fail" : "warn",
+      required,
+      latencyMs: Date.now() - started,
+      error: error?.message || String(error),
+      ...(hint ? { hint } : {}),
+    };
+  }
+}
+
+function userAppDataDir() {
+  if (platform() === "darwin") return join(homedir(), "Library", "Application Support");
+  if (platform() === "win32") return process.env.APPDATA || join(homedir(), "AppData", "Roaming");
+  return process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+}
+
+async function discoverUiBridge() {
+  const appData = userAppDataDir();
+  const candidates = [
+    process.env.MATTERHORN_WORK_UI_CONTROL_DISCOVERY?.trim(),
+    process.env.OPENWORK_UI_CONTROL_DISCOVERY?.trim(),
+    join(appData, "com.matterhorn.work", "matterhorn-work-ui-control.json"),
+    join(appData, "com.matterhorn.work.dev", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork.dev", "matterhorn-work-ui-control.json"),
+    join(appData, "com.differentai.openwork", "openwork-ui-control.json"),
+    join(appData, "com.differentai.openwork.dev", "openwork-ui-control.json"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(await readFile(candidate, "utf8"));
+      if (typeof parsed.baseUrl === "string" && typeof parsed.token === "string") {
+        return { baseUrl: parsed.baseUrl.replace(/\/+$/, ""), path: candidate };
+      }
+    } catch {
+      // Try the next discovery file.
+    }
+  }
+  return null;
+}
+
+async function doctorUiBridgeCheck(requireBrowser) {
+  const bridge = await discoverUiBridge();
+  if (!bridge) {
+    return doctorSkip(
+      "browser.bridge",
+      "Desktop UI/browser bridge",
+      requireBrowser === true,
+      "Launch the desktop app or set MATTERHORN_WORK_UI_CONTROL_DISCOVERY. Browser bridge is optional for server-only agents.",
+    );
+  }
+  const started = Date.now();
+  try {
+    const response = await fetch(`${bridge.baseUrl}/health`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const text = await response.text();
+    let details = null;
+    try {
+      details = text ? JSON.parse(text) : null;
+    } catch {
+      details = { text };
+    }
+    return {
+      id: "browser.bridge",
+      label: "Desktop UI/browser bridge",
+      status: response.ok ? "pass" : requireBrowser ? "fail" : "warn",
+      required: requireBrowser === true,
+      latencyMs: Date.now() - started,
+      details,
+      hint: `Discovery file: ${bridge.path}`,
+      ...(response.ok ? {} : { error: `HTTP ${response.status}` }),
+    };
+  } catch (error) {
+    return {
+      id: "browser.bridge",
+      label: "Desktop UI/browser bridge",
+      status: requireBrowser ? "fail" : "warn",
+      required: requireBrowser === true,
+      latencyMs: Date.now() - started,
+      error: error?.message || String(error),
+      hint: `Discovery file: ${bridge.path}`,
+    };
+  }
+}
+
+async function matterhornDoctor(args = {}) {
+  const checks = [];
+  checks.push(await doctorServerCheck({
+    id: "server.health",
+    label: "Matterhorn Work server health",
+    path: "/health",
+    required: true,
+    auth: "none",
+    ok: (payload) => payload?.ok === true || payload?.service === "matterhorn-work-server",
+    hint: "Start Matterhorn Work with `matterhorn-work start` or set MATTERHORN_WORK_SERVER_URL.",
+  }));
+
+  if (!CLIENT_TOKEN) {
+    checks.push(doctorSkip("auth.client", "Client token configured", true, "Set MATTERHORN_WORK_TOKEN for server client routes."));
+  } else {
+    checks.push({ id: "auth.client", label: "Client token configured", status: "pass", required: true });
+    checks.push(await doctorServerCheck({ id: "server.status", label: "Server status route", path: "/status", required: true }));
+    checks.push(await doctorServerCheck({ id: "server.capabilities", label: "Server capabilities route", path: "/capabilities", required: true }));
+    checks.push(await doctorServerCheck({
+      id: "workspaces.list",
+      label: "Workspace listing route",
+      path: "/workspaces",
+      required: true,
+      ok: (payload) => Array.isArray(payload?.items) || Array.isArray(payload?.workspaces),
+    }));
+    checks.push(await doctorServerCheck({
+      id: "bittensor.readiness",
+      label: "Bittensor readiness route",
+      path: "/api/bittensor/readiness",
+      required: true,
+      ok: (payload) => payload?.success === true || payload?.ready === true || payload?.report,
+      hint: "Bittensor remains non-custodial; this route should only expose read/preview readiness.",
+    }));
+  }
+
+  if (CLIENT_TOKEN && args.workspaceId && args.sessionId) {
+    const base = `/workspace/${encodeURIComponent(args.workspaceId)}/sessions/${encodeURIComponent(args.sessionId)}`;
+    checks.push(await doctorServerCheck({ id: "session.status", label: "Chat session status route", path: `${base}/status`, required: false }));
+    checks.push(await doctorServerCheck({ id: "session.snapshot", label: "Chat session snapshot route", path: `${base}/snapshot?limit=5`, required: false }));
+    checks.push(await doctorServerCheck({
+      id: "session.events",
+      label: "Chat session event stream route",
+      path: `${base}/events?maxEvents=1&snapshot=true`,
+      required: false,
+      accept: "text/event-stream",
+    }));
+  } else {
+    checks.push(doctorSkip(
+      "session.routes",
+      "Chat session route probes",
+      false,
+      "Pass workspaceId and sessionId to probe status/snapshot/events for a real session.",
+    ));
+  }
+
+  if (CLIENT_TOKEN && args.fileSessionId) {
+    checks.push(await doctorServerCheck({
+      id: "files.catalog",
+      label: "File catalog route",
+      path: `/files/sessions/${encodeURIComponent(args.fileSessionId)}/catalog/snapshot?limit=5`,
+      required: false,
+    }));
+    checks.push(await doctorServerCheck({
+      id: "files.events",
+      label: "File event route",
+      path: `/files/sessions/${encodeURIComponent(args.fileSessionId)}/catalog/events`,
+      required: false,
+    }));
+  } else {
+    checks.push(doctorSkip("files.routes", "File-session route probes", false, "Pass fileSessionId to probe catalog and file-event routes."));
+  }
+
+  if (HOST_TOKEN) {
+    checks.push(await doctorServerCheck({ id: "approvals.list", label: "Host approval listing route", path: "/approvals", required: false, auth: "host" }));
+  } else {
+    checks.push(doctorSkip("approvals.host-token", "Host approval token configured", false, "Set MATTERHORN_WORK_HOST_TOKEN to probe approvals."));
+  }
+
+  checks.push(await doctorUiBridgeCheck(args.requireBrowser === true));
+
+  const requiredFailures = checks.filter((check) => check.required && check.status === "fail");
+  return {
+    ok: requiredFailures.length === 0,
+    ready: requiredFailures.length === 0,
+    checkedAt: new Date().toISOString(),
+    serverUrl: SERVER,
+    summary: doctorSummary(checks),
+    checks: checks.sort((a, b) => doctorRank(b.status) - doctorRank(a.status)),
+    warnings: checks
+      .filter((check) => check.status === "warn")
+      .map((check) => `${check.label}: ${check.error || check.hint || "warning"}`),
+    nextSteps: Array.from(new Set(checks
+      .filter((check) => check.status === "fail" || check.status === "skip")
+      .map((check) => check.hint)
+      .filter(Boolean))),
+  };
 }
 
 function parsePositiveInteger(value, fallback, max) {
@@ -499,6 +737,8 @@ async function matterhornStatus() {
 
 async function handleTool(name, args = {}) {
   switch (name) {
+    case "matterhorn_doctor":
+      return matterhornDoctor(args);
     case "matterhorn_status":
       return matterhornStatus();
     case "matterhorn_list_workspaces":
