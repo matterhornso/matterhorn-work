@@ -185,6 +185,22 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
+    assert.equal(body.intent, "service_call");
+    assert.equal(body.task, "Live QA preview for subnet 14");
+    return json(res, 200, {
+      success: true,
+      preview: {
+        netuid: 14,
+        intent: "service_call",
+        requestSha256: "c".repeat(64),
+        requiresConfirmation: true,
+        supported: false,
+      },
+      cards: [card("unsupported_adapter", "Adapter preview")],
+    });
+  }
+
   return json(res, 404, { error: "not_found", path: url.pathname });
 });
 
@@ -253,12 +269,14 @@ try {
     "bittensor.stake.clarification",
     "bittensor.stake.unsigned_preview",
     "bittensor.subnet.unsupported_adapter",
+    "bittensor.subnet.invocation_preview",
   ]) {
     assert.ok(report.stages.some((stage) => stage.id === expected && stage.status === "pass"), `missing passing stage: ${expected}`);
   }
   assert.equal(report.artifacts.bittensorContextId, "bt-chat-1");
   assert.equal(report.artifacts.validatorContextId, "bt-chat-2");
-  assert.equal(report.requestCount, 12);
+  assert.equal(report.artifacts.subnetPreviewRequestSha256, "c".repeat(64));
+  assert.equal(report.requestCount, 13);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
@@ -275,6 +293,7 @@ try {
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
+      "POST /api/bittensor/subnets/14/preview",
     ],
   );
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export|keyfile|suri/i.test(JSON.stringify(requests)), false);

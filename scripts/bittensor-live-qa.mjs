@@ -331,6 +331,35 @@ async function runChatCore() {
       cards: cardKinds(result.body),
     };
   });
+
+  await runStep("bittensor.subnet.invocation_preview", "Preview subnet adapter request before invocation", async () => {
+    const result = await request(`/api/bittensor/subnets/${encodeURIComponent(String(config.netuid))}/preview`, {
+      method: "POST",
+      body: {
+        intent: "service_call",
+        task: `Live QA preview for subnet ${config.netuid}`,
+      },
+    });
+    const preview = result.body?.preview || {};
+    const requestSha256 = String(preview.requestSha256 || "");
+    if (result.body?.success !== true) {
+      throw new Error("subnet invocation preview response success was not true");
+    }
+    if (requestSha256.length !== 64) {
+      throw new Error("subnet invocation preview did not return a 64-character request SHA-256");
+    }
+    if (preview.requiresConfirmation !== true) {
+      throw new Error("subnet invocation preview did not require confirmation");
+    }
+    artifacts.subnetPreviewRequestSha256 = requestSha256;
+    return {
+      latencyMs: result.latencyMs,
+      requestSha256,
+      requiresConfirmation: preview.requiresConfirmation,
+      adapterSupported: preview.supported ?? null,
+      cards: cardKinds(result.body),
+    };
+  });
 }
 
 function summarize() {
