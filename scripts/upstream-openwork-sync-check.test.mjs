@@ -49,6 +49,7 @@ const doc = readFileSync("docs/upstream-openwork-sync.md", "utf8");
 assert.ok(doc.includes("OPENWORK_UPSTREAM_REMOTE=https://github.com/different-ai/openwork.git"));
 assert.ok(doc.includes("Matterhorn-specific Bittensor"));
 assert.ok(doc.includes("pnpm test:upstream-openwork-sync"));
+assert.ok(doc.includes("matterhorn-work upstream openwork check --json"));
 assert.ok(doc.includes("Do not auto-merge upstream OpenWork into Matterhorn `dev`."));
 
 const broadPlan = readFileSync("docs/chat-native-crypto-execution-plan.md", "utf8");
@@ -58,6 +59,7 @@ assert.ok(broadPlan.includes("./upstream-openwork-sync.md"));
 const matrix = readFileSync("docs/agent-control-coverage-matrix.md", "utf8");
 assert.ok(matrix.includes("Upstream OpenWork intake"));
 assert.ok(matrix.includes("test:upstream-openwork-sync"));
+assert.ok(matrix.includes("test:upstream-openwork-cli"));
 
 const serialized = `${result.stdout}\n${human.stdout}\n${doc}\n${broadPlan}\n${matrix}`.toLowerCase();
 for (const forbidden of ["seed phrase field", "mnemonic field", "private key field", "wallet export field"]) {

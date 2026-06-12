@@ -3750,6 +3750,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
     "  matterhorn-work bittensor watch create|list|check [options]",
     "  matterhorn-work bittensor readiness [options]",
+    "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
     "  matterhorn-work status [--openwork-url <url>] [--opencode-url <url>]",
@@ -3768,6 +3769,7 @@ function printHelp(): void {
     "  files                   Manage file sessions and batch file sync",
     "  sessions                Manage chat sessions and read progress events",
     "  bittensor               Run Bittensor chat/readiness workflows",
+    "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
     "  status                  Check Matterhorn Work engine/server health",
@@ -3826,6 +3828,11 @@ function printHelp(): void {
     "  --destination-netuid <n>  Destination subnet netuid for Bittensor move-stake previews",
     "  --strategy <name>         Bittensor validator strategy: balanced | yield | safety",
     "  --rate-tolerance <n>      Bittensor rate/slippage tolerance",
+    "  --upstream-url <url>      OpenWork upstream Git remote for upstream check",
+    "  --upstream-branch <name>  OpenWork upstream branch for upstream check",
+    "  --base-branch <name>      Matterhorn base branch for upstream check",
+    "  --date <YYYY-MM-DD>       Date used for the upstream sync branch name",
+    "  --remote                  Probe the upstream remote with git ls-remote",
     "  --provider-id <id>        Model provider id for sessions prompt",
     "  --model-id <id>           Model id for sessions prompt",
     "  --agent <name>            Agent name for sessions prompt",
@@ -8026,6 +8033,45 @@ async function runMcpCommand(args: ParsedArgs) {
   printMcpConfig(args);
 }
 
+async function runUpstreamCommand(args: ParsedArgs) {
+  const product = args.positionals[1];
+  const action = args.positionals[2] ?? "check";
+  if (product !== "openwork") {
+    throw new Error("upstream requires openwork");
+  }
+  if (action !== "check") {
+    throw new Error("upstream openwork requires check");
+  }
+
+  const scriptArgs: string[] = [];
+  for (const [key, value] of args.flags.entries()) {
+    if (key === "help") {
+      scriptArgs.push("--help");
+    } else if (typeof value === "boolean") {
+      if (value) scriptArgs.push(`--${key}`);
+    } else {
+      scriptArgs.push(`--${key}`, value);
+    }
+  }
+
+  const scriptPath = join(REPO_ROOT_DIR, "scripts", "upstream-openwork-sync-check.mjs");
+  const child = spawn(process.execPath, [scriptPath, ...scriptArgs], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    child.stdout?.pipe(process.stdout);
+    child.stderr?.pipe(process.stderr);
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code && code !== 0) {
+        process.exitCode = code;
+      }
+      resolve();
+    });
+  });
+}
+
 async function runStart(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const checkOnly = readBool(args.flags, "check", false);
@@ -9956,6 +10002,10 @@ async function main() {
   }
   if (command === "bittensor" || command === "tao") {
     await runBittensor(args);
+    return;
+  }
+  if (command === "upstream") {
+    await runUpstreamCommand(args);
     return;
   }
   if (command === "doctor" || command === "diagnose") {
