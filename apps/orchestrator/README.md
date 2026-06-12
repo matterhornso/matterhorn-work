@@ -248,7 +248,28 @@ matterhorn-work bittensor readiness \
   --json
 ```
 
-The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, or wallet exports.
+For direct subnet service adapter calls, use the explicit preview-confirm-invoke path. The preview returns a request SHA-256 that must be shown to the user before invoke:
+
+```bash
+matterhorn-work bittensor subnet-preview \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --netuid 14 \
+  --intent service_call \
+  --task "use this subnet for an image generation task" \
+  --json
+
+matterhorn-work bittensor subnet-invoke \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --netuid 14 \
+  --intent service_call \
+  --task "use this subnet for an image generation task" \
+  --preview-request-sha256 <sha256-from-preview> \
+  --json
+```
+
+The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, wallet exports, or unpreviewed direct subnet invokes.
 
 ## Approvals (manual mode)
 

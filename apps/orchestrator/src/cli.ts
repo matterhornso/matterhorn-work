@@ -3743,6 +3743,8 @@ function printHelp(): void {
     "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work bittensor chat --message <text> [options]",
+    "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
+    "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
     "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3798,6 +3800,9 @@ function printHelp(): void {
     "  --ss58-address <addr>     Bittensor public SS58 address for wallet reads",
     "  --context-id <id>         Bittensor chat context id for follow-up prompts",
     "  --netuid <n>              Bittensor subnet netuid",
+    "  --intent <name>           Bittensor subnet intent: explain | metagraph | stake_guidance | wallet_guidance | service_call",
+    "  --task <text>             Bittensor subnet service task text",
+    "  --preview-request-sha256 <hash>  Request hash returned by bittensor subnet-preview",
     "  --amount-tao <amount>     TAO amount for Bittensor previews",
     "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
     "  --coldkey <key>           Bittensor coldkey public address label",
@@ -7230,18 +7235,79 @@ async function runSessions(args: ParsedArgs) {
 
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
-  const subcommand = args.positionals[1] ?? "chat";
+  const rawSubcommand = args.positionals[1] ?? "chat";
+  const nestedSubcommand = rawSubcommand === "subnet" ? args.positionals[2] : undefined;
+  const subcommand = nestedSubcommand ? `subnet-${nestedSubcommand}` : rawSubcommand;
+  const subcommandTailIndex = nestedSubcommand ? 3 : 2;
   const { openworkUrl, token } = readOpenworkClientAuth(args);
   const baseUrl = openworkUrl.replace(/\/$/, "");
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
+  const readSubnetNetuid = () => {
+    const netuid = readNumber(args.flags, "netuid", undefined);
+    if (typeof netuid !== "number") {
+      throw new Error("netuid is required for bittensor subnet commands");
+    }
+    return netuid;
+  };
+  const readSubnetIntent = () => {
+    const intent = readFlag(args.flags, "intent") ?? "service_call";
+    if (!["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"].includes(intent)) {
+      throw new Error("intent must be explain, metagraph, stake_guidance, wallet_guidance, or service_call");
+    }
+    return intent;
+  };
+  const readSubnetTask = () => {
+    return (
+      readFlag(args.flags, "task") ??
+      readFlag(args.flags, "message") ??
+      readFlag(args.flags, "prompt") ??
+      args.positionals.slice(subcommandTailIndex).join(" ").trim() ??
+      undefined
+    );
+  };
+  const readSubnetBody = (extra?: Record<string, unknown>) => {
+    const task = readSubnetTask();
+    return {
+      intent: readSubnetIntent(),
+      ...(task ? { task } : {}),
+      ...(readFlag(args.flags, "ss58-address") ? { ss58Address: readFlag(args.flags, "ss58-address") } : {}),
+      ...(extra ?? {}),
+    };
+  };
 
   try {
     if (subcommand === "readiness" || subcommand === "ready") {
       const result = await fetchJson(`${baseUrl}/api/bittensor/readiness`, {
         headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "subnet-preview" || subcommand === "preview" || subcommand === "preview-subnet") {
+      const netuid = readSubnetNetuid();
+      const result = await fetchJson(`${baseUrl}/api/bittensor/subnets/${encodeURIComponent(String(netuid))}/preview`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(readSubnetBody()),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "subnet-invoke" || subcommand === "invoke" || subcommand === "invoke-subnet") {
+      const netuid = readSubnetNetuid();
+      const previewRequestSha256 = readFlag(args.flags, "preview-request-sha256")?.trim();
+      if (!previewRequestSha256) {
+        throw new Error("preview-request-sha256 is required for bittensor subnet-invoke");
+      }
+      const result = await fetchJson(`${baseUrl}/api/bittensor/subnets/${encodeURIComponent(String(netuid))}/invoke`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(readSubnetBody({ previewRequestSha256 })),
       });
       outputResult(result, outputJson);
       return;
@@ -7284,7 +7350,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("bittensor requires chat|readiness");
+    throw new Error("bittensor requires chat|subnet-preview|subnet-invoke|readiness");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
