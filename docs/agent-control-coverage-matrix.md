@@ -13,6 +13,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Capability | HTTP | MCP | CLI | Verification |
 | --- | --- | --- | --- | --- |
 | Agent operator workflow | Stable server/session/file/Bittensor routes | Copy-paste Codex/Claude tool sequence | Copy-paste CLI fallback loop | `test:agent-operator-workflow` |
+| Upstream OpenWork intake | Sync playbook and remote-aware checker output | Agent can run checker through shell/MCP terminal | `pnpm upstream:openwork:check` | `test:upstream-openwork-sync` |
 | Bittensor operator playbook | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness` | `matterhorn_bittensor_chat`, `matterhorn_bittensor_readiness` | `matterhorn-work bittensor chat`, `matterhorn-work bittensor readiness` | `test:bittensor-operator-playbook`, `test:bittensor-cli-fallback` |
 | Bittensor live QA harness | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness` | Uses MCP-compatible Bittensor contracts | `node scripts/bittensor-live-qa.mjs` | `test:bittensor-live-qa`, `test:bittensor-live-report` |
 | Unified readiness doctor | Aggregates stable local routes | `matterhorn_doctor` | `matterhorn-work doctor` | `test:agent-control-doctor`, `test:agent-control-mcp`, `test:agent-control-coverage-matrix` |
@@ -71,6 +72,7 @@ pnpm test:agent-control-api-docs
 pnpm test:mcp-config-cli
 pnpm test:agent-session-progress-smoke
 pnpm test:bittensor-cli-fallback
+pnpm test:upstream-openwork-sync
 ```
 
 The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.
