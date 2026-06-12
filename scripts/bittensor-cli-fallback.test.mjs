@@ -71,6 +71,38 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
+    assert.equal(body.intent, "service_call");
+    assert.equal(body.task, "mock subnet service task");
+    return json(res, 200, {
+      success: true,
+      preview: {
+        netuid: 14,
+        intent: "service_call",
+        requestSha256: "b".repeat(64),
+        confirmationPrompt: `Confirm request ${"b".repeat(64)}`,
+        requiresConfirmation: true,
+      },
+      cards: [],
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/invoke") {
+    assert.equal(body.intent, "service_call");
+    assert.equal(body.task, "mock subnet service task");
+    assert.equal(body.previewRequestSha256, "b".repeat(64));
+    return json(res, 200, {
+      success: true,
+      invocation: {
+        netuid: 14,
+        intent: "service_call",
+        supported: false,
+        message: "Mock adapter unavailable.",
+      },
+      cards: [],
+    });
+  }
+
   return json(res, 404, { error: "not_found", path: url.pathname });
 });
 
@@ -139,9 +171,42 @@ try {
   assert.equal(readiness.success, true);
   assert.equal(readiness.report.ready, true);
 
+  const subnetPreview = await runCli(baseUrl, [
+    "bittensor",
+    "subnet-preview",
+    "--netuid",
+    "14",
+    "--intent",
+    "service_call",
+    "--task",
+    "mock subnet service task",
+  ]);
+  assert.equal(subnetPreview.success, true);
+  assert.equal(subnetPreview.preview.requestSha256.length, 64);
+
+  const subnetInvoke = await runCli(baseUrl, [
+    "bittensor",
+    "subnet-invoke",
+    "--netuid",
+    "14",
+    "--intent",
+    "service_call",
+    "--task",
+    "mock subnet service task",
+    "--preview-request-sha256",
+    subnetPreview.preview.requestSha256,
+  ]);
+  assert.equal(subnetInvoke.success, true);
+  assert.equal(subnetInvoke.invocation.supported, false);
+
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
-    ["POST /api/bittensor/chat/execute", "GET /api/bittensor/readiness"],
+    [
+      "POST /api/bittensor/chat/execute",
+      "GET /api/bittensor/readiness",
+      "POST /api/bittensor/subnets/14/preview",
+      "POST /api/bittensor/subnets/14/invoke",
+    ],
   );
 
   const payloadText = JSON.stringify(requests);
