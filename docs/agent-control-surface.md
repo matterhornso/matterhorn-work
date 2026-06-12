@@ -13,7 +13,7 @@ Matterhorn Work should be usable from agent environments such as Claude Code, Co
 | CLI | `matterhorn-work` | Start/serve/status, approvals, workspaces, chat progress, and file sessions |
 | HTTP API | `matterhorn-work-server` | Stable server endpoints for remote clients and MCP wrappers |
 
-See [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude workflow that starts Matterhorn, runs the doctor, creates a session, submits prompts, watches events, reads/writes files, and runs Bittensor chat. See [Matterhorn Work Bittensor Operator Playbook](./bittensor-operator-playbook.md) for Bittensor-specific prompt flows, expected cards, clarification behavior, unsupported-adapter handling, and no-custody safety rules. See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work Agent Control Coverage Matrix](./agent-control-coverage-matrix.md) for the current HTTP/MCP/CLI coverage and remaining gaps. See [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Work Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Work Agent Browser Control](./agent-browser-control.md) and [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow. See [Matterhorn Work Agent Control Live QA](./agent-control-live-qa.md) for the full server/session/file/Bittensor harness.
+See [Matterhorn Work Agent Operator Workflow](./agent-operator-workflow.md) for the copy-paste Codex/Claude workflow that starts Matterhorn, runs the doctor, creates a session, submits prompts, watches events, reads/writes files, and runs Bittensor chat. See [Matterhorn Work Bittensor Operator Playbook](./bittensor-operator-playbook.md) for Bittensor-specific prompt flows, expected cards, clarification behavior, unsupported-adapter handling, and no-custody safety rules. See [Matterhorn Work Bittensor Live QA](./bittensor-live-qa.md) for the repeatable Bittensor operator harness covering wallet clarifications, subnet discovery, validator comparison, unsigned staking previews, and unsupported-adapter behavior. See [Matterhorn Work Local Agent API](./agent-control-api.md) for the OpenAPI-style endpoint contract currently wrapped by `matterhorn-work-mcp`. See [Matterhorn Work Agent Control Coverage Matrix](./agent-control-coverage-matrix.md) for the current HTTP/MCP/CLI coverage and remaining gaps. See [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md) for the planned session-progress stream that will complement status polling. See [Matterhorn Work MCP Install Guide](./agent-mcp-install.md) for Codex, Claude Code, Claude Desktop, Cursor, and generic MCP client setup. See [Matterhorn Work Agent Action Model](./agent-action-model-contract.md) before adding new browser/control tools. See [Matterhorn Work Agent Browser Control](./agent-browser-control.md) and [Matterhorn Work Browser Control Live QA](./agent-browser-live-qa.md) for the semantic browser tool workflow. See [Matterhorn Work Agent Control Live QA](./agent-control-live-qa.md) for the full server/session/file/Bittensor harness.
 
 ## First Agent Flow
 
@@ -78,6 +78,8 @@ For an executable, end-to-end operator loop, use [Matterhorn Work Agent Operator
 
 15. After the doctor is ready, run `node scripts/agent-control-live-qa.mjs --server-url <url> --token <client-token> --json` for one end-to-end server/session/file/Bittensor pass.
 
+16. When Bittensor behavior changes, run `node scripts/bittensor-live-qa.mjs --server-url <url> --token <client-token> --json` for the Bittensor-specific operator pass. Add `--ss58-address` and `--validator-hotkey` when you need wallet and unsigned staking-preview coverage.
+
 ## Doctor Readiness
 
 `matterhorn_doctor` and `matterhorn-work doctor` are read-only readiness aggregators. They check:
@@ -102,5 +104,6 @@ Use `requireBrowser` in MCP or `--require-browser` in CLI only when the task tru
 ## Next Build Steps
 
 1. Keep the agent operator workflow current as new MCP/API/CLI surfaces become stable.
-2. Keep browser-control live QA current as new desktop actions are added.
-3. Keep `matterhorn_doctor` current as new stable product surfaces become agent-addressable.
+2. Keep Bittensor live QA current as Bittensor chat behavior and subnet adapters expand.
+3. Keep browser-control live QA current as new desktop actions are added.
+4. Keep `matterhorn_doctor` current as new stable product surfaces become agent-addressable.
