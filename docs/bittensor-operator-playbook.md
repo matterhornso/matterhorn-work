@@ -469,6 +469,14 @@ matterhorn-work bittensor watch digest \
   --json
 ```
 
+To act on one alert, use the alert key from the digest. Matterhorn will run the alert's suggested copilot prompt through Bittensor chat with public watch context only:
+
+```bash
+matterhorn-work bittensor watch act \
+  --alert-key "<alert-key-from-digest>" \
+  --json
+```
+
 For MCP operators, call the digest tool:
 
 ```json
@@ -486,6 +494,7 @@ Expected behavior:
 - alert entries include watch id, kind, label, netuid, wallet or validator context when available, alert key, notification intent, reason, and a suggested next prompt/action;
 - `maxAlerts` keeps the operator loop compact;
 - `includeOk` can be enabled for full status sweeps;
+- `watch act` executes only the alert's suggested public-data Bittensor chat prompt and does not sign or broadcast anything;
 - digest output is read-only and never requests signing material.
 
 ## 12. Unsupported Subnet Service Calls
