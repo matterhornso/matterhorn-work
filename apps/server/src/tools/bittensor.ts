@@ -134,6 +134,7 @@ export interface BittensorPlan {
     | "signed_action_review"
     | "subnet_result"
     | "watchlist"
+    | "intelligence_report"
   >;
   requiresClarification: boolean;
   clarificationQuestion: string | null;
@@ -274,6 +275,104 @@ export interface BittensorValidatorComparison {
   updatedAt: string;
 }
 
+export type BittensorRiskLevel = "unknown" | "low" | "medium" | "high";
+
+export interface BittensorIntelligenceSignal {
+  label: string;
+  value: string;
+  tone: "default" | "good" | "warning" | "danger" | "muted";
+  explanation: string;
+}
+
+export interface BittensorCopilotAction {
+  label: string;
+  prompt: string;
+  reason: string;
+  riskLevel: BittensorRiskLevel;
+}
+
+export interface BittensorWatchSuggestion {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid: number | null;
+  ss58Address: string | null;
+  validatorHotkey?: string | null;
+  threshold: number | null;
+  reason: string;
+}
+
+export interface BittensorValidatorExposureInsight {
+  validatorHotkey: string;
+  taoValue: number | null;
+  subnetCount: number;
+  netuids: number[];
+  share: number | null;
+  risk: BittensorRiskLevel;
+  prompt: string;
+}
+
+export interface BittensorSubnetIntelligenceReport {
+  kind: "subnet";
+  netuid: number;
+  name: string;
+  category: string;
+  score: number;
+  rating: "limited_provider_context" | "usable_with_caveats" | "strong_public_context";
+  mechanismSummary: {
+    available: boolean;
+    count: number | null;
+    note: string;
+  };
+  market: {
+    priceTao: number | null;
+    emission: number | null;
+    tempo: number | null;
+    source: string;
+    block: number | null;
+    freshness: string | null;
+  };
+  metagraph: {
+    neurons: number | null;
+    totalStake: number | null;
+    validatorsSampled: number;
+    topValidatorStakeShare: number | null;
+    concentrationRisk: BittensorRiskLevel;
+    dataQuality: BittensorRiskLevel;
+  };
+  capability: Pick<BittensorCapabilityManifest, "capabilityLevel" | "serviceAdapter" | "adapterStatus" | "userBenefits">;
+  signals: BittensorIntelligenceSignal[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  updatedAt: string;
+}
+
+export interface BittensorWalletIntelligenceReport {
+  kind: "wallet";
+  ss58Address: string;
+  freeTao: number | null;
+  stakeTotalTao: number | null;
+  estimatedValueTao: number | null;
+  subnetCount: number;
+  validatorCount: number;
+  largestPositionShare: number | null;
+  concentrationRisk: BittensorRiskLevel;
+  slippageRisk: BittensorRiskLevel;
+  staleDataRisk: BittensorRiskLevel;
+  largestPositions: BittensorStakePosition[];
+  validatorExposure: BittensorValidatorExposureInsight[];
+  signals: BittensorIntelligenceSignal[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  source: string;
+  block: number | null;
+  freshness: string | null;
+  updatedAt: string;
+}
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -322,7 +421,8 @@ export type BittensorChatCardKind =
   | "signer_status"
   | "signing_handoff"
   | "unsupported_adapter"
-  | "readiness_report";
+  | "readiness_report"
+  | "intelligence_report";
 
 export interface BittensorChatCardItem {
   label: string;
@@ -585,12 +685,17 @@ function taoAppClient(): ApiClient {
   return new ApiClient({
     baseUrl: TAO_APP_BASE_URL,
     headers: apiKey ? { "X-API-Key": apiKey } : {},
-    timeout: 12_000,
+    timeout: 4_000,
   });
 }
 
 function sidecarBaseUrl(): string {
   return readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL").replace(/\/$/, "");
+}
+
+function sidecarRequestTimeoutMs(): number {
+  const parsed = Number(readEnv("BITTENSOR_SUBTENSOR_SIDECAR_TIMEOUT_MS"));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(15_000, Math.max(1_000, parsed)) : 2_000;
 }
 
 function bittensorNetwork(): BittensorSignerStatus["network"] {
@@ -640,7 +745,7 @@ export async function checkSubtensorSidecarHealth(): Promise<BittensorSubtensorS
   }
 
   const started = Date.now();
-  const payload = await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
+  const payload = await probeSidecarPath(baseUrl, "/liveness") || await probeSidecarPath(baseUrl, "/health") || await probeSidecarPath(baseUrl, "/status");
   const reachable = Boolean(payload);
   const latencyMs = Date.now() - started;
   return {
@@ -667,7 +772,7 @@ class SubtensorSidecarClient {
       const res = await fetch(`${this.baseUrl}${path}`, {
         ...rest,
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(sidecarRequestTimeoutMs()),
       });
       if (!res.ok) return null;
       return asRecord(await res.json());
@@ -1261,6 +1366,20 @@ function isStakePreviewQuestion(message: string, plan: BittensorPlan): boolean {
   return plan.intent === "stake_plan" || /\b(stake|staking|unstake|move stake|transfer|send\s+\d|send\s+tao|set child|register|serve)\b/i.test(message);
 }
 
+function isBittensorIntelligenceQuestion(message: string): boolean {
+  return /\b(analy[sz]e|analysis|intelligence|risk|health|quality|score|diagnose|weak spots?|exposure|portfolio)\b/i.test(message);
+}
+
+function isWalletIntelligenceQuestion(message: string, plan: BittensorPlan): boolean {
+  if (!isBittensorIntelligenceQuestion(message)) return false;
+  return plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake exposure|exposure)\b/i.test(message);
+}
+
+function isSubnetIntelligenceQuestion(message: string): boolean {
+  if (!isBittensorIntelligenceQuestion(message)) return false;
+  return /\b(subnet|netuid|sn\d+|validator|metagraph|emission|price|slippage|adapter)\b/i.test(message);
+}
+
 function buildBittensorLearningCard(message: string): BittensorChatCard {
   const lower = message.toLowerCase();
   const glossary = [
@@ -1531,6 +1650,42 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [card],
       data: { topic: message },
       warnings: uniqueWarnings(warnings, card.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetIntelligenceQuestion(message)) {
+    const netuid = resolveExecutionNetuid(input, plan);
+    if (netuid === null) {
+      return clarificationResult(plan, "Which subnet netuid should I analyze?");
+    }
+    const report = await analyzeBittensorSubnetIntelligence(netuid);
+    return {
+      plan: { ...answeredPlan, intent: "discover", responseCards: ["intelligence_report"] },
+      responseText: `Analyzed subnet ${report.netuid} (${report.name}) from public Bittensor data. Score ${report.score}/100 reflects provider quality, market context, metagraph visibility, validator concentration, and adapter readiness; it is not financial advice.`,
+      cards: [buildBittensorSubnetIntelligenceCard(report)],
+      data: { intelligence: report },
+      warnings: uniqueWarnings(warnings, report.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isWalletIntelligenceQuestion(message, plan)) {
+    const ss58Address = resolveExecutionSs58(input, plan);
+    if (!ss58Address) {
+      return clarificationResult(plan, "I can analyze your Bittensor exposure, but I need your SS58 coldkey public address.");
+    }
+    const report = await analyzeBittensorWalletIntelligence(ss58Address);
+    return {
+      plan: { ...answeredPlan, intent: "wallet", responseCards: ["intelligence_report"] },
+      responseText: `Analyzed watch-only TAO exposure for ${shortSs58(ss58Address)} across ${report.subnetCount} subnet(s) and ${report.validatorCount} validator hotkey(s). This is public wallet intelligence, not financial advice.`,
+      cards: [buildBittensorWalletIntelligenceCard(report)],
+      data: { intelligence: report },
+      warnings: uniqueWarnings(warnings, report.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -2413,6 +2568,404 @@ export async function compareBittensorValidators(input: BittensorValidatorCompar
   };
 }
 
+function riskFromShare(share: number | null): BittensorRiskLevel {
+  if (share === null || !Number.isFinite(share)) return "unknown";
+  if (share >= 0.5) return "high";
+  if (share >= 0.33) return "medium";
+  return "low";
+}
+
+function riskFromSlippagePositions(positions: BittensorStakePosition[]): BittensorRiskLevel {
+  if (!positions.length) return "unknown";
+  if (positions.some((position) => position.slippageRisk === "high")) return "high";
+  if (positions.some((position) => position.slippageRisk === "medium")) return "medium";
+  if (positions.some((position) => position.slippageRisk === "low")) return "low";
+  return "unknown";
+}
+
+function riskTone(risk: BittensorRiskLevel): BittensorChatCardItem["tone"] {
+  if (risk === "high") return "danger";
+  if (risk === "medium") return "warning";
+  if (risk === "low") return "good";
+  return "muted";
+}
+
+function copilotAction(label: string, prompt: string, reason: string, riskLevel: BittensorRiskLevel): BittensorCopilotAction {
+  return { label, prompt, reason, riskLevel };
+}
+
+function watchSuggestion(input: {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid?: number | null;
+  ss58Address?: string | null;
+  validatorHotkey?: string | null;
+  threshold?: number | null;
+  reason: string;
+}): BittensorWatchSuggestion {
+  return {
+    kind: input.kind,
+    label: input.label,
+    netuid: input.netuid ?? null,
+    ss58Address: input.ss58Address ?? null,
+    validatorHotkey: input.validatorHotkey ?? null,
+    threshold: input.threshold ?? null,
+    reason: input.reason,
+  };
+}
+
+function reportRating(score: number): BittensorSubnetIntelligenceReport["rating"] {
+  if (score >= 75) return "strong_public_context";
+  if (score >= 50) return "usable_with_caveats";
+  return "limited_provider_context";
+}
+
+function subnetDataQualityRisk(detail: BittensorSubnetDetail): BittensorRiskLevel {
+  if (detail.source === "curated-fallback") return "high";
+  if (!detail.topValidators.length || detail.metagraphSummary.neurons === null) return "medium";
+  if (!detail.freshness && detail.block === null && detail.block === undefined) return "medium";
+  return "low";
+}
+
+function subnetIntelligenceScore(input: {
+  detail: BittensorSubnetDetail;
+  concentrationRisk: BittensorRiskLevel;
+  dataQualityRisk: BittensorRiskLevel;
+  capability: BittensorCapabilityManifest;
+}): number {
+  const { detail, concentrationRisk, dataQualityRisk, capability } = input;
+  let score = 45;
+  if (detail.source !== "curated-fallback") score += 12;
+  if (detail.block !== null && detail.block !== undefined) score += 8;
+  if (detail.freshness) score += 6;
+  if (detail.priceTao !== null) score += 5;
+  if (detail.emission !== null) score += 4;
+  if (detail.metagraphSummary.neurons !== null) score += 6;
+  if (detail.topValidators.length) score += 6;
+  if (capability.capabilityLevel === "adapter_ready") score += 5;
+  if (capability.capabilityLevel === "adapter_required") score += 2;
+  if (concentrationRisk === "high") score -= 14;
+  if (concentrationRisk === "medium") score -= 7;
+  if (dataQualityRisk === "high") score -= 20;
+  if (dataQualityRisk === "medium") score -= 8;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+export async function analyzeBittensorSubnetIntelligence(netuid: number): Promise<BittensorSubnetIntelligenceReport> {
+  let detail = fallbackSubnet(netuid);
+  let detailReadWarning: string | null = null;
+  try {
+    detail = await bittensorProvider.getSubnet(netuid);
+  } catch (err) {
+    detailReadWarning = err instanceof Error ? err.message : "Live subnet detail read failed.";
+  }
+  const capability = capabilityFromSubnet(detail);
+  const totalStake = detail.metagraphSummary.totalStake;
+  const topStake = Math.max(0, ...detail.topValidators.map((validator) => validator.stake ?? 0));
+  const topValidatorStakeShare = totalStake && totalStake > 0 && topStake > 0 ? topStake / totalStake : null;
+  const concentrationRisk = riskFromShare(topValidatorStakeShare);
+  const dataQualityRisk = subnetDataQualityRisk(detail);
+  const score = subnetIntelligenceScore({ detail, concentrationRisk, dataQualityRisk, capability });
+  const mechanismAvailable = false;
+  const warnings = uniqueWarnings(
+    detailReadWarning ? [`Live subnet detail read failed: ${detailReadWarning}. Falling back to curated subnet context.`] : [],
+    detail.source === "curated-fallback" ? ["Live provider data was unavailable; this report uses curated fallback metadata."] : [],
+    !detail.topValidators.length ? ["No validator sample was available for this subnet."] : [],
+    detail.priceTao === null ? ["Dynamic TAO price was unavailable from the current provider."] : [],
+    concentrationRisk === "high" ? ["The visible validator sample appears highly concentrated."] : [],
+    concentrationRisk === "medium" ? ["The visible validator sample shows moderate concentration."] : [],
+    !mechanismAvailable ? ["Mechanism-specific metagraph fields are not exposed by the current provider contract yet."] : [],
+    ["This is public-data intelligence, not financial advice."],
+  );
+  const signals: BittensorIntelligenceSignal[] = [
+    {
+      label: "Provider quality",
+      value: dataQualityRisk === "low" ? "Live-shaped" : dataQualityRisk === "medium" ? "Partial" : "Fallback",
+      tone: riskTone(dataQualityRisk),
+      explanation: "Scores whether the current provider returned live/fresh subnet and metagraph context.",
+    },
+    {
+      label: "Validator concentration",
+      value: topValidatorStakeShare === null ? "Unknown" : `${Math.round(topValidatorStakeShare * 100)}% top visible stake`,
+      tone: riskTone(concentrationRisk),
+      explanation: "Uses the largest visible validator stake share from the current metagraph sample.",
+    },
+    {
+      label: "Adapter readiness",
+      value: titleCase(capability.capabilityLevel.replace(/_/g, " ")),
+      tone: capability.capabilityLevel === "adapter_ready" ? "good" : capability.capabilityLevel === "adapter_required" ? "warning" : "default",
+      explanation: capability.adapterStatus.message,
+    },
+    {
+      label: "Market context",
+      value: detail.priceTao === null ? "Price unavailable" : `${formatMetric(detail.priceTao)} TAO price`,
+      tone: detail.priceTao === null ? "muted" : "default",
+      explanation: "Uses Dynamic TAO-style pricing fields when the provider exposes them.",
+    },
+  ];
+  const copilotActions = [
+    copilotAction(
+      "Compare validators",
+      `Compare validators on subnet ${detail.netuid} with a balanced strategy.`,
+      "Validator comparison is the safest next step before any staking preview.",
+      concentrationRisk,
+    ),
+    copilotAction(
+      "Monitor subnet",
+      `Monitor subnet ${detail.netuid} emissions and slippage.`,
+      "A watch lets Matterhorn track public subnet changes without custody or signing.",
+      dataQualityRisk === "high" ? "medium" : "low",
+    ),
+    copilotAction(
+      "Prepare preview later",
+      `Prepare staking 1 TAO on subnet ${detail.netuid} after I choose a validator hotkey.`,
+      "Matterhorn should not guess validator hotkeys; previews stay unsigned and external-signer-only.",
+      "medium",
+    ),
+  ];
+  const watchSuggestions = [
+    watchSuggestion({
+      kind: "subnet",
+      label: `Subnet ${detail.netuid} health`,
+      netuid: detail.netuid,
+      reason: "Track provider freshness, metagraph availability, and subnet-level market context.",
+    }),
+    watchSuggestion({
+      kind: "emissions",
+      label: `Subnet ${detail.netuid} emissions`,
+      netuid: detail.netuid,
+      threshold: detail.emission,
+      reason: "Watch emission changes before interpreting validator or staking context.",
+    }),
+    watchSuggestion({
+      kind: "slippage",
+      label: `Subnet ${detail.netuid} Dynamic TAO slippage`,
+      netuid: detail.netuid,
+      reason: "Dynamic TAO price and liquidity can change staking preview outcomes.",
+    }),
+  ];
+
+  return {
+    kind: "subnet",
+    netuid: detail.netuid,
+    name: detail.name,
+    category: detail.category,
+    score,
+    rating: reportRating(score),
+    mechanismSummary: {
+      available: mechanismAvailable,
+      count: mechanismAvailable ? 1 : null,
+      note: mechanismAvailable
+        ? "Mechanism data is available from the provider."
+        : "Current provider data is a subnet-level summary. Mechanism-specific metagraph support is a follow-up contract.",
+    },
+    market: {
+      priceTao: detail.priceTao,
+      emission: detail.emission,
+      tempo: detail.tempo,
+      source: detail.source,
+      block: detail.block ?? detail.metagraphSummary.block ?? null,
+      freshness: detail.freshness ?? null,
+    },
+    metagraph: {
+      neurons: detail.metagraphSummary.neurons,
+      totalStake,
+      validatorsSampled: detail.topValidators.length,
+      topValidatorStakeShare,
+      concentrationRisk,
+      dataQuality: dataQualityRisk,
+    },
+    capability: {
+      capabilityLevel: capability.capabilityLevel,
+      serviceAdapter: capability.serviceAdapter,
+      adapterStatus: capability.adapterStatus,
+      userBenefits: capability.userBenefits,
+    },
+    signals,
+    warnings,
+    nextQuestions: [
+      `Compare validators on subnet ${detail.netuid}.`,
+      `Monitor subnet ${detail.netuid} emissions and slippage.`,
+      `Prepare staking 1 TAO on subnet ${detail.netuid} after I choose a validator hotkey.`,
+    ],
+    copilotActions,
+    watchSuggestions,
+    updatedAt: nowIso(),
+  };
+}
+
+export async function analyzeBittensorWalletIntelligence(ss58Address: string): Promise<BittensorWalletIntelligenceReport> {
+  const wallet = await bittensorProvider.getWallet(ss58Address);
+  const positions = wallet.stakePositions;
+  const stakeValues = positions.map((position) => position.taoValue).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const stakeTotalTao = stakeValues.length ? stakeValues.reduce((sum, value) => sum + value, 0) : null;
+  const largestPosition = stakeValues.length ? Math.max(...stakeValues) : null;
+  const largestPositionShare = stakeTotalTao && largestPosition !== null && stakeTotalTao > 0 ? largestPosition / stakeTotalTao : null;
+  const subnetCount = new Set(positions.map((position) => position.netuid)).size;
+  const validatorCount = new Set(positions.map((position) => position.validatorHotkey).filter(Boolean)).size;
+  const concentrationRisk = riskFromShare(largestPositionShare);
+  const slippageRisk = riskFromSlippagePositions(positions);
+  const staleDataRisk: BittensorRiskLevel = wallet.providerStatus !== "ok"
+    ? "high"
+    : !wallet.freshness && wallet.block === null
+      ? "medium"
+      : "low";
+  const largestPositions = [...positions]
+    .sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0))
+    .slice(0, 5);
+  const validatorExposureMap = new Map<string, { taoValue: number; netuids: Set<number> }>();
+  for (const position of positions) {
+    if (!position.validatorHotkey) continue;
+    const existing = validatorExposureMap.get(position.validatorHotkey) ?? { taoValue: 0, netuids: new Set<number>() };
+    existing.taoValue += position.taoValue ?? 0;
+    existing.netuids.add(position.netuid);
+    validatorExposureMap.set(position.validatorHotkey, existing);
+  }
+  const validatorExposure = [...validatorExposureMap.entries()]
+    .map(([validatorHotkey, exposure]) => {
+      const share = stakeTotalTao && stakeTotalTao > 0 ? exposure.taoValue / stakeTotalTao : null;
+      const netuids = [...exposure.netuids].sort((a, b) => a - b);
+      return {
+        validatorHotkey,
+        taoValue: stakeValues.length ? exposure.taoValue : null,
+        subnetCount: netuids.length,
+        netuids,
+        share,
+        risk: riskFromShare(share),
+        prompt: `Compare validator ${validatorHotkey} on subnet ${netuids[0] ?? 0}.`,
+      };
+    })
+    .sort((a, b) => (b.taoValue ?? 0) - (a.taoValue ?? 0))
+    .slice(0, 5);
+  const warnings = uniqueWarnings(
+    wallet.providerStatus === "ok" ? [] : [wallet.message ?? "Wallet provider data is unavailable."],
+    concentrationRisk === "high" ? ["Wallet stake appears concentrated in one visible position."] : [],
+    concentrationRisk === "medium" ? ["Wallet stake has moderate visible concentration."] : [],
+    slippageRisk === "high" ? ["At least one visible position has high slippage risk."] : [],
+    slippageRisk === "medium" ? ["At least one visible position has medium slippage risk."] : [],
+    staleDataRisk !== "low" ? ["Wallet data freshness is limited from the current provider."] : [],
+    ["This is watch-only public wallet intelligence, not financial advice."],
+    wallet.warnings ?? [],
+  );
+  const signals: BittensorIntelligenceSignal[] = [
+    {
+      label: "Stake concentration",
+      value: largestPositionShare === null ? "Unknown" : `${Math.round(largestPositionShare * 100)}% largest position`,
+      tone: riskTone(concentrationRisk),
+      explanation: "Largest visible stake position as a share of visible staked TAO value.",
+    },
+    {
+      label: "Subnet spread",
+      value: `${subnetCount} subnet${subnetCount === 1 ? "" : "s"}`,
+      tone: subnetCount > 1 ? "good" : subnetCount === 1 ? "warning" : "muted",
+      explanation: "Counts distinct subnets returned by the watch-only wallet provider.",
+    },
+    {
+      label: "Validator spread",
+      value: `${validatorCount} validator hotkey${validatorCount === 1 ? "" : "s"}`,
+      tone: validatorCount > 1 ? "good" : validatorCount === 1 ? "warning" : "muted",
+      explanation: "Counts distinct validator hotkeys returned by the watch-only wallet provider.",
+    },
+    {
+      label: "Data freshness",
+      value: wallet.freshness ?? "Unavailable",
+      tone: riskTone(staleDataRisk),
+      explanation: "Uses provider freshness and block labels where available.",
+    },
+  ];
+  const topPosition = largestPositions[0] ?? null;
+  const topValidator = validatorExposure[0] ?? null;
+  const copilotActions = [
+    copilotAction(
+      "Show stake positions",
+      "Where am I staked?",
+      "Start by inspecting the visible positions that drive this wallet report.",
+      staleDataRisk,
+    ),
+    ...(topPosition ? [
+      copilotAction(
+        "Compare largest subnet",
+        `Compare validators on subnet ${topPosition.netuid} with a balanced strategy.`,
+        "The largest visible subnet exposure is the best first place to inspect validator options.",
+        concentrationRisk,
+      ),
+    ] : []),
+    ...(topValidator ? [
+      copilotAction(
+        "Inspect top validator",
+        `Compare validator ${topValidator.validatorHotkey} on subnet ${topValidator.netuids[0] ?? topPosition?.netuid ?? 0}.`,
+        "This validator has the largest visible share of the wallet's staked TAO exposure.",
+        topValidator.risk,
+      ),
+    ] : []),
+    copilotAction(
+      "Create watches",
+      "Create watches for my riskiest Bittensor positions.",
+      "Watches preserve context and track public changes without signing or custody.",
+      concentrationRisk === "unknown" ? staleDataRisk : concentrationRisk,
+    ),
+  ];
+  const watchSuggestions = [
+    watchSuggestion({
+      kind: "wallet",
+      label: `Wallet ${shortSs58(wallet.ss58Address)} exposure`,
+      ss58Address: wallet.ss58Address,
+      threshold: wallet.estimatedValueTao,
+      reason: "Track wallet-level public balance and stake-position availability.",
+    }),
+    ...(topPosition ? [
+      watchSuggestion({
+        kind: topPosition.slippageRisk === "high" || topPosition.slippageRisk === "medium" ? "slippage" as const : "subnet" as const,
+        label: `Subnet ${topPosition.netuid} largest position`,
+        netuid: topPosition.netuid,
+        ss58Address: wallet.ss58Address,
+        threshold: topPosition.taoValue,
+        reason: "Largest visible position by TAO value.",
+      }),
+    ] : []),
+    ...(topValidator ? [
+      watchSuggestion({
+        kind: "validator",
+        label: `Validator ${shortSs58(topValidator.validatorHotkey)} exposure`,
+        netuid: topValidator.netuids[0] ?? null,
+        ss58Address: wallet.ss58Address,
+        validatorHotkey: topValidator.validatorHotkey,
+        threshold: topValidator.share,
+        reason: "Largest visible validator hotkey exposure.",
+      }),
+    ] : []),
+  ];
+
+  return {
+    kind: "wallet",
+    ss58Address: wallet.ss58Address,
+    freeTao: wallet.taoBalance,
+    stakeTotalTao,
+    estimatedValueTao: wallet.estimatedValueTao,
+    subnetCount,
+    validatorCount,
+    largestPositionShare,
+    concentrationRisk,
+    slippageRisk,
+    staleDataRisk,
+    largestPositions,
+    validatorExposure,
+    signals,
+    warnings,
+    nextQuestions: [
+      "Where am I staked?",
+      "Create watches for my riskiest Bittensor positions.",
+      "Compare validators for my largest subnet exposure.",
+    ],
+    copilotActions,
+    watchSuggestions,
+    source: wallet.source ?? "provider",
+    block: wallet.block ?? null,
+    freshness: wallet.freshness ?? null,
+    updatedAt: nowIso(),
+  };
+}
+
 export function listBittensorWatches(): BittensorWatch[] {
   loadPersistedWatchlist();
   return [...watchlist.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -2916,6 +3469,66 @@ export function buildBittensorWalletCard(wallet: BittensorWalletSnapshot): Bitte
   };
 }
 
+export function buildBittensorSubnetIntelligenceCard(report: BittensorSubnetIntelligenceReport): BittensorChatCard {
+  return {
+    kind: "intelligence_report",
+    title: `${report.name} intelligence`,
+    subtitle: `Subnet ${report.netuid} · ${report.category}`,
+    summary: `Public-data score ${report.score}/100: ${titleCase(report.rating.replace(/_/g, " "))}.`,
+    tone: report.rating === "limited_provider_context" ? "warning" : "default",
+    items: [
+      cardItem("Score", `${report.score}/100`, report.score >= 75 ? "good" : report.score >= 50 ? "warning" : "danger"),
+      cardItem("Provider", report.market.source, report.market.source === "curated-fallback" ? "warning" : "default"),
+      cardItem("Freshness", report.market.freshness ?? "Unavailable", report.market.freshness ? "default" : "muted"),
+      cardItem("Price", report.market.priceTao === null ? "Unavailable" : `${formatMetric(report.market.priceTao)} TAO`),
+      cardItem("Validators sampled", report.metagraph.validatorsSampled),
+      cardItem("Concentration", report.metagraph.concentrationRisk, riskTone(report.metagraph.concentrationRisk)),
+      cardItem("Mechanisms", report.mechanismSummary.available ? String(report.mechanismSummary.count ?? "Available") : "Not exposed", report.mechanismSummary.available ? "good" : "muted"),
+      cardItem("Adapter", report.capability.adapterStatus.configured ? report.capability.serviceAdapter.replace(/_/g, " ") : "Not configured", report.capability.adapterStatus.configured ? "good" : "muted"),
+      cardItem("Copilot actions", report.copilotActions.length),
+      cardItem("Watch suggestions", report.watchSuggestions.length),
+    ],
+    actions: report.copilotActions.slice(0, 3).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel },
+    })),
+    warnings: report.warnings,
+    data: { report },
+  };
+}
+
+export function buildBittensorWalletIntelligenceCard(report: BittensorWalletIntelligenceReport): BittensorChatCard {
+  const topValidator = report.validatorExposure[0] ?? null;
+  return {
+    kind: "intelligence_report",
+    title: "Bittensor wallet intelligence",
+    subtitle: shortSs58(report.ss58Address),
+    summary: `Watch-only exposure across ${report.subnetCount} subnet(s) and ${report.validatorCount} validator hotkey(s).`,
+    tone: report.staleDataRisk === "high" || report.concentrationRisk === "high" || report.slippageRisk === "high" ? "warning" : "default",
+    items: [
+      cardItem("Free TAO", report.freeTao === null ? "Unavailable" : `${formatMetric(report.freeTao)} TAO`),
+      cardItem("Staked TAO", report.stakeTotalTao === null ? "Unavailable" : `${formatMetric(report.stakeTotalTao)} TAO`),
+      cardItem("Largest position", report.largestPositionShare === null ? "Unknown" : `${Math.round(report.largestPositionShare * 100)}%`, riskTone(report.concentrationRisk)),
+      cardItem("Concentration", report.concentrationRisk, riskTone(report.concentrationRisk)),
+      cardItem("Slippage", report.slippageRisk, riskTone(report.slippageRisk)),
+      cardItem("Top validator", topValidator ? shortSs58(topValidator.validatorHotkey) : "Unavailable", topValidator ? riskTone(topValidator.risk) : "muted"),
+      cardItem("Freshness", report.freshness ?? "Unavailable", riskTone(report.staleDataRisk)),
+      cardItem("Source", report.source, report.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("Block", report.block ?? "Unavailable", report.block === null ? "muted" : "default"),
+      cardItem("Copilot actions", report.copilotActions.length),
+      cardItem("Watch suggestions", report.watchSuggestions.length),
+    ],
+    actions: report.copilotActions.slice(0, 4).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel },
+    })),
+    warnings: report.warnings,
+    data: { report },
+  };
+}
+
 export function buildBittensorQuoteCard(quote: BittensorActionQuote): BittensorChatCard {
   return {
     kind: "staking_quote",
@@ -3219,7 +3832,7 @@ function normalizeStakePosition(value: unknown, subnets: BittensorSubnetSummary[
   return {
     netuid,
     subnetName: subnet?.name ?? firstString(record, ["subnet_name", "name"]) ?? `Subnet ${netuid}`,
-    validatorHotkey: firstString(record, ["hotkey", "validator_hotkey", "delegate_hotkey"]),
+    validatorHotkey: firstString(record, ["hotkey", "validatorHotkey", "validator_hotkey", "delegateHotkey", "delegate_hotkey"]),
     alphaAmount,
     taoValue,
     slippageRisk,
@@ -3276,6 +3889,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
           .map((row) => normalizeSubnet(row, firstString(asRecord(row), ["source"]) ?? "subtensor-sidecar"))
           .filter(Boolean) as BittensorSubnetSummary[];
         if (normalized.length) return normalized.sort((a, b) => a.netuid - b.netuid);
+        if (data) return FALLBACK_SUBNETS;
       }
 
       try {
@@ -3289,7 +3903,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
   }
 
   async getSubnet(netuid: number): Promise<BittensorSubnetDetail> {
-    return cached(`bittensor:subnet:${netuid}`, async () => {
+    return cached(`bittensor:subnet:${sidecarBaseUrl() || "tao-app"}:${netuid}`, async () => {
       const subnets = await this.listSubnets();
       let summary = subnets.find((item) => item.netuid === netuid) ?? fallbackSubnet(netuid);
       let metagraphRaw: unknown = null;
@@ -3301,7 +3915,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         if (dynamicSummary) summary = dynamicSummary;
       }
 
-      if (!summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
+      if (!sidecar && !summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
         try {
           const data = await taoAppClient().get(`/api/beta/analytics/subnets/info/${netuid}`);
           summary = normalizeSubnet(data, "tao.app") ?? summary;
@@ -3314,7 +3928,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         metagraphRaw = await sidecar.getSubnetMetagraph(netuid);
       }
 
-      if (!metagraphRaw) {
+      if (!sidecar && !metagraphRaw) {
         try {
           metagraphRaw = await taoAppClient().get(`/api/beta/analytics/subnets/metagraph/${netuid}`);
         } catch {

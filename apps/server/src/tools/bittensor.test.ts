@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  analyzeBittensorSubnetIntelligence,
+  analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorPlanCards,
@@ -9,6 +11,8 @@ import {
   buildBittensorSidecarHealthCard,
   buildBittensorValidatorComparisonCards,
   buildBittensorWalletCard,
+  buildBittensorSubnetIntelligenceCard,
+  buildBittensorWalletIntelligenceCard,
   buildBittensorWatchEvaluationCards,
   buildBittensorQuote,
   capabilityFromSubnet,
@@ -477,6 +481,36 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("answers subnet intelligence prompts with explainable public-data reports", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "analyze risk on subnet 77" });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("intelligence_report");
+      const intelligence = result.data.intelligence as { score?: number; copilotActions?: unknown[]; watchSuggestions?: unknown[] };
+      expect(intelligence.score).toBeGreaterThan(0);
+      expect(intelligence.copilotActions?.length).toBeGreaterThan(0);
+      expect(intelligence.watchSuggestions?.length).toBeGreaterThan(0);
+      expect(result.cards[0]?.actions?.[0]?.payload?.prompt).toContain("Compare validators");
+      expect(result.responseText).toContain("public Bittensor data");
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    });
+  });
+
+  test("answers wallet intelligence prompts with concentration and freshness context", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const result = await executeBittensorChatWorkflow({ message: "analyze my TAO portfolio risk", ss58Address: VALID_SS58 });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("intelligence_report");
+      const intelligence = result.data.intelligence as { subnetCount?: number; validatorExposure?: unknown[]; copilotActions?: unknown[]; watchSuggestions?: unknown[] };
+      expect(intelligence.subnetCount).toBe(2);
+      expect(intelligence.validatorExposure?.length).toBeGreaterThan(0);
+      expect(intelligence.copilotActions?.length).toBeGreaterThan(0);
+      expect(intelligence.watchSuggestions?.length).toBeGreaterThan(0);
+      expect(result.cards[0]?.actions?.some((action) => String(action.payload?.prompt ?? "").includes("Where am I staked"))).toBe(true);
+      expect(result.warnings.join(" ")).toContain("watch-only");
+    });
+  });
+
   test("discovers image-generation subnets with comparison cards", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "which subnet is useful for image generation?" });
@@ -586,6 +620,38 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.execution).toBe("unsigned_preview");
       expect(result.cards[0]?.kind).toBe("signed_action_review");
       expect((result.data.preview as { action?: string; destination?: string }).action).toBe("transfer");
+    });
+  });
+});
+
+describe("Bittensor intelligence reports", () => {
+  test("builds subnet intelligence from public metagraph and capability data", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const report = await analyzeBittensorSubnetIntelligence(77);
+      expect(report.kind).toBe("subnet");
+      expect(report.netuid).toBe(77);
+      expect(report.score).toBeGreaterThan(50);
+      expect(report.metagraph.validatorsSampled).toBe(2);
+      expect(report.signals.some((signal) => signal.label === "Validator concentration")).toBe(true);
+      expect(report.warnings.join(" ")).toContain("not financial advice");
+      const card = buildBittensorSubnetIntelligenceCard(report);
+      expect(card.kind).toBe("intelligence_report");
+      expect(card.items.some((item) => item.label === "Score")).toBe(true);
+    });
+  });
+
+  test("builds wallet intelligence from watch-only wallet positions", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const report = await analyzeBittensorWalletIntelligence(VALID_SS58);
+      expect(report.kind).toBe("wallet");
+      expect(report.subnetCount).toBe(2);
+      expect(report.validatorCount).toBe(2);
+      expect(report.largestPositionShare).toBeGreaterThan(0.7);
+      expect(report.concentrationRisk).toBe("high");
+      expect(report.warnings.join(" ")).toContain("watch-only");
+      const card = buildBittensorWalletIntelligenceCard(report);
+      expect(card.kind).toBe("intelligence_report");
+      expect(card.items.some((item) => item.label === "Largest position")).toBe(true);
     });
   });
 });

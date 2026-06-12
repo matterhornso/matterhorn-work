@@ -575,6 +575,16 @@ async function bittensor_get_wallet_positions(ss58Address) {
   return { success: true, wallet: res.wallet, cards: res.cards || [] };
 }
 
+async function bittensor_analyze_subnet(netuid) {
+  const res = await callServer(`/api/bittensor/intelligence/subnet/${encodeURIComponent(String(netuid))}`);
+  return { success: true, report: res.report, cards: res.cards || [] };
+}
+
+async function bittensor_analyze_wallet(ss58Address) {
+  const res = await callServer(`/api/bittensor/intelligence/wallet/${encodeURIComponent(String(ss58Address || ""))}`);
+  return { success: true, report: res.report, cards: res.cards || [] };
+}
+
 async function bittensor_prepare_action(args) {
   const res = await callServer("/api/bittensor/actions/quote", "POST", {
     action: args.action,
@@ -788,6 +798,8 @@ const tools = [
   { name: "bittensor_explain_subnet", description: "Explain a Bittensor subnet by netuid, including utility, metagraph context, risks, and links.", inputSchema: { type: "object", properties: { netuid: { type: "number" } }, required: ["netuid"] } },
   { name: "bittensor_compare_subnets", description: "Compare multiple Bittensor subnets by utility, price, emissions, metagraph size, and provider freshness.", inputSchema: { type: "object", properties: { netuids: { type: "array", items: { type: "number" } } }, required: ["netuids"] } },
   { name: "bittensor_get_wallet_positions", description: "Read watch-only Bittensor wallet balance and subnet stake positions for an SS58 coldkey public address.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
+  { name: "bittensor_analyze_subnet", description: "Build an explainable public-data intelligence report for a Bittensor subnet, including provider quality, metagraph context, concentration, adapter readiness, warnings, and next questions.", inputSchema: { type: "object", properties: { netuid: { type: "number" } }, required: ["netuid"] } },
+  { name: "bittensor_analyze_wallet", description: "Build an explainable watch-only intelligence report for a Bittensor wallet public SS58 address, including stake concentration, subnet/validator spread, slippage exposure, freshness, warnings, and next questions.", inputSchema: { type: "object", properties: { ss58Address: { type: "string" } }, required: ["ss58Address"] } },
   { name: "bittensor_prepare_action", description: "Prepare a quote-only Bittensor action. Returns warnings and requires an external Bittensor-compatible signer.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "transfer", "compare"] }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, recipient: { type: "string" } }, required: ["action"] } },
   { name: "bittensor_plan_from_chat", description: "Parse an ordinary user request into a safe Bittensor chat workflow plan.", inputSchema: { type: "object", properties: { message: { type: "string" }, ss58Address: { type: "string" } }, required: ["message"] } },
   { name: "bittensor_chat", description: "Execute the safe deterministic Bittensor chat workflow for ordinary Bittensor requests: learn, discover, wallet reads, stake/unstake/transfer previews, subnet use, validator comparison, monitoring, and follow-up prompts using public context.", inputSchema: { type: "object", properties: { message: { type: "string" }, contextId: { type: "string" }, context: { type: "object" }, ss58Address: { type: "string" }, netuid: { type: "number" }, amountTao: { type: "string" }, validatorHotkey: { type: "string" }, coldkey: { type: "string" }, recipient: { type: "string" }, destination: { type: "string" }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] }, rateTolerance: { type: "number" } }, required: ["message"] } },
@@ -914,6 +926,8 @@ function handleMessage(msg) {
         case "bittensor_explain_subnet": return bittensor_explain_subnet(args.netuid).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_compare_subnets": return bittensor_compare_subnets(args.netuids).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_wallet_positions": return bittensor_get_wallet_positions(args.ss58Address).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_analyze_subnet": return bittensor_analyze_subnet(args.netuid).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_analyze_wallet": return bittensor_analyze_wallet(args.ss58Address).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_action": return bittensor_prepare_action(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_plan_from_chat": return bittensor_plan_from_chat(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_chat": return bittensor_chat(args).then(r => respond(textResult(r))).catch(catchErr);

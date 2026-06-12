@@ -120,6 +120,72 @@ def string_or_none(value: Any) -> str | None:
     return text if text and text != "None" else None
 
 
+def sequence_or_empty(*values: Any) -> list[Any]:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            if hasattr(value, "tolist"):
+                value = value.tolist()
+        except Exception:
+            pass
+        if isinstance(value, (str, bytes)):
+            return [value]
+        try:
+            items = list(value)
+            if items:
+                return items
+        except TypeError:
+            return [value]
+    return []
+
+
+def scalar_or_none(value: Any) -> Any | None:
+    if value is None:
+        return None
+    try:
+        if hasattr(value, "item"):
+            return value.item()
+    except Exception:
+        pass
+    try:
+        if hasattr(value, "ravel"):
+            flattened = value.ravel()
+            if len(flattened) > 0:
+                return scalar_or_none(flattened[0])
+    except Exception:
+        pass
+    return value
+
+
+def bool_or_none(value: Any) -> bool | None:
+    scalar = scalar_or_none(value)
+    if scalar is None:
+        return None
+    try:
+        return bool(scalar)
+    except Exception:
+        return None
+
+
+def int_or_none(value: Any) -> int | None:
+    scalar = scalar_or_none(value)
+    if scalar is None:
+        return None
+    try:
+        return int(scalar)
+    except Exception:
+        return None
+
+
+def bounded_limit(payload: dict[str, Any], default: int = 128, maximum: int = 512) -> int:
+    try:
+        value = int(payload.get("limit") or default)
+    except Exception:
+        value = default
+    return max(1, min(value, maximum))
+
+
 def current_block(subtensor: Any) -> int | None:
     for name in ("get_current_block", "block"):
         method = getattr(subtensor, name, None)
@@ -203,8 +269,9 @@ def serialize_dynamic_info(info: Any, netuid: int, subtensor: Any | None = None)
     }
 
 
-def subnets(_: dict[str, Any]) -> dict[str, Any]:
+def subnets(payload: dict[str, Any]) -> dict[str, Any]:
     subtensor = get_subtensor()
+    limit = bounded_limit(payload)
     rows: list[Any] = []
     for attempt in (
         lambda: subtensor.all_subnets(),
@@ -212,13 +279,13 @@ def subnets(_: dict[str, Any]) -> dict[str, Any]:
     ):
         try:
             value = attempt()
-            if value:
+            if value is not None:
                 rows = list(value.values()) if isinstance(value, dict) else list(value)
                 break
         except Exception:
             pass
     normalized = []
-    for index, row in enumerate(rows[:512]):
+    for index, row in enumerate(rows[:limit]):
         raw_netuid = get_any(row, ("netuid", "uid", "id"))
         try:
             netuid = int(raw_netuid if raw_netuid is not None else index)
@@ -262,20 +329,20 @@ def metagraph(payload: dict[str, Any]) -> dict[str, Any]:
     subtensor = get_subtensor()
     mg = subtensor.metagraph(netuid=netuid)
     neurons = []
-    hotkeys = list(getattr(mg, "hotkeys", []) or [])
-    coldkeys = list(getattr(mg, "coldkeys", []) or [])
-    uids = list(getattr(mg, "uids", []) or range(len(hotkeys)))
-    stake = list(getattr(mg, "S", []) or getattr(mg, "stake", []) or [])
-    trust = list(getattr(mg, "T", []) or getattr(mg, "trust", []) or [])
-    validator_trust = list(getattr(mg, "Tv", []) or getattr(mg, "validator_trust", []) or [])
-    dividends = list(getattr(mg, "D", []) or getattr(mg, "dividends", []) or [])
-    emission = list(getattr(mg, "E", []) or getattr(mg, "emission", []) or [])
-    validator_permit = list(getattr(mg, "validator_permit", []) or [])
+    hotkeys = sequence_or_empty(getattr(mg, "hotkeys", None))
+    coldkeys = sequence_or_empty(getattr(mg, "coldkeys", None))
+    uids = sequence_or_empty(getattr(mg, "uids", None), range(len(hotkeys)))
+    stake = sequence_or_empty(getattr(mg, "S", None), getattr(mg, "stake", None))
+    trust = sequence_or_empty(getattr(mg, "T", None), getattr(mg, "trust", None))
+    validator_trust = sequence_or_empty(getattr(mg, "Tv", None), getattr(mg, "validator_trust", None))
+    dividends = sequence_or_empty(getattr(mg, "D", None), getattr(mg, "dividends", None))
+    emission = sequence_or_empty(getattr(mg, "E", None), getattr(mg, "emission", None))
+    validator_permit = sequence_or_empty(getattr(mg, "validator_permit", None))
 
     for index, hotkey in enumerate(hotkeys[:256]):
         neurons.append(
             {
-                "uid": int(uids[index]) if index < len(uids) else index,
+                "uid": int_or_none(uids[index]) if index < len(uids) else index,
                 "hotkey": str(hotkey),
                 "coldkey": str(coldkeys[index]) if index < len(coldkeys) else None,
                 "stake": float(stake[index]) if index < len(stake) else None,
@@ -284,7 +351,7 @@ def metagraph(payload: dict[str, Any]) -> dict[str, Any]:
                 "dividends": float(dividends[index]) if index < len(dividends) else None,
                 "emission": float(emission[index]) if index < len(emission) else None,
                 "active": True,
-                "validator_permit": bool(validator_permit[index]) if index < len(validator_permit) else None,
+                "validator_permit": bool_or_none(validator_permit[index]) if index < len(validator_permit) else None,
             }
         )
 

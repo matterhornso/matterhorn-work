@@ -11,8 +11,13 @@ const NETWORK = process.env.BITTENSOR_NETWORK === "test" || process.env.BITTENSO
   ? process.env.BITTENSOR_NETWORK
   : "finney";
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const PYTHON_HEALTH_CACHE_MS = Number(process.env.BITTENSOR_HEALTH_CACHE_MS || "5000");
+const PYTHON_SUBNET_CACHE_MS = Number(process.env.BITTENSOR_SUBNET_CACHE_MS || "60000");
 
 const here = dirname(fileURLToPath(import.meta.url));
+let pythonHealthCache = null;
+let pythonSubnetCache = null;
+let pythonSubnetRefresh = null;
 
 function json(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json" });
@@ -52,6 +57,12 @@ function firstNumberForHealth(record, key) {
   return numberOrNull(record[key]);
 }
 
+function limitFromUrl(url, fallback = 128, max = 512) {
+  const parsed = numberOrNull(url.searchParams.get("limit"));
+  if (!parsed || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
 function forbiddenKeyPath(value, path = []) {
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
@@ -76,6 +87,25 @@ function liveMeta(source = MODE === "mock" ? "matterhorn-sidecar-mock" : "bitten
     fetchedAt: new Date().toISOString(),
     block: 123456,
     freshness: MODE === "mock" ? "mock" : "live",
+  };
+}
+
+function livenessPayload(bridgeHealth = null) {
+  const sdkAvailable = MODE === "mock" || bridgeHealth?.ok !== false;
+  return {
+    ok: true,
+    status: sdkAvailable ? "healthy" : "degraded",
+    mode: MODE,
+    network: NETWORK,
+    sdkAvailable,
+    canRead: sdkAvailable,
+    canPrepare: sdkAvailable,
+    canSubmit: false,
+    block: firstNumberForHealth(bridgeHealth, "block") ?? 123456,
+    fetchedAt: new Date().toISOString(),
+    message: MODE === "mock"
+      ? "Matterhorn mock Subtensor sidecar is running. Broadcast submission is disabled."
+      : bridgeHealth?.message ?? "Matterhorn Subtensor sidecar is running in Python SDK mode.",
   };
 }
 
@@ -327,32 +357,82 @@ function pythonBridge(action, payload) {
   });
 }
 
+async function cachedPythonHealth() {
+  const now = Date.now();
+  if (pythonHealthCache && now - pythonHealthCache.cachedAt < PYTHON_HEALTH_CACHE_MS) {
+    return pythonHealthCache.payload;
+  }
+  const payload = await pythonBridge("health", {});
+  pythonHealthCache = { cachedAt: now, payload };
+  return payload;
+}
+
+function startPythonSubnetRefresh(limit) {
+  if (pythonSubnetRefresh) return;
+  const refreshLimit = Math.max(limit, pythonSubnetCache?.limit ?? 0, 128);
+  pythonSubnetRefresh = pythonBridge("subnets", { limit: refreshLimit })
+    .then((payload) => {
+      pythonSubnetCache = { cachedAt: Date.now(), limit: refreshLimit, payload };
+    })
+    .catch((err) => {
+      pythonSubnetCache = {
+        cachedAt: Date.now(),
+        limit: 0,
+        payload: {
+          ...liveMeta("bittensor-python-sdk"),
+          subnets: [],
+          warnings: [err instanceof Error ? err.message : "Python subnet list refresh failed."],
+        },
+      };
+    })
+    .finally(() => {
+      pythonSubnetRefresh = null;
+    });
+}
+
+function cachedPythonSubnets(limit) {
+  const now = Date.now();
+  const cached = pythonSubnetCache;
+  const isFresh = cached && now - cached.cachedAt < PYTHON_SUBNET_CACHE_MS && cached.limit >= limit;
+  if (isFresh) {
+    const subnets = Array.isArray(cached.payload.subnets) ? cached.payload.subnets.slice(0, limit) : [];
+    return { ...cached.payload, subnets };
+  }
+  startPythonSubnetRefresh(limit);
+  if (cached) {
+    const subnets = Array.isArray(cached.payload.subnets) ? cached.payload.subnets.slice(0, limit) : [];
+    return {
+      ...cached.payload,
+      subnets,
+      warnings: [
+        ...(Array.isArray(cached.payload.warnings) ? cached.payload.warnings : []),
+        "Returning cached subnet list while a live Python SDK refresh runs in the background.",
+      ],
+    };
+  }
+  return {
+    ...liveMeta("bittensor-python-sdk"),
+    subnets: [],
+    warnings: ["Subnet list is warming from the Python SDK. Retry shortly for live subnet discovery."],
+  };
+}
+
 async function dispatch(req, res) {
   const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+  if (req.method === "GET" && url.pathname === "/liveness") {
+    return json(res, 200, livenessPayload());
+  }
+
   if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/status")) {
     const bridgeHealth = MODE === "python"
-      ? await pythonBridge("health", {}).catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Python SDK health check failed." }))
+      ? await cachedPythonHealth().catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Python SDK health check failed." }))
       : null;
-    const sdkAvailable = MODE === "mock" || Boolean(bridgeHealth?.ok);
-    return json(res, 200, {
-      ok: true,
-      status: sdkAvailable ? "healthy" : "degraded",
-      mode: MODE,
-      network: NETWORK,
-      sdkAvailable,
-      canRead: sdkAvailable,
-      canPrepare: sdkAvailable,
-      canSubmit: false,
-      block: firstNumberForHealth(bridgeHealth, "block") ?? 123456,
-      fetchedAt: new Date().toISOString(),
-      message: MODE === "mock"
-        ? "Matterhorn mock Subtensor sidecar is running. Broadcast submission is disabled."
-        : bridgeHealth?.message ?? "Matterhorn Subtensor sidecar is running in Python SDK mode.",
-    });
+    return json(res, 200, livenessPayload(bridgeHealth));
   }
 
   if (req.method === "GET" && url.pathname === "/subnets") {
-    const data = MODE === "python" ? await pythonBridge("subnets", {}) : mockSubnets();
+    const limit = limitFromUrl(url);
+    const data = MODE === "python" ? cachedPythonSubnets(limit) : mockSubnets();
     return json(res, 200, data);
   }
 

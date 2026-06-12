@@ -25,6 +25,13 @@ async function post(path, body) {
 }
 
 try {
+  const liveness = await get("/liveness");
+  assert.equal(liveness.res.status, 200);
+  assert.equal(liveness.json.status, "healthy");
+  assert.equal(liveness.json.mode, "mock");
+  assert.equal(liveness.json.canRead, true);
+  assert.equal(liveness.json.canSubmit, false);
+
   const health = await get("/health");
   assert.equal(health.res.status, 200);
   assert.equal(health.json.status, "healthy");

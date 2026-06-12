@@ -24,11 +24,15 @@ import {
   buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
+  buildBittensorSubnetIntelligenceCard,
   buildBittensorSubnetCards,
   buildBittensorValidatorComparisonCards,
+  buildBittensorWalletIntelligenceCard,
   buildBittensorWalletCard,
   buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
+  analyzeBittensorSubnetIntelligence,
+  analyzeBittensorWalletIntelligence,
   bittensorProvider,
   checkSubtensorSidecarHealth,
   compareBittensorValidators,
@@ -3895,6 +3899,24 @@ function createRoutes(
     }
     const wallet = await bittensorProvider.getWallet(ss58Address);
     return jsonResponse({ success: true, wallet, cards: [buildBittensorWalletCard(wallet)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/intelligence/subnet/:netuid", "client", async (ctx) => {
+    const netuid = Number(ctx.params.netuid);
+    if (!Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const report = await analyzeBittensorSubnetIntelligence(netuid);
+    return jsonResponse({ success: true, report, cards: [buildBittensorSubnetIntelligenceCard(report)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/intelligence/wallet/:ss58Address", "client", async (ctx) => {
+    const ss58Address = ctx.params.ss58Address.trim();
+    if (!isValidSs58Address(ss58Address)) {
+      throw new ApiError(400, "invalid_ss58_address", "ss58Address must be a valid watch-only SS58 public address");
+    }
+    const report = await analyzeBittensorWalletIntelligence(ss58Address);
+    return jsonResponse({ success: true, report, cards: [buildBittensorWalletIntelligenceCard(report)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/actions/quote", "client", async (ctx) => {

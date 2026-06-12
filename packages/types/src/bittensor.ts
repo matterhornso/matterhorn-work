@@ -102,6 +102,7 @@ export type BittensorPlan = {
     | "signed_action_review"
     | "subnet_result"
     | "watchlist"
+    | "intelligence_report"
   >;
   requiresClarification: boolean;
   clarificationQuestion: string | null;
@@ -240,6 +241,104 @@ export type BittensorValidatorComparison = {
   updatedAt: string;
 };
 
+export type BittensorRiskLevel = "unknown" | "low" | "medium" | "high";
+
+export type BittensorIntelligenceSignal = {
+  label: string;
+  value: string;
+  tone: "default" | "good" | "warning" | "danger" | "muted";
+  explanation: string;
+};
+
+export type BittensorCopilotAction = {
+  label: string;
+  prompt: string;
+  reason: string;
+  riskLevel: BittensorRiskLevel;
+};
+
+export type BittensorWatchSuggestion = {
+  kind: BittensorWatch["kind"];
+  label: string;
+  netuid: number | null;
+  ss58Address: string | null;
+  validatorHotkey?: string | null;
+  threshold: number | null;
+  reason: string;
+};
+
+export type BittensorValidatorExposureInsight = {
+  validatorHotkey: string;
+  taoValue: number | null;
+  subnetCount: number;
+  netuids: number[];
+  share: number | null;
+  risk: BittensorRiskLevel;
+  prompt: string;
+};
+
+export type BittensorSubnetIntelligenceReport = {
+  kind: "subnet";
+  netuid: number;
+  name: string;
+  category: string;
+  score: number;
+  rating: "limited_provider_context" | "usable_with_caveats" | "strong_public_context";
+  mechanismSummary: {
+    available: boolean;
+    count: number | null;
+    note: string;
+  };
+  market: {
+    priceTao: number | null;
+    emission: number | null;
+    tempo: number | null;
+    source: string;
+    block: number | null;
+    freshness: string | null;
+  };
+  metagraph: {
+    neurons: number | null;
+    totalStake: number | null;
+    validatorsSampled: number;
+    topValidatorStakeShare: number | null;
+    concentrationRisk: BittensorRiskLevel;
+    dataQuality: BittensorRiskLevel;
+  };
+  capability: Pick<BittensorCapabilityManifest, "capabilityLevel" | "serviceAdapter" | "adapterStatus" | "userBenefits">;
+  signals: BittensorIntelligenceSignal[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  updatedAt: string;
+};
+
+export type BittensorWalletIntelligenceReport = {
+  kind: "wallet";
+  ss58Address: string;
+  freeTao: number | null;
+  stakeTotalTao: number | null;
+  estimatedValueTao: number | null;
+  subnetCount: number;
+  validatorCount: number;
+  largestPositionShare: number | null;
+  concentrationRisk: BittensorRiskLevel;
+  slippageRisk: BittensorRiskLevel;
+  staleDataRisk: BittensorRiskLevel;
+  largestPositions: BittensorStakePosition[];
+  validatorExposure: BittensorValidatorExposureInsight[];
+  signals: BittensorIntelligenceSignal[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  source: string;
+  block: number | null;
+  freshness: string | null;
+  updatedAt: string;
+};
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -288,7 +387,8 @@ export type BittensorChatCardKind =
   | "signer_status"
   | "signing_handoff"
   | "unsupported_adapter"
-  | "readiness_report";
+  | "readiness_report"
+  | "intelligence_report";
 
 export type BittensorChatCardItem = {
   label: string;
