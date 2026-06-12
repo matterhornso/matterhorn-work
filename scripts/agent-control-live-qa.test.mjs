@@ -144,6 +144,9 @@ function runHarness(baseUrl) {
     "QA prompt",
     "--max-events",
     "4",
+    "--expect-event",
+    "session.snapshot",
+    "--expect-event=session.status",
     "--ttl-seconds",
     "120",
     "--skip-reply",
@@ -181,6 +184,7 @@ try {
     "session.create",
     "session.prompt",
     "session.events",
+    "session.event-expectations",
     "files.session",
     "files.catalog",
     "files.read",
@@ -190,6 +194,10 @@ try {
     assert.ok(report.stages.some((stage) => stage.id === expected && stage.status === "pass"), `missing passing stage: ${expected}`);
   }
   assert.equal(report.artifacts.workspaceId, WORKSPACE_ID);
+  assert.deepEqual(
+    report.stages.find((stage) => stage.id === "session.event-expectations")?.missingEvents,
+    [],
+  );
   assert.equal(report.artifacts.sessionId, SESSION_ID);
   assert.equal(report.artifacts.fileSessionId, FILE_SESSION_ID);
   assert.equal(report.artifacts.filePath, "README.md");

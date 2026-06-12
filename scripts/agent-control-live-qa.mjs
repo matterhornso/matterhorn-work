@@ -9,7 +9,28 @@ const arg = (name, fallback = undefined) => {
   return inline ? inline.slice(name.length + 1) : fallback;
 };
 
+const values = (name) => {
+  const matches = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const item = args[index];
+    if (item === name && args[index + 1]) {
+      matches.push(args[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (item.startsWith(`${name}=`)) {
+      matches.push(item.slice(name.length + 1));
+    }
+  }
+  return matches;
+};
+
 const flag = (name) => args.includes(name);
+
+const expectedEvents = [...values("--expect-event"), ...values("--require-event")]
+  .flatMap((value) => value.split(","))
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const config = {
   serverUrl: (arg("--server-url") || arg("--openwork-url") || process.env.MATTERHORN_WORK_SERVER_URL || process.env.OPENWORK_SERVER_URL || "http://127.0.0.1:8787").replace(/\/+$/, ""),
@@ -27,6 +48,7 @@ const config = {
   strict: flag("--strict"),
   keepSession: flag("--keep-session"),
   skipReply: flag("--skip-reply") || flag("--no-reply"),
+  expectedEvents,
 };
 
 const stages = [];
@@ -174,11 +196,19 @@ async function runSessionFlow(workspaceId) {
       accept: "text/event-stream",
     });
     const parsed = parseSse(events.text);
+    const eventTypes = parsed.map((event) => event.event).filter(Boolean);
     add(parsed.length ? "pass" : "warn", "session.events", "Read bounded session event stream", {
       latencyMs: events.latencyMs,
       eventCount: parsed.length,
-      eventTypes: parsed.map((event) => event.event).filter(Boolean),
+      eventTypes,
     });
+    if (config.expectedEvents.length) {
+      const missing = config.expectedEvents.filter((eventType) => !eventTypes.includes(eventType));
+      add(missing.length ? "fail" : "pass", "session.event-expectations", "Validate expected session event types", {
+        expectedEvents: config.expectedEvents,
+        missingEvents: missing,
+      });
+    }
   } catch (error) {
     add("fail", "session.flow", "Chat session prompt/event flow", { error: error.message });
   } finally {

@@ -7,6 +7,8 @@ node scripts/agent-control-live-qa.mjs \
   --server-url http://127.0.0.1:8787 \
   --token <client-token> \
   --host-token <host-token> \
+  --expect-event session.snapshot \
+  --expect-event session.status \
   --json
 ```
 
@@ -32,6 +34,7 @@ Useful options:
 | `--session-id <id>` | Reuse an existing session instead of creating and deleting a temporary QA session. |
 | `--path <file>` | Read a specific workspace-relative file during the file-session probe. |
 | `--max-events <n>` | Bound the session event stream. |
+| `--expect-event <type>` | Require an event type in the bounded session event stream. Repeat it or pass comma-separated values. |
 | `--ttl-seconds <n>` | Set the temporary file-session TTL. |
 | `--strict` | Exit nonzero when any required stage fails. |
 
