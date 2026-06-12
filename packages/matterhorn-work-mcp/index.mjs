@@ -666,6 +666,14 @@ async function matterhornDoctor(args = {}) {
       ok: (payload) => payload?.success === true || payload?.ready === true || payload?.report,
       hint: "Bittensor remains non-custodial; this route should only expose read/preview readiness.",
     }));
+    checks.push(await doctorServerCheck({
+      id: "bittensor.capabilities",
+      label: "Bittensor capability registry route",
+      path: "/api/bittensor/capabilities",
+      required: true,
+      ok: (payload) => payload?.success === true && Array.isArray(payload?.capabilities),
+      hint: "Capability manifests should be public/read-only and drive subnet explanation, preview, and adapter support.",
+    }));
   }
 
   if (CLIENT_TOKEN && args.workspaceId && args.sessionId) {

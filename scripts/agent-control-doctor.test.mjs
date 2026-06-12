@@ -47,6 +47,9 @@ const server = createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     return json(res, 200, { success: true, report: { ready: true, checks: [] } });
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities") {
+    return json(res, 200, { success: true, capabilities: [{ netuid: 14, capabilityLevel: "adapter_required" }] });
+  }
   if (req.method === "GET" && url.pathname === "/workspace/ws_1/sessions/ses_1/status") {
     return json(res, 200, { item: { status: { type: "idle" }, busy: false } });
   }
@@ -124,6 +127,7 @@ try {
   assert.equal(report.summary.fail, 0);
   assert.ok(report.checks.some((check) => check.id === "server.health" && check.status === "pass"));
   assert.ok(report.checks.some((check) => check.id === "bittensor.readiness" && check.status === "pass"));
+  assert.ok(report.checks.some((check) => check.id === "bittensor.capabilities" && check.status === "pass"));
   assert.ok(report.checks.some((check) => check.id === "session.events" && check.status === "pass"));
   assert.ok(report.checks.some((check) => check.id === "files.events" && check.status === "pass"));
 
@@ -134,6 +138,7 @@ try {
     "GET /capabilities",
     "GET /workspaces",
     "GET /api/bittensor/readiness",
+    "GET /api/bittensor/capabilities",
     "GET /workspace/ws_1/sessions/ses_1/status",
     "GET /workspace/ws_1/sessions/ses_1/snapshot",
     "GET /workspace/ws_1/sessions/ses_1/events",

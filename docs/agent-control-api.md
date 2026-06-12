@@ -50,7 +50,7 @@ Common status codes:
 
 | MCP tool | HTTP route |
 | --- | --- |
-| `matterhorn_doctor` | Aggregates `GET /health`, `GET /status`, `GET /capabilities`, `GET /workspaces`, optional session/file/approval routes, and `GET /api/bittensor/readiness` |
+| `matterhorn_doctor` | Aggregates `GET /health`, `GET /status`, `GET /capabilities`, `GET /workspaces`, optional session/file/approval routes, `GET /api/bittensor/readiness`, and `GET /api/bittensor/capabilities` |
 | `matterhorn_status` | `GET /health`, `GET /status`, `GET /capabilities` |
 | `matterhorn_list_workspaces` | `GET /workspaces` |
 | `matterhorn_create_session` | `POST /workspace/:workspaceId/sessions` |
