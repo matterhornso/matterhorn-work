@@ -679,6 +679,11 @@ try {
   }
   const bittensorSchemas = tools.result.tools.filter((tool) => tool.name.startsWith("bittensor_"));
   assert.equal(/seed|private|mnemonic/i.test(JSON.stringify(bittensorSchemas)), false);
+  const descriptionFor = (name) => tools.result.tools.find((tool) => tool.name === name)?.description || "";
+  assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
+  assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
+  assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
+  assert.match(descriptionFor("bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
 
   const list = await ask({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "bittensor_list_subnets", arguments: { query: "hash" } } });
   assert.equal(JSON.parse(list.result.content[0].text).subnets.length, 1);
