@@ -57,6 +57,30 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities") {
+    return json(res, 200, {
+      success: true,
+      capabilities: [{
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        serviceAdapter: "inference",
+      }],
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities/14") {
+    return json(res, 200, {
+      success: true,
+      capability: {
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        serviceAdapter: "inference",
+      },
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
     if (body.message.startsWith("I'm new to Bittensor")) {
       return json(res, 200, {
@@ -291,6 +315,8 @@ try {
   assert.equal(report.summary.skip, 0);
   for (const expected of [
     "bittensor.readiness",
+    "bittensor.capabilities.list",
+    "bittensor.capabilities.subnet",
     "bittensor.learn",
     "bittensor.wallet.clarification",
     "bittensor.wallet.snapshot",
@@ -310,15 +336,19 @@ try {
   }
   assert.equal(report.artifacts.bittensorContextId, "bt-chat-1");
   assert.equal(report.artifacts.validatorContextId, "bt-chat-2");
+  assert.equal(report.artifacts.capabilityCount, 1);
+  assert.equal(report.artifacts.selectedCapabilityLevel, "adapter_required");
   assert.equal(report.artifacts.extrinsicPreviewAction, "stake");
   assert.equal(report.artifacts.signingHandoffPayloadSha256, "d".repeat(64));
   assert.equal(report.artifacts.subnetPreviewRequestSha256, "c".repeat(64));
-  assert.equal(report.requestCount, 15);
+  assert.equal(report.requestCount, 17);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
       "GET /api/bittensor/readiness",
+      "GET /api/bittensor/capabilities",
+      "GET /api/bittensor/capabilities/14",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",

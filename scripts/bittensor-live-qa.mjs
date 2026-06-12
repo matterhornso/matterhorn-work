@@ -167,6 +167,45 @@ async function runReadiness() {
   });
 }
 
+async function runCapabilityRegistry() {
+  await runStep("bittensor.capabilities.list", "List subnet capability manifests", async () => {
+    const result = await request("/api/bittensor/capabilities");
+    const capabilities = Array.isArray(result.body?.capabilities) ? result.body.capabilities : [];
+    if (result.body?.success !== true) {
+      throw new Error("capability list response success was not true");
+    }
+    if (!capabilities.length) {
+      throw new Error("capability list was empty");
+    }
+    artifacts.capabilityCount = capabilities.length;
+    return {
+      latencyMs: result.latencyMs,
+      capabilityCount: capabilities.length,
+      cards: cardKinds(result.body),
+    };
+  });
+
+  await runStep("bittensor.capabilities.subnet", "Read selected subnet capability manifest", async () => {
+    const result = await request(`/api/bittensor/capabilities/${encodeURIComponent(String(config.netuid))}`);
+    const capability = result.body?.capability || {};
+    if (result.body?.success !== true) {
+      throw new Error("subnet capability response success was not true");
+    }
+    if (Number(capability.netuid) !== config.netuid) {
+      throw new Error(`expected capability netuid ${config.netuid}, received ${capability.netuid ?? "missing"}`);
+    }
+    if (!capability.capabilityLevel) {
+      throw new Error("subnet capability did not include a capability level");
+    }
+    artifacts.selectedCapabilityLevel = capability.capabilityLevel;
+    return {
+      latencyMs: result.latencyMs,
+      capabilityLevel: capability.capabilityLevel,
+      serviceAdapter: capability.serviceAdapter || null,
+    };
+  });
+}
+
 async function runChatCore() {
   await runStep("bittensor.learn", "Answer beginner Bittensor explanation", async () => {
     const result = await chat("I'm new to Bittensor. Explain TAO, subnets, coldkeys, hotkeys, staking, and validators in simple language.");
@@ -457,6 +496,7 @@ function printReport(value) {
 
 await runReadiness();
 if (config.token) {
+  await runCapabilityRegistry();
   await runChatCore();
 }
 

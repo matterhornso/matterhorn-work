@@ -32,11 +32,15 @@ const sample = {
   requestCount: 8,
   artifacts: {
     readinessStatus: "ready",
+    capabilityCount: 1,
+    selectedCapabilityLevel: "adapter_required",
     bittensorContextId: "bt-chat-1",
     signingHandoffPayloadSha256: "d".repeat(64),
   },
   stages: [
     { id: "bittensor.readiness", label: "Read Bittensor readiness", status: "pass", readinessStatus: "ready" },
+    { id: "bittensor.capabilities.list", label: "List subnet capability manifests", status: "pass", capabilityCount: 1 },
+    { id: "bittensor.capabilities.subnet", label: "Read selected subnet capability manifest", status: "pass", capabilityLevel: "adapter_required", serviceAdapter: "inference" },
     { id: "bittensor.extrinsic.handoff", label: "Create checksumed external-signing handoff", status: "pass", payloadSha256: "d".repeat(64) },
     { id: "bittensor.wallet.snapshot", label: "Read watch-only TAO wallet snapshot", status: "skip", hint: "Pass --ss58-address with a public coldkey address to test wallet reads." },
     { id: "bittensor.subnet.unsupported_adapter", label: "Handle unsupported subnet service calls honestly", status: "warn", hint: "A subnet adapter is configured, so the unsupported-adapter fallback was not exercised in this environment." },
@@ -52,6 +56,8 @@ assert.ok(fromStdin.stdout.includes("Result: ready"));
 assert.ok(fromStdin.stdout.includes("bittensor.wallet.snapshot"));
 assert.ok(fromStdin.stdout.includes("request sha256:"));
 assert.ok(fromStdin.stdout.includes("payload sha256:"));
+assert.ok(fromStdin.stdout.includes("capabilities: 1"));
+assert.ok(fromStdin.stdout.includes("capability: adapter_required"));
 assert.ok(fromStdin.stdout.includes("requires confirmation: true"));
 assert.ok(fromStdin.stdout.includes("Skipped Coverage"));
 assert.ok(fromStdin.stdout.includes("Run the full wallet preview path with a public SS58 address."));

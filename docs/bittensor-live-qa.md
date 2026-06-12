@@ -5,6 +5,8 @@ Use this harness after the general [Agent Control Live QA](./agent-control-live-
 The harness calls the same non-custodial server routes used by MCP and CLI agents:
 
 - `GET /api/bittensor/readiness`
+- `GET /api/bittensor/capabilities`
+- `GET /api/bittensor/capabilities/:netuid`
 - `POST /api/bittensor/chat/execute`
 - `POST /api/bittensor/extrinsics/prepare`
 - `POST /api/bittensor/extrinsics/handoff`
@@ -13,6 +15,7 @@ The harness calls the same non-custodial server routes used by MCP and CLI agent
 It validates the Bittensor product behavior that matters most for operators:
 
 - beginner Bittensor explanation succeeds through chat;
+- subnet capability manifests are available for discovery and selected-netuid inspection;
 - `show my TAO` asks for an SS58 public address when one is missing;
 - optional watch-only wallet reads return wallet cards when a public address is supplied;
 - optional follow-up stake-position reads reuse public Bittensor context;
@@ -36,7 +39,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-This basic run does not need a wallet address. It checks readiness, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, unsupported-adapter behavior, and direct subnet adapter preview safety.
+This basic run does not need a wallet address. It checks readiness, subnet capability registry reads, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, unsupported-adapter behavior, and direct subnet adapter preview safety.
 
 ## Full Wallet And Preview Run
 
@@ -83,6 +86,8 @@ The JSON report is intentionally compact:
   "stages": [],
   "artifacts": {
     "readinessStatus": "ready",
+    "capabilityCount": 10,
+    "selectedCapabilityLevel": "adapter_required",
     "bittensorContextId": "bt-chat-...",
     "signingHandoffPayloadSha256": "...",
     "subnetPreviewRequestSha256": "..."
