@@ -320,6 +320,32 @@ const tools = [
     description: "Run the Matterhorn Work Bittensor readiness audit on the configured server.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "matterhorn_bittensor_create_watch",
+    description: "Create a public-data Bittensor watch for subnet, wallet, validator, emissions, or slippage monitoring.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] },
+        label: { type: "string" },
+        netuid: { type: "number" },
+        ss58Address: { type: "string" },
+        validatorHotkey: { type: "string" },
+        threshold: { type: "number" },
+        reason: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "matterhorn_bittensor_list_watches",
+    description: "List public-data Bittensor watches created through chat, CLI, API, or MCP.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_bittensor_check_watches",
+    description: "Check Bittensor watches and return current alert evaluations/cards.",
+    inputSchema: { type: "object", properties: {} },
+  },
 ];
 
 function jsonRpc(id, result) {
@@ -838,6 +864,12 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
       return callServer("/api/bittensor/readiness");
+    case "matterhorn_bittensor_create_watch":
+      return callServer("/api/bittensor/monitoring/watchlist", { method: "POST", body: args });
+    case "matterhorn_bittensor_list_watches":
+      return callServer("/api/bittensor/monitoring/watchlist");
+    case "matterhorn_bittensor_check_watches":
+      return callServer("/api/bittensor/monitoring/check");
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
