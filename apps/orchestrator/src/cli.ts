@@ -3748,7 +3748,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor extrinsic prepare|handoff|submit [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
-    "  matterhorn-work bittensor watch create|list|check|digest [options]",
+    "  matterhorn-work bittensor watch create|list|check|digest|act [options]",
     "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
@@ -3820,6 +3820,9 @@ function printHelp(): void {
     "  --reason <text>           Bittensor watch reason",
     "  --max-alerts <n>          Maximum Bittensor watch alerts in a digest",
     "  --include-ok              Include OK Bittensor watches in a digest",
+    "  --alert-key <key>         Bittensor watch alert key for watch act",
+    "  --alert-index <n>         Zero-based alert index for watch act",
+    "  --action-index <n>        Zero-based copilot action index for watch act",
     "  --amount-tao <amount>     TAO amount for Bittensor previews",
     "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
     "  --hotkey <key>            Bittensor hotkey public address",
@@ -7320,6 +7323,35 @@ function buildBittensorWatchDigest(
   };
 }
 
+function selectBittensorWatchAction(
+  result: Record<string, any>,
+  alertKey: string | undefined,
+  alertIndex: number,
+  actionIndex: number,
+) {
+  const evaluations = Array.isArray(result.evaluations) ? result.evaluations : [];
+  const alertEvaluations = evaluations.filter((evaluation) => evaluation?.status && evaluation.status !== "ok");
+  const evaluation = alertKey
+    ? alertEvaluations.find((item) => item?.alertKey === alertKey)
+    : alertEvaluations[alertIndex];
+  if (!evaluation) {
+    throw new Error(alertKey ? `No Bittensor alert found for alert-key ${alertKey}` : `No Bittensor alert found at alert-index ${alertIndex}`);
+  }
+  const actions = Array.isArray(evaluation.copilotActions) ? evaluation.copilotActions : [];
+  const action = actions[actionIndex];
+  const prompt = typeof action?.prompt === "string" ? action.prompt.trim() : "";
+  if (!prompt) {
+    throw new Error(`Bittensor alert ${evaluation.alertKey ?? alertIndex} does not include a copilot action prompt at action-index ${actionIndex}`);
+  }
+  const watch = evaluation.watch && typeof evaluation.watch === "object" ? evaluation.watch : {};
+  return {
+    evaluation,
+    watch,
+    action,
+    prompt,
+  };
+}
+
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const rawSubcommand = args.positionals[1] ?? "chat";
@@ -7545,6 +7577,52 @@ async function runBittensor(args: ParsedArgs) {
         headers,
       });
       outputResult(buildBittensorWatchDigest(result as Record<string, any>, maxAlerts, includeOk), outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "watch-act" ||
+      effectiveSubcommand === "act" ||
+      effectiveSubcommand === "act-on-alert" ||
+      effectiveSubcommand === "alert-action"
+    ) {
+      const alertKey = readFlag(args.flags, "alert-key")?.trim();
+      const alertIndex = Math.max(0, Math.floor(readNumber(args.flags, "alert-index", 0) ?? 0));
+      const actionIndex = Math.max(0, Math.floor(readNumber(args.flags, "action-index", 0) ?? 0));
+      const checkResult = await fetchJson(`${baseUrl}/api/bittensor/monitoring/check`, {
+        headers,
+      });
+      const selected = selectBittensorWatchAction(checkResult as Record<string, any>, alertKey, alertIndex, actionIndex);
+      const chatResult = await fetchJson(`${baseUrl}/api/bittensor/chat/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: selected.prompt,
+          ...(typeof selected.watch.netuid === "number" ? { netuid: selected.watch.netuid } : {}),
+          ...(typeof selected.watch.ss58Address === "string" ? { ss58Address: selected.watch.ss58Address } : {}),
+          ...(typeof selected.watch.validatorHotkey === "string" ? { validatorHotkey: selected.watch.validatorHotkey } : {}),
+        }),
+      });
+      outputResult({
+        success: (chatResult as Record<string, any>).success !== false,
+        selectedAlert: {
+          status: selected.evaluation.status ?? "unknown",
+          alertKey: selected.evaluation.alertKey,
+          notificationIntent: selected.evaluation.notificationIntent,
+          watchId: selected.watch.id,
+          kind: selected.watch.kind,
+          label: selected.watch.label,
+          netuid: selected.watch.netuid,
+          ss58Address: selected.watch.ss58Address,
+          validatorHotkey: selected.watch.validatorHotkey,
+          reason: selected.evaluation.summary ?? selected.evaluation.reason,
+        },
+        action: {
+          label: selected.action.label,
+          prompt: selected.prompt,
+        },
+        chat: chatResult,
+      }, outputJson);
       return;
     }
 
