@@ -185,6 +185,39 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
+    assert.equal(body.action, "stake");
+    assert.equal(body.netuid, 14);
+    assert.equal(body.amountTao, "1");
+    assert.equal(body.coldkey, VALID_SS58);
+    assert.equal(body.hotkey, VALID_SS58);
+    assert.equal(body.rateTolerance, 0.01);
+    return json(res, 200, {
+      success: true,
+      preview: {
+        action: "stake",
+        netuid: 14,
+        requiresExternalSignature: true,
+        unsignedPayload: { call: "stake", netuid: 14 },
+      },
+      cards: [card("signed_action_review", "Lower-level stake preview")],
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/handoff") {
+    assert.equal(body.preview.action, "stake");
+    assert.equal(body.preview.netuid, 14);
+    return json(res, 200, {
+      success: true,
+      handoff: {
+        payloadSha256: "d".repeat(64),
+        suggestedFilename: "bittensor-stake-subnet-14.json",
+      },
+      receipt: { status: "awaiting_signature" },
+      cards: [card("signing_handoff", "External signing handoff")],
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
     assert.equal(body.intent, "service_call");
     assert.equal(body.task, "Live QA preview for subnet 14");
@@ -268,6 +301,8 @@ try {
     "bittensor.validators.compare",
     "bittensor.stake.clarification",
     "bittensor.stake.unsigned_preview",
+    "bittensor.extrinsic.prepare",
+    "bittensor.extrinsic.handoff",
     "bittensor.subnet.unsupported_adapter",
     "bittensor.subnet.invocation_preview",
   ]) {
@@ -275,8 +310,10 @@ try {
   }
   assert.equal(report.artifacts.bittensorContextId, "bt-chat-1");
   assert.equal(report.artifacts.validatorContextId, "bt-chat-2");
+  assert.equal(report.artifacts.extrinsicPreviewAction, "stake");
+  assert.equal(report.artifacts.signingHandoffPayloadSha256, "d".repeat(64));
   assert.equal(report.artifacts.subnetPreviewRequestSha256, "c".repeat(64));
-  assert.equal(report.requestCount, 13);
+  assert.equal(report.requestCount, 15);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
@@ -292,6 +329,8 @@ try {
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
+      "POST /api/bittensor/extrinsics/prepare",
+      "POST /api/bittensor/extrinsics/handoff",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/subnets/14/preview",
     ],

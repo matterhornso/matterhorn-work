@@ -115,6 +115,7 @@ function stageDetail(stage) {
   if (stage.readinessStatus) parts.push(`readiness: ${stage.readinessStatus}`);
   if (stage.contextId) parts.push(`context: ${stage.contextId}`);
   if (stage.requiresExternalSignature !== undefined) parts.push(`external signature: ${stage.requiresExternalSignature}`);
+  if (stage.payloadSha256) parts.push(`payload sha256: ${stage.payloadSha256}`);
   if (stage.requiresConfirmation !== undefined) parts.push(`requires confirmation: ${stage.requiresConfirmation}`);
   if (stage.requestSha256) parts.push(`request sha256: ${stage.requestSha256}`);
   if (stage.adapterSupported !== undefined && stage.adapterSupported !== null) parts.push(`adapter supported: ${stage.adapterSupported}`);
