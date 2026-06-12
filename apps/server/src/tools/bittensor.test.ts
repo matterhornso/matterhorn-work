@@ -566,14 +566,17 @@ describe("executeBittensorChatWorkflow", () => {
 
       try {
         const result = await executeBittensorChatWorkflow({ message: "use subnet 77 to generate an image" });
-        const preview = result.data.preview as { supported?: boolean; requiredAuth?: string; costModel?: string } | undefined;
+        const preview = result.data.preview as { supported?: boolean; requiredAuth?: string; costModel?: string; requestSha256?: string; confirmationPrompt?: string } | undefined;
         expect(result.execution).toBe("answered");
         expect(preview?.supported).toBe(true);
         expect(preview?.requiredAuth).toBe("api_key");
         expect(preview?.costModel).toBe("provider_priced");
+        expect(preview?.requestSha256).toHaveLength(64);
+        expect(preview?.confirmationPrompt).toContain(preview?.requestSha256 ?? "missing");
         expect(result.cards[0]?.kind).toBe("subnet_result");
         expect(result.cards[0]?.title).toContain("service review");
         expect(result.cards[0]?.actions?.[0]?.label).toBe("Confirm service call");
+        expect(result.cards[0]?.items.some((item) => item.label === "Request SHA-256")).toBe(true);
         expect(adapterCalls).toBe(0);
         expect(JSON.stringify(result)).not.toContain("BITTENSOR_IMAGE_ADAPTER_TOKEN");
         expect(JSON.stringify(result)).not.toContain("adapter-token");
@@ -929,6 +932,9 @@ describe("capabilityFromSubnet", () => {
     expect(preview.netuid).toBe(14);
     expect(preview.requiresConfirmation).toBe(true);
     expect(preview.request.ss58Address).toBe(VALID_SS58);
+    expect(preview.requestJson).toContain("service_call");
+    expect(preview.requestSha256).toHaveLength(64);
+    expect(preview.confirmationPrompt).toContain(preview.requestSha256);
     expect(preview.warnings.join(" ")).toContain("Matterhorn can still explain");
     const card = buildBittensorInvocationPreviewCard(preview);
     expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);

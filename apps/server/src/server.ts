@@ -4137,6 +4137,17 @@ function createRoutes(
     if (!["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"].includes(intent)) {
       throw new ApiError(400, "invalid_intent", "intent must be explain, metagraph, stake_guidance, wallet_guidance, or service_call");
     }
+    const expectedRequestSha256 = typeof body.previewRequestSha256 === "string" ? body.previewRequestSha256 : null;
+    if (expectedRequestSha256) {
+      const preview = await previewBittensorSubnetInvocation(netuid, {
+        intent: intent as BittensorSubnetInvocation["intent"],
+        task: typeof body.task === "string" ? body.task : null,
+        ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+      });
+      if (preview.requestSha256 !== expectedRequestSha256) {
+        throw new ApiError(409, "preview_mismatch", "Confirmed subnet service request does not match the reviewed preview hash.");
+      }
+    }
     const invocation = await invokeBittensorSubnet(netuid, {
       intent: intent as BittensorSubnetInvocation["intent"],
       task: typeof body.task === "string" ? body.task : null,

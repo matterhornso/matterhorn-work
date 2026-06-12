@@ -292,6 +292,9 @@ export interface BittensorSubnetInvocationPreview {
     task: string | null;
     ss58Address: string | null;
   };
+  requestJson: string;
+  requestSha256: string;
+  confirmationPrompt: string;
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
   safetyNotes: string[];
@@ -2753,6 +2756,8 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
     task: input.task?.trim() || null,
     ss58Address,
   };
+  const requestJson = stableJson(request);
+  const requestSha256 = createHash("sha256").update(requestJson).digest("hex");
   return {
     netuid,
     subnetName: detail.name,
@@ -2763,6 +2768,9 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
     requiredAuth: capability.requiredAuth,
     costModel: capability.costModel,
     request,
+    requestJson,
+    requestSha256,
+    confirmationPrompt: `Confirm Bittensor subnet ${netuid} service call with request SHA-256 ${requestSha256}.`,
     requestSchema: capability.requestSchema,
     resultSchema: capability.resultSchema,
     safetyNotes: capability.safetyNotes,
@@ -4569,12 +4577,13 @@ export function buildBittensorInvocationPreviewCard(preview: BittensorSubnetInvo
       cardItem("Auth", titleCase(preview.requiredAuth), preview.requiredAuth === "none" ? "good" : "warning"),
       cardItem("Cost model", titleCase(preview.costModel)),
       cardItem("Task", preview.request.task ? "Included" : "Not provided", preview.request.task ? "default" : "muted"),
+      cardItem("Request SHA-256", preview.requestSha256.slice(0, 20), "muted"),
     ],
     actions: preview.supported ? [{
       label: "Confirm service call",
       kind: "send_to_chat",
       payload: {
-        prompt: `Confirm Bittensor subnet ${preview.netuid} service call with adapter ${preview.adapter}.`,
+        prompt: preview.confirmationPrompt,
         preview,
       },
     }] : [{
