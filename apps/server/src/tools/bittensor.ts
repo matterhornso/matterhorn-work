@@ -444,6 +444,9 @@ export interface BittensorWatchEvaluation {
   threshold: number | null;
   alertLevel?: BittensorRiskLevel;
   actionPrompt?: string | null;
+  copilotActions?: BittensorCopilotAction[];
+  alertKey?: string;
+  shouldNotify?: boolean;
   source: string;
   checkedAt: string;
 }
@@ -3484,12 +3487,100 @@ function actionPromptForWatch(watch: BittensorWatch): string | null {
   return null;
 }
 
+function alertKeyForWatch(watch: BittensorWatch): string {
+  return [
+    watch.kind,
+    watch.netuid ?? "any-subnet",
+    watch.ss58Address ? shortSs58(watch.ss58Address) : "no-wallet",
+    watch.validatorHotkey ? shortSs58(watch.validatorHotkey) : "no-validator",
+  ].join(":");
+}
+
+function watchEvaluationCopilotActions(evaluation: BittensorWatchEvaluation, alertLevel: BittensorRiskLevel): BittensorCopilotAction[] {
+  const watch = evaluation.watch;
+  const actions: BittensorCopilotAction[] = [];
+  const actionPrompt = evaluation.actionPrompt ?? actionPromptForWatch(watch);
+
+  if (actionPrompt) {
+    actions.push(copilotAction(
+      evaluation.status === "ok" ? "Inspect watch context" : "Investigate alert",
+      actionPrompt,
+      evaluation.status === "ok"
+        ? "Open the Bittensor analysis behind this watch before changing any position."
+        : "Start with the relevant Bittensor intelligence view before preparing any action.",
+      alertLevel,
+    ));
+  }
+
+  if (watch.kind === "wallet" && watch.ss58Address) {
+    actions.push(copilotAction(
+      "Explain wallet exposure",
+      `Explain my Bittensor wallet ${watch.ss58Address}, what changed, and what I should monitor next.`,
+      "Wallet watches should turn into a portfolio explanation, not only a balance alert.",
+      alertLevel,
+    ));
+  }
+
+  if (watch.kind === "validator" && watch.validatorHotkey && watch.netuid !== null) {
+    actions.push(copilotAction(
+      "Compare validator options",
+      `Compare validator ${watch.validatorHotkey} on subnet ${watch.netuid} and show safer alternatives if the public sample supports it.`,
+      "Validator alerts should lead to public-data comparison before any staking decision.",
+      alertLevel,
+    ));
+  }
+
+  if ((watch.kind === "subnet" || watch.kind === "emissions" || watch.kind === "slippage") && watch.netuid !== null) {
+    actions.push(copilotAction(
+      "Refresh subnet intelligence",
+      `Analyze subnet ${watch.netuid} and explain current risk, emissions, slippage, validator concentration, and source freshness.`,
+      "Subnet alerts should refresh the full public-data picture before the user acts.",
+      alertLevel,
+    ));
+  }
+
+  if (watch.kind === "slippage" && watch.netuid !== null) {
+    actions.push(copilotAction(
+      "Prepare fresh preview",
+      `Prepare a fresh unsigned Bittensor staking preview for subnet ${watch.netuid} only after I provide the amount, coldkey, and validator hotkey.`,
+      "Slippage alerts should push the user toward a fresh unsigned preview and explicit context, not stale action data.",
+      alertLevel,
+    ));
+  }
+
+  if (evaluation.status !== "ok") {
+    actions.push(copilotAction(
+      "Check alerts again",
+      "Check my Bittensor alerts again and explain which watches still need attention.",
+      "A second check confirms whether the alert is still present before the user escalates.",
+      alertLevel,
+    ));
+  }
+
+  const seen = new Set<string>();
+  return actions.filter((action) => {
+    if (seen.has(action.prompt)) return false;
+    seen.add(action.prompt);
+    return true;
+  }).slice(0, 5);
+}
+
 function finalizeWatchEvaluation(evaluation: BittensorWatchEvaluation): BittensorWatchEvaluation {
   const alertLevel: BittensorRiskLevel =
     evaluation.status === "warning" ? "medium" :
     evaluation.status === "unavailable" ? "high" :
     "low";
-  const next = { ...evaluation, alertLevel, actionPrompt: evaluation.actionPrompt ?? actionPromptForWatch(evaluation.watch) };
+  const actionPrompt = evaluation.actionPrompt ?? actionPromptForWatch(evaluation.watch);
+  const next = {
+    ...evaluation,
+    alertLevel,
+    actionPrompt,
+    copilotActions: evaluation.copilotActions?.length
+      ? evaluation.copilotActions
+      : watchEvaluationCopilotActions({ ...evaluation, alertLevel, actionPrompt }, alertLevel),
+    alertKey: evaluation.alertKey ?? alertKeyForWatch(evaluation.watch),
+    shouldNotify: evaluation.shouldNotify ?? evaluation.status !== "ok",
+  };
   if (next.status !== "ok") {
     const existing = watchlist.get(next.watch.id);
     if (existing) {
@@ -4397,14 +4488,26 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
       cardItem("Threshold", evaluation.threshold ?? "Not set", evaluation.threshold === null ? "muted" : "default"),
       cardItem("Alert level", evaluation.alertLevel ?? "unknown", riskTone(evaluation.alertLevel ?? "unknown")),
       cardItem("Source", evaluation.source, evaluation.source === "curated-fallback" ? "warning" : "muted"),
+      cardItem("Notify", evaluation.shouldNotify ? "Yes" : "No", evaluation.shouldNotify ? "warning" : "good"),
+      cardItem("Next actions", evaluation.copilotActions?.length ?? 0, evaluation.copilotActions?.length ? "default" : "muted"),
     ],
-    actions: evaluation.actionPrompt
-      ? [{
-        label: "Investigate",
+    actions: (evaluation.copilotActions?.length
+      ? evaluation.copilotActions
+      : evaluation.actionPrompt
+        ? [copilotAction("Investigate", evaluation.actionPrompt, "Inspect this Bittensor watch.", evaluation.alertLevel ?? "unknown")]
+        : []
+    ).slice(0, 4).map((action) => ({
+        label: action.label,
         kind: "send_to_chat",
-        payload: { prompt: evaluation.actionPrompt, watchId: evaluation.watch.id, status: evaluation.status },
-      }]
-      : [],
+        payload: {
+          prompt: action.prompt,
+          reason: action.reason,
+          riskLevel: action.riskLevel,
+          watchId: evaluation.watch.id,
+          status: evaluation.status,
+          alertKey: evaluation.alertKey,
+        },
+      })),
     warnings: evaluation.status === "ok" ? [] : [evaluation.summary],
     data: { evaluation },
   }));
