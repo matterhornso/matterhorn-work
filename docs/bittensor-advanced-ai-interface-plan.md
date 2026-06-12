@@ -107,6 +107,12 @@ Deliverable prompt:
 Use the best Bittensor subnet available to help with this task.
 ```
 
+Current implementation:
+
+- Chat-first subnet use now prepares a service review card before any configured adapter call.
+- The preview shows adapter support, auth requirement, cost model, request context, schemas, warnings, and confirmation action.
+- Direct adapter invocation remains a lower-level explicit API path; ordinary chat does not silently call service adapters.
+
 ## Phase 6: Autonomous Monitoring And Bittensor Agent Ops
 
 Goal: make Matterhorn continuously useful after the user leaves chat.

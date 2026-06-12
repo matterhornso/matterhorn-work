@@ -17,6 +17,7 @@ import {
   auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationCard,
+  buildBittensorInvocationPreviewCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
@@ -56,6 +57,7 @@ import {
   listBittensorCapabilities,
   listBittensorWatches,
   planBittensorChat,
+  previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   submitSignedBittensorExtrinsic,
   type BittensorActionQuoteInput,
@@ -4141,6 +4143,24 @@ function createRoutes(
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
     });
     return jsonResponse({ success: true, invocation, cards: [buildBittensorInvocationCard(invocation)] });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/subnets/:netuid/preview", "client", async (ctx) => {
+    const netuid = Number(ctx.params.netuid);
+    if (!Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const body = await readJsonBody(ctx.request);
+    const intent = typeof body.intent === "string" ? body.intent : "service_call";
+    if (!["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"].includes(intent)) {
+      throw new ApiError(400, "invalid_intent", "intent must be explain, metagraph, stake_guidance, wallet_guidance, or service_call");
+    }
+    const preview = await previewBittensorSubnetInvocation(netuid, {
+      intent: intent as BittensorSubnetInvocation["intent"],
+      task: typeof body.task === "string" ? body.task : null,
+      ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+    });
+    return jsonResponse({ success: true, preview, cards: [buildBittensorInvocationPreviewCard(preview)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/validators/compare", "client", async (ctx) => {

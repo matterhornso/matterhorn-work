@@ -243,6 +243,29 @@ export type BittensorSubnetInvocation = {
   warnings: string[];
 };
 
+export type BittensorSubnetInvocationPreview = {
+  netuid: number;
+  subnetName: string;
+  intent: BittensorSubnetInvocation["intent"];
+  adapter: BittensorCapabilityManifest["serviceAdapter"];
+  supported: boolean;
+  configured: boolean;
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  request: {
+    netuid: number;
+    intent: BittensorSubnetInvocation["intent"];
+    task: string | null;
+    ss58Address: string | null;
+  };
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  safetyNotes: string[];
+  warnings: string[];
+  consequenceSummary: string;
+  requiresConfirmation: true;
+};
+
 export type BittensorValidatorCandidate = {
   netuid: number;
   subnetName: string;

@@ -5,6 +5,7 @@ import {
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
+  buildBittensorInvocationPreviewCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
@@ -34,6 +35,7 @@ import {
   getSubtensorSidecarStatus,
   isValidSs58Address,
   planBittensorChat,
+  previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   parseAmountTao,
   scoreBittensorSubnetForGoal,
@@ -537,6 +539,60 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("previews configured subnet service adapters before chat invocation", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousToken = process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN;
+      const previousFetch = globalThis.fetch;
+      process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN = "adapter-token";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock image adapter",
+        serviceAdapter: "creative_media",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "api_key",
+        authEnv: "BITTENSOR_IMAGE_ADAPTER_TOKEN",
+        costModel: "provider_priced",
+        safetyNotes: ["Mock image adapter safety note."],
+      }]);
+      let adapterCalls = 0;
+      globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).startsWith("https://adapter.invalid")) {
+          adapterCalls += 1;
+          throw new Error("adapter should not be called during preview");
+        }
+        return previousFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        const result = await executeBittensorChatWorkflow({ message: "use subnet 77 to generate an image" });
+        const preview = result.data.preview as { supported?: boolean; requiredAuth?: string; costModel?: string } | undefined;
+        expect(result.execution).toBe("answered");
+        expect(preview?.supported).toBe(true);
+        expect(preview?.requiredAuth).toBe("api_key");
+        expect(preview?.costModel).toBe("provider_priced");
+        expect(result.cards[0]?.kind).toBe("subnet_result");
+        expect(result.cards[0]?.title).toContain("service review");
+        expect(result.cards[0]?.actions?.[0]?.label).toBe("Confirm service call");
+        expect(adapterCalls).toBe(0);
+        expect(JSON.stringify(result)).not.toContain("BITTENSOR_IMAGE_ADAPTER_TOKEN");
+        expect(JSON.stringify(result)).not.toContain("adapter-token");
+      } finally {
+        globalThis.fetch = previousFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousToken === undefined) {
+          delete process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN;
+        } else {
+          process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN = previousToken;
+        }
+      }
+    });
+  });
+
   test("compares validators on a requested subnet", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
@@ -862,6 +918,21 @@ describe("capabilityFromSubnet", () => {
     } else {
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previous;
     }
+  });
+
+  test("builds subnet invocation preview cards without calling adapters", async () => {
+    const preview = await previewBittensorSubnetInvocation(14, {
+      intent: "service_call",
+      task: "Use this subnet for a compute task.",
+      ss58Address: VALID_SS58,
+    });
+    expect(preview.netuid).toBe(14);
+    expect(preview.requiresConfirmation).toBe(true);
+    expect(preview.request.ss58Address).toBe(VALID_SS58);
+    expect(preview.warnings.join(" ")).toContain("Matterhorn can still explain");
+    const card = buildBittensorInvocationPreviewCard(preview);
+    expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);
+    expect(card.items.some((item) => item.label === "Cost model")).toBe(true);
   });
 });
 
