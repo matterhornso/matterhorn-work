@@ -11,6 +11,25 @@ Matterhorn should make crypto systems usable through chat without hiding the mec
 
 This plan is gated. Hyperliquid and Polymarket execution work should not start until Bittensor's readiness audit has no blockers and only accepted provider/runtime warnings.
 
+## Foundation Lane: Upstream OpenWork Intake
+
+Matterhorn Work should continue to benefit from upstream OpenWork runtime, desktop, server, dependency, and packaging updates without losing Matterhorn-specific product direction. Upstream updates are integrated through a reviewed sync lane, not by direct auto-merge.
+
+The sync lane is documented in [Upstream OpenWork Sync Playbook](./upstream-openwork-sync.md) and checked by:
+
+```bash
+pnpm upstream:openwork:check
+pnpm test:upstream-openwork-sync
+```
+
+Every upstream sync PR must preserve:
+
+- Matterhorn Work branding and engine abstraction.
+- `matterhorn-work` and `matterhorn-work-server` commands with legacy OpenWork shims.
+- `MATTERHORN_WORK_*` aliases with `OPENWORK_*` fallbacks.
+- Bittensor non-custodial safety contracts.
+- Agent-control HTTP, MCP, CLI, browser, event, file, and Bittensor interfaces.
+
 ## Gate 1: Perfect Bittensor First
 
 Bittensor is the first proof that Matterhorn can make a complex ecosystem simple:
@@ -237,11 +256,12 @@ Shared safety rules:
 
 ## Execution Order
 
-1. Finish Bittensor readiness audit and remove blockers.
-2. Build Bittensor Subtensor sidecar contract/tests and live health probe. Delivered in PR #3 with `packages/bittensor-subtensor-sidecar`, deterministic mock mode, optional Python SDK bridge, health/status endpoints, metagraph/wallet reads, unsigned extrinsic previews, submit-disabled safety behavior, and no-secret contract tests.
-3. Promote TAO sidecar reads from contract-ready to live-read-ready: sidecar-first subnet list/detail, Dynamic TAO metadata, wallet/stake exposure, quote enrichment, source/freshness labels, and CI-safe mocked live-read tests.
-4. Build Hyperliquid read-only chat tools.
-5. Build Hyperliquid order previews, not submission.
-6. Build Polymarket read-only chat tools.
-7. Build Polymarket bet previews, not submission.
-8. Only after preview tests and no-secret audits pass, add signed submission flows.
+1. Keep the upstream OpenWork intake lane available so runtime and packaging fixes can flow into Matterhorn safely.
+2. Finish Bittensor readiness audit and remove blockers.
+3. Build Bittensor Subtensor sidecar contract/tests and live health probe. Delivered in PR #3 with `packages/bittensor-subtensor-sidecar`, deterministic mock mode, optional Python SDK bridge, health/status endpoints, metagraph/wallet reads, unsigned extrinsic previews, submit-disabled safety behavior, and no-secret contract tests.
+4. Promote TAO sidecar reads from contract-ready to live-read-ready: sidecar-first subnet list/detail, Dynamic TAO metadata, wallet/stake exposure, quote enrichment, source/freshness labels, and CI-safe mocked live-read tests.
+5. Build Hyperliquid read-only chat tools.
+6. Build Hyperliquid order previews, not submission.
+7. Build Polymarket read-only chat tools.
+8. Build Polymarket bet previews, not submission.
+9. Only after preview tests and no-secret audits pass, add signed submission flows.
