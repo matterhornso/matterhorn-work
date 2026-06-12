@@ -39,10 +39,18 @@ pnpm upstream:openwork:check
 pnpm upstream:openwork:check -- --json
 ```
 
+Agent-friendly CLI wrapper:
+
+```bash
+matterhorn-work upstream openwork check
+matterhorn-work upstream openwork check --json
+```
+
 Use a remote check only when network access is available:
 
 ```bash
 pnpm upstream:openwork:check -- --remote
+matterhorn-work upstream openwork check --remote
 ```
 
 The checker prints:
