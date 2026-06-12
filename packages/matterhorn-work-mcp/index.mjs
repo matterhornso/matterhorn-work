@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
@@ -33,6 +34,60 @@ const HOST_TOKEN =
 const REQUEST_TIMEOUT_MS = Number(process.env.MATTERHORN_WORK_MCP_TIMEOUT_MS || 15_000);
 const MAX_TEXT_BYTES = Number(process.env.MATTERHORN_WORK_MCP_MAX_TEXT_BYTES || 512_000);
 
+const UPSTREAM_OPENWORK_DEFAULTS = {
+  upstreamUrl: process.env.OPENWORK_UPSTREAM_REMOTE || "https://github.com/different-ai/openwork.git",
+  upstreamBranch: process.env.OPENWORK_UPSTREAM_BRANCH || "main",
+  baseBranch: process.env.MATTERHORN_WORK_BASE_BRANCH || "dev",
+};
+
+const UPSTREAM_OPENWORK_CONFLICT_ZONES = [
+  {
+    name: "Branding and i18n",
+    paths: ["apps/app/src/i18n", "README.md", "docs"],
+    preserve: "Visible product copy should say Matterhorn Work.",
+  },
+  {
+    name: "Env vars and headers",
+    paths: ["apps/server", "apps/orchestrator", "docs"],
+    preserve: "Matterhorn-native aliases should take precedence while OpenWork fallbacks keep working.",
+  },
+  {
+    name: "CLI and packaging",
+    paths: ["apps/orchestrator", "packages", "scripts/release"],
+    preserve: "Public commands should stay matterhorn-work and matterhorn-work-server with openwork shims.",
+  },
+  {
+    name: "OpenCode abstraction",
+    paths: ["apps/app/src", "apps/orchestrator", "docs/opencode-runtime-abstraction.md"],
+    preserve: "User-facing copy should say Matterhorn Work engine while technical docs can name OpenCode.",
+  },
+  {
+    name: "Agent control surface",
+    paths: ["docs/agent-control-*.md", "packages/matterhorn-work-mcp", "apps/orchestrator/src/cli.ts"],
+    preserve: "HTTP, MCP, CLI, browser-control, and event-stream contracts should remain stable.",
+  },
+  {
+    name: "Bittensor safety",
+    paths: ["apps/server/src/tools/bittensor*", "packages/types/src/bittensor.ts", "docs/bittensor-*.md"],
+    preserve: "Bittensor remains chat-first, non-custodial, source-aware, and no-secret by contract.",
+  },
+  {
+    name: "Release automation",
+    paths: [".github/workflows", "scripts/release", "apps/desktop"],
+    preserve: "CI runner fallbacks, alpha packaging, and Matterhorn naming should remain intact.",
+  },
+];
+
+const UPSTREAM_OPENWORK_VERIFICATION_COMMANDS = [
+  "pnpm test:upstream-openwork-sync",
+  "pnpm test:cli-packaging-rename",
+  "pnpm test:opencode-abstraction-copy",
+  "pnpm test:agent-control-coverage-matrix",
+  "pnpm test:agent-control-doctor",
+  "pnpm test:bittensor-operator-playbook",
+  "pnpm test:bittensor-live-qa",
+];
+
 const tools = [
   {
     name: "matterhorn_doctor",
@@ -51,6 +106,20 @@ const tools = [
     name: "matterhorn_status",
     description: "Read Matterhorn Work server health, status, and capability summary.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_upstream_openwork_check",
+    description: "Build a read-only intake plan for reviewing upstream OpenWork updates before bringing them into Matterhorn Work. Does not merge or modify files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        upstreamUrl: { type: "string", description: "Optional upstream OpenWork repository URL." },
+        upstreamBranch: { type: "string", description: "Optional upstream branch name." },
+        baseBranch: { type: "string", description: "Optional Matterhorn base branch." },
+        date: { type: "string", description: "Optional date used for the recommended sync branch slug." },
+        remote: { type: "boolean", description: "When true, run git ls-remote against the upstream branch." },
+      },
+    },
   },
   {
     name: "matterhorn_list_workspaces",
@@ -855,12 +924,96 @@ async function matterhornStatus() {
   };
 }
 
+function upstreamBranchDateSlug(date) {
+  const slug = String(date)
+    .trim()
+    .replace(/[^0-9A-Za-z]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || new Date().toISOString().slice(0, 10);
+}
+
+function inspectUpstreamRemote(upstreamUrl, upstreamBranch) {
+  try {
+    const output = execFileSync("git", ["ls-remote", "--heads", upstreamUrl, upstreamBranch], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30_000,
+    }).trim();
+    return {
+      checked: true,
+      status: output ? "reachable" : "missing_branch",
+      message: output
+        ? `Found upstream branch ${upstreamBranch}.`
+        : `Could not find upstream branch ${upstreamBranch}.`,
+      head: output.split(/\s+/)[0] || null,
+    };
+  } catch (error) {
+    return {
+      checked: true,
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+      head: null,
+    };
+  }
+}
+
+function matterhornUpstreamOpenWorkCheck(args = {}) {
+  const upstreamUrl = args.upstreamUrl || UPSTREAM_OPENWORK_DEFAULTS.upstreamUrl;
+  const upstreamBranch = args.upstreamBranch || UPSTREAM_OPENWORK_DEFAULTS.upstreamBranch;
+  const baseBranch = args.baseBranch || UPSTREAM_OPENWORK_DEFAULTS.baseBranch;
+  const date = args.date || new Date().toISOString().slice(0, 10);
+  const syncBranch = `codex/sync-openwork-${upstreamBranchDateSlug(date)}`;
+  const remoteStatus = args.remote === true
+    ? inspectUpstreamRemote(upstreamUrl, upstreamBranch)
+    : {
+        checked: false,
+        status: "skipped",
+        message: "Remote inspection skipped. Pass remote=true when network access is available.",
+      };
+
+  const plan = {
+    upstreamUrl,
+    upstreamBranch,
+    baseBranch,
+    syncBranch,
+    remoteStatus,
+    conflictZones: UPSTREAM_OPENWORK_CONFLICT_ZONES,
+    verificationCommands: UPSTREAM_OPENWORK_VERIFICATION_COMMANDS,
+    nextCommands: [
+      `git fetch origin ${baseBranch}`,
+      `git switch -c ${syncBranch} origin/${baseBranch}`,
+      `git remote add openwork-upstream ${upstreamUrl}`,
+      `git fetch openwork-upstream ${upstreamBranch}`,
+      `git log --oneline ${baseBranch}..openwork-upstream/${upstreamBranch}`,
+      `git diff --name-status ${baseBranch}...openwork-upstream/${upstreamBranch}`,
+    ],
+  };
+
+  return {
+    ok: true,
+    plan,
+    safety: {
+      mode: "read_only_intake",
+      modifiesFiles: false,
+      mergesUpstream: false,
+      requiresHumanReview: true,
+    },
+    guidance: [
+      "Review conflict zones before applying upstream OpenWork changes.",
+      "Preserve Matterhorn Work branding, compatibility aliases, CLI names, agent-control contracts, and Bittensor safety gates.",
+      "Run the verification commands before opening or merging an upstream sync PR.",
+    ],
+  };
+}
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
       return matterhornDoctor(args);
     case "matterhorn_status":
       return matterhornStatus();
+    case "matterhorn_upstream_openwork_check":
+      return matterhornUpstreamOpenWorkCheck(args);
     case "matterhorn_list_workspaces":
       return callServer("/workspaces");
     case "matterhorn_create_session":

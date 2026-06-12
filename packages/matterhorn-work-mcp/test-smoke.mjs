@@ -359,6 +359,7 @@ try {
   for (const expected of [
     "matterhorn_doctor",
     "matterhorn_status",
+    "matterhorn_upstream_openwork_check",
     "matterhorn_list_workspaces",
     "matterhorn_create_session",
     "matterhorn_list_sessions",
@@ -395,6 +396,19 @@ try {
   const status = parseToolResult(await mcp.ask("tools/call", { name: "matterhorn_status", arguments: {} }));
   assert.equal(status.health.ok, true);
   assert.equal(status.status.ok, true);
+
+  const upstream = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_upstream_openwork_check",
+    arguments: { date: "2026-06-12" },
+  }));
+  assert.equal(upstream.ok, true);
+  assert.equal(upstream.safety.mode, "read_only_intake");
+  assert.equal(upstream.plan.syncBranch, "codex/sync-openwork-2026-06-12");
+  assert.equal(upstream.plan.remoteStatus.status, "skipped");
+  assert.ok(upstream.plan.conflictZones.some((zone) => zone.name === "Bittensor safety"));
+  assert.ok(upstream.plan.conflictZones.some((zone) => zone.name === "Agent control surface"));
+  assert.ok(upstream.plan.verificationCommands.includes("pnpm test:upstream-openwork-sync"));
+  assert.ok(upstream.plan.nextCommands.some((command) => command.includes("git fetch openwork-upstream main")));
 
   const doctor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_doctor",

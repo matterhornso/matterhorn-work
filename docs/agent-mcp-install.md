@@ -184,10 +184,13 @@ After connecting any client:
 3. Call `matterhorn_list_sessions` with a workspace id.
 4. For chat control, call `matterhorn_create_session`, `matterhorn_submit_session_prompt`, then use `matterhorn_watch_session_events` for bounded progress updates or `matterhorn_get_session_status` for simple polling.
 5. For Bittensor, call `matterhorn_bittensor_chat` with a read-only prompt such as `show my TAO`.
+6. For upstream OpenWork intake, call `matterhorn_upstream_openwork_check` to get the reviewed sync branch name, conflict zones, and verification commands.
 
 If the MCP client is unavailable, the CLI fallback for chat control is `matterhorn-work sessions create`, `matterhorn-work sessions prompt`, `matterhorn-work sessions status`, `matterhorn-work sessions snapshot`, and `matterhorn-work sessions events`.
 
 For Bittensor without MCP, use `matterhorn-work bittensor chat --message "<prompt>"` and `matterhorn-work bittensor readiness`. These CLI commands call the same non-custodial server routes as `matterhorn_bittensor_chat` and `matterhorn_bittensor_readiness`.
+
+For upstream OpenWork checks without MCP, use `matterhorn-work upstream openwork check --json`.
 
 ## Troubleshooting
 
