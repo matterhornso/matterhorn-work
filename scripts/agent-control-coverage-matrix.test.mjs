@@ -59,6 +59,7 @@ for (const command of [
 for (const scriptName of [
   "test:agent-control-coverage-matrix",
   "test:agent-control-doctor",
+  "test:agent-control-live-qa",
   "test:agent-control-api-docs",
   "test:mcp-config-cli",
   "test:agent-session-progress-smoke",
@@ -77,5 +78,8 @@ for (const forbidden of [
 }
 
 assert.ok(surface.includes("./agent-control-coverage-matrix.md"), "agent control surface should link the coverage matrix");
+assert.ok(surface.includes("./agent-control-live-qa.md"), "agent control surface should link the live QA harness");
+assert.ok(matrix.includes("node scripts/agent-control-live-qa.mjs"), "coverage matrix should list the live QA harness");
+assert.ok(api.includes("GET /api/bittensor/readiness"), "API docs should include the Bittensor readiness route used by live QA");
 
 console.log("Matterhorn agent control coverage matrix static check passed.");

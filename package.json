@@ -29,6 +29,7 @@
     "test:e2e": "pnpm --filter @matterhorn-work/app test:e2e",
     "test:agent-control-mcp": "node packages/matterhorn-work-mcp/test-smoke.mjs",
     "test:agent-control-doctor": "node scripts/agent-control-doctor.test.mjs",
+    "test:agent-control-live-qa": "node scripts/agent-control-live-qa.test.mjs",
     "test:agent-control-coverage-matrix": "node scripts/agent-control-coverage-matrix.test.mjs",
     "test:mcp-config-cli": "node scripts/mcp-config-cli.test.mjs",
     "test:agent-control-api-docs": "node scripts/agent-control-api-docs.test.mjs",
