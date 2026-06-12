@@ -3743,6 +3743,7 @@ function printHelp(): void {
     "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work bittensor chat --message <text> [options]",
+    "  matterhorn-work bittensor extrinsic prepare|handoff|submit [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
     "  matterhorn-work bittensor watch create|list|check [options]",
@@ -3801,6 +3802,11 @@ function printHelp(): void {
     "  --ss58-address <addr>     Bittensor public SS58 address for wallet reads",
     "  --context-id <id>         Bittensor chat context id for follow-up prompts",
     "  --netuid <n>              Bittensor subnet netuid",
+    "  --action <name>           Bittensor extrinsic action: stake | unstake | move_stake | transfer | set_child_hotkey | register | serve",
+    "  --preview-json <json>     Bittensor extrinsic preview JSON for handoff/submit",
+    "  --preview-file <path>     File containing a Bittensor preview or prepare response JSON",
+    "  --signature <hex>         Externally signed Bittensor payload for submit",
+    "  --signer-address <addr>   Public signer address for signed Bittensor submit",
     "  --intent <name>           Bittensor subnet intent: explain | metagraph | stake_guidance | wallet_guidance | service_call",
     "  --task <text>             Bittensor subnet service task text",
     "  --preview-request-sha256 <hash>  Request hash returned by bittensor subnet-preview",
@@ -3810,9 +3816,12 @@ function printHelp(): void {
     "  --reason <text>           Bittensor watch reason",
     "  --amount-tao <amount>     TAO amount for Bittensor previews",
     "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
+    "  --hotkey <key>            Bittensor hotkey public address",
     "  --coldkey <key>           Bittensor coldkey public address label",
     "  --recipient <addr>        Bittensor transfer recipient",
     "  --destination <addr>      Bittensor destination hotkey/coldkey where applicable",
+    "  --origin-netuid <n>       Origin subnet netuid for Bittensor move-stake previews",
+    "  --destination-netuid <n>  Destination subnet netuid for Bittensor move-stake previews",
     "  --strategy <name>         Bittensor validator strategy: balanced | yield | safety",
     "  --rate-tolerance <n>      Bittensor rate/slippage tolerance",
     "  --provider-id <id>        Model provider id for sessions prompt",
@@ -7241,12 +7250,10 @@ async function runSessions(args: ParsedArgs) {
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const rawSubcommand = args.positionals[1] ?? "chat";
-  const nestedSubcommand = ["subnet", "watch"].includes(rawSubcommand) ? args.positionals[2] : undefined;
-  const subcommand = nestedSubcommand ? `subnet-${nestedSubcommand}` : rawSubcommand;
+  const nestedSubcommand = ["extrinsic", "subnet", "watch"].includes(rawSubcommand) ? args.positionals[2] : undefined;
+  const subcommand = nestedSubcommand ? `${rawSubcommand}-${nestedSubcommand}` : rawSubcommand;
   const subcommandTailIndex = nestedSubcommand ? 3 : 2;
-  const effectiveSubcommand = rawSubcommand === "watch" && nestedSubcommand
-    ? `watch-${nestedSubcommand}`
-    : subcommand;
+  const effectiveSubcommand = subcommand;
   const { openworkUrl, token } = readOpenworkClientAuth(args);
   const baseUrl = openworkUrl.replace(/\/$/, "");
   const headers = {
@@ -7292,11 +7299,92 @@ async function runBittensor(args: ParsedArgs) {
     }
     return kind;
   };
+  const readExtrinsicAction = () => {
+    const action = readFlag(args.flags, "action") ?? (rawSubcommand === "extrinsic" ? undefined : rawSubcommand);
+    if (!action || !["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"].includes(action)) {
+      throw new Error("action must be stake, unstake, move_stake, transfer, set_child_hotkey, register, or serve");
+    }
+    return action;
+  };
+  const readPreviewInput = () => {
+    const previewJson = readFlag(args.flags, "preview-json");
+    const previewFile = readFlag(args.flags, "preview-file");
+    if (!previewJson && !previewFile) {
+      throw new Error("preview-json or preview-file is required for bittensor extrinsic handoff/submit");
+    }
+    const raw = previewJson ?? readFileSync(resolve(String(previewFile)), "utf8");
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.preview && typeof parsed.preview === "object") return parsed.preview;
+      if (parsed?.handoff?.preview && typeof parsed.handoff.preview === "object") return parsed.handoff.preview;
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (error) {
+      throw new Error(`Could not parse Bittensor preview JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    throw new Error("preview-json or preview-file must contain a preview object");
+  };
 
   try {
     if (effectiveSubcommand === "readiness" || effectiveSubcommand === "ready") {
       const result = await fetchJson(`${baseUrl}/api/bittensor/readiness`, {
         headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "extrinsic-prepare" ||
+      effectiveSubcommand === "prepare-extrinsic" ||
+      effectiveSubcommand === "prepare"
+    ) {
+      const netuid = readNumber(args.flags, "netuid", undefined);
+      const originNetuid = readNumber(args.flags, "origin-netuid", undefined);
+      const destinationNetuid = readNumber(args.flags, "destination-netuid", undefined);
+      const rateTolerance = readNumber(args.flags, "rate-tolerance", undefined);
+      const hotkey = readFlag(args.flags, "hotkey") ?? readFlag(args.flags, "validator-hotkey");
+      const result = await fetchJson(`${baseUrl}/api/bittensor/extrinsics/prepare`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: readExtrinsicAction(),
+          ...(typeof netuid === "number" ? { netuid } : {}),
+          ...(readFlag(args.flags, "amount-tao") ? { amountTao: readFlag(args.flags, "amount-tao") } : {}),
+          ...(readFlag(args.flags, "coldkey") ? { coldkey: readFlag(args.flags, "coldkey") } : {}),
+          ...(hotkey ? { hotkey } : {}),
+          ...(readFlag(args.flags, "destination") ? { destination: readFlag(args.flags, "destination") } : {}),
+          ...(typeof originNetuid === "number" ? { originNetuid } : {}),
+          ...(typeof destinationNetuid === "number" ? { destinationNetuid } : {}),
+          ...(typeof rateTolerance === "number" ? { rateTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "extrinsic-handoff" || effectiveSubcommand === "handoff" || effectiveSubcommand === "signing-handoff") {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/extrinsics/handoff`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ preview: readPreviewInput() }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "extrinsic-submit" || effectiveSubcommand === "submit-extrinsic" || effectiveSubcommand === "submit") {
+      const signature = readFlag(args.flags, "signature")?.trim();
+      if (!signature) {
+        throw new Error("signature is required for bittensor extrinsic submit");
+      }
+      const result = await fetchJson(`${baseUrl}/api/bittensor/extrinsics/submit`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          preview: readPreviewInput(),
+          signature,
+          ...(readFlag(args.flags, "signer-address") ? { signerAddress: readFlag(args.flags, "signer-address") } : {}),
+        }),
       });
       outputResult(result, outputJson);
       return;
@@ -7401,7 +7489,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("bittensor requires chat|subnet-preview|subnet-invoke|watch|readiness");
+    throw new Error("bittensor requires chat|extrinsic prepare|extrinsic handoff|extrinsic submit|subnet-preview|subnet-invoke|watch|readiness");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

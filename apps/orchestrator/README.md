@@ -248,6 +248,35 @@ matterhorn-work bittensor readiness \
   --json
 ```
 
+For no-custody Bittensor action flows, prepare an unsigned preview first, then create an external-signing handoff from that preview. Submit only after an external signer returns a signed payload:
+
+```bash
+matterhorn-work bittensor extrinsic prepare \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --action stake \
+  --netuid 14 \
+  --amount-tao 1 \
+  --hotkey <validator-hotkey> \
+  --coldkey <public-coldkey-label> \
+  --rate-tolerance 0.01 \
+  --json
+
+matterhorn-work bittensor extrinsic handoff \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --preview-json '<preview-json-from-prepare>' \
+  --json
+
+matterhorn-work bittensor extrinsic submit \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --preview-json '<preview-json-from-prepare>' \
+  --signature <externally-signed-payload> \
+  --signer-address <public-signer-address> \
+  --json
+```
+
 For direct subnet service adapter calls, use the explicit preview-confirm-invoke path. The preview returns a request SHA-256 that must be shown to the user before invoke:
 
 ```bash
@@ -292,7 +321,7 @@ matterhorn-work bittensor watch check \
   --json
 ```
 
-The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, wallet exports, unpreviewed direct subnet invokes, or signing material for watch operations.
+The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, wallet exports, or unpreviewed direct subnet invokes. Bittensor submit accepts only externally signed payloads plus public signer metadata.
 
 ## Approvals (manual mode)
 
