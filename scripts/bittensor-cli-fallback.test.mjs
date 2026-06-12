@@ -71,6 +71,30 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities") {
+    return json(res, 200, {
+      success: true,
+      capabilities: [{
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        serviceAdapter: "inference",
+      }],
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities/14") {
+    return json(res, 200, {
+      success: true,
+      capability: {
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        serviceAdapter: "inference",
+      },
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
     assert.equal(body.action, "stake");
     assert.equal(body.netuid, 14);
@@ -256,6 +280,14 @@ try {
   assert.equal(readiness.success, true);
   assert.equal(readiness.report.ready, true);
 
+  const capabilities = await runCli(baseUrl, ["bittensor", "capabilities"]);
+  assert.equal(capabilities.success, true);
+  assert.equal(capabilities.capabilities[0].netuid, 14);
+
+  const capability = await runCli(baseUrl, ["bittensor", "capability", "--netuid", "14"]);
+  assert.equal(capability.success, true);
+  assert.equal(capability.capability.serviceAdapter, "inference");
+
   const extrinsicPrepare = await runCli(baseUrl, [
     "bittensor",
     "extrinsic",
@@ -360,6 +392,8 @@ try {
     [
       "POST /api/bittensor/chat/execute",
       "GET /api/bittensor/readiness",
+      "GET /api/bittensor/capabilities",
+      "GET /api/bittensor/capabilities/14",
       "POST /api/bittensor/extrinsics/prepare",
       "POST /api/bittensor/extrinsics/handoff",
       "POST /api/bittensor/extrinsics/submit",

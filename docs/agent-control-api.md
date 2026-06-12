@@ -72,6 +72,8 @@ Common status codes:
 | `matterhorn_reply_approval` | `POST /approvals/:approvalId` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
+| `matterhorn_bittensor_list_capabilities` | `GET /api/bittensor/capabilities` |
+| `matterhorn_bittensor_get_subnet_capability` | `GET /api/bittensor/capabilities/:netuid` |
 | `matterhorn_bittensor_prepare_extrinsic` | `POST /api/bittensor/extrinsics/prepare` |
 | `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
 | `matterhorn_bittensor_submit_signed_extrinsic` | `POST /api/bittensor/extrinsics/submit` |
@@ -687,6 +689,44 @@ Runs a Bittensor readiness audit and returns a report plus cards for the chat re
     "checks": []
   },
   "cards": []
+}
+```
+
+### `GET /api/bittensor/capabilities`
+
+Auth: `client`
+
+Returns the Bittensor subnet capability registry used by chat, MCP tools, CLI commands, and subnet adapter previews.
+
+```json
+{
+  "success": true,
+  "capabilities": [
+    {
+      "netuid": 14,
+      "name": "Example subnet",
+      "capabilityLevel": "adapter_required",
+      "serviceAdapter": "inference"
+    }
+  ]
+}
+```
+
+### `GET /api/bittensor/capabilities/:netuid`
+
+Auth: `client`
+
+Returns one subnet capability manifest by `netuid`.
+
+```json
+{
+  "success": true,
+  "capability": {
+    "netuid": 14,
+    "name": "Example subnet",
+    "capabilityLevel": "adapter_required",
+    "serviceAdapter": "inference"
+  }
 }
 ```
 

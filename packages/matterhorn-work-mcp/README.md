@@ -82,6 +82,8 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_reply_approval` — allow or deny an approval request
 - `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
 - `matterhorn_bittensor_readiness` — run Bittensor readiness checks
+- `matterhorn_bittensor_list_capabilities` — list Bittensor subnet capability manifests
+- `matterhorn_bittensor_get_subnet_capability` — read one subnet capability manifest by netuid
 - `matterhorn_bittensor_prepare_extrinsic` — prepare an unsigned Bittensor action preview
 - `matterhorn_bittensor_create_signing_handoff` — create a checksumed external-signing handoff
 - `matterhorn_bittensor_submit_signed_extrinsic` — submit an externally signed Bittensor payload when a sidecar is available

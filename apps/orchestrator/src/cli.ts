@@ -3743,6 +3743,8 @@ function printHelp(): void {
     "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
     "  matterhorn-work bittensor chat --message <text> [options]",
+    "  matterhorn-work bittensor capabilities [options]",
+    "  matterhorn-work bittensor capability --netuid <n> [options]",
     "  matterhorn-work bittensor extrinsic prepare|handoff|submit [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
@@ -7333,6 +7335,23 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
+    if (effectiveSubcommand === "capabilities" || effectiveSubcommand === "list-capabilities") {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/capabilities`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "capability" || effectiveSubcommand === "subnet-capability" || effectiveSubcommand === "get-capability") {
+      const netuid = readSubnetNetuid();
+      const result = await fetchJson(`${baseUrl}/api/bittensor/capabilities/${encodeURIComponent(String(netuid))}`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (
       effectiveSubcommand === "extrinsic-prepare" ||
       effectiveSubcommand === "prepare-extrinsic" ||
@@ -7489,7 +7508,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("bittensor requires chat|extrinsic prepare|extrinsic handoff|extrinsic submit|subnet-preview|subnet-invoke|watch|readiness");
+    throw new Error("bittensor requires chat|capabilities|capability|extrinsic prepare|extrinsic handoff|extrinsic submit|subnet-preview|subnet-invoke|watch|readiness");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

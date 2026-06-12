@@ -183,6 +183,31 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     return json(res, 200, { success: true, ready: true });
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities") {
+    return json(res, 200, {
+      success: true,
+      capabilities: [{
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "monitor", "subnet_use"],
+        serviceAdapter: "inference",
+        adapterStatus: { configured: false, message: "Adapter not configured." },
+      }],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities/14") {
+    return json(res, 200, {
+      success: true,
+      capability: {
+        netuid: 14,
+        name: "Mock Subnet",
+        capabilityLevel: "adapter_required",
+        serviceAdapter: "inference",
+        adapterStatus: { configured: false, message: "Adapter not configured." },
+      },
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
     assert.equal(body.action, "stake");
     assert.equal(body.netuid, 14);
@@ -350,6 +375,8 @@ try {
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_bittensor_chat",
+    "matterhorn_bittensor_list_capabilities",
+    "matterhorn_bittensor_get_subnet_capability",
     "matterhorn_bittensor_prepare_extrinsic",
     "matterhorn_bittensor_create_signing_handoff",
     "matterhorn_bittensor_submit_signed_extrinsic",
@@ -496,6 +523,18 @@ try {
     arguments: {},
   }));
   assert.equal(readiness.ready, true);
+
+  const capabilities = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_list_capabilities",
+    arguments: {},
+  }));
+  assert.equal(capabilities.capabilities[0].netuid, 14);
+
+  const capability = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_get_subnet_capability",
+    arguments: { netuid: 14 },
+  }));
+  assert.equal(capability.capability.serviceAdapter, "inference");
 
   const extrinsicPreview = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_prepare_extrinsic",

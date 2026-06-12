@@ -321,6 +321,22 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_bittensor_list_capabilities",
+    description: "List Bittensor subnet capability manifests from the configured Matterhorn Work server.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_bittensor_get_subnet_capability",
+    description: "Read one Bittensor subnet capability manifest by netuid.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        netuid: { type: "number" },
+      },
+      required: ["netuid"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_prepare_extrinsic",
     description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.",
     inputSchema: {
@@ -934,6 +950,10 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
       return callServer("/api/bittensor/readiness");
+    case "matterhorn_bittensor_list_capabilities":
+      return callServer("/api/bittensor/capabilities");
+    case "matterhorn_bittensor_get_subnet_capability":
+      return callServer(`/api/bittensor/capabilities/${encodeURIComponent(String(args.netuid))}`);
     case "matterhorn_bittensor_prepare_extrinsic":
       return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
     case "matterhorn_bittensor_create_signing_handoff":
