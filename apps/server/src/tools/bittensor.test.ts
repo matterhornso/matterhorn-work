@@ -9,6 +9,7 @@ import {
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
   buildBittensorSigningHandoffCard,
+  buildBittensorSigningReceiptCard,
   buildBittensorSidecarHealthCard,
   buildBittensorStakingPlanCard,
   buildBittensorValidatorComparisonCards,
@@ -23,6 +24,7 @@ import {
   compareBittensorValidators,
   checkSubtensorSidecarHealth,
   createBittensorSigningHandoff,
+  createBittensorSigningReceipt,
   createBittensorWatch,
   evaluateBittensorWatch,
   executeBittensorChatWorkflow,
@@ -35,6 +37,7 @@ import {
   prepareBittensorExtrinsic,
   parseAmountTao,
   scoreBittensorSubnetForGoal,
+  submitSignedBittensorExtrinsic,
   TaoAppBittensorProvider,
 } from "./bittensor.js";
 
@@ -987,6 +990,40 @@ describe("prepareBittensorExtrinsic", () => {
     expect(handoff.suggestedFilename).toContain("bittensor-stake-subnet-14");
     expect(handoff.instructions.join(" ")).toContain("SHA-256");
     expect(buildBittensorSigningHandoffCard(handoff).kind).toBe("signing_handoff");
+  });
+
+  test("creates no-secret signing receipts for handoff and submission follow-through", async () => {
+    const previous = process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    const preview = await prepareBittensorExtrinsic({
+      action: "stake",
+      netuid: 14,
+      amountTao: "1",
+      hotkey: VALID_SS58,
+    });
+    const handoff = createBittensorSigningHandoff(preview);
+    const awaitingReceipt = createBittensorSigningReceipt({ preview, handoff });
+    expect(awaitingReceipt.status).toBe("awaiting_signature");
+    expect(awaitingReceipt.payloadSha256).toBe(handoff.payloadSha256);
+    expect(awaitingReceipt.signatureSha256).toBeNull();
+    expect(awaitingReceipt.nextActions.join(" ")).toContain("Sign externally");
+    expect(buildBittensorSigningReceiptCard(awaitingReceipt).kind).toBe("signed_action_review");
+
+    const signature = "0x".padEnd(130, "a");
+    const result = await submitSignedBittensorExtrinsic({ preview, signature, signerAddress: VALID_SS58 });
+    const receipt = createBittensorSigningReceipt({ preview, result, signature, signerAddress: VALID_SS58 });
+    expect(result.status).toBe("sidecar_unavailable");
+    expect(receipt.status).toBe("sidecar_unavailable");
+    expect(receipt.signatureSha256).toHaveLength(64);
+    expect(JSON.stringify(receipt)).not.toContain(signature);
+    expect(receipt.signerAddress).toBe(VALID_SS58);
+    expect(receipt.nextActions.join(" ")).toContain("Subtensor sidecar");
+    expect(JSON.stringify({ awaitingReceipt, receipt })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    if (previous === undefined) {
+      delete process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL;
+    } else {
+      process.env.BITTENSOR_SUBTENSOR_SIDECAR_URL = previous;
+    }
   });
 
   test("rejects handoff payloads with disallowed signing-material fields", async () => {

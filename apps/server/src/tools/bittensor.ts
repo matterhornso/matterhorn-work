@@ -240,6 +240,33 @@ export interface BittensorSigningHandoff {
   consequenceSummary: string;
 }
 
+export type BittensorSigningReceiptStatus =
+  | "awaiting_signature"
+  | "signed_payload_received"
+  | BittensorSignedResult["status"];
+
+export interface BittensorSigningReceipt {
+  id: string;
+  handoffId: string | null;
+  action: BittensorExtrinsicAction;
+  network: BittensorSignerStatus["network"];
+  netuid: number | null;
+  payloadSha256: string;
+  signatureSha256: string | null;
+  signerMode: BittensorSignerStatus["mode"];
+  signerAddress: string | null;
+  status: BittensorSigningReceiptStatus;
+  txHash: string | null;
+  blockHash: string | null;
+  explorerUrl: string | null;
+  message: string;
+  consequenceSummary: string;
+  warnings: string[];
+  nextActions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BittensorSubnetInvocation {
   netuid: number;
   intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";
@@ -2561,6 +2588,80 @@ export function createBittensorSigningHandoff(preview: BittensorExtrinsicPreview
   };
 }
 
+export function createBittensorSigningReceipt(input: {
+  preview: BittensorExtrinsicPreview;
+  handoff?: BittensorSigningHandoff | null;
+  result?: BittensorSignedResult | null;
+  signature?: string | null;
+  signerAddress?: string | null;
+}): BittensorSigningReceipt {
+  const payloadJson = input.handoff?.payloadJson ?? stableJson(asRecord(input.preview.unsignedPayload));
+  const payloadSha256 = input.handoff?.payloadSha256 ?? createHash("sha256").update(payloadJson).digest("hex");
+  const signature = input.signature?.trim() || null;
+  const signatureSha256 = signature ? createHash("sha256").update(signature).digest("hex") : null;
+  const signerAddress = input.signerAddress && isValidSs58Address(input.signerAddress) ? input.signerAddress : null;
+  const status: BittensorSigningReceiptStatus = input.result?.status ?? (signatureSha256 ? "signed_payload_received" : "awaiting_signature");
+  const createdAt = input.handoff?.createdAt ?? nowIso();
+  const updatedAt = nowIso();
+  const txHash = input.result?.txHash ?? null;
+  const blockHash = input.result?.blockHash ?? null;
+  const explorerUrl = input.result?.explorerUrl ?? null;
+  const message = input.result?.message ?? (
+    status === "signed_payload_received"
+      ? "External signature was received by Matterhorn. Broadcast still requires a configured and verified Subtensor sidecar."
+      : "External signature is still required before this Bittensor action can be submitted."
+  );
+  const nextActions =
+    status === "submitted" ? [
+      txHash ? `Open the submitted extrinsic ${txHash} in an explorer.` : "Check the submitted extrinsic in the configured Bittensor explorer.",
+      "Refresh the watch-only wallet after finality to compare the before and after state.",
+    ] :
+    status === "sidecar_unavailable" ? [
+      "Keep this receipt with the payload hash and external signature hash.",
+      "Configure a verified Subtensor sidecar or submit the signed payload through the external wallet/CLI flow.",
+      "Refresh the unsigned preview if the payload expires or market/slippage context changes.",
+    ] :
+    status === "rejected" || status === "invalid_signature" ? [
+      "Do not retry the stale signed payload without understanding the rejection.",
+      "Rebuild a fresh unsigned preview and compare the payload hash before signing again.",
+    ] :
+    status === "signed_payload_received" ? [
+      "Submit only through a configured Subtensor sidecar or complete broadcast in the external signer.",
+      "Keep the receipt hash pair for post-action audit.",
+    ] : [
+      "Sign externally only after matching the payload SHA-256 in the external signer.",
+      "Return only the signed payload or signature, never seed phrases or private keys.",
+    ];
+
+  return {
+    id: `bt-receipt-${payloadSha256.slice(0, 12)}-${updatedAt.replace(/[^0-9]/g, "").slice(0, 14)}`,
+    handoffId: input.handoff?.id ?? null,
+    action: input.preview.action,
+    network: input.preview.network,
+    netuid: input.preview.netuid,
+    payloadSha256,
+    signatureSha256,
+    signerMode: input.preview.signer.mode,
+    signerAddress,
+    status,
+    txHash,
+    blockHash,
+    explorerUrl,
+    message,
+    consequenceSummary: input.preview.consequenceSummary,
+    warnings: uniqueWarnings(
+      input.handoff?.warnings,
+      input.preview.warnings,
+      input.result && input.result.status !== "submitted" ? [input.result.message] : [],
+      input.signerAddress && !signerAddress ? ["Signer address did not look like a valid SS58 public address and was not recorded."] : [],
+      ["Receipt stores hashes and public routing metadata only. It does not store signing material."],
+    ),
+    nextActions,
+    createdAt,
+    updatedAt,
+  };
+}
+
 export async function submitSignedBittensorExtrinsic(input: BittensorSignedSubmitInput): Promise<BittensorSignedResult> {
   if (!input.signature || input.signature.trim().length < 16) {
     return {
@@ -4277,6 +4378,46 @@ export function buildBittensorSigningHandoffCard(handoff: BittensorSigningHandof
     ],
     warnings: handoff.warnings,
     data: { handoff },
+  };
+}
+
+export function buildBittensorSigningReceiptCard(receipt: BittensorSigningReceipt): BittensorChatCard {
+  const submitted = receipt.status === "submitted";
+  const invalid = receipt.status === "invalid_signature" || receipt.status === "rejected";
+  return {
+    kind: "signed_action_review",
+    title: "Bittensor signing receipt",
+    subtitle: `${titleCase(receipt.status)} · ${receipt.network}`,
+    summary: receipt.message,
+    tone: submitted ? "good" : invalid ? "danger" : receipt.status === "awaiting_signature" ? "warning" : "default",
+    items: [
+      cardItem("Action", titleCase(receipt.action)),
+      cardItem("Netuid", receipt.netuid ?? "Network", receipt.netuid === null ? "muted" : "default"),
+      cardItem("Payload SHA-256", receipt.payloadSha256.slice(0, 20), "muted"),
+      cardItem("Signature SHA-256", receipt.signatureSha256 ? receipt.signatureSha256.slice(0, 20) : "Not received", receipt.signatureSha256 ? "muted" : "warning"),
+      cardItem("Signer", receipt.signerAddress ? shortSs58(receipt.signerAddress) : "External signer", receipt.signerAddress ? "default" : "muted"),
+      cardItem("Status", titleCase(receipt.status), submitted ? "good" : invalid ? "danger" : "warning"),
+      cardItem("Transaction", receipt.txHash ?? "Unavailable", receipt.txHash ? "default" : "muted"),
+    ],
+    actions: [
+      ...(receipt.explorerUrl ? [{
+        label: "Open explorer",
+        kind: "open_url" as const,
+        href: receipt.explorerUrl,
+      }] : []),
+      ...receipt.nextActions.slice(0, 3).map((nextAction) => ({
+        label: "Continue in chat",
+        kind: "send_to_chat" as const,
+        payload: {
+          prompt: nextAction,
+          receiptId: receipt.id,
+          status: receipt.status,
+          payloadSha256: receipt.payloadSha256,
+        },
+      })),
+    ],
+    warnings: receipt.warnings,
+    data: { receipt },
   };
 }
 
