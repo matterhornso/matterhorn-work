@@ -84,10 +84,38 @@ The JSON report is intentionally compact:
 
 Skipped wallet or staking-preview stages usually mean the run did not receive public SS58 or validator-hotkey context. Failures mean the Bittensor chat workflow is not safe enough for operators yet.
 
+## Generate A Markdown Report
+
+Save the JSON output, then render it into a shareable readiness report:
+
+```bash
+node scripts/bittensor-live-qa.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token <client-token> \
+  --json > /tmp/bittensor-live-qa.json
+
+node scripts/bittensor-live-report.mjs \
+  --input /tmp/bittensor-live-qa.json \
+  --output docs/bittensor-live-readiness-report.local.md
+```
+
+Or pipe directly:
+
+```bash
+node scripts/bittensor-live-qa.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token <client-token> \
+  --json | node scripts/bittensor-live-report.mjs \
+    --output docs/bittensor-live-readiness-report.local.md
+```
+
+Do not commit `docs/bittensor-live-readiness-report.local.md` if it contains wallet-specific public addresses you do not want in the repo. For handoff PRs, redact addresses or summarize them before committing.
+
 ## Required Check
 
 ```bash
 pnpm test:bittensor-live-qa
+pnpm test:bittensor-live-report
 ```
 
-The test binds a mock local server, so it may need to run outside restricted sandboxes.
+The QA test binds a mock local server, so it may need to run outside restricted sandboxes.
