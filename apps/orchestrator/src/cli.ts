@@ -3748,7 +3748,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor extrinsic prepare|handoff|submit [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
-    "  matterhorn-work bittensor watch create|list|check [options]",
+    "  matterhorn-work bittensor watch create|list|check|digest [options]",
     "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
@@ -3818,6 +3818,8 @@ function printHelp(): void {
     "  --label <text>            Bittensor watch label",
     "  --threshold <n>           Bittensor watch threshold",
     "  --reason <text>           Bittensor watch reason",
+    "  --max-alerts <n>          Maximum Bittensor watch alerts in a digest",
+    "  --include-ok              Include OK Bittensor watches in a digest",
     "  --amount-tao <amount>     TAO amount for Bittensor previews",
     "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
     "  --hotkey <key>            Bittensor hotkey public address",
@@ -7267,6 +7269,57 @@ async function runSessions(args: ParsedArgs) {
   }
 }
 
+function buildBittensorWatchDigest(
+  result: Record<string, any>,
+  maxAlerts: number,
+  includeOk: boolean,
+) {
+  const evaluations = Array.isArray(result.evaluations) ? result.evaluations : [];
+  const statusCounts = evaluations.reduce<Record<string, number>>((counts, evaluation) => {
+    const status = typeof evaluation?.status === "string" && evaluation.status.trim()
+      ? evaluation.status.trim()
+      : "unknown";
+    counts[status] = (counts[status] ?? 0) + 1;
+    return counts;
+  }, {});
+  const alertCount = evaluations.filter((evaluation) => evaluation?.status && evaluation.status !== "ok").length;
+  const alerts = evaluations
+    .filter((evaluation) => includeOk || (evaluation?.status && evaluation.status !== "ok"))
+    .slice(0, maxAlerts)
+    .map((evaluation) => {
+      const watch = evaluation?.watch && typeof evaluation.watch === "object" ? evaluation.watch : {};
+      const actions = Array.isArray(evaluation?.copilotActions) ? evaluation.copilotActions : [];
+      const firstAction = actions.find((action: any) => action && typeof action === "object") ?? {};
+      return {
+        status: evaluation?.status ?? "unknown",
+        alertKey: evaluation?.alertKey,
+        notificationIntent: evaluation?.notificationIntent,
+        watchId: watch.id,
+        kind: watch.kind,
+        label: watch.label,
+        netuid: watch.netuid,
+        ss58Address: watch.ss58Address,
+        validatorHotkey: watch.validatorHotkey,
+        reason: evaluation?.summary ?? evaluation?.reason,
+        prompt: firstAction.prompt,
+        actionLabel: firstAction.label,
+      };
+    });
+
+  return {
+    success: result.success !== false,
+    total: evaluations.length,
+    alertCount,
+    statusCounts,
+    alerts,
+    source: result.source,
+    block: result.block,
+    freshness: result.freshness,
+    warnings: result.warnings ?? [],
+    cards: result.cards ?? [],
+  };
+}
+
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const rawSubcommand = args.positionals[1] ?? "chat";
@@ -7478,6 +7531,20 @@ async function runBittensor(args: ParsedArgs) {
         }),
       });
       outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "watch-digest" ||
+      effectiveSubcommand === "digest" ||
+      effectiveSubcommand === "alert-digest"
+    ) {
+      const maxAlerts = Math.max(1, Math.floor(readNumber(args.flags, "max-alerts", 5) ?? 5));
+      const includeOk = readBool(args.flags, "include-ok", false);
+      const result = await fetchJson(`${baseUrl}/api/bittensor/monitoring/check`, {
+        headers,
+      });
+      outputResult(buildBittensorWatchDigest(result as Record<string, any>, maxAlerts, includeOk), outputJson);
       return;
     }
 

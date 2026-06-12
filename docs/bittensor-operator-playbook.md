@@ -461,7 +461,15 @@ matterhorn-work bittensor chat \
   --json
 ```
 
-For agent operators, use the watch digest after watches exist:
+For CLI operators, use the watch digest after watches exist:
+
+```bash
+matterhorn-work bittensor watch digest \
+  --max-alerts 5 \
+  --json
+```
+
+For MCP operators, call the digest tool:
 
 ```json
 {

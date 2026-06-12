@@ -203,11 +203,32 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/check") {
     return json(res, 200, {
       success: true,
-      evaluations: [{
-        watch: { id: "bt-watch-cli", kind: "slippage", netuid: 14 },
-        status: "ok",
-        summary: "Mock slippage watch ok.",
-      }],
+      evaluations: [
+        {
+          watch: { id: "bt-watch-cli", kind: "slippage", netuid: 14 },
+          status: "ok",
+          summary: "Mock slippage watch ok.",
+        },
+        {
+          watch: {
+            id: "bt-watch-alert",
+            kind: "validator",
+            netuid: 14,
+            validatorHotkey: "5ValidatorHotkey",
+            label: "Subnet 14 validator",
+          },
+          status: "alert",
+          summary: "Mock validator watch needs review.",
+          alertKey: "validator:14:bt-watch-alert",
+          notificationIntent: "review_validator",
+          copilotActions: [
+            {
+              label: "Review validator",
+              prompt: "Analyze validator 5ValidatorHotkey on subnet 14.",
+            },
+          ],
+        },
+      ],
       cards: [],
     });
   }
@@ -387,6 +408,22 @@ try {
   assert.equal(watchCheck.success, true);
   assert.equal(watchCheck.evaluations[0].status, "ok");
 
+  const watchDigest = await runCli(baseUrl, [
+    "bittensor",
+    "watch",
+    "digest",
+    "--max-alerts",
+    "1",
+  ]);
+  assert.equal(watchDigest.success, true);
+  assert.equal(watchDigest.total, 2);
+  assert.equal(watchDigest.alertCount, 1);
+  assert.equal(watchDigest.statusCounts.alert, 1);
+  assert.equal(watchDigest.alerts.length, 1);
+  assert.equal(watchDigest.alerts[0].alertKey, "validator:14:bt-watch-alert");
+  assert.equal(watchDigest.alerts[0].notificationIntent, "review_validator");
+  assert.equal(watchDigest.alerts[0].prompt, "Analyze validator 5ValidatorHotkey on subnet 14.");
+
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
     [
@@ -401,6 +438,7 @@ try {
       "POST /api/bittensor/subnets/14/invoke",
       "GET /api/bittensor/monitoring/watchlist",
       "POST /api/bittensor/monitoring/watchlist",
+      "GET /api/bittensor/monitoring/check",
       "GET /api/bittensor/monitoring/check",
     ],
   );
