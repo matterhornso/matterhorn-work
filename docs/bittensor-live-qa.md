@@ -6,6 +6,7 @@ The harness calls the same non-custodial server routes used by MCP and CLI agent
 
 - `GET /api/bittensor/readiness`
 - `POST /api/bittensor/chat/execute`
+- `POST /api/bittensor/subnets/:netuid/preview`
 
 It validates the Bittensor product behavior that matters most for operators:
 
@@ -20,6 +21,7 @@ It validates the Bittensor product behavior that matters most for operators:
 - incomplete staking prompts ask for a validator hotkey instead of guessing;
 - complete staking prompts return unsigned previews that require external signing;
 - unsupported subnet service calls explain that no adapter is configured yet;
+- direct subnet adapter previews return a request SHA-256 and require confirmation without invoking the adapter;
 - no request or report contains secret-shaped fields.
 
 ## Basic Run
@@ -31,7 +33,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-This basic run does not need a wallet address. It checks readiness, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, and unsupported-adapter behavior.
+This basic run does not need a wallet address. It checks readiness, beginner explanation, missing-address clarification, discovery, subnet intelligence, validator comparison, staking clarification, unsupported-adapter behavior, and direct subnet adapter preview safety.
 
 ## Full Wallet And Preview Run
 
@@ -74,11 +76,12 @@ The JSON report is intentionally compact:
 ```json
 {
   "ready": true,
-  "summary": { "pass": 8, "warn": 0, "fail": 0, "skip": 2 },
+  "summary": { "pass": 9, "warn": 0, "fail": 0, "skip": 2 },
   "stages": [],
   "artifacts": {
     "readinessStatus": "ready",
-    "bittensorContextId": "bt-chat-..."
+    "bittensorContextId": "bt-chat-...",
+    "subnetPreviewRequestSha256": "..."
   },
   "nextSteps": []
 }
