@@ -48,7 +48,7 @@ Query parameters:
 | --- | --- | --- |
 | `since` | number or string | Optional cursor for replaying events after a disconnect |
 | `snapshot` | boolean | Optional `true` to request an initial `session.snapshot` event |
-| `details` | boolean | Optional `true` to emit `message.created` and `todo.updated` events derived from the initial snapshot |
+| `details` | boolean | Optional `true` to emit message, tool, and todo detail events derived from the initial snapshot |
 | `maxEvents` | number | Optional positive event cap for tests and bounded clients |
 | `heartbeatMs` | number | Optional positive keepalive interval; the server clamps very low values |
 
@@ -136,7 +136,7 @@ Client recovery:
 5. Render deltas and status events as they arrive.
 6. Fetch `matterhorn_get_session_snapshot` when the session becomes idle, after reconnects, or before taking write actions.
 
-MCP clients that cannot expose streaming responses can use `matterhorn_watch_session_events` as a bounded watch. It returns the next batch of events by calling this route with `maxEvents`. Clients can still fall back to `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
+MCP clients that cannot expose streaming responses can use `matterhorn_watch_session_events` as a bounded watch. It returns the next batch of events by calling this route with `maxEvents`. Pass `details=true` when the client wants snapshot-derived `message.delta`, `message.completed`, `tool.started`, `tool.completed`, and `todo.updated` frames in addition to the snapshot/status frames. Clients can still fall back to `matterhorn_get_session_status` and `matterhorn_get_session_snapshot`.
 
 ## Verification
 
@@ -163,5 +163,5 @@ pnpm test:agent-session-progress-smoke
 
 - The existing `GET /workspace/:workspaceId/events` route remains a workspace reload/config event route.
 - The session event route should be session-scoped and should not replace the workspace event route.
-- The first implementation emits `session.snapshot`, `session.status`, `heartbeat`, and recoverable `cursor_expired` events. With `details=true`, it also emits `message.created` and `todo.updated` events derived from the initial snapshot. It should add richer tool and delta events as those upstream events become stable.
+- The current implementation emits `session.snapshot`, `session.status`, `heartbeat`, and recoverable `cursor_expired` events. With `details=true`, it also emits snapshot-derived `message.created`, `message.delta`, `message.completed`, `tool.started`, `tool.completed`, and `todo.updated` events. Tool events intentionally include lifecycle metadata only, not raw tool inputs or result payloads.
 - If native SSE is unavailable in an agent client, expose a bounded batch route or MCP watch tool with the same envelope and cursor semantics.

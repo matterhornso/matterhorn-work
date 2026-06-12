@@ -99,7 +99,7 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
               id: "msg_1",
               sessionID: "ses_1",
               role: "assistant",
-              time: { created: 200 },
+              time: { created: 200, completed: 250 },
             },
             parts: [
               {
@@ -108,6 +108,16 @@ function startMockOpencode(input?: { invalidList?: boolean; holdCommand?: Promis
                 sessionID: "ses_1",
                 type: "text",
                 text: "hostname: mock-host",
+              },
+              {
+                id: "prt_2",
+                messageID: "msg_1",
+                sessionID: "ses_1",
+                type: "tool",
+                toolCallID: "tool_1",
+                toolName: "workspace.read",
+                status: "completed",
+                result: { ok: true, bytes: 12 },
               },
             ],
           },
@@ -359,7 +369,7 @@ describe("workspace session read APIs", () => {
     });
   });
 
-  test("streams optional message and todo detail events from the initial snapshot", async () => {
+  test("streams optional message, tool, and todo detail events from the initial snapshot", async () => {
     const workspaceRoot = await createWorkspaceRoot();
     const mock = startMockOpencode();
     const openwork = await startOpenworkServer({
@@ -368,7 +378,7 @@ describe("workspace session read APIs", () => {
     });
 
     const response = await fetch(
-      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/events?snapshot=true&details=true&maxEvents=4`,
+      `http://127.0.0.1:${openwork.server.port}/workspace/ws_1/sessions/ses_1/events?snapshot=true&details=true&maxEvents=8`,
       { headers: auth(openwork.token) },
     );
     expect(response.status).toBe(200);
@@ -377,6 +387,10 @@ describe("workspace session read APIs", () => {
     expect(events.map((event) => event.event)).toEqual([
       "session.snapshot",
       "message.created",
+      "message.delta",
+      "tool.started",
+      "tool.completed",
+      "message.completed",
       "todo.updated",
       "session.status",
     ]);
@@ -389,6 +403,41 @@ describe("workspace session read APIs", () => {
       },
     });
     expect(events[2]?.data).toMatchObject({
+      type: "message.delta",
+      payload: {
+        messageId: "msg_1",
+        partId: "prt_1",
+        delta: "hostname: mock-host",
+      },
+    });
+    expect(events[3]?.data).toMatchObject({
+      type: "tool.started",
+      payload: {
+        messageId: "msg_1",
+        partId: "prt_2",
+        toolCallId: "tool_1",
+        name: "workspace.read",
+      },
+    });
+    expect(events[4]?.data).toMatchObject({
+      type: "tool.completed",
+      payload: {
+        messageId: "msg_1",
+        partId: "prt_2",
+        toolCallId: "tool_1",
+        name: "workspace.read",
+        ok: true,
+      },
+    });
+    expect(JSON.stringify(events[4]?.data)).not.toContain("bytes");
+    expect(events[5]?.data).toMatchObject({
+      type: "message.completed",
+      payload: {
+        messageId: "msg_1",
+        completedAt: 250,
+      },
+    });
+    expect(events[6]?.data).toMatchObject({
       type: "todo.updated",
       payload: {
         todos: [

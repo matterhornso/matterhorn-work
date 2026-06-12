@@ -156,7 +156,7 @@ const tools = [
         sessionId: { type: "string" },
         maxEvents: { type: "number", description: "Positive event cap. Defaults to 10 and is capped at 50." },
         snapshot: { type: "boolean", description: "When true, request an initial session.snapshot event." },
-        details: { type: "boolean", description: "When true with snapshot, include message.created and todo.updated detail events." },
+        details: { type: "boolean", description: "When true with snapshot, include snapshot-derived message, tool, and todo detail events." },
         since: { type: "string", description: "Optional reconnect cursor." },
         limit: { type: "number", description: "Optional message limit for the initial snapshot." },
         heartbeatMs: { type: "number", description: "Optional heartbeat interval for the bounded stream." },
