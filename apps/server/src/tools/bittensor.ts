@@ -653,12 +653,17 @@ function taoAppClient(): ApiClient {
   return new ApiClient({
     baseUrl: TAO_APP_BASE_URL,
     headers: apiKey ? { "X-API-Key": apiKey } : {},
-    timeout: 12_000,
+    timeout: 4_000,
   });
 }
 
 function sidecarBaseUrl(): string {
   return readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL").replace(/\/$/, "");
+}
+
+function sidecarRequestTimeoutMs(): number {
+  const parsed = Number(readEnv("BITTENSOR_SUBTENSOR_SIDECAR_TIMEOUT_MS"));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(15_000, Math.max(1_000, parsed)) : 2_000;
 }
 
 function bittensorNetwork(): BittensorSignerStatus["network"] {
@@ -735,7 +740,7 @@ class SubtensorSidecarClient {
       const res = await fetch(`${this.baseUrl}${path}`, {
         ...rest,
         headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(12_000),
+        signal: AbortSignal.timeout(sidecarRequestTimeoutMs()),
       });
       if (!res.ok) return null;
       return asRecord(await res.json());
@@ -2591,7 +2596,13 @@ function subnetIntelligenceScore(input: {
 }
 
 export async function analyzeBittensorSubnetIntelligence(netuid: number): Promise<BittensorSubnetIntelligenceReport> {
-  const detail = await bittensorProvider.getSubnet(netuid);
+  let detail = fallbackSubnet(netuid);
+  let detailReadWarning: string | null = null;
+  try {
+    detail = await bittensorProvider.getSubnet(netuid);
+  } catch (err) {
+    detailReadWarning = err instanceof Error ? err.message : "Live subnet detail read failed.";
+  }
   const capability = capabilityFromSubnet(detail);
   const totalStake = detail.metagraphSummary.totalStake;
   const topStake = Math.max(0, ...detail.topValidators.map((validator) => validator.stake ?? 0));
@@ -2601,6 +2612,7 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
   const score = subnetIntelligenceScore({ detail, concentrationRisk, dataQualityRisk, capability });
   const mechanismAvailable = false;
   const warnings = uniqueWarnings(
+    detailReadWarning ? [`Live subnet detail read failed: ${detailReadWarning}. Falling back to curated subnet context.`] : [],
     detail.source === "curated-fallback" ? ["Live provider data was unavailable; this report uses curated fallback metadata."] : [],
     !detail.topValidators.length ? ["No validator sample was available for this subnet."] : [],
     detail.priceTao === null ? ["Dynamic TAO price was unavailable from the current provider."] : [],
@@ -3697,6 +3709,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
           .map((row) => normalizeSubnet(row, firstString(asRecord(row), ["source"]) ?? "subtensor-sidecar"))
           .filter(Boolean) as BittensorSubnetSummary[];
         if (normalized.length) return normalized.sort((a, b) => a.netuid - b.netuid);
+        if (data) return FALLBACK_SUBNETS;
       }
 
       try {
@@ -3722,7 +3735,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         if (dynamicSummary) summary = dynamicSummary;
       }
 
-      if (!summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
+      if (!sidecar && !summary.source.includes("sidecar") && !summary.source.includes("bittensor-python-sdk")) {
         try {
           const data = await taoAppClient().get(`/api/beta/analytics/subnets/info/${netuid}`);
           summary = normalizeSubnet(data, "tao.app") ?? summary;
@@ -3735,7 +3748,7 @@ export class TaoAppBittensorProvider implements BittensorProvider {
         metagraphRaw = await sidecar.getSubnetMetagraph(netuid);
       }
 
-      if (!metagraphRaw) {
+      if (!sidecar && !metagraphRaw) {
         try {
           metagraphRaw = await taoAppClient().get(`/api/beta/analytics/subnets/metagraph/${netuid}`);
         } catch {
