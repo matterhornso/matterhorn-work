@@ -144,6 +144,63 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname.startsWith("/api/bittensor/intelligence/validator/")) {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "validator",
+        netuid: 14,
+        subnetName: "TAOHash",
+        validatorHotkey: VALID_SS58,
+        coldkey: VALID_SS58,
+        uid: 1,
+        score: 81,
+        stake: 1000,
+        trust: 0.9,
+        dividends: 0.2,
+        source: "mock",
+        foundInSample: true,
+        risk: "low",
+        signals: [{ label: "Sample visibility", value: "Found", tone: "good", explanation: "Mock signal." }],
+        warnings: ["Public validator intelligence, not financial advice."],
+        nextQuestions: ["Monitor validator."],
+        copilotActions: [{ label: "Create validator watch", prompt: `Monitor validator ${VALID_SS58} on subnet 14.`, reason: "Track visibility.", riskLevel: "low" }],
+        watchSuggestions: [{ kind: "validator", label: "Validator watch", netuid: 14, ss58Address: null, validatorHotkey: VALID_SS58, threshold: 1000, reason: "Track visibility." }],
+        updatedAt: "2026-06-09T00:00:00.000Z",
+      },
+      cards: [{
+        kind: "intelligence_report",
+        title: "Validator intelligence",
+        items: [{ label: "Score", value: "81/100" }],
+      }],
+    }));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/staking/plan") {
+    res.end(JSON.stringify({
+      success: true,
+      plan: {
+        kind: "staking_plan",
+        goal: "compute exposure",
+        totalAmountTao: 2,
+        strategy: "safety",
+        steps: [{ netuid: 14, subnetName: "TAOHash", validatorHotkey: VALID_SS58, amountTao: 2, strategy: "safety", expectedAlpha: 4, slippageBps: 25, source: "mock", warnings: [], rationale: "Mock plan." }],
+        unsignedPreviews: [{ action: "stake", network: "finney", netuid: 14, amountTao: 2, coldkey: VALID_SS58, hotkey: VALID_SS58, destination: null, feeTao: 0.0001, slippageBps: 25, expectedAlpha: 4, unsignedPayload: { action: "stake", netuid: 14 }, signer: { mode: "desktop_handoff", available: true, canSign: false, canSubmit: false, network: "finney", address: VALID_SS58, message: "External signer required." }, warnings: ["Unsigned preview only."], consequenceSummary: "If signed, this stakes 2 TAO.", requiresExternalSignature: true }],
+        assumptions: ["Mock assumption."],
+        warnings: ["Unsigned preview only."],
+        nextQuestions: ["Create watches for this plan."],
+        copilotActions: [{ label: "Create plan watches", prompt: "Create watches for this Bittensor staking plan.", reason: "Keep plan current.", riskLevel: "low" }],
+        watchSuggestions: [{ kind: "subnet", label: "Planned subnet 14", netuid: 14, ss58Address: null, validatorHotkey: null, threshold: 2, reason: "Track planned subnet." }],
+        updatedAt: "2026-06-09T00:00:00.000Z",
+      },
+      cards: [{
+        kind: "intelligence_report",
+        title: "Bittensor staking plan",
+        items: [{ label: "Steps", value: "1" }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/actions/quote") {
     res.end(JSON.stringify({
       success: true,
@@ -566,6 +623,8 @@ try {
     "bittensor_get_wallet_positions",
     "bittensor_analyze_subnet",
     "bittensor_analyze_wallet",
+    "bittensor_analyze_validator",
+    "bittensor_build_staking_plan",
     "bittensor_prepare_action",
     "bittensor_plan_from_chat",
     "bittensor_chat",
@@ -608,6 +667,14 @@ try {
   const walletIntel = await ask({ jsonrpc: "2.0", id: 24, method: "tools/call", params: { name: "bittensor_analyze_wallet", arguments: { ss58Address: VALID_SS58 } } });
   assert.equal(JSON.parse(walletIntel.result.content[0].text).report.kind, "wallet");
   assert.equal(JSON.parse(walletIntel.result.content[0].text).cards[0].kind, "intelligence_report");
+
+  const validatorIntel = await ask({ jsonrpc: "2.0", id: 25, method: "tools/call", params: { name: "bittensor_analyze_validator", arguments: { netuid: 14, validatorHotkey: VALID_SS58 } } });
+  assert.equal(JSON.parse(validatorIntel.result.content[0].text).report.kind, "validator");
+  assert.equal(JSON.parse(validatorIntel.result.content[0].text).cards[0].kind, "intelligence_report");
+
+  const stakingPlan = await ask({ jsonrpc: "2.0", id: 26, method: "tools/call", params: { name: "bittensor_build_staking_plan", arguments: { message: "Build a safety staking plan for compute exposure.", amountTao: "2", ss58Address: VALID_SS58, strategy: "safety" } } });
+  assert.equal(JSON.parse(stakingPlan.result.content[0].text).plan.kind, "staking_plan");
+  assert.equal(JSON.parse(stakingPlan.result.content[0].text).cards[0].kind, "intelligence_report");
 
   const quote = await ask({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "bittensor_prepare_action", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   assert.equal(JSON.parse(quote.result.content[0].text).quote.requiresExternalSignature, true);

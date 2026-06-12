@@ -62,6 +62,12 @@ Deliverable prompt:
 I have 10 TAO. Build a low-risk Bittensor staking plan for inference and compute exposure.
 ```
 
+Current implementation:
+
+- Chat and API can draft deterministic staking plans from a plain-English goal, TAO amount, and strategy.
+- Plans split exposure across discovered subnet candidates, attach visible validator candidates where available, and return unsigned previews only.
+- Plan cards include assumptions, warnings, watch suggestions, and next actions so the user can monitor before signing.
+
 ## Phase 4: Non-Custodial Signing Gateway
 
 Goal: move safely from unsigned preview to externally signed execution.
@@ -76,6 +82,12 @@ Build:
 Non-goal:
 
 - No seed import or local custody.
+
+Current implementation:
+
+- Signing remains external-only.
+- Unsigned previews can be turned into checksumed handoff JSON with expiry and plain-English consequences.
+- The sidecar submit path remains gated by configured external signed payloads; Matterhorn still never stores or requests seed phrases, private keys, mnemonics, keyfiles, or SURI material.
 
 ## Phase 5: Subnet Service Marketplace
 
@@ -110,6 +122,12 @@ Deliverable prompt:
 ```text
 Watch my Bittensor wallet and tell me when something important changes.
 ```
+
+Current implementation:
+
+- Chat can create watches from wallet/subnet/validator intelligence suggestions.
+- Watches persist validator hotkey, wallet scope, threshold, reason, and last-alert timestamp where available.
+- Watch checks return actionable alert prompts that can send the user back into subnet analysis, wallet intelligence, or validator deep dives.
 
 ## Build Order
 

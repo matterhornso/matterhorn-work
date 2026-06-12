@@ -277,6 +277,56 @@ export type BittensorValidatorExposureInsight = {
   prompt: string;
 };
 
+export type BittensorValidatorIntelligenceReport = {
+  kind: "validator";
+  netuid: number;
+  subnetName: string;
+  validatorHotkey: string;
+  coldkey: string | null;
+  uid: number | null;
+  score: number;
+  stake: number | null;
+  trust: number | null;
+  dividends: number | null;
+  source: string;
+  foundInSample: boolean;
+  risk: BittensorRiskLevel;
+  signals: BittensorIntelligenceSignal[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  updatedAt: string;
+};
+
+export type BittensorStakingPlanStep = {
+  netuid: number;
+  subnetName: string;
+  validatorHotkey: string | null;
+  amountTao: number;
+  strategy: "balanced" | "yield" | "safety";
+  expectedAlpha: number | null;
+  slippageBps: number | null;
+  source: string;
+  warnings: string[];
+  rationale: string;
+};
+
+export type BittensorStakingPlan = {
+  kind: "staking_plan";
+  goal: string;
+  totalAmountTao: number;
+  strategy: "balanced" | "yield" | "safety";
+  steps: BittensorStakingPlanStep[];
+  unsignedPreviews: BittensorExtrinsicPreview[];
+  assumptions: string[];
+  warnings: string[];
+  nextQuestions: string[];
+  copilotActions: BittensorCopilotAction[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  updatedAt: string;
+};
+
 export type BittensorSubnetIntelligenceReport = {
   kind: "subnet";
   netuid: number;
@@ -345,7 +395,10 @@ export type BittensorWatch = {
   label: string;
   netuid: number | null;
   ss58Address: string | null;
+  validatorHotkey: string | null;
   threshold: number | null;
+  reason: string | null;
+  lastAlertAt: string | null;
   createdAt: string;
 };
 
@@ -355,6 +408,8 @@ export type BittensorWatchEvaluation = {
   summary: string;
   observedValue: number | string | null;
   threshold: number | null;
+  alertLevel?: BittensorRiskLevel;
+  actionPrompt?: string | null;
   source: string;
   checkedAt: string;
 };

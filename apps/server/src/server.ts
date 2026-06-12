@@ -24,16 +24,20 @@ import {
   buildBittensorSidecarHealthCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSignedResultCard,
+  buildBittensorStakingPlanCard,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorSubnetCards,
   buildBittensorValidatorComparisonCards,
+  buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWalletCard,
   buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
+  analyzeBittensorValidatorIntelligence,
   analyzeBittensorSubnetIntelligence,
   analyzeBittensorWalletIntelligence,
   bittensorProvider,
+  buildBittensorStakingPlan,
   checkSubtensorSidecarHealth,
   compareBittensorValidators,
   createBittensorSigningHandoff,
@@ -3919,6 +3923,46 @@ function createRoutes(
     return jsonResponse({ success: true, report, cards: [buildBittensorWalletIntelligenceCard(report)] });
   });
 
+  addRoute(routes, "GET", "/api/bittensor/intelligence/validator/:netuid/:validatorHotkey", "client", async (ctx) => {
+    const netuid = Number(ctx.params.netuid);
+    const validatorHotkey = ctx.params.validatorHotkey.trim();
+    if (!Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    if (!isValidSs58Address(validatorHotkey)) {
+      throw new ApiError(400, "invalid_validator_hotkey", "validatorHotkey must be a valid SS58 public address");
+    }
+    const report = await analyzeBittensorValidatorIntelligence({ netuid, validatorHotkey });
+    return jsonResponse({ success: true, report, cards: [buildBittensorValidatorIntelligenceCard(report)] });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/staking/plan", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "Build a Bittensor staking plan.";
+    const amountTao = body.amountTao === undefined || body.amountTao === null || body.amountTao === "" ? null : String(body.amountTao);
+    if (!amountTao) {
+      throw new ApiError(400, "invalid_amount", "amountTao is required for a staking plan");
+    }
+    const strategy = typeof body.strategy === "string" && ["balanced", "yield", "safety"].includes(body.strategy)
+      ? body.strategy as "balanced" | "yield" | "safety"
+      : "balanced";
+    const plan = await buildBittensorStakingPlan({
+      message,
+      amountTao,
+      coldkey: typeof body.coldkey === "string" ? body.coldkey : typeof body.ss58Address === "string" ? body.ss58Address : null,
+      strategy,
+      limit: body.limit === null || body.limit === undefined || body.limit === "" ? null : Number(body.limit),
+    });
+    return jsonResponse({
+      success: true,
+      plan,
+      cards: [
+        buildBittensorStakingPlanCard(plan),
+        ...plan.unsignedPreviews.slice(0, 2).map(buildBittensorExtrinsicPreviewCard),
+      ],
+    });
+  });
+
   addRoute(routes, "POST", "/api/bittensor/actions/quote", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     const action = String(body.action);
@@ -4123,7 +4167,9 @@ function createRoutes(
       label: typeof body.label === "string" ? body.label : undefined,
       netuid: body.netuid === null || body.netuid === undefined || body.netuid === "" ? null : Number(body.netuid),
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+      validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
       threshold: body.threshold === null || body.threshold === undefined || body.threshold === "" ? null : Number(body.threshold),
+      reason: typeof body.reason === "string" ? body.reason : null,
     });
     const watches = listBittensorWatches();
     return jsonResponse({ success: true, watch, watches, cards: buildBittensorWatchCards([watch]) });
