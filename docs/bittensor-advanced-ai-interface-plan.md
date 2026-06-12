@@ -138,6 +138,23 @@ Current implementation:
 - Watch checks return actionable alert prompts that can send the user back into subnet analysis, wallet intelligence, or validator deep dives.
 - Watch evaluations now expose an alert key, notification intent, and multiple copilot actions so chat, MCP clients, and future UI alerts can route the user into the safest next step.
 
+## Cross-Cutting: Upstream OpenWork Update Intake
+
+Goal: keep Matterhorn Work current with useful OpenWork upstream improvements without losing Matterhorn-specific product, branding, Bittensor, and agent-control decisions.
+
+Build:
+
+- Maintain a repeatable upstream checker and sync playbook for OpenWork updates.
+- Review upstream changes against Matterhorn conflict zones: branding, env/header aliases, CLI/packaging names, OpenCode abstraction, agent control surface, Bittensor safety, and release automation.
+- Split useful upstream improvements into focused Matterhorn patches instead of auto-merging broad upstream ranges.
+- Run the upstream sync check beside Bittensor and agent-control verification when relevant.
+
+Current implementation:
+
+- `docs/upstream-openwork-sync.md` defines the sync policy, conflict zones, and no-secret merge rules.
+- `pnpm upstream:openwork:check` provides the repeatable intake command for operators.
+- The agent-control coverage matrix tracks upstream OpenWork intake as a first-class operator workflow.
+
 ## Build Order
 
 1. Phase 1 Intelligence Engine.
@@ -146,5 +163,6 @@ Current implementation:
 4. Phase 4 Non-Custodial Signing Gateway.
 5. Phase 5 Subnet Service Marketplace.
 6. Phase 6 Autonomous Monitoring And Bittensor Agent Ops.
+7. Cross-cutting upstream OpenWork update intake continues during every phase.
 
 This order keeps the product useful at every step and avoids adding action execution before the intelligence and safety layers are mature.

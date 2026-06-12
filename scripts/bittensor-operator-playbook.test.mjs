@@ -6,6 +6,7 @@ const playbook = await readFile("docs/bittensor-operator-playbook.md", "utf8");
 const operator = await readFile("docs/agent-operator-workflow.md", "utf8");
 const surface = await readFile("docs/agent-control-surface.md", "utf8");
 const matrix = await readFile("docs/agent-control-coverage-matrix.md", "utf8");
+const advancedPlan = await readFile("docs/bittensor-advanced-ai-interface-plan.md", "utf8");
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
 
 for (const phrase of [
@@ -13,6 +14,9 @@ for (const phrase of [
   "matterhorn-work bittensor chat",
   "matterhorn_bittensor_readiness",
   "matterhorn_bittensor_chat",
+  "matterhorn_bittensor_prepare_extrinsic",
+  "matterhorn_bittensor_create_signing_handoff",
+  "matterhorn_bittensor_submit_signed_extrinsic",
   "I'm new to Bittensor",
   "Show my TAO",
   "Where am I staked",
@@ -26,6 +30,7 @@ for (const phrase of [
   "subnet comparison cards",
   "validator selection cards",
   "unsigned_preview",
+  "payload SHA-256",
   "clarification_required",
   "unsupported",
   "external signature required",
@@ -47,6 +52,7 @@ for (const safetyPhrase of [
   "Do not give financial advice",
   "Never invent a validator hotkey",
   "no signing happens inside Matterhorn",
+  "Matterhorn still does not import keys",
 ]) {
   assert.ok(playbook.includes(safetyPhrase), `Bittensor operator playbook should include safety phrase: ${safetyPhrase}`);
 }
@@ -60,8 +66,24 @@ for (const command of [
   "--rate-tolerance 0.01",
   "--limit 5",
   "--strategy balanced",
+  "bittensor extrinsic prepare",
+  "bittensor extrinsic handoff",
+  "bittensor extrinsic submit",
+  "--preview-json",
+  "--signature",
+  "--signer-address",
 ]) {
   assert.ok(playbook.includes(command), `Bittensor operator playbook should include CLI option: ${command}`);
+}
+
+for (const planPhrase of [
+  "Cross-Cutting: Upstream OpenWork Update Intake",
+  "docs/upstream-openwork-sync.md",
+  "pnpm upstream:openwork:check",
+  "Bittensor safety",
+  "Cross-cutting upstream OpenWork update intake continues during every phase",
+]) {
+  assert.ok(advancedPlan.includes(planPhrase), `Bittensor advanced plan should include upstream intake phrase: ${planPhrase}`);
 }
 
 assert.ok(operator.includes("./bittensor-operator-playbook.md"), "agent operator workflow should link the Bittensor playbook");

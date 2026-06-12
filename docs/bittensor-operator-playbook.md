@@ -354,6 +354,76 @@ Expected behavior:
 - no signing happens inside Matterhorn;
 - no seed phrase, mnemonic, private key, keyfile, or wallet export is requested.
 
+Lower-level no-custody signing CLI:
+
+```bash
+matterhorn-work bittensor extrinsic prepare \
+  --action stake \
+  --netuid 14 \
+  --amount-tao 1 \
+  --validator-hotkey "<validator-hotkey>" \
+  --coldkey "<public-coldkey-label-or-address>" \
+  --rate-tolerance 0.01 \
+  --json
+
+matterhorn-work bittensor extrinsic handoff \
+  --preview-json '<preview-json-from-prepare>' \
+  --json
+
+matterhorn-work bittensor extrinsic submit \
+  --preview-json '<preview-json-from-prepare>' \
+  --signature "<externally-signed-payload>" \
+  --signer-address "<public-signer-address>" \
+  --json
+```
+
+Lower-level no-custody MCP:
+
+```json
+{
+  "tool": "matterhorn_bittensor_prepare_extrinsic",
+  "arguments": {
+    "action": "stake",
+    "netuid": 14,
+    "amountTao": "1",
+    "hotkey": "<validator-hotkey>",
+    "coldkey": "<public-coldkey-label-or-address>",
+    "rateTolerance": 0.01
+  }
+}
+```
+
+Then:
+
+```json
+{
+  "tool": "matterhorn_bittensor_create_signing_handoff",
+  "arguments": {
+    "preview": "<preview-object-from-prepare>"
+  }
+}
+```
+
+Only after an external signer returns a signed payload:
+
+```json
+{
+  "tool": "matterhorn_bittensor_submit_signed_extrinsic",
+  "arguments": {
+    "preview": "<preview-object-from-prepare>",
+    "signature": "<externally-signed-payload>",
+    "signerAddress": "<public-signer-address>"
+  }
+}
+```
+
+Expected behavior:
+
+- prepare returns an unsigned preview that requires external signing;
+- handoff returns a payload SHA-256 and instructions for signing outside Matterhorn;
+- submit accepts only an externally signed payload plus public signer metadata;
+- Matterhorn still does not import keys, custody funds, or ask for raw signing material.
+
 ## 8. Follow-Up Context
 
 Matterhorn can return reusable public Bittensor context. Use `contextId` for follow-ups when present.
@@ -433,9 +503,11 @@ Use the Matterhorn Work MCP server for Bittensor.
      "coldkey": "<public-coldkey-label-or-address>",
      "rateTolerance": 0.01
    }
-9. For direct subnet service use, call `bittensor_preview_subnet_invocation` first, ask the user to confirm the request SHA-256, then call `bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-10. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-11. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+9. For lower-level action workflows, call `matterhorn_bittensor_prepare_extrinsic`, then `matterhorn_bittensor_create_signing_handoff`.
+10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
+11. For direct subnet service use, call `matterhorn_bittensor_preview_subnet_invocation` first, ask the user to confirm the request SHA-256, then call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+12. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+13. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 11. What Good Looks Like
