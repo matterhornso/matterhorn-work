@@ -193,6 +193,8 @@ matterhorn-work files session close "$MATTERHORN_WORK_WRITE_SESSION_ID" --json
 
 ## 5. Bittensor Chat From CLI
 
+Use [Matterhorn Work Bittensor Operator Playbook](./bittensor-operator-playbook.md) for the full Bittensor-specific operator flow, including expected behavior for wallet reads, subnet discovery, validator comparison, staking previews, missing-context clarifications, and unsupported subnet adapters.
+
 Start with readiness:
 
 ```bash

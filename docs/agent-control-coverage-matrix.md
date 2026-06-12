@@ -13,6 +13,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Capability | HTTP | MCP | CLI | Verification |
 | --- | --- | --- | --- | --- |
 | Agent operator workflow | Stable server/session/file/Bittensor routes | Copy-paste Codex/Claude tool sequence | Copy-paste CLI fallback loop | `test:agent-operator-workflow` |
+| Bittensor operator playbook | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness` | `matterhorn_bittensor_chat`, `matterhorn_bittensor_readiness` | `matterhorn-work bittensor chat`, `matterhorn-work bittensor readiness` | `test:bittensor-operator-playbook`, `test:bittensor-cli-fallback` |
 | Unified readiness doctor | Aggregates stable local routes | `matterhorn_doctor` | `matterhorn-work doctor` | `test:agent-control-doctor`, `test:agent-control-mcp`, `test:agent-control-coverage-matrix` |
 | End-to-end agent QA harness | Stable server/session/file/Bittensor routes | Uses MCP-compatible contracts | `node scripts/agent-control-live-qa.mjs` | `test:agent-control-live-qa` |
 | Health/status/capabilities | `GET /health`, `GET /status`, `GET /capabilities` | `matterhorn_status` | `matterhorn-work status` | `test:agent-control-mcp`, `test:agent-control-api-docs` |
@@ -60,6 +61,7 @@ Run these when changing this control surface:
 ```bash
 pnpm test:agent-control-coverage-matrix
 pnpm test:agent-operator-workflow
+pnpm test:bittensor-operator-playbook
 pnpm test:agent-control-doctor
 pnpm test:agent-control-live-qa
 pnpm test:agent-control-api-docs
