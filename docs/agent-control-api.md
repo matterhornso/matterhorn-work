@@ -72,6 +72,8 @@ Common status codes:
 | `matterhorn_reply_approval` | `POST /approvals/:approvalId` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
+| `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
+| `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |
 | `matterhorn_bittensor_create_watch` | `POST /api/bittensor/monitoring/watchlist` |
 | `matterhorn_bittensor_list_watches` | `GET /api/bittensor/monitoring/watchlist` |
 | `matterhorn_bittensor_check_watches` | `GET /api/bittensor/monitoring/check` |

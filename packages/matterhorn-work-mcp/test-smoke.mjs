@@ -183,6 +183,30 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     return json(res, 200, { success: true, ready: true });
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
+    assert.equal(body.intent, "service_call");
+    assert.equal(body.task, "mock subnet task");
+    return json(res, 200, {
+      success: true,
+      preview: {
+        netuid: 14,
+        intent: "service_call",
+        requestSha256: "d".repeat(64),
+        requiresConfirmation: true,
+      },
+      cards: [],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/invoke") {
+    assert.equal(body.intent, "service_call");
+    assert.equal(body.task, "mock subnet task");
+    assert.equal(body.previewRequestSha256, "d".repeat(64));
+    return json(res, 200, {
+      success: true,
+      invocation: { netuid: 14, intent: "service_call", supported: false },
+      cards: [],
+    });
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/monitoring/watchlist") {
     return json(res, 200, { success: true, watches: [], cards: [] });
   }
@@ -300,6 +324,8 @@ try {
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_bittensor_chat",
+    "matterhorn_bittensor_preview_subnet_invocation",
+    "matterhorn_bittensor_invoke_subnet",
     "matterhorn_bittensor_create_watch",
     "matterhorn_bittensor_list_watches",
     "matterhorn_bittensor_check_watches",
@@ -441,6 +467,19 @@ try {
     arguments: {},
   }));
   assert.equal(readiness.ready, true);
+
+  const subnetPreview = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_preview_subnet_invocation",
+    arguments: { netuid: 14, intent: "service_call", task: "mock subnet task" },
+  }));
+  assert.equal(subnetPreview.preview.requestSha256.length, 64);
+  assert.equal(subnetPreview.preview.requiresConfirmation, true);
+
+  const subnetInvoke = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_invoke_subnet",
+    arguments: { netuid: 14, intent: "service_call", task: "mock subnet task", previewRequestSha256: subnetPreview.preview.requestSha256 },
+  }));
+  assert.equal(subnetInvoke.invocation.supported, false);
 
   const watchCreate = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_create_watch",
