@@ -4008,21 +4008,39 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
       !capability.adapterStatus ||
       !capability.dataFreshness
     );
+    const missingServiceMarketplaceFields = capabilities.filter((capability) =>
+      !capability.supportedChatIntents.includes("subnet_use") ||
+      !capability.requiredAuth ||
+      !capability.costModel ||
+      !capability.adapterStatus?.message ||
+      !capability.requestSchema ||
+      typeof capability.requestSchema !== "object" ||
+      Array.isArray(capability.requestSchema) ||
+      !capability.resultSchema ||
+      typeof capability.resultSchema !== "object" ||
+      Array.isArray(capability.resultSchema) ||
+      !Array.isArray(capability.safetyNotes) ||
+      !capability.safetyNotes.length ||
+      Boolean(secretFieldPath(capability))
+    );
     checks.push({
       id: "capabilities",
       label: "Subnet capability registry",
-      status: missingUniversal.length || missingV2Fields.length ? "fail" : capabilities.length ? "pass" : "warning",
+      status: missingUniversal.length || missingV2Fields.length || missingServiceMarketplaceFields.length ? "fail" : capabilities.length ? "pass" : "warning",
       summary: missingUniversal.length
         ? "Some capability manifests are missing universal chat support."
         : missingV2Fields.length
           ? "Some capability manifests are missing Phase 3/4 capability metadata."
+        : missingServiceMarketplaceFields.length
+          ? "Some capability manifests are missing subnet service marketplace safety metadata."
         : capabilities.length
-          ? "Capability manifests include universal Bittensor chat support, adapter readiness, examples, and freshness labels."
+          ? "Capability manifests include universal Bittensor chat support, adapter readiness, examples, freshness labels, schemas, auth/cost metadata, and service safety notes."
           : "No capability manifests were available to audit.",
       details: {
         count: capabilities.length,
         missingNetuids: missingUniversal.map((capability) => capability.netuid),
         missingV2Netuids: missingV2Fields.map((capability) => capability.netuid),
+        missingServiceMarketplaceNetuids: missingServiceMarketplaceFields.map((capability) => capability.netuid),
         adapterReady: capabilities.filter((capability) => capability.capabilityLevel === "adapter_ready").length,
         adapterRequired: capabilities.filter((capability) => capability.capabilityLevel === "adapter_required").length,
       },

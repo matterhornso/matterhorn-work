@@ -1031,6 +1031,10 @@ describe("auditBittensorReadiness", () => {
     expect(report.checks.some((check) => check.id === "chat_intents")).toBe(true);
     expect(report.checks.some((check) => check.id === "chat_context")).toBe(true);
     expect(report.checks.some((check) => check.id === "live_read_freshness")).toBe(true);
+    const capabilityCheck = report.checks.find((check) => check.id === "capabilities");
+    expect(capabilityCheck).toBeDefined();
+    expect(capabilityCheck?.summary).toContain("schemas");
+    expect((capabilityCheck?.details as { missingServiceMarketplaceNetuids?: number[] })?.missingServiceMarketplaceNetuids).toEqual([]);
     expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
     const card = buildBittensorReadinessCard(report);
     expect(card.kind).toBe("readiness_report");
