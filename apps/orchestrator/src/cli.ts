@@ -6820,6 +6820,17 @@ async function runDoctorReport(args: ParsedArgs) {
         ok: (payload) => payload?.success === true || payload?.ready === true || payload?.report,
         hint: "Bittensor remains non-custodial; this route should only expose read/preview readiness.",
       }),
+      await doctorHttpCheck({
+        id: "bittensor.capabilities",
+        label: "Bittensor capability registry route",
+        baseUrl,
+        path: "/api/bittensor/capabilities",
+        required: true,
+        token,
+        timeoutMs,
+        ok: (payload) => payload?.success === true && Array.isArray(payload?.capabilities),
+        hint: "Capability manifests should be public/read-only and drive subnet explanation, preview, and adapter support.",
+      }),
     );
   }
 

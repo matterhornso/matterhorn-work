@@ -403,6 +403,7 @@ try {
   assert.equal(doctor.ready, true);
   assert.equal(doctor.summary.fail, 0);
   assert.ok(doctor.checks.some((check) => check.id === "bittensor.readiness" && check.status === "pass"));
+  assert.ok(doctor.checks.some((check) => check.id === "bittensor.capabilities" && check.status === "pass"));
   assert.ok(doctor.checks.some((check) => check.id === "session.events" && check.status === "pass"));
   assert.ok(doctor.checks.some((check) => check.id === "files.events" && check.status === "pass"));
 
