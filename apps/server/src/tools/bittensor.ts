@@ -277,6 +277,29 @@ export interface BittensorSubnetInvocation {
   warnings: string[];
 }
 
+export interface BittensorSubnetInvocationPreview {
+  netuid: number;
+  subnetName: string;
+  intent: BittensorSubnetInvocation["intent"];
+  adapter: BittensorCapabilityManifest["serviceAdapter"];
+  supported: boolean;
+  configured: boolean;
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  request: {
+    netuid: number;
+    intent: BittensorSubnetInvocation["intent"];
+    task: string | null;
+    ss58Address: string | null;
+  };
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  safetyNotes: string[];
+  warnings: string[];
+  consequenceSummary: string;
+  requiresConfirmation: true;
+}
+
 export interface BittensorValidatorCandidate {
   netuid: number;
   subnetName: string;
@@ -2124,20 +2147,22 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     if (netuid === null) {
       return clarificationResult(plan, "Which subnet netuid should I inspect or use?");
     }
-    const invocation = await invokeBittensorSubnet(netuid, {
+    const preview = await previewBittensorSubnetInvocation(netuid, {
       intent: "service_call",
       task: message,
       ss58Address: resolveExecutionSs58(input, plan),
     });
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["subnet_result"] },
-      responseText: invocation.message,
-      cards: [buildBittensorInvocationCard(invocation)],
-      data: { invocation },
-      warnings: uniqueWarnings(warnings, invocation.warnings),
+      responseText: preview.supported
+        ? `Prepared a Bittensor service review for subnet ${preview.netuid}. Confirm before Matterhorn calls the configured adapter.`
+        : preview.consequenceSummary,
+      cards: [buildBittensorInvocationPreviewCard(preview)],
+      data: { preview },
+      warnings: uniqueWarnings(warnings, preview.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
-      execution: invocation.supported ? "answered" : "unsupported",
+      execution: preview.supported ? "answered" : "unsupported",
     };
   }
 
@@ -2711,6 +2736,52 @@ export async function submitSignedBittensorExtrinsic(input: BittensorSignedSubmi
       explorerUrl: null,
     };
   }
+}
+
+export async function previewBittensorSubnetInvocation(netuid: number, input: BittensorSubnetInvokeInput): Promise<BittensorSubnetInvocationPreview> {
+  const [detail, capability] = await Promise.all([
+    bittensorProvider.getSubnet(netuid),
+    getBittensorCapability(netuid),
+  ]);
+  const configuredAdapter = getConfiguredSubnetAdapter(netuid);
+  const intent = input.intent ?? "service_call";
+  const ss58Address = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
+  const supported = intent === "service_call" && Boolean(configuredAdapter && capability.adapterStatus.configured && capability.serviceAdapter !== "unsupported");
+  const request = {
+    netuid,
+    intent,
+    task: input.task?.trim() || null,
+    ss58Address,
+  };
+  return {
+    netuid,
+    subnetName: detail.name,
+    intent,
+    adapter: capability.serviceAdapter,
+    supported,
+    configured: capability.adapterStatus.configured,
+    requiredAuth: capability.requiredAuth,
+    costModel: capability.costModel,
+    request,
+    requestSchema: capability.requestSchema,
+    resultSchema: capability.resultSchema,
+    safetyNotes: capability.safetyNotes,
+    warnings: uniqueWarnings(
+      capability.safetyNotes,
+      supported ? [
+        "Review this adapter request before invoking the subnet service.",
+        "Direct service invocation may send the task text and public routing context to the configured adapter.",
+      ] : [
+        `No configured ${capability.serviceAdapter.replace(/_/g, " ")} service adapter is ready for this subnet.`,
+        "Matterhorn can still explain, compare, monitor, and prepare staking guidance for this subnet.",
+      ],
+      input.ss58Address && !ss58Address ? ["Provided wallet address was not valid SS58 and will not be sent to the adapter."] : [],
+    ),
+    consequenceSummary: supported
+      ? `If confirmed, Matterhorn will call the configured ${configuredAdapter?.name ?? capability.serviceAdapter} adapter for ${detail.name} with the visible task and public context.`
+      : `Matterhorn cannot call ${detail.name}'s direct service yet because no supported adapter is configured.`,
+    requiresConfirmation: true,
+  };
 }
 
 export async function invokeBittensorSubnet(netuid: number, input: BittensorSubnetInvokeInput): Promise<BittensorSubnetInvocation> {
@@ -4479,6 +4550,43 @@ export function buildBittensorSignedResultCard(result: BittensorSignedResult): B
     }] : [],
     warnings: submitted ? [] : [result.message],
     data: { result },
+  };
+}
+
+export function buildBittensorInvocationPreviewCard(preview: BittensorSubnetInvocationPreview): BittensorChatCard {
+  return {
+    kind: preview.supported ? "subnet_result" : "unsupported_adapter",
+    title: preview.supported ? "Bittensor service review" : `Subnet ${preview.netuid} adapter unavailable`,
+    subtitle: `${preview.subnetName} · ${titleCase(preview.adapter)}`,
+    summary: preview.consequenceSummary,
+    tone: preview.supported ? "warning" : "warning",
+    items: [
+      cardItem("Netuid", preview.netuid),
+      cardItem("Intent", titleCase(preview.intent)),
+      cardItem("Adapter", titleCase(preview.adapter)),
+      cardItem("Configured", preview.configured ? "Yes" : "No", preview.configured ? "good" : "warning"),
+      cardItem("Supported", preview.supported ? "Yes" : "No", preview.supported ? "good" : "warning"),
+      cardItem("Auth", titleCase(preview.requiredAuth), preview.requiredAuth === "none" ? "good" : "warning"),
+      cardItem("Cost model", titleCase(preview.costModel)),
+      cardItem("Task", preview.request.task ? "Included" : "Not provided", preview.request.task ? "default" : "muted"),
+    ],
+    actions: preview.supported ? [{
+      label: "Confirm service call",
+      kind: "send_to_chat",
+      payload: {
+        prompt: `Confirm Bittensor subnet ${preview.netuid} service call with adapter ${preview.adapter}.`,
+        preview,
+      },
+    }] : [{
+      label: "Explain subnet instead",
+      kind: "send_to_chat",
+      payload: {
+        prompt: `Explain subnet ${preview.netuid} and what Matterhorn can do without a service adapter.`,
+        preview,
+      },
+    }],
+    warnings: preview.warnings,
+    data: { preview },
   };
 }
 
