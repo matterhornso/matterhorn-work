@@ -72,6 +72,9 @@ Common status codes:
 | `matterhorn_reply_approval` | `POST /approvals/:approvalId` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
+| `matterhorn_bittensor_prepare_extrinsic` | `POST /api/bittensor/extrinsics/prepare` |
+| `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
+| `matterhorn_bittensor_submit_signed_extrinsic` | `POST /api/bittensor/extrinsics/submit` |
 | `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
 | `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |
 | `matterhorn_bittensor_create_watch` | `POST /api/bittensor/monitoring/watchlist` |
@@ -566,6 +569,108 @@ Safety rules:
 - It returns unsigned previews for Bittensor actions.
 - Users must sign externally through a compatible signer when an action moves beyond preview.
 - It never requests or accepts custody material.
+
+### `POST /api/bittensor/extrinsics/prepare`
+
+Auth: `client`
+
+Builds an unsigned Bittensor action preview for chat or MCP review. This route is for deterministic preview only; it does not sign or broadcast.
+
+Request:
+
+```json
+{
+  "action": "stake",
+  "netuid": 14,
+  "amountTao": "1",
+  "coldkey": "5...",
+  "hotkey": "5...",
+  "rateTolerance": 0.01
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "preview": {
+    "action": "stake",
+    "netuid": 14,
+    "requiresExternalSignature": true
+  },
+  "cards": []
+}
+```
+
+### `POST /api/bittensor/extrinsics/handoff`
+
+Auth: `client`
+
+Creates a checksumed desktop handoff bundle from an unsigned preview so a user can sign externally. The payload hash is what agents should preserve when guiding follow-up steps.
+
+Request:
+
+```json
+{
+  "preview": {
+    "action": "stake",
+    "netuid": 14,
+    "requiresExternalSignature": true,
+    "unsignedPayload": {}
+  }
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "handoff": {
+    "id": "bt-handoff-...",
+    "payloadSha256": "64-hex-character-checksum",
+    "suggestedFilename": "bittensor-stake-subnet-14.json"
+  },
+  "receipt": {},
+  "cards": []
+}
+```
+
+### `POST /api/bittensor/extrinsics/submit`
+
+Auth: `client`
+
+Submits an externally signed Bittensor payload when a sidecar submission path is configured. The route accepts a signed payload and signer address, but it still never accepts seed phrases, mnemonics, private keys, wallet exports, or imported key material.
+
+Request:
+
+```json
+{
+  "preview": {
+    "action": "stake",
+    "netuid": 14,
+    "requiresExternalSignature": true,
+    "unsignedPayload": {}
+  },
+  "signature": "0x...",
+  "signerAddress": "5..."
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "result": {
+    "status": "submitted",
+    "txHash": "0x..."
+  },
+  "receipt": {},
+  "cards": []
+}
+```
 
 ### `GET /api/bittensor/readiness`
 

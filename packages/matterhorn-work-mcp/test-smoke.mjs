@@ -183,6 +183,32 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/bittensor/readiness") {
     return json(res, 200, { success: true, ready: true });
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
+    assert.equal(body.action, "stake");
+    assert.equal(body.netuid, 14);
+    return json(res, 200, {
+      success: true,
+      preview: { action: "stake", netuid: 14, requiresExternalSignature: true },
+      cards: [],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/handoff") {
+    assert.equal(body.preview.action, "stake");
+    return json(res, 200, {
+      success: true,
+      handoff: { payloadSha256: "e".repeat(64), expiresAt: "2026-06-12T20:00:00.000Z" },
+      cards: [],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/submit") {
+    assert.equal(body.preview.action, "stake");
+    assert.equal(body.signature, "0x1234567890abcdef");
+    return json(res, 200, {
+      success: true,
+      result: { status: "sidecar_unavailable", txHash: null },
+      cards: [],
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
     assert.equal(body.intent, "service_call");
     assert.equal(body.task, "mock subnet task");
@@ -324,6 +350,9 @@ try {
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_bittensor_chat",
+    "matterhorn_bittensor_prepare_extrinsic",
+    "matterhorn_bittensor_create_signing_handoff",
+    "matterhorn_bittensor_submit_signed_extrinsic",
     "matterhorn_bittensor_preview_subnet_invocation",
     "matterhorn_bittensor_invoke_subnet",
     "matterhorn_bittensor_create_watch",
@@ -467,6 +496,24 @@ try {
     arguments: {},
   }));
   assert.equal(readiness.ready, true);
+
+  const extrinsicPreview = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_prepare_extrinsic",
+    arguments: { action: "stake", netuid: 14, amountTao: "1" },
+  }));
+  assert.equal(extrinsicPreview.preview.requiresExternalSignature, true);
+
+  const signingHandoff = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_create_signing_handoff",
+    arguments: { preview: extrinsicPreview.preview },
+  }));
+  assert.equal(signingHandoff.handoff.payloadSha256.length, 64);
+
+  const signedSubmit = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_submit_signed_extrinsic",
+    arguments: { preview: extrinsicPreview.preview, signature: "0x1234567890abcdef" },
+  }));
+  assert.equal(signedSubmit.result.status, "sidecar_unavailable");
 
   const subnetPreview = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_preview_subnet_invocation",

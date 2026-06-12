@@ -321,6 +321,47 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_bittensor_prepare_extrinsic",
+    description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] },
+        netuid: { type: "number" },
+        amountTao: { type: "string" },
+        coldkey: { type: "string" },
+        hotkey: { type: "string" },
+        destination: { type: "string" },
+        originNetuid: { type: "number" },
+        destinationNetuid: { type: "number" },
+        rateTolerance: { type: "number" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    name: "matterhorn_bittensor_create_signing_handoff",
+    description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.",
+    inputSchema: {
+      type: "object",
+      properties: { preview: { type: "object" } },
+      required: ["preview"],
+    },
+  },
+  {
+    name: "matterhorn_bittensor_submit_signed_extrinsic",
+    description: "Submit an externally signed Bittensor extrinsic through a configured sidecar, if available.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        preview: { type: "object" },
+        signature: { type: "string" },
+        signerAddress: { type: "string" },
+      },
+      required: ["preview", "signature"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_preview_subnet_invocation",
     description: "Preview a Bittensor subnet adapter call before invocation, including request hash, auth/cost context, warnings, and confirmation text.",
     inputSchema: {
@@ -893,6 +934,12 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
       return callServer("/api/bittensor/readiness");
+    case "matterhorn_bittensor_prepare_extrinsic":
+      return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
+    case "matterhorn_bittensor_create_signing_handoff":
+      return callServer("/api/bittensor/extrinsics/handoff", { method: "POST", body: args });
+    case "matterhorn_bittensor_submit_signed_extrinsic":
+      return callServer("/api/bittensor/extrinsics/submit", { method: "POST", body: args });
     case "matterhorn_bittensor_preview_subnet_invocation":
       return callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/preview`, { method: "POST", body: args });
     case "matterhorn_bittensor_invoke_subnet":
