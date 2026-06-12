@@ -3745,6 +3745,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor chat --message <text> [options]",
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
+    "  matterhorn-work bittensor watch create|list|check [options]",
     "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3803,6 +3804,10 @@ function printHelp(): void {
     "  --intent <name>           Bittensor subnet intent: explain | metagraph | stake_guidance | wallet_guidance | service_call",
     "  --task <text>             Bittensor subnet service task text",
     "  --preview-request-sha256 <hash>  Request hash returned by bittensor subnet-preview",
+    "  --kind <name>             Bittensor watch kind: subnet | wallet | validator | emissions | slippage",
+    "  --label <text>            Bittensor watch label",
+    "  --threshold <n>           Bittensor watch threshold",
+    "  --reason <text>           Bittensor watch reason",
     "  --amount-tao <amount>     TAO amount for Bittensor previews",
     "  --validator-hotkey <key>  Bittensor validator hotkey for staking previews",
     "  --coldkey <key>           Bittensor coldkey public address label",
@@ -7236,9 +7241,12 @@ async function runSessions(args: ParsedArgs) {
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const rawSubcommand = args.positionals[1] ?? "chat";
-  const nestedSubcommand = rawSubcommand === "subnet" ? args.positionals[2] : undefined;
+  const nestedSubcommand = ["subnet", "watch"].includes(rawSubcommand) ? args.positionals[2] : undefined;
   const subcommand = nestedSubcommand ? `subnet-${nestedSubcommand}` : rawSubcommand;
   const subcommandTailIndex = nestedSubcommand ? 3 : 2;
+  const effectiveSubcommand = rawSubcommand === "watch" && nestedSubcommand
+    ? `watch-${nestedSubcommand}`
+    : subcommand;
   const { openworkUrl, token } = readOpenworkClientAuth(args);
   const baseUrl = openworkUrl.replace(/\/$/, "");
   const headers = {
@@ -7277,9 +7285,16 @@ async function runBittensor(args: ParsedArgs) {
       ...(extra ?? {}),
     };
   };
+  const readWatchKind = () => {
+    const kind = readFlag(args.flags, "kind") ?? "subnet";
+    if (!["subnet", "wallet", "validator", "emissions", "slippage"].includes(kind)) {
+      throw new Error("kind must be subnet, wallet, validator, emissions, or slippage");
+    }
+    return kind;
+  };
 
   try {
-    if (subcommand === "readiness" || subcommand === "ready") {
+    if (effectiveSubcommand === "readiness" || effectiveSubcommand === "ready") {
       const result = await fetchJson(`${baseUrl}/api/bittensor/readiness`, {
         headers,
       });
@@ -7287,7 +7302,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    if (subcommand === "subnet-preview" || subcommand === "preview" || subcommand === "preview-subnet") {
+    if (effectiveSubcommand === "subnet-preview" || effectiveSubcommand === "preview" || effectiveSubcommand === "preview-subnet") {
       const netuid = readSubnetNetuid();
       const result = await fetchJson(`${baseUrl}/api/bittensor/subnets/${encodeURIComponent(String(netuid))}/preview`, {
         method: "POST",
@@ -7298,7 +7313,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    if (subcommand === "subnet-invoke" || subcommand === "invoke" || subcommand === "invoke-subnet") {
+    if (effectiveSubcommand === "subnet-invoke" || effectiveSubcommand === "invoke" || effectiveSubcommand === "invoke-subnet") {
       const netuid = readSubnetNetuid();
       const previewRequestSha256 = readFlag(args.flags, "preview-request-sha256")?.trim();
       if (!previewRequestSha256) {
@@ -7313,7 +7328,43 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
+    if (effectiveSubcommand === "watch" || effectiveSubcommand === "watch-list" || effectiveSubcommand === "watches" || effectiveSubcommand === "watchlist") {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/monitoring/watchlist`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "watch-create" || effectiveSubcommand === "create-watch") {
+      const netuid = readNumber(args.flags, "netuid", undefined);
+      const threshold = readNumber(args.flags, "threshold", undefined);
+      const result = await fetchJson(`${baseUrl}/api/bittensor/monitoring/watchlist`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          kind: readWatchKind(),
+          ...(readFlag(args.flags, "label") ? { label: readFlag(args.flags, "label") } : {}),
+          ...(typeof netuid === "number" ? { netuid } : {}),
+          ...(readFlag(args.flags, "ss58-address") ? { ss58Address: readFlag(args.flags, "ss58-address") } : {}),
+          ...(readFlag(args.flags, "validator-hotkey") ? { validatorHotkey: readFlag(args.flags, "validator-hotkey") } : {}),
+          ...(typeof threshold === "number" ? { threshold } : {}),
+          ...(readFlag(args.flags, "reason") ? { reason: readFlag(args.flags, "reason") } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "watch-check" || effectiveSubcommand === "check-watches" || effectiveSubcommand === "alerts") {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/monitoring/check`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (effectiveSubcommand === "chat" || effectiveSubcommand === "ask" || effectiveSubcommand === "execute") {
       const message =
         readFlag(args.flags, "message") ??
         readFlag(args.flags, "prompt") ??
@@ -7350,7 +7401,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("bittensor requires chat|subnet-preview|subnet-invoke|readiness");
+    throw new Error("bittensor requires chat|subnet-preview|subnet-invoke|watch|readiness");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

@@ -269,7 +269,30 @@ matterhorn-work bittensor subnet-invoke \
   --json
 ```
 
-The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, wallet exports, or unpreviewed direct subnet invokes.
+For Bittensor watch operations:
+
+```bash
+matterhorn-work bittensor watch create \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --kind slippage \
+  --netuid 14 \
+  --threshold 0.35 \
+  --label "Subnet 14 slippage" \
+  --json
+
+matterhorn-work bittensor watch list \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --json
+
+matterhorn-work bittensor watch check \
+  --openwork-url http://<host>:8787 \
+  --token <client-token> \
+  --json
+```
+
+The CLI uses the same non-custodial server routes as `matterhorn_bittensor_chat` and never accepts seed phrases, mnemonics, private keys, wallet exports, unpreviewed direct subnet invokes, or signing material for watch operations.
 
 ## Approvals (manual mode)
 
