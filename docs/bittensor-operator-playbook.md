@@ -452,6 +452,32 @@ Context may remember public values such as SS58 address, netuid, amount, validat
 
 When the user asks to “use subnet X for this task,” Matterhorn should try the supported subnet adapter path only when a service adapter is configured.
 
+Capability discovery CLI:
+
+```bash
+matterhorn-work bittensor capabilities --json
+
+matterhorn-work bittensor capability \
+  --netuid 14 \
+  --json
+```
+
+Capability discovery MCP:
+
+```json
+{
+  "tool": "matterhorn_bittensor_list_capabilities",
+  "arguments": {}
+}
+```
+
+```json
+{
+  "tool": "matterhorn_bittensor_get_subnet_capability",
+  "arguments": { "netuid": 14 }
+}
+```
+
 CLI:
 
 ```bash
@@ -469,9 +495,10 @@ Expected behavior when no adapter exists:
 
 For lower-level MCP/API use, service calls should follow a preview-confirm-invoke sequence:
 
-1. Preview the subnet invocation and inspect adapter support, auth, cost, safety notes, warnings, and the request SHA-256.
-2. Ask the user to confirm the exact preview, including the request SHA-256.
-3. Invoke only when the adapter is configured and pass the preview request SHA-256 back as `previewRequestSha256`.
+1. Read the subnet capability manifest and inspect supported chat intents, adapter support, auth, cost, schemas, user benefits, and safety notes.
+2. Preview the subnet invocation and inspect adapter support, auth, cost, safety notes, warnings, and the request SHA-256.
+3. Ask the user to confirm the exact preview, including the request SHA-256.
+4. Invoke only when the adapter is configured and pass the preview request SHA-256 back as `previewRequestSha256`.
 
 This keeps direct adapter execution explicit while letting Matterhorn explain unsupported subnets without pretending a service call happened.
 
@@ -505,9 +532,10 @@ Use the Matterhorn Work MCP server for Bittensor.
    }
 9. For lower-level action workflows, call `matterhorn_bittensor_prepare_extrinsic`, then `matterhorn_bittensor_create_signing_handoff`.
 10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
-11. For direct subnet service use, call `matterhorn_bittensor_preview_subnet_invocation` first, ask the user to confirm the request SHA-256, then call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-12. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-13. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+11. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+12. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+13. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+14. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 11. What Good Looks Like

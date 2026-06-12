@@ -14,6 +14,8 @@ for (const phrase of [
   "matterhorn-work bittensor chat",
   "matterhorn_bittensor_readiness",
   "matterhorn_bittensor_chat",
+  "matterhorn_bittensor_list_capabilities",
+  "matterhorn_bittensor_get_subnet_capability",
   "matterhorn_bittensor_prepare_extrinsic",
   "matterhorn_bittensor_create_signing_handoff",
   "matterhorn_bittensor_submit_signed_extrinsic",
@@ -72,6 +74,8 @@ for (const command of [
   "--preview-json",
   "--signature",
   "--signer-address",
+  "bittensor capabilities",
+  "bittensor capability",
 ]) {
   assert.ok(playbook.includes(command), `Bittensor operator playbook should include CLI option: ${command}`);
 }
