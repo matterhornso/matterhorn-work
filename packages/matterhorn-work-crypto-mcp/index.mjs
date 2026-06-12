@@ -730,11 +730,21 @@ async function bittensor_submit_signed_extrinsic(args) {
   return { success: true, result: res.result, cards: res.cards || [] };
 }
 
+async function bittensor_preview_subnet_invocation(args) {
+  const res = await callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/preview`, "POST", {
+    intent: args.intent,
+    task: args.task,
+    ss58Address: args.ss58Address,
+  });
+  return { success: true, preview: res.preview, cards: res.cards || [] };
+}
+
 async function bittensor_invoke_subnet(args) {
   const res = await callServer(`/api/bittensor/subnets/${encodeURIComponent(String(args.netuid))}/invoke`, "POST", {
     intent: args.intent,
     task: args.task,
     ss58Address: args.ss58Address,
+    previewRequestSha256: args.previewRequestSha256,
   });
   return { success: true, invocation: res.invocation, cards: res.cards || [] };
 }
@@ -832,7 +842,8 @@ const tools = [
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
   { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
   { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
-  { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
+  { name: "bittensor_preview_subnet_invocation", description: "Preview a Bittensor subnet service or universal adapter call before invocation, including auth, cost, request hash, warnings, and confirmation prompt.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" } }, required: ["netuid"] } },
+  { name: "bittensor_invoke_subnet", description: "Invoke a supported Bittensor subnet adapter after explicit preview/confirmation, or return a safe unsupported-adapter explanation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, intent: { type: "string", enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] }, task: { type: "string" }, ss58Address: { type: "string" }, previewRequestSha256: { type: "string" } }, required: ["netuid"] } },
   { name: "bittensor_compare_validators", description: "Compare visible validator candidates for a subnet by public metagraph samples. Informational only; not financial advice.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, hotkeys: { type: "array", items: { type: "string" } }, limit: { type: "number" }, strategy: { type: "string", enum: ["balanced", "yield", "safety"] } }, required: ["netuid"] } },
   { name: "bittensor_create_watch", description: "Create a Bittensor watch for a subnet, wallet, validator, emissions, or slippage condition.", inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["subnet", "wallet", "validator", "emissions", "slippage"] }, label: { type: "string" }, netuid: { type: "number" }, ss58Address: { type: "string" }, validatorHotkey: { type: "string" }, threshold: { type: "number" }, reason: { type: "string" } } } },
   { name: "bittensor_list_watches", description: "List Bittensor watches created through chat or the Bittensor monitoring API.", inputSchema: { type: "object", properties: {} } },
@@ -962,6 +973,7 @@ function handleMessage(msg) {
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_signing_handoff": return bittensor_create_signing_handoff(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_preview_subnet_invocation": return bittensor_preview_subnet_invocation(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_invoke_subnet": return bittensor_invoke_subnet(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_compare_validators": return bittensor_compare_validators(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_watch": return bittensor_create_watch(args).then(r => respond(textResult(r))).catch(catchErr);

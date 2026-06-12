@@ -462,6 +462,38 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/preview") {
+    const requestSha256 = "a".repeat(64);
+    res.end(JSON.stringify({
+      success: true,
+      preview: {
+        netuid: 14,
+        subnetName: "TAOHash",
+        intent: "service_call",
+        adapter: "compute",
+        supported: false,
+        configured: false,
+        requiredAuth: "unknown",
+        costModel: "unknown",
+        request: { netuid: 14, intent: "service_call", task: "mock task", ss58Address: null },
+        requestJson: "{\"intent\":\"service_call\",\"netuid\":14,\"ss58Address\":null,\"task\":\"mock task\"}",
+        requestSha256,
+        confirmationPrompt: `Confirm Bittensor subnet 14 service call with request SHA-256 ${requestSha256}.`,
+        requestSchema: {},
+        resultSchema: {},
+        safetyNotes: ["Universal support covers explanation, monitoring, and staking guidance."],
+        warnings: ["No configured compute service adapter is ready for this subnet."],
+        consequenceSummary: "Matterhorn cannot call TAOHash's direct service yet because no supported adapter is configured.",
+        requiresConfirmation: true,
+      },
+      cards: [{
+        kind: "unsupported_adapter",
+        title: "Subnet 14 adapter unavailable",
+        items: [{ label: "Request SHA-256", value: requestSha256 }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/subnets/14/invoke") {
     res.end(JSON.stringify({
       success: true,
@@ -636,6 +668,7 @@ try {
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
     "bittensor_submit_signed_extrinsic",
+    "bittensor_preview_subnet_invocation",
     "bittensor_invoke_subnet",
     "bittensor_compare_validators",
     "bittensor_create_watch",
@@ -720,7 +753,14 @@ try {
   const submit = await ask({ jsonrpc: "2.0", id: 16, method: "tools/call", params: { name: "bittensor_submit_signed_extrinsic", arguments: { preview: { action: "stake" }, signature: "0x1234567890abcdef" } } });
   assert.equal(JSON.parse(submit.result.content[0].text).result.status, "sidecar_unavailable");
 
-  const invoke = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph" } } });
+  const subnetPreview = await ask({ jsonrpc: "2.0", id: 27, method: "tools/call", params: { name: "bittensor_preview_subnet_invocation", arguments: { netuid: 14, intent: "service_call", task: "mock task" } } });
+  const subnetPreviewPayload = JSON.parse(subnetPreview.result.content[0].text);
+  assert.equal(subnetPreviewPayload.preview.requestSha256.length, 64);
+  assert.equal(subnetPreviewPayload.preview.requiresConfirmation, true);
+  assert.equal(subnetPreviewPayload.cards[0].kind, "unsupported_adapter");
+  assert.equal(/seed|private|mnemonic/i.test(JSON.stringify(subnetPreviewPayload)), false);
+
+  const invoke = await ask({ jsonrpc: "2.0", id: 17, method: "tools/call", params: { name: "bittensor_invoke_subnet", arguments: { netuid: 14, intent: "metagraph", previewRequestSha256: subnetPreviewPayload.preview.requestSha256 } } });
   assert.equal(JSON.parse(invoke.result.content[0].text).invocation.supported, true);
   assert.equal(JSON.parse(invoke.result.content[0].text).cards[0].kind, "subnet_result");
 

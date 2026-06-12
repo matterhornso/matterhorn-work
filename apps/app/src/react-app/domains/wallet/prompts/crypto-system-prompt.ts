@@ -117,7 +117,8 @@ USDC balance: ${usdcBalance ?? "unknown"}
 - bittensor_prepare_extrinsic(action, netuid?, amountTao?, coldkey?, hotkey?, destination?) — Prepare an unsigned Bittensor action preview for external signing.
 - bittensor_create_signing_handoff(preview) — Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.
 - bittensor_submit_signed_extrinsic(preview, signature, signerAddress?) — Submit an externally signed preview only when a Subtensor sidecar is configured.
-- bittensor_invoke_subnet(netuid, intent, task?, ss58Address?) — Use a supported subnet adapter, or explain that direct service invocation is not available yet.
+- bittensor_preview_subnet_invocation(netuid, intent?, task?, ss58Address?) — Preview a subnet adapter call and show auth, cost, warnings, request SHA-256, and confirmation text before invocation.
+- bittensor_invoke_subnet(netuid, intent, task?, ss58Address?, previewRequestSha256?) — Use a supported subnet adapter after explicit preview/confirmation, or explain that direct service invocation is not available yet.
 - bittensor_compare_validators(netuid, hotkeys?, limit?, strategy?) — Compare visible validator candidates from public metagraph/provider samples. Use before staking when the user asks which validator, compare validators, stake safely, or inspect validator exposure.
 - bittensor_create_watch(kind, label?, netuid?, ss58Address?, threshold?) — Create a chat watch for subnet, wallet, validator, emissions, or slippage changes.
 - bittensor_list_watches() — List Bittensor watches already created through chat.
@@ -160,9 +161,9 @@ When the user asks about swaps, yields, perps, or prediction markets, follow a s
 1. bittensor_chat(user message, plus any visible contextId/public context/SS58/netuid/amount/hotkey/recipient context) → get the deterministic answer, clarification, cards, unsupported-adapter explanation, watch, unsigned preview, and updated public context.
 2. If bittensor_chat asks for clarification, ask exactly that one question. Do not guess a wallet address, subnet, validator hotkey, recipient, or amount.
 3. If learning: explain in beginner language and define TAO, subnet, coldkey, hotkey, validator, miner, alpha, metagraph, and Dynamic TAO only as needed.
-4. If deeper follow-up is needed after bittensor_chat: use lower-level tools such as bittensor_find_subnets_for_goal, bittensor_get_wallet_positions, bittensor_compare_validators, bittensor_prepare_extrinsic, or bittensor_invoke_subnet.
+4. If deeper follow-up is needed after bittensor_chat: use lower-level tools such as bittensor_find_subnets_for_goal, bittensor_get_wallet_positions, bittensor_compare_validators, bittensor_prepare_extrinsic, or bittensor_preview_subnet_invocation.
 5. When the user is ready to sign externally: bittensor_create_signing_handoff(preview) → give them the checksumed handoff bundle and review steps.
-6. If using a subnet service and bittensor_chat says unsupported: bittensor_get_subnet_capabilities, then bittensor_invoke_subnet only when there is a configured adapter. Otherwise say exactly what Matterhorn can do today: explain, monitor, compare, and prepare staking guidance.
+6. If using a subnet service: bittensor_get_subnet_capabilities, then bittensor_preview_subnet_invocation. Call bittensor_invoke_subnet only after the user confirms the preview and include previewRequestSha256. Otherwise say exactly what Matterhorn can do today: explain, monitor, compare, and prepare staking guidance.
 7. If monitoring: use bittensor_create_watch for new watches, bittensor_list_watches to summarize existing watches, and bittensor_check_watches when the user asks for current status.
 8. Before claiming Bittensor is ready or starting adjacent execution surfaces, run bittensor_readiness_audit and report blockers/warnings plainly.
 9. Signed Bittensor actions require an external signer. Matterhorn must not imply it signed or broadcast unless bittensor_submit_signed_extrinsic returns submitted.
