@@ -13,6 +13,7 @@ for (const snippet of [
   "matterhorn-work sessions create --workspace-id <id>",
   "matterhorn-work sessions prompt <session-id> --workspace-id <id> --message <text>",
   "matterhorn-work sessions events <session-id> --workspace-id <id>",
+  "matterhorn-work doctor",
   "matterhorn-work bittensor chat --message <text>",
   "matterhorn-work bittensor readiness",
   "mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -24,6 +25,7 @@ for (const snippet of [
   "sessions prompt",
   "sessions status",
   "sessions snapshot",
+  "doctor",
   "bittensor chat",
   "bittensor readiness",
   "--details",
@@ -65,11 +67,14 @@ for (const forbidden of [
 }
 
 assert.ok(docs.includes("matterhorn-work mcp config"), "agent control docs should mention mcp config");
+assert.ok(docs.includes("matterhorn-work doctor"), "agent control docs should mention doctor CLI fallback");
+assert.ok(docs.includes("matterhorn_doctor"), "agent control docs should mention doctor MCP tool");
 assert.ok(docs.includes("matterhorn-work sessions events"), "agent control docs should mention session event CLI fallback");
 assert.ok(docs.includes("matterhorn-work sessions prompt"), "agent control docs should mention session prompt CLI fallback");
 assert.ok(docs.includes("matterhorn-work bittensor chat"), "agent control docs should mention Bittensor CLI fallback");
 assert.ok(docs.includes("./agent-mcp-install.md"), "agent control docs should link the MCP install guide");
 assert.ok(orchestratorReadme.includes("## Agent MCP config"), "orchestrator README should document MCP config helper");
+assert.ok(orchestratorReadme.includes("## Agent doctor"), "orchestrator README should document doctor helper");
 assert.ok(orchestratorReadme.includes("## Chat session events"), "orchestrator README should document chat session events");
 assert.ok(orchestratorReadme.includes("## Bittensor"), "orchestrator README should document Bittensor CLI fallback");
 

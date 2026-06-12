@@ -12,6 +12,7 @@ The goal is to keep every stable capability available through at least one safe 
 
 | Capability | HTTP | MCP | CLI | Verification |
 | --- | --- | --- | --- | --- |
+| Unified readiness doctor | Aggregates stable local routes | `matterhorn_doctor` | `matterhorn-work doctor` | `test:agent-control-doctor`, `test:agent-control-mcp`, `test:agent-control-coverage-matrix` |
 | Health/status/capabilities | `GET /health`, `GET /status`, `GET /capabilities` | `matterhorn_status` | `matterhorn-work status` | `test:agent-control-mcp`, `test:agent-control-api-docs` |
 | List workspaces | `GET /workspaces` | `matterhorn_list_workspaces` | `matterhorn-work workspace list` | `test:agent-control-mcp` |
 | Create chat session | `POST /workspace/:workspaceId/sessions` | `matterhorn_create_session` | `matterhorn-work sessions create` | `test:agent-control-mcp`, `test:agent-session-progress-smoke` |
@@ -43,12 +44,12 @@ The goal is to keep every stable capability available through at least one safe 
 | Reply to approval | `POST /approvals/:approvalId` | `matterhorn_reply_approval` | `matterhorn-work approvals reply` | `test:agent-control-mcp` |
 | Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | `matterhorn-work bittensor chat` | `test:agent-control-mcp`, Bittensor server tests, `test:bittensor-cli-fallback` |
 | Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | `matterhorn-work bittensor readiness` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
-| Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Not yet | `test:agent-browser-control-guide`, `test:agent-browser-live-qa` |
+| Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Doctor reports bridge availability | `test:agent-browser-control-guide`, `test:agent-browser-live-qa`, `test:agent-browser-live-probe` |
 
 ## Current Gaps
 
-1. Add a live desktop smoke path for browser actions when the desktop bridge is available.
-2. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
+1. Keep OpenAPI-style docs and MCP schemas in sync as new stable server routes are added.
+2. Keep the unified doctor updated as new product surfaces become agent-addressable.
 
 ## Required Checks
 
@@ -56,6 +57,7 @@ Run these when changing this control surface:
 
 ```bash
 pnpm test:agent-control-coverage-matrix
+pnpm test:agent-control-doctor
 pnpm test:agent-control-api-docs
 pnpm test:mcp-config-cli
 pnpm test:agent-session-progress-smoke

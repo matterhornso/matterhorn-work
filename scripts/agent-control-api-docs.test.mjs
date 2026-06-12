@@ -8,6 +8,8 @@ const mcpReadme = readFileSync("packages/matterhorn-work-mcp/README.md", "utf8")
 const mcpServer = readFileSync("packages/matterhorn-work-mcp/index.mjs", "utf8");
 
 const endpointContracts = [
+  ["matterhorn_doctor", "GET /health"],
+  ["matterhorn_doctor", "GET /api/bittensor/readiness"],
   ["matterhorn_status", "GET /health"],
   ["matterhorn_status", "GET /status"],
   ["matterhorn_status", "GET /capabilities"],
@@ -68,6 +70,7 @@ for (const routePath of [
   assert.ok(mcpServer.includes(routePath), `MCP server no longer references documented path fragment: ${routePath}`);
 }
 
+assert.ok(mcpServer.includes("matterhorn_doctor"), "MCP server should expose the unified doctor tool");
 assert.ok(surface.includes("./agent-control-api.md"), "agent control surface should link to the API contract");
 assert.ok(mcpReadme.includes("docs/agent-control-api.md"), "MCP README should link to the API contract");
 

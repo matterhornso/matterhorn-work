@@ -10,6 +10,7 @@ const cli = readFileSync("apps/orchestrator/src/cli.ts", "utf8");
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
 const rows = [
+  ["GET /health", "matterhorn_doctor", "matterhorn-work doctor"],
   ["GET /health", "matterhorn_status", "matterhorn-work status"],
   ["POST /workspace/:workspaceId/sessions", "matterhorn_create_session", "matterhorn-work sessions create"],
   ["GET /workspace/:workspaceId/sessions", "matterhorn_list_sessions", "matterhorn-work sessions list"],
@@ -50,12 +51,14 @@ for (const command of [
   "approvals list",
   "bittensor chat",
   "bittensor readiness",
+  "doctor",
 ]) {
   assert.ok(cli.includes(command), `CLI help or implementation missing command listed by coverage matrix: ${command}`);
 }
 
 for (const scriptName of [
   "test:agent-control-coverage-matrix",
+  "test:agent-control-doctor",
   "test:agent-control-api-docs",
   "test:mcp-config-cli",
   "test:agent-session-progress-smoke",
