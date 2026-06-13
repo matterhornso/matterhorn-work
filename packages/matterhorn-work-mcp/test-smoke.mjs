@@ -177,6 +177,18 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { ok: true, allowed: true });
   }
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
+    if (body.message === "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.") {
+      assert.equal(body.netuid, 14);
+      assert.equal(body.validatorHotkey, "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX");
+      assert.equal("ss58Address" in body, false);
+      return json(res, 200, {
+        success: true,
+        execution: "answered",
+        responseText: "Validator alert analysis ready.",
+        cards: [],
+        warnings: [],
+      });
+    }
     assert.equal(body.message, "show my TAO");
     return json(res, 200, { success: true, execution: "clarification_required", clarificationQuestion: "What SS58 address should I use?" });
   }
@@ -396,6 +408,7 @@ try {
     "matterhorn_bittensor_list_watches",
     "matterhorn_bittensor_check_watches",
     "matterhorn_bittensor_watch_digest",
+    "matterhorn_bittensor_act_on_watch_alert",
   ]) {
     assert.ok(toolNames.includes(expected), `missing ${expected}`);
   }
@@ -626,6 +639,16 @@ try {
   assert.equal(watchDigest.alerts[0].alertKey, "validator:14:bt-watch-alert");
   assert.equal(watchDigest.alerts[0].notificationIntent, "review_validator");
   assert.equal(watchDigest.alerts[0].prompt, "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.");
+
+  const watchAct = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_act_on_watch_alert",
+    arguments: { alertKey: "validator:14:bt-watch-alert" },
+  }));
+  assert.equal(watchAct.selectedAlert.alertKey, "validator:14:bt-watch-alert");
+  assert.equal(watchAct.selectedAlert.validatorHotkey, "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX");
+  assert.equal(watchAct.action.prompt, "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.");
+  assert.equal(watchAct.chat.execution, "answered");
+  assert.equal(watchAct.chat.responseText, "Validator alert analysis ready.");
 
   await mcp.ask("tools/call", {
     name: "matterhorn_close_file_session",

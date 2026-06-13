@@ -138,6 +138,7 @@ Current implementation:
 - Watch checks return actionable alert prompts that can send the user back into subnet analysis, wallet intelligence, or validator deep dives.
 - Watch evaluations now expose an alert key, notification intent, and multiple copilot actions so chat, MCP clients, and future UI alerts can route the user into the safest next step.
 - `matterhorn_bittensor_watch_digest` gives MCP agents a compact alert queue with watch ids, alert keys, notification intents, and next prompts/actions.
+- `matterhorn_bittensor_act_on_watch_alert` lets MCP agents select one alert and run its suggested public-data Bittensor chat prompt without signing, custody, or broadcast.
 
 ## Cross-Cutting: Upstream OpenWork Update Intake
 

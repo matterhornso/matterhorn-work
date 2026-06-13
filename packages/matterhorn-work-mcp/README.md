@@ -94,6 +94,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_bittensor_list_watches` — list configured Bittensor watches
 - `matterhorn_bittensor_check_watches` — evaluate Bittensor watches and return alert cards
 - `matterhorn_bittensor_watch_digest` — summarize Bittensor watch alerts into an agent-facing queue with next prompts/actions
+- `matterhorn_bittensor_act_on_watch_alert` — run one watch alert's suggested public-data prompt through Bittensor chat
 
 ## Safety
 
