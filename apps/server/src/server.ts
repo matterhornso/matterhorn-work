@@ -33,6 +33,7 @@ import {
   buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWalletCard,
+  buildBittensorWatchDigest,
   buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
   analyzeBittensorValidatorIntelligence,
@@ -4223,6 +4224,18 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/monitoring/check", "client", async () => {
     const evaluations = await evaluateBittensorWatches();
     return jsonResponse({ success: true, evaluations, cards: buildBittensorWatchEvaluationCards(evaluations) });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/monitoring/digest", "client", async (ctx) => {
+    const evaluations = await evaluateBittensorWatches();
+    const maxAlertsParam = ctx.url.searchParams.get("maxAlerts") ?? ctx.url.searchParams.get("max_alerts");
+    const includeOk = ctx.url.searchParams.get("includeOk") === "true" || ctx.url.searchParams.get("include_ok") === "true";
+    const maxAlerts = maxAlertsParam ? Number(maxAlertsParam) : null;
+    return jsonResponse({
+      success: true,
+      digest: buildBittensorWatchDigest(evaluations, { maxAlerts, includeOk }),
+      cards: buildBittensorWatchEvaluationCards(evaluations),
+    });
   });
 
   addRoute(routes, "GET", "/api/cow/quote", "client", async (ctx) => {

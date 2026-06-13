@@ -18,6 +18,7 @@ import {
   buildBittensorWalletCard,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
+  buildBittensorWatchDigest,
   buildBittensorWatchEvaluationCards,
   buildBittensorQuote,
   capabilityFromSubnet,
@@ -1159,6 +1160,18 @@ describe("signer and watch helpers", () => {
     expect(card?.items.some((item) => item.label === "Notify")).toBe(true);
     expect(card?.items.some((item) => item.label === "Intent")).toBe(true);
     expect(card?.actions?.some((action) => String(action.payload?.alertKey ?? "").includes("wallet"))).toBe(true);
+  });
+
+  test("builds bounded watch alert digests with notification intents", async () => {
+    const watch = createBittensorWatch({ kind: "slippage", netuid: 77, threshold: 0.1, label: "Watch slippage" });
+    const evaluation = await evaluateBittensorWatch(watch);
+    const digest = buildBittensorWatchDigest([evaluation], { maxAlerts: 1, includeOk: true });
+    expect(digest.total).toBe(1);
+    expect(digest.alerts.length).toBe(1);
+    expect(digest.alerts[0]?.alertKey).toContain("slippage");
+    expect(digest.alerts[0]?.notificationIntent).toBe(evaluation.status === "ok" ? "none" : "review_slippage");
+    expect(digest.alerts[0]?.prompt).toBeTruthy();
+    expect(JSON.stringify(digest)).not.toMatch(/seed|mnemonic|privateKey|wallet export/i);
   });
 
   test("reports sidecar mode from configuration without exposing endpoint details", () => {
