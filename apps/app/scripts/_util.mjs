@@ -57,7 +57,11 @@ export async function spawnOpencodeServe({
     args.push("--cors", origin);
   }
 
-  const child = spawn("opencode", args, {
+  const engineBin =
+    process.env.MATTERHORN_WORK_ENGINE_BIN?.trim() ||
+    process.env.OPENCODE_BIN?.trim() ||
+    "opencode";
+  const child = spawn(engineBin, args, {
     cwd,
     stdio: ["ignore", "ignore", "pipe"],
     env: {
@@ -74,6 +78,9 @@ export async function spawnOpencodeServe({
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => {
     stderr += chunk;
+  });
+  child.on("error", (error) => {
+    stderr += `${error instanceof Error ? error.message : String(error)}\n`;
   });
 
   async function waitForExit(ms) {

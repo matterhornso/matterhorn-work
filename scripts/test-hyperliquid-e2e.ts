@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 /**
  * Hyperliquid End-to-End Test
- * Validates the full order signing + submission flow.
- * NOTE: Requires a Hyperliquid account with margin to submit real orders.
- * The signing test works with any private key. Submission requires real funds.
+ * Validates non-custodial order planning surfaces.
+ *
+ * This helper intentionally does not accept or construct clients with private
+ * keys. Signed Hyperliquid execution must go through a separately reviewed
+ * external-signer flow.
  */
 
 // viem imports removed — testing from server packages which are already built
@@ -78,17 +80,15 @@ await check("summarizeOrder limit order", async () => {
 });
 
 // ============================================================
-// Test 3: Signing with SDK
+// Test 3: SDK availability without custody material
 // ============================================================
 console.log("");
-console.log("[Signing with SDK]");
+console.log("[SDK Availability]");
 
-await check("SDK loads and has placeOrder method", async () => {
+await check("SDK package loads without custody material", async () => {
   try {
     const { Hyperliquid } = await import("../apps/server/node_modules/hyperliquid");
-    const pk = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"; // Anvil default account #0
-    const hl = new Hyperliquid({ privateKey: pk, isTestnet: true });
-    return typeof hl.exchange?.placeOrder === "function";
+    return typeof Hyperliquid === "function";
   } catch (err) {
     console.log("    SDK load error:", (err as Error).message);
     return false;
@@ -165,11 +165,7 @@ console.log("========================================");
 if (FAIL === 0) {
   console.log(green("ALL HYPERLIQUID E2E TESTS PASSED"));
   console.log("");
-  console.log("Next steps for live submission test:");
-  console.log("1. Get Arbitrum Sepolia testnet ETH");
-  console.log("2. Deposit to Hyperliquid testnet");
-  console.log("3. Set private key in environment: HYPERLIQUID_PRIVATE_KEY=0x...");
-  console.log("4. Run: bun scripts/test-hyperliquid-live.ts");
+  console.log("Next step for live submission testing: build and review an external-signer flow first.");
   process.exit(0);
 } else {
   console.log(red("SOME TESTS FAILED"));

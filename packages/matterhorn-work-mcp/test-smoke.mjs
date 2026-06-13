@@ -348,7 +348,7 @@ function createMcp(baseUrl) {
       const timeout = setTimeout(() => {
         pending.delete(id);
         reject(new Error(`Timed out waiting for ${method}`));
-      }, 5_000);
+      }, 45_000);
       pending.set(id, {
         resolve: (message) => {
           clearTimeout(timeout);
