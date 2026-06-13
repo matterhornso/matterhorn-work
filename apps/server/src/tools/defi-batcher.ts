@@ -5,9 +5,15 @@
  */
 
 import { tokensForChain } from "../infra/token-registry.js";
-import { encodeFunctionData, type Address, type Hex } from "viem";
+import { encodeFunctionData, isHex, type Address, type Hex } from "viem";
 import type { buildSwap } from "./swap-builder.js";
 import type { buildRevokeApprovalTx } from "./approval-manager.js";
+import {
+  normalizeAddressField,
+  validateKnownToken,
+  validatePositiveUint256,
+  validateWhitelistedProtocol,
+} from "./tx-security.js";
 
 export type BatchStepType = "swap" | "approve" | "revoke" | "supply" | "custom";
 
@@ -59,6 +65,8 @@ export async function buildBatchPlan({
   if (!steps.length) {
     return { success: false, error: "Batch must contain at least one step" };
   }
+  const safeFrom = normalizeAddressField("from", from);
+  if (!safeFrom.success) return safeFrom;
 
   // Validate chain support
   const registry = tokensForChain(chainId);
@@ -68,17 +76,32 @@ export async function buildBatchPlan({
 
   // Validate dependencies exist
   const ids = new Set(steps.map((s) => s.id));
+  const normalizedSteps: BatchStep[] = [];
   for (const step of steps) {
     if (step.dependsOn && !ids.has(step.dependsOn)) {
       return { success: false, error: `Step ${step.id} depends on unknown step ${step.dependsOn}` };
     }
+    const target = normalizeAddressField(`Step ${step.id} target`, step.to);
+    if (!target.success) return target;
+    if (typeof step.data !== "string" || !isHex(step.data)) {
+      return { success: false, error: `Step ${step.id} data must be hex encoded` };
+    }
+    if (step.value !== undefined) {
+      try {
+        const value = BigInt(step.value);
+        if (value < 0n) return { success: false, error: `Step ${step.id} value cannot be negative` };
+      } catch {
+        return { success: false, error: `Step ${step.id} value must be an integer` };
+      }
+    }
+    normalizedSteps.push({ ...step, to: target.value, data: step.data });
   }
 
   // Compute total estimates (best effort — will refine at UI level with live gas)
   let totalGas = 0n;
   let totalCostEth: number | null = 0;
 
-  for (const step of steps) {
+  for (const step of normalizedSteps) {
     const gas = BigInt(step.estimatedGas ?? "0");
     totalGas += gas;
     if (step.estimatedCostEth !== null && step.estimatedCostEth !== undefined) {
@@ -87,11 +110,11 @@ export async function buildBatchPlan({
   }
 
   const plan: BatchPlan = {
-    steps,
+    steps: normalizedSteps,
     totalEstimatedGas: totalGas.toString(),
     totalEstimatedCostEth: totalCostEth !== null && totalCostEth !== undefined ? totalCostEth.toFixed(8) : null,
     chainId,
-    from,
+    from: safeFrom.value,
   };
 
   return { success: true, plan };
@@ -101,14 +124,24 @@ export async function buildBatchPlan({
  * Build an ERC-20 approve calldata for a spender.
  */
 export function buildApproveTx({
+  chainId,
   tokenAddress,
   spender,
   amount = ((1n << 256n) - 1n).toString(), // max uint256 for unlimited
 }: {
+  chainId?: number;
   tokenAddress: Address;
   spender: Address;
   amount?: string;
 }): { to: Address; data: Hex } {
+  const safeToken = chainId === undefined
+    ? normalizeAddressField("tokenAddress", tokenAddress)
+    : validateKnownToken(chainId, tokenAddress, "tokenAddress");
+  if (!safeToken.success) throw new Error(safeToken.error);
+  const safeSpender = normalizeAddressField("spender", spender);
+  if (!safeSpender.success) throw new Error(safeSpender.error);
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) throw new Error(safeAmount.error);
   const data = encodeFunctionData({
     abi: [
       {
@@ -122,9 +155,9 @@ export function buildApproveTx({
       },
     ],
     functionName: "approve",
-    args: [spender, BigInt(amount)],
+    args: [safeSpender.value, BigInt(safeAmount.value)],
   });
-  return { to: tokenAddress, data };
+  return { to: safeToken.value, data };
 }
 
 /**
@@ -146,6 +179,21 @@ export function createSwapApproveSupplyBatch({
   spender: Address;
   supplyTx: { to: Address; data: Hex; value?: string; description: string };
 }): BatchPlan {
+  const safeFrom = normalizeAddressField("from", from);
+  if (!safeFrom.success) throw new Error(safeFrom.error);
+  const safeToken = validateKnownToken(chainId, tokenToApprove, "tokenToApprove");
+  if (!safeToken.success) throw new Error(safeToken.error);
+  const safeSpender = normalizeAddressField("spender", spender);
+  if (!safeSpender.success) throw new Error(safeSpender.error);
+  const aavePool = validateWhitelistedProtocol(chainId, "aaveV3Pool");
+  if (!aavePool.success) throw new Error(aavePool.error);
+  if (safeSpender.value.toLowerCase() !== aavePool.value.toLowerCase()) {
+    throw new Error("spender must be the whitelisted Aave V3 pool for this supply batch");
+  }
+  const safeSupplyTarget = normalizeAddressField("supply target", supplyTx.to);
+  if (!safeSupplyTarget.success) throw new Error(safeSupplyTarget.error);
+  if (!isHex(supplyTx.data)) throw new Error("supply data must be hex encoded");
+
   const steps: BatchStep[] = [
     {
       id: "swap",
@@ -159,16 +207,16 @@ export function createSwapApproveSupplyBatch({
     {
       id: "approve",
       type: "approve",
-      description: `Approve ERC-20 for ${spender}`,
-      to: tokenToApprove,
-      data: buildApproveTx({ tokenAddress: tokenToApprove, spender }).data,
+      description: `Approve ERC-20 for ${safeSpender.value}`,
+      to: safeToken.value,
+      data: buildApproveTx({ chainId, tokenAddress: safeToken.value, spender: safeSpender.value }).data,
       dependsOn: "swap",
     },
     {
       id: "supply",
       type: "supply",
       description: supplyTx.description,
-      to: supplyTx.to,
+      to: safeSupplyTarget.value,
       data: supplyTx.data,
       value: supplyTx.value ?? "0",
       dependsOn: "approve",
@@ -181,7 +229,7 @@ export function createSwapApproveSupplyBatch({
     totalEstimatedGas: "0", // populated by UI with per-step gas estimation
     totalEstimatedCostEth: null,
     chainId,
-    from,
+    from: safeFrom.value,
   };
 }
 

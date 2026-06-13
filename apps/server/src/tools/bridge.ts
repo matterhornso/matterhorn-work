@@ -5,6 +5,7 @@
 import type { Address, Hex } from "viem";
 import { encodeFunctionData } from "viem";
 import { WHITELISTED_PROTOCOLS } from "../infra/token-registry.js";
+import { normalizeAddressField, validateKnownToken, validatePositiveUint256 } from "./tx-security.js";
 
 const ACROSS_API = "https://across.to/api";
 
@@ -25,13 +26,19 @@ export async function getBridgeQuote({
   amount: string;
   recipient: Address;
 }): Promise<{ success: true; fee: string; time: string; receiveAmount: string; totalSent: string } | { success: false; error: string }> {
+  const safeToken = validateKnownToken(originChainId, originToken, "originToken");
+  if (!safeToken.success) return safeToken;
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) return safeAmount;
+  const safeRecipient = normalizeAddressField("recipient", recipient);
+  if (!safeRecipient.success) return safeRecipient;
   try {
     const url = new URL(`${ACROSS_API}/suggested-fees`);
-    url.searchParams.set("token", originToken);
-    url.searchParams.set("inputAmount", amount);
+    url.searchParams.set("token", safeToken.value);
+    url.searchParams.set("inputAmount", safeAmount.value);
     url.searchParams.set("originChainId", String(originChainId));
     url.searchParams.set("destinationChainId", String(destinationChainId));
-    url.searchParams.set("recipient", recipient);
+    url.searchParams.set("recipient", safeRecipient.value);
     url.searchParams.set("message", "0x");
 
     const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
@@ -49,7 +56,7 @@ export async function getBridgeQuote({
     const feeFormatted = (Number(fee) / 1e18).toFixed(6);
     const timeMin = Math.ceil(data.estimatedFillTimeSec / 60);
     const receive = data.outputAmount;
-    const total = (BigInt(amount) + BigInt(fee)).toString();
+    const total = (BigInt(safeAmount.value) + BigInt(fee)).toString();
     return {
       success: true,
       fee: feeFormatted,
@@ -83,18 +90,31 @@ export function buildBridgeDepositTx({
 }): { success: true; to: Address; data: Hex; value: string } | { success: false; error: string } {
   const spokePool = WHITELISTED_PROTOCOLS[chainId]?.acrossSpokePool as Address | undefined;
   if (!spokePool) return { success: false, error: `Across not supported on chain ${chainId}` };
+  const safeInputToken = validateKnownToken(chainId, inputToken, "inputToken");
+  if (!safeInputToken.success) return safeInputToken;
+  const safeOutputToken = validateKnownToken(destinationChainId, outputToken, "outputToken");
+  if (!safeOutputToken.success) return safeOutputToken;
+  const safeInputAmount = validatePositiveUint256("inputAmount", inputAmount);
+  if (!safeInputAmount.success) return safeInputAmount;
+  const safeOutputAmount = validatePositiveUint256("outputAmount", outputAmount);
+  if (!safeOutputAmount.success) return safeOutputAmount;
+  const safeRecipient = normalizeAddressField("recipient", recipient);
+  if (!safeRecipient.success) return safeRecipient;
+  if (!Number.isInteger(quoteTimestamp) || quoteTimestamp <= 0) {
+    return { success: false, error: "quoteTimestamp must be a positive unix timestamp" };
+  }
   try {
-    const depositor = recipient; // self-deposit pattern
+    const depositor = safeRecipient.value; // self-deposit pattern
     const data = encodeFunctionData({
       abi: spokePoolAbi,
       functionName: "depositV2",
       args: [
         depositor,
-        recipient,
-        inputToken,
-        outputToken,
-        BigInt(inputAmount),
-        BigInt(outputAmount),
+        safeRecipient.value,
+        safeInputToken.value,
+        safeOutputToken.value,
+        BigInt(safeInputAmount.value),
+        BigInt(safeOutputAmount.value),
         BigInt(destinationChainId),
         "0x0000000000000000000000000000000000000000", // no exclusive relayer
         quoteTimestamp,

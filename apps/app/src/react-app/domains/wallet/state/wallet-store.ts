@@ -93,6 +93,7 @@ const PREFERRED_NETWORK_KEY = "matterhorn:wallet:preferredNetwork";
 const MAX_SLIPPAGE_BPS_KEY = "matterhorn:wallet:maxSlippageBps";
 const SWAP_COUNT_KEY = "matterhorn:wallet:sessionSwapCount";
 const LAST_SWAP_RESET_KEY = "matterhorn:wallet:lastSwapReset";
+const WEI_PER_ETH = 1_000_000_000_000_000_000n;
 
 function readNum(key: string, fallback: number): number {
   const raw = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
@@ -165,10 +166,26 @@ function getInitialSnapshot(): WalletStoreSnapshot {
   };
 }
 
+export function parseTxValueWei(value: string): bigint {
+  const text = String(value ?? "0").trim();
+  if (text.startsWith("0x")) return BigInt(text);
+  if (/^(0|[1-9]\d*)$/.test(text)) return BigInt(text);
+  if (/^(0|[1-9]\d*)\.\d+$/.test(text)) {
+    const [whole, fraction = ""] = text.split(".");
+    const paddedFraction = `${fraction.slice(0, 18)}${"0".repeat(Math.max(0, 18 - fraction.length))}`;
+    return BigInt(whole) * WEI_PER_ETH + BigInt(paddedFraction);
+  }
+  throw new Error("Transaction value must be hex wei, raw wei, or decimal ETH");
+}
+
 export function computeTxValueUSD(value: string): number {
-  const numeric = value.startsWith("0x") ? Number(BigInt(value)) / 1e18 : Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return 0;
-  return numeric * FALLBACK_ETH_PRICE_USD;
+  try {
+    const eth = Number(parseTxValueWei(value)) / Number(WEI_PER_ETH);
+    if (!Number.isFinite(eth) || eth < 0) return 0;
+    return eth * FALLBACK_ETH_PRICE_USD;
+  } catch {
+    return 0;
+  }
 }
 
 export function createWalletStore() {

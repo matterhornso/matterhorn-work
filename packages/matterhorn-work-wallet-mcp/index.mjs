@@ -5,16 +5,28 @@
  */
 
 import { createServer } from "node:http";
-import { createPublicClient, http } from "viem";
-import { base, baseSepolia } from "viem/chains";
 
-// --- viem clients ---
-const clients = {
-  8453: createPublicClient({ chain: base, transport: http() }),
-  84532: createPublicClient({ chain: baseSepolia, transport: http() }),
-};
+const SUPPORTED_CHAIN_IDS = new Set([8453, 84532]);
 
-function getClient(chainId) { return clients[chainId] ?? null; }
+let clientsPromise = null;
+
+async function getClients() {
+  if (!clientsPromise) {
+    clientsPromise = Promise.all([import("viem"), import("viem/chains")]).then(
+      ([{ createPublicClient, http }, { base, baseSepolia }]) => ({
+        8453: createPublicClient({ chain: base, transport: http() }),
+        84532: createPublicClient({ chain: baseSepolia, transport: http() }),
+      }),
+    );
+  }
+  return clientsPromise;
+}
+
+async function getClient(chainId) {
+  if (!SUPPORTED_CHAIN_IDS.has(chainId)) return null;
+  const clients = await getClients();
+  return clients[chainId] ?? null;
+}
 
 const registry = {
   8453: { USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 } },
@@ -25,6 +37,48 @@ const erc20BalanceOf = [
   { inputs: [{ name: "account", type: "address" }], name: "balanceOf", outputs: [{ name: "", type: "uint256" }], type: "function" },
 ];
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const FORBIDDEN_SIGNING_TEXT_RE = /(seed phrase|mnemonic|private key|wallet export|keyfile|suri|raw custody|secret key)/i;
+
+function normalizeAddress(value, label = "address") {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    return { error: `${label} must be a valid EVM address` };
+  }
+  const address = value.toLowerCase();
+  if (address.toLowerCase() === ZERO_ADDRESS) return { error: `${label} cannot be the zero address` };
+  return { value: address };
+}
+
+function normalizeValue(value) {
+  const text = typeof value === "string" ? value.trim() : String(value ?? "0");
+  try {
+    const amount = text.startsWith("0x") ? BigInt(text) : BigInt(text);
+    if (amount < 0n) return { error: "value cannot be negative" };
+    return { value: amount.toString() };
+  } catch {
+    return { error: "value must be a decimal or hex integer" };
+  }
+}
+
+function normalizeData(value) {
+  if (value === undefined || value === null || value === "") return { value: undefined };
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]*$/.test(value)) return { error: "data must be hex encoded" };
+  return { value };
+}
+
+function validateSummary(value) {
+  const summary = typeof value === "string" ? value.trim() : "Transaction";
+  if (summary.length > 240) return { error: "summary is too long" };
+  return { value: summary || "Transaction" };
+}
+
+function validateSignMessage(value) {
+  if (typeof value !== "string" || value.trim().length === 0) return { error: "message is required" };
+  if (value.length > 4096) return { error: "message is too long" };
+  if (FORBIDDEN_SIGNING_TEXT_RE.test(value)) return { error: "message appears to request custody material" };
+  return { value };
+}
+
 const tools = [
   {
     name: "wallet_connect",
@@ -33,12 +87,12 @@ const tools = [
   },
   {
     name: "wallet_sendTransaction",
-    description: "Prepare an on-chain transaction for user approval.",
+    description: "Prepare an on-chain transaction for explicit user approval. This tool never signs or broadcasts.",
     inputSchema: { type: "object", properties: { to: { type: "string" }, value: { type: "string" }, data: { type: "string" }, chainId: { type: "number" }, summary: { type: "string" } }, required: ["to", "value", "chainId"] },
   },
   {
     name: "wallet_signMessage",
-    description: "Request a message signature from the connected wallet. Used for Hyperliquid L1 proofs.",
+    description: "Request an explicit user-approved message signature. Never use this for custody material or hidden authorization.",
     inputSchema: { type: "object", properties: { message: { type: "string" }, description: { type: "string" } }, required: ["message"] },
   },
   {
@@ -57,7 +111,7 @@ function jsonRpc(id, result) { return JSON.stringify({ jsonrpc: "2.0", id, resul
 function jsonRpcError(id, code, message) { return JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n"; }
 
 async function fetchBalance(address, chainId) {
-  const client = getClient(chainId);
+  const client = await getClient(chainId);
   if (!client) return { error: `Unsupported chainId: ${chainId}` };
   const native = await client.getBalance({ address });
   let usdc = 0n;
@@ -80,14 +134,16 @@ process.stdin.on("data", (chunk) => {
     if (!trimmed) continue;
     try {
       const msg = JSON.parse(trimmed);
-      handleMessage(msg);
+      void handleMessage(msg).catch((err) => {
+        process.stdout.write(jsonRpcError(msg.id, -32000, err instanceof Error ? err.message : "wallet MCP request failed"));
+      });
     } catch {
       process.stderr.write(`MCP parse error: ${trimmed.slice(0, 200)}\n`);
     }
   }
 });
 
-function handleMessage(msg) {
+async function handleMessage(msg) {
   const { method, id } = msg;
   switch (method) {
     case "initialize":
@@ -102,20 +158,46 @@ function handleMessage(msg) {
         case "wallet_connect":
           return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "check_ui", message: "Wallet state is managed by the browser UI. Check the wallet panel." }) }] }));
         case "wallet_sendTransaction": {
-          const tx = { to: args?.to ?? "", value: args?.value ?? "0x0", data: args?.data, chainId: args?.chainId ?? 8453, summary: args?.summary ?? "Transaction", status: "pending_approval" };
+          const chainId = Number(args?.chainId ?? 8453);
+          if (!SUPPORTED_CHAIN_IDS.has(chainId)) return process.stdout.write(jsonRpcError(id, -32602, `Unsupported chainId: ${chainId}`));
+          const to = normalizeAddress(args?.to, "to");
+          if (to.error) return process.stdout.write(jsonRpcError(id, -32602, to.error));
+          const value = normalizeValue(args?.value ?? "0");
+          if (value.error) return process.stdout.write(jsonRpcError(id, -32602, value.error));
+          const data = normalizeData(args?.data);
+          if (data.error) return process.stdout.write(jsonRpcError(id, -32602, data.error));
+          const summary = validateSummary(args?.summary);
+          if (summary.error) return process.stdout.write(jsonRpcError(id, -32602, summary.error));
+          const tx = { to: to.value, value: value.value, data: data.value, chainId, summary: summary.value, status: "pending_approval" };
           process.stderr.write(JSON.stringify({ event: "tx_approval", tx }) + "\n");
           return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "pending_approval", needs_approval: true, tx: { to: tx.to, value: tx.value, data: tx.data } }) }] }));
         }
         case "wallet_signMessage":
-          process.stderr.write(JSON.stringify({ event: "sign_message", message: args?.message, description: args?.description }) + "\n");
-          return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "pending_approval", needs_approval: true, type: "sign_message", message: args?.message }) }] }));
+          {
+            const message = validateSignMessage(args?.message);
+            if (message.error) return process.stdout.write(jsonRpcError(id, -32602, message.error));
+            const description = validateSummary(args?.description ?? "Message signature");
+            if (description.error) return process.stdout.write(jsonRpcError(id, -32602, description.error));
+            process.stderr.write(JSON.stringify({ event: "sign_message", message: message.value, description: description.value }) + "\n");
+            return process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ status: "pending_approval", needs_approval: true, type: "sign_message", message: message.value }) }] }));
+          }
         case "wallet_getBalance":
           if (!args?.address || !args?.chainId) return process.stdout.write(jsonRpcError(id, -32602, "address and chainId required"));
-          return fetchBalance(args.address, args.chainId).then(r => process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify(r) }] })));
+          {
+            const address = normalizeAddress(args.address);
+            if (address.error) return process.stdout.write(jsonRpcError(id, -32602, address.error));
+            return fetchBalance(address.value, args.chainId).then(r => process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify(r) }] })));
+          }
         case "wallet_readContract": {
-          const c = getClient(args?.chainId);
+          const c = await getClient(args?.chainId);
           if (!c) return process.stdout.write(jsonRpcError(id, -32602, `Unsupported chainId: ${args?.chainId}`));
-          return c.readContract({ address: args.address, abi: args.abi, functionName: args.functionName, args: args.args ?? [] })
+          const address = normalizeAddress(args?.address);
+          if (address.error) return process.stdout.write(jsonRpcError(id, -32602, address.error));
+          if (!Array.isArray(args?.abi)) return process.stdout.write(jsonRpcError(id, -32602, "abi must be an array"));
+          if (typeof args?.functionName !== "string" || args.functionName.trim().length === 0) {
+            return process.stdout.write(jsonRpcError(id, -32602, "functionName is required"));
+          }
+          return c.readContract({ address: address.value, abi: args.abi, functionName: args.functionName, args: args.args ?? [] })
             .then(r => process.stdout.write(jsonRpc(id, { content: [{ type: "text", text: JSON.stringify({ result: r }) }] })))
             .catch(err => process.stdout.write(jsonRpcError(id, -32000, err.message || "readContract failed")));
         }
