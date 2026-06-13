@@ -3900,6 +3900,56 @@ export async function evaluateBittensorWatches(): Promise<BittensorWatchEvaluati
   return Promise.all(watches.map((watch) => evaluateBittensorWatch(watch)));
 }
 
+function summarizeWatchEvaluationForDigest(evaluation: BittensorWatchEvaluation) {
+  const firstAction = evaluation.copilotActions?.[0] ?? null;
+  return {
+    status: evaluation.status,
+    alertLevel: evaluation.alertLevel ?? "unknown",
+    alertKey: evaluation.alertKey ?? alertKeyForWatch(evaluation.watch),
+    notificationIntent: evaluation.notificationIntent ?? notificationIntentForWatch(evaluation.watch, evaluation.status),
+    shouldNotify: evaluation.shouldNotify ?? evaluation.status !== "ok",
+    watchId: evaluation.watch.id,
+    kind: evaluation.watch.kind,
+    label: evaluation.watch.label,
+    netuid: evaluation.watch.netuid,
+    ss58Address: evaluation.watch.ss58Address,
+    validatorHotkey: evaluation.watch.validatorHotkey,
+    observedValue: evaluation.observedValue,
+    threshold: evaluation.threshold,
+    reason: evaluation.summary,
+    prompt: firstAction?.prompt ?? evaluation.actionPrompt ?? null,
+    actionLabel: firstAction?.label ?? null,
+    source: evaluation.source,
+    checkedAt: evaluation.checkedAt,
+  };
+}
+
+export function buildBittensorWatchDigest(
+  evaluations: BittensorWatchEvaluation[],
+  options: { maxAlerts?: number | null; includeOk?: boolean } = {},
+) {
+  const maxAlerts = Math.max(1, Math.min(50, Math.floor(Number(options.maxAlerts ?? 10) || 10)));
+  const statusCounts = evaluations.reduce<Record<string, number>>((counts, evaluation) => {
+    const status = evaluation.status || "unknown";
+    counts[status] = (counts[status] ?? 0) + 1;
+    return counts;
+  }, {});
+  const alertLike = evaluations.filter((evaluation) => evaluation.status !== "ok");
+  const okLike = options.includeOk === true
+    ? evaluations.filter((evaluation) => evaluation.status === "ok")
+    : [];
+  const alerts = [...alertLike, ...okLike].slice(0, maxAlerts).map(summarizeWatchEvaluationForDigest);
+  return {
+    ok: true,
+    checkedAt: new Date().toISOString(),
+    total: evaluations.length,
+    alertCount: alertLike.length,
+    statusCounts,
+    alerts,
+    source: "bittensor.monitoring.digest",
+  };
+}
+
 function readinessStatus(checks: BittensorReadinessCheck[]): BittensorReadinessReport["status"] {
   if (checks.some((check) => check.status === "fail")) return "fail";
   if (checks.some((check) => check.status === "warning")) return "warning";

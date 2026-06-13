@@ -271,6 +271,19 @@ describe("Bittensor chat execute route", () => {
     expect(watchCheck.execution).toBe("answered");
     expect(watchCheck.cards[0]?.kind).toBe("watchlist");
 
+    const watchDigest = await nativeFetch(`${base}/api/bittensor/monitoring/digest?includeOk=true&maxAlerts=3`, {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    expect(watchDigest.status).toBe(200);
+    const watchDigestPayload = await watchDigest.json();
+    expect(watchDigestPayload.success).toBe(true);
+    expect(watchDigestPayload.digest.source).toBe("bittensor.monitoring.digest");
+    expect(watchDigestPayload.digest.total).toBeGreaterThan(0);
+    expect(watchDigestPayload.digest.alerts.length).toBeGreaterThan(0);
+    expect(watchDigestPayload.digest.alerts.length).toBeLessThanOrEqual(3);
+    expect(watchDigestPayload.digest.alerts[0].notificationIntent).toBeTruthy();
+    expect(watchDigestPayload.cards[0]?.kind).toBe("watchlist");
+
     const stakingPlan = await postExecute(base, {
       message: "I have 3 TAO. Build a low-risk Bittensor staking plan for image generation.",
       ss58Address: VALID_SS58,
