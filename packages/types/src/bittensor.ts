@@ -466,6 +466,7 @@ export type BittensorWatchEvaluation = {
   copilotActions?: BittensorCopilotAction[];
   alertKey?: string;
   shouldNotify?: boolean;
+  notificationIntent?: "none" | "review_wallet" | "review_validator" | "review_subnet" | "review_emissions" | "review_slippage";
   source: string;
   checkedAt: string;
 };
