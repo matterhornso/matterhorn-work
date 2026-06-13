@@ -5,6 +5,7 @@
 import type { Address, Hex } from "viem";
 import { encodeFunctionData } from "viem";
 import { WHITELISTED_PROTOCOLS } from "../infra/token-registry.js";
+import { normalizeAddressField, validateKnownToken, validatePositiveUint256 } from "./tx-security.js";
 
 const poolAbi = [
   "function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external",
@@ -31,11 +32,17 @@ export function buildAaveSupplyTx({
 }): { success: true; to: Address; data: Hex; value: "0" } | { success: false; error: string } {
   const pool = poolAddress(chainId);
   if (!pool) return { success: false, error: `Aave not supported on chain ${chainId}` };
+  const safeAsset = validateKnownToken(chainId, asset, "asset");
+  if (!safeAsset.success) return safeAsset;
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) return safeAmount;
+  const safeOnBehalfOf = normalizeAddressField("onBehalfOf", onBehalfOf);
+  if (!safeOnBehalfOf.success) return safeOnBehalfOf;
   try {
     const data = encodeFunctionData({
       abi: poolAbi,
       functionName: "supply",
-      args: [asset, BigInt(amount), onBehalfOf, 0],
+      args: [safeAsset.value, BigInt(safeAmount.value), safeOnBehalfOf.value, 0],
     });
     return { success: true, to: pool, data, value: "0" };
   } catch (err) {
@@ -56,11 +63,17 @@ export function buildAaveWithdrawTx({
 }): { success: true; to: Address; data: Hex; value: "0" } | { success: false; error: string } {
   const pool = poolAddress(chainId);
   if (!pool) return { success: false, error: `Aave not supported on chain ${chainId}` };
+  const safeAsset = validateKnownToken(chainId, asset, "asset");
+  if (!safeAsset.success) return safeAsset;
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) return safeAmount;
+  const safeTo = normalizeAddressField("recipient", to);
+  if (!safeTo.success) return safeTo;
   try {
     const data = encodeFunctionData({
       abi: poolAbi,
       functionName: "withdraw",
-      args: [asset, BigInt(amount), to],
+      args: [safeAsset.value, BigInt(safeAmount.value), safeTo.value],
     });
     return { success: true, to: pool, data, value: "0" };
   } catch (err) {
@@ -83,11 +96,20 @@ export function buildAaveBorrowTx({
 }): { success: true; to: Address; data: Hex; value: "0" } | { success: false; error: string } {
   const pool = poolAddress(chainId);
   if (!pool) return { success: false, error: `Aave not supported on chain ${chainId}` };
+  const safeAsset = validateKnownToken(chainId, asset, "asset");
+  if (!safeAsset.success) return safeAsset;
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) return safeAmount;
+  const safeOnBehalfOf = normalizeAddressField("onBehalfOf", onBehalfOf);
+  if (!safeOnBehalfOf.success) return safeOnBehalfOf;
+  if (interestRateMode !== 1 && interestRateMode !== 2) {
+    return { success: false, error: "interestRateMode must be 1 (stable) or 2 (variable)" };
+  }
   try {
     const data = encodeFunctionData({
       abi: poolAbi,
       functionName: "borrow",
-      args: [asset, BigInt(amount), BigInt(interestRateMode), 0, onBehalfOf],
+      args: [safeAsset.value, BigInt(safeAmount.value), BigInt(interestRateMode), 0, safeOnBehalfOf.value],
     });
     return { success: true, to: pool, data, value: "0" };
   } catch (err) {
@@ -110,11 +132,20 @@ export function buildAaveRepayTx({
 }): { success: true; to: Address; data: Hex; value: "0" } | { success: false; error: string } {
   const pool = poolAddress(chainId);
   if (!pool) return { success: false, error: `Aave not supported on chain ${chainId}` };
+  const safeAsset = validateKnownToken(chainId, asset, "asset");
+  if (!safeAsset.success) return safeAsset;
+  const safeAmount = validatePositiveUint256("amount", amount);
+  if (!safeAmount.success) return safeAmount;
+  const safeOnBehalfOf = normalizeAddressField("onBehalfOf", onBehalfOf);
+  if (!safeOnBehalfOf.success) return safeOnBehalfOf;
+  if (interestRateMode !== 1 && interestRateMode !== 2) {
+    return { success: false, error: "interestRateMode must be 1 (stable) or 2 (variable)" };
+  }
   try {
     const data = encodeFunctionData({
       abi: poolAbi,
       functionName: "repay",
-      args: [asset, BigInt(amount), BigInt(interestRateMode), onBehalfOf],
+      args: [safeAsset.value, BigInt(safeAmount.value), BigInt(interestRateMode), safeOnBehalfOf.value],
     });
     return { success: true, to: pool, data, value: "0" };
   } catch (err) {

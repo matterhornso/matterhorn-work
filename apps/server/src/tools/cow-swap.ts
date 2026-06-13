@@ -7,6 +7,7 @@
  */
 
 import type { Address, Hex } from "viem";
+import { normalizeAddressField, validatePositiveUint256, validateSignatureHex } from "./tx-security.js";
 
 const COW_API_BASE: Record<number, string> = {
   1: "https://api.cow.fi/mainnet",
@@ -53,20 +54,31 @@ export async function getCowQuote({
 }) {
   const base = COW_API_BASE[chainId];
   if (!base) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  const safeSellToken = normalizeAddressField("sellToken", sellToken);
+  if (!safeSellToken.success) return safeSellToken;
+  const safeBuyToken = normalizeAddressField("buyToken", buyToken);
+  if (!safeBuyToken.success) return safeBuyToken;
+  const safeReceiver = normalizeAddressField("receiver", receiver);
+  if (!safeReceiver.success) return safeReceiver;
+  const safeSellAmount = validatePositiveUint256("sellAmount", sellAmount);
+  if (!safeSellAmount.success) return safeSellAmount;
+  if (!Number.isInteger(validMinutes) || validMinutes < 1 || validMinutes > 60) {
+    return { success: false, error: "validMinutes must be between 1 and 60" };
+  }
 
   try {
     const body = {
-      sellToken,
-      buyToken,
-      sellAmount,
-      receiver,
+      sellToken: safeSellToken.value,
+      buyToken: safeBuyToken.value,
+      sellAmount: safeSellAmount.value,
+      receiver: safeReceiver.value,
       kind: "sell",
       partiallyFillable: false,
       validTo: Math.floor(Date.now() / 1000) + validMinutes * 60,
       appData: "0x0000000000000000000000000000000000000000000000000000000000000000",
       sellTokenBalance: "erc20",
       buyTokenBalance: "erc20",
-      from: receiver,
+      from: safeReceiver.value,
     };
 
     const res = await fetch(`${base}/api/v1/quote`, {
@@ -116,9 +128,11 @@ export function buildCowOrder({
   quote: CowQuote;
   owner: Address;
 }) {
+  const safeOwner = normalizeAddressField("owner", owner);
+  if (!safeOwner.success) return safeOwner;
   return {
     ...quote,
-    from: owner,
+    from: safeOwner.value,
     /** The order is EIP-712 signed by the user and POSTed to CoW /api/v1/orders. */
     signingScheme: "eip712" as const,
   };
@@ -142,11 +156,13 @@ export async function submitCowOrder({
 > {
   const base = COW_API_BASE[chainId];
   if (!base) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  const safeSignature = validateSignatureHex(signature);
+  if (!safeSignature.success) return safeSignature;
   try {
     const res = await fetch(`${base}/api/v1/orders`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ ...order, signature }),
+      body: JSON.stringify({ ...order, signature: safeSignature.value }),
     });
     if (!res.ok) {
       const err = await res.text().catch(() => "unknown");

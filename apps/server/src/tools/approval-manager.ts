@@ -6,6 +6,7 @@
 import { getClient } from "../infra/chain-client.js";
 import { encodeFunctionData } from "viem";
 import type { Address, Hex } from "viem";
+import { normalizeAddressField } from "./tx-security.js";
 
 const erc20AllowanceAbi = [
   {
@@ -100,23 +101,29 @@ export async function getAllowance({
 }) {
   const client = getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  const safeToken = normalizeAddressField("tokenAddress", tokenAddress);
+  if (!safeToken.success) return safeToken;
+  const safeOwner = normalizeAddressField("owner", owner);
+  if (!safeOwner.success) return safeOwner;
+  const safeSpender = normalizeAddressField("spender", spender);
+  if (!safeSpender.success) return safeSpender;
 
   try {
     const [allowance, meta] = await Promise.all([
       client.readContract({
-        address: tokenAddress,
+        address: safeToken.value,
         abi: erc20AllowanceAbi,
         functionName: "allowance",
-        args: [owner, spender],
+        args: [safeOwner.value, safeSpender.value],
       }) as Promise<bigint>,
-      getTokenMeta(chainId, tokenAddress),
+      getTokenMeta(chainId, safeToken.value),
     ]);
 
     return {
       success: true,
-      tokenAddress,
-      owner,
-      spender,
+      tokenAddress: safeToken.value,
+      owner: safeOwner.value,
+      spender: safeSpender.value,
       allowance: allowance.toString(),
       allowanceFormatted: meta ? Number(allowance) / 10 ** meta.decimals : null,
       symbol: meta?.symbol ?? null,
@@ -142,18 +149,24 @@ export function buildRevokeApprovalTx({
   spender: Address;
 }) {
   try {
+    const safeToken = normalizeAddressField("tokenAddress", tokenAddress);
+    if (!safeToken.success) return safeToken;
+    const safeSpender = normalizeAddressField("spender", spender);
+    if (!safeSpender.success) return safeSpender;
     const data = encodeFunctionData({
       abi: erc20ApproveAbi,
       functionName: "approve",
-      args: [spender, 0n],
+      args: [safeSpender.value, 0n],
     }) as Hex;
 
     return {
       success: true,
-      tokenAddress,
-      spender,
+      to: safeToken.value,
+      value: "0",
+      tokenAddress: safeToken.value,
+      spender: safeSpender.value,
       data,
-      description: `Revoke approval for ${spender} on ${tokenAddress}`,
+      description: `Revoke approval for ${safeSpender.value} on ${safeToken.value}`,
     };
   } catch (err) {
     return {

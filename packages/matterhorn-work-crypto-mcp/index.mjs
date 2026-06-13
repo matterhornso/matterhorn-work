@@ -135,12 +135,71 @@ const registry = {
   },
 };
 
-function resolveToken(chainId, symbol) {
+const protocolRegistry = {
+  8453: {
+    oneInchRouter: "0x111111125421ca6dc452d289314280a0f8842a65",
+  },
+};
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const ONE_INCH_NATIVE_TOKEN = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const UINT256_MAX = (1n << 256n) - 1n;
+
+function normalizeAddress(value, label = "address") {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    throw new Error(`${label} must be a valid EVM address`);
+  }
+  const address = value.toLowerCase();
+  if (address.toLowerCase() === ZERO_ADDRESS) throw new Error(`${label} cannot be the zero address`);
+  return address;
+}
+
+function normalizeUint256(value, label = "amount", { allowZero = false } = {}) {
+  const text = typeof value === "string" ? value.trim() : String(value ?? "");
+  if (!/^(0|[1-9]\d*)$/.test(text)) throw new Error(`${label} must be a raw integer amount`);
+  const amount = BigInt(text);
+  if (!allowZero && amount <= 0n) throw new Error(`${label} must be greater than zero`);
+  if (amount > UINT256_MAX) throw new Error(`${label} exceeds uint256 max`);
+  return amount.toString();
+}
+
+function normalizeHexData(value, label = "data") {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]*$/.test(value)) throw new Error(`${label} must be hex encoded`);
+  return value;
+}
+
+function getRegistryForChain(chainId) {
   const reg = registry[chainId];
-  const match = reg?.[symbol.toUpperCase()];
-  if (match) return match.address;
-  if (/^0x[a-fA-F0-9]{40}$/.test(symbol)) return symbol;
-  throw new Error(`Unknown token "${symbol}" on chain ${chainId}`);
+  if (!reg) throw new Error(`Unsupported chainId: ${chainId}`);
+  return reg;
+}
+
+function resolveRegistryToken(chainId, token, label = "token") {
+  const reg = getRegistryForChain(chainId);
+  const text = String(token || "").trim();
+  const symbolMatch = reg[text.toUpperCase()];
+  if (symbolMatch) return symbolMatch.address;
+
+  if (/^0x[a-fA-F0-9]{40}$/.test(text)) {
+    const lower = text.toLowerCase();
+    const known = Object.values(reg).find((meta) => meta.address.toLowerCase() === lower);
+    if (known) return known.address;
+  }
+
+  throw new Error(`${label} must be a supported registry token on chain ${chainId}`);
+}
+
+function resolveSwapToken(chainId, token, label = "token") {
+  const text = String(token || "").trim();
+  const upper = text.toUpperCase();
+  if (upper === "ETH" || upper === "NATIVE" || text.toLowerCase() === ONE_INCH_NATIVE_TOKEN) {
+    return ONE_INCH_NATIVE_TOKEN;
+  }
+  return resolveRegistryToken(chainId, token, label);
+}
+
+function resolveToken(chainId, symbol) {
+  return resolveSwapToken(chainId, symbol);
 }
 
 function formatAmount(raw, symbol) {
@@ -151,6 +210,10 @@ function formatAmount(raw, symbol) {
 }
 
 function enforceSlippageLimit(slippagePct, maxBps = 100) {
+  if (!Number.isFinite(slippagePct) || slippagePct < 0) throw new Error("Slippage must be a non-negative percent");
+  if (!Number.isInteger(maxBps) || maxBps < 0 || maxBps > 500) {
+    throw new Error("maxSlippageBps must be an integer between 0 and 500");
+  }
   const requestedBps = Math.round(slippagePct * 100);
   if (requestedBps > maxBps) {
     throw new Error(
@@ -160,16 +223,37 @@ function enforceSlippageLimit(slippagePct, maxBps = 100) {
   }
 }
 
+function normalizeBuiltTx(chainId, tx) {
+  const expectedRouter = protocolRegistry[chainId]?.oneInchRouter;
+  if (!expectedRouter) throw new Error(`1inch swap building is not configured for chain ${chainId}`);
+
+  const to = normalizeAddress(tx?.to, "swap tx.to");
+  if (to.toLowerCase() !== expectedRouter.toLowerCase()) {
+    throw new Error("1inch response returned an unexpected router address");
+  }
+
+  return {
+    to,
+    data: normalizeHexData(tx?.data ?? "0x", "swap tx.data"),
+    value: normalizeUint256(tx?.value ?? "0", "swap tx.value", { allowZero: true }),
+    gas: tx?.gas === undefined ? undefined : normalizeUint256(String(tx.gas), "swap tx.gas"),
+    gasPrice: tx?.gasPrice === undefined ? undefined : normalizeUint256(String(tx.gasPrice), "swap tx.gasPrice"),
+  };
+}
+
 /** Quote only — no transaction. Useful for agent reasoning. */
 export async function getQuote({ chainId, fromToken, toToken, amount, slippage = 1, maxSlippageBps }) {
   const effectiveMax = maxSlippageBps ?? 100;
   enforceSlippageLimit(slippage, effectiveMax);
+  const src = resolveToken(chainId, fromToken);
+  const dst = resolveToken(chainId, toToken);
+  const rawAmount = normalizeUint256(amount, "amount");
 
   const key = process.env.ONE_INCH_API_KEY;
   if (!key) throw new Error("ONE_INCH_API_KEY not configured");
 
   const url = `https://api.1inch.dev/swap/v6.0/${chainId}/quote?` +
-    new URLSearchParams({ src: resolveToken(chainId, fromToken), dst: resolveToken(chainId, toToken), amount: String(amount) }).toString();
+    new URLSearchParams({ src, dst, amount: rawAmount }).toString();
 
   const data = await fetchJson(url, { headers: { Authorization: `Bearer ${key}` } });
 
@@ -186,27 +270,32 @@ export async function getQuote({ chainId, fromToken, toToken, amount, slippage =
 async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, slippage = 1, maxSlippageBps }) {
   const effectiveMax = maxSlippageBps ?? 100;
   enforceSlippageLimit(slippage, effectiveMax);
+  const src = resolveToken(chainId, fromToken);
+  const dst = resolveToken(chainId, toToken);
+  const rawAmount = normalizeUint256(amount, "amount");
+  const safeFrom = normalizeAddress(fromAddress, "fromAddress");
 
   const key = process.env.ONE_INCH_API_KEY;
   if (!key) throw new Error("ONE_INCH_API_KEY not configured");
 
   const url = `https://api.1inch.dev/swap/v6.0/${chainId}/swap?` +
     new URLSearchParams({
-      src: resolveToken(chainId, fromToken),
-      dst: resolveToken(chainId, toToken),
-      amount: String(amount),
-      from: fromAddress,
+      src,
+      dst,
+      amount: rawAmount,
+      from: safeFrom,
       slippage: String(slippage),
       disableEstimate: "true",
       includeGas: "true",
     }).toString();
 
   const data = await fetchJson(url, { headers: { Authorization: `Bearer ${key}` } });
+  const tx = normalizeBuiltTx(chainId, data.tx);
 
   return {
     action: "swap",
     chainId,
-    tx: { to: data.tx.to, data: data.tx.data, value: data.tx.value, gas: data.tx.gas, gasPrice: data.tx.gasPrice },
+    tx,
     summary: `Swap ${formatAmount(data.fromTokenAmount, fromToken)} ${data.fromToken.symbol} → ${formatAmount(data.toTokenAmount, data.toToken.symbol)} ${data.toToken.symbol}`,
     needsApproval: true,
     protocol: "1inch",
@@ -219,8 +308,12 @@ async function buildSwap({ chainId, fromToken, toToken, amount, fromAddress, sli
 async function simulateTransaction({ chainId, to, data, value = "0", from }) {
   const client = await getClient(chainId);
   if (!client) return { error: `Unsupported chainId: ${chainId}` };
+  const safeTo = normalizeAddress(to, "to");
+  const safeFrom = normalizeAddress(from, "from");
+  const safeData = normalizeHexData(data, "data");
+  const safeValue = normalizeUint256(value, "value", { allowZero: true });
   try {
-    await client.call({ to, data, value: BigInt(value), account: from });
+    await client.call({ to: safeTo, data: safeData, value: BigInt(safeValue), account: safeFrom });
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message || "Simulation failed" };
@@ -244,11 +337,12 @@ const erc20ApproveAbi = [
 async function getTokenMeta(chainId, tokenAddress) {
   const client = await getClient(chainId);
   if (!client) return null;
+  const safeToken = normalizeAddress(tokenAddress, "tokenAddress");
   try {
     const [symbol, name, decimals] = await Promise.all([
-      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "symbol" }).catch(() => "???"),
-      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "name" }).catch(() => "Unknown Token"),
-      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "decimals" }).catch(() => 18),
+      client.readContract({ address: safeToken, abi: erc20AllowanceAbi, functionName: "symbol" }).catch(() => "???"),
+      client.readContract({ address: safeToken, abi: erc20AllowanceAbi, functionName: "name" }).catch(() => "Unknown Token"),
+      client.readContract({ address: safeToken, abi: erc20AllowanceAbi, functionName: "decimals" }).catch(() => 18),
     ]);
     return { symbol, name, decimals: Number(decimals) };
   } catch { return null; }
@@ -257,13 +351,16 @@ async function getTokenMeta(chainId, tokenAddress) {
 async function getAllowance({ chainId, tokenAddress, owner, spender }) {
   const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  const safeToken = normalizeAddress(tokenAddress, "tokenAddress");
+  const safeOwner = normalizeAddress(owner, "owner");
+  const safeSpender = normalizeAddress(spender, "spender");
   try {
     const [allowance, meta] = await Promise.all([
-      client.readContract({ address: tokenAddress, abi: erc20AllowanceAbi, functionName: "allowance", args: [owner, spender] }),
-      getTokenMeta(chainId, tokenAddress),
+      client.readContract({ address: safeToken, abi: erc20AllowanceAbi, functionName: "allowance", args: [safeOwner, safeSpender] }),
+      getTokenMeta(chainId, safeToken),
     ]);
     return {
-      success: true, tokenAddress, owner, spender,
+      success: true, tokenAddress: safeToken, owner: safeOwner, spender: safeSpender,
       allowance: allowance.toString(),
       allowanceFormatted: meta ? Number(allowance) / 10 ** meta.decimals : null,
       symbol: meta?.symbol ?? null, name: meta?.name ?? null,
@@ -273,19 +370,22 @@ async function getAllowance({ chainId, tokenAddress, owner, spender }) {
   }
 }
 
-function buildRevokeApprovalTx({ tokenAddress, spender }) {
+function buildRevokeApprovalTx({ chainId = 8453, tokenAddress, spender }) {
   try {
+    const safeToken = resolveRegistryToken(chainId, tokenAddress, "tokenAddress");
+    const safeSpender = normalizeAddress(spender, "spender");
     // viem encodeFunctionData is not readily available in plain node without viem/utils in ESM.
     // We know the function selector for approve(address,uint256) is 0x095ea7b3.
     // ABI encode: approve(address spender, uint256 amount)
     // selector = 0x095ea7b3
     // address pad left to 32 bytes
     // uint256 0 = 0x0000....0000 (64 zeros)
-    const paddedSpender = spender.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+    const paddedSpender = safeSpender.toLowerCase().replace(/^0x/, "").padStart(64, "0");
     const data = `0x095ea7b3${paddedSpender}0000000000000000000000000000000000000000000000000000000000000000`;
     return {
-      success: true, tokenAddress, spender, data,
-      description: `Revoke approval for ${spender} on ${tokenAddress}`,
+      success: true, chainId, to: safeToken, tokenAddress: safeToken, spender: safeSpender, data,
+      value: "0",
+      description: `Revoke approval for ${safeSpender} on ${safeToken}`,
     };
   } catch (err) {
     return { success: false, error: err.message || "Failed to build revoke tx" };
@@ -334,6 +434,7 @@ async function decodeSelector(selector) {
 }
 
 async function decodeCalldata(data) {
+  normalizeHexData(data, "data");
   const clean = data.toLowerCase().replace(/^0x/, "");
   if (clean.length < 8) return { success: false, error: "Calldata too short" };
   const selector = `0x${clean.slice(0, 8)}`;
@@ -360,9 +461,10 @@ async function resolveEnsName(name) {
 
 async function lookupEnsAddress(address) {
   try {
+    const safeAddress = normalizeAddress(address, "address");
     const mainnetClient = await getMainnetClient();
-    const ensName = await mainnetClient.getEnsName({ address });
-    return { success: true, address, ensName: ensName ?? null, resolved: ensName !== null };
+    const ensName = await mainnetClient.getEnsName({ address: safeAddress });
+    return { success: true, address: safeAddress, ensName: ensName ?? null, resolved: ensName !== null };
   } catch (err) {
     return { success: false, address, error: err.message || "ENS reverse lookup failed" };
   }
@@ -390,9 +492,13 @@ async function getGasPriceCached(chainId) {
 async function estimateGas({ chainId, to, data, value = "0", from }) {
   const client = await getClient(chainId);
   if (!client) return { success: false, error: `Unsupported chainId: ${chainId}` };
+  const safeTo = normalizeAddress(to, "to");
+  const safeFrom = normalizeAddress(from, "from");
+  const safeData = normalizeHexData(data, "data");
+  const safeValue = normalizeUint256(value, "value", { allowZero: true });
   try {
     const [gas, gasPrice] = await Promise.all([
-      client.estimateGas({ to, data, value: BigInt(value), account: from }),
+      client.estimateGas({ to: safeTo, data: safeData, value: BigInt(safeValue), account: safeFrom }),
       getGasPriceCached(chainId),
     ]);
     const gasPriceGwei = gasPrice ? Number(gasPrice) / 1e9 : null;
@@ -799,7 +905,7 @@ const tools = [
 
   // -- security / analysis --
   { name: "security_checkAllowance", description: "Check the current ERC-20 allowance for a token, owner, and spender.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, tokenAddress: { type: "string" }, owner: { type: "string" }, spender: { type: "string" } }, required: ["chainId", "tokenAddress", "owner", "spender"] } },
-  { name: "security_revokeApproval", description: "Build a revoke (approve to 0) transaction for an ERC-20 token. Returns tx data to send via wallet_sendTransaction.", inputSchema: { type: "object", properties: { tokenAddress: { type: "string" }, spender: { type: "string" } }, required: ["tokenAddress", "spender"] } },
+  { name: "security_revokeApproval", description: "Build a revoke (approve to 0) transaction for a supported ERC-20 token. Returns tx data to send via wallet_sendTransaction.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, tokenAddress: { type: "string" }, spender: { type: "string" } }, required: ["tokenAddress", "spender"] } },
   { name: "security_decodeCalldata", description: "Decode a transaction's calldata to reveal which function is being called. Uses 4byte.directory + local known signatures.", inputSchema: { type: "object", properties: { data: { type: "string" } }, required: ["data"] } },
   { name: "security_estimateGas", description: "Estimate gas cost for a transaction in ETH and USD. Use before suggesting any on-chain action.", inputSchema: { type: "object", properties: { chainId: { type: "number" }, to: { type: "string" }, data: { type: "string" }, value: { type: "string" }, from: { type: "string" } }, required: ["chainId", "to", "data", "from"] } },
   { name: "security_resolveEns", description: "Resolve an ENS name (e.g. vitalik.eth) to a 0x address.", inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } },
@@ -926,7 +1032,7 @@ function handleMessage(msg) {
 
         // security / analysis
         case "security_checkAllowance": return getAllowance({ chainId: args.chainId, tokenAddress: args.tokenAddress, owner: args.owner, spender: args.spender }).then(r => respond(textResult(r))).catch(catchErr);
-        case "security_revokeApproval": return respond(textResult(buildRevokeApprovalTx({ tokenAddress: args.tokenAddress, spender: args.spender })));
+        case "security_revokeApproval": return respond(textResult(buildRevokeApprovalTx({ chainId: args.chainId, tokenAddress: args.tokenAddress, spender: args.spender })));
         case "security_decodeCalldata": return decodeCalldata(args.data).then(r => respond(textResult(r))).catch(catchErr);
         case "security_estimateGas": return estimateGas({ chainId: args.chainId, to: args.to, data: args.data, value: args.value, from: args.from }).then(r => respond(textResult(r))).catch(catchErr);
         case "security_resolveEns": return resolveEnsName(args.name).then(r => respond(textResult(r))).catch(catchErr);

@@ -1,12 +1,11 @@
 /**
  * Hyperliquid Execution Tools.
- * Builds orders and provides signing helpers.
+ * Builds orders and external-signing helpers.
  * IMPORTANT: Hyperliquid is NOT EVM. It uses Arbitrum L1 signatures for L2 settlement.
  * Flow: Server builds order JSON -> UI displays it with "Sign with Wallet" button
  *       -> wagmi signs a L1 proof via signTypedData -> server submits to HL API.
  */
 
-import { Hyperliquid } from "hyperliquid";
 import type { OrderType } from "hyperliquid";
 
 // ─── Order Types ───────────────────────────────────────────
@@ -93,36 +92,17 @@ export function buildSignTypedData(
 }
 
 /**
- * Sign and submit an order using the Hyperliquid SDK.
- * NOTE: This requires the server's private key, which is NOT how
- * the production UI flow works. The UI flow calls signTypedData
- * with the wallet's private key and returns a signature.
- * This function is available for server-side or test use only.
+ * Compatibility stub for the old server-side signing helper.
+ *
+ * Matterhorn Work is non-custodial: this server module must never accept
+ * custody material. Use buildOrder/buildSignTypedData for previews and
+ * submitOrder only after an external signer returns a signature.
  */
-export async function signAndSubmitOrder({
-  order,
-  privateKey,
-  isTestnet = true,
-}: {
+export async function signAndSubmitOrder(_input: {
   order: ReturnType<typeof buildOrder>;
-  privateKey: `0x${string}`;
   isTestnet?: boolean;
 }) {
-  const hl = new Hyperliquid({ privateKey, testnet: isTestnet });
-  await hl.ensureInitialized();
-
-  const action = order.action.orderAction.orders[0];
-
-  const result = await hl.exchange.placeOrder({
-    coin: action.a,
-    is_buy: action.b,
-    sz: Number(action.s),
-    limit_px: action.p !== "0" ? Number(action.p) : 0,
-    order_type: action.t,
-    reduce_only: action.r,
-  });
-
-  return result;
+  throw new Error("Server-side Hyperliquid signing is disabled. Use an external signer flow.");
 }
 
 /**

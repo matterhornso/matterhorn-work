@@ -1,10 +1,9 @@
 /** @jsxImportSource react */
 import { useCallback, useMemo, useEffect, useRef, useState } from "react";
 import { useAccount, useChainId, useSendTransaction, useSignMessage, usePublicClient } from "wagmi";
-import { parseEther } from "viem";
 
 import type { WalletStore } from "./state/wallet-store";
-import { useWalletStore, computeTxValueUSD } from "./state/wallet-store";
+import { useWalletStore, computeTxValueUSD, parseTxValueWei } from "./state/wallet-store";
 import { buildSessionWalletContext, type SessionWalletContext } from "./SessionContextProvider";
 import { CHAIN_NAMES, FORCE_TESTNET } from "../../infra/chains";
 import { USDC_BY_CHAIN } from "../../infra/contracts";
@@ -52,9 +51,7 @@ export function useSessionWallet(store: WalletStore) {
 
     const hash = await sendTransactionAsync({
       to: approval.to as `0x${string}`,
-      value: approval.value.startsWith("0x")
-        ? BigInt(approval.value)
-        : parseEther(approval.value),
+      value: parseTxValueWei(approval.value),
       data: approval.data as `0x${string}` | undefined,
     });
 
@@ -203,11 +200,7 @@ export function useSessionWallet(store: WalletStore) {
       if (!wagmiAddress) throw new Error("Wallet not connected");
       const hash = await sendTransactionAsync({
         to: step.to as `0x${string}`,
-        value: step.value
-          ? (step.value.startsWith("0x")
-            ? BigInt(step.value)
-            : parseEther(step.value))
-          : undefined,
+        value: step.value ? parseTxValueWei(step.value) : undefined,
         data: step.data as `0x${string}` | undefined,
       });
       store.addTransaction({

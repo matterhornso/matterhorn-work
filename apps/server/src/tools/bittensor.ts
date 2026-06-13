@@ -1153,6 +1153,24 @@ function fallbackSubnet(netuid: number): BittensorSubnetSummary {
   };
 }
 
+function subnetDetailFromSummary(summary: BittensorSubnetSummary): BittensorSubnetDetail {
+  return {
+    ...summary,
+    metagraphSummary: {
+      neurons: null,
+      totalStake: null,
+      block: summary.block ?? null,
+    },
+    topValidators: [],
+    knownUseCases: knownUseCasesFor(summary.category),
+    risks: risksFor(summary),
+    links: [
+      { label: "TAO.app", url: `https://www.tao.app/subnets/${summary.netuid}` },
+      { label: "Bittensor docs", url: "https://docs.learnbittensor.org/subnets/working-with-subnets" },
+    ],
+  };
+}
+
 function knownUseCasesFor(category: string): string[] {
   const common = ["Ask Matterhorn to explain the subnet in plain English", "Compare live metrics with similar subnets"];
   const byCategory: Record<string, string[]> = {
@@ -3241,7 +3259,7 @@ function riskFromSlippagePositions(positions: BittensorStakePosition[]): Bittens
   return "unknown";
 }
 
-function riskTone(risk: BittensorRiskLevel): BittensorChatCardItem["tone"] {
+function riskTone(risk: BittensorRiskLevel): BittensorIntelligenceSignal["tone"] {
   if (risk === "high") return "danger";
   if (risk === "medium") return "warning";
   if (risk === "low") return "good";
@@ -3310,7 +3328,7 @@ function subnetIntelligenceScore(input: {
 }
 
 export async function analyzeBittensorSubnetIntelligence(netuid: number): Promise<BittensorSubnetIntelligenceReport> {
-  let detail = fallbackSubnet(netuid);
+  let detail = subnetDetailFromSummary(fallbackSubnet(netuid));
   let detailReadWarning: string | null = null;
   try {
     detail = await bittensorProvider.getSubnet(netuid);

@@ -4,6 +4,7 @@
  */
 import type { Job } from "../hooks/useJobQueue";
 import type { WalletStore } from "../state/wallet-store";
+import { isWhitelistedAddress } from "../infra/whitelist";
 import { sendJobCompleted } from "./notifications";
 
 export interface JobExecutionContext {
@@ -15,6 +16,34 @@ export interface JobExecutionContext {
   logRun: (id: string, entry: Job["history"][number]) => void;
   pause: (id: string) => void;
   notificationsEnabled?: boolean;
+}
+
+function hasPositiveValue(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    return BigInt(value) > 0n;
+  } catch {
+    return Number(value) > 0;
+  }
+}
+
+function classifyBuiltTxRisk({
+  chainId,
+  to,
+  value,
+  data,
+}: {
+  chainId: number;
+  to: unknown;
+  value: unknown;
+  data: unknown;
+}): "low" | "medium" | "high" {
+  const target = typeof to === "string" ? to : "";
+  const hasData = typeof data === "string" && data !== "" && data !== "0x";
+  if (!/^0x[a-fA-F0-9]{40}$/.test(target)) return "high";
+  if (hasData && !isWhitelistedAddress(chainId, target)) return "high";
+  if (hasPositiveValue(value)) return "medium";
+  return hasData ? "medium" : "low";
 }
 
 export async function executeJob(ctx: JobExecutionContext, job: Job): Promise<void> {
@@ -169,7 +198,9 @@ export async function executeJob(ctx: JobExecutionContext, job: Job): Promise<vo
         steps: batchSteps,
         chainId,
         proposedBy: `agent_job:${job.id}`,
-        riskLevel: "medium",
+        riskLevel: batchSteps.some((step) =>
+          classifyBuiltTxRisk({ chainId, to: step.to, value: step.value, data: step.data }) === "high"
+        ) ? "high" : "medium",
       });
 
       logRun(job.id, { ts: Date.now(), status: "approved" });
@@ -192,7 +223,7 @@ export async function executeJob(ctx: JobExecutionContext, job: Job): Promise<vo
       result.data,
       chainId,
       `agent_job:${job.id}`,
-      "low",
+      classifyBuiltTxRisk({ chainId, to: result.to, value: result.value, data: result.data }),
     );
 
     logRun(job.id, { ts: Date.now(), status: "approved" });
