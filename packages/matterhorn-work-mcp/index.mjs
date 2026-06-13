@@ -512,6 +512,18 @@ const tools = [
       },
     },
   },
+  {
+    name: "matterhorn_bittensor_act_on_watch_alert",
+    description: "Select one Bittensor watch alert and run its suggested public-data copilot prompt through Bittensor chat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        alertKey: { type: "string", description: "Optional alert key from matterhorn_bittensor_watch_digest." },
+        alertIndex: { type: "number", description: "Optional zero-based alert index when alertKey is not provided. Defaults to 0." },
+        actionIndex: { type: "number", description: "Optional zero-based copilot action index. Defaults to 0." },
+      },
+    },
+  },
 ];
 
 function jsonRpc(id, result) {
@@ -828,6 +840,15 @@ function parsePositiveInteger(value, fallback, max, label = "maxEvents") {
   return max ? Math.min(parsed, max) : parsed;
 }
 
+function parseNonNegativeInteger(value, fallback, label) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${label} must be a non-negative integer.`);
+  }
+  return parsed;
+}
+
 function parseSseEvents(text) {
   return text
     .trim()
@@ -1066,6 +1087,55 @@ async function matterhornBittensorWatchDigest(args = {}) {
   };
 }
 
+function selectWatchAlertAction(result, args = {}) {
+  const evaluations = Array.isArray(result?.evaluations) ? result.evaluations : [];
+  const alertLike = evaluations.filter((evaluation) => {
+    const status = evaluation?.status;
+    return status && status !== "ok";
+  });
+  const alertKey = typeof args.alertKey === "string" ? args.alertKey.trim() : "";
+  const alertIndex = parseNonNegativeInteger(args.alertIndex, 0, "alertIndex");
+  const actionIndex = parseNonNegativeInteger(args.actionIndex, 0, "actionIndex");
+  const evaluation = alertKey
+    ? alertLike.find((item) => item?.alertKey === alertKey)
+    : alertLike[alertIndex];
+  if (!evaluation) {
+    throw new Error(alertKey ? `No Bittensor alert found for alertKey ${alertKey}.` : `No Bittensor alert found at alertIndex ${alertIndex}.`);
+  }
+  const actions = Array.isArray(evaluation?.copilotActions) ? evaluation.copilotActions : [];
+  const action = actions[actionIndex];
+  const prompt = typeof action?.prompt === "string" ? action.prompt.trim() : "";
+  if (!prompt) {
+    throw new Error(`Bittensor alert ${evaluation.alertKey || alertIndex} does not include a copilot action prompt at actionIndex ${actionIndex}.`);
+  }
+  const watch = evaluation.watch && typeof evaluation.watch === "object" ? evaluation.watch : {};
+  return { evaluation, watch, action, prompt };
+}
+
+async function matterhornBittensorActOnWatchAlert(args = {}) {
+  const result = await callServer("/api/bittensor/monitoring/check");
+  const selected = selectWatchAlertAction(result, args);
+  const chat = await callServer("/api/bittensor/chat/execute", {
+    method: "POST",
+    body: {
+      message: selected.prompt,
+      ...(typeof selected.watch.netuid === "number" ? { netuid: selected.watch.netuid } : {}),
+      ...(typeof selected.watch.ss58Address === "string" ? { ss58Address: selected.watch.ss58Address } : {}),
+      ...(typeof selected.watch.validatorHotkey === "string" ? { validatorHotkey: selected.watch.validatorHotkey } : {}),
+    },
+  });
+  return {
+    ok: chat?.success !== false,
+    selectedAlert: summarizeWatchEvaluation(selected.evaluation),
+    action: {
+      label: selected.action?.label || null,
+      prompt: selected.prompt,
+    },
+    chat,
+    source: "matterhorn_bittensor_act_on_watch_alert",
+  };
+}
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1193,6 +1263,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/monitoring/check");
     case "matterhorn_bittensor_watch_digest":
       return matterhornBittensorWatchDigest(args);
+    case "matterhorn_bittensor_act_on_watch_alert":
+      return matterhornBittensorActOnWatchAlert(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
