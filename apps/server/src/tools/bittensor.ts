@@ -500,6 +500,7 @@ export interface BittensorWatchEvaluation {
   copilotActions?: BittensorCopilotAction[];
   alertKey?: string;
   shouldNotify?: boolean;
+  notificationIntent?: "none" | "review_wallet" | "review_validator" | "review_subnet" | "review_emissions" | "review_slippage";
   source: string;
   checkedAt: string;
 }
@@ -3676,6 +3677,15 @@ function alertKeyForWatch(watch: BittensorWatch): string {
   ].join(":");
 }
 
+function notificationIntentForWatch(watch: BittensorWatch, status: BittensorWatchEvaluation["status"]): NonNullable<BittensorWatchEvaluation["notificationIntent"]> {
+  if (status === "ok") return "none";
+  if (watch.kind === "wallet") return "review_wallet";
+  if (watch.kind === "validator") return "review_validator";
+  if (watch.kind === "emissions") return "review_emissions";
+  if (watch.kind === "slippage") return "review_slippage";
+  return "review_subnet";
+}
+
 function watchEvaluationCopilotActions(evaluation: BittensorWatchEvaluation, alertLevel: BittensorRiskLevel): BittensorCopilotAction[] {
   const watch = evaluation.watch;
   const actions: BittensorCopilotAction[] = [];
@@ -3760,6 +3770,7 @@ function finalizeWatchEvaluation(evaluation: BittensorWatchEvaluation): Bittenso
       : watchEvaluationCopilotActions({ ...evaluation, alertLevel, actionPrompt }, alertLevel),
     alertKey: evaluation.alertKey ?? alertKeyForWatch(evaluation.watch),
     shouldNotify: evaluation.shouldNotify ?? evaluation.status !== "ok",
+    notificationIntent: evaluation.notificationIntent ?? notificationIntentForWatch(evaluation.watch, evaluation.status),
   };
   if (next.status !== "ok") {
     const existing = watchlist.get(next.watch.id);
@@ -4765,6 +4776,7 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
       cardItem("Alert level", evaluation.alertLevel ?? "unknown", riskTone(evaluation.alertLevel ?? "unknown")),
       cardItem("Source", evaluation.source, evaluation.source === "curated-fallback" ? "warning" : "muted"),
       cardItem("Notify", evaluation.shouldNotify ? "Yes" : "No", evaluation.shouldNotify ? "warning" : "good"),
+      cardItem("Intent", evaluation.notificationIntent ?? "none", evaluation.notificationIntent && evaluation.notificationIntent !== "none" ? "default" : "muted"),
       cardItem("Next actions", evaluation.copilotActions?.length ?? 0, evaluation.copilotActions?.length ? "default" : "muted"),
     ],
     actions: (evaluation.copilotActions?.length
@@ -4782,6 +4794,7 @@ export function buildBittensorWatchEvaluationCards(evaluations: BittensorWatchEv
           watchId: evaluation.watch.id,
           status: evaluation.status,
           alertKey: evaluation.alertKey,
+          notificationIntent: evaluation.notificationIntent,
         },
       })),
     warnings: evaluation.status === "ok" ? [] : [evaluation.summary],
