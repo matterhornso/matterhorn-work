@@ -431,6 +431,38 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/dry-run") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_dry_run",
+        status: "pass",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        total: 1,
+        passed: 1,
+        failed: 0,
+        skipped: 0,
+        cases: [{
+          name: "Mock compute adapter",
+          netuid: 14,
+          adapter: "compute",
+          mode: "mock",
+          status: "pass",
+          requestSha256: "a".repeat(64),
+          previewSupported: true,
+          missingHashRejected: true,
+          mismatchedHashRejected: true,
+          invocationSupported: true,
+          redactionPassed: true,
+          errors: [],
+          warnings: [],
+        }],
+        warnings: [],
+        nextActions: ["Use the same assertions for real adapter integration PRs."],
+      },
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
     res.end(JSON.stringify({
       success: true,
@@ -702,6 +734,7 @@ try {
     "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
+    "bittensor_dry_run_subnet_adapters",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
     "bittensor_submit_signed_extrinsic",
@@ -720,6 +753,7 @@ try {
   assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
+  assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
   assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
   assert.match(descriptionFor("bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
 
@@ -790,6 +824,15 @@ try {
   assert.equal(adapterDoctorPayload.report.kind, "bittensor_subnet_adapter_doctor");
   assert.equal(adapterDoctorPayload.report.readyCount, 1);
   assert.doesNotMatch(JSON.stringify(adapterDoctorPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterDryRun = await ask({ jsonrpc: "2.0", id: 29, method: "tools/call", params: { name: "bittensor_dry_run_subnet_adapters", arguments: { netuid: 14, task: "dry run task" } } });
+  const adapterDryRunPayload = JSON.parse(adapterDryRun.result.content[0].text);
+  assert.equal(adapterDryRunPayload.success, true);
+  assert.equal(adapterDryRunPayload.report.kind, "bittensor_subnet_adapter_dry_run");
+  assert.equal(adapterDryRunPayload.report.passed, 1);
+  assert.equal(adapterDryRunPayload.report.cases[0].missingHashRejected, true);
+  assert.equal(adapterDryRunPayload.report.cases[0].mismatchedHashRejected, true);
+  assert.doesNotMatch(JSON.stringify(adapterDryRunPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
 
   const preview = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   const previewPayload = JSON.parse(preview.result.content[0].text);

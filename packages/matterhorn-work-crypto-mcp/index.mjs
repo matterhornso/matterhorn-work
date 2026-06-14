@@ -810,6 +810,17 @@ async function bittensor_doctor_subnet_adapters() {
   return { success: true, report: res.report };
 }
 
+async function bittensor_dry_run_subnet_adapters(args = {}) {
+  const params = new URLSearchParams();
+  if (Number.isFinite(args.netuid)) params.set("netuid", String(args.netuid));
+  if (typeof args.task === "string") params.set("task", args.task);
+  if (typeof args.ss58Address === "string") params.set("ss58Address", args.ss58Address);
+  if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
+  const query = params.toString();
+  const res = await callServer(`/api/bittensor/adapters/dry-run${query ? `?${query}` : ""}`);
+  return { success: true, report: res.report };
+}
+
 async function bittensor_prepare_extrinsic(args) {
   const res = await callServer("/api/bittensor/extrinsics/prepare", "POST", args);
   return {
@@ -951,6 +962,7 @@ const tools = [
   { name: "bittensor_get_sidecar_health", description: "Probe whether the configured Bittensor Subtensor sidecar is reachable, without exposing its endpoint URL.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_readiness_audit", description: "Run the Bittensor readiness gate across chat planning, discovery, wallet safety, signing safety, capabilities, monitoring, validator comparison, and sidecar status.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_doctor_subnet_adapters", description: "Inspect configured Bittensor subnet service adapters for endpoint allowlisting, auth readiness, schema safety, and preview-confirm-invoke readiness without exposing token values or auth env names.", inputSchema: { type: "object", properties: {} } },
+  { name: "bittensor_dry_run_subnet_adapters", description: "Run the safe subnet adapter dry-run harness for configured mock adapters: preview, missing-hash rejection, mismatched-hash rejection, confirmed invocation, and redaction checks. Non-mock adapters are skipped.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
   { name: "bittensor_create_signing_handoff", description: "Create a checksumed desktop handoff bundle from an unsigned Bittensor preview for external signing.", inputSchema: { type: "object", properties: { preview: { type: "object" } }, required: ["preview"] } },
   { name: "bittensor_submit_signed_extrinsic", description: "Submit an externally signed Bittensor extrinsic through a configured Subtensor sidecar, if available.", inputSchema: { type: "object", properties: { preview: { type: "object" }, signature: { type: "string" }, signerAddress: { type: "string" } }, required: ["preview", "signature"] } },
@@ -1083,6 +1095,7 @@ function handleMessage(msg) {
         case "bittensor_get_sidecar_health": return bittensor_get_sidecar_health().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_readiness_audit": return bittensor_readiness_audit().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_doctor_subnet_adapters": return bittensor_doctor_subnet_adapters().then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_dry_run_subnet_adapters": return bittensor_dry_run_subnet_adapters(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_signing_handoff": return bittensor_create_signing_handoff(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_submit_signed_extrinsic": return bittensor_submit_signed_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);
