@@ -681,6 +681,12 @@ const server = createServer(async (req, res) => {
         warnings: ["This bundle is evidence for review only; it does not authorize real subnet service execution."],
         nextPrompt: "Help me unblock the Bittensor adapter evidence review for subnet 14.",
       },
+      cards: [{
+        kind: "adapter_evidence_review",
+        title: "Bittensor adapter evidence review",
+        items: [{ label: "Missing required", value: "2" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Help me unblock the Bittensor adapter evidence review for subnet 14." } }],
+      }],
     }));
     return;
   }
@@ -1194,6 +1200,8 @@ try {
   assert.equal(adapterEvidenceReviewPayload.review.status, "blocked");
   assert.match(adapterEvidenceReviewPayload.review.nextPrompt, /unblock/i);
   assert.match(adapterEvidenceReviewPayload.review.allowedNextActions.join(" "), /Do not invoke any subnet adapter/i);
+  assert.equal(adapterEvidenceReviewPayload.cards[0].kind, "adapter_evidence_review");
+  assert.equal(adapterEvidenceReviewPayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterEvidenceReviewPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });

@@ -5,6 +5,7 @@ import {
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
   buildBittensorAdapterEvidenceBundleCard,
+  buildBittensorAdapterEvidenceReviewCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorExtrinsicPreviewCard,
@@ -1309,6 +1310,11 @@ describe("executeBittensorChatWorkflow", () => {
     expect(review.blockedReasons.join(" ")).toContain("Adapter doctor");
     expect(review.nextPrompt).toContain("unblock");
     expect(review.allowedNextActions.join(" ")).toContain("Do not invoke any subnet adapter");
+    const card = buildBittensorAdapterEvidenceReviewCard(review);
+    expect(card.kind).toBe("adapter_evidence_review");
+    expect(card.tone).toBe("danger");
+    expect(card.items.find((item) => item.label === "Missing required")?.value).toBe(String(review.missingRequiredArtifactCount));
+    expect(card.actions?.[0]?.payload?.prompt).toContain("unblock");
     expect(JSON.stringify(review)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 

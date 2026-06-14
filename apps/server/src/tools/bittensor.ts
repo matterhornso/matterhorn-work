@@ -912,6 +912,7 @@ export type BittensorChatCardKind =
   | "adapter_onboarding"
   | "adapter_launch_gate"
   | "adapter_evidence_bundle"
+  | "adapter_evidence_review"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -8413,6 +8414,38 @@ export function buildBittensorAdapterEvidenceBundleCard(bundle: BittensorSubnetA
     }],
     warnings: bundle.exportWarnings,
     data: { bundle },
+  };
+}
+
+export function buildBittensorAdapterEvidenceReviewCard(review: BittensorSubnetAdapterEvidenceReviewDecision): BittensorChatCard {
+  return {
+    kind: "adapter_evidence_review",
+    title: "Bittensor adapter evidence review",
+    subtitle: titleCase(review.status),
+    summary: review.summary,
+    tone: review.status === "mock_dry_run_ready" ? "good" : review.status === "manual_real_canary_review_required" ? "warning" : "danger",
+    items: [
+      cardItem("Adapter", review.requested.adapter ?? "Any"),
+      cardItem("Netuid", review.requested.netuid ?? "Any", review.requested.netuid === null ? "muted" : "default"),
+      cardItem("Decision", titleCase(review.status), review.status === "mock_dry_run_ready" ? "good" : review.status === "blocked" ? "danger" : "warning"),
+      cardItem("Launch gate", titleCase(review.launchGateStatus), review.launchGateStatus === "mock_ready" ? "good" : review.launchGateStatus === "blocked" ? "danger" : "warning"),
+      cardItem("Onboarding", titleCase(review.onboardingStatus), review.onboardingStatus === "ready_for_preview_review" ? "good" : review.onboardingStatus === "blocked" ? "danger" : "warning"),
+      cardItem("Required artifacts", review.requiredArtifactCount, review.requiredArtifactCount ? "warning" : "muted"),
+      cardItem("Missing required", review.missingRequiredArtifactCount, review.missingRequiredArtifactCount ? "danger" : "good"),
+      cardItem("Blocked reasons", review.blockedReasons.length, review.blockedReasons.length ? "danger" : "good"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: review.nextPrompt,
+        adapter: review.requested.adapter,
+        netuid: review.requested.netuid,
+        evidenceReviewStatus: review.status,
+      },
+    }],
+    warnings: review.warnings,
+    data: { review },
   };
 }
 
