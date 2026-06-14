@@ -20,6 +20,7 @@ import {
   buildBittensorInvocationPreviewCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
+  buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
@@ -4091,7 +4092,7 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
     const report = auditBittensorSubnetAdapterRuntimeApprovals();
-    return jsonResponse({ success: true, report });
+    return jsonResponse({ success: true, report, cards: [buildBittensorAdapterApprovalAuditCard(report)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/templates", "client", async (ctx) => {

@@ -682,6 +682,8 @@ Audit approvals without exposing full hashes:
 curl -s "http://localhost:8787/api/bittensor/adapters/approvals"
 ```
 
+The response includes an `adapter_approval_audit` card with active, expired, and invalid approval counts plus a safe continuation prompt.
+
 Equivalent MCP tool:
 
 ```text

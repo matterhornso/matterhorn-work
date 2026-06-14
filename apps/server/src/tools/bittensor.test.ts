@@ -5,6 +5,7 @@ import {
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
   auditBittensorSubnetAdapterRuntimeApprovals,
+  buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
   buildBittensorAdapterLaunchGateCard,
@@ -853,6 +854,10 @@ describe("executeBittensorChatWorkflow", () => {
       expect(report.activeCount).toBe(1);
       expect(report.invalidCount).toBe(1);
       expect(report.entries[0]?.requestSha256Prefix).toBe("a".repeat(12));
+      const card = buildBittensorAdapterApprovalAuditCard(report);
+      expect(card.kind).toBe("adapter_approval_audit");
+      expect(card.items.find((item) => item.label === "Active approvals")?.value).toBe("1");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("Review active");
       expect(JSON.stringify(report)).not.toContain("a".repeat(64));
       expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
     } finally {
