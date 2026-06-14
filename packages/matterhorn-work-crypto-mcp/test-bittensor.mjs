@@ -550,6 +550,12 @@ const server = createServer(async (req, res) => {
         warnings: [],
         nextActions: ["Run a reviewed preview for the no-execution canary fixture."],
       },
+      cards: [{
+        kind: "adapter_onboarding",
+        title: "Bittensor adapter onboarding",
+        items: [{ label: "Adapter", value: "data_search" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Prepare a reviewed no-execution canary preview for subnet 14." } }],
+      }],
     }));
     return;
   }
@@ -1006,6 +1012,8 @@ try {
   assert.equal(adapterOnboardingPayload.report.kind, "bittensor_subnet_adapter_onboarding_plan");
   assert.equal(adapterOnboardingPayload.report.status, "ready_for_preview_review");
   assert.equal(adapterOnboardingPayload.report.gates.find((gate) => gate.id === "service_execution").status, "not_configured");
+  assert.equal(adapterOnboardingPayload.cards[0].kind, "adapter_onboarding");
+  assert.equal(adapterOnboardingPayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterOnboardingPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
