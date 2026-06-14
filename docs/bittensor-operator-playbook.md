@@ -894,6 +894,28 @@ MCP equivalent:
 The response includes an `adapter_canary_packet` card. Only a packet with
 `status: "approval_template_ready"` contains a copyable approval env value.
 
+For review handoff to another agent, export the canary packet as redacted
+markdown. The markdown intentionally omits full approval env values.
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/canary-packet-export?adapter=data_search&netuid=77&requestSha256=<64-char-preview-request-sha256>&ttlMinutes=15" \
+  | jq -r '.canaryPacketExport.markdown'
+```
+
+MCP equivalent:
+
+```json
+{
+  "tool": "bittensor_export_subnet_adapter_canary_packet",
+  "arguments": {
+    "adapter": "data_search",
+    "netuid": 77,
+    "requestSha256": "<64-char-preview-request-sha256>",
+    "ttlMinutes": 15
+  }
+}
+```
+
 ## 14. MCP Sequence For Bittensor Operators
 
 Ask Codex or Claude to follow this exact Bittensor sequence:
@@ -929,16 +951,17 @@ Use the Matterhorn Work MCP server for Bittensor.
 13. Before any real HTTPS canary, call `bittensor_get_subnet_adapter_canary_review` and collect evidence for every blocker item: provider identity, metadata conformance, fixture review, preview hash, bounded result handling, redaction, rollback, and monitoring.
 14. For review handoff, call `bittensor_get_subnet_adapter_evidence_bundle`; treat it as evidence only, not authorization for real subnet execution.
 15. If an operator has reviewed the preview hash and evidence, prefer `bittensor_build_subnet_adapter_canary_packet`; use its approval env value only when packet status is `approval_template_ready`.
-16. For lower-level approval generation, call `bittensor_create_subnet_adapter_approval_template`; use the returned env value only for a short-lived reviewed canary window.
-17. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
-18. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-19. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-20. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-21. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-22. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-23. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-24. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-25. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+16. For handoff to another agent, call `bittensor_export_subnet_adapter_canary_packet`; it returns redacted markdown and omits full approval env values.
+17. For lower-level approval generation, call `bittensor_create_subnet_adapter_approval_template`; use the returned env value only for a short-lived reviewed canary window.
+18. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
+19. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+20. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+21. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+22. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+23. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+24. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+25. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+26. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like

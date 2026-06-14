@@ -1258,6 +1258,15 @@ export interface BittensorSubnetAdapterCanaryOperatorPacket {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterCanaryPacketExport {
+  kind: "bittensor_subnet_adapter_canary_packet_export";
+  generatedAt: string;
+  requested: BittensorSubnetAdapterCanaryOperatorPacket["requested"];
+  status: BittensorSubnetAdapterCanaryOperatorPacket["status"];
+  markdown: string;
+  warnings: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -2744,6 +2753,67 @@ export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
           "Resolve blocked evidence review items before requesting a real adapter approval template.",
           "Continue with mock dry-runs, conformance, and evidence review; do not invoke real subnet services.",
         ],
+  };
+}
+
+export function renderBittensorSubnetAdapterCanaryPacketMarkdown(packet: BittensorSubnetAdapterCanaryOperatorPacket): string {
+  const approval = packet.approvalTemplate;
+  return [
+    "# Bittensor Subnet Adapter Canary Packet",
+    "",
+    `Generated: ${sanitizeEvidenceMarkdownText(packet.generatedAt)}`,
+    `Adapter: ${sanitizeEvidenceMarkdownText(packet.requested.adapter ?? "not specified")}`,
+    `Netuid: ${sanitizeEvidenceMarkdownText(packet.requested.netuid ?? "not specified")}`,
+    `Packet status: ${sanitizeEvidenceMarkdownText(packet.status)}`,
+    `Evidence review: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.status)}`,
+    `Launch gate: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.launchGateStatus)}`,
+    `Preview request SHA-256 prefix: ${sanitizeEvidenceMarkdownText(packet.previewRequestSha256Prefix ?? "not included")}`,
+    "",
+    "## Approval Template",
+    approval
+      ? `- Available for operator copy in Matterhorn UI/MCP card only. Env key: ${approval.env.key}. Full env value intentionally omitted from this markdown export.`
+      : "- Not included. Evidence is blocked, only mock-ready, missing a valid preview hash, or missing a direct adapter kind.",
+    "",
+    "## Evidence Export Summary",
+    markdownBullet(`Onboarding: ${packet.evidenceExport.summary.onboardingStatus}`),
+    markdownBullet(`Launch gate: ${packet.evidenceExport.summary.launchGateStatus}`),
+    markdownBullet(`Required artifacts: ${packet.evidenceExport.summary.requiredArtifactCount}`),
+    markdownBullet(`Warnings: ${packet.evidenceExport.summary.warningCount}`),
+    "",
+    "## Blocked Reasons",
+    ...(packet.evidenceReview.blockedReasons.length ? packet.evidenceReview.blockedReasons.map(markdownBullet) : ["- None"]),
+    "",
+    "## Warnings",
+    ...(packet.warnings.length ? packet.warnings.map(markdownBullet) : ["- None"]),
+    "",
+    "## Next Actions",
+    ...(packet.nextActions.length ? packet.nextActions.map(markdownBullet) : ["- None"]),
+    "",
+    "## Safety Boundary",
+    "- This export is for review and handoff only. It does not invoke a subnet service.",
+    "- Full approval env values are intentionally omitted from this markdown export.",
+    "- Never include seed phrases, mnemonics, private keys, wallet exports, host tokens, or adapter credential values in review notes.",
+    "",
+  ].join("\n");
+}
+
+export async function buildBittensorSubnetAdapterCanaryPacketExport(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+  requestSha256?: string | null;
+  approvedBy?: string | null;
+  reason?: string | null;
+  ttlMinutes?: number | null;
+} = {}): Promise<BittensorSubnetAdapterCanaryPacketExport> {
+  const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket(input);
+  return {
+    kind: "bittensor_subnet_adapter_canary_packet_export",
+    generatedAt: nowIso(),
+    requested: packet.requested,
+    status: packet.status,
+    markdown: renderBittensorSubnetAdapterCanaryPacketMarkdown(packet),
+    warnings: uniqueWarnings(packet.warnings, ["Full approval env values are intentionally omitted from this export."]),
   };
 }
 
