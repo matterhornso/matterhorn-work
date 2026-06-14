@@ -799,6 +799,7 @@ export type BittensorSubnetInvokeInput = {
   intent?: BittensorSubnetInvocation["intent"];
   task?: string | null;
   ss58Address?: string | null;
+  reviewedRequestSha256?: string | null;
 };
 
 export type BittensorValidatorCompareInput = {
@@ -1125,6 +1126,15 @@ function normalizeCostModel(value: unknown): BittensorCapabilityManifest["costMo
     : "unknown";
 }
 
+function mockSubnetAdaptersEnabled(): boolean {
+  const value = readEnv("BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS")?.toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function isMockSubnetAdapterEndpoint(endpoint: string): boolean {
+  return endpoint.startsWith("mock://");
+}
+
 function configuredSubnetAdapters(): BittensorConfiguredSubnetAdapter[] {
   const raw = readEnv("BITTENSOR_SUBNET_ADAPTERS_JSON");
   if (!raw) return [];
@@ -1138,6 +1148,7 @@ function configuredSubnetAdapters(): BittensorConfiguredSubnetAdapter[] {
       const netuid = firstNumber(record, ["netuid", "net_uid", "subnet"]);
       const endpoint = firstString(record, ["endpoint", "url", "baseUrl", "base_url"]);
       if (netuid === null || !Number.isInteger(netuid) || netuid < 0 || !endpoint) return [];
+      if (isMockSubnetAdapterEndpoint(endpoint) && !mockSubnetAdaptersEnabled()) return [];
       const timeoutMs = firstNumber(record, ["timeoutMs", "timeout_ms"]) ?? 20_000;
       return [{
         netuid,
@@ -1161,10 +1172,47 @@ export function getConfiguredSubnetAdapter(netuid: number): BittensorConfiguredS
   return configuredSubnetAdapters().find((adapter) => adapter.netuid === netuid) ?? null;
 }
 
+function invokeMockSubnetAdapter(
+  adapter: BittensorConfiguredSubnetAdapter,
+  input: BittensorSubnetInvokeInput,
+  requestSha256: string,
+): Record<string, unknown> {
+  const task = input.task?.trim() || "No task text provided.";
+  if (adapter.endpoint !== "mock://data-search" || adapter.serviceAdapter !== "data_search") {
+    return {
+      ok: false,
+      mode: "mock",
+      message: "Only mock://data-search is supported by the current mock subnet service adapter.",
+    };
+  }
+  return {
+    ok: true,
+    mode: "mock",
+    adapterKind: "data_search",
+    netuid: adapter.netuid,
+    requestSha256,
+    query: task,
+    results: [{
+      title: "Mock Bittensor data-search result",
+      summary: `Deterministic mock result for: ${task}`,
+      source: "matterhorn-mock-subnet-adapter",
+      confidence: "fixture",
+    }],
+    warnings: [
+      "Mock adapter result only; no real Bittensor subnet service was called.",
+      "Use this path to test preview, confirmation, result rendering, and safety behavior before adding real adapters.",
+    ],
+  };
+}
+
 async function invokeConfiguredSubnetAdapter(
   adapter: BittensorConfiguredSubnetAdapter,
   input: BittensorSubnetInvokeInput,
+  requestSha256: string,
 ): Promise<Record<string, unknown> | null> {
+  if (isMockSubnetAdapterEndpoint(adapter.endpoint)) {
+    return invokeMockSubnetAdapter(adapter, input, requestSha256);
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (adapter.authEnv) {
     const token = readEnv(adapter.authEnv);
@@ -1179,6 +1227,7 @@ async function invokeConfiguredSubnetAdapter(
         intent: input.intent ?? "service_call",
         task: input.task ?? "",
         ss58Address: input.ss58Address ?? null,
+        requestSha256,
         safeMode: true,
       }),
       signal: AbortSignal.timeout(adapter.timeoutMs),
@@ -3378,16 +3427,16 @@ export async function submitSignedBittensorExtrinsic(input: BittensorSignedSubmi
   }
 }
 
-export async function previewBittensorSubnetInvocation(netuid: number, input: BittensorSubnetInvokeInput): Promise<BittensorSubnetInvocationPreview> {
-  const [detail, capability] = await Promise.all([
-    bittensorProvider.getSubnet(netuid),
-    getBittensorCapability(netuid),
-  ]);
-  const configuredAdapter = getConfiguredSubnetAdapter(netuid);
-  const intent = input.intent ?? "service_call";
+function buildSubnetInvocationReviewRequest(
+  netuid: number,
+  input: BittensorSubnetInvokeInput,
+  intent: BittensorSubnetInvocation["intent"],
+): {
+  request: BittensorSubnetInvocationPreview["request"];
+  requestJson: string;
+  requestSha256: string;
+} {
   const ss58Address = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
-  const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
-  const supported = adapterGate.supported;
   const request = {
     netuid,
     intent,
@@ -3396,6 +3445,19 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
   };
   const requestJson = stableJson(request);
   const requestSha256 = createHash("sha256").update(requestJson).digest("hex");
+  return { request, requestJson, requestSha256 };
+}
+
+export async function previewBittensorSubnetInvocation(netuid: number, input: BittensorSubnetInvokeInput): Promise<BittensorSubnetInvocationPreview> {
+  const [detail, capability] = await Promise.all([
+    bittensorProvider.getSubnet(netuid),
+    getBittensorCapability(netuid),
+  ]);
+  const configuredAdapter = getConfiguredSubnetAdapter(netuid);
+  const intent = input.intent ?? "service_call";
+  const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
+  const supported = adapterGate.supported;
+  const { request, requestJson, requestSha256 } = buildSubnetInvocationReviewRequest(netuid, input, intent);
   return {
     netuid,
     subnetName: detail.name,
@@ -3426,7 +3488,7 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
         ...adapterGate.blockers,
         ...adapterGate.contractValidation.warnings,
       ],
-      input.ss58Address && !ss58Address ? ["Provided wallet address was not valid SS58 and will not be sent to the adapter."] : [],
+      input.ss58Address && !request.ss58Address ? ["Provided wallet address was not valid SS58 and will not be sent to the adapter."] : [],
     ),
     consequenceSummary: supported
       ? `If confirmed, Matterhorn will call the configured ${configuredAdapter?.name ?? capability.serviceAdapter} adapter for ${detail.name} with the visible task and public context.`
@@ -3482,8 +3544,34 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
   if (intent === "service_call") {
     const configuredAdapter = getConfiguredSubnetAdapter(netuid);
     const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
+    const reviewRequest = buildSubnetInvocationReviewRequest(netuid, input, intent);
     if (adapterGate.supported && configuredAdapter) {
-      const adapterResult = await invokeConfiguredSubnetAdapter(configuredAdapter, input);
+      if (!input.reviewedRequestSha256 || input.reviewedRequestSha256 !== reviewRequest.requestSha256) {
+        return {
+          netuid,
+          intent,
+          adapter: configuredAdapter.serviceAdapter,
+          supported: false,
+          result: {
+            capability,
+            requestedTask: input.task ?? null,
+            expectedRequestSha256: reviewRequest.requestSha256,
+            receivedRequestSha256: input.reviewedRequestSha256 ?? null,
+            adapterContract: adapterGate.adapterContract,
+            contractValidation: adapterGate.contractValidation,
+          },
+          message: "Matterhorn will not invoke this subnet service until the reviewed request SHA-256 from the preview card is provided and matches the current request.",
+          warnings: uniqueWarnings(
+            warnings,
+            configuredAdapter.safetyNotes,
+            ["Reviewed request SHA-256 is missing or does not match the current subnet service request."],
+          ),
+          adapterContract: adapterGate.adapterContract,
+          contractValidation: adapterGate.contractValidation,
+        };
+      }
+
+      const adapterResult = await invokeConfiguredSubnetAdapter(configuredAdapter, input, reviewRequest.requestSha256);
       const ok = adapterResult?.["ok"] !== false;
       return {
         netuid,
@@ -3493,6 +3581,7 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
         result: {
           capability,
           requestedTask: input.task ?? null,
+          requestSha256: reviewRequest.requestSha256,
           adapter: {
             name: configuredAdapter.name,
             requiredAuth: configuredAdapter.requiredAuth,

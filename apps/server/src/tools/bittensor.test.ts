@@ -610,6 +610,98 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("runs the mock data-search adapter through preview, confirmation hash, and invocation", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      const task = "Search for public Bittensor subnet documentation patterns.";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock data search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "mock://data-search",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock data search adapter safety note."],
+      }]);
+
+      try {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        const disabledPreview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        expect(disabledPreview.supported).toBe(false);
+        expect(disabledPreview.adapterContract.endpointConfigured).toBe(false);
+
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        expect(preview.supported).toBe(true);
+        expect(preview.adapter).toBe("data_search");
+        expect(preview.requiredAuth).toBe("none");
+        expect(preview.costModel).toBe("free_read");
+        expect(preview.adapterContract.endpointConfigured).toBe(true);
+        expect(preview.contractValidation.ok).toBe(true);
+
+        const missingReview = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        expect(missingReview.supported).toBe(false);
+        expect(missingReview.message).toContain("reviewed request SHA-256");
+
+        const mismatchedReview = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: "0".repeat(64),
+        });
+        expect(mismatchedReview.supported).toBe(false);
+        expect(mismatchedReview.warnings.join(" ")).toContain("does not match");
+
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const output = invocation.result.output as {
+          ok?: boolean;
+          mode?: string;
+          adapterKind?: string;
+          requestSha256?: string;
+          results?: Array<{ title?: string; source?: string }>;
+        } | undefined;
+        expect(invocation.supported).toBe(true);
+        expect(invocation.adapter).toBe("data_search");
+        expect(invocation.result.requestSha256).toBe(preview.requestSha256);
+        expect(output?.ok).toBe(true);
+        expect(output?.mode).toBe("mock");
+        expect(output?.adapterKind).toBe("data_search");
+        expect(output?.requestSha256).toBe(preview.requestSha256);
+        expect(output?.results?.[0]?.source).toBe("matterhorn-mock-subnet-adapter");
+        expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|adapter-token|BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
   test("compares validators on a requested subnet", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
