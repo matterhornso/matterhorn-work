@@ -1203,6 +1203,30 @@ export interface BittensorSubnetAdapterRuntimeApproval {
   reason: string | null;
 }
 
+export interface BittensorSubnetAdapterRuntimeApprovalAuditEntry {
+  netuid: number;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  requestSha256Prefix: string;
+  approvedBy: string;
+  approvedAt: string;
+  expiresAt: string | null;
+  expired: boolean;
+  reason: string | null;
+}
+
+export interface BittensorSubnetAdapterRuntimeApprovalAudit {
+  kind: "bittensor_subnet_adapter_runtime_approval_audit";
+  checkedAt: string;
+  status: "pass" | "warning";
+  configured: boolean;
+  activeCount: number;
+  expiredCount: number;
+  invalidCount: number;
+  entries: BittensorSubnetAdapterRuntimeApprovalAuditEntry[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -1542,6 +1566,69 @@ function configuredSubnetAdapterRuntimeApprovals(): BittensorSubnetAdapterRuntim
   } catch {
     return [];
   }
+}
+
+export function auditBittensorSubnetAdapterRuntimeApprovals(): BittensorSubnetAdapterRuntimeApprovalAudit {
+  const checkedAt = nowIso();
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+  if (!raw) {
+    return {
+      kind: "bittensor_subnet_adapter_runtime_approval_audit",
+      checkedAt,
+      status: "warning",
+      configured: false,
+      activeCount: 0,
+      expiredCount: 0,
+      invalidCount: 0,
+      entries: [],
+      warnings: ["No exact request approval manifest is configured. Real subnet service adapter invocations remain blocked."],
+      nextActions: ["Generate a preview request SHA-256 and add an operator-reviewed approval only for that exact canary request."],
+    };
+  }
+  let rawEntries: unknown[];
+  try {
+    const parsed = JSON.parse(raw);
+    rawEntries = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    rawEntries = [];
+  }
+  const approvals = configuredSubnetAdapterRuntimeApprovals();
+  const now = Date.now();
+  const entries = approvals.map((approval) => {
+    const expires = approval.expiresAt ? Date.parse(approval.expiresAt) : null;
+    const expired = expires !== null && Number.isFinite(expires) && expires < now;
+    return {
+      netuid: approval.netuid,
+      serviceAdapter: approval.serviceAdapter,
+      requestSha256Prefix: approval.requestSha256.slice(0, 12),
+      approvedBy: approval.approvedBy,
+      approvedAt: approval.approvedAt,
+      expiresAt: approval.expiresAt,
+      expired,
+      reason: approval.reason,
+    };
+  });
+  const expiredCount = entries.filter((entry) => entry.expired).length;
+  const activeCount = entries.length - expiredCount;
+  const invalidCount = Math.max(0, rawEntries.length - approvals.length);
+  return {
+    kind: "bittensor_subnet_adapter_runtime_approval_audit",
+    checkedAt,
+    status: activeCount > 0 && invalidCount === 0 ? "pass" : "warning",
+    configured: true,
+    activeCount,
+    expiredCount,
+    invalidCount,
+    entries,
+    warnings: uniqueWarnings(
+      invalidCount ? [`${invalidCount} approval entr${invalidCount === 1 ? "y was" : "ies were"} ignored because required fields were invalid.`] : [],
+      expiredCount ? [`${expiredCount} approval entr${expiredCount === 1 ? "y has" : "ies have"} expired.`] : [],
+      activeCount ? [] : ["No active exact request approvals are available. Real subnet service adapter invocations remain blocked."],
+    ),
+    nextActions: activeCount
+      ? ["Use approvals only for the exact reviewed canary request SHA-256.", "Remove approvals after canary completion or expiry."]
+      : ["Run preview, review evidence, and add one short-lived exact request SHA-256 approval if a real canary is explicitly approved."],
+  };
 }
 
 function findSubnetAdapterRuntimeApproval(
