@@ -11,6 +11,8 @@ import {
   buildBittensorReadinessCard,
   buildBittensorDecisionBrief,
   buildBittensorDecisionBriefCard,
+  buildBittensorWatchPolicyPreset,
+  buildBittensorWatchPolicyPresetCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSigningReceiptCard,
   buildBittensorSidecarHealthCard,
@@ -1061,6 +1063,39 @@ describe("Bittensor advanced copilot engines", () => {
 
   test("clarifies personalized decision prompts when SS58 context is missing", async () => {
     const result = await executeBittensorChatWorkflow({ message: "What should I do next with my TAO?" });
+    expect(result.execution).toBe("clarification_required");
+    expect(result.clarificationQuestion).toContain("SS58 coldkey public address");
+  });
+
+  test("builds wallet watch-policy presets without custody fields", async () => {
+    const policy = await buildBittensorWatchPolicyPreset({
+      message: "Set up Bittensor guardrails for my TAO wallet.",
+      ss58Address: VALID_SS58,
+    });
+    expect(policy.kind).toBe("watch_policy");
+    expect(policy.scope).toBe("wallet");
+    expect(policy.rules.length).toBeGreaterThan(0);
+    expect(policy.copilotActions.some((action) => action.label === "Create recommended watches")).toBe(true);
+    const card = buildBittensorWatchPolicyPresetCard(policy);
+    expect(card.kind).toBe("intelligence_report");
+    expect(card.actions?.some((action) => action.label === "Create recommended watches")).toBe(true);
+    expect(JSON.stringify({ policy, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
+  });
+
+  test("routes watch-policy prompts through Bittensor chat", async () => {
+    const result = await executeBittensorChatWorkflow({
+      message: "Create a Bittensor watch policy for subnet 14.",
+      netuid: 14,
+    });
+    expect(result.execution).toBe("answered");
+    expect(result.cards[0]?.kind).toBe("intelligence_report");
+    expect((result.data.watchPolicy as { scope?: string })?.scope).toBe("subnet");
+    expect(result.cards[0]?.actions?.some((action) => String(action.payload?.prompt ?? "").includes("Create watches for Bittensor subnet 14"))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
+  });
+
+  test("clarifies personalized watch-policy prompts when SS58 context is missing", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "Set up Bittensor alerts for my wallet." });
     expect(result.execution).toBe("clarification_required");
     expect(result.clarificationQuestion).toContain("SS58 coldkey public address");
   });

@@ -503,6 +503,31 @@ export interface BittensorDecisionBrief {
   related: Record<string, unknown>;
 }
 
+export interface BittensorWatchPolicyRule {
+  label: string;
+  kind: BittensorWatch["kind"];
+  trigger: string;
+  threshold: number | null;
+  reason: string;
+  actionPrompt: string;
+  riskLevel: BittensorRiskLevel;
+  watch: Partial<BittensorWatch>;
+}
+
+export interface BittensorWatchPolicyPreset {
+  kind: "watch_policy";
+  scope: "wallet" | "validator" | "subnet" | "general";
+  label: string;
+  summary: string;
+  priority: "now" | "next" | "later";
+  source: string;
+  rules: BittensorWatchPolicyRule[];
+  copilotActions: BittensorCopilotAction[];
+  warnings: string[];
+  updatedAt: string;
+  related: Record<string, unknown>;
+}
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -1558,6 +1583,11 @@ function isBittensorDecisionQuestion(message: string): boolean {
     /\b(bittensor|tao|subnet|netuid|validator|stake|staking|wallet|coldkey|hotkey|alpha|dtao)\b/i.test(message);
 }
 
+function isBittensorWatchPolicyQuestion(message: string): boolean {
+  return /\b(watch policy|watch preset|monitoring policy|alert policy|guardrails?|guard rails|risk policy|keep an eye|watch my|monitor my|set up alerts?|create alerts?)\b/i.test(message) &&
+    /\b(bittensor|tao|subnet|netuid|validator|stake|staking|wallet|coldkey|hotkey|alpha|dtao|exposure)\b/i.test(message);
+}
+
 function decisionPromptNeedsWallet(message: string): boolean {
   return /\b(my|wallet|portfolio|balance|coldkey|exposure|staked|where am i|my tao|positions?)\b/i.test(message);
 }
@@ -1858,6 +1888,36 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
 
   if (!message) {
     return clarificationResult(plan, "What would you like to do with Bittensor?");
+  }
+
+  if (isBittensorWatchPolicyQuestion(message)) {
+    const ss58Address = resolveExecutionSs58(input, plan);
+    const netuid = resolveExecutionNetuid(input, plan);
+    const validatorHotkey = resolveValidatorHotkeyFromInput(input, plan);
+    if (decisionPromptNeedsWallet(message) && !ss58Address && netuid === null && !validatorHotkey) {
+      return clarificationResult(plan, "I can build Bittensor wallet guardrails, but I need your SS58 coldkey public address for watch-only wallet context.");
+    }
+    if (/\bvalidator\b/i.test(message) && !validatorHotkey && netuid === null) {
+      return clarificationResult(plan, "Which validator hotkey or subnet netuid should this Bittensor watch policy focus on?");
+    }
+    const policy = await buildBittensorWatchPolicyPreset({
+      message,
+      ss58Address,
+      netuid,
+      validatorHotkey,
+      strategy: resolveExecutionStrategy(input),
+      limit: resolveExecutionLimit(input, 4),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "monitor", responseCards: ["intelligence_report"] },
+      responseText: `${policy.summary} The first safe step is to review the policy rules, then create the recommended public-data watches if they match your intent.`,
+      cards: [buildBittensorWatchPolicyPresetCard(policy)],
+      data: { watchPolicy: policy },
+      warnings: uniqueWarnings(warnings, policy.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
   }
 
   if (isBittensorDecisionQuestion(message)) {
@@ -3544,6 +3604,164 @@ export async function buildBittensorDecisionBrief(input: {
   };
 }
 
+function watchPolicyActionPrompt(suggestion: BittensorWatchSuggestion): string {
+  if (suggestion.kind === "wallet" && suggestion.ss58Address) return `Analyze Bittensor wallet. SS58 address: ${suggestion.ss58Address}`;
+  if (suggestion.kind === "validator" && suggestion.validatorHotkey) return `Deep dive validator ${suggestion.validatorHotkey} on subnet ${suggestion.netuid ?? 0}.`;
+  if (suggestion.kind === "slippage" && suggestion.netuid !== null) return `Prepare a fresh unsigned Bittensor staking preview for subnet ${suggestion.netuid}.`;
+  if ((suggestion.kind === "subnet" || suggestion.kind === "emissions") && suggestion.netuid !== null) return `Analyze Bittensor subnet ${suggestion.netuid}.`;
+  return "Check my Bittensor alerts.";
+}
+
+function watchPolicyTrigger(suggestion: BittensorWatchSuggestion): string {
+  if (suggestion.kind === "wallet") return "Wallet exposure, freshness, or concentration changes.";
+  if (suggestion.kind === "validator") return "Validator visibility, stake sample, or peer context changes.";
+  if (suggestion.kind === "emissions") return "Subnet emission context changes.";
+  if (suggestion.kind === "slippage") return "Dynamic TAO quote or slippage context changes.";
+  return "Subnet public-data context changes.";
+}
+
+function watchPolicyRuleFromSuggestion(suggestion: BittensorWatchSuggestion, riskLevel: BittensorRiskLevel): BittensorWatchPolicyRule {
+  return {
+    label: suggestion.label,
+    kind: suggestion.kind,
+    trigger: watchPolicyTrigger(suggestion),
+    threshold: suggestion.threshold,
+    reason: suggestion.reason,
+    actionPrompt: watchPolicyActionPrompt(suggestion),
+    riskLevel,
+    watch: {
+      kind: suggestion.kind,
+      label: suggestion.label,
+      netuid: suggestion.netuid,
+      ss58Address: suggestion.ss58Address,
+      validatorHotkey: suggestion.validatorHotkey ?? null,
+      threshold: suggestion.threshold,
+      reason: suggestion.reason,
+    },
+  };
+}
+
+export async function buildBittensorWatchPolicyPreset(input: {
+  message: string;
+  ss58Address?: string | null;
+  netuid?: number | null;
+  validatorHotkey?: string | null;
+  strategy?: BittensorValidatorComparison["strategy"] | null;
+  limit?: number | null;
+}): Promise<BittensorWatchPolicyPreset> {
+  const ss58Address = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
+  const validatorHotkey = input.validatorHotkey && isValidSs58Address(input.validatorHotkey) ? input.validatorHotkey : null;
+  const netuid = Number.isInteger(input.netuid) && input.netuid !== null && input.netuid !== undefined && input.netuid >= 0 ? input.netuid : null;
+  const limit = Math.min(6, Math.max(2, Number(input.limit ?? 4) || 4));
+  const commonWarnings = [
+    "Watch policies use public/provider data and may lag live chain state.",
+    "A policy does not sign, stake, unstake, transfer, or broadcast anything.",
+    "Matterhorn never needs seed phrases, private keys, mnemonics, or key exports for watch policies.",
+  ];
+
+  if (ss58Address) {
+    const wallet = await analyzeBittensorWalletIntelligence(ss58Address);
+    const rules = uniqueWatchSuggestions(wallet.watchSuggestions)
+      .slice(0, limit)
+      .map((suggestion) => watchPolicyRuleFromSuggestion(suggestion, highestRisk(wallet.concentrationRisk, wallet.slippageRisk, wallet.staleDataRisk)));
+    const fallbackRule = watchPolicyRuleFromSuggestion(watchSuggestion({
+      kind: "wallet",
+      label: `Wallet ${shortSs58(ss58Address)}`,
+      ss58Address,
+      reason: "Keep a baseline watch on wallet exposure and provider freshness.",
+    }), wallet.staleDataRisk);
+    const finalRules = rules.length ? rules : [fallbackRule];
+    return {
+      kind: "watch_policy",
+      scope: "wallet",
+      label: `Wallet guardrails for ${shortSs58(ss58Address)}`,
+      summary: `Monitor wallet concentration, slippage, validator exposure, and freshness for ${shortSs58(ss58Address)}.`,
+      priority: wallet.concentrationRisk === "high" || wallet.slippageRisk === "high" ? "now" : "next",
+      source: wallet.source,
+      rules: finalRules,
+      copilotActions: [
+        copilotAction("Create recommended watches", `Create watches for my riskiest Bittensor positions. SS58 address: ${ss58Address}`, "Turns this policy into concrete watch entries using public wallet data.", "low"),
+        copilotAction("Check alerts", "Check my Bittensor alerts.", "Evaluates configured watches and shows actionable follow-up prompts.", "low"),
+        copilotAction("Build decision brief", `What should I do next with my TAO? SS58 address: ${ss58Address}`, "Re-runs the broader wallet decision copilot after watches are in place.", "low"),
+      ],
+      warnings: uniqueWarnings(commonWarnings, wallet.warnings),
+      updatedAt: nowIso(),
+      related: { wallet },
+    };
+  }
+
+  if (validatorHotkey && netuid !== null) {
+    const validator = await analyzeBittensorValidatorIntelligence({ netuid, validatorHotkey, strategy: input.strategy });
+    const rules = uniqueWatchSuggestions(validator.watchSuggestions)
+      .slice(0, limit)
+      .map((suggestion) => watchPolicyRuleFromSuggestion(suggestion, validator.risk));
+    return {
+      kind: "watch_policy",
+      scope: "validator",
+      label: `Validator guardrails for ${shortSs58(validatorHotkey)}`,
+      summary: `Monitor validator visibility, score context, and peer comparison readiness on subnet ${netuid}.`,
+      priority: validator.risk === "high" ? "now" : "next",
+      source: validator.source,
+      rules,
+      copilotActions: [
+        copilotAction("Create validator watch", `Monitor validator ${validatorHotkey} on subnet ${netuid}.`, "Creates a concrete watch for this validator hotkey.", "low"),
+        copilotAction("Compare peers", `Compare validators on subnet ${netuid} with a ${normalizeValidatorStrategy(input.strategy)} strategy.`, "Peer comparison keeps validator context honest before any preview.", "low"),
+      ],
+      warnings: uniqueWarnings(commonWarnings, validator.warnings),
+      updatedAt: nowIso(),
+      related: { validator },
+    };
+  }
+
+  if (netuid !== null) {
+    const subnet = await analyzeBittensorSubnetIntelligence(netuid);
+    const rules = uniqueWatchSuggestions(subnet.watchSuggestions)
+      .slice(0, limit)
+      .map((suggestion) => watchPolicyRuleFromSuggestion(suggestion, highestRisk(subnet.metagraph.concentrationRisk, subnet.metagraph.dataQuality)));
+    return {
+      kind: "watch_policy",
+      scope: "subnet",
+      label: `Subnet ${netuid} guardrails`,
+      summary: `Monitor subnet ${netuid} market context, emissions, concentration, and adapter readiness before acting.`,
+      priority: subnet.metagraph.concentrationRisk === "high" || subnet.metagraph.dataQuality === "high" ? "now" : "next",
+      source: subnet.market.source,
+      rules,
+      copilotActions: [
+        copilotAction("Create subnet watches", `Create watches for Bittensor subnet ${netuid}.`, "Creates concrete watches for subnet state and market context.", "low"),
+        copilotAction("Compare validators", `Compare validators on subnet ${netuid}.`, "Validator comparison is the next safe step before a staking preview.", "low"),
+      ],
+      warnings: uniqueWarnings(commonWarnings, subnet.warnings),
+      updatedAt: nowIso(),
+      related: { subnet },
+    };
+  }
+
+  const goal = extractStakingPlanGoal(input.message) || "Bittensor monitoring";
+  const discovery = await findBittensorSubnetsForGoal({ goal, limit });
+  const rules = discovery.matches.slice(0, limit).map((match) => watchPolicyRuleFromSuggestion(watchSuggestion({
+    kind: "subnet",
+    label: `Watch ${match.subnet.name}`,
+    netuid: match.subnet.netuid,
+    reason: match.reasons[0] ?? "Track this subnet while evaluating fit.",
+  }), match.subnet.source === "curated-fallback" ? "medium" : "low"));
+  return {
+    kind: "watch_policy",
+    scope: "general",
+    label: "Bittensor discovery guardrails",
+    summary: `Start with watchable subnet candidates for "${goal}" before wallet-specific or transaction-like actions.`,
+    priority: "next",
+    source: discovery.source,
+    rules,
+    copilotActions: [
+      copilotAction("Add wallet context", "Analyze my Bittensor wallet. SS58 address: ", "A public SS58 address enables personalized watch policies without custody.", "low"),
+      copilotAction("Find more subnets", `Find Bittensor subnets useful for: ${goal}.`, "Discovery expands the policy before selecting validators or previews.", "low"),
+    ],
+    warnings: uniqueWarnings(commonWarnings, discovery.warnings),
+    updatedAt: nowIso(),
+    related: { discovery },
+  };
+}
+
 function riskFromShare(share: number | null): BittensorRiskLevel {
   if (share === null || !Number.isFinite(share)) return "unknown";
   if (share >= 0.5) return "high";
@@ -4805,6 +5023,33 @@ export function buildBittensorDecisionBriefCard(brief: BittensorDecisionBrief): 
     })),
     warnings: brief.warnings,
     data: { brief },
+  };
+}
+
+export function buildBittensorWatchPolicyPresetCard(policy: BittensorWatchPolicyPreset): BittensorChatCard {
+  const highestRuleRisk = highestRisk(...policy.rules.map((rule) => rule.riskLevel));
+  return {
+    kind: "intelligence_report",
+    title: policy.label,
+    subtitle: `${titleCase(policy.scope)} watch policy · ${titleCase(policy.priority)}`,
+    summary: policy.summary,
+    tone: highestRuleRisk === "high" ? "warning" : "default",
+    items: [
+      cardItem("Scope", titleCase(policy.scope)),
+      cardItem("Priority", titleCase(policy.priority), policy.priority === "now" ? "warning" : "default"),
+      cardItem("Rules", policy.rules.length, policy.rules.length ? "default" : "warning"),
+      cardItem("Highest risk", highestRuleRisk, riskTone(highestRuleRisk)),
+      cardItem("Source", policy.source, policy.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("First trigger", policy.rules[0]?.trigger ?? "Unavailable", policy.rules[0] ? "default" : "muted"),
+      cardItem("Copilot actions", policy.copilotActions.length),
+    ],
+    actions: policy.copilotActions.slice(0, 4).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel, policyScope: policy.scope },
+    })),
+    warnings: policy.warnings,
+    data: { policy },
   };
 }
 
