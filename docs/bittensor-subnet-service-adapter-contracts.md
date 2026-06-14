@@ -130,6 +130,35 @@ The default fixtures cover:
 
 Harness reports are sanitized. They report readiness, validation errors, warnings, supported intents, and unsupported status. They do not echo full raw contracts or auth env names.
 
+## Mock Data-Search Adapter
+
+The first direct-service adapter path is a mock-only data-search adapter. It exists to prove the full preview, confirmation, invocation, and result-rendering loop without calling any real subnet service.
+
+Enable it explicitly:
+
+```bash
+export BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1
+export BITTENSOR_SUBNET_ADAPTERS_JSON='[
+  {
+    "netuid": 77,
+    "name": "Mock data search adapter",
+    "serviceAdapter": "data_search",
+    "endpoint": "mock://data-search",
+    "requiredAuth": "none",
+    "costModel": "free_read",
+    "safetyNotes": ["Mock data search adapter safety note."]
+  }
+]'
+```
+
+Expected behavior:
+
+- without `BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1`, `mock://` adapters are ignored and the subnet remains unsupported for direct service calls;
+- with the flag enabled, preview returns a request SHA-256;
+- invocation refuses to run unless `reviewedRequestSha256` matches the preview hash;
+- successful invocation returns deterministic fixture data with `mode: "mock"` and `adapterKind: "data_search"`;
+- no real Bittensor subnet service is called.
+
 ## Required PR Shape For A Real Adapter
 
 A real adapter PR should be split into small steps:
