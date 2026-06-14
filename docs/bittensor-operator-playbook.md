@@ -604,6 +604,8 @@ Expected conformance behavior:
 - request/result schemas do not contain secret-shaped fields;
 - response size is bounded.
 
+The main Bittensor readiness audit also includes this conformance signal, so `GET /api/bittensor/readiness` should show `subnet_adapter_conformance` whenever operators review whether direct subnet service usage is safe enough to proceed.
+
 Start Matterhorn Work with mock adapters enabled in the trusted local shell:
 
 ```bash
