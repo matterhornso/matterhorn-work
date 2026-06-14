@@ -22,6 +22,7 @@ import {
   buildBittensorQuoteCard,
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
+  buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
@@ -48,6 +49,7 @@ import {
   analyzeBittensorWalletIntelligence,
   bittensorProvider,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
+  buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorStakingPlan,
@@ -4122,6 +4124,34 @@ function createRoutes(
     } catch (err) {
       throw new ApiError(400, "invalid_approval_template", err instanceof Error ? err.message : "Invalid approval template request");
     }
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/canary-packet", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const ttlParam = ctx.url.searchParams.get("ttlMinutes") ?? ctx.url.searchParams.get("ttl_minutes");
+    const ttlMinutes = ttlParam === null || ttlParam === "" ? null : Number(ttlParam);
+    if (ttlMinutes !== null && (!Number.isFinite(ttlMinutes) || ttlMinutes < 1)) {
+      throw new ApiError(400, "invalid_ttl", "ttlMinutes must be a positive number");
+    }
+    const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket({
+      adapter: ctx.url.searchParams.get("adapter") ?? ctx.url.searchParams.get("serviceAdapter"),
+      netuid,
+      limit,
+      requestSha256: ctx.url.searchParams.get("requestSha256") ?? ctx.url.searchParams.get("request_sha256"),
+      approvedBy: ctx.url.searchParams.get("approvedBy") ?? ctx.url.searchParams.get("approved_by"),
+      reason: ctx.url.searchParams.get("reason"),
+      ttlMinutes,
+    });
+    return jsonResponse({ success: true, packet, cards: [buildBittensorAdapterCanaryOperatorPacketCard(packet)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/templates", "client", async (ctx) => {

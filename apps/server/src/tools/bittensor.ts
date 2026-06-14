@@ -915,6 +915,7 @@ export type BittensorChatCardKind =
   | "adapter_evidence_review"
   | "adapter_approval_audit"
   | "adapter_approval_template"
+  | "adapter_canary_packet"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -1237,6 +1238,22 @@ export interface BittensorSubnetAdapterRuntimeApprovalTemplate {
     key: "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON";
     value: string;
   };
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface BittensorSubnetAdapterCanaryOperatorPacket {
+  kind: "bittensor_subnet_adapter_canary_operator_packet";
+  generatedAt: string;
+  requested: {
+    adapter: string | null;
+    netuid: number | null;
+  };
+  status: "blocked" | "needs_preview_hash" | "approval_template_ready";
+  previewRequestSha256Prefix: string | null;
+  evidenceExport: BittensorSubnetAdapterEvidenceExport;
+  evidenceReview: BittensorSubnetAdapterEvidenceReviewDecision;
+  approvalTemplate: BittensorSubnetAdapterRuntimeApprovalTemplate | null;
   warnings: string[];
   nextActions: string[];
 }
@@ -2250,7 +2267,7 @@ export async function checkBittensorSubnetAdapterLaunchGate(input: {
   });
   const readyEntries = scopedEntries.filter((entry) => entry.serviceCallReady && entry.status === "ready");
   const readyMockCount = readyEntries.filter((entry) => entry.endpoint.mode === "mock").length;
-  const readyRealCount = readyEntries.filter((entry) => entry.endpoint.mode === "http").length;
+  const readyRealCount = readyEntries.filter((entry) => entry.endpoint.mode !== "mock").length;
   const blockedCount = scopedEntries.filter((entry) => entry.status === "blocked").length;
   const requirements: BittensorSubnetAdapterLaunchGateRequirement[] = [
     {
@@ -2653,6 +2670,80 @@ export async function reviewBittensorSubnetAdapterEvidence(input: {
         : [],
     ),
     nextPrompt,
+  };
+}
+
+export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+  requestSha256?: string | null;
+  approvedBy?: string | null;
+  reason?: string | null;
+  ttlMinutes?: number | null;
+} = {}): Promise<BittensorSubnetAdapterCanaryOperatorPacket> {
+  const [evidenceExport, evidenceReview] = await Promise.all([
+    buildBittensorSubnetAdapterEvidenceExport(input),
+    reviewBittensorSubnetAdapterEvidence(input),
+  ]);
+  const requestedAdapter = input.adapter ?? evidenceReview.requested.adapter;
+  const serviceAdapter = normalizeServiceAdapter(requestedAdapter, "unsupported");
+  const requestSha256 = (input.requestSha256 ?? "").trim();
+  const hashIsValid = isSha256Hex(requestSha256);
+  const warnings = uniqueWarnings(
+    evidenceExport.warnings,
+    evidenceReview.warnings,
+    evidenceReview.status === "blocked" ? ["Evidence review is blocked. Resolve blockers before generating an approval template."] : [],
+    evidenceReview.status === "mock_dry_run_ready" ? ["Mock dry-run is ready, but this is not enough to approve a real subnet adapter canary."] : [],
+    requestSha256 && !hashIsValid ? ["The preview request SHA-256 is malformed; approval templates require a 64-character SHA-256 hex string."] : [],
+    serviceAdapter === "universal" || serviceAdapter === "unsupported" ? ["A direct subnet service adapter kind is required before a real canary approval can be generated."] : [],
+  );
+  const canBuildApproval =
+    evidenceReview.status === "manual_real_canary_review_required" &&
+    evidenceReview.requested.netuid !== null &&
+    hashIsValid &&
+    serviceAdapter !== "universal" &&
+    serviceAdapter !== "unsupported";
+  const approvalTemplate = canBuildApproval
+    ? buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+      netuid: evidenceReview.requested.netuid as number,
+      serviceAdapter,
+      requestSha256,
+      approvedBy: input.approvedBy,
+      reason: input.reason,
+      ttlMinutes: input.ttlMinutes,
+    })
+    : null;
+  const status: BittensorSubnetAdapterCanaryOperatorPacket["status"] = approvalTemplate
+    ? "approval_template_ready"
+    : evidenceReview.status === "blocked" || evidenceReview.status === "mock_dry_run_ready"
+      ? "blocked"
+      : "needs_preview_hash";
+  return {
+    kind: "bittensor_subnet_adapter_canary_operator_packet",
+    generatedAt: nowIso(),
+    requested: evidenceReview.requested,
+    status,
+    previewRequestSha256Prefix: hashIsValid ? requestSha256.slice(0, 12).toLowerCase() : null,
+    evidenceExport,
+    evidenceReview,
+    approvalTemplate,
+    warnings,
+    nextActions: status === "approval_template_ready"
+      ? [
+        "Copy the approval template only into the reviewed canary environment.",
+        "Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window.",
+        "Run approval audit after the canary and remove stale approvals.",
+      ]
+      : status === "needs_preview_hash"
+        ? [
+          "Run a preview for the exact canary fixture and paste the 64-character request SHA-256.",
+          "Do not invoke any real subnet adapter until the packet includes an approval template and the operator confirms it.",
+        ]
+        : [
+          "Resolve blocked evidence review items before requesting a real adapter approval template.",
+          "Continue with mock dry-runs, conformance, and evidence review; do not invoke real subnet services.",
+        ],
   };
 }
 
@@ -8751,6 +8842,63 @@ export function buildBittensorAdapterApprovalTemplateCard(template: BittensorSub
         },
       },
     },
+  };
+}
+
+export function buildBittensorAdapterCanaryOperatorPacketCard(packet: BittensorSubnetAdapterCanaryOperatorPacket): BittensorChatCard {
+  const tone = packet.status === "approval_template_ready"
+    ? "warning"
+    : packet.status === "needs_preview_hash"
+      ? "warning"
+      : "danger";
+  const prompt = packet.status === "approval_template_ready"
+    ? "Audit Bittensor subnet adapter request approvals after this canary."
+    : packet.status === "needs_preview_hash"
+      ? "Run a Bittensor subnet adapter preview and prepare the exact request SHA-256 for review."
+      : "Help me unblock the Bittensor adapter canary packet before any real adapter invocation.";
+  const actions: BittensorChatCardAction[] = [];
+  if (packet.approvalTemplate) {
+    actions.push({
+      label: "Copy approval JSON",
+      kind: "copy_payload",
+      payload: {
+        envKey: packet.approvalTemplate.env.key,
+        envValue: packet.approvalTemplate.env.value,
+      },
+    });
+  }
+  actions.push({
+    label: "Continue safely",
+    kind: "send_to_chat",
+    payload: {
+      prompt,
+      adapter: packet.requested.adapter,
+      netuid: packet.requested.netuid,
+      packetStatus: packet.status,
+    },
+  });
+  return {
+    kind: "adapter_canary_packet",
+    title: "Bittensor adapter canary packet",
+    subtitle: titleCase(packet.status),
+    summary: packet.status === "approval_template_ready"
+      ? "Evidence review reached manual real-canary review and an exact request-hash approval template is ready for operator review."
+      : packet.status === "needs_preview_hash"
+        ? "Evidence review reached manual real-canary review, but the exact preview request SHA-256 is still required."
+        : "Evidence is blocked or only mock-ready. No real adapter approval template is included.",
+    tone,
+    items: [
+      cardItem("Adapter", packet.requested.adapter ?? "Any"),
+      cardItem("Netuid", packet.requested.netuid ?? "Any", packet.requested.netuid === null ? "muted" : "default"),
+      cardItem("Packet status", titleCase(packet.status), packet.status === "approval_template_ready" ? "warning" : packet.status === "blocked" ? "danger" : "warning"),
+      cardItem("Evidence review", titleCase(packet.evidenceReview.status), packet.evidenceReview.status === "manual_real_canary_review_required" ? "warning" : packet.evidenceReview.status === "mock_dry_run_ready" ? "good" : "danger"),
+      cardItem("Launch gate", titleCase(packet.evidenceReview.launchGateStatus), packet.evidenceReview.launchGateStatus === "manual_review_required" ? "warning" : packet.evidenceReview.launchGateStatus === "mock_ready" ? "good" : "danger"),
+      cardItem("Request hash", packet.previewRequestSha256Prefix ? `${packet.previewRequestSha256Prefix}...` : "Required", packet.previewRequestSha256Prefix ? "muted" : "warning"),
+      cardItem("Approval env", packet.approvalTemplate ? packet.approvalTemplate.env.key : "Not included", packet.approvalTemplate ? "warning" : "muted"),
+    ],
+    actions,
+    warnings: packet.warnings,
+    data: { packet },
   };
 }
 
