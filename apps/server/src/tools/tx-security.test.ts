@@ -123,8 +123,12 @@ describe("transaction security guardrails", () => {
     })).resolves.toEqual({ success: false, error: "Step bad data must be hex encoded" });
 
     const swapTx = {
+      action: "swap",
+      chainId: BASE,
       summary: "Swap",
-      tx: { to: AAVE_POOL, data: "0x", value: "0" },
+      tx: { to: AAVE_POOL, data: "0x", value: "0", gas: "21000", gasPrice: "1" },
+      needsApproval: true,
+      protocol: "1inch",
     } as Awaited<ReturnType<typeof import("./swap-builder.js").buildSwap>>;
 
     expect(() => createSwapApproveSupplyBatch({
