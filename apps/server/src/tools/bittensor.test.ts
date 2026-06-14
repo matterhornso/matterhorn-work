@@ -42,6 +42,7 @@ import {
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
+  buildBittensorSubnetAdapterPreflightPacket,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1636,6 +1637,26 @@ describe("executeBittensorChatWorkflow", () => {
     expect(validation.errors.join(" ")).toContain("secret-shaped value");
     const card = buildBittensorAdapterResultValidationCard(validation);
     expect(card.tone).toBe("danger");
+  });
+
+  test("builds adapter preflight packets from manifest and result samples", () => {
+    const manifest = getBittensorSubnetAdapterManifestExamples({ adapter: "data_search", netuid: 18 }).examples[0]!.manifest;
+    const packet = buildBittensorSubnetAdapterPreflightPacket({
+      manifest,
+      result: {
+        mode: "mock",
+        requestSha256: "d".repeat(64),
+        output: "Bounded preflight output.",
+        warnings: [],
+      },
+    });
+    expect(packet.kind).toBe("bittensor_subnet_adapter_preflight_packet");
+    expect(packet.status).toBe("pass");
+    expect(packet.readyForConformance).toBe(true);
+    expect(packet.readyForCanaryEvidence).toBe(true);
+    expect(packet.manifestValidation.status).toBe("pass");
+    expect(packet.resultValidation?.status).toBe("pass");
+    expect(JSON.stringify(packet)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue/i);
   });
 
   test("returns real adapter onboarding templates without credential values", () => {

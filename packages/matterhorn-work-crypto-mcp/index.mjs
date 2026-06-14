@@ -840,6 +840,16 @@ async function bittensor_validate_subnet_adapter_result(args = {}) {
   return { success: res.success !== false, validation: res.validation, cards: res.cards || [] };
 }
 
+async function bittensor_build_subnet_adapter_preflight_packet(args = {}) {
+  const body = {
+    manifest: args.manifest,
+    result: args.result,
+  };
+  if (Number.isFinite(args.maxResponseBytes)) body.maxResponseBytes = args.maxResponseBytes;
+  const res = await callServer("/api/bittensor/adapters/preflight", "POST", body);
+  return { success: res.success !== false, packet: res.packet, cards: res.cards || [] };
+}
+
 async function bittensor_audit_subnet_adapter_approvals() {
   const res = await callServer("/api/bittensor/adapters/approvals");
   return { success: true, report: res.report, cards: res.cards || [] };
@@ -1131,6 +1141,7 @@ const tools = [
   { name: "bittensor_validate_subnet_adapter_manifest", description: "Validate a proposed Bittensor subnet adapter metadata manifest against Matterhorn's safe adapter contract without invoking a subnet service.", inputSchema: { type: "object", properties: { manifest: { type: "object" }, version: { type: "string" }, name: { type: "string" }, netuid: { type: "number" }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, supportedIntents: { type: "array", items: { type: "string" } }, safeModeRequired: { type: "boolean" }, requestHashRequired: { type: "boolean" }, maxResponseBytes: { type: "number" }, healthStatus: { type: "string", enum: ["ok", "degraded", "unavailable"] }, requiredAuth: { type: "string", enum: ["none", "api_key", "external_wallet", "unknown"] }, costModel: { type: "string", enum: ["free_read", "tao_fee", "provider_priced", "unknown"] }, endpointConfigured: { type: "boolean" }, requestSchema: { type: "object" }, resultSchema: { type: "object" }, privacy: { type: "object" }, safetyNotes: { type: "array", items: { type: "string" } } } } },
   { name: "bittensor_get_subnet_adapter_manifest_examples", description: "Return copy-pasteable, self-validated Bittensor subnet adapter manifest examples for safe adapter onboarding. Does not configure or invoke adapters.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_validate_subnet_adapter_result", description: "Validate a Bittensor subnet adapter result envelope for bounded size, renderability, request-hash auditability, and obvious secret leakage without invoking a subnet service.", inputSchema: { type: "object", properties: { result: { type: "object" }, mode: { type: "string" }, requestSha256: { type: "string" }, output: {}, resultValue: {}, summary: { type: "string" }, message: { type: "string" }, warnings: { type: "array", items: { type: "string" } }, usage: { type: "object" }, costEstimate: { type: "object" }, maxResponseBytes: { type: "number" } } } },
+  { name: "bittensor_build_subnet_adapter_preflight_packet", description: "Build a no-execution Bittensor subnet adapter preflight packet from a manifest and optional result sample before conformance or canary review.", inputSchema: { type: "object", properties: { manifest: { type: "object" }, result: { type: "object" }, maxResponseBytes: { type: "number" } }, required: ["manifest"] } },
   { name: "bittensor_audit_subnet_adapter_approvals", description: "Inspect exact request SHA-256 approvals for real Bittensor subnet adapters without exposing full hashes or credential values.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_create_subnet_adapter_approval_template", description: "Create a short-lived exact request SHA-256 approval manifest template for a reviewed Bittensor subnet adapter canary. Does not invoke subnet services.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, requestSha256: { type: "string" }, approvedBy: { type: "string" }, reason: { type: "string" }, ttlMinutes: { type: "number" } }, required: ["netuid", "requestSha256"] } },
   { name: "bittensor_build_subnet_adapter_canary_packet", description: "Build a no-execution operator packet that combines evidence export, evidence review, and a gated approval-template recommendation for a Bittensor subnet adapter canary.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, requestSha256: { type: "string" }, approvedBy: { type: "string" }, reason: { type: "string" }, ttlMinutes: { type: "number" }, limit: { type: "number" } } } },
@@ -1281,6 +1292,7 @@ function handleMessage(msg) {
         case "bittensor_validate_subnet_adapter_manifest": return bittensor_validate_subnet_adapter_manifest(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_adapter_manifest_examples": return bittensor_get_subnet_adapter_manifest_examples(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_validate_subnet_adapter_result": return bittensor_validate_subnet_adapter_result(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_build_subnet_adapter_preflight_packet": return bittensor_build_subnet_adapter_preflight_packet(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_audit_subnet_adapter_approvals": return bittensor_audit_subnet_adapter_approvals().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_create_subnet_adapter_approval_template": return bittensor_create_subnet_adapter_approval_template(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_build_subnet_adapter_canary_packet": return bittensor_build_subnet_adapter_canary_packet(args).then(r => respond(textResult(r))).catch(catchErr);

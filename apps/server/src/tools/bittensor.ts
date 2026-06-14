@@ -1363,6 +1363,19 @@ export interface BittensorSubnetAdapterResultValidation {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterPreflightPacket {
+  kind: "bittensor_subnet_adapter_preflight_packet";
+  checkedAt: string;
+  status: "pass" | "warning" | "fail";
+  manifestValidation: BittensorSubnetAdapterManifestValidation;
+  resultValidation: BittensorSubnetAdapterResultValidation | null;
+  readyForConformance: boolean;
+  readyForCanaryEvidence: boolean;
+  errors: string[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -3376,6 +3389,51 @@ export function validateBittensorSubnetAdapterResult(resultInput: unknown, optio
     nextActions: status === "fail"
       ? ["Fix result envelope errors before using this adapter output in chat or canary evidence."]
       : ["Attach this validation to the canary evidence bundle before any real adapter review.", "Keep response limits and redaction checks enabled for live invocations."],
+  };
+}
+
+export function buildBittensorSubnetAdapterPreflightPacket(input: {
+  manifest: unknown;
+  result?: unknown;
+  maxResponseBytes?: number | null;
+}): BittensorSubnetAdapterPreflightPacket {
+  const checkedAt = nowIso();
+  const manifestValidation = validateBittensorSubnetAdapterManifest(input.manifest);
+  const hasResult = input.result !== undefined && input.result !== null;
+  const resultValidation = hasResult
+    ? validateBittensorSubnetAdapterResult(input.result, { maxResponseBytes: input.maxResponseBytes })
+    : null;
+  const errors = uniqueWarnings(
+    manifestValidation.status === "fail" ? manifestValidation.errors : [],
+    resultValidation?.status === "fail" ? resultValidation.errors : [],
+  );
+  const warnings = uniqueWarnings(
+    manifestValidation.warnings,
+    resultValidation?.warnings ?? [],
+    resultValidation ? [] : ["No adapter result sample was supplied; canary evidence is incomplete."],
+  );
+  const readyForConformance = manifestValidation.status !== "fail";
+  const readyForCanaryEvidence = readyForConformance && Boolean(resultValidation) && resultValidation?.status !== "fail";
+  const status: BittensorSubnetAdapterPreflightPacket["status"] = errors.length
+    ? "fail"
+    : warnings.length
+      ? "warning"
+      : "pass";
+  return {
+    kind: "bittensor_subnet_adapter_preflight_packet",
+    checkedAt,
+    status,
+    manifestValidation,
+    resultValidation,
+    readyForConformance,
+    readyForCanaryEvidence,
+    errors,
+    warnings,
+    nextActions: errors.length
+      ? ["Fix manifest/result validation errors before endpoint conformance or canary evidence review."]
+      : readyForCanaryEvidence
+        ? ["Run endpoint metadata conformance, then attach this preflight packet to the canary evidence bundle."]
+        : ["Add a validated adapter result sample before canary evidence review.", "Run endpoint metadata conformance only after manifest validation remains non-failing."],
   };
 }
 

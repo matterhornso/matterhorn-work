@@ -547,6 +547,28 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/adapters/preflight") {
+    res.end(JSON.stringify({
+      success: true,
+      packet: {
+        kind: "bittensor_subnet_adapter_preflight_packet",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        status: "pass",
+        readyForConformance: true,
+        readyForCanaryEvidence: true,
+        manifestValidation: { kind: "bittensor_subnet_adapter_manifest_validation", status: "pass" },
+        resultValidation: { kind: "bittensor_subnet_adapter_result_validation", status: "pass" },
+        errors: [],
+        warnings: [],
+        nextActions: ["Run conformance."],
+      },
+      cards: [
+        { kind: "adapter_manifest_validation", title: "Manifest", items: [] },
+        { kind: "adapter_result_validation", title: "Result", items: [] },
+      ],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/approvals") {
     res.end(JSON.stringify({
       success: true,
@@ -1270,6 +1292,7 @@ try {
     "bittensor_validate_subnet_adapter_manifest",
     "bittensor_get_subnet_adapter_manifest_examples",
     "bittensor_validate_subnet_adapter_result",
+    "bittensor_build_subnet_adapter_preflight_packet",
     "bittensor_audit_subnet_adapter_approvals",
     "bittensor_create_subnet_adapter_approval_template",
     "bittensor_build_subnet_adapter_canary_packet",
@@ -1306,6 +1329,7 @@ try {
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_result"), /obvious secret leakage without invoking a subnet service/i);
+  assert.match(descriptionFor("bittensor_build_subnet_adapter_preflight_packet"), /before conformance or canary review/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
@@ -1437,6 +1461,18 @@ try {
   assert.equal(adapterResultValidationPayload.validation.summary.outputPresent, true);
   assert.equal(adapterResultValidationPayload.cards[0].kind, "adapter_result_validation");
   assert.doesNotMatch(JSON.stringify(adapterResultValidationPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterPreflightPacket = await ask({ jsonrpc: "2.0", id: 47, method: "tools/call", params: { name: "bittensor_build_subnet_adapter_preflight_packet", arguments: {
+    manifest: { version: "matterhorn.bittensor.adapter.v1", netuid: 14, serviceAdapter: "data_search" },
+    result: { mode: "mock", requestSha256: "d".repeat(64), output: "Bounded output", warnings: [] },
+  } } });
+  const adapterPreflightPacketPayload = JSON.parse(adapterPreflightPacket.result.content[0].text);
+  assert.equal(adapterPreflightPacketPayload.success, true);
+  assert.equal(adapterPreflightPacketPayload.packet.kind, "bittensor_subnet_adapter_preflight_packet");
+  assert.equal(adapterPreflightPacketPayload.packet.readyForCanaryEvidence, true);
+  assert.equal(adapterPreflightPacketPayload.cards[0].kind, "adapter_manifest_validation");
+  assert.equal(adapterPreflightPacketPayload.cards[1].kind, "adapter_result_validation");
+  assert.doesNotMatch(JSON.stringify(adapterPreflightPacketPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterApprovalAudit = await ask({ jsonrpc: "2.0", id: 39, method: "tools/call", params: { name: "bittensor_audit_subnet_adapter_approvals", arguments: {} } });
   const adapterApprovalAuditPayload = JSON.parse(adapterApprovalAudit.result.content[0].text);
