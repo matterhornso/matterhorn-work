@@ -557,6 +557,23 @@ This keeps direct adapter execution explicit while letting Matterhorn explain un
 
 Use this loop to test subnet adapter behavior before any real direct subnet service is enabled.
 
+Before configuring a real adapter, ask Matterhorn for a sanitized template. This returns placeholder JSON, allowlist value, credential env name, request/result schemas, and preflight steps, but never credential values:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/templates?adapter=data_search&netuid=77"
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_get_subnet_adapter_templates({
+  "adapter": "data_search",
+  "netuid": 77
+})
+```
+
+Copy the template only after replacing `<NETUID>` where needed and setting the credential value outside Matterhorn. Then run the adapter doctor before previewing or invoking any user request.
+
 Start Matterhorn Work with mock adapters enabled in the trusted local shell:
 
 ```bash
@@ -662,12 +679,13 @@ Use the Matterhorn Work MCP server for Bittensor.
    }
 9. For lower-level action workflows, call `matterhorn_bittensor_prepare_extrinsic`, then `matterhorn_bittensor_create_signing_handoff`.
 10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
-11. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-12. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-13. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-14. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-15. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-16. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+11. Before real adapter setup, call `bittensor_get_subnet_adapter_templates` for the target adapter kind and netuid; use placeholders only and set credential values outside Matterhorn.
+12. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+13. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+14. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+15. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+16. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+17. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 14. What Good Looks Like

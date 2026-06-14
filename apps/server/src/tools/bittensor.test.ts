@@ -45,6 +45,7 @@ import {
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
+  getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
   isValidSs58Address,
   invokeBittensorSubnet,
@@ -1207,6 +1208,31 @@ describe("executeBittensorChatWorkflow", () => {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       } else {
         process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("returns real adapter onboarding templates without credential values", () => {
+    const previousToken = process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN;
+    try {
+      process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN = "super-secret-token-value";
+      const report = getBittensorSubnetAdapterTemplates({ adapter: "data_search", netuid: 18 });
+      expect(report.kind).toBe("bittensor_subnet_adapter_template_report");
+      expect(report.templates).toHaveLength(1);
+      const template = report.templates[0];
+      expect(template?.adapter).toBe("data_search");
+      expect(template?.config.netuid).toBe(18);
+      expect(template?.env.credentialEnv).toBe("BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN");
+      expect(template?.env.credentialValue).toBe("<set-outside-matterhorn>");
+      expect(template?.preflightSteps.join(" ")).toContain("bittensor_preview_subnet_invocation");
+      const serialized = JSON.stringify(report);
+      expect(serialized).not.toContain("super-secret-token-value");
+      expect(serialized).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousToken === undefined) {
+        delete process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN;
+      } else {
+        process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN = previousToken;
       }
     }
   });
