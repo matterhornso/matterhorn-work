@@ -574,6 +574,21 @@ export interface BittensorReadinessReport {
   nextActions: string[];
 }
 
+export interface BittensorReadinessOperatorReport {
+  kind: "readiness_operator_report";
+  status: BittensorReadinessReport["status"];
+  checkedAt: string;
+  liveChecks: BittensorReadinessCheck[];
+  fallbackChecks: BittensorReadinessCheck[];
+  blockedChecks: BittensorReadinessCheck[];
+  operatorSummary: string;
+  operatorPrompts: BittensorCopilotAction[];
+  warnings: string[];
+  blockers: string[];
+  source: "readiness_audit";
+  related: { report: BittensorReadinessReport };
+}
+
 export type BittensorChatCardKind =
   | "subnet_comparison"
   | "wallet_snapshot"
@@ -1588,6 +1603,11 @@ function isBittensorWatchPolicyQuestion(message: string): boolean {
     /\b(bittensor|tao|subnet|netuid|validator|stake|staking|wallet|coldkey|hotkey|alpha|dtao|exposure)\b/i.test(message);
 }
 
+function isBittensorReadinessQuestion(message: string): boolean {
+  return /\b(readiness|ready|health check|operator report|live qa|qa gate|is .*live|sidecar status|fallback status|provider status)\b/i.test(message) &&
+    /\b(bittensor|tao|subtensor|finney|subnet|validator|wallet|sidecar)\b/i.test(message);
+}
+
 function decisionPromptNeedsWallet(message: string): boolean {
   return /\b(my|wallet|portfolio|balance|coldkey|exposure|staked|where am i|my tao|positions?)\b/i.test(message);
 }
@@ -1888,6 +1908,21 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
 
   if (!message) {
     return clarificationResult(plan, "What would you like to do with Bittensor?");
+  }
+
+  if (isBittensorReadinessQuestion(message)) {
+    const report = await auditBittensorReadiness();
+    const operatorReport = buildBittensorReadinessOperatorReport(report);
+    return {
+      plan: { ...answeredPlan, intent: "monitor", responseCards: ["readiness_report"] },
+      responseText: operatorReport.operatorSummary,
+      cards: [buildBittensorReadinessOperatorCard(operatorReport)],
+      data: { readiness: report, operatorReport },
+      warnings: uniqueWarnings(warnings, operatorReport.warnings, operatorReport.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
   }
 
   if (isBittensorWatchPolicyQuestion(message)) {
@@ -4763,6 +4798,67 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   };
 }
 
+export function buildBittensorReadinessOperatorReport(report: BittensorReadinessReport): BittensorReadinessOperatorReport {
+  const liveChecks = report.checks.filter((check) => check.status === "pass");
+  const fallbackChecks = report.checks.filter((check) => check.status === "warning");
+  const blockedChecks = report.checks.filter((check) => check.status === "fail");
+  const sidecarCheck = report.checks.find((check) => check.id === "sidecar_status");
+  const liveReadCheck = report.checks.find((check) => check.id === "live_read_freshness");
+  const operatorPrompts = [
+    ...(blockedChecks.length ? [
+      copilotAction(
+        "Fix blockers",
+        "Explain the Bittensor readiness blockers and suggest the next fix.",
+        "A failed readiness check should be resolved before expanding execution surfaces.",
+        "high",
+      ),
+    ] : []),
+    ...(fallbackChecks.length ? [
+      copilotAction(
+        "Inspect fallback data",
+        "Show which Bittensor flows are using fallback data and how to upgrade them to live Finney reads.",
+        "Fallback data is acceptable when clearly labeled, but operators need to know it is not live.",
+        "medium",
+      ),
+    ] : []),
+    copilotAction(
+      "Check alerts",
+      "Check my Bittensor alerts.",
+      "Monitoring is the quickest follow-up after a readiness pass or warning.",
+      "low",
+    ),
+    copilotAction(
+      "Create watch policy",
+      "Create a Bittensor watch policy for subnet 14.",
+      "Watch policies keep the operator loop active after readiness checks.",
+      "low",
+    ),
+  ];
+  const operatorSummary = blockedChecks.length
+    ? `${blockedChecks.length} Bittensor readiness blocker(s) need fixes before expanding execution.`
+    : fallbackChecks.length
+      ? `Bittensor is usable with ${fallbackChecks.length} fallback/runtime warning(s); live-read labels should stay visible.`
+      : "Bittensor is ready for the current non-custodial chat, watch, and unsigned-preview workflows.";
+  return {
+    kind: "readiness_operator_report",
+    status: report.status,
+    checkedAt: report.checkedAt,
+    liveChecks,
+    fallbackChecks,
+    blockedChecks,
+    operatorSummary,
+    operatorPrompts,
+    warnings: uniqueWarnings(
+      report.warnings,
+      sidecarCheck?.status === "warning" ? [sidecarCheck.summary] : [],
+      liveReadCheck?.status === "warning" ? [liveReadCheck.summary] : [],
+    ),
+    blockers: report.blockers,
+    source: "readiness_audit",
+    related: { report },
+  };
+}
+
 function formatMetric(value: number | null | undefined, suffix = "", digits = 3): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "Unavailable";
   return `${value.toLocaleString("en-US", { maximumFractionDigits: digits })}${suffix}`;
@@ -5360,6 +5456,30 @@ export function buildBittensorReadinessCard(report: BittensorReadinessReport): B
     ],
     warnings: [...report.blockers, ...report.warnings],
     data: { report },
+  };
+}
+
+export function buildBittensorReadinessOperatorCard(operatorReport: BittensorReadinessOperatorReport): BittensorChatCard {
+  return {
+    kind: "readiness_report",
+    title: "Bittensor operator readiness",
+    subtitle: titleCase(operatorReport.status),
+    summary: operatorReport.operatorSummary,
+    tone: operatorReport.status === "pass" ? "good" : operatorReport.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Live checks", operatorReport.liveChecks.length, operatorReport.liveChecks.length ? "good" : "muted"),
+      cardItem("Fallback warnings", operatorReport.fallbackChecks.length, operatorReport.fallbackChecks.length ? "warning" : "muted"),
+      cardItem("Blockers", operatorReport.blockedChecks.length, operatorReport.blockedChecks.length ? "danger" : "muted"),
+      cardItem("Checked", operatorReport.checkedAt, "muted"),
+      cardItem("Next prompt", operatorReport.operatorPrompts[0]?.label ?? "None", operatorReport.operatorPrompts.length ? "default" : "muted"),
+    ],
+    actions: operatorReport.operatorPrompts.slice(0, 4).map((action) => ({
+      label: action.label,
+      kind: "send_to_chat",
+      payload: { prompt: action.prompt, reason: action.reason, riskLevel: action.riskLevel },
+    })),
+    warnings: [...operatorReport.blockers, ...operatorReport.warnings],
+    data: { operatorReport },
   };
 }
 
