@@ -40,6 +40,7 @@ import {
   buildBittensorWatchDigest,
   buildBittensorWatchEvaluationCards,
   buildBittensorWatchCards,
+  auditBittensorSubnetAdapterRuntimeApprovals,
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorSubnetIntelligence,
   analyzeBittensorWalletIntelligence,
@@ -4085,6 +4086,11 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/adapters/doctor", "client", async () => {
     const report = doctorBittensorSubnetAdapters();
+    return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
+    const report = auditBittensorSubnetAdapterRuntimeApprovals();
     return jsonResponse({ success: true, report });
   });
 

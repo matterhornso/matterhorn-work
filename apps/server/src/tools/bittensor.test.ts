@@ -4,6 +4,7 @@ import {
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
+  auditBittensorSubnetAdapterRuntimeApprovals,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
   buildBittensorAdapterLaunchGateCard,
@@ -829,6 +830,38 @@ describe("executeBittensorChatWorkflow", () => {
         }
       }
     });
+  });
+
+  test("audits real adapter request approvals without exposing full hashes", () => {
+    const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([
+        {
+          netuid: 77,
+          serviceAdapter: "data_search",
+          requestSha256: "a".repeat(64),
+          approvedBy: "operator",
+          approvedAt: "2026-06-09T00:00:00.000Z",
+          expiresAt: "2999-01-01T00:00:00.000Z",
+          reason: "Reviewed canary fixture.",
+        },
+        { netuid: 18, serviceAdapter: "inference", requestSha256: "too-short" },
+      ]);
+      const report = auditBittensorSubnetAdapterRuntimeApprovals();
+      expect(report.kind).toBe("bittensor_subnet_adapter_runtime_approval_audit");
+      expect(report.status).toBe("warning");
+      expect(report.activeCount).toBe(1);
+      expect(report.invalidCount).toBe(1);
+      expect(report.entries[0]?.requestSha256Prefix).toBe("a".repeat(12));
+      expect(JSON.stringify(report)).not.toContain("a".repeat(64));
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      if (previousApprovals === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+      }
+    }
   });
 
   test("runs the mock data-search adapter through preview, confirmation hash, and invocation", async () => {

@@ -676,6 +676,18 @@ That flag is only the outer lock. Each real adapter invocation also requires `BI
 ]
 ```
 
+Audit approvals without exposing full hashes:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/approvals"
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_audit_subnet_adapter_approvals()
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/candidates?adapter=data_search&netuid=77"
 ```
