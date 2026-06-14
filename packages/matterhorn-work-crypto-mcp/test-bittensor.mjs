@@ -660,6 +660,30 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/evidence-review") {
+    res.end(JSON.stringify({
+      success: true,
+      review: {
+        kind: "bittensor_subnet_adapter_evidence_review",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        status: "blocked",
+        summary: "Adapter evidence is blocked or incomplete. Resolve the listed reasons before any canary.",
+        requiredArtifactCount: 2,
+        missingRequiredArtifactCount: 2,
+        launchGateStatus: "blocked",
+        onboardingStatus: "needs_configuration",
+        allowedNextActions: ["Do not invoke any subnet adapter."],
+        blockedReasons: ["Adapter doctor: No subnet service adapters are configured yet."],
+        warnings: ["This bundle is evidence for review only; it does not authorize real subnet service execution."],
+        nextPrompt: "Help me unblock the Bittensor adapter evidence review for subnet 14.",
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
     res.end(JSON.stringify({
       success: true,
@@ -1007,6 +1031,7 @@ try {
     "bittensor_get_subnet_adapter_canary_review",
     "bittensor_get_subnet_adapter_evidence_bundle",
     "bittensor_export_subnet_adapter_evidence",
+    "bittensor_review_subnet_adapter_evidence",
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
@@ -1034,6 +1059,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_adapter_canary_review"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_evidence_bundle"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_export_subnet_adapter_evidence"), /does not authorize or invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_review_subnet_adapter_evidence"), /Does not authorize or invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
@@ -1160,6 +1186,15 @@ try {
   assert.match(adapterEvidenceExportPayload.evidenceExport.markdown, /Bittensor Subnet Adapter Evidence Export/);
   assert.match(adapterEvidenceExportPayload.evidenceExport.markdown, /evidence for review only/i);
   assert.doesNotMatch(JSON.stringify(adapterEvidenceExportPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+
+  const adapterEvidenceReview = await ask({ jsonrpc: "2.0", id: 38, method: "tools/call", params: { name: "bittensor_review_subnet_adapter_evidence", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterEvidenceReviewPayload = JSON.parse(adapterEvidenceReview.result.content[0].text);
+  assert.equal(adapterEvidenceReviewPayload.success, true);
+  assert.equal(adapterEvidenceReviewPayload.review.kind, "bittensor_subnet_adapter_evidence_review");
+  assert.equal(adapterEvidenceReviewPayload.review.status, "blocked");
+  assert.match(adapterEvidenceReviewPayload.review.nextPrompt, /unblock/i);
+  assert.match(adapterEvidenceReviewPayload.review.allowedNextActions.join(" "), /Do not invoke any subnet adapter/i);
+  assert.doesNotMatch(JSON.stringify(adapterEvidenceReviewPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);

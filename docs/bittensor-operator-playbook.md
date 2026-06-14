@@ -639,6 +639,21 @@ bittensor_export_subnet_adapter_evidence({
 })
 ```
 
+When an agent needs a deterministic go/no-go label, run the evidence review. It classifies the bundle as blocked, mock-dry-run-ready, or manual real-canary-review-required. It is still a planning artifact, not execution approval:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/evidence-review?adapter=data_search&netuid=77"
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_review_subnet_adapter_evidence({
+  "adapter": "data_search",
+  "netuid": 77
+})
+```
+
 Use lower-level candidate profiles when you want to inspect only the no-execution canary contract. This describes the adapter category, required gates, canary fixture, forbidden field classes, and operator questions before any provider endpoint is configured:
 
 ```bash
