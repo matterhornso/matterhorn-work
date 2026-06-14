@@ -25,6 +25,7 @@ import {
   buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletCard,
   buildBittensorSubnetServiceAdapterContract,
+  buildBittensorSubnetServiceAdapterContractTestFixtures,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -49,6 +50,7 @@ import {
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   parseAmountTao,
+  runBittensorSubnetServiceAdapterContractTests,
   scoreBittensorSubnetForGoal,
   submitSignedBittensorExtrinsic,
   TaoAppBittensorProvider,
@@ -1043,6 +1045,29 @@ describe("capabilityFromSubnet", () => {
     const validation = validateBittensorSubnetServiceAdapterContract(contract);
     expect(validation.ok).toBe(false);
     expect(validation.errors.join(" ")).toContain("Request schema contains a secret-shaped field");
+  });
+
+  test("runs subnet adapter contract fixtures with sanitized results", () => {
+    const report = runBittensorSubnetServiceAdapterContractTests(buildBittensorSubnetServiceAdapterContractTestFixtures());
+    expect(report.kind).toBe("subnet_adapter_contract_test_report");
+    expect(report.total).toBe(3);
+    expect(report.failed).toBe(0);
+    expect(report.results.some((result) => result.name === "configured safe service adapter" && result.serviceCallReady)).toBe(true);
+    expect(report.results.some((result) => result.name === "missing adapter falls back to explain and monitor" && result.unsupportedStatus === "adapter_missing")).toBe(true);
+    expect(report.results.some((result) => result.name === "unsafe schema is rejected" && result.actualOk === false)).toBe(true);
+    expect(JSON.stringify(report)).not.toMatch(/BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic/i);
+  });
+
+  test("reports adapter contract expectation mismatches without exposing raw schemas", () => {
+    const fixture = buildBittensorSubnetServiceAdapterContractTestFixtures()[1];
+    const report = runBittensorSubnetServiceAdapterContractTests([{
+      ...fixture,
+      expectedServiceCallReady: true,
+    }]);
+    expect(report.failed).toBe(1);
+    expect(report.warnings.join(" ")).toContain("Adapter contract test failed");
+    expect(report.results[0]?.warnings.join(" ")).toContain("Expected serviceCallReady=true");
+    expect(JSON.stringify(report)).not.toMatch(/BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic/i);
   });
 });
 
