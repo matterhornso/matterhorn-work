@@ -580,6 +580,12 @@ const server = createServer(async (req, res) => {
         warnings: [],
         nextActions: ["Run the mock adapter dry-run harness."],
       },
+      cards: [{
+        kind: "adapter_launch_gate",
+        title: "Bittensor adapter launch gate",
+        items: [{ label: "Mock ready", value: "1" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Run the Bittensor mock adapter dry-run harness for subnet 14." } }],
+      }],
     }));
     return;
   }
@@ -1048,6 +1054,8 @@ try {
   assert.equal(adapterLaunchGatePayload.report.kind, "bittensor_subnet_adapter_launch_gate");
   assert.equal(adapterLaunchGatePayload.report.status, "mock_ready");
   assert.equal(adapterLaunchGatePayload.report.requirements.find((requirement) => requirement.id === "user_confirmation").status, "manual_review");
+  assert.equal(adapterLaunchGatePayload.cards[0].kind, "adapter_launch_gate");
+  assert.equal(adapterLaunchGatePayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterLaunchGatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });

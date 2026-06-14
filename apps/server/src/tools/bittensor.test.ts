@@ -4,6 +4,7 @@ import {
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
+  buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationPreviewCard,
@@ -1293,6 +1294,10 @@ describe("executeBittensorChatWorkflow", () => {
       expect(report.readyMockCount).toBe(0);
       expect(report.readyRealCount).toBe(0);
       expect(report.requirements.find((requirement) => requirement.id === "user_confirmation")?.status).toBe("manual_review");
+      const card = buildBittensorAdapterLaunchGateCard(report);
+      expect(card.kind).toBe("adapter_launch_gate");
+      expect(card.tone).toBe("danger");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("unblock");
       expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
     } finally {
       if (previousAdapters === undefined) {
@@ -1325,6 +1330,10 @@ describe("executeBittensorChatWorkflow", () => {
       expect(report.readyRealCount).toBe(0);
       expect(report.requirements.find((requirement) => requirement.id === "real_adapter_review")?.status).toBe("not_configured");
       expect(report.nextActions.join(" ")).toContain("mock adapter dry-run");
+      const card = buildBittensorAdapterLaunchGateCard(report);
+      expect(card.kind).toBe("adapter_launch_gate");
+      expect(card.tone).toBe("good");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("mock adapter dry-run");
       expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
     } finally {
       if (previousAdapters === undefined) {

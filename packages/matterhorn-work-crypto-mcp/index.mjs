@@ -845,7 +845,7 @@ async function bittensor_check_subnet_adapter_launch_gate(args = {}) {
   if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
   const query = params.toString();
   const res = await callServer(`/api/bittensor/adapters/launch-gate${query ? `?${query}` : ""}`);
-  return { success: true, report: res.report };
+  return { success: true, report: res.report, cards: res.cards || [] };
 }
 
 async function bittensor_probe_subnet_adapter_conformance(args = {}) {

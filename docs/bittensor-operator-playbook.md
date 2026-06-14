@@ -580,6 +580,8 @@ After onboarding is clean, check the launch gate. This does not invoke subnet se
 curl -s "http://localhost:8787/api/bittensor/adapters/launch-gate?adapter=data_search&netuid=77"
 ```
 
+The response includes an `adapter_launch_gate` card with mock-ready, real-review, blocked, and manual-review counts plus a safe chat continuation action.
+
 Equivalent MCP tool:
 
 ```text

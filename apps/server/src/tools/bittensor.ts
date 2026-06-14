@@ -830,6 +830,7 @@ export type BittensorChatCardKind =
   | "unsupported_adapter"
   | "readiness_report"
   | "adapter_onboarding"
+  | "adapter_launch_gate"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -7949,6 +7950,48 @@ export function buildBittensorAdapterOnboardingCard(plan: BittensorSubnetAdapter
     }],
     warnings: plan.warnings,
     data: { plan },
+  };
+}
+
+export function buildBittensorAdapterLaunchGateCard(report: BittensorSubnetAdapterLaunchGateReport): BittensorChatCard {
+  const passed = report.requirements.filter((requirement) => requirement.status === "pass").length;
+  const manual = report.requirements.filter((requirement) => requirement.status === "manual_review").length;
+  const blocked = report.requirements.filter((requirement) => requirement.status === "blocked").length;
+  const notConfigured = report.requirements.filter((requirement) => requirement.status === "not_configured").length;
+  const nextPrompt = report.status === "mock_ready"
+    ? `Run the Bittensor mock adapter dry-run harness${report.requested.netuid === null ? "" : ` for subnet ${report.requested.netuid}`}.`
+    : report.status === "manual_review_required"
+      ? `Review the real Bittensor subnet adapter canary plan${report.requested.netuid === null ? "" : ` for subnet ${report.requested.netuid}`} before any invocation.`
+      : `Help me unblock Bittensor subnet adapter launch gates${report.requested.netuid === null ? "" : ` for subnet ${report.requested.netuid}`}.`;
+  return {
+    kind: "adapter_launch_gate",
+    title: "Bittensor adapter launch gate",
+    subtitle: titleCase(report.status),
+    summary: report.nextActions[0] ?? "Review launch-gate requirements before any direct subnet service invocation.",
+    tone: report.status === "mock_ready" ? "good" : report.status === "manual_review_required" ? "warning" : "danger",
+    items: [
+      cardItem("Adapter", report.requested.adapter ?? "Any"),
+      cardItem("Netuid", report.requested.netuid ?? "Any", report.requested.netuid === null ? "muted" : "default"),
+      cardItem("Mock ready", report.readyMockCount, report.readyMockCount ? "good" : "muted"),
+      cardItem("Real review", report.readyRealCount, report.readyRealCount ? "warning" : "muted"),
+      cardItem("Blocked entries", report.blockedCount, report.blockedCount ? "danger" : "muted"),
+      cardItem("Passed", passed, passed ? "good" : "muted"),
+      cardItem("Manual review", manual, manual ? "warning" : "muted"),
+      cardItem("Blocked", blocked, blocked ? "danger" : "muted"),
+      cardItem("Not configured", notConfigured, notConfigured ? "warning" : "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        adapter: report.requested.adapter,
+        netuid: report.requested.netuid,
+        launchGateStatus: report.status,
+      },
+    }],
+    warnings: report.warnings,
+    data: { report },
   };
 }
 
