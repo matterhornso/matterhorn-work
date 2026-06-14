@@ -52,6 +52,7 @@ import {
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   parseAmountTao,
+  runBittensorSubnetAdapterDryRun,
   runBittensorSubnetServiceAdapterContractTests,
   scoreBittensorSubnetForGoal,
   submitSignedBittensorExtrinsic,
@@ -1163,6 +1164,72 @@ describe("executeBittensorChatWorkflow", () => {
         process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = previousToken;
       }
     }
+  });
+
+  test("returns a warning dry-run report when no mock adapters are configured", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const report = await runBittensorSubnetAdapterDryRun();
+      expect(report.kind).toBe("bittensor_subnet_adapter_dry_run");
+      expect(report.status).toBe("warning");
+      expect(report.total).toBe(0);
+      expect(report.warnings.join(" ")).toContain("No configured subnet adapters matched");
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("runs mock subnet adapters through preview, hash gates, invocation, and redaction checks", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      try {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Mock inference adapter",
+          serviceAdapter: "inference",
+          endpoint: "mock://inference",
+          requiredAuth: "none",
+          costModel: "free_read",
+          safetyNotes: ["Mock inference adapter safety note."],
+        }]);
+        const report = await runBittensorSubnetAdapterDryRun({
+          netuid: 77,
+          task: "Dry-run the mock inference adapter.",
+          ss58Address: VALID_SS58,
+        });
+        expect(report.status).toBe("pass");
+        expect(report.passed).toBe(1);
+        expect(report.failed).toBe(0);
+        expect(report.skipped).toBe(0);
+        const runCase = report.cases[0];
+        expect(runCase?.status).toBe("pass");
+        expect(runCase?.previewSupported).toBe(true);
+        expect(runCase?.missingHashRejected).toBe(true);
+        expect(runCase?.mismatchedHashRejected).toBe(true);
+        expect(runCase?.invocationSupported).toBe(true);
+        expect(runCase?.redactionPassed).toBe(true);
+        expect(runCase?.requestSha256).toHaveLength(64);
+        expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
   });
 
   test("compares validators on a requested subnet", async () => {

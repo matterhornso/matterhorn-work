@@ -588,6 +588,20 @@ Expected doctor behavior:
 - API-key adapters report whether a credential is present without returning the env var name or token value;
 - request/result schemas with seed, mnemonic, private key, wallet export, or similar fields are blocked.
 
+Then run the dry-run harness. It invokes only configured mock adapters and skips non-mock adapters:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/dry-run?netuid=77&task=Answer%20this%20Bittensor%20subnet%20question"
+```
+
+Expected dry-run behavior:
+
+- preview reports the mock adapter as supported;
+- invocation without the reviewed hash is rejected;
+- invocation after changing the task text is rejected;
+- invocation with the exact reviewed request hash succeeds;
+- returned payloads do not expose token values, auth env names, seed phrases, private keys, wallet exports, or similar signing material.
+
 Preview:
 
 ```bash

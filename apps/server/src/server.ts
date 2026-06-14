@@ -61,6 +61,7 @@ import {
   planBittensorChat,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
+  runBittensorSubnetAdapterDryRun,
   submitSignedBittensorExtrinsic,
   type BittensorActionQuoteInput,
   type BittensorChatExecutionInput,
@@ -4071,6 +4072,21 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/adapters/doctor", "client", async () => {
     const report = doctorBittensorSubnetAdapters();
+    return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/dry-run", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const report = await runBittensorSubnetAdapterDryRun({
+      netuid,
+      task: ctx.url.searchParams.get("task"),
+      ss58Address: ctx.url.searchParams.get("ss58Address"),
+      limit: ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : null,
+    });
     return jsonResponse({ success: true, report });
   });
 

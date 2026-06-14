@@ -888,6 +888,35 @@ export interface BittensorSubnetAdapterDoctorReport {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterDryRunCase {
+  name: string;
+  netuid: number;
+  adapter: BittensorCapabilityManifest["serviceAdapter"];
+  mode: BittensorSubnetAdapterDoctorEndpoint["mode"];
+  status: "pass" | "fail" | "skipped";
+  requestSha256: string | null;
+  previewSupported: boolean;
+  missingHashRejected: boolean;
+  mismatchedHashRejected: boolean;
+  invocationSupported: boolean;
+  redactionPassed: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BittensorSubnetAdapterDryRunReport {
+  kind: "bittensor_subnet_adapter_dry_run";
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  cases: BittensorSubnetAdapterDryRunCase[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetAdapterRunResult {
   ok: boolean;
   mode: "mock" | "http";
@@ -1580,6 +1609,156 @@ export function doctorBittensorSubnetAdapters(): BittensorSubnetAdapterDoctorRep
         "Run preview, confirmation-hash, and invocation smoke tests for each ready adapter.",
         "Keep adapter endpoints and auth values out of logs and user-facing payloads.",
       ],
+  };
+}
+
+function dryRunRedactionPassed(value: unknown): boolean {
+  return !/(seed phrase|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token|authEnv|apiKeyEnv)/i.test(JSON.stringify(value));
+}
+
+export async function runBittensorSubnetAdapterDryRun(input: {
+  netuid?: number | null;
+  task?: string | null;
+  ss58Address?: string | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterDryRunReport> {
+  const checkedAt = nowIso();
+  const doctor = doctorBittensorSubnetAdapters();
+  const limit = Math.max(1, Math.min(20, Math.floor(Number(input.limit ?? 10) || 10)));
+  const task = input.task?.trim() || "Matterhorn adapter dry-run fixture task.";
+  const doctorEntries = doctor.entries.filter((entry) => input.netuid === null || input.netuid === undefined || entry.netuid === input.netuid);
+  const cases: BittensorSubnetAdapterDryRunCase[] = [];
+
+  for (const entry of doctorEntries.slice(0, limit)) {
+    if (!entry.serviceCallReady) {
+      cases.push({
+        name: entry.name,
+        netuid: entry.netuid ?? -1,
+        adapter: entry.serviceAdapter,
+        mode: entry.endpoint.mode,
+        status: "skipped",
+        requestSha256: null,
+        previewSupported: false,
+        missingHashRejected: false,
+        mismatchedHashRejected: false,
+        invocationSupported: false,
+        redactionPassed: true,
+        errors: [],
+        warnings: uniqueWarnings(entry.warnings, entry.errors, ["Adapter is not service-call ready, so dry-run invocation was skipped."]),
+      });
+      continue;
+    }
+    if (entry.netuid === null) {
+      cases.push({
+        name: entry.name,
+        netuid: -1,
+        adapter: entry.serviceAdapter,
+        mode: entry.endpoint.mode,
+        status: "skipped",
+        requestSha256: null,
+        previewSupported: false,
+        missingHashRejected: false,
+        mismatchedHashRejected: false,
+        invocationSupported: false,
+        redactionPassed: true,
+        errors: ["Adapter netuid is not valid."],
+        warnings: ["Adapter is not eligible for dry-run invocation."],
+      });
+      continue;
+    }
+    if (entry.endpoint.mode !== "mock") {
+      cases.push({
+        name: entry.name,
+        netuid: entry.netuid,
+        adapter: entry.serviceAdapter,
+        mode: entry.endpoint.mode,
+        status: "skipped",
+        requestSha256: null,
+        previewSupported: false,
+        missingHashRejected: false,
+        mismatchedHashRejected: false,
+        invocationSupported: false,
+        redactionPassed: true,
+        errors: [],
+        warnings: ["Dry-run harness does not invoke non-mock adapters yet; use the doctor and preview route for real adapter readiness."],
+      });
+      continue;
+    }
+
+    const preview = await previewBittensorSubnetInvocation(entry.netuid, {
+      intent: "service_call",
+      task,
+      ss58Address: input.ss58Address ?? null,
+    });
+    const missingHash = await invokeBittensorSubnet(entry.netuid, {
+      intent: "service_call",
+      task,
+      ss58Address: input.ss58Address ?? null,
+    });
+    const mismatchedHash = await invokeBittensorSubnet(entry.netuid, {
+      intent: "service_call",
+      task: `${task} Changed after review.`,
+      ss58Address: input.ss58Address ?? null,
+      reviewedRequestSha256: preview.requestSha256,
+    });
+    const invocation = await invokeBittensorSubnet(entry.netuid, {
+      intent: "service_call",
+      task,
+      ss58Address: input.ss58Address ?? null,
+      reviewedRequestSha256: preview.requestSha256,
+    });
+    const previewSupported = preview.supported === true;
+    const missingHashRejected = missingHash.supported === false && /reviewed request SHA-256/i.test(missingHash.message);
+    const mismatchedHashRejected = mismatchedHash.supported === false && /reviewed request SHA-256/i.test(mismatchedHash.message);
+    const invocationSupported = invocation.supported === true;
+    const redactionPassed = dryRunRedactionPassed({ preview, missingHash, mismatchedHash, invocation });
+    const errors = [
+      previewSupported ? null : "Preview did not report adapter support.",
+      missingHashRejected ? null : "Missing reviewed hash was not rejected.",
+      mismatchedHashRejected ? null : "Mismatched reviewed hash was not rejected.",
+      invocationSupported ? null : "Confirmed mock invocation did not succeed.",
+      redactionPassed ? null : "Dry-run payload exposed a secret-shaped field.",
+    ].filter((item): item is string => Boolean(item));
+    cases.push({
+      name: entry.name,
+      netuid: entry.netuid,
+      adapter: entry.serviceAdapter,
+      mode: entry.endpoint.mode,
+      status: errors.length ? "fail" : "pass",
+      requestSha256: preview.requestSha256,
+      previewSupported,
+      missingHashRejected,
+      mismatchedHashRejected,
+      invocationSupported,
+      redactionPassed,
+      errors,
+      warnings: uniqueWarnings(preview.warnings, invocation.warnings),
+    });
+  }
+
+  const passed = cases.filter((item) => item.status === "pass").length;
+  const failed = cases.filter((item) => item.status === "fail").length;
+  const skipped = cases.filter((item) => item.status === "skipped").length;
+  const warnings = [
+    ...doctor.warnings,
+    ...(cases.length ? [] : ["No configured subnet adapters matched the dry-run filters."]),
+    ...(skipped ? [`${skipped} adapter dry-run case(s) were skipped.`] : []),
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_dry_run",
+    status: failed ? "fail" : passed ? skipped ? "warning" : "pass" : "warning",
+    checkedAt,
+    total: cases.length,
+    passed,
+    failed,
+    skipped,
+    cases,
+    warnings,
+    nextActions: failed
+      ? ["Fix failed dry-run cases before enabling real adapter execution."]
+      : passed
+        ? ["Use the same preview-confirm-invoke assertions for the first real adapter integration PR."]
+        : ["Configure an enabled mock subnet adapter, then rerun the dry-run harness."],
   };
 }
 
