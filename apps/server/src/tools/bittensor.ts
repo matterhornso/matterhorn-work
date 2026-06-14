@@ -837,6 +837,27 @@ export interface BittensorConfiguredSubnetAdapter {
   safetyNotes: string[];
 }
 
+export interface BittensorSubnetAdapterRunResult {
+  ok: boolean;
+  mode: "mock" | "http";
+  adapterKind: BittensorCapabilityManifest["serviceAdapter"];
+  netuid: number;
+  requestSha256: string;
+  message: string;
+  output: Record<string, unknown> | null;
+  warnings: string[];
+  usage: {
+    units: number | null;
+    label: string | null;
+  } | null;
+  costEstimate: {
+    amount: number | null;
+    currency: string | null;
+    model: BittensorCapabilityManifest["costModel"];
+  } | null;
+  status?: number;
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -1176,13 +1197,20 @@ function invokeMockSubnetAdapter(
   adapter: BittensorConfiguredSubnetAdapter,
   input: BittensorSubnetInvokeInput,
   requestSha256: string,
-): Record<string, unknown> {
+): BittensorSubnetAdapterRunResult {
   const task = input.task?.trim() || "No task text provided.";
   if (adapter.endpoint !== "mock://data-search" || adapter.serviceAdapter !== "data_search") {
     return {
       ok: false,
       mode: "mock",
+      adapterKind: adapter.serviceAdapter,
+      netuid: adapter.netuid,
+      requestSha256,
       message: "Only mock://data-search is supported by the current mock subnet service adapter.",
+      output: null,
+      warnings: ["No real Bittensor subnet service was called."],
+      usage: null,
+      costEstimate: null,
     };
   }
   return {
@@ -1191,28 +1219,52 @@ function invokeMockSubnetAdapter(
     adapterKind: "data_search",
     netuid: adapter.netuid,
     requestSha256,
-    query: task,
-    results: [{
-      title: "Mock Bittensor data-search result",
-      summary: `Deterministic mock result for: ${task}`,
-      source: "matterhorn-mock-subnet-adapter",
-      confidence: "fixture",
-    }],
+    message: "Mock data-search adapter returned deterministic fixture results.",
+    output: {
+      query: task,
+      results: [{
+        title: "Mock Bittensor data-search result",
+        summary: `Deterministic mock result for: ${task}`,
+        source: "matterhorn-mock-subnet-adapter",
+        confidence: "fixture",
+      }],
+    },
     warnings: [
       "Mock adapter result only; no real Bittensor subnet service was called.",
       "Use this path to test preview, confirmation, result rendering, and safety behavior before adding real adapters.",
     ],
+    usage: {
+      units: 1,
+      label: "mock_request",
+    },
+    costEstimate: {
+      amount: 0,
+      currency: "TAO",
+      model: adapter.costModel,
+    },
   };
 }
 
-async function invokeConfiguredSubnetAdapter(
+function normalizeAdapterUsage(value: unknown): BittensorSubnetAdapterRunResult["usage"] {
+  const record = asRecord(value);
+  const units = firstNumber(record, ["units", "count", "requests"]);
+  const label = firstString(record, ["label", "unit", "type"]);
+  return units === null && label === null ? null : { units, label };
+}
+
+function normalizeAdapterCostEstimate(value: unknown, fallbackModel: BittensorCapabilityManifest["costModel"]): BittensorSubnetAdapterRunResult["costEstimate"] {
+  const record = asRecord(value);
+  const amount = firstNumber(record, ["amount", "cost", "estimatedAmount", "estimated_amount"]);
+  const currency = firstString(record, ["currency", "denom", "unit"]);
+  const model = normalizeCostModel(record["model"] ?? record["costModel"] ?? record["cost_model"] ?? fallbackModel);
+  return amount === null && currency === null && model === fallbackModel ? null : { amount, currency, model };
+}
+
+async function runHttpSubnetAdapter(
   adapter: BittensorConfiguredSubnetAdapter,
   input: BittensorSubnetInvokeInput,
   requestSha256: string,
-): Promise<Record<string, unknown> | null> {
-  if (isMockSubnetAdapterEndpoint(adapter.endpoint)) {
-    return invokeMockSubnetAdapter(adapter, input, requestSha256);
-  }
+): Promise<BittensorSubnetAdapterRunResult> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (adapter.authEnv) {
     const token = readEnv(adapter.authEnv);
@@ -1234,16 +1286,55 @@ async function invokeConfiguredSubnetAdapter(
     });
     if (!res.ok) return {
       ok: false,
+      mode: "http",
+      adapterKind: adapter.serviceAdapter,
+      netuid: adapter.netuid,
+      requestSha256,
       status: res.status,
       message: `Adapter returned HTTP ${res.status}.`,
+      output: null,
+      warnings: [`Adapter returned HTTP ${res.status}.`],
+      usage: null,
+      costEstimate: null,
     };
-    return asRecord(await res.json());
+    const data = asRecord(await res.json());
+    return {
+      ok: data["ok"] !== false,
+      mode: "http",
+      adapterKind: adapter.serviceAdapter,
+      netuid: adapter.netuid,
+      requestSha256,
+      message: firstString(data, ["message", "summary"]) ?? "HTTP subnet service adapter returned a response.",
+      output: data,
+      warnings: arrayFrom(data["warnings"]).filter((item): item is string => typeof item === "string"),
+      usage: normalizeAdapterUsage(data["usage"]),
+      costEstimate: normalizeAdapterCostEstimate(data["costEstimate"] ?? data["cost_estimate"], adapter.costModel),
+    };
   } catch (err) {
     return {
       ok: false,
+      mode: "http",
+      adapterKind: adapter.serviceAdapter,
+      netuid: adapter.netuid,
+      requestSha256,
       message: err instanceof Error ? err.message : "Adapter invocation failed.",
+      output: null,
+      warnings: [err instanceof Error ? err.message : "Adapter invocation failed."],
+      usage: null,
+      costEstimate: null,
     };
   }
+}
+
+async function runBittensorSubnetAdapter(
+  adapter: BittensorConfiguredSubnetAdapter,
+  input: BittensorSubnetInvokeInput,
+  requestSha256: string,
+): Promise<BittensorSubnetAdapterRunResult> {
+  if (isMockSubnetAdapterEndpoint(adapter.endpoint)) {
+    return invokeMockSubnetAdapter(adapter, input, requestSha256);
+  }
+  return runHttpSubnetAdapter(adapter, input, requestSha256);
 }
 
 async function cached<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
@@ -3571,7 +3662,7 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
         };
       }
 
-      const adapterResult = await invokeConfiguredSubnetAdapter(configuredAdapter, input, reviewRequest.requestSha256);
+      const adapterResult = await runBittensorSubnetAdapter(configuredAdapter, input, reviewRequest.requestSha256);
       const ok = adapterResult?.["ok"] !== false;
       return {
         netuid,

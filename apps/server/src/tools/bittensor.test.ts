@@ -676,7 +676,11 @@ describe("executeBittensorChatWorkflow", () => {
           mode?: string;
           adapterKind?: string;
           requestSha256?: string;
-          results?: Array<{ title?: string; source?: string }>;
+          output?: {
+            results?: Array<{ title?: string; source?: string }>;
+          };
+          usage?: { units?: number | null; label?: string | null } | null;
+          costEstimate?: { amount?: number | null; currency?: string | null; model?: string } | null;
         } | undefined;
         expect(invocation.supported).toBe(true);
         expect(invocation.adapter).toBe("data_search");
@@ -685,7 +689,10 @@ describe("executeBittensorChatWorkflow", () => {
         expect(output?.mode).toBe("mock");
         expect(output?.adapterKind).toBe("data_search");
         expect(output?.requestSha256).toBe(preview.requestSha256);
-        expect(output?.results?.[0]?.source).toBe("matterhorn-mock-subnet-adapter");
+        expect(output?.output?.results?.[0]?.source).toBe("matterhorn-mock-subnet-adapter");
+        expect(output?.usage?.label).toBe("mock_request");
+        expect(output?.costEstimate?.amount).toBe(0);
+        expect(output?.costEstimate?.currency).toBe("TAO");
         expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|adapter-token|BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN/i);
       } finally {
         if (previousAdapters === undefined) {
@@ -697,6 +704,80 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
         } else {
           process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
+  test("normalizes mocked HTTP adapter responses through the adapter runner envelope", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const sidecarFetch = globalThis.fetch;
+      const task = "Search for subnet service adapter examples.";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "HTTP data search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "none",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTP adapter safety note."],
+      }]);
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://adapter.invalid")) {
+          const body = JSON.parse(String(init?.body ?? "{}"));
+          expect(body.requestSha256).toHaveLength(64);
+          return new Response(JSON.stringify({
+            ok: true,
+            message: "HTTP adapter fixture response.",
+            result: { answer: "fixture" },
+            warnings: ["HTTP fixture warning."],
+            usage: { units: 2, label: "fixture_units" },
+            costEstimate: { amount: 0.01, currency: "TAO", model: "provider_priced" },
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return sidecarFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const output = invocation.result.output as {
+          ok?: boolean;
+          mode?: string;
+          message?: string;
+          output?: { result?: { answer?: string } };
+          warnings?: string[];
+          usage?: { units?: number | null; label?: string | null } | null;
+          costEstimate?: { amount?: number | null; currency?: string | null; model?: string | null } | null;
+        } | undefined;
+        expect(invocation.supported).toBe(true);
+        expect(output?.mode).toBe("http");
+        expect(output?.message).toBe("HTTP adapter fixture response.");
+        expect(output?.output?.result?.answer).toBe("fixture");
+        expect(output?.warnings?.[0]).toBe("HTTP fixture warning.");
+        expect(output?.usage?.units).toBe(2);
+        expect(output?.costEstimate?.model).toBe("provider_priced");
+        expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+      } finally {
+        globalThis.fetch = sidecarFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
         }
       }
     });

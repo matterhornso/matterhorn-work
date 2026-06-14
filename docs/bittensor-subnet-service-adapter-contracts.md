@@ -156,8 +156,34 @@ Expected behavior:
 - without `BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1`, `mock://` adapters are ignored and the subnet remains unsupported for direct service calls;
 - with the flag enabled, preview returns a request SHA-256;
 - invocation refuses to run unless `reviewedRequestSha256` matches the preview hash;
-- successful invocation returns deterministic fixture data with `mode: "mock"` and `adapterKind: "data_search"`;
+- successful invocation returns a standardized adapter runner envelope with `mode: "mock"`, `adapterKind: "data_search"`, `requestSha256`, `output`, `warnings`, `usage`, and `costEstimate`;
 - no real Bittensor subnet service is called.
+
+## Adapter Runner Envelope
+
+All direct service adapters must return the same runner envelope, whether they are mock adapters or future HTTP adapters:
+
+```json
+{
+  "ok": true,
+  "mode": "mock",
+  "adapterKind": "data_search",
+  "netuid": 77,
+  "requestSha256": "<reviewed-request-hash>",
+  "message": "Adapter completed.",
+  "output": {},
+  "warnings": [],
+  "usage": { "units": 1, "label": "mock_request" },
+  "costEstimate": { "amount": 0, "currency": "TAO", "model": "free_read" }
+}
+```
+
+The runner is responsible for:
+
+- routing supported adapter schemes such as `mock://...` and future `https://...`;
+- preserving the reviewed request hash in the result;
+- normalizing adapter warnings, usage, and cost estimates;
+- preventing mock adapters from running unless the mock env gate is enabled.
 
 ## Required PR Shape For A Real Adapter
 
