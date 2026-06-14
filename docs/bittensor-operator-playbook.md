@@ -658,6 +658,8 @@ bittensor_review_subnet_adapter_evidence({
 
 Use lower-level candidate profiles when you want to inspect only the no-execution canary contract. This describes the adapter category, required gates, canary fixture, forbidden field classes, and operator questions before any provider endpoint is configured:
 
+Real HTTPS or loopback HTTP subnet service adapters are blocked by default even when endpoint allowlists and credentials are configured. Mock adapters remain the only runnable adapter path unless `BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1` is explicitly set after evidence review and operator approval.
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/candidates?adapter=data_search&netuid=77"
 ```

@@ -1498,6 +1498,11 @@ function localSubnetAdaptersEnabled(): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
+function realSubnetAdaptersEnabled(): boolean {
+  const value = readEnv("BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS")?.toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 function subnetAdapterEndpointAllowlist(): string[] {
   const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST") || readEnv("BITTENSOR_SUBNET_ADAPTER_ALLOWLIST");
   return raw.split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
@@ -2485,8 +2490,12 @@ function validateSubnetAdapterAuth(
 function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdapter): string[] {
   const endpoint = summarizeSubnetAdapterEndpoint(adapter.endpoint);
   const auth = validateSubnetAdapterAuth(adapter.requiredAuth, adapter.authEnv ?? null);
+  const realAdapterBlocked = endpoint.mode !== "mock" && !realSubnetAdaptersEnabled()
+    ? "Real subnet service adapters are disabled until BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 after evidence review and operator approval."
+    : null;
   return [
     endpoint.allowed ? null : endpoint.reason,
+    realAdapterBlocked,
     ...auth.errors,
   ].filter((item): item is string => Boolean(item));
 }
