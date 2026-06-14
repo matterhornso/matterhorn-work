@@ -589,6 +589,28 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/canary-review") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_canary_review",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        candidateProfile: { id: "candidate-data-search-v1", adapter: "data_search" },
+        fixtureTask: "Canary fixture task.",
+        reviewItems: [
+          { id: "preview_hash", label: "Preview hash confirmation", required: true, evidence: "Recorded request SHA-256.", blockerIfMissing: true },
+        ],
+        stopConditions: ["Stop if metadata conformance does not pass."],
+        allowedNextActions: ["Require exact request SHA-256 confirmation."],
+        warnings: [],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
     res.end(JSON.stringify({
       success: true,
@@ -933,6 +955,7 @@ try {
     "bittensor_get_subnet_adapter_candidates",
     "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_check_subnet_adapter_launch_gate",
+    "bittensor_get_subnet_adapter_canary_review",
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
@@ -957,6 +980,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_get_subnet_adapter_canary_review"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
@@ -1057,6 +1081,14 @@ try {
   assert.equal(adapterLaunchGatePayload.cards[0].kind, "adapter_launch_gate");
   assert.equal(adapterLaunchGatePayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterLaunchGatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+
+  const adapterCanaryReview = await ask({ jsonrpc: "2.0", id: 35, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_canary_review", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterCanaryReviewPayload = JSON.parse(adapterCanaryReview.result.content[0].text);
+  assert.equal(adapterCanaryReviewPayload.success, true);
+  assert.equal(adapterCanaryReviewPayload.report.kind, "bittensor_subnet_adapter_canary_review");
+  assert.equal(adapterCanaryReviewPayload.report.reviewItems[0].id, "preview_hash");
+  assert.equal(adapterCanaryReviewPayload.report.reviewItems[0].blockerIfMissing, true);
+  assert.doesNotMatch(JSON.stringify(adapterCanaryReviewPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);

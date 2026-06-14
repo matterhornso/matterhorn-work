@@ -48,6 +48,7 @@ import {
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
+  getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
@@ -1253,6 +1254,17 @@ describe("executeBittensorChatWorkflow", () => {
     expect(report.profiles[0]?.noExecutionCanary.expectedMetadata.requestHashRequired).toBe(true);
     expect(report.profiles[0]?.requiredMatterhornGates.join(" ")).toContain("bittensor_probe_subnet_adapter_conformance");
     expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+  });
+
+  test("returns a manual canary review checklist without invoking adapters", () => {
+    const checklist = getBittensorSubnetAdapterCanaryReviewChecklist({ adapter: "data_search", netuid: 18 });
+    expect(checklist.kind).toBe("bittensor_subnet_adapter_canary_review");
+    expect(checklist.candidateProfile?.adapter).toBe("data_search");
+    expect(checklist.fixtureTask).toContain("Canary fixture");
+    expect(checklist.reviewItems.find((item) => item.id === "preview_hash")?.blockerIfMissing).toBe(true);
+    expect(checklist.stopConditions.join(" ")).toContain("Stop if metadata conformance does not pass");
+    expect(checklist.allowedNextActions.join(" ")).toContain("exact request SHA-256");
+    expect(JSON.stringify(checklist)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
   });
 
   test("builds one safe adapter onboarding plan before real execution", async () => {

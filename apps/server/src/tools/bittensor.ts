@@ -246,6 +246,29 @@ export interface BittensorSubnetAdapterLaunchGateReport {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterCanaryReviewItem {
+  id: string;
+  label: string;
+  required: boolean;
+  evidence: string;
+  blockerIfMissing: boolean;
+}
+
+export interface BittensorSubnetAdapterCanaryReviewChecklist {
+  kind: "bittensor_subnet_adapter_canary_review";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  candidateProfile: BittensorSubnetAdapterCandidateProfile | null;
+  fixtureTask: string | null;
+  reviewItems: BittensorSubnetAdapterCanaryReviewItem[];
+  stopConditions: string[];
+  allowedNextActions: string[];
+  warnings: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -2049,6 +2072,100 @@ export async function checkBittensorSubnetAdapterLaunchGate(input: {
     requirements,
     warnings,
     nextActions,
+  };
+}
+
+export function getBittensorSubnetAdapterCanaryReviewChecklist(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+} = {}): BittensorSubnetAdapterCanaryReviewChecklist {
+  const requestedAdapter = input.adapter ? normalizeServiceAdapter(input.adapter, "unsupported") : null;
+  const netuid = input.netuid !== null && input.netuid !== undefined && Number.isInteger(input.netuid) && input.netuid >= 0
+    ? input.netuid
+    : null;
+  const candidateReport = getBittensorSubnetAdapterCandidateProfiles({ adapter: requestedAdapter, netuid });
+  const candidateProfile = candidateReport.profiles[0] ?? null;
+  const reviewItems: BittensorSubnetAdapterCanaryReviewItem[] = [
+    {
+      id: "provider_identity",
+      label: "Provider identity and ownership",
+      required: true,
+      evidence: "Operator has verified the adapter host, provider identity, endpoint ownership, and contact/rollback owner.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "metadata_conformance",
+      label: "Metadata conformance",
+      required: true,
+      evidence: "bittensor_probe_subnet_adapter_conformance passes for version, adapter kind, netuid, safe-mode, request hash, privacy, schema, and response bounds.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "fixture_review",
+      label: "Canary fixture review",
+      required: true,
+      evidence: "The canary fixture contains no user data, wallet address, signing payload, host token, or production secret.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "preview_hash",
+      label: "Preview hash confirmation",
+      required: true,
+      evidence: "Operator has recorded the preview request SHA-256 and the exact task text before any invocation.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "bounded_result",
+      label: "Bounded result handling",
+      required: true,
+      evidence: "Adapter result size, timeout, JSON envelope, warnings, usage, and cost fields fit Matterhorn's result schema.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "redaction_check",
+      label: "Redaction check",
+      required: true,
+      evidence: "Canary result does not expose credentials, signing material, local file paths, host tokens, or private user data.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "rollback_plan",
+      label: "Rollback plan",
+      required: true,
+      evidence: "Operator can disable the adapter by removing config or allowlist entries without redeploying wallet/signing code.",
+      blockerIfMissing: true,
+    },
+    {
+      id: "post_canary_monitoring",
+      label: "Post-canary monitoring",
+      required: true,
+      evidence: "Operator has a watch or alert plan for adapter errors, latency, response-size failures, and unexpected warning spikes.",
+      blockerIfMissing: false,
+    },
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_canary_review",
+    generatedAt: nowIso(),
+    requested: {
+      adapter: requestedAdapter,
+      netuid,
+    },
+    candidateProfile,
+    fixtureTask: candidateProfile?.noExecutionCanary.fixtureTask ?? null,
+    reviewItems,
+    stopConditions: [
+      "Stop if the adapter asks for wallet secrets, signing material, host tokens, key files, or local custody.",
+      "Stop if metadata conformance does not pass.",
+      "Stop if preview request SHA-256 changes between review and invocation.",
+      "Stop if the result schema cannot be rendered without exposing sensitive values.",
+      "Stop if rollback cannot disable the adapter quickly.",
+    ],
+    allowedNextActions: [
+      "Run launch gate and confirm it is mock_ready or manual_review_required.",
+      "Run only a reviewed canary preview with public fixture text.",
+      "Require explicit operator/user confirmation of the exact request SHA-256 before any canary invocation.",
+    ],
+    warnings: candidateReport.warnings,
   };
 }
 
