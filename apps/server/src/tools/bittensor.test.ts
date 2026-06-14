@@ -45,6 +45,7 @@ import {
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
+  getBittensorSubnetAdapterCandidateProfiles,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
   isValidSs58Address,
@@ -1236,6 +1237,18 @@ describe("executeBittensorChatWorkflow", () => {
         process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN = previousToken;
       }
     }
+  });
+
+  test("returns no-execution adapter candidate profiles with canary contracts", () => {
+    const report = getBittensorSubnetAdapterCandidateProfiles({ adapter: "data_search", netuid: 18 });
+    expect(report.kind).toBe("bittensor_subnet_adapter_candidate_profile_report");
+    expect(report.profiles).toHaveLength(1);
+    expect(report.profiles[0]?.adapter).toBe("data_search");
+    expect(report.profiles[0]?.netuid).toBe(18);
+    expect(report.profiles[0]?.noExecutionCanary.kind).toBe("matterhorn.bittensor.adapter.no_execution_canary.v1");
+    expect(report.profiles[0]?.noExecutionCanary.expectedMetadata.requestHashRequired).toBe(true);
+    expect(report.profiles[0]?.requiredMatterhornGates.join(" ")).toContain("bittensor_probe_subnet_adapter_conformance");
+    expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
   });
 
   test("probes mock adapter conformance without user task execution", async () => {
