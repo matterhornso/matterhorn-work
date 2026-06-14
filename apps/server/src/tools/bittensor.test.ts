@@ -4,6 +4,7 @@ import {
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
+  buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorExtrinsicPreviewCard,
@@ -1276,6 +1277,10 @@ describe("executeBittensorChatWorkflow", () => {
     expect(bundle.canaryReview.kind).toBe("bittensor_subnet_adapter_canary_review");
     expect(bundle.requiredArtifacts.map((artifact) => artifact.id)).toContain("operator_approval");
     expect(bundle.exportWarnings.join(" ")).toContain("does not authorize real subnet service execution");
+    const card = buildBittensorAdapterEvidenceBundleCard(bundle);
+    expect(card.kind).toBe("adapter_evidence_bundle");
+    expect(card.items.find((item) => item.label === "Required artifacts")?.value).toBe(String(bundle.requiredArtifacts.length));
+    expect(card.actions?.[0]?.payload?.prompt).toContain("evidence bundle");
     expect(JSON.stringify(bundle)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
   });
 

@@ -864,7 +864,7 @@ async function bittensor_get_subnet_adapter_evidence_bundle(args = {}) {
   if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
   const query = params.toString();
   const res = await callServer(`/api/bittensor/adapters/evidence-bundle${query ? `?${query}` : ""}`);
-  return { success: true, report: res.report };
+  return { success: true, report: res.report, cards: res.cards || [] };
 }
 
 async function bittensor_probe_subnet_adapter_conformance(args = {}) {
