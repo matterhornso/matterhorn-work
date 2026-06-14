@@ -524,6 +524,29 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/adapters/result/validate") {
+    res.end(JSON.stringify({
+      success: true,
+      validation: {
+        kind: "bittensor_subnet_adapter_result_validation",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        status: "pass",
+        summary: {
+          mode: "mock",
+          requestSha256Prefix: "cccccccccccc",
+          responseBytes: 128,
+          outputPresent: true,
+          usagePresent: true,
+          costPresent: true,
+        },
+        errors: [],
+        warnings: [],
+        nextActions: ["Attach this validation to evidence."],
+      },
+      cards: [{ kind: "adapter_result_validation", title: "Bittensor adapter result validation", items: [] }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/approvals") {
     res.end(JSON.stringify({
       success: true,
@@ -1246,6 +1269,7 @@ try {
     "bittensor_get_subnet_adapter_spec",
     "bittensor_validate_subnet_adapter_manifest",
     "bittensor_get_subnet_adapter_manifest_examples",
+    "bittensor_validate_subnet_adapter_result",
     "bittensor_audit_subnet_adapter_approvals",
     "bittensor_create_subnet_adapter_approval_template",
     "bittensor_build_subnet_adapter_canary_packet",
@@ -1281,6 +1305,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
+  assert.match(descriptionFor("bittensor_validate_subnet_adapter_result"), /obvious secret leakage without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
@@ -1399,6 +1424,19 @@ try {
   assert.equal(adapterManifestExamplesPayload.report.examples[0].validation.serviceCallReady, true);
   assert.equal(adapterManifestExamplesPayload.cards[0].kind, "adapter_manifest_validation");
   assert.doesNotMatch(JSON.stringify(adapterManifestExamplesPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterResultValidation = await ask({ jsonrpc: "2.0", id: 46, method: "tools/call", params: { name: "bittensor_validate_subnet_adapter_result", arguments: { result: {
+    mode: "mock",
+    requestSha256: "c".repeat(64),
+    output: "Bounded output",
+    warnings: [],
+  } } } });
+  const adapterResultValidationPayload = JSON.parse(adapterResultValidation.result.content[0].text);
+  assert.equal(adapterResultValidationPayload.success, true);
+  assert.equal(adapterResultValidationPayload.validation.kind, "bittensor_subnet_adapter_result_validation");
+  assert.equal(adapterResultValidationPayload.validation.summary.outputPresent, true);
+  assert.equal(adapterResultValidationPayload.cards[0].kind, "adapter_result_validation");
+  assert.doesNotMatch(JSON.stringify(adapterResultValidationPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterApprovalAudit = await ask({ jsonrpc: "2.0", id: 39, method: "tools/call", params: { name: "bittensor_audit_subnet_adapter_approvals", arguments: {} } });
   const adapterApprovalAuditPayload = JSON.parse(adapterApprovalAudit.result.content[0].text);

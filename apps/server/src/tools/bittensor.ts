@@ -917,6 +917,7 @@ export type BittensorChatCardKind =
   | "adapter_approval_template"
   | "adapter_canary_packet"
   | "adapter_manifest_validation"
+  | "adapter_result_validation"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -1341,6 +1342,23 @@ export interface BittensorSubnetAdapterManifestExampleReport {
     netuid: number | null;
   };
   examples: BittensorSubnetAdapterManifestExample[];
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface BittensorSubnetAdapterResultValidation {
+  kind: "bittensor_subnet_adapter_result_validation";
+  checkedAt: string;
+  status: "pass" | "warning" | "fail";
+  summary: {
+    mode: string | null;
+    requestSha256Prefix: string | null;
+    responseBytes: number;
+    outputPresent: boolean;
+    usagePresent: boolean;
+    costPresent: boolean;
+  };
+  errors: string[];
   warnings: string[];
   nextActions: string[];
 }
@@ -3279,6 +3297,85 @@ export function getBittensorSubnetAdapterManifestExamples(input: {
       "Run bittensor_validate_subnet_adapter_manifest after each edit.",
       "Only then configure endpoints and run metadata conformance.",
     ],
+  };
+}
+
+function secretValuePath(value: unknown, path: string[] = []): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = secretValuePath(value[index], [...path, String(index)]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const nested = secretValuePath(child, [...path, key]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value !== "string") return null;
+  if (/(seed phrase|mnemonic|private key|wallet export|-----BEGIN|Bearer\s+[A-Za-z0-9._-]{8,})/i.test(value)) {
+    return path.join(".") || "$";
+  }
+  return null;
+}
+
+export function validateBittensorSubnetAdapterResult(resultInput: unknown, options: {
+  maxResponseBytes?: number | null;
+} = {}): BittensorSubnetAdapterResultValidation {
+  const checkedAt = nowIso();
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const record = asRecord(resultInput);
+  if (!Object.keys(record).length) errors.push("Adapter result must be a JSON object.");
+  const serialized = JSON.stringify(resultInput ?? null);
+  const responseBytes = new TextEncoder().encode(serialized).byteLength;
+  const limit = Number.isInteger(options.maxResponseBytes ?? null) && Number(options.maxResponseBytes) > 0
+    ? Math.min(Number(options.maxResponseBytes), getBittensorSubnetAdapterSpec().responseLimits.hardMaxBytes)
+    : getBittensorSubnetAdapterSpec().responseLimits.defaultMaxBytes;
+  if (responseBytes > limit) errors.push(`Adapter result is ${responseBytes} bytes, above the ${limit} byte response limit.`);
+  const forbiddenField = secretFieldPath(record);
+  if (forbiddenField) errors.push(`Adapter result contains a secret-shaped field at ${forbiddenField}.`);
+  const forbiddenValue = secretValuePath(record);
+  if (forbiddenValue) errors.push(`Adapter result contains a secret-shaped value at ${forbiddenValue}.`);
+  const requestSha256 = firstString(record, ["requestSha256", "request_sha256", "previewRequestSha256", "preview_request_sha256"]);
+  if (!requestSha256) {
+    warnings.push("Adapter result should include the reviewed preview request SHA-256 for auditability.");
+  } else if (!isSha256Hex(requestSha256)) {
+    errors.push("Adapter result requestSha256 must be a 64-character SHA-256 hex string.");
+  }
+  const mode = firstString(record, ["mode", "adapterMode", "adapter_mode"]);
+  if (mode && mode !== "mock" && mode !== "http" && mode !== "https") {
+    warnings.push(`Adapter result mode '${mode}' is not one of mock, http, or https.`);
+  }
+  const outputPresent = Boolean(record["output"] ?? record["result"] ?? record["summary"] ?? record["message"]);
+  if (!outputPresent) warnings.push("Adapter result should include output, result, summary, or message for chat rendering.");
+  const warningsValue = record["warnings"];
+  if (warningsValue !== undefined && !Array.isArray(warningsValue)) errors.push("Adapter result warnings must be an array when present.");
+  if (warningsValue === undefined) warnings.push("Adapter result should include a warnings array, even when empty.");
+  const usagePresent = Boolean(record["usage"]);
+  const costPresent = Boolean(record["costEstimate"] ?? record["cost_estimate"] ?? record["cost"]);
+  const status: BittensorSubnetAdapterResultValidation["status"] = errors.length ? "fail" : warnings.length ? "warning" : "pass";
+
+  return {
+    kind: "bittensor_subnet_adapter_result_validation",
+    checkedAt,
+    status,
+    summary: {
+      mode,
+      requestSha256Prefix: requestSha256 && isSha256Hex(requestSha256) ? requestSha256.slice(0, 12) : null,
+      responseBytes,
+      outputPresent,
+      usagePresent,
+      costPresent,
+    },
+    errors,
+    warnings,
+    nextActions: status === "fail"
+      ? ["Fix result envelope errors before using this adapter output in chat or canary evidence."]
+      : ["Attach this validation to the canary evidence bundle before any real adapter review.", "Keep response limits and redaction checks enabled for live invocations."],
   };
 }
 
@@ -9464,6 +9561,37 @@ export function buildBittensorAdapterManifestValidationCard(validation: Bittenso
         prompt,
         netuid: validation.manifest.netuid,
         serviceAdapter: validation.manifest.serviceAdapter,
+        validationStatus: validation.status,
+      },
+    }],
+    warnings: uniqueWarnings(validation.errors, validation.warnings),
+    data: { validation },
+  };
+}
+
+export function buildBittensorAdapterResultValidationCard(validation: BittensorSubnetAdapterResultValidation): BittensorChatCard {
+  return {
+    kind: "adapter_result_validation",
+    title: "Bittensor adapter result validation",
+    subtitle: titleCase(validation.status),
+    summary: validation.errors[0] ?? validation.warnings[0] ?? "Adapter result envelope is bounded, renderable, and free of obvious secret-shaped fields or values.",
+    tone: validation.status === "pass" ? "good" : validation.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Mode", validation.summary.mode ?? "Unknown", validation.summary.mode ? "default" : "muted"),
+      cardItem("Request hash", validation.summary.requestSha256Prefix ? `${validation.summary.requestSha256Prefix}...` : "Missing", validation.summary.requestSha256Prefix ? "muted" : "warning"),
+      cardItem("Bytes", validation.summary.responseBytes),
+      cardItem("Output", validation.summary.outputPresent ? "Present" : "Missing", validation.summary.outputPresent ? "good" : "warning"),
+      cardItem("Usage", validation.summary.usagePresent ? "Present" : "Missing", validation.summary.usagePresent ? "default" : "muted"),
+      cardItem("Cost", validation.summary.costPresent ? "Present" : "Missing", validation.summary.costPresent ? "default" : "muted"),
+      cardItem("Status", titleCase(validation.status), validation.status === "pass" ? "good" : validation.status === "warning" ? "warning" : "danger"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: validation.status === "fail"
+          ? "Help me fix this Bittensor adapter result envelope before canary review."
+          : "Attach this Bittensor adapter result validation to the canary evidence bundle.",
         validationStatus: validation.status,
       },
     }],

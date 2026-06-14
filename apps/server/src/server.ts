@@ -24,6 +24,7 @@ import {
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorAdapterManifestValidationCard,
+  buildBittensorAdapterResultValidationCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
@@ -87,6 +88,7 @@ import {
   runBittensorSubnetAdapterDryRun,
   submitSignedBittensorExtrinsic,
   validateBittensorSubnetAdapterManifest,
+  validateBittensorSubnetAdapterResult,
   type BittensorActionQuoteInput,
   type BittensorChatExecutionInput,
   type BittensorExtrinsicAction,
@@ -4127,6 +4129,19 @@ function createRoutes(
       limit,
     });
     return jsonResponse({ success: true, report, cards: report.examples.slice(0, 6).map((example) => buildBittensorAdapterManifestValidationCard(example.validation)) });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/adapters/result/validate", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const result = body.result && typeof body.result === "object" ? body.result : body;
+    const maxResponseBytes = body.maxResponseBytes === null || body.maxResponseBytes === undefined || body.maxResponseBytes === ""
+      ? null
+      : Number(body.maxResponseBytes);
+    if (maxResponseBytes !== null && (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 1)) {
+      throw new ApiError(400, "invalid_max_response_bytes", "maxResponseBytes must be a positive integer");
+    }
+    const validation = validateBittensorSubnetAdapterResult(result, { maxResponseBytes });
+    return jsonResponse({ success: validation.status !== "fail", validation, cards: [buildBittensorAdapterResultValidationCard(validation)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
