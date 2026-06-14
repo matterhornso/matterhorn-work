@@ -16,6 +16,8 @@ import {
   buildBittensorWatchPolicyPreset,
   buildBittensorWatchPolicyPresetCard,
   buildBittensorSigningHandoffCard,
+  buildBittensorSigningSafetyChecklist,
+  buildBittensorSigningSafetyChecklistCard,
   buildBittensorSigningReceiptCard,
   buildBittensorSidecarHealthCard,
   buildBittensorStakingPlanCard,
@@ -1149,6 +1151,24 @@ describe("prepareBittensorExtrinsic", () => {
     expect(preview.signer.canSign).toBe(false);
     expect(preview.warnings.join(" ")).toContain("external");
     expect(buildBittensorExtrinsicPreviewCard(preview).actions?.[0]?.kind).toBe("sign_externally");
+    const checklist = buildBittensorSigningSafetyChecklist(preview);
+    expect(["pass", "warning"]).toContain(checklist.status);
+    expect(checklist.checks.some((check) => check.label === "External signature" && check.status === "pass")).toBe(true);
+    expect(checklist.checks.some((check) => check.label === "No key material" && check.status === "pass")).toBe(true);
+    expect(buildBittensorSigningSafetyChecklistCard(checklist).kind).toBe("signed_action_review");
+    expect(JSON.stringify(checklist)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
+  });
+
+  test("adds signing safety checklist to direct unsigned preview chat responses", async () => {
+    const result = await executeBittensorChatWorkflow({
+      message: `Prepare staking 1 TAO on subnet 14 to validator ${VALID_SS58}.`,
+      netuid: 14,
+      validatorHotkey: VALID_SS58,
+    });
+    expect(result.execution).toBe("unsigned_preview");
+    expect(result.cards.some((card) => card.title === "External signing safety checklist")).toBe(true);
+    expect((result.data.signingSafety as { kind?: string })?.kind).toBe("signing_safety_checklist");
+    expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
   });
 
   test("creates a checksumed desktop signing handoff", async () => {
