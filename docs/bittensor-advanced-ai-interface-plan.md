@@ -113,6 +113,8 @@ Current implementation:
 - The preview shows adapter support, auth requirement, cost model, request context, request hash, schemas, warnings, and confirmation action.
 - Direct adapter invocation remains a lower-level explicit API path; ordinary chat does not silently call service adapters.
 - Explicit invoke calls can pass the reviewed request hash so Matterhorn rejects mismatched service-call confirmations.
+- Subnet service adapter contracts now define the safe interface, unsupported behavior, privacy promises, and validation gate before real direct subnet execution is added.
+- Preview and invocation paths are contract-gated, and the reusable contract harness covers safe configured, missing-adapter, and unsafe-schema fixtures.
 
 ## Phase 6: Autonomous Monitoring And Bittensor Agent Ops
 
