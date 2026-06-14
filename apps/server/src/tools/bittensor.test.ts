@@ -584,15 +584,22 @@ describe("executeBittensorChatWorkflow", () => {
       try {
         const result = await executeBittensorChatWorkflow({ message: "use subnet 77 to generate an image" });
         const preview = result.data.preview as { supported?: boolean; requiredAuth?: string; costModel?: string; requestSha256?: string; confirmationPrompt?: string } | undefined;
-        expect(result.execution).toBe("answered");
+        const nextStep = result.data.nextStep as { type?: string; prompt?: string; invokeArgs?: { netuid?: number; previewRequestSha256?: string } } | undefined;
+        expect(result.execution).toBe("unsigned_preview");
         expect(preview?.supported).toBe(true);
         expect(preview?.requiredAuth).toBe("api_key");
         expect(preview?.costModel).toBe("provider_priced");
         expect(preview?.requestSha256).toHaveLength(64);
         expect(preview?.confirmationPrompt).toContain(preview?.requestSha256 ?? "missing");
+        expect(result.responseText).toContain("confirm the exact request SHA-256");
+        expect(nextStep?.type).toBe("confirm_subnet_invocation");
+        expect(nextStep?.prompt).toContain(preview?.requestSha256 ?? "missing");
+        expect(nextStep?.invokeArgs?.netuid).toBe(77);
+        expect(nextStep?.invokeArgs?.previewRequestSha256).toBe(preview?.requestSha256);
         expect(result.cards[0]?.kind).toBe("subnet_result");
         expect(result.cards[0]?.title).toContain("service review");
         expect(result.cards[0]?.actions?.[0]?.label).toBe("Confirm service call");
+        expect((result.cards[0]?.actions?.[0]?.payload as { invokeArgs?: { previewRequestSha256?: string } } | undefined)?.invokeArgs?.previewRequestSha256).toBe(preview?.requestSha256);
         expect(result.cards[0]?.items.some((item) => item.label === "Request SHA-256")).toBe(true);
         expect(adapterCalls).toBe(0);
         expect(JSON.stringify(result)).not.toContain("BITTENSOR_IMAGE_ADAPTER_TOKEN");
@@ -608,6 +615,30 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN;
         } else {
           process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN = previousToken;
+        }
+      }
+    });
+  });
+
+  test("returns structured fallback guidance when subnet service adapter is unsupported", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      try {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        const result = await executeBittensorChatWorkflow({ message: "use subnet 77 to generate an image" });
+        const preview = result.data.preview as { supported?: boolean } | undefined;
+        const nextStep = result.data.nextStep as { type?: string; fallbackIntents?: string[] } | undefined;
+        expect(result.execution).toBe("unsupported");
+        expect(preview?.supported).toBe(false);
+        expect(result.responseText).toContain("I can still explain, compare, monitor");
+        expect(nextStep?.type).toBe("unsupported_adapter");
+        expect(nextStep?.fallbackIntents).toContain("explain");
+        expect(result.cards[0]?.kind).toBe("unsupported_adapter");
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
         }
       }
     });

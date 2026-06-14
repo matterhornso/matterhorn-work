@@ -3224,14 +3224,32 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["subnet_result"] },
       responseText: preview.supported
-        ? `Prepared a Bittensor service review for subnet ${preview.netuid}. Confirm before Matterhorn calls the configured adapter.`
-        : preview.consequenceSummary,
+        ? `Prepared a Bittensor service review for subnet ${preview.netuid}. Review the card, then confirm the exact request SHA-256 before Matterhorn calls the configured adapter.`
+        : `${preview.consequenceSummary} I can still explain, compare, monitor, and help with staking guidance for subnet ${preview.netuid}.`,
       cards: [buildBittensorInvocationPreviewCard(preview)],
-      data: { preview },
+      data: {
+        preview,
+        nextStep: preview.supported
+          ? {
+            type: "confirm_subnet_invocation",
+            prompt: preview.confirmationPrompt,
+            invokeArgs: {
+              netuid: preview.netuid,
+              intent: preview.intent,
+              task: preview.request.task,
+              ss58Address: preview.request.ss58Address,
+              previewRequestSha256: preview.requestSha256,
+            },
+          }
+          : {
+            type: "unsupported_adapter",
+            fallbackIntents: preview.adapterContract.unsupportedBehavior.fallbackIntents,
+          },
+      },
       warnings: uniqueWarnings(warnings, preview.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
-      execution: preview.supported ? "answered" : "unsupported",
+      execution: preview.supported ? "unsigned_preview" : "unsupported",
     };
   }
 
@@ -6755,6 +6773,13 @@ export function buildBittensorInvocationPreviewCard(preview: BittensorSubnetInvo
       kind: "send_to_chat",
       payload: {
         prompt: preview.confirmationPrompt,
+        invokeArgs: {
+          netuid: preview.netuid,
+          intent: preview.intent,
+          task: preview.request.task,
+          ss58Address: preview.request.ss58Address,
+          previewRequestSha256: preview.requestSha256,
+        },
         preview,
       },
     }] : [{
