@@ -82,6 +82,11 @@ export interface BittensorSubnetServiceAdapterContractValidation {
   warnings: string[];
 }
 
+export type BittensorSubnetServiceAdapterContractRuntimeSummary = Pick<
+  BittensorSubnetServiceAdapterContract,
+  "version" | "supportedIntents" | "endpointConfigured" | "requiredAuth" | "costModel" | "privacy" | "unsupportedBehavior"
+>;
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -334,6 +339,8 @@ export interface BittensorSubnetInvocation {
   result: Record<string, unknown>;
   message: string;
   warnings: string[];
+  adapterContract?: BittensorSubnetServiceAdapterContractRuntimeSummary;
+  contractValidation?: BittensorSubnetServiceAdapterContractValidation;
 }
 
 export interface BittensorSubnetInvocationPreview {
@@ -356,6 +363,8 @@ export interface BittensorSubnetInvocationPreview {
   confirmationPrompt: string;
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
+  adapterContract: BittensorSubnetServiceAdapterContractRuntimeSummary;
+  contractValidation: BittensorSubnetServiceAdapterContractValidation;
   safetyNotes: string[];
   warnings: string[];
   consequenceSummary: string;
@@ -2543,6 +2552,47 @@ export function validateBittensorSubnetServiceAdapterContract(
   return { ok: errors.length === 0, errors, warnings };
 }
 
+function summarizeSubnetServiceAdapterContract(contract: BittensorSubnetServiceAdapterContract): BittensorSubnetServiceAdapterContractRuntimeSummary {
+  return {
+    version: contract.version,
+    supportedIntents: contract.supportedIntents,
+    endpointConfigured: contract.endpointConfigured,
+    requiredAuth: contract.requiredAuth,
+    costModel: contract.costModel,
+    privacy: contract.privacy,
+    unsupportedBehavior: contract.unsupportedBehavior,
+  };
+}
+
+function evaluateSubnetServiceAdapterGate(
+  capability: BittensorCapabilityManifest,
+  configuredAdapter: BittensorConfiguredSubnetAdapter | null,
+  intent: BittensorSubnetInvocation["intent"],
+): {
+  adapterContract: BittensorSubnetServiceAdapterContractRuntimeSummary;
+  contractValidation: BittensorSubnetServiceAdapterContractValidation;
+  supported: boolean;
+  blockers: string[];
+} {
+  const contractValidation = validateBittensorSubnetServiceAdapterContract(capability.adapterContract);
+  const blockers: string[] = [];
+  const supportsIntent = capability.adapterContract.supportedIntents.includes(intent);
+
+  if (intent !== "service_call") blockers.push("Direct subnet service adapters only run for explicit service_call intents.");
+  if (!configuredAdapter || !capability.adapterStatus.configured) blockers.push("No configured subnet service adapter endpoint is available.");
+  if (capability.serviceAdapter === "unsupported") blockers.push("This subnet category does not have a direct service adapter contract yet.");
+  if (!capability.adapterContract.endpointConfigured) blockers.push("Adapter contract declares endpointConfigured=false.");
+  if (!supportsIntent) blockers.push(`Adapter contract does not declare ${intent} support.`);
+  if (!contractValidation.ok) blockers.push(...contractValidation.errors);
+
+  return {
+    adapterContract: summarizeSubnetServiceAdapterContract(capability.adapterContract),
+    contractValidation,
+    supported: blockers.length === 0,
+    blockers,
+  };
+}
+
 export function buildBittensorSubnetServiceAdapterContract(input: {
   netuid: number;
   adapter: BittensorSubnetServiceAdapterKind;
@@ -3149,7 +3199,8 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
   const configuredAdapter = getConfiguredSubnetAdapter(netuid);
   const intent = input.intent ?? "service_call";
   const ss58Address = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
-  const supported = intent === "service_call" && Boolean(configuredAdapter && capability.adapterStatus.configured && capability.serviceAdapter !== "unsupported");
+  const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
+  const supported = adapterGate.supported;
   const request = {
     netuid,
     intent,
@@ -3173,21 +3224,26 @@ export async function previewBittensorSubnetInvocation(netuid: number, input: Bi
     confirmationPrompt: `Confirm Bittensor subnet ${netuid} service call with request SHA-256 ${requestSha256}.`,
     requestSchema: capability.requestSchema,
     resultSchema: capability.resultSchema,
+    adapterContract: adapterGate.adapterContract,
+    contractValidation: adapterGate.contractValidation,
     safetyNotes: capability.safetyNotes,
     warnings: uniqueWarnings(
       capability.safetyNotes,
       supported ? [
         "Review this adapter request before invoking the subnet service.",
         "Direct service invocation may send the task text and public routing context to the configured adapter.",
+        ...adapterGate.contractValidation.warnings,
       ] : [
         `No configured ${capability.serviceAdapter.replace(/_/g, " ")} service adapter is ready for this subnet.`,
         "Matterhorn can still explain, compare, monitor, and prepare staking guidance for this subnet.",
+        ...adapterGate.blockers,
+        ...adapterGate.contractValidation.warnings,
       ],
       input.ss58Address && !ss58Address ? ["Provided wallet address was not valid SS58 and will not be sent to the adapter."] : [],
     ),
     consequenceSummary: supported
       ? `If confirmed, Matterhorn will call the configured ${configuredAdapter?.name ?? capability.serviceAdapter} adapter for ${detail.name} with the visible task and public context.`
-      : `Matterhorn cannot call ${detail.name}'s direct service yet because no supported adapter is configured.`,
+      : `${capability.adapterContract.unsupportedBehavior.message} Matterhorn will not invoke ${detail.name}'s direct service until the adapter contract passes the service-call gate.`,
     requiresConfirmation: true,
   };
 }
@@ -3238,7 +3294,8 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
   }
   if (intent === "service_call") {
     const configuredAdapter = getConfiguredSubnetAdapter(netuid);
-    if (configuredAdapter) {
+    const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
+    if (adapterGate.supported && configuredAdapter) {
       const adapterResult = await invokeConfiguredSubnetAdapter(configuredAdapter, input);
       const ok = adapterResult?.["ok"] !== false;
       return {
@@ -3260,6 +3317,8 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
           ? `Matterhorn invoked the configured ${configuredAdapter.name} adapter for ${detail.name}.`
           : `The configured ${configuredAdapter.name} adapter for ${detail.name} did not complete successfully.`,
         warnings: [...warnings, ...configuredAdapter.safetyNotes],
+        adapterContract: adapterGate.adapterContract,
+        contractValidation: adapterGate.contractValidation,
       };
     }
     return {
@@ -3267,9 +3326,17 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
       intent,
       adapter: capability.serviceAdapter,
       supported: false,
-      result: { capability, requestedTask: input.task ?? null },
-      message: `Matterhorn can explain and monitor ${detail.name}, but no direct subnet service adapter is configured yet.`,
-      warnings,
+      result: {
+        capability,
+        requestedTask: input.task ?? null,
+        adapterContract: adapterGate.adapterContract,
+        contractValidation: adapterGate.contractValidation,
+        blockers: adapterGate.blockers,
+      },
+      message: `Matterhorn can explain and monitor ${detail.name}, but it will not invoke a direct subnet service until the adapter contract passes the service-call gate.`,
+      warnings: uniqueWarnings(warnings, adapterGate.blockers, adapterGate.contractValidation.warnings),
+      adapterContract: adapterGate.adapterContract,
+      contractValidation: adapterGate.contractValidation,
     };
   }
 
@@ -5603,6 +5670,7 @@ export function buildBittensorInvocationPreviewCard(preview: BittensorSubnetInvo
       cardItem("Adapter", titleCase(preview.adapter)),
       cardItem("Configured", preview.configured ? "Yes" : "No", preview.configured ? "good" : "warning"),
       cardItem("Supported", preview.supported ? "Yes" : "No", preview.supported ? "good" : "warning"),
+      cardItem("Contract", preview.contractValidation.ok ? "Valid" : "Blocked", preview.contractValidation.ok ? "good" : "danger"),
       cardItem("Auth", titleCase(preview.requiredAuth), preview.requiredAuth === "none" ? "good" : "warning"),
       cardItem("Cost model", titleCase(preview.costModel)),
       cardItem("Task", preview.request.task ? "Included" : "Not provided", preview.request.task ? "default" : "muted"),
@@ -5640,6 +5708,9 @@ export function buildBittensorInvocationCard(invocation: BittensorSubnetInvocati
       cardItem("Intent", titleCase(invocation.intent)),
       cardItem("Adapter", titleCase(invocation.adapter)),
       cardItem("Supported", invocation.supported ? "Yes" : "No", invocation.supported ? "good" : "warning"),
+      ...(invocation.contractValidation
+        ? [cardItem("Contract", invocation.contractValidation.ok ? "Valid" : "Blocked", invocation.contractValidation.ok ? "good" : "danger")]
+        : []),
     ],
     warnings: invocation.warnings,
     data: { invocation },

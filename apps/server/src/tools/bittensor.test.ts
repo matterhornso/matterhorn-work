@@ -44,6 +44,7 @@ import {
   getBittensorSignerStatus,
   getSubtensorSidecarStatus,
   isValidSs58Address,
+  invokeBittensorSubnet,
   planBittensorChat,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
@@ -959,10 +960,61 @@ describe("capabilityFromSubnet", () => {
     expect(preview.requestJson).toContain("service_call");
     expect(preview.requestSha256).toHaveLength(64);
     expect(preview.confirmationPrompt).toContain(preview.requestSha256);
+    expect(preview.contractValidation.ok).toBe(true);
+    expect(preview.adapterContract.endpointConfigured).toBe(false);
     expect(preview.warnings.join(" ")).toContain("Matterhorn can still explain");
     const card = buildBittensorInvocationPreviewCard(preview);
     expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);
     expect(card.items.some((item) => item.label === "Cost model")).toBe(true);
+    expect(card.items.some((item) => item.label === "Contract")).toBe(true);
+  });
+
+  test("marks configured service adapter previews as supported only after contract validation", async () => {
+    const previous = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+      netuid: 14,
+      name: "Mock compute adapter",
+      serviceAdapter: "compute",
+      endpoint: "http://127.0.0.1:4040/invoke",
+      requiredAuth: "api_key",
+      authEnv: "BITTENSOR_MOCK_ADAPTER_TOKEN",
+      costModel: "provider_priced",
+      safetyNotes: ["Mock adapter safety note."],
+    }]);
+
+    try {
+      const preview = await previewBittensorSubnetInvocation(14, {
+        intent: "service_call",
+        task: "Use this subnet for a compute task.",
+        ss58Address: VALID_SS58,
+      });
+      expect(preview.supported).toBe(true);
+      expect(preview.configured).toBe(true);
+      expect(preview.contractValidation.ok).toBe(true);
+      expect(preview.adapterContract.endpointConfigured).toBe(true);
+      expect(preview.adapterContract.supportedIntents).toContain("service_call");
+      expect(preview.warnings.join(" ")).toContain("Review this adapter request");
+      expect(JSON.stringify(preview)).not.toContain("BITTENSOR_MOCK_ADAPTER_TOKEN");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previous;
+      }
+    }
+  });
+
+  test("returns unsupported behavior for service invocation when the adapter contract is not ready", async () => {
+    const invocation = await invokeBittensorSubnet(14, {
+      intent: "service_call",
+      task: "Run this compute task without a configured adapter.",
+      ss58Address: VALID_SS58,
+    });
+    expect(invocation.supported).toBe(false);
+    expect(invocation.adapterContract?.endpointConfigured).toBe(false);
+    expect(invocation.contractValidation?.ok).toBe(true);
+    expect(invocation.message).toContain("will not invoke");
+    expect(invocation.warnings.join(" ")).toContain("Adapter contract declares endpointConfigured=false");
   });
 
   test("rejects unsafe adapter contracts with secret-shaped schemas", () => {
