@@ -553,6 +553,57 @@ For lower-level MCP/API use, service calls should follow a preview-confirm-invok
 
 This keeps direct adapter execution explicit while letting Matterhorn explain unsupported subnets without pretending a service call happened.
 
+### Mock Adapter Operator Loop
+
+Use this loop to test subnet adapter behavior before any real direct subnet service is enabled.
+
+Start Matterhorn Work with mock adapters enabled in the trusted local shell:
+
+```bash
+export BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1
+export BITTENSOR_SUBNET_ADAPTERS_JSON='[
+  {
+    "netuid": 77,
+    "name": "Mock inference adapter",
+    "serviceAdapter": "inference",
+    "endpoint": "mock://inference",
+    "requiredAuth": "none",
+    "costModel": "free_read",
+    "safetyNotes": ["Mock inference adapter safety note."]
+  }
+]'
+```
+
+Preview:
+
+```bash
+matterhorn-work bittensor subnet-preview \
+  --netuid 77 \
+  --intent service_call \
+  --task "Answer this Bittensor subnet question in one sentence." \
+  --ss58-address "<public-ss58-address>" \
+  --json
+```
+
+Copy `.requestSha256` from the preview. Invoke only with the reviewed hash:
+
+```bash
+matterhorn-work bittensor subnet-invoke \
+  --netuid 77 \
+  --intent service_call \
+  --task "Answer this Bittensor subnet question in one sentence." \
+  --ss58-address "<public-ss58-address>" \
+  --preview-request-sha256 "<requestSha256-from-preview>" \
+  --json
+```
+
+Expected result:
+
+- `supported` is true only when the adapter contract gate passes;
+- the invocation refuses missing or mismatched preview hashes;
+- the result card shows adapter mode, request hash, output summary, usage, and cost;
+- `mode` is `mock`, proving no real Bittensor subnet service was called.
+
 ## 13. MCP Sequence For Bittensor Operators
 
 Ask Codex or Claude to follow this exact Bittensor sequence:
