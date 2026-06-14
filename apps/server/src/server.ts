@@ -21,6 +21,7 @@ import {
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorAdapterApprovalAuditCard,
+  buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
@@ -4117,7 +4118,7 @@ function createRoutes(
         reason: ctx.url.searchParams.get("reason"),
         ttlMinutes,
       });
-      return jsonResponse({ success: true, template });
+      return jsonResponse({ success: true, template, cards: [buildBittensorAdapterApprovalTemplateCard(template)] });
     } catch (err) {
       throw new ApiError(400, "invalid_approval_template", err instanceof Error ? err.message : "Invalid approval template request");
     }

@@ -826,7 +826,7 @@ async function bittensor_create_subnet_adapter_approval_template(args = {}) {
   if (Number.isFinite(args.ttlMinutes)) params.set("ttlMinutes", String(args.ttlMinutes));
   const query = params.toString();
   const res = await callServer(`/api/bittensor/adapters/approval-template${query ? `?${query}` : ""}`);
-  return { success: true, template: res.template };
+  return { success: true, template: res.template, cards: res.cards || [] };
 }
 
 async function bittensor_get_subnet_adapter_templates(args = {}) {

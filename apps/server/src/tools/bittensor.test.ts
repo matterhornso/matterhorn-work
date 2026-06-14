@@ -6,6 +6,7 @@ import {
   auditBittensorReadiness,
   auditBittensorSubnetAdapterRuntimeApprovals,
   buildBittensorAdapterApprovalAuditCard,
+  buildBittensorAdapterApprovalTemplateCard,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
@@ -887,7 +888,13 @@ describe("executeBittensorChatWorkflow", () => {
     expect(JSON.parse(template.env.value)[0].requestSha256).toBe("b".repeat(64));
     expect(template.warnings.join(" ")).toContain("does not invoke");
     expect(template.nextActions.join(" ")).toContain("BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1");
+    const card = buildBittensorAdapterApprovalTemplateCard(template);
+    expect(card.kind).toBe("adapter_approval_template");
+    expect(card.items.find((item) => item.label === "Request SHA-256")?.value).toBe(`${"b".repeat(12)}...`);
+    expect(card.actions?.[0]?.kind).toBe("copy_payload");
+    expect(card.actions?.[1]?.payload?.prompt).toContain("Audit Bittensor");
     expect(JSON.stringify(template)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    expect(JSON.stringify(card)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
   test("rejects approval templates for universal adapters and malformed hashes", () => {

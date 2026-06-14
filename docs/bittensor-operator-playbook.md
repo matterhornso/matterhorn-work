@@ -864,6 +864,10 @@ remove them after the canary, and run the approval audit afterwards:
 curl -s "http://localhost:8787/api/bittensor/adapters/approvals"
 ```
 
+The response includes an `adapter_approval_template` card with the adapter,
+netuid, short request hash, expiry, copy-payload action, and safe follow-up
+prompt for post-canary approval audit.
+
 ## 14. MCP Sequence For Bittensor Operators
 
 Ask Codex or Claude to follow this exact Bittensor sequence:

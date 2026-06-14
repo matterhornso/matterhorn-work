@@ -490,6 +490,12 @@ const server = createServer(async (req, res) => {
         warnings: ["This template does not invoke a subnet service."],
         nextActions: ["Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window."],
       },
+      cards: [{
+        kind: "adapter_approval_template",
+        title: "Bittensor adapter approval template",
+        items: [{ label: "Request SHA-256", value: `${requestSha256.slice(0, 12)}...` }],
+        actions: [{ label: "Copy approval JSON", kind: "copy_payload", payload: { envKey: "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON" } }],
+      }],
     }));
     return;
   }
@@ -1221,6 +1227,8 @@ try {
   assert.equal(adapterApprovalTemplatePayload.success, true);
   assert.equal(adapterApprovalTemplatePayload.template.kind, "bittensor_subnet_adapter_runtime_approval_template");
   assert.equal(adapterApprovalTemplatePayload.template.env.key, "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+  assert.equal(adapterApprovalTemplatePayload.cards[0].kind, "adapter_approval_template");
+  assert.equal(adapterApprovalTemplatePayload.cards[0].actions[0].kind, "copy_payload");
   assert.match(adapterApprovalTemplatePayload.template.warnings.join(" "), /does not invoke/i);
   assert.doesNotMatch(JSON.stringify(adapterApprovalTemplatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
