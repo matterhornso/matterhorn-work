@@ -196,6 +196,31 @@ export interface BittensorSubnetAdapterCandidateProfileReport {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterOnboardingGate {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "blocked" | "not_configured";
+  summary: string;
+  nextAction: string;
+}
+
+export interface BittensorSubnetAdapterOnboardingPlan {
+  kind: "bittensor_subnet_adapter_onboarding_plan";
+  generatedAt: string;
+  status: "ready_for_preview_review" | "needs_configuration" | "needs_conformance" | "blocked";
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  candidateProfiles: BittensorSubnetAdapterCandidateProfileReport;
+  templates: BittensorSubnetAdapterTemplateReport;
+  doctor: BittensorSubnetAdapterDoctorReport;
+  conformance: BittensorSubnetAdapterConformanceReport;
+  gates: BittensorSubnetAdapterOnboardingGate[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -1732,6 +1757,153 @@ export function getBittensorSubnetAdapterCandidateProfiles(input: {
       "Use adapter templates for config placeholders, then doctor and conformance before any invocation smoke test.",
       "Keep real subnet execution disabled until a reviewed profile has passed all gates.",
     ],
+  };
+}
+
+export async function planBittensorSubnetAdapterOnboarding(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterOnboardingPlan> {
+  const requestedAdapter = input.adapter ? normalizeServiceAdapter(input.adapter, "unsupported") : null;
+  const netuid = input.netuid !== null && input.netuid !== undefined && Number.isInteger(input.netuid) && input.netuid >= 0
+    ? input.netuid
+    : null;
+  const candidateProfiles = getBittensorSubnetAdapterCandidateProfiles({
+    adapter: requestedAdapter,
+    netuid,
+  });
+  const templates = getBittensorSubnetAdapterTemplates({
+    adapter: requestedAdapter,
+    netuid,
+  });
+  const doctor = doctorBittensorSubnetAdapters();
+  const conformance = await probeBittensorSubnetAdapterConformance({
+    netuid,
+    limit: input.limit,
+  });
+  const gates: BittensorSubnetAdapterOnboardingGate[] = [
+    {
+      id: "candidate_profile",
+      label: "Candidate profile",
+      status: candidateProfiles.profiles.length ? "pass" : "blocked",
+      summary: candidateProfiles.profiles.length
+        ? `${candidateProfiles.profiles.length} no-execution candidate profile(s) match this request.`
+        : "No candidate profile matches the requested adapter.",
+      nextAction: candidateProfiles.profiles.length
+        ? "Review target use cases, operator questions, and the no-execution canary contract."
+        : "Choose data_search or inference before configuring a real adapter endpoint.",
+    },
+    {
+      id: "config_template",
+      label: "Configuration template",
+      status: templates.templates.length ? "pass" : "blocked",
+      summary: templates.templates.length
+        ? `${templates.templates.length} sanitized config template(s) are available.`
+        : "No sanitized config template matches this request.",
+      nextAction: templates.templates.length
+        ? "Copy placeholders only; keep actual credential values outside Matterhorn."
+        : "Request a supported adapter kind before setting adapter configuration.",
+    },
+    {
+      id: "adapter_doctor",
+      label: "Adapter doctor",
+      status: !doctor.rawConfigured
+        ? "not_configured"
+        : doctor.status === "pass"
+          ? "pass"
+          : doctor.status === "warning"
+            ? "warning"
+            : "blocked",
+      summary: !doctor.rawConfigured
+        ? "No subnet service adapters are configured yet."
+        : `${doctor.readyCount} ready, ${doctor.warningCount} warning, ${doctor.blockedCount} blocked adapter entries.`,
+      nextAction: !doctor.rawConfigured
+        ? "Set BITTENSOR_SUBNET_ADAPTERS_JSON and endpoint allowlist values from a template, then rerun this plan."
+        : doctor.status === "pass"
+          ? "Keep endpoint and auth values out of user-facing payloads."
+          : "Resolve doctor warnings/errors before any preview-confirm-invoke smoke test.",
+    },
+    {
+      id: "metadata_conformance",
+      label: "Metadata conformance",
+      status: !doctor.rawConfigured
+        ? "not_configured"
+        : conformance.status === "pass"
+          ? "pass"
+          : conformance.status === "warning"
+            ? "warning"
+            : "blocked",
+      summary: !doctor.rawConfigured
+        ? "Conformance is skipped until an adapter is configured."
+        : `${conformance.passed} passed, ${conformance.failed} failed, ${conformance.skipped} skipped conformance case(s).`,
+      nextAction: !doctor.rawConfigured
+        ? "Configure an adapter metadata endpoint before probing conformance."
+        : conformance.status === "pass"
+          ? "Use the no-execution canary contract before considering a reviewed service-call smoke test."
+          : "Fix metadata version, adapter kind, safe-mode, request-hash, privacy, schema, or response-bound issues.",
+    },
+    {
+      id: "service_execution",
+      label: "Service execution",
+      status: "not_configured",
+      summary: "Real subnet service execution is intentionally out of scope for this onboarding plan.",
+      nextAction: "Use preview-confirm-invoke only after candidate, template, doctor, and conformance gates pass.",
+    },
+  ];
+  const warnings = uniqueWarnings(
+    candidateProfiles.warnings,
+    templates.warnings,
+    doctor.warnings,
+    doctor.errors,
+    conformance.warnings,
+  );
+  const status: BittensorSubnetAdapterOnboardingPlan["status"] = candidateProfiles.profiles.length === 0 || templates.templates.length === 0
+    ? "blocked"
+    : !doctor.rawConfigured
+      ? "needs_configuration"
+      : doctor.status === "fail"
+        ? "blocked"
+        : conformance.status === "fail"
+          ? "needs_conformance"
+          : doctor.status === "warning" || conformance.status === "warning"
+            ? "needs_conformance"
+            : "ready_for_preview_review";
+  const nextActions = status === "needs_configuration"
+    ? [
+      "Choose a candidate profile and copy the matching sanitized config template.",
+      "Set adapter endpoint, allowlist, and external credential env values outside Matterhorn.",
+      "Rerun onboarding after configuration; do not invoke real services yet.",
+    ]
+    : status === "needs_conformance"
+      ? [
+        "Fix metadata conformance warnings before running any preview-confirm-invoke smoke test.",
+        "Use the no-execution canary fixture only after metadata checks pass.",
+      ]
+      : status === "blocked"
+        ? [
+          "Resolve blocked candidate, template, or doctor gates before proceeding.",
+          "Keep real subnet execution disabled until every gate passes.",
+        ]
+        : [
+          "Run a reviewed preview for the no-execution canary fixture and verify the request SHA-256.",
+          "Invoke only mock adapters or explicitly reviewed canary endpoints; keep production service execution disabled.",
+        ];
+  return {
+    kind: "bittensor_subnet_adapter_onboarding_plan",
+    generatedAt: nowIso(),
+    status,
+    requested: {
+      adapter: requestedAdapter,
+      netuid,
+    },
+    candidateProfiles,
+    templates,
+    doctor,
+    conformance,
+    gates,
+    warnings,
+    nextActions,
   };
 }
 

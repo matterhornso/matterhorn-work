@@ -510,6 +510,49 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/onboarding-plan") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_onboarding_plan",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        status: "ready_for_preview_review",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        candidateProfiles: {
+          kind: "bittensor_subnet_adapter_candidate_profile_report",
+          profiles: [{ id: "candidate-data-search-v1", noExecutionCanary: { expectedMetadata: { requestHashRequired: true } } }],
+        },
+        templates: {
+          kind: "bittensor_subnet_adapter_template_report",
+          templates: [{ config: { netuid: Number(url.searchParams.get("netuid") || 14) } }],
+        },
+        doctor: {
+          kind: "bittensor_subnet_adapter_doctor",
+          status: "pass",
+          readyCount: 1,
+          warningCount: 0,
+          blockedCount: 0,
+        },
+        conformance: {
+          kind: "bittensor_subnet_adapter_conformance",
+          status: "pass",
+          passed: 1,
+          failed: 0,
+          skipped: 0,
+        },
+        gates: [
+          { id: "candidate_profile", status: "pass" },
+          { id: "service_execution", status: "not_configured" },
+        ],
+        warnings: [],
+        nextActions: ["Run a reviewed preview for the no-execution canary fixture."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
     res.end(JSON.stringify({
       success: true,
@@ -852,6 +895,7 @@ try {
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
     "bittensor_get_subnet_adapter_candidates",
+    "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
@@ -874,6 +918,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
+  assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
@@ -954,6 +999,14 @@ try {
   assert.equal(adapterCandidatePayload.report.kind, "bittensor_subnet_adapter_candidate_profile_report");
   assert.equal(adapterCandidatePayload.report.profiles[0].noExecutionCanary.expectedMetadata.requestHashRequired, true);
   assert.doesNotMatch(JSON.stringify(adapterCandidatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+
+  const adapterOnboarding = await ask({ jsonrpc: "2.0", id: 33, method: "tools/call", params: { name: "bittensor_plan_subnet_adapter_onboarding", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterOnboardingPayload = JSON.parse(adapterOnboarding.result.content[0].text);
+  assert.equal(adapterOnboardingPayload.success, true);
+  assert.equal(adapterOnboardingPayload.report.kind, "bittensor_subnet_adapter_onboarding_plan");
+  assert.equal(adapterOnboardingPayload.report.status, "ready_for_preview_review");
+  assert.equal(adapterOnboardingPayload.report.gates.find((gate) => gate.id === "service_execution").status, "not_configured");
+  assert.doesNotMatch(JSON.stringify(adapterOnboardingPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);
