@@ -913,6 +913,7 @@ export type BittensorChatCardKind =
   | "adapter_launch_gate"
   | "adapter_evidence_bundle"
   | "adapter_evidence_review"
+  | "adapter_approval_audit"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -8604,6 +8605,38 @@ export function buildBittensorAdapterEvidenceReviewCard(review: BittensorSubnetA
     }],
     warnings: review.warnings,
     data: { review },
+  };
+}
+
+export function buildBittensorAdapterApprovalAuditCard(report: BittensorSubnetAdapterRuntimeApprovalAudit): BittensorChatCard {
+  const nextPrompt = report.activeCount
+    ? "Review active Bittensor adapter request approvals and remove any stale entries."
+    : "Help me prepare a safe exact-SHA Bittensor adapter request approval after evidence review.";
+  return {
+    kind: "adapter_approval_audit",
+    title: "Bittensor adapter approval audit",
+    subtitle: titleCase(report.status),
+    summary: report.warnings[0] ?? (report.activeCount ? "Active exact request approvals are configured." : "No active request approvals are configured."),
+    tone: report.status === "pass" ? "good" : "warning",
+    items: [
+      cardItem("Configured", report.configured ? "Yes" : "No", report.configured ? "default" : "warning"),
+      cardItem("Active approvals", report.activeCount, report.activeCount ? "good" : "warning"),
+      cardItem("Expired", report.expiredCount, report.expiredCount ? "warning" : "muted"),
+      cardItem("Invalid", report.invalidCount, report.invalidCount ? "danger" : "muted"),
+      cardItem("Visible hash", report.entries[0]?.requestSha256Prefix ?? "None", report.entries[0] ? "muted" : "warning"),
+      cardItem("Checked", report.checkedAt, "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        approvalAuditStatus: report.status,
+        activeCount: report.activeCount,
+      },
+    }],
+    warnings: report.warnings,
+    data: { report },
   };
 }
 

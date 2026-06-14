@@ -455,6 +455,12 @@ const server = createServer(async (req, res) => {
         warnings: ["1 approval entry was ignored because required fields were invalid."],
         nextActions: ["Use approvals only for the exact reviewed canary request SHA-256."],
       },
+      cards: [{
+        kind: "adapter_approval_audit",
+        title: "Bittensor adapter approval audit",
+        items: [{ label: "Active approvals", value: "1" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Review active Bittensor adapter request approvals." } }],
+      }],
     }));
     return;
   }
@@ -1175,6 +1181,8 @@ try {
   assert.equal(adapterApprovalAuditPayload.report.kind, "bittensor_subnet_adapter_runtime_approval_audit");
   assert.equal(adapterApprovalAuditPayload.report.activeCount, 1);
   assert.equal(adapterApprovalAuditPayload.report.entries[0].requestSha256Prefix, "abc123abc123");
+  assert.equal(adapterApprovalAuditPayload.cards[0].kind, "adapter_approval_audit");
+  assert.equal(adapterApprovalAuditPayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterApprovalAuditPayload), /seed|mnemonic|privateKey|wallet export|[a-f0-9]{64}|super-secret-token-value/i);
 
   const adapterCandidates = await ask({ jsonrpc: "2.0", id: 32, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_candidates", arguments: { adapter: "data_search", netuid: 14 } } });

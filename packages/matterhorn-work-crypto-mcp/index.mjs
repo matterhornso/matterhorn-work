@@ -812,7 +812,7 @@ async function bittensor_doctor_subnet_adapters() {
 
 async function bittensor_audit_subnet_adapter_approvals() {
   const res = await callServer("/api/bittensor/adapters/approvals");
-  return { success: true, report: res.report };
+  return { success: true, report: res.report, cards: res.cards || [] };
 }
 
 async function bittensor_get_subnet_adapter_templates(args = {}) {
