@@ -9,6 +9,8 @@ import {
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
+  buildBittensorDecisionBrief,
+  buildBittensorDecisionBriefCard,
   buildBittensorSigningHandoffCard,
   buildBittensorSigningReceiptCard,
   buildBittensorSidecarHealthCard,
@@ -1026,6 +1028,41 @@ describe("Bittensor advanced copilot engines", () => {
     const card = buildBittensorStakingPlanCard(plan);
     expect(card.kind).toBe("intelligence_report");
     expect(JSON.stringify({ plan, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+  });
+
+  test("builds wallet decision briefs without custody fields", async () => {
+    const brief = await buildBittensorDecisionBrief({
+      message: "What should I do next with my TAO?",
+      ss58Address: VALID_SS58,
+      amountTao: "1",
+    });
+    expect(brief.kind).toBe("decision_brief");
+    expect(brief.focus).toBe("wallet");
+    expect(brief.options.some((option) => option.label === "Create risk watches")).toBe(true);
+    expect(brief.options.some((option) => option.requiresExternalSignature)).toBe(true);
+    const card = buildBittensorDecisionBriefCard(brief);
+    expect(card.kind).toBe("intelligence_report");
+    expect(card.actions?.some((action) => action.label === "Create risk watches")).toBe(true);
+    expect(JSON.stringify({ brief, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
+  });
+
+  test("routes subnet decision prompts through Bittensor chat", async () => {
+    const result = await executeBittensorChatWorkflow({
+      message: "What should I do next with Bittensor subnet 14?",
+      netuid: 14,
+      strategy: "safety",
+    });
+    expect(result.execution).toBe("answered");
+    expect(result.cards[0]?.kind).toBe("intelligence_report");
+    expect((result.data.decision as { focus?: string })?.focus).toBe("subnet");
+    expect(result.cards[0]?.actions?.some((action) => String(action.payload?.prompt ?? "").includes("Compare validators on subnet 14"))).toBe(true);
+    expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|suri/i);
+  });
+
+  test("clarifies personalized decision prompts when SS58 context is missing", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "What should I do next with my TAO?" });
+    expect(result.execution).toBe("clarification_required");
+    expect(result.clarificationQuestion).toContain("SS58 coldkey public address");
   });
 });
 

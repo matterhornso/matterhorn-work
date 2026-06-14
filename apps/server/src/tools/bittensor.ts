@@ -476,6 +476,33 @@ export interface BittensorWalletIntelligenceReport {
   updatedAt: string;
 }
 
+export interface BittensorDecisionOption {
+  label: string;
+  summary: string;
+  prompt: string;
+  priority: "now" | "next" | "later";
+  riskLevel: BittensorRiskLevel;
+  rationale: string;
+  requiresExternalSignature: boolean;
+}
+
+export interface BittensorDecisionBrief {
+  kind: "decision_brief";
+  focus: "wallet" | "subnet" | "general";
+  title: string;
+  summary: string;
+  score: number;
+  risk: BittensorRiskLevel;
+  source: string;
+  warnings: string[];
+  assumptions: string[];
+  signals: BittensorIntelligenceSignal[];
+  options: BittensorDecisionOption[];
+  watchSuggestions: BittensorWatchSuggestion[];
+  updatedAt: string;
+  related: Record<string, unknown>;
+}
+
 export type BittensorWatch = {
   id: string;
   kind: "subnet" | "wallet" | "validator" | "emissions" | "slippage";
@@ -1526,6 +1553,15 @@ function isBittensorIntelligenceQuestion(message: string): boolean {
   return /\b(analy[sz]e|analysis|intelligence|risk|health|quality|score|diagnose|weak spots?|exposure|portfolio)\b/i.test(message);
 }
 
+function isBittensorDecisionQuestion(message: string): boolean {
+  return /\b(what should i do|what do i do|next steps?|recommend(?:ation|ed)?|decide|decision|strategy|prioriti[sz]e|action plan|copilot|guide me|should i)\b/i.test(message) &&
+    /\b(bittensor|tao|subnet|netuid|validator|stake|staking|wallet|coldkey|hotkey|alpha|dtao)\b/i.test(message);
+}
+
+function decisionPromptNeedsWallet(message: string): boolean {
+  return /\b(my|wallet|portfolio|balance|coldkey|exposure|staked|where am i|my tao|positions?)\b/i.test(message);
+}
+
 function isWalletIntelligenceQuestion(message: string, plan: BittensorPlan): boolean {
   if (!isBittensorIntelligenceQuestion(message)) return false;
   return plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake exposure|exposure)\b/i.test(message);
@@ -1822,6 +1858,32 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
 
   if (!message) {
     return clarificationResult(plan, "What would you like to do with Bittensor?");
+  }
+
+  if (isBittensorDecisionQuestion(message)) {
+    const ss58Address = resolveExecutionSs58(input, plan);
+    const netuid = resolveExecutionNetuid(input, plan);
+    if (decisionPromptNeedsWallet(message) && !ss58Address && netuid === null) {
+      return clarificationResult(plan, "I can build a personalized Bittensor decision brief, but I need your SS58 coldkey public address for watch-only wallet context.");
+    }
+    const brief = await buildBittensorDecisionBrief({
+      message,
+      ss58Address,
+      netuid,
+      amountTao: extractExecutionAmountTao(input),
+      strategy: resolveExecutionStrategy(input),
+      limit: resolveExecutionLimit(input, 5),
+    });
+    return {
+      plan: { ...answeredPlan, intent: brief.focus === "wallet" ? "wallet" : brief.focus === "subnet" ? "discover" : plan.intent, responseCards: ["intelligence_report"] },
+      responseText: `${brief.summary} The first safe step is: ${brief.options[0]?.summary ?? "gather live read context before acting"}.`,
+      cards: [buildBittensorDecisionBriefCard(brief)],
+      data: { decision: brief },
+      warnings: uniqueWarnings(warnings, brief.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
   }
 
   if (plan.intent === "learn") {
@@ -3244,6 +3306,244 @@ export async function buildBittensorStakingPlan(input: {
   };
 }
 
+function riskSeverity(risk: BittensorRiskLevel): number {
+  if (risk === "high") return 3;
+  if (risk === "medium") return 2;
+  if (risk === "low") return 1;
+  return 0;
+}
+
+function highestRisk(...risks: BittensorRiskLevel[]): BittensorRiskLevel {
+  return risks.reduce((highest, risk) => riskSeverity(risk) > riskSeverity(highest) ? risk : highest, "unknown" as BittensorRiskLevel);
+}
+
+function decisionOption(input: {
+  label: string;
+  summary: string;
+  prompt: string;
+  priority: BittensorDecisionOption["priority"];
+  riskLevel: BittensorRiskLevel;
+  rationale: string;
+  requiresExternalSignature?: boolean;
+}): BittensorDecisionOption {
+  return {
+    label: input.label,
+    summary: input.summary,
+    prompt: input.prompt,
+    priority: input.priority,
+    riskLevel: input.riskLevel,
+    rationale: input.rationale,
+    requiresExternalSignature: Boolean(input.requiresExternalSignature),
+  };
+}
+
+export async function buildBittensorDecisionBrief(input: {
+  message: string;
+  ss58Address?: string | null;
+  netuid?: number | null;
+  amountTao?: string | null;
+  strategy?: BittensorValidatorComparison["strategy"] | null;
+  limit?: number | null;
+}): Promise<BittensorDecisionBrief> {
+  const strategy = normalizeValidatorStrategy(input.strategy);
+  const limit = Math.min(6, Math.max(3, Number(input.limit ?? 5) || 5));
+  const ss58Address = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
+  const netuid = Number.isInteger(input.netuid) && input.netuid !== null && input.netuid !== undefined && input.netuid >= 0 ? input.netuid : null;
+  const commonWarnings = [
+    "This is a Bittensor decision brief based on public/provider data, not financial advice.",
+    "Matterhorn does not ask for seed phrases, private keys, mnemonics, or key exports.",
+    "Any transaction-like next step must be reviewed and signed externally.",
+  ];
+
+  if (ss58Address) {
+    const wallet = await analyzeBittensorWalletIntelligence(ss58Address);
+    const topPosition = wallet.largestPositions[0] ?? null;
+    const topValidator = wallet.validatorExposure[0] ?? null;
+    const risk = highestRisk(wallet.concentrationRisk, wallet.slippageRisk, wallet.staleDataRisk);
+    const score = Math.max(0, Math.min(100, 100 - riskSeverity(risk) * 18 - Math.max(0, wallet.watchSuggestions.length - 2) * 3));
+    const options = [
+      decisionOption({
+        label: "Create risk watches",
+        summary: "Track the positions and validators most likely to need review.",
+        prompt: `Create watches for my riskiest Bittensor positions. SS58 address: ${ss58Address}`,
+        priority: "now",
+        riskLevel: "low",
+        rationale: "Watches keep the wallet context fresh without signing or custody.",
+      }),
+      ...(topPosition ? [
+        decisionOption({
+          label: "Inspect largest subnet",
+          summary: `Review subnet ${topPosition.netuid} before changing exposure.`,
+          prompt: `Analyze Bittensor subnet ${topPosition.netuid} for my current stake exposure.`,
+          priority: risk === "high" ? "now" : "next",
+          riskLevel: wallet.concentrationRisk,
+          rationale: "Largest-position concentration is the first thing to understand before preparing actions.",
+        }),
+      ] : []),
+      ...(topValidator ? [
+        decisionOption({
+          label: "Deep dive top validator",
+          summary: `Review validator ${shortSs58(topValidator.validatorHotkey)} across ${topValidator.subnetCount} subnet(s).`,
+          prompt: `Deep dive validator ${topValidator.validatorHotkey} on subnet ${topValidator.netuids[0] ?? topPosition?.netuid ?? 0}.`,
+          priority: "next",
+          riskLevel: topValidator.risk,
+          rationale: "Validator exposure can dominate wallet risk even when subnet exposure looks diversified.",
+        }),
+      ] : []),
+      decisionOption({
+        label: "Draft a safe staking plan",
+        summary: "Prepare an unsigned plan only after current exposure is understood.",
+        prompt: `Build a safety-first Bittensor staking plan for ${input.amountTao ?? "1"} TAO. Coldkey: ${ss58Address}`,
+        priority: wallet.freeTao && wallet.freeTao > 0 ? "later" : "later",
+        riskLevel: "medium",
+        rationale: "A staking plan is useful, but no funds move until the user signs externally.",
+        requiresExternalSignature: true,
+      }),
+    ];
+    return {
+      kind: "decision_brief",
+      focus: "wallet",
+      title: "Bittensor wallet decision brief",
+      summary: `Prioritized next steps for ${shortSs58(ss58Address)} using watch-only wallet intelligence across ${wallet.subnetCount} subnet(s).`,
+      score,
+      risk,
+      source: wallet.source,
+      warnings: uniqueWarnings(commonWarnings, wallet.warnings),
+      assumptions: [
+        "Public SS58 wallet reads are enough for exposure analysis.",
+        "Watches should be created before preparing or signing any transaction-like action.",
+        "Quotes and validator samples should be refreshed immediately before external signing.",
+      ],
+      signals: wallet.signals,
+      options,
+      watchSuggestions: wallet.watchSuggestions,
+      updatedAt: nowIso(),
+      related: { wallet },
+    };
+  }
+
+  if (netuid !== null) {
+    const subnet = await analyzeBittensorSubnetIntelligence(netuid);
+    const validators = await compareBittensorValidators({ netuid, strategy, limit: Math.min(4, limit) });
+    const risk = highestRisk(subnet.metagraph.concentrationRisk, subnet.metagraph.dataQuality);
+    const score = Math.round((subnet.score + (validators.candidates[0]?.score ?? 50)) / 2);
+    const topValidator = validators.candidates[0] ?? null;
+    const options = [
+      decisionOption({
+        label: "Create subnet watches",
+        summary: "Track emissions, slippage, and subnet state before acting.",
+        prompt: `Create watches for Bittensor subnet ${netuid}.`,
+        priority: "now",
+        riskLevel: "low",
+        rationale: "Subnet watches preserve context and catch stale data before a staking preview.",
+      }),
+      decisionOption({
+        label: "Compare validators",
+        summary: `Rank validator candidates on subnet ${netuid} with a ${strategy} strategy.`,
+        prompt: `Compare validators on subnet ${netuid} with a ${strategy} strategy.`,
+        priority: "now",
+        riskLevel: subnet.metagraph.dataQuality,
+        rationale: "Validator context is required before any staking preview should be trusted.",
+      }),
+      ...(topValidator?.hotkey ? [
+        decisionOption({
+          label: "Prepare unsigned preview",
+          summary: `Prepare, but do not sign, a small preview for ${shortSs58(topValidator.hotkey)}.`,
+          prompt: `Prepare staking ${input.amountTao ?? "1"} TAO on subnet ${netuid} to validator ${topValidator.hotkey}.`,
+          priority: "later",
+          riskLevel: "medium",
+          rationale: "Unsigned preview shows fees/slippage/consequences while keeping signing external.",
+          requiresExternalSignature: true,
+        }),
+      ] : []),
+    ];
+    return {
+      kind: "decision_brief",
+      focus: "subnet",
+      title: "Bittensor subnet decision brief",
+      summary: `Prioritized next steps for subnet ${netuid} (${subnet.name}) using public subnet and validator intelligence.`,
+      score,
+      risk,
+      source: subnet.market.source,
+      warnings: uniqueWarnings(commonWarnings, subnet.warnings, validators.warnings),
+      assumptions: [
+        `Use ${strategy} validator scoring until the user chooses another strategy.`,
+        "Provider samples may omit validators; verify externally before signing.",
+        "Service execution is separate from staking and still depends on subnet adapter availability.",
+      ],
+      signals: subnet.signals,
+      options,
+      watchSuggestions: subnet.watchSuggestions,
+      updatedAt: nowIso(),
+      related: { subnet, validators },
+    };
+  }
+
+  const goal = extractStakingPlanGoal(input.message) || "Bittensor work";
+  const discovery = await findBittensorSubnetsForGoal({ goal, limit });
+  const first = discovery.matches[0] ?? null;
+  const options = [
+    decisionOption({
+      label: "Pick a subnet lane",
+      summary: first ? `Start by inspecting ${first.subnet.name} (subnet ${first.subnet.netuid}).` : "Start with subnet discovery before staking or service use.",
+      prompt: first
+        ? `Analyze Bittensor subnet ${first.subnet.netuid} and explain whether it fits this goal: ${goal}.`
+        : `Find Bittensor subnets useful for: ${goal}.`,
+      priority: "now",
+      riskLevel: first?.subnet.source === "curated-fallback" ? "medium" : "low",
+      rationale: "Choosing a capability lane first prevents mixing up staking exposure with using a subnet service.",
+    }),
+    decisionOption({
+      label: "Add wallet context",
+      summary: "Use a public SS58 coldkey address to get personalized exposure.",
+      prompt: "Analyze my Bittensor wallet. SS58 address: ",
+      priority: "next",
+      riskLevel: "low",
+      rationale: "A public address enables watch-only balance/stake analysis without custody.",
+    }),
+    decisionOption({
+      label: "Run readiness check",
+      summary: "Check sidecar, provider, signer, and safety readiness before advanced actions.",
+      prompt: "Run a Bittensor readiness check.",
+      priority: "next",
+      riskLevel: "low",
+      rationale: "Readiness distinguishes live data from fallback data before users trust the workflow.",
+    }),
+  ];
+  return {
+    kind: "decision_brief",
+    focus: "general",
+    title: "Bittensor decision brief",
+    summary: `Prioritized a safe path for "${goal}" from discovery toward watch-only context and unsigned previews.`,
+    score: first ? Math.max(45, Math.min(85, first.score)) : 40,
+    risk: first?.subnet.source === "curated-fallback" ? "medium" : "low",
+    source: discovery.source,
+    warnings: uniqueWarnings(commonWarnings, discovery.warnings),
+    assumptions: [
+      "Start with discovery when no wallet address or subnet is supplied.",
+      "Wallet personalization requires only a public SS58 address.",
+      "Direct subnet service use still depends on adapter availability.",
+    ],
+    signals: discovery.matches.slice(0, 3).map((match) => ({
+      label: `Subnet ${match.subnet.netuid}`,
+      value: `${match.subnet.name}: ${match.score}/100`,
+      tone: match.subnet.source === "curated-fallback" ? "warning" : "default",
+      explanation: match.reasons[0] ?? "Goal-based subnet match.",
+    })),
+    options,
+    watchSuggestions: first ? [
+      watchSuggestion({
+        kind: "subnet",
+        label: `Watch ${first.subnet.name}`,
+        netuid: first.subnet.netuid,
+        reason: "Track the first subnet candidate while evaluating fit.",
+      }),
+    ] : [],
+    updatedAt: nowIso(),
+    related: { discovery },
+  };
+}
+
 function riskFromShare(share: number | null): BittensorRiskLevel {
   if (share === null || !Number.isFinite(share)) return "unknown";
   if (share >= 0.5) return "high";
@@ -4470,6 +4770,41 @@ export function buildBittensorStakingPlanCard(plan: BittensorStakingPlan): Bitte
     })),
     warnings: plan.warnings,
     data: { plan },
+  };
+}
+
+export function buildBittensorDecisionBriefCard(brief: BittensorDecisionBrief): BittensorChatCard {
+  const nowOptions = brief.options.filter((option) => option.priority === "now").length;
+  const signingOptions = brief.options.filter((option) => option.requiresExternalSignature).length;
+  return {
+    kind: "intelligence_report",
+    title: brief.title,
+    subtitle: `${titleCase(brief.focus)} focus · ${brief.score}/100`,
+    summary: brief.summary,
+    tone: brief.risk === "high" ? "warning" : "default",
+    items: [
+      cardItem("Focus", titleCase(brief.focus)),
+      cardItem("Decision score", `${brief.score}/100`, brief.score >= 75 ? "good" : brief.score >= 50 ? "warning" : "danger"),
+      cardItem("Risk", brief.risk, riskTone(brief.risk)),
+      cardItem("Source", brief.source, brief.source.includes("fallback") ? "warning" : "muted"),
+      cardItem("Do now", nowOptions),
+      cardItem("Options", brief.options.length),
+      cardItem("External signing", signingOptions ? `${signingOptions} later option(s)` : "Not required for first step", signingOptions ? "warning" : "good"),
+      cardItem("Watch suggestions", brief.watchSuggestions.length),
+    ],
+    actions: brief.options.slice(0, 4).map((option) => ({
+      label: option.label,
+      kind: "send_to_chat",
+      payload: {
+        prompt: option.prompt,
+        reason: option.rationale,
+        priority: option.priority,
+        riskLevel: option.riskLevel,
+        requiresExternalSignature: option.requiresExternalSignature,
+      },
+    })),
+    warnings: brief.warnings,
+    data: { brief },
   };
 }
 
