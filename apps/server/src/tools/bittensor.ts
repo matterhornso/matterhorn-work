@@ -289,6 +289,24 @@ export interface BittensorSubnetAdapterEvidenceBundle {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterEvidenceExport {
+  kind: "bittensor_subnet_adapter_evidence_export";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  summary: {
+    onboardingStatus: BittensorSubnetAdapterOnboardingPlan["status"];
+    launchGateStatus: BittensorSubnetAdapterLaunchGateReport["status"];
+    requiredArtifactCount: number;
+    warningCount: number;
+    nextActionCount: number;
+  };
+  markdown: string;
+  warnings: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -2246,6 +2264,94 @@ export async function buildBittensorSubnetAdapterEvidenceBundle(input: {
       "Run mock dry-run and metadata conformance before manual real-adapter review.",
       "Require exact preview request SHA-256 confirmation for any future canary invocation.",
     ],
+  };
+}
+
+function sanitizeEvidenceMarkdownText(value: string | number | boolean | null | undefined): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
+    .replace(/\b(gh[pousr]|xox[baprs]|sk|pk)_[A-Za-z0-9_=-]{8,}\b/g, "[redacted-token]")
+    .replace(/\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSPHRASE|KEYFILE|SURI)[A-Z0-9_]*)=([^\s]+)/gi, "$1=[redacted]")
+    .trim();
+}
+
+function markdownBullet(value: string | number | boolean | null | undefined): string {
+  const sanitized = sanitizeEvidenceMarkdownText(value);
+  return sanitized ? `- ${sanitized}` : "- Not available";
+}
+
+export function renderBittensorSubnetAdapterEvidenceMarkdown(bundle: BittensorSubnetAdapterEvidenceBundle): string {
+  const adapter = bundle.requested.adapter ?? "not specified";
+  const netuid = bundle.requested.netuid === null ? "not specified" : String(bundle.requested.netuid);
+  const requiredArtifacts = bundle.requiredArtifacts.map((artifact) => {
+    const required = artifact.requiredBeforeRealCanary ? "required" : "optional";
+    return `- [${required}] ${sanitizeEvidenceMarkdownText(artifact.label)} (${artifact.source})`;
+  });
+  const reviewItems = bundle.canaryReview.reviewItems.map((item) => {
+    const required = item.required ? "required" : "optional";
+    const blocker = item.blockerIfMissing ? "blocker if missing" : "not a blocker";
+    return `- ${sanitizeEvidenceMarkdownText(item.label)}: ${required}, ${blocker}. Evidence: ${sanitizeEvidenceMarkdownText(item.evidence)}`;
+  });
+
+  return [
+    "# Bittensor Subnet Adapter Evidence Export",
+    "",
+    `Generated: ${sanitizeEvidenceMarkdownText(bundle.generatedAt)}`,
+    `Adapter: ${sanitizeEvidenceMarkdownText(adapter)}`,
+    `Netuid: ${sanitizeEvidenceMarkdownText(netuid)}`,
+    "",
+    "## Status",
+    markdownBullet(`Onboarding: ${bundle.onboarding.status}`),
+    markdownBullet(`Launch gate: ${bundle.launchGate.status}`),
+    markdownBullet(`Ready mock adapters: ${bundle.launchGate.readyMockCount}`),
+    markdownBullet(`Ready real adapters: ${bundle.launchGate.readyRealCount}`),
+    markdownBullet(`Blocked adapters: ${bundle.launchGate.blockedCount}`),
+    "",
+    "## Required Artifacts",
+    ...(requiredArtifacts.length ? requiredArtifacts : ["- No artifacts listed"]),
+    "",
+    "## Canary Review Checklist",
+    ...(reviewItems.length ? reviewItems : ["- No review items listed"]),
+    "",
+    "## Stop Conditions",
+    ...bundle.canaryReview.stopConditions.map(markdownBullet),
+    "",
+    "## Warnings",
+    ...bundle.exportWarnings.map(markdownBullet),
+    "",
+    "## Next Actions",
+    ...bundle.nextActions.map(markdownBullet),
+    "",
+    "## Safety Boundary",
+    "- This export is evidence for review only. It does not authorize real subnet service execution.",
+    "- Do not include credential values, recovery phrases, signing material, wallet backup files, host tokens, or private user data in review notes.",
+    "- A future real canary still requires a separate explicit preview, exact request SHA-256 confirmation, and operator approval.",
+    "",
+  ].join("\n");
+}
+
+export async function buildBittensorSubnetAdapterEvidenceExport(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterEvidenceExport> {
+  const report = await buildBittensorSubnetAdapterEvidenceBundle(input);
+  return {
+    kind: "bittensor_subnet_adapter_evidence_export",
+    generatedAt: nowIso(),
+    requested: report.requested,
+    summary: {
+      onboardingStatus: report.onboarding.status,
+      launchGateStatus: report.launchGate.status,
+      requiredArtifactCount: report.requiredArtifacts.length,
+      warningCount: report.exportWarnings.length,
+      nextActionCount: report.nextActions.length,
+    },
+    markdown: renderBittensorSubnetAdapterEvidenceMarkdown(report),
+    warnings: report.exportWarnings,
   };
 }
 

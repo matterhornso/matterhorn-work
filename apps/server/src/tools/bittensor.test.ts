@@ -31,6 +31,7 @@ import {
   buildBittensorSubnetServiceAdapterContract,
   buildBittensorSubnetServiceAdapterContractTestFixtures,
   buildBittensorSubnetAdapterEvidenceBundle,
+  buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1282,6 +1283,19 @@ describe("executeBittensorChatWorkflow", () => {
     expect(card.items.find((item) => item.label === "Required artifacts")?.value).toBe(String(bundle.requiredArtifacts.length));
     expect(card.actions?.[0]?.payload?.prompt).toContain("evidence bundle");
     expect(JSON.stringify(bundle)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+  });
+
+  test("exports adapter evidence as redacted review markdown", async () => {
+    const evidenceExport = await buildBittensorSubnetAdapterEvidenceExport({ adapter: "data_search", netuid: 18 });
+    expect(evidenceExport.kind).toBe("bittensor_subnet_adapter_evidence_export");
+    expect(evidenceExport.summary.requiredArtifactCount).toBeGreaterThan(0);
+    expect(evidenceExport.summary.launchGateStatus).toBe("blocked");
+    expect(evidenceExport.markdown).toContain("# Bittensor Subnet Adapter Evidence Export");
+    expect(evidenceExport.markdown).toContain("Launch gate:");
+    expect(evidenceExport.markdown).toContain("This export is evidence for review only");
+    expect(evidenceExport.markdown).toContain("request SHA-256 confirmation");
+    expect(evidenceExport.warnings.join(" ")).toContain("does not authorize real subnet service execution");
+    expect(JSON.stringify(evidenceExport)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
   test("builds one safe adapter onboarding plan before real execution", async () => {

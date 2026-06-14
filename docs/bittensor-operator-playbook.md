@@ -623,6 +623,22 @@ bittensor_get_subnet_adapter_evidence_bundle({
 })
 ```
 
+For a copy-pasteable redacted review packet, export the same evidence as markdown. This remains evidence only; it does not authorize or invoke subnet services:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/evidence-export?adapter=data_search&netuid=77" \
+  | jq -r '.evidenceExport.markdown'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_export_subnet_adapter_evidence({
+  "adapter": "data_search",
+  "netuid": 77
+})
+```
+
 Use lower-level candidate profiles when you want to inspect only the no-execution canary contract. This describes the adapter category, required gates, canary fixture, forbidden field classes, and operator questions before any provider endpoint is configured:
 
 ```bash
