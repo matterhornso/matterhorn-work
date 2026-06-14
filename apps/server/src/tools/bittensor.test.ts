@@ -9,6 +9,8 @@ import {
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
+  buildBittensorReadinessOperatorCard,
+  buildBittensorReadinessOperatorReport,
   buildBittensorDecisionBrief,
   buildBittensorDecisionBriefCard,
   buildBittensorWatchPolicyPreset,
@@ -1115,7 +1117,21 @@ describe("auditBittensorReadiness", () => {
     expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
     const card = buildBittensorReadinessCard(report);
     expect(card.kind).toBe("readiness_report");
-    expect(JSON.stringify({ report, card })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+    const operatorReport = buildBittensorReadinessOperatorReport(report);
+    expect(operatorReport.kind).toBe("readiness_operator_report");
+    expect(operatorReport.operatorPrompts.length).toBeGreaterThan(0);
+    const operatorCard = buildBittensorReadinessOperatorCard(operatorReport);
+    expect(operatorCard.kind).toBe("readiness_report");
+    expect(operatorCard.actions?.some((action) => action.kind === "send_to_chat")).toBe(true);
+    expect(JSON.stringify({ report, card, operatorReport, operatorCard })).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
+  });
+
+  test("routes readiness prompts through Bittensor chat", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "Run a Bittensor readiness operator report." });
+    expect(result.execution).toBe("answered");
+    expect(result.cards[0]?.kind).toBe("readiness_report");
+    expect((result.data.operatorReport as { kind?: string })?.kind).toBe("readiness_operator_report");
+    expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
   });
 });
 
