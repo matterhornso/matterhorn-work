@@ -730,6 +730,60 @@ Returns one subnet capability manifest by `netuid`.
 }
 ```
 
+### `POST /api/bittensor/subnets/:netuid/preview`
+
+Auth: `client`
+
+Previews a direct subnet service adapter request. This route does not call the adapter. It returns the canonical request JSON and `requestSha256` that must be reviewed before invocation.
+
+```json
+{
+  "intent": "service_call",
+  "task": "Answer this Bittensor subnet question in one sentence.",
+  "ss58Address": "<public-ss58-address>"
+}
+```
+
+Important response fields:
+
+```json
+{
+  "supported": true,
+  "requestSha256": "<reviewed-request-hash>",
+  "adapterContract": {
+    "endpointConfigured": true,
+    "supportedIntents": ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"]
+  },
+  "contractValidation": {
+    "ok": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+```
+
+### `POST /api/bittensor/subnets/:netuid/invoke`
+
+Auth: `client`
+
+Invokes a configured direct subnet service adapter only after preview review. The request must include the exact preview hash as `previewRequestSha256` or `reviewedRequestSha256`.
+
+```json
+{
+  "intent": "service_call",
+  "task": "Answer this Bittensor subnet question in one sentence.",
+  "ss58Address": "<public-ss58-address>",
+  "previewRequestSha256": "<requestSha256-from-preview>"
+}
+```
+
+Expected behavior:
+
+- missing or mismatched preview hashes return `supported: false`;
+- unconfigured adapters return unsupported behavior instead of pretending a service call happened;
+- successful adapter calls return a standardized runner envelope with `mode`, `adapterKind`, `requestSha256`, `output`, `warnings`, `usage`, and `costEstimate`;
+- mock adapters require `BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1` and never call a real Bittensor subnet service.
+
 ## Not Yet Stable
 
 Browser control and desktop UI automation are not part of this HTTP contract yet. Session event streaming is documented in [Matterhorn Work Session Event Stream Contract](./agent-session-event-stream.md), and MCP clients can use `matterhorn_watch_session_events` when they need bounded progress events instead of polling only.
