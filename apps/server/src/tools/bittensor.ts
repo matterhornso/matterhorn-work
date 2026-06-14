@@ -916,6 +916,7 @@ export type BittensorChatCardKind =
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
+  | "adapter_manifest_validation"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -1297,6 +1298,29 @@ export interface BittensorSubnetAdapterSpec {
     hardMaxBytes: number;
   };
   safetyNotes: string[];
+  nextActions: string[];
+}
+
+export interface BittensorSubnetAdapterManifestValidation {
+  kind: "bittensor_subnet_adapter_manifest_validation";
+  checkedAt: string;
+  status: "pass" | "warning" | "fail";
+  manifest: {
+    version: string | null;
+    name: string | null;
+    netuid: number | null;
+    serviceAdapter: BittensorSubnetServiceAdapterKind;
+    supportedIntents: BittensorSubnetServiceIntent[];
+    safeModeRequired: boolean | null;
+    requestHashRequired: boolean | null;
+    maxResponseBytes: number | null;
+    healthStatus: string | null;
+  };
+  contract: BittensorSubnetServiceAdapterContract;
+  contractValidation: BittensorSubnetServiceAdapterContractValidation;
+  serviceCallReady: boolean;
+  errors: string[];
+  warnings: string[];
   nextActions: string[];
 }
 
@@ -2903,6 +2927,150 @@ export function getBittensorSubnetAdapterSpec(): BittensorSubnetAdapterSpec {
       "Use mock dry-runs before manual real-adapter canary review.",
       "Use canary packets and short-lived exact request approvals for reviewed real canaries only.",
     ],
+  };
+}
+
+function booleanField(record: Record<string, unknown>, keys: string[]): boolean | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string" && /^(true|false)$/i.test(value.trim())) return value.trim().toLowerCase() === "true";
+  }
+  return null;
+}
+
+function stringArrayField(record: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.trim()).map((item) => item.trim());
+  }
+  return [];
+}
+
+function normalizeSubnetServiceIntentList(value: string[]): BittensorSubnetServiceIntent[] {
+  const allowed: BittensorSubnetServiceIntent[] = ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"];
+  return value.filter((item): item is BittensorSubnetServiceIntent => allowed.includes(item as BittensorSubnetServiceIntent));
+}
+
+function directSubnetAdapterKind(adapter: BittensorSubnetServiceAdapterKind): adapter is Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported"> {
+  return adapter === "data_search" || adapter === "inference" || adapter === "compute" || adapter === "creative_media" || adapter === "agent_tooling";
+}
+
+export function validateBittensorSubnetAdapterManifest(manifestInput: unknown): BittensorSubnetAdapterManifestValidation {
+  const checkedAt = nowIso();
+  const record = asRecord(manifestInput);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (!Object.keys(record).length) errors.push("Adapter manifest must be a JSON object.");
+
+  const version = firstString(record, ["version"]);
+  const name = firstString(record, ["name"]);
+  const netuid = firstNumber(record, ["netuid", "net_uid", "subnet"]);
+  const serviceAdapter = normalizeServiceAdapter(record["serviceAdapter"] ?? record["adapter"], "unsupported");
+  const rawIntents = stringArrayField(record, ["supportedIntents", "supported_intents", "intents"]);
+  const supportedIntents = normalizeSubnetServiceIntentList(rawIntents);
+  const safeModeRequired = booleanField(record, ["safeModeRequired", "safe_mode_required"]);
+  const requestHashRequired = booleanField(record, ["requestHashRequired", "request_hash_required"]);
+  const maxResponseBytes = firstNumber(record, ["maxResponseBytes", "max_response_bytes"]);
+  const healthStatus = firstString(record, ["healthStatus", "health_status"]);
+  const requiredAuth = normalizeRequiredAuth(record["requiredAuth"] ?? record["required_auth"]);
+  const costModel = normalizeCostModel(record["costModel"] ?? record["cost_model"]);
+  const endpointConfigured = booleanField(record, ["endpointConfigured", "endpoint_configured"]) ?? false;
+  const timeoutMs = firstNumber(record, ["timeoutMs", "timeout_ms"]);
+  const privacy = asRecord(record["privacy"]);
+  const safetyNotes = stringArrayField(record, ["safetyNotes", "safety_notes"]);
+  const requestSchema = asRecord(record["requestSchema"] ?? record["request_schema"]);
+  const resultSchema = asRecord(record["resultSchema"] ?? record["result_schema"]);
+
+  if (version !== "matterhorn.bittensor.adapter.v1") errors.push("version must equal matterhorn.bittensor.adapter.v1.");
+  if (netuid === null || !Number.isInteger(netuid) || netuid < 0) errors.push("netuid must be a non-negative integer.");
+  if (!directSubnetAdapterKind(serviceAdapter)) errors.push("serviceAdapter must be one of data_search, inference, compute, creative_media, or agent_tooling.");
+  if (!rawIntents.length) errors.push("supportedIntents must be a non-empty array.");
+  if (rawIntents.length !== supportedIntents.length) errors.push("supportedIntents contains unsupported intent values.");
+  if (!supportedIntents.includes("service_call")) errors.push("supportedIntents must include service_call for direct subnet service use.");
+  if (safeModeRequired !== true) errors.push("safeModeRequired must be true.");
+  if (requestHashRequired !== true) errors.push("requestHashRequired must be true.");
+  if (maxResponseBytes === null || !Number.isInteger(maxResponseBytes) || maxResponseBytes < 1) {
+    errors.push("maxResponseBytes must be a positive integer.");
+  } else if (maxResponseBytes > getBittensorSubnetAdapterSpec().responseLimits.hardMaxBytes) {
+    errors.push(`maxResponseBytes must not exceed ${getBittensorSubnetAdapterSpec().responseLimits.hardMaxBytes}.`);
+  } else if (maxResponseBytes > getBittensorSubnetAdapterSpec().responseLimits.defaultMaxBytes) {
+    warnings.push("maxResponseBytes is above Matterhorn's default response limit; operator review should confirm UI rendering and storage impact.");
+  }
+  if (healthStatus !== "ok" && healthStatus !== "degraded" && healthStatus !== "unavailable") {
+    errors.push("healthStatus must be ok, degraded, or unavailable.");
+  } else if (healthStatus !== "ok") {
+    warnings.push(`Adapter healthStatus is ${healthStatus}; do not use it for real canaries until health is ok.`);
+  }
+  if (privacy["sendsWalletData"] !== false) errors.push("privacy.sendsWalletData must be false.");
+  if (privacy["sendsKeyMaterial"] !== false) errors.push("privacy.sendsKeyMaterial must be false.");
+  if (secretFieldPath(record)) errors.push(`Adapter manifest contains a secret-shaped field at ${secretFieldPath(record)}.`);
+  if (!safetyNotes.length) warnings.push("Adapter manifest should include safetyNotes for operator review.");
+  if (!Object.keys(requestSchema).length) warnings.push("Adapter manifest should include a requestSchema.");
+  if (!Object.keys(resultSchema).length) warnings.push("Adapter manifest should include a resultSchema.");
+
+  const contract: BittensorSubnetServiceAdapterContract = {
+    version: (version === "matterhorn.bittensor.adapter.v1" ? version : "matterhorn.bittensor.adapter.v1"),
+    netuid: netuid ?? -1,
+    adapter: serviceAdapter,
+    capabilityLevel: endpointConfigured && directSubnetAdapterKind(serviceAdapter) ? "adapter_ready" : "adapter_required",
+    supportedIntents,
+    endpointConfigured,
+    requiredAuth,
+    costModel,
+    timeoutMs,
+    requestSchema,
+    resultSchema,
+    privacy: {
+      sendsTaskText: privacy["sendsTaskText"] === true,
+      sendsSs58Address: privacy["sendsSs58Address"] === true,
+      sendsWalletData: privacy["sendsWalletData"] as false,
+      sendsKeyMaterial: privacy["sendsKeyMaterial"] as false,
+    },
+    safetyNotes,
+    unsupportedBehavior: {
+      status: endpointConfigured ? "explain_and_monitor_only" : "adapter_missing",
+      message: endpointConfigured
+        ? "Adapter manifest is ready for preview, conformance, and manual canary gates."
+        : "Adapter manifest is valid for planning, but no endpoint is configured yet.",
+      fallbackIntents: ["explain", "metagraph", "stake_guidance", "wallet_guidance"],
+    },
+  };
+  const contractValidation = validateBittensorSubnetServiceAdapterContract(contract);
+  const allErrors = uniqueWarnings(errors, contractValidation.errors);
+  const allWarnings = uniqueWarnings(warnings, contractValidation.warnings);
+  const serviceCallReady = contractServiceCallReady(contract, contractValidation) && allErrors.length === 0;
+  const status: BittensorSubnetAdapterManifestValidation["status"] = allErrors.length ? "fail" : allWarnings.length ? "warning" : "pass";
+
+  return {
+    kind: "bittensor_subnet_adapter_manifest_validation",
+    checkedAt,
+    status,
+    manifest: {
+      version,
+      name,
+      netuid,
+      serviceAdapter,
+      supportedIntents,
+      safeModeRequired,
+      requestHashRequired,
+      maxResponseBytes,
+      healthStatus,
+    },
+    contract,
+    contractValidation,
+    serviceCallReady,
+    errors: allErrors,
+    warnings: allWarnings,
+    nextActions: serviceCallReady
+      ? [
+        "Run metadata conformance against the configured endpoint without sending task text or wallet data.",
+        "Run mock dry-run and canary packet review before any real adapter canary.",
+      ]
+      : [
+        "Fix manifest errors before configuring or invoking any subnet adapter.",
+        "Keep unsupported behavior active until the manifest, conformance, dry-run, and canary gates pass.",
+      ],
   };
 }
 
@@ -9058,6 +9226,41 @@ export function buildBittensorAdapterCanaryOperatorPacketCard(packet: BittensorS
     actions,
     warnings: packet.warnings,
     data: { packet },
+  };
+}
+
+export function buildBittensorAdapterManifestValidationCard(validation: BittensorSubnetAdapterManifestValidation): BittensorChatCard {
+  const prompt = validation.serviceCallReady
+    ? "Run Bittensor subnet adapter metadata conformance for this validated manifest."
+    : "Help me fix this Bittensor subnet adapter manifest before configuring an endpoint.";
+  return {
+    kind: "adapter_manifest_validation",
+    title: "Bittensor adapter manifest validation",
+    subtitle: titleCase(validation.status),
+    summary: validation.errors[0] ?? validation.warnings[0] ?? "Adapter manifest satisfies Matterhorn's no-execution adapter contract checks.",
+    tone: validation.status === "pass" ? "good" : validation.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Adapter", validation.manifest.serviceAdapter),
+      cardItem("Netuid", validation.manifest.netuid ?? "Missing", validation.manifest.netuid === null ? "danger" : "default"),
+      cardItem("Service call", validation.serviceCallReady ? "Ready" : "Blocked", validation.serviceCallReady ? "good" : "danger"),
+      cardItem("Safe mode", validation.manifest.safeModeRequired === true ? "Required" : "Missing", validation.manifest.safeModeRequired === true ? "good" : "danger"),
+      cardItem("Request hash", validation.manifest.requestHashRequired === true ? "Required" : "Missing", validation.manifest.requestHashRequired === true ? "good" : "danger"),
+      cardItem("Max response", validation.manifest.maxResponseBytes ?? "Missing", validation.manifest.maxResponseBytes === null ? "danger" : "default"),
+      cardItem("Health", validation.manifest.healthStatus ?? "Missing", validation.manifest.healthStatus === "ok" ? "good" : validation.manifest.healthStatus ? "warning" : "danger"),
+      cardItem("Contract", validation.contractValidation.ok ? "Valid" : "Blocked", validation.contractValidation.ok ? "good" : "danger"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt,
+        netuid: validation.manifest.netuid,
+        serviceAdapter: validation.manifest.serviceAdapter,
+        validationStatus: validation.status,
+      },
+    }],
+    warnings: uniqueWarnings(validation.errors, validation.warnings),
+    data: { validation },
   };
 }
 

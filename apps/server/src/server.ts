@@ -23,6 +23,7 @@ import {
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
+  buildBittensorAdapterManifestValidationCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
@@ -84,6 +85,7 @@ import {
   reviewBittensorSubnetAdapterEvidence,
   runBittensorSubnetAdapterDryRun,
   submitSignedBittensorExtrinsic,
+  validateBittensorSubnetAdapterManifest,
   type BittensorActionQuoteInput,
   type BittensorChatExecutionInput,
   type BittensorExtrinsicAction,
@@ -4098,6 +4100,13 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/adapters/spec", "client", async () => {
     return jsonResponse({ success: true, spec: getBittensorSubnetAdapterSpec() });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/adapters/spec/validate", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const manifest = body.manifest && typeof body.manifest === "object" ? body.manifest : body;
+    const validation = validateBittensorSubnetAdapterManifest(manifest);
+    return jsonResponse({ success: validation.status !== "fail", validation, cards: [buildBittensorAdapterManifestValidationCard(validation)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
