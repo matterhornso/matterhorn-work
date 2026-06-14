@@ -36,6 +36,7 @@ import {
   capabilityFromSubnet,
   buildBittensorStakingPlan,
   compareBittensorValidators,
+  checkBittensorSubnetAdapterLaunchGate,
   checkSubtensorSidecarHealth,
   createBittensorSigningHandoff,
   createBittensorSigningReceipt,
@@ -1278,6 +1279,63 @@ describe("executeBittensorChatWorkflow", () => {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       } else {
         process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("blocks adapter launch gate before configuration", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const report = await checkBittensorSubnetAdapterLaunchGate({ adapter: "data_search", netuid: 18 });
+      expect(report.kind).toBe("bittensor_subnet_adapter_launch_gate");
+      expect(report.status).toBe("blocked");
+      expect(report.readyMockCount).toBe(0);
+      expect(report.readyRealCount).toBe(0);
+      expect(report.requirements.find((requirement) => requirement.id === "user_confirmation")?.status).toBe("manual_review");
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("marks launch gate mock-ready without enabling real adapters", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 18,
+        name: "Mock data-search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "mock://data-search",
+        metadataEndpoint: "mock://data-search/metadata",
+        requiredAuth: "none",
+        costModel: "free_read",
+        timeoutMs: 5000,
+        safetyNotes: ["Mock adapter for launch rehearsal only."],
+      }]);
+      const report = await checkBittensorSubnetAdapterLaunchGate({ adapter: "data_search", netuid: 18 });
+      expect(report.status).toBe("mock_ready");
+      expect(report.readyMockCount).toBe(1);
+      expect(report.readyRealCount).toBe(0);
+      expect(report.requirements.find((requirement) => requirement.id === "real_adapter_review")?.status).toBe("not_configured");
+      expect(report.nextActions.join(" ")).toContain("mock adapter dry-run");
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
       }
     }
   });
