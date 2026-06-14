@@ -794,6 +794,38 @@ bittensor_validate_subnet_adapter_manifest({
 
 Treat `status=fail` as a hard stop. Fix manifest errors before configuring endpoints, running conformance, building canary packets, or asking an operator for a real-adapter review.
 
+Validate sample result envelopes before using them as canary evidence. This is also no-execution: it checks a supplied JSON object for size, renderability, request-hash auditability, and obvious secret leakage.
+
+```bash
+curl -s -X POST "http://localhost:8787/api/bittensor/adapters/result/validate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "result": {
+      "mode": "mock",
+      "requestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "output": "Bounded adapter output.",
+      "warnings": [],
+      "usage": { "inputTokens": 12, "outputTokens": 8 },
+      "costEstimate": { "amount": 0, "currency": "TAO" }
+    }
+  }'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_validate_subnet_adapter_result({
+  "result": {
+    "mode": "mock",
+    "requestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "output": "Bounded adapter output.",
+    "warnings": []
+  }
+})
+```
+
+Treat `status=fail` as a hard stop for canary evidence and chat rendering. Fix result envelope errors before asking for a real-adapter review.
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/templates?adapter=data_search&netuid=77"
 ```
@@ -1046,14 +1078,15 @@ Use the Matterhorn Work MCP server for Bittensor.
 19. Before writing adapter code, call `bittensor_get_subnet_adapter_spec` to inspect metadata fields, forbidden fields, response limits, and preview-confirm-invoke rules.
 20. To start from a known-safe shape, call `bittensor_get_subnet_adapter_manifest_examples` and copy one example as a draft only.
 21. Validate the proposed metadata with `bittensor_validate_subnet_adapter_manifest`; treat `status=fail` as a hard stop before endpoint setup.
-22. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-23. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-24. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-25. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-26. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-27. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-28. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-29. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+22. Validate sample adapter results with `bittensor_validate_subnet_adapter_result` before using them in canary evidence or chat rendering.
+23. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+24. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+25. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+26. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+27. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+28. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+29. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+30. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like

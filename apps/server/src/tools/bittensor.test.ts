@@ -9,6 +9,7 @@ import {
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorAdapterManifestValidationCard,
+  buildBittensorAdapterResultValidationCard,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
@@ -82,6 +83,7 @@ import {
   TaoAppBittensorProvider,
   validateBittensorSubnetServiceAdapterContract,
   validateBittensorSubnetAdapterManifest,
+  validateBittensorSubnetAdapterResult,
 } from "./bittensor.js";
 
 process.env.BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE = "1";
@@ -1600,6 +1602,40 @@ describe("executeBittensorChatWorkflow", () => {
     expect(card.kind).toBe("adapter_manifest_validation");
     expect(card.tone).toBe("good");
     expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue/i);
+  });
+
+  test("validates safe adapter result envelopes before canary review", () => {
+    const validation = validateBittensorSubnetAdapterResult({
+      mode: "mock",
+      requestSha256: "c".repeat(64),
+      output: "Here is a bounded adapter result.",
+      warnings: [],
+      usage: { inputTokens: 12, outputTokens: 8 },
+      costEstimate: { amount: 0, currency: "TAO" },
+    });
+    expect(validation.kind).toBe("bittensor_subnet_adapter_result_validation");
+    expect(validation.status).toBe("pass");
+    expect(validation.summary.requestSha256Prefix).toBe("c".repeat(12));
+    expect(validation.summary.outputPresent).toBe(true);
+    const card = buildBittensorAdapterResultValidationCard(validation);
+    expect(card.kind).toBe("adapter_result_validation");
+    expect(card.tone).toBe("good");
+    expect(card.items.find((item) => item.label === "Output")?.value).toBe("Present");
+  });
+
+  test("blocks adapter result envelopes that leak secret-shaped fields or values", () => {
+    const validation = validateBittensorSubnetAdapterResult({
+      mode: "https",
+      requestSha256: "c".repeat(64),
+      output: "-----BEGIN PRIVATE KEY-----",
+      warnings: [],
+      privateKey: "do-not-return",
+    });
+    expect(validation.status).toBe("fail");
+    expect(validation.errors.join(" ")).toContain("secret-shaped field");
+    expect(validation.errors.join(" ")).toContain("secret-shaped value");
+    const card = buildBittensorAdapterResultValidationCard(validation);
+    expect(card.tone).toBe("danger");
   });
 
   test("returns real adapter onboarding templates without credential values", () => {
