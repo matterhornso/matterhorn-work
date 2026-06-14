@@ -1199,14 +1199,75 @@ function invokeMockSubnetAdapter(
   requestSha256: string,
 ): BittensorSubnetAdapterRunResult {
   const task = input.task?.trim() || "No task text provided.";
-  if (adapter.endpoint !== "mock://data-search" || adapter.serviceAdapter !== "data_search") {
+  if (adapter.endpoint === "mock://data-search" && adapter.serviceAdapter === "data_search") {
+    return {
+      ok: true,
+      mode: "mock",
+      adapterKind: "data_search",
+      netuid: adapter.netuid,
+      requestSha256,
+      message: "Mock data-search adapter returned deterministic fixture results.",
+      output: {
+        query: task,
+        results: [{
+          title: "Mock Bittensor data-search result",
+          summary: `Deterministic mock result for: ${task}`,
+          source: "matterhorn-mock-subnet-adapter",
+          confidence: "fixture",
+        }],
+      },
+      warnings: [
+        "Mock adapter result only; no real Bittensor subnet service was called.",
+        "Use this path to test preview, confirmation, result rendering, and safety behavior before adding real adapters.",
+      ],
+      usage: {
+        units: 1,
+        label: "mock_request",
+      },
+      costEstimate: {
+        amount: 0,
+        currency: "TAO",
+        model: adapter.costModel,
+      },
+    };
+  }
+  if (adapter.endpoint === "mock://inference" && adapter.serviceAdapter === "inference") {
+    return {
+      ok: true,
+      mode: "mock",
+      adapterKind: "inference",
+      netuid: adapter.netuid,
+      requestSha256,
+      message: "Mock inference adapter returned a deterministic fixture response.",
+      output: {
+        prompt: task,
+        completion: `Mock inference response for: ${task}`,
+        model: "matterhorn-mock-inference-v0",
+        confidence: "fixture",
+      },
+      warnings: [
+        "Mock inference result only; no real Bittensor subnet service was called.",
+        "Use this path to test prompt handling, confirmation, result rendering, and safety behavior before adding real inference adapters.",
+      ],
+      usage: {
+        units: Math.max(1, Math.ceil(task.length / 12)),
+        label: "mock_tokens",
+      },
+      costEstimate: {
+        amount: 0,
+        currency: "TAO",
+        model: adapter.costModel,
+      },
+    };
+  }
+  if (isMockSubnetAdapterEndpoint(adapter.endpoint)) {
     return {
       ok: false,
       mode: "mock",
       adapterKind: adapter.serviceAdapter,
       netuid: adapter.netuid,
       requestSha256,
-      message: "Only mock://data-search is supported by the current mock subnet service adapter.",
+      message: "Unsupported mock subnet service adapter endpoint.",
       output: null,
       warnings: ["No real Bittensor subnet service was called."],
       usage: null,
@@ -1214,34 +1275,16 @@ function invokeMockSubnetAdapter(
     };
   }
   return {
-    ok: true,
+    ok: false,
     mode: "mock",
-    adapterKind: "data_search",
+    adapterKind: adapter.serviceAdapter,
     netuid: adapter.netuid,
     requestSha256,
-    message: "Mock data-search adapter returned deterministic fixture results.",
-    output: {
-      query: task,
-      results: [{
-        title: "Mock Bittensor data-search result",
-        summary: `Deterministic mock result for: ${task}`,
-        source: "matterhorn-mock-subnet-adapter",
-        confidence: "fixture",
-      }],
-    },
-    warnings: [
-      "Mock adapter result only; no real Bittensor subnet service was called.",
-      "Use this path to test preview, confirmation, result rendering, and safety behavior before adding real adapters.",
-    ],
-    usage: {
-      units: 1,
-      label: "mock_request",
-    },
-    costEstimate: {
-      amount: 0,
-      currency: "TAO",
-      model: adapter.costModel,
-    },
+    message: "Unsupported mock subnet service adapter endpoint.",
+    output: null,
+    warnings: ["No real Bittensor subnet service was called."],
+    usage: null,
+    costEstimate: null,
   };
 }
 

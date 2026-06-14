@@ -783,6 +783,71 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("runs the mock inference adapter through the same reviewed-hash runner path", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      const task = "Answer this Bittensor subnet question in one sentence.";
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock inference adapter",
+        serviceAdapter: "inference",
+        endpoint: "mock://inference",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock inference adapter safety note."],
+      }]);
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        expect(preview.supported).toBe(true);
+        expect(preview.adapter).toBe("inference");
+        expect(preview.adapterContract.supportedIntents).toContain("service_call");
+
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const output = invocation.result.output as {
+          ok?: boolean;
+          mode?: string;
+          adapterKind?: string;
+          output?: { completion?: string; model?: string };
+          usage?: { units?: number | null; label?: string | null } | null;
+          costEstimate?: { amount?: number | null; currency?: string | null } | null;
+        } | undefined;
+        expect(invocation.supported).toBe(true);
+        expect(invocation.adapter).toBe("inference");
+        expect(output?.ok).toBe(true);
+        expect(output?.mode).toBe("mock");
+        expect(output?.adapterKind).toBe("inference");
+        expect(output?.output?.completion).toContain("Mock inference response");
+        expect(output?.output?.model).toBe("matterhorn-mock-inference-v0");
+        expect(output?.usage?.label).toBe("mock_tokens");
+        expect(output?.costEstimate?.amount).toBe(0);
+        expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
   test("compares validators on a requested subnet", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });

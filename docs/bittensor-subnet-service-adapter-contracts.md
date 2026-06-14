@@ -132,9 +132,9 @@ Harness reports are sanitized. They report readiness, validation errors, warning
 
 ## Mock Data-Search Adapter
 
-The first direct-service adapter path is a mock-only data-search adapter. It exists to prove the full preview, confirmation, invocation, and result-rendering loop without calling any real subnet service.
+The first direct-service adapter paths are mock-only adapters. They exist to prove the full preview, confirmation, invocation, and result-rendering loop without calling any real subnet service.
 
-Enable it explicitly:
+Enable data-search explicitly:
 
 ```bash
 export BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1
@@ -151,12 +151,31 @@ export BITTENSOR_SUBNET_ADAPTERS_JSON='[
 ]'
 ```
 
+Enable inference explicitly:
+
+```bash
+export BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1
+export BITTENSOR_SUBNET_ADAPTERS_JSON='[
+  {
+    "netuid": 77,
+    "name": "Mock inference adapter",
+    "serviceAdapter": "inference",
+    "endpoint": "mock://inference",
+    "requiredAuth": "none",
+    "costModel": "free_read",
+    "safetyNotes": ["Mock inference adapter safety note."]
+  }
+]'
+```
+
 Expected behavior:
 
 - without `BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1`, `mock://` adapters are ignored and the subnet remains unsupported for direct service calls;
 - with the flag enabled, preview returns a request SHA-256;
 - invocation refuses to run unless `reviewedRequestSha256` matches the preview hash;
-- successful invocation returns a standardized adapter runner envelope with `mode: "mock"`, `adapterKind: "data_search"`, `requestSha256`, `output`, `warnings`, `usage`, and `costEstimate`;
+- successful invocation returns a standardized adapter runner envelope with `mode: "mock"`, `adapterKind`, `requestSha256`, `output`, `warnings`, `usage`, and `costEstimate`;
+- `mock://data-search` returns deterministic fixture search results;
+- `mock://inference` returns a deterministic fixture completion with model `matterhorn-mock-inference-v0`;
 - no real Bittensor subnet service is called.
 
 ## Adapter Runner Envelope
