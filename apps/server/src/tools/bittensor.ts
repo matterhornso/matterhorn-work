@@ -267,6 +267,23 @@ export interface BittensorSigningReceipt {
   updatedAt: string;
 }
 
+export interface BittensorSigningSafetyCheck {
+  label: string;
+  status: "pass" | "warning" | "fail";
+  summary: string;
+}
+
+export interface BittensorSigningSafetyChecklist {
+  kind: "signing_safety_checklist";
+  status: "pass" | "warning" | "fail";
+  previewAction: BittensorExtrinsicAction;
+  network: BittensorSignerStatus["network"];
+  checks: BittensorSigningSafetyCheck[];
+  warnings: string[];
+  nextActions: string[];
+  consequenceSummary: string;
+}
+
 export interface BittensorSubnetInvocation {
   netuid: number;
   intent: "explain" | "metagraph" | "stake_guidance" | "wallet_guidance" | "service_call";
@@ -2309,12 +2326,13 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       destination,
       rateTolerance: input.rateTolerance ?? null,
     });
+    const signingSafety = buildBittensorSigningSafetyChecklist(preview);
     return {
       plan: { ...answeredPlan, intent: "stake_plan", responseCards: ["signed_action_review"] },
       responseText: `${preview.consequenceSummary} This is unsigned and requires external signing before anything can move.`,
-      cards: [buildBittensorExtrinsicPreviewCard(preview)],
-      data: { preview },
-      warnings: uniqueWarnings(warnings, preview.warnings),
+      cards: [buildBittensorExtrinsicPreviewCard(preview), buildBittensorSigningSafetyChecklistCard(signingSafety)],
+      data: { preview, signingSafety },
+      warnings: uniqueWarnings(warnings, preview.warnings, signingSafety.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "unsigned_preview",
@@ -2863,6 +2881,88 @@ export function createBittensorSigningReceipt(input: {
     nextActions,
     createdAt,
     updatedAt,
+  };
+}
+
+function signingCheck(label: string, status: BittensorSigningSafetyCheck["status"], summary: string): BittensorSigningSafetyCheck {
+  return { label, status, summary };
+}
+
+function signingChecklistStatus(checks: BittensorSigningSafetyCheck[]): BittensorSigningSafetyChecklist["status"] {
+  if (checks.some((check) => check.status === "fail")) return "fail";
+  if (checks.some((check) => check.status === "warning")) return "warning";
+  return "pass";
+}
+
+export function buildBittensorSigningSafetyChecklist(preview: BittensorExtrinsicPreview): BittensorSigningSafetyChecklist {
+  const forbiddenPayloadPath = secretFieldPath(preview.unsignedPayload);
+  const needsSubnet = preview.action !== "transfer";
+  const needsHotkey = preview.action === "stake" || preview.action === "unstake";
+  const needsDestination = preview.action === "transfer";
+  const checks: BittensorSigningSafetyCheck[] = [
+    signingCheck(
+      "External signature",
+      preview.requiresExternalSignature && preview.signer.canSign === false ? "pass" : "fail",
+      preview.requiresExternalSignature
+        ? "Matterhorn will not sign this payload; the user must sign externally."
+        : "Preview did not require external signing.",
+    ),
+    signingCheck(
+      "No key material",
+      forbiddenPayloadPath ? "fail" : "pass",
+      forbiddenPayloadPath
+        ? `Unsigned payload contains a forbidden signing-material field at ${forbiddenPayloadPath}.`
+        : "Unsigned payload contains only public routing/action fields.",
+    ),
+    signingCheck(
+      "Subnet context",
+      needsSubnet && preview.netuid === null ? "warning" : "pass",
+      needsSubnet
+        ? preview.netuid === null ? "Subnet netuid is missing; rebuild the preview before signing." : `Subnet ${preview.netuid} is explicit.`
+        : "Transfer previews do not require a subnet netuid.",
+    ),
+    signingCheck(
+      "Validator or destination",
+      needsHotkey && !preview.hotkey ? "warning" : needsDestination && !preview.destination ? "warning" : "pass",
+      needsHotkey
+        ? preview.hotkey ? `Validator hotkey ${shortSs58(preview.hotkey)} is explicit.` : "Validator hotkey is missing; do not sign until it is explicit."
+        : needsDestination
+          ? preview.destination ? `Destination ${shortSs58(preview.destination)} is explicit.` : "Destination is missing; do not sign until it is explicit."
+          : "This action does not require validator or destination context.",
+    ),
+    signingCheck(
+      "Amount",
+      preview.amountTao && preview.amountTao > 0 ? "pass" : "warning",
+      preview.amountTao && preview.amountTao > 0 ? `${formatMetric(preview.amountTao)} TAO is explicit.` : "Amount is unavailable; rebuild the preview before signing.",
+    ),
+    signingCheck(
+      "Fee and slippage visibility",
+      preview.feeTao === null && preview.slippageBps === null ? "warning" : "pass",
+      preview.feeTao === null && preview.slippageBps === null
+        ? "Fee and slippage are unavailable; refresh with a live provider before signing."
+        : "Fee or slippage context is present; still refresh immediately before external signing.",
+    ),
+  ];
+  const status = signingChecklistStatus(checks);
+  return {
+    kind: "signing_safety_checklist",
+    status,
+    previewAction: preview.action,
+    network: preview.network,
+    checks,
+    warnings: uniqueWarnings(
+      preview.warnings,
+      checks.filter((check) => check.status !== "pass").map((check) => `${check.label}: ${check.summary}`),
+      ["Final signing must happen in an external Bittensor-compatible signer."],
+    ),
+    nextActions: status === "fail"
+      ? ["Do not sign. Rebuild the preview after removing blocker fields."]
+      : [
+        "Compare the action, amount, subnet, validator/destination, and payload hash in the external signer.",
+        "Refresh the quote if fee, Dynamic TAO price, slippage, or provider freshness is stale.",
+        "Sign externally only after the signer shows the same consequence you expect.",
+      ],
+    consequenceSummary: preview.consequenceSummary,
   };
 }
 
@@ -5196,6 +5296,38 @@ export function buildBittensorExtrinsicPreviewCard(preview: BittensorExtrinsicPr
     }],
     warnings: preview.warnings,
     data: { preview },
+  };
+}
+
+export function buildBittensorSigningSafetyChecklistCard(checklist: BittensorSigningSafetyChecklist): BittensorChatCard {
+  const passed = checklist.checks.filter((check) => check.status === "pass").length;
+  const warnings = checklist.checks.filter((check) => check.status === "warning").length;
+  const failed = checklist.checks.filter((check) => check.status === "fail").length;
+  return {
+    kind: "signed_action_review",
+    title: "External signing safety checklist",
+    subtitle: `${titleCase(checklist.previewAction)} · ${checklist.network}`,
+    summary: checklist.consequenceSummary,
+    tone: checklist.status === "pass" ? "good" : checklist.status === "warning" ? "warning" : "danger",
+    items: [
+      cardItem("Passed", passed, passed ? "good" : "muted"),
+      cardItem("Warnings", warnings, warnings ? "warning" : "muted"),
+      cardItem("Failed", failed, failed ? "danger" : "muted"),
+      cardItem("External signer", "Required", "warning"),
+      cardItem("First check", checklist.checks[0]?.summary ?? "Unavailable", checklist.checks[0]?.status === "pass" ? "good" : checklist.checks[0]?.status ?? "muted"),
+    ],
+    actions: [{
+      label: checklist.status === "fail" ? "Rebuild preview" : "Create signing handoff",
+      kind: "send_to_chat",
+      payload: {
+        prompt: checklist.status === "fail"
+          ? `Rebuild the unsigned Bittensor ${checklist.previewAction} preview with complete safe context.`
+          : "Create signing handoff for this unsigned Bittensor preview.",
+        status: checklist.status,
+      },
+    }],
+    warnings: checklist.warnings,
+    data: { checklist },
   };
 }
 
