@@ -4,6 +4,7 @@ import {
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
+  buildBittensorAdapterOnboardingCard,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationPreviewCard,
   buildBittensorInvocationCard,
@@ -1267,6 +1268,11 @@ describe("executeBittensorChatWorkflow", () => {
       expect(plan.gates.find((gate) => gate.id === "service_execution")?.status).toBe("not_configured");
       expect(plan.nextActions.join(" ")).toContain("do not invoke real services yet");
       expect(JSON.stringify(plan)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+      const card = buildBittensorAdapterOnboardingCard(plan);
+      expect(card.kind).toBe("adapter_onboarding");
+      expect(card.items.find((item) => item.label === "Not configured")?.value).toBe("3");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("without enabling real execution");
+      expect(JSON.stringify(card)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
     } finally {
       if (previousAdapters === undefined) {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;

@@ -804,6 +804,7 @@ export type BittensorChatCardKind =
   | "signing_handoff"
   | "unsupported_adapter"
   | "readiness_report"
+  | "adapter_onboarding"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -7760,6 +7761,51 @@ export function buildBittensorReadinessCard(report: BittensorReadinessReport): B
     ],
     warnings: [...report.blockers, ...report.warnings],
     data: { report },
+  };
+}
+
+export function buildBittensorAdapterOnboardingCard(plan: BittensorSubnetAdapterOnboardingPlan): BittensorChatCard {
+  const passed = plan.gates.filter((gate) => gate.status === "pass").length;
+  const warning = plan.gates.filter((gate) => gate.status === "warning").length;
+  const blocked = plan.gates.filter((gate) => gate.status === "blocked").length;
+  const notConfigured = plan.gates.filter((gate) => gate.status === "not_configured").length;
+  const nextPrompt = plan.status === "needs_configuration"
+    ? `Help me configure a ${plan.requested.adapter ?? "Bittensor"} subnet adapter${plan.requested.netuid === null ? "" : ` for subnet ${plan.requested.netuid}`} without enabling real execution.`
+    : plan.status === "needs_conformance"
+      ? `Review Bittensor subnet adapter conformance issues${plan.requested.netuid === null ? "" : ` for subnet ${plan.requested.netuid}`}.`
+      : plan.status === "ready_for_preview_review"
+        ? `Prepare a reviewed no-execution canary preview${plan.requested.netuid === null ? "" : ` for subnet ${plan.requested.netuid}`}.`
+        : "Review blocked Bittensor subnet adapter onboarding gates.";
+  return {
+    kind: "adapter_onboarding",
+    title: "Bittensor adapter onboarding",
+    subtitle: titleCase(plan.status),
+    summary: plan.nextActions[0] ?? "Review adapter onboarding gates before any direct subnet service execution.",
+    tone: plan.status === "ready_for_preview_review" ? "good" : plan.status === "blocked" ? "danger" : "warning",
+    items: [
+      cardItem("Adapter", plan.requested.adapter ?? "Any"),
+      cardItem("Netuid", plan.requested.netuid ?? "Any", plan.requested.netuid === null ? "muted" : "default"),
+      cardItem("Profiles", plan.candidateProfiles.profiles.length, plan.candidateProfiles.profiles.length ? "good" : "danger"),
+      cardItem("Templates", plan.templates.templates.length, plan.templates.templates.length ? "good" : "danger"),
+      cardItem("Doctor", titleCase(plan.doctor.status), plan.doctor.status === "pass" ? "good" : plan.doctor.status === "warning" ? "warning" : "danger"),
+      cardItem("Conformance", titleCase(plan.conformance.status), plan.conformance.status === "pass" ? "good" : plan.conformance.status === "warning" ? "warning" : "danger"),
+      cardItem("Passed gates", passed, passed ? "good" : "muted"),
+      cardItem("Warnings", warning, warning ? "warning" : "muted"),
+      cardItem("Blocked", blocked, blocked ? "danger" : "muted"),
+      cardItem("Not configured", notConfigured, notConfigured ? "warning" : "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        adapter: plan.requested.adapter,
+        netuid: plan.requested.netuid,
+        onboardingStatus: plan.status,
+      },
+    }],
+    warnings: plan.warnings,
+    data: { plan },
   };
 }
 

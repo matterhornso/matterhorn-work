@@ -563,6 +563,8 @@ Start with the combined onboarding plan. This gives an agent or operator the can
 curl -s "http://localhost:8787/api/bittensor/adapters/onboarding-plan?adapter=data_search&netuid=77"
 ```
 
+The response also includes an `adapter_onboarding` chat card with gate counts and a `send_to_chat` continuation action for the next safe step.
+
 Equivalent MCP tool:
 
 ```text
