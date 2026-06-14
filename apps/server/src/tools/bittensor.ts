@@ -914,6 +914,7 @@ export type BittensorChatCardKind =
   | "adapter_evidence_bundle"
   | "adapter_evidence_review"
   | "adapter_approval_audit"
+  | "adapter_approval_template"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -8706,6 +8707,50 @@ export function buildBittensorAdapterApprovalAuditCard(report: BittensorSubnetAd
     }],
     warnings: report.warnings,
     data: { report },
+  };
+}
+
+export function buildBittensorAdapterApprovalTemplateCard(template: BittensorSubnetAdapterRuntimeApprovalTemplate): BittensorChatCard {
+  return {
+    kind: "adapter_approval_template",
+    title: "Bittensor adapter approval template",
+    subtitle: `${template.approval.serviceAdapter} · subnet ${template.approval.netuid}`,
+    summary: "Short-lived exact request approval template generated for a reviewed canary. This does not invoke or authorize a subnet service until an operator deliberately configures it.",
+    tone: "warning",
+    items: [
+      cardItem("Adapter", template.approval.serviceAdapter),
+      cardItem("Netuid", template.approval.netuid),
+      cardItem("Request SHA-256", `${template.approval.requestSha256.slice(0, 12)}...`, "muted"),
+      cardItem("Approved by", template.approval.approvedBy || "operator"),
+      cardItem("Expires", template.approval.expiresAt ?? "Unset", template.approval.expiresAt ? "warning" : "danger"),
+      cardItem("Env key", template.env.key, "muted"),
+    ],
+    actions: [{
+      label: "Copy approval JSON",
+      kind: "copy_payload",
+      payload: {
+        envKey: template.env.key,
+        envValue: template.env.value,
+      },
+    }, {
+      label: "Audit approvals after canary",
+      kind: "send_to_chat",
+      payload: {
+        prompt: "Audit Bittensor subnet adapter request approvals and remove stale entries.",
+        netuid: template.approval.netuid,
+        serviceAdapter: template.approval.serviceAdapter,
+      },
+    }],
+    warnings: template.warnings,
+    data: {
+      template: {
+        ...template,
+        approval: {
+          ...template.approval,
+          requestSha256: template.approval.requestSha256,
+        },
+      },
+    },
   };
 }
 
