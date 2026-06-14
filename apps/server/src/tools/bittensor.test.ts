@@ -857,6 +857,169 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("refuses subnet adapter invocation when the reviewed hash belongs to different task text", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock inference adapter",
+        serviceAdapter: "inference",
+        endpoint: "mock://inference",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock inference adapter safety note."],
+      }]);
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task: "Original reviewed prompt.",
+          ss58Address: VALID_SS58,
+        });
+        const tampered = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task: "Changed prompt after review.",
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        expect(tampered.supported).toBe(false);
+        expect(tampered.message).toContain("reviewed request SHA-256");
+        expect(tampered.result.receivedRequestSha256).toBe(preview.requestSha256);
+        expect(tampered.result.expectedRequestSha256).not.toBe(preview.requestSha256);
+        expect(JSON.stringify(tampered)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
+  test("fails closed for unsupported mock adapter endpoints after review", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Unsupported mock adapter",
+        serviceAdapter: "inference",
+        endpoint: "mock://unsupported",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Unsupported mock adapter safety note."],
+      }]);
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task: "Try unsupported mock adapter.",
+          ss58Address: VALID_SS58,
+        });
+        expect(preview.supported).toBe(true);
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task: "Try unsupported mock adapter.",
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const output = invocation.result.output as { ok?: boolean; mode?: string; message?: string } | undefined;
+        expect(invocation.supported).toBe(false);
+        expect(output?.ok).toBe(false);
+        expect(output?.mode).toBe("mock");
+        expect(output?.message).toContain("Unsupported mock subnet service adapter endpoint");
+        expect(invocation.warnings.join(" ")).toContain("Unsupported mock adapter safety note");
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
+  test("uses HTTP adapter auth without exposing auth env names or token values", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousToken = process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+      const sidecarFetch = globalThis.fetch;
+      process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "adapter-token";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "HTTP inference adapter",
+        serviceAdapter: "inference",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "api_key",
+        authEnv: "BITTENSOR_HTTP_ADAPTER_TOKEN",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTP inference adapter safety note."],
+      }]);
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://adapter.invalid")) {
+          const headers = init?.headers as Headers | Record<string, string> | undefined;
+          const authorization = headers instanceof Headers ? headers.get("Authorization") : headers?.Authorization;
+          expect(authorization).toBe("Bearer adapter-token");
+          return new Response(JSON.stringify({
+            ok: true,
+            message: "HTTP auth fixture response.",
+            result: { answer: "authorized" },
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return sidecarFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task: "Use HTTP auth adapter safely.",
+          ss58Address: VALID_SS58,
+        });
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task: "Use HTTP auth adapter safely.",
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        expect(invocation.supported).toBe(true);
+        const serialized = JSON.stringify({ preview, invocation });
+        expect(serialized).not.toContain("adapter-token");
+        expect(serialized).not.toContain("BITTENSOR_HTTP_ADAPTER_TOKEN");
+        expect(serialized).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+      } finally {
+        globalThis.fetch = sidecarFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousToken === undefined) {
+          delete process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+        } else {
+          process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = previousToken;
+        }
+      }
+    });
+  });
+
   test("compares validators on a requested subnet", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
