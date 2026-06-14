@@ -660,6 +660,22 @@ Use lower-level candidate profiles when you want to inspect only the no-executio
 
 Real HTTPS or loopback HTTP subnet service adapters are blocked by default even when endpoint allowlists and credentials are configured. Mock adapters remain the only runnable adapter path unless `BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1` is explicitly set after evidence review and operator approval.
 
+That flag is only the outer lock. Each real adapter invocation also requires `BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON` to include the exact preview request SHA-256 for the adapter and netuid:
+
+```json
+[
+  {
+    "netuid": 77,
+    "serviceAdapter": "data_search",
+    "requestSha256": "<preview-request-sha256>",
+    "approvedBy": "operator",
+    "approvedAt": "2026-06-09T00:00:00.000Z",
+    "expiresAt": "2026-06-09T01:00:00.000Z",
+    "reason": "Reviewed canary fixture and rollback plan."
+  }
+]
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/candidates?adapter=data_search&netuid=77"
 ```
