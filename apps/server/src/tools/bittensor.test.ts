@@ -39,6 +39,7 @@ import {
   createBittensorSigningHandoff,
   createBittensorSigningReceipt,
   createBittensorWatch,
+  doctorBittensorSubnetAdapters,
   evaluateBittensorWatch,
   executeBittensorChatWorkflow,
   getConfiguredSubnetAdapter,
@@ -1018,6 +1019,150 @@ describe("executeBittensorChatWorkflow", () => {
         }
       }
     });
+  });
+
+  test("reports adapter doctor warning when no subnet service adapters are configured", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const report = doctorBittensorSubnetAdapters();
+      expect(report.kind).toBe("bittensor_subnet_adapter_doctor");
+      expect(report.status).toBe("warning");
+      expect(report.rawConfigured).toBe(false);
+      expect(report.entries).toHaveLength(0);
+      expect(report.warnings.join(" ")).toContain("No subnet service adapters are configured");
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("marks enabled mock subnet adapters as ready without exposing secret-shaped fields", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock data-search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "mock://data-search",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock adapter safety note."],
+      }]);
+      const report = doctorBittensorSubnetAdapters();
+      expect(report.status).toBe("pass");
+      expect(report.readyCount).toBe(1);
+      expect(report.entries[0]?.status).toBe("ready");
+      expect(report.entries[0]?.endpoint.mode).toBe("mock");
+      expect(report.entries[0]?.serviceCallReady).toBe(true);
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("blocks unsafe subnet adapter schemas and non-allowlisted HTTPS endpoints", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Unsafe inference adapter",
+        serviceAdapter: "inference",
+        endpoint: "https://adapter.invalid/invoke?token=do-not-return",
+        requiredAuth: "none",
+        costModel: "provider_priced",
+        requestSchema: {
+          type: "object",
+          properties: {
+            task: { type: "string" },
+            privateKey: { type: "string" },
+          },
+        },
+        safetyNotes: ["Unsafe adapter should be blocked."],
+      }]);
+      const report = doctorBittensorSubnetAdapters();
+      expect(report.status).toBe("fail");
+      expect(report.blockedCount).toBe(1);
+      expect(report.entries[0]?.endpoint.origin).toBe("https://adapter.invalid");
+      expect(report.entries[0]?.endpoint.allowed).toBe(false);
+      expect(report.entries[0]?.errors.join(" ")).toContain("Request schema contains a secret-shaped field");
+      const serialized = JSON.stringify(report);
+      expect(serialized).not.toContain("do-not-return");
+      expect(serialized).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+      }
+    }
+  });
+
+  test("validates HTTPS adapter allowlist and auth readiness without returning env names or token values", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+    const previousToken = process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+      process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "adapter-token";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "HTTPS inference adapter",
+        serviceAdapter: "inference",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "api_key",
+        authEnv: "BITTENSOR_HTTP_ADAPTER_TOKEN",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTPS adapter safety note."],
+      }]);
+      const report = doctorBittensorSubnetAdapters();
+      expect(report.status).toBe("pass");
+      expect(report.readyCount).toBe(1);
+      expect(report.entries[0]?.endpoint.allowed).toBe(true);
+      expect(report.entries[0]?.auth.envConfigured).toBe(true);
+      expect(report.entries[0]?.auth.credentialPresent).toBe(true);
+      const serialized = JSON.stringify(report);
+      expect(serialized).not.toContain("BITTENSOR_HTTP_ADAPTER_TOKEN");
+      expect(serialized).not.toContain("adapter-token");
+      expect(serialized).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+      }
+      if (previousToken === undefined) {
+        delete process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+      } else {
+        process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = previousToken;
+      }
+    }
   });
 
   test("compares validators on a requested subnet", async () => {

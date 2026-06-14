@@ -574,6 +574,20 @@ export BITTENSOR_SUBNET_ADAPTERS_JSON='[
 ]'
 ```
 
+Run the adapter doctor before previewing anything:
+
+```bash
+curl -s http://localhost:8787/api/bittensor/adapters/doctor
+```
+
+Expected doctor behavior:
+
+- configured mock adapters are `ready` only when `BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1`;
+- real HTTPS adapters are blocked until their host or origin is listed in `BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST`;
+- loopback HTTP adapters are blocked unless `BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS=1`;
+- API-key adapters report whether a credential is present without returning the env var name or token value;
+- request/result schemas with seed, mnemonic, private key, wallet export, or similar fields are blocked.
+
 Preview:
 
 ```bash

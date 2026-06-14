@@ -395,6 +395,42 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/doctor") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_doctor",
+        status: "pass",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        rawConfigured: true,
+        rawEntryCount: 1,
+        readyCount: 1,
+        warningCount: 0,
+        blockedCount: 0,
+        entries: [{
+          index: 0,
+          status: "ready",
+          netuid: 14,
+          name: "Mock compute adapter",
+          serviceAdapter: "compute",
+          requiredAuth: "none",
+          costModel: "free_read",
+          timeoutMs: 20000,
+          endpoint: { configured: true, mode: "mock", origin: "mock://compute", host: "compute", allowed: true, reason: "Mock adapter endpoint is enabled." },
+          auth: { required: "none", envConfigured: false, credentialPresent: null, message: "Adapter does not require credentials." },
+          contractValidation: { ok: true, errors: [], warnings: [] },
+          serviceCallReady: true,
+          errors: [],
+          warnings: [],
+          safetyNotes: ["Mock adapter only."],
+        }],
+        errors: [],
+        warnings: [],
+        nextActions: ["Run preview-confirm-invoke smoke tests."],
+      },
+    }));
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/prepare") {
     res.end(JSON.stringify({
       success: true,
@@ -665,6 +701,7 @@ try {
     "bittensor_get_sidecar_status",
     "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
+    "bittensor_doctor_subnet_adapters",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
     "bittensor_submit_signed_extrinsic",
@@ -682,6 +719,7 @@ try {
   const descriptionFor = (name) => tools.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
+  assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
   assert.match(descriptionFor("bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
 
@@ -745,6 +783,13 @@ try {
   const readiness = await ask({ jsonrpc: "2.0", id: 13, method: "tools/call", params: { name: "bittensor_readiness_audit", arguments: {} } });
   assert.equal(JSON.parse(readiness.result.content[0].text).report.status, "warning");
   assert.equal(JSON.parse(readiness.result.content[0].text).cards[0].kind, "readiness_report");
+
+  const adapterDoctor = await ask({ jsonrpc: "2.0", id: 28, method: "tools/call", params: { name: "bittensor_doctor_subnet_adapters", arguments: {} } });
+  const adapterDoctorPayload = JSON.parse(adapterDoctor.result.content[0].text);
+  assert.equal(adapterDoctorPayload.success, true);
+  assert.equal(adapterDoctorPayload.report.kind, "bittensor_subnet_adapter_doctor");
+  assert.equal(adapterDoctorPayload.report.readyCount, 1);
+  assert.doesNotMatch(JSON.stringify(adapterDoctorPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
 
   const preview = await ask({ jsonrpc: "2.0", id: 14, method: "tools/call", params: { name: "bittensor_prepare_extrinsic", arguments: { action: "stake", netuid: 14, amountTao: "1" } } });
   const previewPayload = JSON.parse(preview.result.content[0].text);

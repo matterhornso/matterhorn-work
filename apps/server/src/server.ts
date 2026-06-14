@@ -46,6 +46,7 @@ import {
   createBittensorSigningHandoff,
   createBittensorSigningReceipt,
   createBittensorWatch,
+  doctorBittensorSubnetAdapters,
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
   findBittensorSubnetsForGoal,
@@ -4068,6 +4069,11 @@ function createRoutes(
     return jsonResponse({ success: true, report, cards: [buildBittensorReadinessCard(report)] });
   });
 
+  addRoute(routes, "GET", "/api/bittensor/adapters/doctor", "client", async () => {
+    const report = doctorBittensorSubnetAdapters();
+    return jsonResponse({ success: true, report });
+  });
+
   addRoute(routes, "POST", "/api/bittensor/extrinsics/prepare", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     const action = String(body.action) as BittensorExtrinsicAction;
@@ -4139,6 +4145,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_intent", "intent must be explain, metagraph, stake_guidance, wallet_guidance, or service_call");
     }
     const expectedRequestSha256 = typeof body.previewRequestSha256 === "string" ? body.previewRequestSha256 : null;
+    const reviewedRequestSha256 = typeof body.reviewedRequestSha256 === "string" ? body.reviewedRequestSha256 : expectedRequestSha256;
     if (expectedRequestSha256) {
       const preview = await previewBittensorSubnetInvocation(netuid, {
         intent: intent as BittensorSubnetInvocation["intent"],
@@ -4153,6 +4160,7 @@ function createRoutes(
       intent: intent as BittensorSubnetInvocation["intent"],
       task: typeof body.task === "string" ? body.task : null,
       ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+      reviewedRequestSha256,
     });
     return jsonResponse({ success: true, invocation, cards: [buildBittensorInvocationCard(invocation)] });
   });

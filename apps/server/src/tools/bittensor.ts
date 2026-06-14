@@ -837,6 +837,57 @@ export interface BittensorConfiguredSubnetAdapter {
   safetyNotes: string[];
 }
 
+export type BittensorSubnetAdapterDoctorEntryStatus = "ready" | "warning" | "blocked";
+
+export interface BittensorSubnetAdapterDoctorEndpoint {
+  configured: boolean;
+  mode: "mock" | "https" | "http" | "invalid" | "missing";
+  origin: string | null;
+  host: string | null;
+  allowed: boolean;
+  reason: string;
+}
+
+export interface BittensorSubnetAdapterDoctorAuth {
+  required: BittensorCapabilityManifest["requiredAuth"];
+  envConfigured: boolean;
+  credentialPresent: boolean | null;
+  message: string;
+}
+
+export interface BittensorSubnetAdapterDoctorEntry {
+  index: number;
+  status: BittensorSubnetAdapterDoctorEntryStatus;
+  netuid: number | null;
+  name: string;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  timeoutMs: number | null;
+  endpoint: BittensorSubnetAdapterDoctorEndpoint;
+  auth: BittensorSubnetAdapterDoctorAuth;
+  contractValidation: BittensorSubnetServiceAdapterContractValidation;
+  serviceCallReady: boolean;
+  errors: string[];
+  warnings: string[];
+  safetyNotes: string[];
+}
+
+export interface BittensorSubnetAdapterDoctorReport {
+  kind: "bittensor_subnet_adapter_doctor";
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  rawConfigured: boolean;
+  rawEntryCount: number;
+  readyCount: number;
+  warningCount: number;
+  blockedCount: number;
+  entries: BittensorSubnetAdapterDoctorEntry[];
+  errors: string[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetAdapterRunResult {
   ok: boolean;
   mode: "mock" | "http";
@@ -1154,6 +1205,382 @@ function mockSubnetAdaptersEnabled(): boolean {
 
 function isMockSubnetAdapterEndpoint(endpoint: string): boolean {
   return endpoint.startsWith("mock://");
+}
+
+function localSubnetAdaptersEnabled(): boolean {
+  const value = readEnv("BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS")?.toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function subnetAdapterEndpointAllowlist(): string[] {
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST") || readEnv("BITTENSOR_SUBNET_ADAPTER_ALLOWLIST");
+  return raw.split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter(Boolean);
+}
+
+function endpointHostMatchesAllowlist(host: string, origin: string, allowlist: string[]): boolean {
+  const safeHost = host.toLowerCase();
+  const safeOrigin = origin.toLowerCase();
+  return allowlist.some((entry) => {
+    if (entry === safeHost || entry === safeOrigin) return true;
+    if (entry.startsWith("*.")) {
+      const suffix = entry.slice(1);
+      return safeHost.endsWith(suffix) && safeHost.length > suffix.length;
+    }
+    return false;
+  });
+}
+
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.toLowerCase();
+  return normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "::1" ||
+    normalized.startsWith("127.");
+}
+
+function summarizeSubnetAdapterEndpoint(endpoint: string | null): BittensorSubnetAdapterDoctorEndpoint {
+  if (!endpoint) {
+    return {
+      configured: false,
+      mode: "missing",
+      origin: null,
+      host: null,
+      allowed: false,
+      reason: "Adapter endpoint is missing.",
+    };
+  }
+  if (isMockSubnetAdapterEndpoint(endpoint)) {
+    const mockName = endpoint.replace(/^mock:\/\//, "").split(/[/?#]/)[0] || "unknown";
+    const enabled = mockSubnetAdaptersEnabled();
+    return {
+      configured: true,
+      mode: "mock",
+      origin: `mock://${mockName}`,
+      host: mockName,
+      allowed: enabled,
+      reason: enabled
+        ? "Mock adapter endpoint is enabled for local preview-confirm-invoke testing."
+        : "Mock adapter endpoint is configured, but BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS is not enabled.",
+    };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    return {
+      configured: true,
+      mode: "invalid",
+      origin: null,
+      host: null,
+      allowed: false,
+      reason: "Adapter endpoint must be a valid URL.",
+    };
+  }
+
+  const host = parsed.hostname;
+  const origin = parsed.origin;
+  if (parsed.protocol === "https:") {
+    const allowlist = subnetAdapterEndpointAllowlist();
+    const allowed = endpointHostMatchesAllowlist(host, origin, allowlist);
+    return {
+      configured: true,
+      mode: "https",
+      origin,
+      host,
+      allowed,
+      reason: allowed
+        ? "HTTPS adapter endpoint matches the configured adapter endpoint allowlist."
+        : "HTTPS adapter endpoint host is not in BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST.",
+    };
+  }
+
+  if (parsed.protocol === "http:") {
+    const allowed = isLoopbackHost(host) && localSubnetAdaptersEnabled();
+    return {
+      configured: true,
+      mode: "http",
+      origin,
+      host,
+      allowed,
+      reason: allowed
+        ? "Loopback HTTP adapter endpoint is enabled for local development."
+        : "HTTP adapter endpoints are blocked unless they are loopback URLs and BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS is enabled.",
+    };
+  }
+
+  return {
+    configured: true,
+    mode: "invalid",
+    origin,
+    host,
+    allowed: false,
+    reason: "Adapter endpoint protocol must be mock://, https://, or explicitly enabled loopback http://.",
+  };
+}
+
+function defaultSubnetAdapterRequestSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    properties: {
+      netuid: { type: "number" },
+      intent: { enum: ["service_call"] },
+      task: { type: "string" },
+      ss58Address: { type: ["string", "null"] },
+      requestSha256: { type: "string" },
+      safeMode: { const: true },
+    },
+  };
+}
+
+function defaultSubnetAdapterResultSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    properties: {
+      ok: { type: "boolean" },
+      message: { type: "string" },
+      result: { type: "object" },
+      warnings: { type: "array", items: { type: "string" } },
+      usage: { type: "object" },
+      costEstimate: { type: "object" },
+    },
+  };
+}
+
+function adapterSchemaFromConfig(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
+  const record = asRecord(value);
+  return Object.keys(record).length ? record : fallback;
+}
+
+function isUnsafeAuthEnvName(value: string): boolean {
+  return /(seed|mnemonic|private|suri|keyfile|passphrase)/i.test(value);
+}
+
+function validateSubnetAdapterAuth(
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"],
+  authEnv: string | null,
+): { auth: BittensorSubnetAdapterDoctorAuth; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const envConfigured = Boolean(authEnv);
+  const credentialPresent = authEnv ? Boolean(readEnv(authEnv)) : null;
+  if (authEnv && isUnsafeAuthEnvName(authEnv)) {
+    errors.push("Adapter auth env name appears to reference signing or key-material fields.");
+  }
+  if (requiredAuth === "api_key" && !authEnv) {
+    errors.push("Adapter requires API key auth but no auth env is configured.");
+  }
+  if (requiredAuth === "api_key" && authEnv && !credentialPresent) {
+    errors.push("Adapter requires API key auth but the configured credential value is not present.");
+  }
+  if (requiredAuth === "none" && authEnv) {
+    warnings.push("Adapter declares no auth requirement but still configures an auth env.");
+  }
+  if (requiredAuth === "external_wallet") {
+    errors.push("Subnet service adapters cannot require wallet signing material; use the external signer flow for Bittensor extrinsics.");
+  }
+  return {
+    auth: {
+      required: requiredAuth,
+      envConfigured,
+      credentialPresent,
+      message: requiredAuth === "api_key"
+        ? envConfigured
+          ? credentialPresent
+            ? "Required adapter credential is present."
+            : "Required adapter credential is not present."
+          : "Required adapter credential env is not configured."
+        : requiredAuth === "none"
+          ? "Adapter does not require credentials."
+          : "Adapter auth requires additional review.",
+    },
+    errors,
+    warnings,
+  };
+}
+
+function parseSubnetAdapterConfigEntries(raw: string): unknown[] | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+    return Object.entries(asRecord(parsed)).map(([netuid, value]) => ({ ...asRecord(value), netuid: Number(netuid) }));
+  } catch {
+    return null;
+  }
+}
+
+export function doctorBittensorSubnetAdapters(): BittensorSubnetAdapterDoctorReport {
+  const checkedAt = nowIso();
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTERS_JSON");
+  if (!raw) {
+    return {
+      kind: "bittensor_subnet_adapter_doctor",
+      status: "warning",
+      checkedAt,
+      rawConfigured: false,
+      rawEntryCount: 0,
+      readyCount: 0,
+      warningCount: 0,
+      blockedCount: 0,
+      entries: [],
+      errors: [],
+      warnings: ["No subnet service adapters are configured. Universal explain, compare, monitor, wallet, and staking-preview flows still work."],
+      nextActions: [
+        "Configure BITTENSOR_SUBNET_ADAPTERS_JSON only for adapters you want Matterhorn to preview and invoke.",
+        "Use mock://data-search or mock://inference with BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1 before adding real subnet execution.",
+      ],
+    };
+  }
+
+  const rawEntries = parseSubnetAdapterConfigEntries(raw);
+  if (!rawEntries) {
+    return {
+      kind: "bittensor_subnet_adapter_doctor",
+      status: "fail",
+      checkedAt,
+      rawConfigured: true,
+      rawEntryCount: 0,
+      readyCount: 0,
+      warningCount: 0,
+      blockedCount: 0,
+      entries: [],
+      errors: ["BITTENSOR_SUBNET_ADAPTERS_JSON must be valid JSON."],
+      warnings: [],
+      nextActions: ["Fix BITTENSOR_SUBNET_ADAPTERS_JSON syntax, then rerun the adapter doctor."],
+    };
+  }
+
+  const duplicateNetuids = new Set<number>();
+  const seenNetuids = new Set<number>();
+  for (const entry of rawEntries) {
+    const netuid = firstNumber(asRecord(entry), ["netuid", "net_uid", "subnet"]);
+    if (netuid !== null && Number.isInteger(netuid)) {
+      if (seenNetuids.has(netuid)) duplicateNetuids.add(netuid);
+      seenNetuids.add(netuid);
+    }
+  }
+
+  const entries = rawEntries.map((entry, index): BittensorSubnetAdapterDoctorEntry => {
+    const record = asRecord(entry);
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const netuid = firstNumber(record, ["netuid", "net_uid", "subnet"]);
+    const endpoint = firstString(record, ["endpoint", "url", "baseUrl", "base_url"]);
+    const adapterRaw = record["serviceAdapter"] ?? record["adapter"];
+    const requiredAuthRaw = record["requiredAuth"] ?? record["auth"];
+    const costModelRaw = record["costModel"] ?? record["cost"];
+    const serviceAdapter = normalizeServiceAdapter(adapterRaw, "unsupported");
+    const requiredAuth = normalizeRequiredAuth(requiredAuthRaw);
+    const costModel = normalizeCostModel(costModelRaw);
+    const timeoutRaw = firstNumber(record, ["timeoutMs", "timeout_ms"]);
+    const timeoutMs = timeoutRaw === null ? 20_000 : Math.min(60_000, Math.max(1_000, timeoutRaw));
+    const authEnv = firstString(record, ["authEnv", "auth_env", "apiKeyEnv", "api_key_env"]);
+    const safetyNotes = arrayFrom(record["safetyNotes"] ?? record["safety_notes"])
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    const endpointSummary = summarizeSubnetAdapterEndpoint(endpoint);
+    const authValidation = validateSubnetAdapterAuth(requiredAuth, authEnv);
+    const requestSchema = adapterSchemaFromConfig(record["requestSchema"] ?? record["request_schema"], defaultSubnetAdapterRequestSchema());
+    const resultSchema = adapterSchemaFromConfig(record["resultSchema"] ?? record["result_schema"], defaultSubnetAdapterResultSchema());
+
+    if (netuid === null || !Number.isInteger(netuid) || netuid < 0) errors.push("Adapter netuid must be a non-negative integer.");
+    if (typeof adapterRaw !== "string" || serviceAdapter === "unsupported") errors.push("Adapter serviceAdapter must be one of inference, data_search, compute, creative_media, or agent_tooling.");
+    if (typeof requiredAuthRaw !== "string" || requiredAuth === "unknown") warnings.push("Adapter requiredAuth is unknown; set none or api_key for service adapters.");
+    if (typeof costModelRaw !== "string" || costModel === "unknown") warnings.push("Adapter costModel is unknown; set free_read, provider_priced, or tao_fee.");
+    if (timeoutRaw !== null && (!Number.isFinite(timeoutRaw) || timeoutRaw <= 0)) warnings.push("Adapter timeoutMs should be a positive number.");
+    if (duplicateNetuids.has(netuid ?? -1)) warnings.push("Multiple adapters are configured for the same netuid; runtime will use the first matching entry.");
+    if (!endpointSummary.allowed) errors.push(endpointSummary.reason);
+    errors.push(...authValidation.errors);
+    warnings.push(...authValidation.warnings);
+    if (!safetyNotes.length) warnings.push("Adapter should include safetyNotes for operator review.");
+
+    const adapterStatus: BittensorCapabilityManifest["adapterStatus"] = {
+      configured: Boolean(endpointSummary.configured && serviceAdapter !== "unsupported"),
+      adapter: serviceAdapter,
+      message: endpointSummary.allowed ? "Adapter endpoint passed doctor allowlist checks." : endpointSummary.reason,
+      requiredAuth,
+      costModel,
+    };
+    const configuredAdapter: BittensorConfiguredSubnetAdapter | null = netuid !== null && endpoint
+      ? {
+        netuid,
+        name: firstString(record, ["name", "label"]) ?? `Subnet ${netuid} adapter`,
+        serviceAdapter,
+        endpoint,
+        requiredAuth,
+        costModel,
+        timeoutMs,
+        authEnv,
+        safetyNotes,
+      }
+      : null;
+    const contract = buildBittensorSubnetServiceAdapterContract({
+      netuid: netuid ?? 0,
+      adapter: serviceAdapter,
+      capabilityLevel: adapterStatus.configured && endpointSummary.allowed ? "adapter_ready" : "adapter_required",
+      adapterStatus,
+      configuredAdapter,
+      requestSchema,
+      resultSchema,
+      safetyNotes: safetyNotes.length ? safetyNotes : ["Adapter is under Matterhorn doctor review."],
+    });
+    const contractValidation = validateBittensorSubnetServiceAdapterContract(contract);
+    const serviceCallReady = contractServiceCallReady(contract, contractValidation)
+      && endpointSummary.allowed
+      && errors.length === 0;
+    const allWarnings = uniqueWarnings(warnings, contractValidation.warnings);
+    const allErrors = uniqueWarnings(errors, contractValidation.errors);
+    const status: BittensorSubnetAdapterDoctorEntryStatus = allErrors.length || !serviceCallReady
+      ? "blocked"
+      : allWarnings.length
+        ? "warning"
+        : "ready";
+    return {
+      index,
+      status,
+      netuid: netuid !== null && Number.isInteger(netuid) && netuid >= 0 ? netuid : null,
+      name: firstString(record, ["name", "label"]) ?? (netuid === null ? `Adapter ${index + 1}` : `Subnet ${netuid} adapter`),
+      serviceAdapter,
+      requiredAuth,
+      costModel,
+      timeoutMs,
+      endpoint: endpointSummary,
+      auth: authValidation.auth,
+      contractValidation,
+      serviceCallReady,
+      errors: allErrors,
+      warnings: allWarnings,
+      safetyNotes,
+    };
+  });
+
+  const readyCount = entries.filter((entry) => entry.status === "ready").length;
+  const warningCount = entries.filter((entry) => entry.status === "warning").length;
+  const blockedCount = entries.filter((entry) => entry.status === "blocked").length;
+  const errors = entries.flatMap((entry) => entry.errors.map((error) => `Adapter ${entry.index + 1}: ${error}`));
+  const warnings = entries.flatMap((entry) => entry.warnings.map((warning) => `Adapter ${entry.index + 1}: ${warning}`));
+  return {
+    kind: "bittensor_subnet_adapter_doctor",
+    status: blockedCount ? "fail" : warningCount ? "warning" : "pass",
+    checkedAt,
+    rawConfigured: true,
+    rawEntryCount: rawEntries.length,
+    readyCount,
+    warningCount,
+    blockedCount,
+    entries,
+    errors,
+    warnings,
+    nextActions: blockedCount
+      ? [
+        "Fix blocked adapter entries before treating direct subnet execution as ready.",
+        "For real HTTPS adapters, add the adapter host or origin to BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST.",
+        "Keep mock adapters behind BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS=1 and real execution behind explicit review gates.",
+      ]
+      : [
+        "Run preview, confirmation-hash, and invocation smoke tests for each ready adapter.",
+        "Keep adapter endpoints and auth values out of logs and user-facing payloads.",
+      ],
+  };
 }
 
 function configuredSubnetAdapters(): BittensorConfiguredSubnetAdapter[] {
@@ -5380,6 +5807,28 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
     });
   } catch (err) {
     checks.push({ id: "capabilities", label: "Subnet capability registry", status: "fail", summary: err instanceof Error ? err.message : "Capability audit failed." });
+  }
+
+  try {
+    const doctor = doctorBittensorSubnetAdapters();
+    checks.push({
+      id: "subnet_adapter_doctor",
+      label: "Subnet adapter registry doctor",
+      status: doctor.status === "fail" ? "fail" : doctor.status === "warning" ? "warning" : "pass",
+      summary: doctor.rawConfigured
+        ? doctor.status === "pass"
+          ? `${doctor.readyCount} subnet service adapter entries passed doctor checks.`
+          : `${doctor.blockedCount} blocked and ${doctor.warningCount} warning subnet service adapter entries need review.`
+        : "No direct subnet service adapters are configured; universal Bittensor chat flows remain available.",
+      details: {
+        rawEntryCount: doctor.rawEntryCount,
+        readyCount: doctor.readyCount,
+        warningCount: doctor.warningCount,
+        blockedCount: doctor.blockedCount,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_doctor", label: "Subnet adapter registry doctor", status: "fail", summary: err instanceof Error ? err.message : "Adapter registry doctor failed." });
   }
 
   try {
