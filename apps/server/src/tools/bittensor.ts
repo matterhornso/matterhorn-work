@@ -87,6 +87,38 @@ export type BittensorSubnetServiceAdapterContractRuntimeSummary = Pick<
   "version" | "supportedIntents" | "endpointConfigured" | "requiredAuth" | "costModel" | "privacy" | "unsupportedBehavior"
 >;
 
+export interface BittensorSubnetServiceAdapterContractTestCase {
+  name: string;
+  contract: BittensorSubnetServiceAdapterContract;
+  expectedOk?: boolean;
+  expectedServiceCallReady?: boolean;
+  expectedUnsupportedStatus?: BittensorSubnetServiceAdapterContract["unsupportedBehavior"]["status"];
+}
+
+export interface BittensorSubnetServiceAdapterContractTestResult {
+  name: string;
+  passed: boolean;
+  expectedOk: boolean;
+  actualOk: boolean;
+  expectedServiceCallReady: boolean;
+  serviceCallReady: boolean;
+  endpointConfigured: boolean;
+  supportedIntents: BittensorSubnetServiceIntent[];
+  unsupportedStatus: BittensorSubnetServiceAdapterContract["unsupportedBehavior"]["status"];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BittensorSubnetServiceAdapterContractTestReport {
+  kind: "subnet_adapter_contract_test_report";
+  total: number;
+  passed: number;
+  failed: number;
+  results: BittensorSubnetServiceAdapterContractTestResult[];
+  warnings: string[];
+  updatedAt: string;
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -2627,6 +2659,161 @@ export function buildBittensorSubnetServiceAdapterContract(input: {
       fallbackIntents,
     },
   };
+}
+
+function contractServiceCallReady(contract: BittensorSubnetServiceAdapterContract, validation: BittensorSubnetServiceAdapterContractValidation): boolean {
+  return Boolean(
+    validation.ok
+      && contract.endpointConfigured
+      && contract.supportedIntents.includes("service_call")
+      && contract.adapter !== "universal"
+      && contract.adapter !== "unsupported",
+  );
+}
+
+export function runBittensorSubnetServiceAdapterContractTests(
+  cases: BittensorSubnetServiceAdapterContractTestCase[],
+): BittensorSubnetServiceAdapterContractTestReport {
+  const results = cases.map((testCase): BittensorSubnetServiceAdapterContractTestResult => {
+    const validation = validateBittensorSubnetServiceAdapterContract(testCase.contract);
+    const serviceCallReady = contractServiceCallReady(testCase.contract, validation);
+    const expectedOk = testCase.expectedOk ?? true;
+    const expectedServiceCallReady = testCase.expectedServiceCallReady ?? (
+      expectedOk
+      && testCase.contract.endpointConfigured
+      && testCase.contract.supportedIntents.includes("service_call")
+      && testCase.contract.adapter !== "universal"
+      && testCase.contract.adapter !== "unsupported"
+    );
+    const unsupportedStatus = testCase.contract.unsupportedBehavior.status;
+    const statusMatches = testCase.expectedUnsupportedStatus === undefined || testCase.expectedUnsupportedStatus === unsupportedStatus;
+    const passed = validation.ok === expectedOk && serviceCallReady === expectedServiceCallReady && statusMatches;
+    const expectationWarnings = [
+      validation.ok === expectedOk ? null : `Expected validation ok=${expectedOk}, received ok=${validation.ok}.`,
+      serviceCallReady === expectedServiceCallReady ? null : `Expected serviceCallReady=${expectedServiceCallReady}, received ${serviceCallReady}.`,
+      statusMatches ? null : `Expected unsupported status ${testCase.expectedUnsupportedStatus}, received ${unsupportedStatus}.`,
+    ].filter((item): item is string => Boolean(item));
+    return {
+      name: testCase.name,
+      passed,
+      expectedOk,
+      actualOk: validation.ok,
+      expectedServiceCallReady,
+      serviceCallReady,
+      endpointConfigured: testCase.contract.endpointConfigured,
+      supportedIntents: testCase.contract.supportedIntents,
+      unsupportedStatus,
+      errors: validation.errors,
+      warnings: uniqueWarnings(validation.warnings, expectationWarnings),
+    };
+  });
+  const failed = results.filter((result) => !result.passed);
+  return {
+    kind: "subnet_adapter_contract_test_report",
+    total: results.length,
+    passed: results.length - failed.length,
+    failed: failed.length,
+    results,
+    warnings: failed.length ? failed.map((result) => `Adapter contract test failed: ${result.name}.`) : [],
+    updatedAt: nowIso(),
+  };
+}
+
+export function buildBittensorSubnetServiceAdapterContractTestFixtures(): BittensorSubnetServiceAdapterContractTestCase[] {
+  const requestSchema = {
+    type: "object",
+    properties: {
+      intent: { enum: ["service_call"] },
+      task: { type: "string" },
+      ss58Address: { type: "string" },
+    },
+  };
+  const resultSchema = {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      result: { type: "object" },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+  };
+  const configuredAdapter: BittensorConfiguredSubnetAdapter = {
+    netuid: 14,
+    name: "Fixture compute adapter",
+    serviceAdapter: "compute",
+    endpoint: "http://127.0.0.1:4040/invoke",
+    requiredAuth: "api_key",
+    costModel: "provider_priced",
+    timeoutMs: 15_000,
+    authEnv: "BITTENSOR_FIXTURE_ADAPTER_TOKEN",
+    safetyNotes: ["Fixture adapter only accepts visible task text and public routing context."],
+  };
+  const configuredStatus: BittensorCapabilityManifest["adapterStatus"] = {
+    configured: true,
+    adapter: "compute",
+    message: "Direct service adapter configured: Fixture compute adapter.",
+    requiredAuth: "api_key",
+    costModel: "provider_priced",
+  };
+  const missingStatus: BittensorCapabilityManifest["adapterStatus"] = {
+    configured: false,
+    adapter: "compute",
+    message: "No compute service adapter is configured yet.",
+    requiredAuth: "unknown",
+    costModel: "unknown",
+  };
+
+  return [{
+    name: "configured safe service adapter",
+    expectedOk: true,
+    expectedServiceCallReady: true,
+    expectedUnsupportedStatus: "explain_and_monitor_only",
+    contract: buildBittensorSubnetServiceAdapterContract({
+      netuid: 14,
+      adapter: "compute",
+      capabilityLevel: "adapter_ready",
+      adapterStatus: configuredStatus,
+      configuredAdapter,
+      requestSchema,
+      resultSchema,
+      safetyNotes: ["Safe fixture contract."],
+    }),
+  }, {
+    name: "missing adapter falls back to explain and monitor",
+    expectedOk: true,
+    expectedServiceCallReady: false,
+    expectedUnsupportedStatus: "adapter_missing",
+    contract: buildBittensorSubnetServiceAdapterContract({
+      netuid: 14,
+      adapter: "compute",
+      capabilityLevel: "adapter_required",
+      adapterStatus: missingStatus,
+      configuredAdapter: null,
+      requestSchema,
+      resultSchema,
+      safetyNotes: ["Missing adapter fixture contract."],
+    }),
+  }, {
+    name: "unsafe schema is rejected",
+    expectedOk: false,
+    expectedServiceCallReady: false,
+    expectedUnsupportedStatus: "adapter_missing",
+    contract: buildBittensorSubnetServiceAdapterContract({
+      netuid: 14,
+      adapter: "compute",
+      capabilityLevel: "adapter_required",
+      adapterStatus: missingStatus,
+      configuredAdapter: null,
+      requestSchema: {
+        type: "object",
+        properties: {
+          task: { type: "string" },
+          privateKey: { type: "string" },
+        },
+      },
+      resultSchema,
+      safetyNotes: ["Unsafe fixture should fail validation."],
+    }),
+  }];
 }
 
 export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorCapabilityManifest {
