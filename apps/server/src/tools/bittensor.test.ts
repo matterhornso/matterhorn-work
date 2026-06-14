@@ -6,6 +6,7 @@ import {
   auditBittensorReadiness,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationPreviewCard,
+  buildBittensorInvocationCard,
   buildBittensorPlanCards,
   buildBittensorQuoteCard,
   buildBittensorReadinessCard,
@@ -832,6 +833,14 @@ describe("executeBittensorChatWorkflow", () => {
         expect(output?.output?.model).toBe("matterhorn-mock-inference-v0");
         expect(output?.usage?.label).toBe("mock_tokens");
         expect(output?.costEstimate?.amount).toBe(0);
+        const card = buildBittensorInvocationCard(invocation);
+        expect(card.kind).toBe("subnet_result");
+        expect(card.summary).toContain("Mock inference response");
+        expect(card.items.some((item) => item.label === "Adapter mode" && item.value === "Mock")).toBe(true);
+        expect(card.items.some((item) => item.label === "Request SHA-256")).toBe(true);
+        expect(card.items.some((item) => item.label === "Output" && item.value.includes("Mock inference response"))).toBe(true);
+        expect(card.items.some((item) => item.label === "Usage" && item.value.includes("mock_tokens"))).toBe(true);
+        expect(card.items.some((item) => item.label === "Cost" && item.value.includes("TAO"))).toBe(true);
         expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
       } finally {
         if (previousAdapters === undefined) {

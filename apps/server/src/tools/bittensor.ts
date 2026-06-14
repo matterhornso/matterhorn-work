@@ -5585,6 +5585,42 @@ function cardItem(label: string, value: string | number | null | undefined, tone
   return { label, value: value === null || value === undefined || value === "" ? "Unavailable" : String(value), tone };
 }
 
+function adapterRunResultFromInvocation(invocation: BittensorSubnetInvocation): BittensorSubnetAdapterRunResult | null {
+  const output = asRecord(invocation.result["output"]);
+  const mode = output["mode"];
+  const adapterKind = output["adapterKind"];
+  const requestSha256 = output["requestSha256"];
+  if ((mode !== "mock" && mode !== "http") || typeof adapterKind !== "string" || typeof requestSha256 !== "string") return null;
+  return output as unknown as BittensorSubnetAdapterRunResult;
+}
+
+function adapterRunUsageLabel(result: BittensorSubnetAdapterRunResult): string {
+  if (!result.usage) return "Unavailable";
+  const units = result.usage.units === null ? "unknown" : String(result.usage.units);
+  return result.usage.label ? `${units} ${result.usage.label}` : units;
+}
+
+function adapterRunCostLabel(result: BittensorSubnetAdapterRunResult): string {
+  if (!result.costEstimate) return titleCase(result.adapterKind);
+  const amount = result.costEstimate.amount === null ? "unknown" : String(result.costEstimate.amount);
+  const currency = result.costEstimate.currency ?? "";
+  return `${amount}${currency ? ` ${currency}` : ""} · ${titleCase(result.costEstimate.model)}`;
+}
+
+function adapterRunOutputSummary(result: BittensorSubnetAdapterRunResult): string {
+  const output = asRecord(result.output);
+  const completion = firstString(output, ["completion", "answer", "text"]);
+  if (completion) return completion;
+  const results = arrayFrom(output["results"]);
+  const first = asRecord(results[0]);
+  const summary = firstString(first, ["summary", "title"]);
+  if (summary) return summary;
+  const nestedResult = asRecord(output["result"]);
+  const nestedAnswer = firstString(nestedResult, ["answer", "summary", "text"]);
+  if (nestedAnswer) return nestedAnswer;
+  return result.message;
+}
+
 export function buildBittensorPlanCards(plan: BittensorPlan): BittensorChatCard[] {
   return [{
     kind: "subnet_result",
@@ -6107,22 +6143,30 @@ export function buildBittensorInvocationPreviewCard(preview: BittensorSubnetInvo
 }
 
 export function buildBittensorInvocationCard(invocation: BittensorSubnetInvocation): BittensorChatCard {
+  const adapterResult = adapterRunResultFromInvocation(invocation);
   return {
     kind: invocation.supported ? "subnet_result" : "unsupported_adapter",
     title: invocation.supported ? `Subnet ${invocation.netuid} result` : `Subnet ${invocation.netuid} adapter unavailable`,
     subtitle: `${titleCase(invocation.intent)} · ${titleCase(invocation.adapter)}`,
-    summary: invocation.message,
+    summary: adapterResult ? adapterRunOutputSummary(adapterResult) : invocation.message,
     tone: invocation.supported ? "default" : "warning",
     items: [
       cardItem("Netuid", invocation.netuid),
       cardItem("Intent", titleCase(invocation.intent)),
       cardItem("Adapter", titleCase(invocation.adapter)),
       cardItem("Supported", invocation.supported ? "Yes" : "No", invocation.supported ? "good" : "warning"),
+      ...(adapterResult ? [
+        cardItem("Adapter mode", titleCase(adapterResult.mode), adapterResult.mode === "mock" ? "warning" : "default"),
+        cardItem("Request SHA-256", adapterResult.requestSha256.slice(0, 20), "muted"),
+        cardItem("Output", adapterRunOutputSummary(adapterResult)),
+        cardItem("Usage", adapterRunUsageLabel(adapterResult), adapterResult.usage ? "default" : "muted"),
+        cardItem("Cost", adapterRunCostLabel(adapterResult), adapterResult.costEstimate?.amount === 0 ? "good" : "warning"),
+      ] : []),
       ...(invocation.contractValidation
         ? [cardItem("Contract", invocation.contractValidation.ok ? "Valid" : "Blocked", invocation.contractValidation.ok ? "good" : "danger")]
         : []),
     ],
-    warnings: invocation.warnings,
+    warnings: uniqueWarnings(invocation.warnings, adapterResult?.warnings),
     data: { invocation },
   };
 }
