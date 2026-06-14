@@ -50,6 +50,7 @@ import {
   getSubtensorSidecarStatus,
   isValidSs58Address,
   invokeBittensorSubnet,
+  planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
   probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
@@ -1249,6 +1250,30 @@ describe("executeBittensorChatWorkflow", () => {
     expect(report.profiles[0]?.noExecutionCanary.expectedMetadata.requestHashRequired).toBe(true);
     expect(report.profiles[0]?.requiredMatterhornGates.join(" ")).toContain("bittensor_probe_subnet_adapter_conformance");
     expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+  });
+
+  test("builds one safe adapter onboarding plan before real execution", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const plan = await planBittensorSubnetAdapterOnboarding({ adapter: "data_search", netuid: 18 });
+      expect(plan.kind).toBe("bittensor_subnet_adapter_onboarding_plan");
+      expect(plan.status).toBe("needs_configuration");
+      expect(plan.requested.adapter).toBe("data_search");
+      expect(plan.candidateProfiles.profiles[0]?.noExecutionCanary.expectedMetadata.requestHashRequired).toBe(true);
+      expect(plan.templates.templates[0]?.config.netuid).toBe(18);
+      expect(plan.doctor.rawConfigured).toBe(false);
+      expect(plan.gates.map((gate) => gate.id)).toContain("metadata_conformance");
+      expect(plan.gates.find((gate) => gate.id === "service_execution")?.status).toBe("not_configured");
+      expect(plan.nextActions.join(" ")).toContain("do not invoke real services yet");
+      expect(JSON.stringify(plan)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
   });
 
   test("probes mock adapter conformance without user task execution", async () => {

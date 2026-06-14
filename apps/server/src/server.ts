@@ -60,6 +60,7 @@ import {
   isValidSs58Address,
   listBittensorCapabilities,
   listBittensorWatches,
+  planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
   probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
@@ -4100,6 +4101,25 @@ function createRoutes(
     const report = getBittensorSubnetAdapterCandidateProfiles({
       adapter: ctx.url.searchParams.get("adapter"),
       netuid,
+    });
+    return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/onboarding-plan", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const report = await planBittensorSubnetAdapterOnboarding({
+      adapter: ctx.url.searchParams.get("adapter"),
+      netuid,
+      limit,
     });
     return jsonResponse({ success: true, report });
   });
