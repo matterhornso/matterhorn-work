@@ -1324,6 +1324,27 @@ export interface BittensorSubnetAdapterManifestValidation {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterManifestExample {
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  netuid: number;
+  title: string;
+  description: string;
+  manifest: Record<string, unknown>;
+  validation: BittensorSubnetAdapterManifestValidation;
+}
+
+export interface BittensorSubnetAdapterManifestExampleReport {
+  kind: "bittensor_subnet_adapter_manifest_examples";
+  generatedAt: string;
+  requested: {
+    adapter: string | null;
+    netuid: number | null;
+  };
+  examples: BittensorSubnetAdapterManifestExample[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -3071,6 +3092,193 @@ export function validateBittensorSubnetAdapterManifest(manifestInput: unknown): 
         "Fix manifest errors before configuring or invoking any subnet adapter.",
         "Keep unsupported behavior active until the manifest, conformance, dry-run, and canary gates pass.",
       ],
+  };
+}
+
+function buildSubnetAdapterManifestExample(
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">,
+  netuid: number,
+): BittensorSubnetAdapterManifestExample {
+  const baseManifest = {
+    version: "matterhorn.bittensor.adapter.v1",
+    netuid,
+    serviceAdapter: adapter,
+    supportedIntents: ["explain", "metagraph", "service_call"],
+    safeModeRequired: true,
+    requestHashRequired: true,
+    healthStatus: "ok",
+    requiredAuth: "api_key",
+    costModel: "provider_priced",
+    endpointConfigured: true,
+    privacy: {
+      sendsTaskText: true,
+      sendsSs58Address: false,
+      sendsWalletData: false,
+      sendsKeyMaterial: false,
+    },
+    safetyNotes: [
+      "Adapter accepts visible user task text only after preview hash confirmation.",
+      "Adapter does not accept wallet data, signing material, host tokens, or credential values.",
+      "Adapter responses must be bounded, renderable, and safe to show in a chat card.",
+    ],
+  };
+  const categoryManifest: Record<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">, {
+    title: string;
+    description: string;
+    manifest: Record<string, unknown>;
+  }> = {
+    data_search: {
+      title: "Data search adapter manifest",
+      description: "Use for subnet services that search, retrieve, rank, summarize, or cite data sources.",
+      manifest: {
+        ...baseManifest,
+        name: "Example data search adapter",
+        maxResponseBytes: 64_000,
+        requestSchema: {
+          type: "object",
+          required: ["task", "previewRequestSha256"],
+          properties: {
+            task: { type: "string", maxLength: 4000 },
+            previewRequestSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+            limit: { type: "integer", minimum: 1, maximum: 10 },
+          },
+          additionalProperties: false,
+        },
+        resultSchema: {
+          type: "object",
+          required: ["summary", "results", "warnings"],
+          properties: {
+            summary: { type: "string", maxLength: 2000 },
+            results: {
+              type: "array",
+              maxItems: 10,
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  url: { type: "string" },
+                  snippet: { type: "string" },
+                  score: { type: "number" },
+                },
+              },
+            },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+    inference: {
+      title: "Inference adapter manifest",
+      description: "Use for subnet services that run text, image, or multimodal inference behind Matterhorn's preview-confirm-invoke gate.",
+      manifest: {
+        ...baseManifest,
+        name: "Example inference adapter",
+        maxResponseBytes: 128_000,
+        requestSchema: {
+          type: "object",
+          required: ["task", "previewRequestSha256"],
+          properties: {
+            task: { type: "string", maxLength: 4000 },
+            previewRequestSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+            modality: { type: "string", enum: ["text", "image", "multimodal"] },
+            maxTokens: { type: "integer", minimum: 1, maximum: 4096 },
+          },
+          additionalProperties: false,
+        },
+        resultSchema: {
+          type: "object",
+          required: ["output", "warnings"],
+          properties: {
+            output: { type: "string" },
+            model: { type: "string" },
+            usage: {
+              type: "object",
+              properties: {
+                inputTokens: { type: "number" },
+                outputTokens: { type: "number" },
+              },
+            },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+    compute: {
+      title: "Compute adapter manifest",
+      description: "Use for bounded compute jobs that return status, logs, and artifacts through Matterhorn's safe result envelope.",
+      manifest: {
+        ...baseManifest,
+        name: "Example compute adapter",
+        maxResponseBytes: 128_000,
+        requestSchema: { type: "object", required: ["task", "previewRequestSha256"], properties: { task: { type: "string" }, previewRequestSha256: { type: "string" } } },
+        resultSchema: { type: "object", required: ["status", "warnings"], properties: { status: { type: "string" }, logs: { type: "array", items: { type: "string" } }, warnings: { type: "array", items: { type: "string" } } } },
+      },
+    },
+    creative_media: {
+      title: "Creative media adapter manifest",
+      description: "Use for bounded media generation or transformation services that return safe asset references and warnings.",
+      manifest: {
+        ...baseManifest,
+        name: "Example creative media adapter",
+        maxResponseBytes: 128_000,
+        requestSchema: { type: "object", required: ["task", "previewRequestSha256"], properties: { task: { type: "string" }, previewRequestSha256: { type: "string" }, outputType: { type: "string" } } },
+        resultSchema: { type: "object", required: ["summary", "assets", "warnings"], properties: { summary: { type: "string" }, assets: { type: "array", items: { type: "object" } }, warnings: { type: "array", items: { type: "string" } } } },
+      },
+    },
+    agent_tooling: {
+      title: "Agent tooling adapter manifest",
+      description: "Use for subnet services that expose bounded tool execution or agent-assist results back to Matterhorn.",
+      manifest: {
+        ...baseManifest,
+        name: "Example agent tooling adapter",
+        maxResponseBytes: 64_000,
+        requestSchema: { type: "object", required: ["task", "previewRequestSha256"], properties: { task: { type: "string" }, previewRequestSha256: { type: "string" }, toolName: { type: "string" } } },
+        resultSchema: { type: "object", required: ["summary", "actions", "warnings"], properties: { summary: { type: "string" }, actions: { type: "array", items: { type: "object" } }, warnings: { type: "array", items: { type: "string" } } } },
+      },
+    },
+  };
+  const entry = categoryManifest[adapter];
+  return {
+    adapter,
+    netuid,
+    title: entry.title,
+    description: entry.description,
+    manifest: entry.manifest,
+    validation: validateBittensorSubnetAdapterManifest(entry.manifest),
+  };
+}
+
+export function getBittensorSubnetAdapterManifestExamples(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): BittensorSubnetAdapterManifestExampleReport {
+  const adapters: Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">> = ["data_search", "inference", "compute", "creative_media", "agent_tooling"];
+  const requestedAdapter = typeof input.adapter === "string" ? input.adapter : null;
+  const adapterFilter = directSubnetAdapterKind(normalizeServiceAdapter(requestedAdapter, "unsupported"))
+    ? normalizeServiceAdapter(requestedAdapter, "unsupported") as Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">
+    : null;
+  const requestedNetuid = Number.isInteger(input.netuid ?? null) && Number(input.netuid) >= 0 ? Number(input.netuid) : null;
+  const limit = Number.isInteger(input.limit ?? null) && Number(input.limit) > 0 ? Math.min(10, Number(input.limit)) : adapters.length;
+  const examples = (adapterFilter ? [adapterFilter] : adapters)
+    .slice(0, limit)
+    .map((adapter, index) => buildSubnetAdapterManifestExample(adapter, requestedNetuid ?? (adapter === "data_search" ? 18 : adapter === "inference" ? 4 : 77 + index)));
+  return {
+    kind: "bittensor_subnet_adapter_manifest_examples",
+    generatedAt: nowIso(),
+    requested: {
+      adapter: requestedAdapter,
+      netuid: requestedNetuid,
+    },
+    examples,
+    warnings: examples.some((example) => example.validation.status === "fail")
+      ? ["One or more generated examples failed validation; do not use failed examples."]
+      : [],
+    nextActions: [
+      "Copy an example manifest and replace name, netuid, schemas, auth, and cost values for the real adapter.",
+      "Run bittensor_validate_subnet_adapter_manifest after each edit.",
+      "Only then configure endpoints and run metadata conformance.",
+    ],
   };
 }
 

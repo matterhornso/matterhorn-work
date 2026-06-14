@@ -722,6 +722,23 @@ The spec defines required metadata fields, preview-confirm-invoke behavior,
 response-size limits, forbidden secret-shaped fields, and the default-off real
 adapter boundary.
 
+To start from a safe example instead of a blank manifest:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/spec/examples?adapter=data_search&netuid=77"
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_get_subnet_adapter_manifest_examples({
+  "adapter": "data_search",
+  "netuid": 77
+})
+```
+
+Each example includes its own manifest validation result and `adapter_manifest_validation` card. Copy it only as a starting point, then validate again after every edit.
+
 Validate the adapter manifest before endpoint conformance. This is a no-execution check: it does not send task text, wallet data, signing payloads, or request bodies to any subnet service.
 
 ```bash
@@ -1027,15 +1044,16 @@ Use the Matterhorn Work MCP server for Bittensor.
 17. For lower-level approval generation, call `bittensor_create_subnet_adapter_approval_template`; use the returned env value only for a short-lived reviewed canary window.
 18. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
 19. Before writing adapter code, call `bittensor_get_subnet_adapter_spec` to inspect metadata fields, forbidden fields, response limits, and preview-confirm-invoke rules.
-20. Validate the proposed metadata with `bittensor_validate_subnet_adapter_manifest`; treat `status=fail` as a hard stop before endpoint setup.
-21. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-22. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-23. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-24. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-25. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-26. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-27. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-28. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+20. To start from a known-safe shape, call `bittensor_get_subnet_adapter_manifest_examples` and copy one example as a draft only.
+21. Validate the proposed metadata with `bittensor_validate_subnet_adapter_manifest`; treat `status=fail` as a hard stop before endpoint setup.
+22. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+23. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+24. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+25. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+26. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+27. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+28. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+29. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like
