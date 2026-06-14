@@ -39,6 +39,7 @@ import {
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
+  buildBittensorSubnetAdapterCanaryPacketExport,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1644,15 +1645,27 @@ describe("executeBittensorChatWorkflow", () => {
         requestSha256: "c".repeat(64),
         ttlMinutes: 15,
       });
+      const canaryPacketExport = await buildBittensorSubnetAdapterCanaryPacketExport({
+        adapter: "data_search",
+        netuid: 77,
+        requestSha256: "c".repeat(64),
+        ttlMinutes: 15,
+      });
       expect(packet.status).toBe("approval_template_ready");
       expect(packet.approvalTemplate?.approval.requestSha256).toBe("c".repeat(64));
       expect(packet.evidenceReview.status).toBe("manual_real_canary_review_required");
+      expect(canaryPacketExport.kind).toBe("bittensor_subnet_adapter_canary_packet_export");
+      expect(canaryPacketExport.status).toBe("approval_template_ready");
+      expect(canaryPacketExport.markdown).toContain("Full env value intentionally omitted");
+      expect(canaryPacketExport.markdown).not.toContain("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON=");
+      expect(canaryPacketExport.markdown).not.toContain("c".repeat(64));
       expect(calls.every((call) => call.includes(".well-known"))).toBe(true);
       const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
       expect(card.kind).toBe("adapter_canary_packet");
       expect(card.actions?.[0]?.kind).toBe("copy_payload");
       expect(JSON.stringify(packet)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
       expect(JSON.stringify(card)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+      expect(JSON.stringify(canaryPacketExport)).not.toMatch(/super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON=/i);
     } finally {
       globalThis.fetch = previousFetch;
       if (previousAdapters === undefined) {
