@@ -612,6 +612,8 @@ For review handoff or audit, export the evidence bundle. It combines onboarding,
 curl -s "http://localhost:8787/api/bittensor/adapters/evidence-bundle?adapter=data_search&netuid=77"
 ```
 
+The response includes an `adapter_evidence_bundle` card with review status, required artifact count, warnings, and a safe chat continuation action.
+
 Equivalent MCP tool:
 
 ```text

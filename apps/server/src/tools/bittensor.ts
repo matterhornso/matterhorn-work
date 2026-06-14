@@ -874,6 +874,7 @@ export type BittensorChatCardKind =
   | "readiness_report"
   | "adapter_onboarding"
   | "adapter_launch_gate"
+  | "adapter_evidence_bundle"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -8188,6 +8189,45 @@ export function buildBittensorAdapterLaunchGateCard(report: BittensorSubnetAdapt
     }],
     warnings: report.warnings,
     data: { report },
+  };
+}
+
+export function buildBittensorAdapterEvidenceBundleCard(bundle: BittensorSubnetAdapterEvidenceBundle): BittensorChatCard {
+  const required = bundle.requiredArtifacts.filter((artifact) => artifact.requiredBeforeRealCanary).length;
+  const operator = bundle.requiredArtifacts.filter((artifact) => artifact.source === "operator").length;
+  const canary = bundle.requiredArtifacts.filter((artifact) => artifact.source === "canary_review").length;
+  const blocked = bundle.launchGate.status === "blocked";
+  const nextPrompt = blocked
+    ? `Help me unblock the Bittensor adapter evidence bundle${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`
+    : `Review the Bittensor adapter evidence bundle${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} before any real canary.`;
+  return {
+    kind: "adapter_evidence_bundle",
+    title: "Bittensor adapter evidence bundle",
+    subtitle: titleCase(bundle.launchGate.status),
+    summary: bundle.nextActions[0] ?? "Collect evidence before any real subnet adapter canary.",
+    tone: blocked ? "danger" : bundle.launchGate.status === "mock_ready" ? "good" : "warning",
+    items: [
+      cardItem("Adapter", bundle.requested.adapter ?? "Any"),
+      cardItem("Netuid", bundle.requested.netuid ?? "Any", bundle.requested.netuid === null ? "muted" : "default"),
+      cardItem("Onboarding", titleCase(bundle.onboarding.status), bundle.onboarding.status === "ready_for_preview_review" ? "good" : bundle.onboarding.status === "blocked" ? "danger" : "warning"),
+      cardItem("Launch gate", titleCase(bundle.launchGate.status), blocked ? "danger" : bundle.launchGate.status === "mock_ready" ? "good" : "warning"),
+      cardItem("Required artifacts", required, required ? "warning" : "muted"),
+      cardItem("Canary items", canary, canary ? "warning" : "muted"),
+      cardItem("Operator approvals", operator, operator ? "warning" : "muted"),
+      cardItem("Warnings", bundle.exportWarnings.length, bundle.exportWarnings.length ? "warning" : "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        adapter: bundle.requested.adapter,
+        netuid: bundle.requested.netuid,
+        launchGateStatus: bundle.launchGate.status,
+      },
+    }],
+    warnings: bundle.exportWarnings,
+    data: { bundle },
   };
 }
 

@@ -628,6 +628,12 @@ const server = createServer(async (req, res) => {
         exportWarnings: ["This bundle is evidence for review only; it does not authorize real subnet service execution."],
         nextActions: ["Collect evidence for every required artifact before any real HTTPS canary."],
       },
+      cards: [{
+        kind: "adapter_evidence_bundle",
+        title: "Bittensor adapter evidence bundle",
+        items: [{ label: "Required artifacts", value: "1" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Review the Bittensor adapter evidence bundle before any real canary." } }],
+      }],
     }));
     return;
   }
@@ -1118,6 +1124,8 @@ try {
   assert.equal(adapterEvidenceBundlePayload.report.kind, "bittensor_subnet_adapter_evidence_bundle");
   assert.equal(adapterEvidenceBundlePayload.report.requiredArtifacts[0].id, "operator_approval");
   assert.match(adapterEvidenceBundlePayload.report.exportWarnings.join(" "), /does not authorize real subnet service execution/i);
+  assert.equal(adapterEvidenceBundlePayload.cards[0].kind, "adapter_evidence_bundle");
+  assert.equal(adapterEvidenceBundlePayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterEvidenceBundlePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
