@@ -1267,6 +1267,39 @@ export interface BittensorSubnetAdapterCanaryPacketExport {
   warnings: string[];
 }
 
+export interface BittensorSubnetAdapterSpec {
+  kind: "bittensor_subnet_adapter_spec";
+  version: "matterhorn.bittensor.adapter.v1";
+  generatedAt: string;
+  supportedServiceAdapters: Array<Exclude<BittensorCapabilityManifest["serviceAdapter"], "universal" | "unsupported">>;
+  requiredMetadata: {
+    version: string;
+    netuid: string;
+    serviceAdapter: string;
+    supportedIntents: string;
+    safeModeRequired: string;
+    requestHashRequired: string;
+    maxResponseBytes: string;
+    healthStatus: string;
+    privacy: string;
+  };
+  invocationContract: {
+    previewRequired: true;
+    exactRequestHashRequired: true;
+    userTaskSentOnlyOnInvoke: true;
+    missingHashBehavior: "reject";
+    mismatchedHashBehavior: "reject";
+    defaultRealAdapterState: "disabled";
+  };
+  forbiddenFields: string[];
+  responseLimits: {
+    defaultMaxBytes: number;
+    hardMaxBytes: number;
+  };
+  safetyNotes: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -2814,6 +2847,62 @@ export async function buildBittensorSubnetAdapterCanaryPacketExport(input: {
     status: packet.status,
     markdown: renderBittensorSubnetAdapterCanaryPacketMarkdown(packet),
     warnings: uniqueWarnings(packet.warnings, ["Full approval env values are intentionally omitted from this export."]),
+  };
+}
+
+export function getBittensorSubnetAdapterSpec(): BittensorSubnetAdapterSpec {
+  return {
+    kind: "bittensor_subnet_adapter_spec",
+    version: "matterhorn.bittensor.adapter.v1",
+    generatedAt: nowIso(),
+    supportedServiceAdapters: ["data_search", "inference", "compute", "creative_media", "agent_tooling"],
+    requiredMetadata: {
+      version: "Must equal matterhorn.bittensor.adapter.v1.",
+      netuid: "Bittensor subnet id served by this adapter.",
+      serviceAdapter: "One of data_search, inference, compute, creative_media, or agent_tooling.",
+      supportedIntents: "Must include service_call before Matterhorn can preview direct service use.",
+      safeModeRequired: "Must be true for Matterhorn-managed adapter calls.",
+      requestHashRequired: "Must be true; invocation requires the exact preview request SHA-256.",
+      maxResponseBytes: "Maximum response size the adapter agrees to return.",
+      healthStatus: "ok, degraded, or unavailable.",
+      privacy: "Must explicitly state sendsWalletData=false and sendsKeyMaterial=false.",
+    },
+    invocationContract: {
+      previewRequired: true,
+      exactRequestHashRequired: true,
+      userTaskSentOnlyOnInvoke: true,
+      missingHashBehavior: "reject",
+      mismatchedHashBehavior: "reject",
+      defaultRealAdapterState: "disabled",
+    },
+    forbiddenFields: [
+      "seed",
+      "seedPhrase",
+      "mnemonic",
+      "privateKey",
+      "keyfile",
+      "walletExport",
+      "suri",
+      "password",
+      "hostToken",
+      "credentialValue",
+    ],
+    responseLimits: {
+      defaultMaxBytes: subnetAdapterMaxResponseBytes(),
+      hardMaxBytes: 2_000_000,
+    },
+    safetyNotes: [
+      "Matterhorn never sends seed phrases, mnemonics, private keys, wallet exports, host tokens, or adapter credential values to subnet adapters.",
+      "Metadata conformance sends no user task text and no wallet data.",
+      "Real adapters remain disabled unless explicitly enabled and exact request approvals are configured for reviewed canaries.",
+      "Adapters should return bounded, renderable, non-secret outputs with usage and cost metadata when available.",
+    ],
+    nextActions: [
+      "Implement the metadata document before configuring a provider endpoint.",
+      "Run adapter doctor and metadata conformance before any preview.",
+      "Use mock dry-runs before manual real-adapter canary review.",
+      "Use canary packets and short-lived exact request approvals for reviewed real canaries only.",
+    ],
   };
 }
 

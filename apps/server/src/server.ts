@@ -69,6 +69,7 @@ import {
   getBittensorSignerStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
+  getBittensorSubnetAdapterSpec,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
   invokeBittensorSubnet,
@@ -4093,6 +4094,10 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/adapters/doctor", "client", async () => {
     const report = doctorBittensorSubnetAdapters();
     return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/spec", "client", async () => {
+    return jsonResponse({ success: true, spec: getBittensorSubnetAdapterSpec() });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
