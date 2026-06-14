@@ -1428,6 +1428,15 @@ function validateSubnetAdapterAuth(
   };
 }
 
+function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdapter): string[] {
+  const endpoint = summarizeSubnetAdapterEndpoint(adapter.endpoint);
+  const auth = validateSubnetAdapterAuth(adapter.requiredAuth, adapter.authEnv ?? null);
+  return [
+    endpoint.allowed ? null : endpoint.reason,
+    ...auth.errors,
+  ].filter((item): item is string => Boolean(item));
+}
+
 function parseSubnetAdapterConfigEntries(raw: string): unknown[] | null {
   try {
     const parsed = JSON.parse(raw);
@@ -1909,11 +1918,31 @@ function normalizeAdapterCostEstimate(value: unknown, fallbackModel: BittensorCa
   return amount === null && currency === null && model === fallbackModel ? null : { amount, currency, model };
 }
 
+function subnetAdapterMaxResponseBytes(): number {
+  const configured = Number(readEnv("BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES"));
+  return Number.isFinite(configured) && configured > 0 ? Math.min(2_000_000, Math.max(8_192, configured)) : 256_000;
+}
+
 async function runHttpSubnetAdapter(
   adapter: BittensorConfiguredSubnetAdapter,
   input: BittensorSubnetInvokeInput,
   requestSha256: string,
 ): Promise<BittensorSubnetAdapterRunResult> {
+  const runtimeBlockers = subnetAdapterRuntimeGateBlockers(adapter);
+  if (runtimeBlockers.length) {
+    return {
+      ok: false,
+      mode: "http",
+      adapterKind: adapter.serviceAdapter,
+      netuid: adapter.netuid,
+      requestSha256,
+      message: "Adapter runtime readiness gate blocked invocation.",
+      output: null,
+      warnings: runtimeBlockers,
+      usage: null,
+      costEstimate: null,
+    };
+  }
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (adapter.authEnv) {
     const token = readEnv(adapter.authEnv);
@@ -1946,7 +1975,40 @@ async function runHttpSubnetAdapter(
       usage: null,
       costEstimate: null,
     };
-    const data = asRecord(await res.json());
+    const text = await res.text();
+    if (text.length > subnetAdapterMaxResponseBytes()) {
+      return {
+        ok: false,
+        mode: "http",
+        adapterKind: adapter.serviceAdapter,
+        netuid: adapter.netuid,
+        requestSha256,
+        status: res.status,
+        message: "Adapter response exceeded the configured size limit.",
+        output: null,
+        warnings: ["Adapter response exceeded the configured size limit."],
+        usage: null,
+        costEstimate: null,
+      };
+    }
+    let data: Record<string, unknown>;
+    try {
+      data = asRecord(JSON.parse(text));
+    } catch {
+      return {
+        ok: false,
+        mode: "http",
+        adapterKind: adapter.serviceAdapter,
+        netuid: adapter.netuid,
+        requestSha256,
+        status: res.status,
+        message: "Adapter returned invalid JSON.",
+        output: null,
+        warnings: ["Adapter returned invalid JSON."],
+        usage: null,
+        costEstimate: null,
+      };
+    }
     return {
       ok: data["ok"] !== false,
       mode: "http",
@@ -3423,6 +3485,7 @@ function evaluateSubnetServiceAdapterGate(
   if (!capability.adapterContract.endpointConfigured) blockers.push("Adapter contract declares endpointConfigured=false.");
   if (!supportsIntent) blockers.push(`Adapter contract does not declare ${intent} support.`);
   if (!contractValidation.ok) blockers.push(...contractValidation.errors);
+  if (configuredAdapter) blockers.push(...subnetAdapterRuntimeGateBlockers(configuredAdapter));
 
   return {
     adapterContract: summarizeSubnetServiceAdapterContract(capability.adapterContract),

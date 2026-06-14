@@ -560,8 +560,10 @@ describe("executeBittensorChatWorkflow", () => {
     await withMockedFivePromptSidecar(async () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       const previousToken = process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousFetch = globalThis.fetch;
       process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN = "adapter-token";
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
         name: "Mock image adapter",
@@ -616,6 +618,11 @@ describe("executeBittensorChatWorkflow", () => {
         } else {
           process.env.BITTENSOR_IMAGE_ADAPTER_TOKEN = previousToken;
         }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+        }
       }
     });
   });
@@ -639,6 +646,52 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
         } else {
           process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+      }
+    });
+  });
+
+  test("blocks non-allowlisted HTTPS adapters before previewed chat invocation can call fetch", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      const previousFetch = globalThis.fetch;
+      let adapterCalls = 0;
+      try {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Blocked HTTPS adapter",
+          serviceAdapter: "inference",
+          endpoint: "https://adapter.invalid/invoke",
+          requiredAuth: "none",
+          costModel: "provider_priced",
+          safetyNotes: ["Blocked adapter safety note."],
+        }]);
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).startsWith("https://adapter.invalid")) {
+            adapterCalls += 1;
+            throw new Error("adapter should not be called when not allowlisted");
+          }
+          return previousFetch(input, init);
+        }) as typeof fetch;
+        const result = await executeBittensorChatWorkflow({ message: "use subnet 77 for inference" });
+        const preview = result.data.preview as { supported?: boolean; warnings?: string[] } | undefined;
+        expect(result.execution).toBe("unsupported");
+        expect(preview?.supported).toBe(false);
+        expect(result.warnings.join(" ")).toContain("BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST");
+        expect(adapterCalls).toBe(0);
+      } finally {
+        globalThis.fetch = previousFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
         }
       }
     });
@@ -746,8 +799,10 @@ describe("executeBittensorChatWorkflow", () => {
   test("normalizes mocked HTTP adapter responses through the adapter runner envelope", async () => {
     await withMockedFivePromptSidecar(async () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const sidecarFetch = globalThis.fetch;
       const task = "Search for subnet service adapter examples.";
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
         name: "HTTP data search adapter",
@@ -812,6 +867,83 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
         } else {
           process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+        }
+      }
+    });
+  });
+
+  test("fails closed when HTTP adapter responses exceed the configured size limit", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      const previousLimit = process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES;
+      const sidecarFetch = globalThis.fetch;
+      const task = "Return an oversized adapter response.";
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+      process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES = "8192";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "HTTP oversized adapter",
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "none",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTP adapter safety note."],
+      }]);
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("https://adapter.invalid")) {
+          return new Response(JSON.stringify({
+            ok: true,
+            message: "oversized",
+            result: { text: "x".repeat(20_000) },
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return sidecarFetch(input, init);
+      }) as typeof fetch;
+
+      try {
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+        });
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task,
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const output = invocation.result.output as { ok?: boolean; message?: string; warnings?: string[] } | undefined;
+        expect(preview.supported).toBe(true);
+        expect(invocation.supported).toBe(false);
+        expect(output?.ok).toBe(false);
+        expect(output?.message).toContain("size limit");
+        expect(output?.warnings?.join(" ")).toContain("size limit");
+      } finally {
+        globalThis.fetch = sidecarFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+        }
+        if (previousLimit === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES = previousLimit;
         }
       }
     });
@@ -990,8 +1122,10 @@ describe("executeBittensorChatWorkflow", () => {
     await withMockedFivePromptSidecar(async () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       const previousToken = process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const sidecarFetch = globalThis.fetch;
       process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "adapter-token";
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
         name: "HTTP inference adapter",
@@ -1048,6 +1182,11 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
         } else {
           process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = previousToken;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
         }
       }
     });
@@ -1626,6 +1765,10 @@ describe("capabilityFromSubnet", () => {
 
   test("marks configured service adapter previews as supported only after contract validation", async () => {
     const previous = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousLocal = process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS;
+    const previousToken = process.env.BITTENSOR_MOCK_ADAPTER_TOKEN;
+    process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS = "1";
+    process.env.BITTENSOR_MOCK_ADAPTER_TOKEN = "mock-token";
     process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
       netuid: 14,
       name: "Mock compute adapter",
@@ -1655,6 +1798,16 @@ describe("capabilityFromSubnet", () => {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       } else {
         process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previous;
+      }
+      if (previousLocal === undefined) {
+        delete process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_LOCAL_SUBNET_ADAPTERS = previousLocal;
+      }
+      if (previousToken === undefined) {
+        delete process.env.BITTENSOR_MOCK_ADAPTER_TOKEN;
+      } else {
+        process.env.BITTENSOR_MOCK_ADAPTER_TOKEN = previousToken;
       }
     }
   });
