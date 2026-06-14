@@ -471,6 +471,44 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_conformance",
+        status: "pass",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        total: 1,
+        passed: 1,
+        failed: 0,
+        skipped: 0,
+        cases: [{
+          name: "Mock compute adapter",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+          adapter: "compute",
+          mode: "mock",
+          status: "pass",
+          metadataEndpoint: { configured: true, mode: "mock", origin: "mock://compute", host: "compute", allowed: true, reason: "Mock metadata endpoint is enabled." },
+          metadata: {
+            version: "matterhorn.bittensor.adapter.v1",
+            netuid: Number(url.searchParams.get("netuid") || 14),
+            serviceAdapter: "compute",
+            supportedIntents: ["service_call"],
+            safeModeRequired: true,
+            requestHashRequired: true,
+            maxResponseBytes: 256000,
+            healthStatus: "ok",
+          },
+          checks: [{ id: "no_user_task", label: "No user task sent", status: "pass", summary: "No user task text was sent." }],
+          errors: [],
+          warnings: [],
+        }],
+        warnings: [],
+        nextActions: ["Run preview-confirm-invoke smoke tests."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/dry-run") {
     res.end(JSON.stringify({
       success: true,
@@ -775,6 +813,7 @@ try {
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
     "bittensor_get_subnet_adapter_templates",
+    "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
@@ -795,6 +834,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
+  assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
   assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
   assert.match(descriptionFor("bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
@@ -874,6 +914,14 @@ try {
   assert.equal(adapterTemplatePayload.report.templates[0].config.netuid, 14);
   assert.equal(adapterTemplatePayload.report.templates[0].env.credentialValue, "<set-outside-matterhorn>");
   assert.doesNotMatch(JSON.stringify(adapterTemplatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+
+  const adapterConformance = await ask({ jsonrpc: "2.0", id: 31, method: "tools/call", params: { name: "bittensor_probe_subnet_adapter_conformance", arguments: { netuid: 14 } } });
+  const adapterConformancePayload = JSON.parse(adapterConformance.result.content[0].text);
+  assert.equal(adapterConformancePayload.success, true);
+  assert.equal(adapterConformancePayload.report.kind, "bittensor_subnet_adapter_conformance");
+  assert.equal(adapterConformancePayload.report.passed, 1);
+  assert.equal(adapterConformancePayload.report.cases[0].metadata.requestHashRequired, true);
+  assert.doesNotMatch(JSON.stringify(adapterConformancePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterDryRun = await ask({ jsonrpc: "2.0", id: 29, method: "tools/call", params: { name: "bittensor_dry_run_subnet_adapters", arguments: { netuid: 14, task: "dry run task" } } });
   const adapterDryRunPayload = JSON.parse(adapterDryRun.result.content[0].text);

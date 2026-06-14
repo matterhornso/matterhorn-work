@@ -130,6 +130,7 @@ export interface BittensorSubnetAdapterConfigTemplate {
     name: string;
     serviceAdapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
     endpoint: string;
+    metadataEndpoint: string;
     requiredAuth: "none" | "api_key";
     costModel: "free_read" | "provider_priced" | "tao_fee";
     authEnv?: string;
@@ -868,6 +869,7 @@ export interface BittensorConfiguredSubnetAdapter {
   name: string;
   serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
   endpoint: string;
+  metadataEndpoint?: string | null;
   requiredAuth: BittensorCapabilityManifest["requiredAuth"];
   costModel: BittensorCapabilityManifest["costModel"];
   timeoutMs: number;
@@ -951,6 +953,48 @@ export interface BittensorSubnetAdapterDryRunReport {
   failed: number;
   skipped: number;
   cases: BittensorSubnetAdapterDryRunCase[];
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface BittensorSubnetAdapterConformanceCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warning" | "fail";
+  summary: string;
+}
+
+export interface BittensorSubnetAdapterConformanceCase {
+  name: string;
+  netuid: number;
+  adapter: BittensorCapabilityManifest["serviceAdapter"];
+  mode: BittensorSubnetAdapterDoctorEndpoint["mode"];
+  status: "pass" | "warning" | "fail" | "skipped";
+  metadataEndpoint: BittensorSubnetAdapterDoctorEndpoint;
+  metadata: {
+    version: string | null;
+    netuid: number | null;
+    serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+    supportedIntents: string[];
+    safeModeRequired: boolean | null;
+    requestHashRequired: boolean | null;
+    maxResponseBytes: number | null;
+    healthStatus: string | null;
+  } | null;
+  checks: BittensorSubnetAdapterConformanceCheck[];
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BittensorSubnetAdapterConformanceReport {
+  kind: "bittensor_subnet_adapter_conformance";
+  status: "pass" | "warning" | "fail";
+  checkedAt: string;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  cases: BittensorSubnetAdapterConformanceCase[];
   warnings: string[];
   nextActions: string[];
 }
@@ -1427,6 +1471,7 @@ function buildSubnetAdapterTemplate(params: {
   description: string;
   recommendedFor: string[];
   endpoint: string;
+  metadataEndpoint: string;
   allowlist: string;
   requiredAuth: "none" | "api_key";
   costModel: "free_read" | "provider_priced" | "tao_fee";
@@ -1439,6 +1484,7 @@ function buildSubnetAdapterTemplate(params: {
     name: params.name,
     serviceAdapter: params.adapter,
     endpoint: params.endpoint,
+    metadataEndpoint: params.metadataEndpoint,
     requiredAuth: params.requiredAuth,
     costModel: params.costModel,
     ...(params.authEnv ? { authEnv: params.authEnv } : {}),
@@ -1484,6 +1530,7 @@ export function getBittensorSubnetAdapterTemplates(input: {
       description: "Template for a reviewed HTTPS adapter that accepts a user task and returns bounded search or retrieval results.",
       recommendedFor: ["data search", "retrieval", "research", "knowledge-base lookup", "web or dataset search"],
       endpoint: "https://adapter.example.com/bittensor/data-search/invoke",
+      metadataEndpoint: "https://adapter.example.com/.well-known/matterhorn-bittensor-adapter.json",
       allowlist: "adapter.example.com",
       requiredAuth: "api_key",
       costModel: "provider_priced",
@@ -1501,6 +1548,7 @@ export function getBittensorSubnetAdapterTemplates(input: {
       description: "Template for a reviewed HTTPS adapter that runs a prompt against an inference subnet service and returns bounded model output.",
       recommendedFor: ["text inference", "LLM response", "classification", "summarization", "reasoning"],
       endpoint: "https://adapter.example.com/bittensor/inference/invoke",
+      metadataEndpoint: "https://adapter.example.com/.well-known/matterhorn-bittensor-adapter.json",
       allowlist: "adapter.example.com",
       requiredAuth: "api_key",
       costModel: "provider_priced",
@@ -1689,6 +1737,7 @@ export function doctorBittensorSubnetAdapters(): BittensorSubnetAdapterDoctorRep
         name: firstString(record, ["name", "label"]) ?? `Subnet ${netuid} adapter`,
         serviceAdapter,
         endpoint,
+        metadataEndpoint: firstString(record, ["metadataEndpoint", "metadata_endpoint", "manifestUrl", "manifest_url", "healthEndpoint", "health_endpoint"]),
         requiredAuth,
         costModel,
         timeoutMs,
@@ -1913,6 +1962,258 @@ export async function runBittensorSubnetAdapterDryRun(input: {
       : passed
         ? ["Use the same preview-confirm-invoke assertions for the first real adapter integration PR."]
         : ["Configure an enabled mock subnet adapter, then rerun the dry-run harness."],
+	  };
+	}
+
+function subnetAdapterMetadataEndpoint(adapter: BittensorConfiguredSubnetAdapter): string | null {
+  if (adapter.metadataEndpoint) return adapter.metadataEndpoint;
+  if (isMockSubnetAdapterEndpoint(adapter.endpoint)) return `${adapter.endpoint.replace(/\/$/, "")}/metadata`;
+  try {
+    const parsed = new URL(adapter.endpoint);
+    return `${parsed.origin}/.well-known/matterhorn-bittensor-adapter.json`;
+  } catch {
+    return null;
+  }
+}
+
+function mockSubnetAdapterMetadata(adapter: BittensorConfiguredSubnetAdapter): Record<string, unknown> {
+  return {
+    version: "matterhorn.bittensor.adapter.v1",
+    netuid: adapter.netuid,
+    serviceAdapter: adapter.serviceAdapter,
+    supportedIntents: ["service_call"],
+    safeModeRequired: true,
+    requestHashRequired: true,
+    maxResponseBytes: subnetAdapterMaxResponseBytes(),
+    privacy: {
+      sendsTaskText: true,
+      sendsSs58Address: true,
+      sendsWalletData: false,
+      sendsKeyMaterial: false,
+    },
+    requestSchema: defaultSubnetAdapterRequestSchema(),
+    resultSchema: defaultSubnetAdapterResultSchema(),
+    health: { status: "ok" },
+  };
+}
+
+function conformanceCheck(
+  id: string,
+  label: string,
+  status: BittensorSubnetAdapterConformanceCheck["status"],
+  summary: string,
+): BittensorSubnetAdapterConformanceCheck {
+  return { id, label, status, summary };
+}
+
+function summarizeAdapterConformanceMetadata(metadata: Record<string, unknown>): NonNullable<BittensorSubnetAdapterConformanceCase["metadata"]> {
+  const supportedIntents = arrayFrom(metadata["supportedIntents"] ?? metadata["supported_intents"])
+    .filter((item): item is string => typeof item === "string");
+  const privacy = asRecord(metadata["privacy"]);
+  const health = asRecord(metadata["health"]);
+  return {
+    version: firstString(metadata, ["version"]),
+    netuid: firstNumber(metadata, ["netuid", "net_uid", "subnet"]),
+    serviceAdapter: normalizeServiceAdapter(metadata["serviceAdapter"] ?? metadata["service_adapter"] ?? metadata["adapter"], "unsupported"),
+    supportedIntents,
+    safeModeRequired: typeof metadata["safeModeRequired"] === "boolean"
+      ? metadata["safeModeRequired"]
+      : typeof metadata["safe_mode_required"] === "boolean"
+        ? metadata["safe_mode_required"] as boolean
+        : null,
+    requestHashRequired: typeof metadata["requestHashRequired"] === "boolean"
+      ? metadata["requestHashRequired"]
+      : typeof metadata["request_hash_required"] === "boolean"
+        ? metadata["request_hash_required"] as boolean
+        : null,
+    maxResponseBytes: firstNumber(metadata, ["maxResponseBytes", "max_response_bytes"]),
+    healthStatus: firstString(health, ["status"]) ?? firstString(privacy, ["healthStatus", "health_status"]),
+  };
+}
+
+function buildAdapterConformanceChecks(
+  adapter: BittensorConfiguredSubnetAdapter,
+  metadata: Record<string, unknown>,
+  endpoint: BittensorSubnetAdapterDoctorEndpoint,
+): BittensorSubnetAdapterConformanceCheck[] {
+  const summary = summarizeAdapterConformanceMetadata(metadata);
+  const privacy = asRecord(metadata["privacy"]);
+  const schemaSecretPath = secretFieldPath({
+    requestSchema: metadata["requestSchema"] ?? metadata["request_schema"],
+    resultSchema: metadata["resultSchema"] ?? metadata["result_schema"],
+  });
+  const maxResponseLimit = subnetAdapterMaxResponseBytes();
+  return [
+    conformanceCheck(
+      "metadata_endpoint",
+      "Metadata endpoint",
+      endpoint.allowed ? "pass" : "fail",
+      endpoint.allowed ? "Metadata endpoint is allowed by adapter endpoint policy." : endpoint.reason,
+    ),
+    conformanceCheck(
+      "no_user_task",
+      "No user task sent",
+      "pass",
+      "Conformance probe sends no user task text, SS58 address, wallet data, signing payload, or request body.",
+    ),
+    conformanceCheck(
+      "version",
+      "Metadata version",
+      summary?.version === "matterhorn.bittensor.adapter.v1" ? "pass" : "fail",
+      summary?.version === "matterhorn.bittensor.adapter.v1" ? "Adapter declares the Matterhorn adapter contract version." : "Adapter metadata must declare version matterhorn.bittensor.adapter.v1.",
+    ),
+    conformanceCheck(
+      "netuid",
+      "Netuid",
+      summary?.netuid === adapter.netuid ? "pass" : "fail",
+      summary?.netuid === adapter.netuid ? "Adapter metadata netuid matches configured netuid." : "Adapter metadata netuid does not match configured netuid.",
+    ),
+    conformanceCheck(
+      "service_adapter",
+      "Service adapter",
+      summary?.serviceAdapter === adapter.serviceAdapter ? "pass" : "fail",
+      summary?.serviceAdapter === adapter.serviceAdapter ? "Adapter metadata service adapter matches configuration." : "Adapter metadata service adapter does not match configuration.",
+    ),
+    conformanceCheck(
+      "service_call",
+      "Service call intent",
+      summary?.supportedIntents.includes("service_call") ? "pass" : "fail",
+      summary?.supportedIntents.includes("service_call") ? "Adapter declares service_call support." : "Adapter metadata must declare service_call support.",
+    ),
+    conformanceCheck(
+      "safe_mode",
+      "Safe mode",
+      summary?.safeModeRequired === true ? "pass" : "fail",
+      summary?.safeModeRequired === true ? "Adapter requires safeMode on service requests." : "Adapter metadata must declare safeModeRequired: true.",
+    ),
+    conformanceCheck(
+      "request_hash",
+      "Request hash",
+      summary?.requestHashRequired === true ? "pass" : "fail",
+      summary?.requestHashRequired === true ? "Adapter requires reviewed request SHA-256 confirmation." : "Adapter metadata must declare requestHashRequired: true.",
+    ),
+    conformanceCheck(
+      "privacy",
+      "Privacy contract",
+      privacy["sendsKeyMaterial"] === false && privacy["sendsWalletData"] === false ? "pass" : "fail",
+      privacy["sendsKeyMaterial"] === false && privacy["sendsWalletData"] === false ? "Adapter metadata forbids key material and wallet data." : "Adapter privacy metadata must explicitly forbid key material and wallet data.",
+    ),
+    conformanceCheck(
+      "schema_redaction",
+      "Schema redaction",
+      schemaSecretPath ? "fail" : "pass",
+      schemaSecretPath ? `Adapter schemas contain a secret-shaped field at ${schemaSecretPath}.` : "Adapter schemas do not expose secret-shaped fields.",
+    ),
+    conformanceCheck(
+      "response_bound",
+      "Response bound",
+      summary?.maxResponseBytes !== null && summary.maxResponseBytes <= maxResponseLimit ? "pass" : "warning",
+      summary?.maxResponseBytes !== null && summary.maxResponseBytes <= maxResponseLimit
+        ? "Adapter metadata declares a bounded response size compatible with Matterhorn."
+        : "Adapter metadata should declare maxResponseBytes at or below Matterhorn's configured response limit.",
+    ),
+  ];
+}
+
+async function fetchAdapterConformanceMetadata(
+  adapter: BittensorConfiguredSubnetAdapter,
+): Promise<{ endpoint: BittensorSubnetAdapterDoctorEndpoint; metadata: Record<string, unknown> | null; errors: string[]; warnings: string[] }> {
+  const metadataUrl = subnetAdapterMetadataEndpoint(adapter);
+  const endpoint = summarizeSubnetAdapterEndpoint(metadataUrl);
+  if (!metadataUrl) return { endpoint, metadata: null, errors: ["Adapter metadata endpoint is unavailable."], warnings: [] };
+  if (!endpoint.allowed) return { endpoint, metadata: null, errors: [endpoint.reason], warnings: [] };
+  if (endpoint.mode === "mock") return { endpoint, metadata: mockSubnetAdapterMetadata(adapter), errors: [], warnings: ["Mock adapter metadata only; no real adapter health endpoint was called."] };
+  try {
+    const res = await fetch(metadataUrl, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(Math.min(5_000, adapter.timeoutMs)),
+    });
+    if (!res.ok) return { endpoint, metadata: null, errors: [`Adapter metadata endpoint returned HTTP ${res.status}.`], warnings: [] };
+    const text = await res.text();
+    const limit = Math.min(64_000, subnetAdapterMaxResponseBytes());
+    if (text.length > limit) return { endpoint, metadata: null, errors: ["Adapter metadata response exceeded the conformance size limit."], warnings: [] };
+    try {
+      return { endpoint, metadata: asRecord(JSON.parse(text)), errors: [], warnings: [] };
+    } catch {
+      return { endpoint, metadata: null, errors: ["Adapter metadata endpoint returned invalid JSON."], warnings: [] };
+    }
+  } catch (err) {
+    return { endpoint, metadata: null, errors: [err instanceof Error ? err.message : "Adapter metadata probe failed."], warnings: [] };
+  }
+}
+
+export async function probeBittensorSubnetAdapterConformance(input: {
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterConformanceReport> {
+  const checkedAt = nowIso();
+  const doctor = doctorBittensorSubnetAdapters();
+  const limit = Math.max(1, Math.min(20, Math.floor(Number(input.limit ?? 10) || 10)));
+  const adapters = configuredSubnetAdapters();
+  const entries = doctor.entries.filter((entry) => input.netuid === null || input.netuid === undefined || entry.netuid === input.netuid).slice(0, limit);
+  const cases: BittensorSubnetAdapterConformanceCase[] = [];
+
+  for (const entry of entries) {
+    const adapter = entry.netuid === null ? null : adapters.find((candidate) => candidate.netuid === entry.netuid);
+    if (!adapter || !entry.serviceCallReady) {
+      cases.push({
+        name: entry.name,
+        netuid: entry.netuid ?? -1,
+        adapter: entry.serviceAdapter,
+        mode: entry.endpoint.mode,
+        status: "skipped",
+        metadataEndpoint: entry.endpoint,
+        metadata: null,
+        checks: [],
+        errors: entry.errors,
+        warnings: uniqueWarnings(entry.warnings, ["Adapter is not service-call ready, so conformance metadata was not probed."]),
+      });
+      continue;
+    }
+    const fetched = await fetchAdapterConformanceMetadata(adapter);
+    const checks = fetched.metadata ? buildAdapterConformanceChecks(adapter, fetched.metadata, fetched.endpoint) : [
+      conformanceCheck("metadata_reachable", "Metadata reachable", "fail", fetched.errors[0] ?? "Adapter metadata endpoint was not reachable."),
+      conformanceCheck("no_user_task", "No user task sent", "pass", "Conformance probe sends no user task text, SS58 address, wallet data, signing payload, or request body."),
+    ];
+    const failed = checks.some((check) => check.status === "fail");
+    const warning = checks.some((check) => check.status === "warning");
+    cases.push({
+      name: adapter.name,
+      netuid: adapter.netuid,
+      adapter: adapter.serviceAdapter,
+      mode: fetched.endpoint.mode,
+      status: failed ? "fail" : warning ? "warning" : "pass",
+      metadataEndpoint: fetched.endpoint,
+      metadata: fetched.metadata ? summarizeAdapterConformanceMetadata(fetched.metadata) : null,
+      checks,
+      errors: fetched.errors,
+      warnings: fetched.warnings,
+    });
+  }
+
+  const passed = cases.filter((item) => item.status === "pass").length;
+  const failed = cases.filter((item) => item.status === "fail").length;
+  const skipped = cases.filter((item) => item.status === "skipped").length;
+  return {
+    kind: "bittensor_subnet_adapter_conformance",
+    status: failed ? "fail" : passed ? skipped ? "warning" : "pass" : "warning",
+    checkedAt,
+    total: cases.length,
+    passed,
+    failed,
+    skipped,
+    cases,
+    warnings: uniqueWarnings(
+      doctor.warnings,
+      cases.length ? [] : ["No configured subnet adapters matched the conformance filters."],
+      skipped ? [`${skipped} adapter conformance case(s) were skipped.`] : [],
+    ),
+    nextActions: failed
+      ? ["Fix failed conformance checks before enabling real adapter invocation."]
+      : passed
+        ? ["Run preview-confirm-invoke smoke tests against a reviewed adapter before enabling production usage."]
+        : ["Configure an adapter and metadata endpoint, then rerun the conformance probe."],
   };
 }
 
@@ -1936,6 +2237,7 @@ function configuredSubnetAdapters(): BittensorConfiguredSubnetAdapter[] {
         name: firstString(record, ["name", "label"]) ?? `Subnet ${netuid} adapter`,
         serviceAdapter: normalizeServiceAdapter(record["serviceAdapter"] ?? record["adapter"], "unsupported"),
         endpoint,
+        metadataEndpoint: firstString(record, ["metadataEndpoint", "metadata_endpoint", "manifestUrl", "manifest_url", "healthEndpoint", "health_endpoint"]),
         requiredAuth: normalizeRequiredAuth(record["requiredAuth"] ?? record["auth"]),
         costModel: normalizeCostModel(record["costModel"] ?? record["cost"]),
         timeoutMs: Math.min(60_000, Math.max(1_000, timeoutMs)),
