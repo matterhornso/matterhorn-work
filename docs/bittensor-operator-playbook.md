@@ -722,6 +722,61 @@ The spec defines required metadata fields, preview-confirm-invoke behavior,
 response-size limits, forbidden secret-shaped fields, and the default-off real
 adapter boundary.
 
+Validate the adapter manifest before endpoint conformance. This is a no-execution check: it does not send task text, wallet data, signing payloads, or request bodies to any subnet service.
+
+```bash
+curl -s -X POST "http://localhost:8787/api/bittensor/adapters/spec/validate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "manifest": {
+      "version": "matterhorn.bittensor.adapter.v1",
+      "name": "Example data search adapter",
+      "netuid": 77,
+      "serviceAdapter": "data_search",
+      "supportedIntents": ["explain", "metagraph", "service_call"],
+      "safeModeRequired": true,
+      "requestHashRequired": true,
+      "maxResponseBytes": 64000,
+      "healthStatus": "ok",
+      "requiredAuth": "api_key",
+      "costModel": "provider_priced",
+      "endpointConfigured": true,
+      "requestSchema": { "type": "object" },
+      "resultSchema": { "type": "object" },
+      "privacy": {
+        "sendsTaskText": true,
+        "sendsSs58Address": false,
+        "sendsWalletData": false,
+        "sendsKeyMaterial": false
+      },
+      "safetyNotes": ["No wallet data, key material, host token, or credential values are accepted."]
+    }
+  }'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_validate_subnet_adapter_manifest({
+  "manifest": {
+    "version": "matterhorn.bittensor.adapter.v1",
+    "netuid": 77,
+    "serviceAdapter": "data_search",
+    "supportedIntents": ["explain", "metagraph", "service_call"],
+    "safeModeRequired": true,
+    "requestHashRequired": true,
+    "maxResponseBytes": 64000,
+    "healthStatus": "ok",
+    "privacy": {
+      "sendsWalletData": false,
+      "sendsKeyMaterial": false
+    }
+  }
+})
+```
+
+Treat `status=fail` as a hard stop. Fix manifest errors before configuring endpoints, running conformance, building canary packets, or asking an operator for a real-adapter review.
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/templates?adapter=data_search&netuid=77"
 ```
@@ -972,14 +1027,15 @@ Use the Matterhorn Work MCP server for Bittensor.
 17. For lower-level approval generation, call `bittensor_create_subnet_adapter_approval_template`; use the returned env value only for a short-lived reviewed canary window.
 18. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
 19. Before writing adapter code, call `bittensor_get_subnet_adapter_spec` to inspect metadata fields, forbidden fields, response limits, and preview-confirm-invoke rules.
-20. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-21. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-22. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-23. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-24. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-25. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-26. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-27. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+20. Validate the proposed metadata with `bittensor_validate_subnet_adapter_manifest`; treat `status=fail` as a hard stop before endpoint setup.
+21. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+22. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+23. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+24. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+25. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+26. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+27. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+28. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like

@@ -8,6 +8,7 @@ import {
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
+  buildBittensorAdapterManifestValidationCard,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
@@ -79,6 +80,7 @@ import {
   submitSignedBittensorExtrinsic,
   TaoAppBittensorProvider,
   validateBittensorSubnetServiceAdapterContract,
+  validateBittensorSubnetAdapterManifest,
 } from "./bittensor.js";
 
 process.env.BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE = "1";
@@ -1504,6 +1506,85 @@ describe("executeBittensorChatWorkflow", () => {
     expect(spec.forbiddenFields).toContain("privateKey");
     expect(spec.responseLimits.defaultMaxBytes).toBeGreaterThan(0);
     expect(JSON.stringify(spec)).not.toMatch(/super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue=/i);
+  });
+
+  test("validates safe subnet adapter manifests without invoking services", () => {
+    const validation = validateBittensorSubnetAdapterManifest({
+      version: "matterhorn.bittensor.adapter.v1",
+      name: "Example data search adapter",
+      netuid: 18,
+      serviceAdapter: "data_search",
+      supportedIntents: ["explain", "metagraph", "service_call"],
+      safeModeRequired: true,
+      requestHashRequired: true,
+      maxResponseBytes: 64_000,
+      healthStatus: "ok",
+      requiredAuth: "api_key",
+      costModel: "provider_priced",
+      endpointConfigured: true,
+      requestSchema: {
+        type: "object",
+        properties: {
+          task: { type: "string" },
+          previewRequestSha256: { type: "string" },
+        },
+      },
+      resultSchema: {
+        type: "object",
+        properties: {
+          summary: { type: "string" },
+          results: { type: "array", items: { type: "object" } },
+        },
+      },
+      privacy: {
+        sendsTaskText: true,
+        sendsSs58Address: false,
+        sendsWalletData: false,
+        sendsKeyMaterial: false,
+      },
+      safetyNotes: ["No wallet data, key material, host token, or credential values are accepted."],
+    });
+    expect(validation.kind).toBe("bittensor_subnet_adapter_manifest_validation");
+    expect(validation.status).toBe("pass");
+    expect(validation.serviceCallReady).toBe(true);
+    expect(validation.errors).toHaveLength(0);
+    const card = buildBittensorAdapterManifestValidationCard(validation);
+    expect(card.kind).toBe("adapter_manifest_validation");
+    expect(card.tone).toBe("good");
+    expect(card.items.find((item) => item.label === "Service call")?.value).toBe("Ready");
+    expect(JSON.stringify(validation)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("blocks unsafe subnet adapter manifests before conformance or invocation", () => {
+    const validation = validateBittensorSubnetAdapterManifest({
+      version: "matterhorn.bittensor.adapter.v1",
+      netuid: 18,
+      serviceAdapter: "data_search",
+      supportedIntents: ["service_call"],
+      safeModeRequired: true,
+      requestHashRequired: true,
+      maxResponseBytes: 64_000,
+      healthStatus: "ok",
+      endpointConfigured: true,
+      requestSchema: {
+        type: "object",
+        properties: {
+          privateKey: { type: "string" },
+        },
+      },
+      resultSchema: { type: "object" },
+      privacy: {
+        sendsWalletData: false,
+        sendsKeyMaterial: false,
+      },
+      safetyNotes: ["Unsafe fixture should be blocked."],
+    });
+    expect(validation.status).toBe("fail");
+    expect(validation.serviceCallReady).toBe(false);
+    expect(validation.errors.join(" ")).toContain("secret-shaped field");
+    const card = buildBittensorAdapterManifestValidationCard(validation);
+    expect(card.tone).toBe("danger");
+    expect(card.items.find((item) => item.label === "Service call")?.value).toBe("Blocked");
   });
 
   test("returns real adapter onboarding templates without credential values", () => {
