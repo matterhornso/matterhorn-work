@@ -884,7 +884,7 @@ async function bittensor_review_subnet_adapter_evidence(args = {}) {
   if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
   const query = params.toString();
   const res = await callServer(`/api/bittensor/adapters/evidence-review${query ? `?${query}` : ""}`);
-  return { success: true, review: res.review };
+  return { success: true, review: res.review, cards: res.cards || [] };
 }
 
 async function bittensor_probe_subnet_adapter_conformance(args = {}) {

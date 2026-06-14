@@ -645,6 +645,8 @@ When an agent needs a deterministic go/no-go label, run the evidence review. It 
 curl -s "http://localhost:8787/api/bittensor/adapters/evidence-review?adapter=data_search&netuid=77"
 ```
 
+The response includes an `adapter_evidence_review` card with the decision, missing required artifact count, blocked reason count, and a safe continuation prompt.
+
 Equivalent MCP tool:
 
 ```text

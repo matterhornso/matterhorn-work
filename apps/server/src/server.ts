@@ -23,6 +23,7 @@ import {
   buildBittensorAdapterOnboardingCard,
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
+  buildBittensorAdapterEvidenceReviewCard,
   buildBittensorReadinessCard,
   buildBittensorSignerCard,
   buildBittensorSidecarHealthCard,
@@ -4218,7 +4219,7 @@ function createRoutes(
       netuid,
       limit,
     });
-    return jsonResponse({ success: true, review });
+    return jsonResponse({ success: true, review, cards: [buildBittensorAdapterEvidenceReviewCard(review)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/conformance", "client", async (ctx) => {
