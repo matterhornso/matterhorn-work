@@ -307,6 +307,25 @@ export interface BittensorSubnetAdapterEvidenceExport {
   warnings: string[];
 }
 
+export interface BittensorSubnetAdapterEvidenceReviewDecision {
+  kind: "bittensor_subnet_adapter_evidence_review";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  status: "blocked" | "mock_dry_run_ready" | "manual_real_canary_review_required";
+  summary: string;
+  requiredArtifactCount: number;
+  missingRequiredArtifactCount: number;
+  launchGateStatus: BittensorSubnetAdapterLaunchGateReport["status"];
+  onboardingStatus: BittensorSubnetAdapterOnboardingPlan["status"];
+  allowedNextActions: string[];
+  blockedReasons: string[];
+  warnings: string[];
+  nextPrompt: string;
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -2352,6 +2371,66 @@ export async function buildBittensorSubnetAdapterEvidenceExport(input: {
     },
     markdown: renderBittensorSubnetAdapterEvidenceMarkdown(report),
     warnings: report.exportWarnings,
+  };
+}
+
+export async function reviewBittensorSubnetAdapterEvidence(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterEvidenceReviewDecision> {
+  const bundle = await buildBittensorSubnetAdapterEvidenceBundle(input);
+  const blockedReasons = [
+    ...bundle.launchGate.requirements
+      .filter((requirement) => requirement.status === "blocked" || requirement.status === "not_configured")
+      .map((requirement) => `${requirement.label}: ${requirement.detail}`),
+    ...bundle.onboarding.gates
+      .filter((gate) => gate.status === "blocked" || gate.status === "not_configured")
+      .map((gate) => `${gate.label}: ${gate.summary}`),
+  ];
+  const status: BittensorSubnetAdapterEvidenceReviewDecision["status"] =
+    bundle.launchGate.status === "mock_ready"
+      ? "mock_dry_run_ready"
+      : bundle.launchGate.status === "manual_review_required"
+        ? "manual_real_canary_review_required"
+        : "blocked";
+  const missingRequiredArtifactCount = status === "blocked"
+    ? bundle.requiredArtifacts.filter((artifact) => artifact.requiredBeforeRealCanary).length
+    : 0;
+  const nextPrompt = status === "mock_dry_run_ready"
+    ? `Run the Bittensor mock adapter dry-run harness${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} and summarize failures.`
+    : status === "manual_real_canary_review_required"
+      ? `Prepare a manual real-adapter canary review packet${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`} without invoking the subnet.`
+      : `Help me unblock the Bittensor adapter evidence review${bundle.requested.netuid === null ? "" : ` for subnet ${bundle.requested.netuid}`}.`;
+  const summary = status === "mock_dry_run_ready"
+    ? "Mock adapter evidence is ready for the dry-run harness. Real subnet execution remains disabled."
+    : status === "manual_real_canary_review_required"
+      ? "A real adapter needs manual review before any canary. This decision does not authorize invocation."
+      : "Adapter evidence is blocked or incomplete. Resolve the listed reasons before any canary.";
+
+  return {
+    kind: "bittensor_subnet_adapter_evidence_review",
+    generatedAt: nowIso(),
+    requested: bundle.requested,
+    status,
+    summary,
+    requiredArtifactCount: bundle.requiredArtifacts.length,
+    missingRequiredArtifactCount,
+    launchGateStatus: bundle.launchGate.status,
+    onboardingStatus: bundle.onboarding.status,
+    allowedNextActions: status === "mock_dry_run_ready"
+      ? ["Run mock dry-run only.", "Keep real adapters disabled.", "Export evidence markdown for human review."]
+      : status === "manual_real_canary_review_required"
+        ? ["Export evidence markdown.", "Confirm provider identity and rollback owner.", "Do not invoke until exact preview request SHA-256 is separately confirmed."]
+        : ["Resolve blocked launch-gate and onboarding reasons.", "Run doctor, conformance, and evidence export again.", "Do not invoke any subnet adapter."],
+    blockedReasons: blockedReasons.length ? uniqueWarnings(blockedReasons) : [],
+    warnings: uniqueWarnings(
+      bundle.exportWarnings,
+      status === "manual_real_canary_review_required"
+        ? ["Manual review is not execution approval; real canaries require a separate confirmed preview."]
+        : [],
+    ),
+    nextPrompt,
   };
 }
 

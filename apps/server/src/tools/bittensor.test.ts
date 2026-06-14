@@ -63,6 +63,7 @@ import {
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   parseAmountTao,
+  reviewBittensorSubnetAdapterEvidence,
   runBittensorSubnetAdapterDryRun,
   runBittensorSubnetServiceAdapterContractTests,
   scoreBittensorSubnetForGoal,
@@ -1296,6 +1297,19 @@ describe("executeBittensorChatWorkflow", () => {
     expect(evidenceExport.markdown).toContain("request SHA-256 confirmation");
     expect(evidenceExport.warnings.join(" ")).toContain("does not authorize real subnet service execution");
     expect(JSON.stringify(evidenceExport)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("reviews adapter evidence without authorizing invocation", async () => {
+    const review = await reviewBittensorSubnetAdapterEvidence({ adapter: "data_search", netuid: 18 });
+    expect(review.kind).toBe("bittensor_subnet_adapter_evidence_review");
+    expect(review.status).toBe("blocked");
+    expect(review.launchGateStatus).toBe("blocked");
+    expect(review.requiredArtifactCount).toBeGreaterThan(0);
+    expect(review.missingRequiredArtifactCount).toBeGreaterThan(0);
+    expect(review.blockedReasons.join(" ")).toContain("Adapter doctor");
+    expect(review.nextPrompt).toContain("unblock");
+    expect(review.allowedNextActions.join(" ")).toContain("Do not invoke any subnet adapter");
+    expect(JSON.stringify(review)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
   test("builds one safe adapter onboarding plan before real execution", async () => {
