@@ -53,6 +53,7 @@ import {
   getBittensorCapability,
   getBittensorChatContext,
   getBittensorSignerStatus,
+  getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
   invokeBittensorSubnet,
   isValidSs58Address,
@@ -4072,6 +4073,19 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/bittensor/adapters/doctor", "client", async () => {
     const report = doctorBittensorSubnetAdapters();
+    return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/templates", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const report = getBittensorSubnetAdapterTemplates({
+      adapter: ctx.url.searchParams.get("adapter"),
+      netuid,
+    });
     return jsonResponse({ success: true, report });
   });
 

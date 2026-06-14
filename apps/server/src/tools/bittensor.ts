@@ -119,6 +119,43 @@ export interface BittensorSubnetServiceAdapterContractTestReport {
   updatedAt: string;
 }
 
+export interface BittensorSubnetAdapterConfigTemplate {
+  kind: "bittensor_subnet_adapter_config_template";
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  name: string;
+  description: string;
+  recommendedFor: string[];
+  config: {
+    netuid: number | "<NETUID>";
+    name: string;
+    serviceAdapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+    endpoint: string;
+    requiredAuth: "none" | "api_key";
+    costModel: "free_read" | "provider_priced" | "tao_fee";
+    authEnv?: string;
+    timeoutMs: number;
+    safetyNotes: string[];
+  };
+  env: {
+    adaptersJson: string;
+    endpointAllowlist: string;
+    credentialEnv?: string;
+    credentialValue: "<set-outside-matterhorn>" | null;
+  };
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  preflightSteps: string[];
+  safetyNotes: string[];
+}
+
+export interface BittensorSubnetAdapterTemplateReport {
+  kind: "bittensor_subnet_adapter_template_report";
+  generatedAt: string;
+  templates: BittensorSubnetAdapterConfigTemplate[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -1382,6 +1419,111 @@ function defaultSubnetAdapterResultSchema(): Record<string, unknown> {
 function adapterSchemaFromConfig(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
   const record = asRecord(value);
   return Object.keys(record).length ? record : fallback;
+}
+
+function buildSubnetAdapterTemplate(params: {
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  name: string;
+  description: string;
+  recommendedFor: string[];
+  endpoint: string;
+  allowlist: string;
+  requiredAuth: "none" | "api_key";
+  costModel: "free_read" | "provider_priced" | "tao_fee";
+  authEnv?: string;
+  netuid?: number | null;
+  safetyNotes: string[];
+}): BittensorSubnetAdapterConfigTemplate {
+  const config = {
+    netuid: params.netuid ?? "<NETUID>",
+    name: params.name,
+    serviceAdapter: params.adapter,
+    endpoint: params.endpoint,
+    requiredAuth: params.requiredAuth,
+    costModel: params.costModel,
+    ...(params.authEnv ? { authEnv: params.authEnv } : {}),
+    timeoutMs: 20_000,
+    safetyNotes: params.safetyNotes,
+  };
+  return {
+    kind: "bittensor_subnet_adapter_config_template",
+    adapter: params.adapter,
+    name: params.name,
+    description: params.description,
+    recommendedFor: params.recommendedFor,
+    config,
+    env: {
+      adaptersJson: JSON.stringify([config], null, 2),
+      endpointAllowlist: params.allowlist,
+      ...(params.authEnv ? { credentialEnv: params.authEnv, credentialValue: "<set-outside-matterhorn>" as const } : { credentialValue: null }),
+    },
+    requestSchema: defaultSubnetAdapterRequestSchema(),
+    resultSchema: defaultSubnetAdapterResultSchema(),
+    preflightSteps: [
+      "Run bittensor_get_subnet_capabilities for the target netuid and confirm the service adapter category is appropriate.",
+      "Run bittensor_doctor_subnet_adapters and resolve every blocked entry before previewing user requests.",
+      "Run bittensor_preview_subnet_invocation and require the user to confirm the exact request SHA-256 before invocation.",
+      "Run bittensor_dry_run_subnet_adapters for mock adapters; non-mock adapters must use preview-confirm-invoke smoke tests with a reviewed endpoint.",
+    ],
+    safetyNotes: params.safetyNotes,
+  };
+}
+
+export function getBittensorSubnetAdapterTemplates(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+} = {}): BittensorSubnetAdapterTemplateReport {
+  const requestedAdapter = input.adapter ? normalizeServiceAdapter(input.adapter, "unsupported") : null;
+  const netuid = input.netuid !== null && input.netuid !== undefined && Number.isInteger(input.netuid) && input.netuid >= 0
+    ? input.netuid
+    : null;
+  const templates = [
+    buildSubnetAdapterTemplate({
+      adapter: "data_search",
+      name: "HTTPS data-search subnet adapter",
+      description: "Template for a reviewed HTTPS adapter that accepts a user task and returns bounded search or retrieval results.",
+      recommendedFor: ["data search", "retrieval", "research", "knowledge-base lookup", "web or dataset search"],
+      endpoint: "https://adapter.example.com/bittensor/data-search/invoke",
+      allowlist: "adapter.example.com",
+      requiredAuth: "api_key",
+      costModel: "provider_priced",
+      authEnv: "BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN",
+      netuid,
+      safetyNotes: [
+        "Do not put credential values inside BITTENSOR_SUBNET_ADAPTERS_JSON.",
+        "Adapter responses must be JSON and stay below BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES.",
+        "Matterhorn sends task text, optional public SS58 address, request hash, and safeMode only.",
+      ],
+    }),
+    buildSubnetAdapterTemplate({
+      adapter: "inference",
+      name: "HTTPS inference subnet adapter",
+      description: "Template for a reviewed HTTPS adapter that runs a prompt against an inference subnet service and returns bounded model output.",
+      recommendedFor: ["text inference", "LLM response", "classification", "summarization", "reasoning"],
+      endpoint: "https://adapter.example.com/bittensor/inference/invoke",
+      allowlist: "adapter.example.com",
+      requiredAuth: "api_key",
+      costModel: "provider_priced",
+      authEnv: "BITTENSOR_INFERENCE_ADAPTER_TOKEN",
+      netuid,
+      safetyNotes: [
+        "Do not send seed phrases, mnemonics, private keys, wallet exports, or signing payloads to subnet adapters.",
+        "Use the preview-confirm-invoke request SHA-256 gate for every service call.",
+        "Keep real adapter hosts on BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST and prefer HTTPS.",
+      ],
+    }),
+  ].filter((template) => requestedAdapter === null || template.adapter === requestedAdapter);
+  return {
+    kind: "bittensor_subnet_adapter_template_report",
+    generatedAt: nowIso(),
+    templates,
+    warnings: templates.length ? [] : ["No adapter template matched the requested adapter filter."],
+    nextActions: [
+      "Start with a mock adapter until chat preview, confirmation, card rendering, and redaction checks are green.",
+      "Copy one template, replace <NETUID>, set the credential env outside Matterhorn, and rerun the adapter doctor.",
+      "Do not enable real subnet execution until the endpoint, auth, schema, response size, and redaction gates pass.",
+    ],
+  };
 }
 
 function isUnsafeAuthEnvName(value: string): boolean {

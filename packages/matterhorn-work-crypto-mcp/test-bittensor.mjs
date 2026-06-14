@@ -431,6 +431,46 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/templates") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_template_report",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        templates: [{
+          kind: "bittensor_subnet_adapter_config_template",
+          adapter: url.searchParams.get("adapter") || "data_search",
+          name: "HTTPS data-search subnet adapter",
+          description: "Template for a reviewed HTTPS adapter.",
+          recommendedFor: ["data search"],
+          config: {
+            netuid: Number(url.searchParams.get("netuid") || 14),
+            name: "HTTPS data-search subnet adapter",
+            serviceAdapter: "data_search",
+            endpoint: "https://adapter.example.com/bittensor/data-search/invoke",
+            requiredAuth: "api_key",
+            costModel: "provider_priced",
+            authEnv: "BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN",
+            timeoutMs: 20000,
+            safetyNotes: ["No credential values in config."],
+          },
+          env: {
+            adaptersJson: "[{\"netuid\":14}]",
+            endpointAllowlist: "adapter.example.com",
+            credentialEnv: "BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN",
+            credentialValue: "<set-outside-matterhorn>",
+          },
+          requestSchema: { type: "object" },
+          resultSchema: { type: "object" },
+          preflightSteps: ["Run bittensor_preview_subnet_invocation before invoking."],
+          safetyNotes: ["Never send wallet key material to adapters."],
+        }],
+        warnings: [],
+        nextActions: ["Run the adapter doctor."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/dry-run") {
     res.end(JSON.stringify({
       success: true,
@@ -734,6 +774,7 @@ try {
     "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
+    "bittensor_get_subnet_adapter_templates",
     "bittensor_dry_run_subnet_adapters",
     "bittensor_prepare_extrinsic",
     "bittensor_create_signing_handoff",
@@ -753,6 +794,7 @@ try {
   assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
+  assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
   assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
   assert.match(descriptionFor("bittensor_invoke_subnet"), /capability inspection, preview, explicit confirmation/i);
@@ -824,6 +866,14 @@ try {
   assert.equal(adapterDoctorPayload.report.kind, "bittensor_subnet_adapter_doctor");
   assert.equal(adapterDoctorPayload.report.readyCount, 1);
   assert.doesNotMatch(JSON.stringify(adapterDoctorPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);
+  assert.equal(adapterTemplatePayload.success, true);
+  assert.equal(adapterTemplatePayload.report.kind, "bittensor_subnet_adapter_template_report");
+  assert.equal(adapterTemplatePayload.report.templates[0].config.netuid, 14);
+  assert.equal(adapterTemplatePayload.report.templates[0].env.credentialValue, "<set-outside-matterhorn>");
+  assert.doesNotMatch(JSON.stringify(adapterTemplatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterDryRun = await ask({ jsonrpc: "2.0", id: 29, method: "tools/call", params: { name: "bittensor_dry_run_subnet_adapters", arguments: { netuid: 14, task: "dry run task" } } });
   const adapterDryRunPayload = JSON.parse(adapterDryRun.result.content[0].text);
