@@ -1193,6 +1193,16 @@ export interface BittensorSubnetAdapterRunResult {
   status?: number;
 }
 
+export interface BittensorSubnetAdapterRuntimeApproval {
+  netuid: number;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  requestSha256: string;
+  approvedBy: string;
+  approvedAt: string;
+  expiresAt: string | null;
+  reason: string | null;
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -1501,6 +1511,54 @@ function localSubnetAdaptersEnabled(): boolean {
 function realSubnetAdaptersEnabled(): boolean {
   const value = readEnv("BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS")?.toLowerCase();
   return value === "1" || value === "true" || value === "yes";
+}
+
+function configuredSubnetAdapterRuntimeApprovals(): BittensorSubnetAdapterRuntimeApproval[] {
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    const entries = Array.isArray(parsed) ? parsed : [];
+    return entries.flatMap((entry) => {
+      const record = asRecord(entry);
+      const netuid = firstNumber(record, ["netuid", "net_uid", "subnet"]);
+      const serviceAdapter = normalizeServiceAdapter(record["serviceAdapter"] ?? record["adapter"], "unsupported");
+      const requestSha256 = firstString(record, ["requestSha256", "request_sha256", "previewRequestSha256", "preview_request_sha256"]);
+      const approvedBy = firstString(record, ["approvedBy", "approved_by", "operator"]) ?? "operator";
+      const approvedAt = firstString(record, ["approvedAt", "approved_at"]) ?? nowIso();
+      const expiresAt = firstString(record, ["expiresAt", "expires_at"]);
+      const reason = firstString(record, ["reason", "note"]);
+      if (netuid === null || !Number.isInteger(netuid) || netuid < 0 || !requestSha256 || requestSha256.length !== 64) return [];
+      return [{
+        netuid,
+        serviceAdapter,
+        requestSha256,
+        approvedBy,
+        approvedAt,
+        expiresAt,
+        reason,
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+function findSubnetAdapterRuntimeApproval(
+  adapter: BittensorConfiguredSubnetAdapter,
+  requestSha256: string,
+): BittensorSubnetAdapterRuntimeApproval | null {
+  const now = Date.now();
+  return configuredSubnetAdapterRuntimeApprovals().find((approval) => {
+    if (approval.netuid !== adapter.netuid) return false;
+    if (approval.serviceAdapter !== adapter.serviceAdapter) return false;
+    if (approval.requestSha256 !== requestSha256) return false;
+    if (approval.expiresAt) {
+      const expires = Date.parse(approval.expiresAt);
+      if (Number.isFinite(expires) && expires < now) return false;
+    }
+    return true;
+  }) ?? null;
 }
 
 function subnetAdapterEndpointAllowlist(): string[] {
@@ -2487,15 +2545,19 @@ function validateSubnetAdapterAuth(
   };
 }
 
-function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdapter): string[] {
+function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdapter, requestSha256?: string | null): string[] {
   const endpoint = summarizeSubnetAdapterEndpoint(adapter.endpoint);
   const auth = validateSubnetAdapterAuth(adapter.requiredAuth, adapter.authEnv ?? null);
   const realAdapterBlocked = endpoint.mode !== "mock" && !realSubnetAdaptersEnabled()
     ? "Real subnet service adapters are disabled until BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 after evidence review and operator approval."
     : null;
+  const approvalBlocked = endpoint.mode !== "mock" && requestSha256 && !findSubnetAdapterRuntimeApproval(adapter, requestSha256)
+    ? "Real subnet service adapter invocation requires BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON to include the exact reviewed request SHA-256."
+    : null;
   return [
     endpoint.allowed ? null : endpoint.reason,
     realAdapterBlocked,
+    approvalBlocked,
     ...auth.errors,
   ].filter((item): item is string => Boolean(item));
 }
@@ -3245,7 +3307,7 @@ async function runHttpSubnetAdapter(
   input: BittensorSubnetInvokeInput,
   requestSha256: string,
 ): Promise<BittensorSubnetAdapterRunResult> {
-  const runtimeBlockers = subnetAdapterRuntimeGateBlockers(adapter);
+  const runtimeBlockers = subnetAdapterRuntimeGateBlockers(adapter, requestSha256);
   if (runtimeBlockers.length) {
     return {
       ok: false,
@@ -5735,7 +5797,7 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
         message: ok && adapterResult
           ? `Matterhorn invoked the configured ${configuredAdapter.name} adapter for ${detail.name}.`
           : `The configured ${configuredAdapter.name} adapter for ${detail.name} did not complete successfully.`,
-        warnings: [...warnings, ...configuredAdapter.safetyNotes],
+        warnings: uniqueWarnings(warnings, configuredAdapter.safetyNotes, adapterResult?.warnings),
         adapterContract: adapterGate.adapterContract,
         contractValidation: adapterGate.contractValidation,
       };

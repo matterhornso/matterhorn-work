@@ -762,6 +762,75 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("requires exact request approval before real HTTPS adapter invocation", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      const previousFetch = globalThis.fetch;
+      let adapterCalls = 0;
+      try {
+        process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Reviewed HTTPS adapter",
+          serviceAdapter: "inference",
+          endpoint: "https://adapter.invalid/invoke",
+          requiredAuth: "none",
+          costModel: "provider_priced",
+          safetyNotes: ["HTTPS adapter safety note."],
+        }]);
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).startsWith("https://adapter.invalid")) {
+            adapterCalls += 1;
+            return new Response(JSON.stringify({ ok: true }), { status: 200 });
+          }
+          return previousFetch(input, init);
+        }) as typeof fetch;
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task: "Use this adapter.",
+          ss58Address: VALID_SS58,
+        });
+        expect(preview.supported).toBe(true);
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task: "Use this adapter.",
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        expect(invocation.supported).toBe(false);
+        expect(invocation.warnings.join(" ")).toContain("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+        expect(adapterCalls).toBe(0);
+      } finally {
+        globalThis.fetch = previousFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+        }
+        if (previousReal === undefined) {
+          delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+        }
+        if (previousApprovals === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+        }
+      }
+    });
+  });
+
   test("runs the mock data-search adapter through preview, confirmation hash, and invocation", async () => {
     await withMockedFivePromptSidecar(async () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
@@ -866,6 +935,7 @@ describe("executeBittensorChatWorkflow", () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
       const sidecarFetch = globalThis.fetch;
       const task = "Search for subnet service adapter examples.";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
@@ -905,6 +975,13 @@ describe("executeBittensorChatWorkflow", () => {
           task,
           ss58Address: VALID_SS58,
         });
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([{
+          netuid: 77,
+          serviceAdapter: "data_search",
+          requestSha256: preview.requestSha256,
+          approvedBy: "test",
+          approvedAt: "2026-06-09T00:00:00.000Z",
+        }]);
         const invocation = await invokeBittensorSubnet(77, {
           intent: "service_call",
           task,
@@ -945,6 +1022,11 @@ describe("executeBittensorChatWorkflow", () => {
         } else {
           process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
         }
+        if (previousApprovals === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+        }
       }
     });
   });
@@ -955,6 +1037,7 @@ describe("executeBittensorChatWorkflow", () => {
       const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousLimit = process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
       const sidecarFetch = globalThis.fetch;
       const task = "Return an oversized adapter response.";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
@@ -990,6 +1073,13 @@ describe("executeBittensorChatWorkflow", () => {
           task,
           ss58Address: VALID_SS58,
         });
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([{
+          netuid: 77,
+          serviceAdapter: "data_search",
+          requestSha256: preview.requestSha256,
+          approvedBy: "test",
+          approvedAt: "2026-06-09T00:00:00.000Z",
+        }]);
         const invocation = await invokeBittensorSubnet(77, {
           intent: "service_call",
           task,
@@ -1023,6 +1113,11 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
         } else {
           process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+        }
+        if (previousApprovals === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
         }
       }
     });
@@ -1203,6 +1298,7 @@ describe("executeBittensorChatWorkflow", () => {
       const previousToken = process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
       const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
       const sidecarFetch = globalThis.fetch;
       process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "adapter-token";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
@@ -1241,6 +1337,13 @@ describe("executeBittensorChatWorkflow", () => {
           task: "Use HTTP auth adapter safely.",
           ss58Address: VALID_SS58,
         });
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([{
+          netuid: 77,
+          serviceAdapter: "inference",
+          requestSha256: preview.requestSha256,
+          approvedBy: "test",
+          approvedAt: "2026-06-09T00:00:00.000Z",
+        }]);
         const invocation = await invokeBittensorSubnet(77, {
           intent: "service_call",
           task: "Use HTTP auth adapter safely.",
@@ -1273,6 +1376,11 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
         } else {
           process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+        }
+        if (previousApprovals === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
         }
       }
     });
