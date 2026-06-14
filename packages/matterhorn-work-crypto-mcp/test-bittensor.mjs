@@ -611,6 +611,26 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/evidence-bundle") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_evidence_bundle",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        onboarding: { kind: "bittensor_subnet_adapter_onboarding_plan" },
+        launchGate: { kind: "bittensor_subnet_adapter_launch_gate" },
+        canaryReview: { kind: "bittensor_subnet_adapter_canary_review" },
+        requiredArtifacts: [{ id: "operator_approval", requiredBeforeRealCanary: true }],
+        exportWarnings: ["This bundle is evidence for review only; it does not authorize real subnet service execution."],
+        nextActions: ["Collect evidence for every required artifact before any real HTTPS canary."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
     res.end(JSON.stringify({
       success: true,
@@ -956,6 +976,7 @@ try {
     "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_check_subnet_adapter_launch_gate",
     "bittensor_get_subnet_adapter_canary_review",
+    "bittensor_get_subnet_adapter_evidence_bundle",
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
@@ -981,6 +1002,7 @@ try {
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_canary_review"), /Does not invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_get_subnet_adapter_evidence_bundle"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
@@ -1089,6 +1111,14 @@ try {
   assert.equal(adapterCanaryReviewPayload.report.reviewItems[0].id, "preview_hash");
   assert.equal(adapterCanaryReviewPayload.report.reviewItems[0].blockerIfMissing, true);
   assert.doesNotMatch(JSON.stringify(adapterCanaryReviewPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+
+  const adapterEvidenceBundle = await ask({ jsonrpc: "2.0", id: 36, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_evidence_bundle", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterEvidenceBundlePayload = JSON.parse(adapterEvidenceBundle.result.content[0].text);
+  assert.equal(adapterEvidenceBundlePayload.success, true);
+  assert.equal(adapterEvidenceBundlePayload.report.kind, "bittensor_subnet_adapter_evidence_bundle");
+  assert.equal(adapterEvidenceBundlePayload.report.requiredArtifacts[0].id, "operator_approval");
+  assert.match(adapterEvidenceBundlePayload.report.exportWarnings.join(" "), /does not authorize real subnet service execution/i);
+  assert.doesNotMatch(JSON.stringify(adapterEvidenceBundlePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);
