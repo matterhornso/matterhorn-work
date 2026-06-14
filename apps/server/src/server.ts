@@ -70,6 +70,7 @@ import {
   getBittensorSignerStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
+  getBittensorSubnetAdapterManifestExamples,
   getBittensorSubnetAdapterSpec,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
@@ -4107,6 +4108,25 @@ function createRoutes(
     const manifest = body.manifest && typeof body.manifest === "object" ? body.manifest : body;
     const validation = validateBittensorSubnetAdapterManifest(manifest);
     return jsonResponse({ success: validation.status !== "fail", validation, cards: [buildBittensorAdapterManifestValidationCard(validation)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/spec/examples", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const report = getBittensorSubnetAdapterManifestExamples({
+      adapter: ctx.url.searchParams.get("adapter") ?? ctx.url.searchParams.get("serviceAdapter"),
+      netuid,
+      limit,
+    });
+    return jsonResponse({ success: true, report, cards: report.examples.slice(0, 6).map((example) => buildBittensorAdapterManifestValidationCard(example.validation)) });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {

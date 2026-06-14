@@ -62,6 +62,7 @@ import {
   getBittensorSignerStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
+  getBittensorSubnetAdapterManifestExamples,
   getBittensorSubnetAdapterSpec,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
@@ -1585,6 +1586,20 @@ describe("executeBittensorChatWorkflow", () => {
     const card = buildBittensorAdapterManifestValidationCard(validation);
     expect(card.tone).toBe("danger");
     expect(card.items.find((item) => item.label === "Service call")?.value).toBe("Blocked");
+  });
+
+  test("returns self-validating adapter manifest examples for safe onboarding", () => {
+    const report = getBittensorSubnetAdapterManifestExamples({ adapter: "inference", netuid: 4 });
+    expect(report.kind).toBe("bittensor_subnet_adapter_manifest_examples");
+    expect(report.examples).toHaveLength(1);
+    expect(report.examples[0]?.adapter).toBe("inference");
+    expect(report.examples[0]?.netuid).toBe(4);
+    expect(report.examples[0]?.validation.status).toBe("pass");
+    expect(report.examples[0]?.validation.serviceCallReady).toBe(true);
+    const card = buildBittensorAdapterManifestValidationCard(report.examples[0]!.validation);
+    expect(card.kind).toBe("adapter_manifest_validation");
+    expect(card.tone).toBe("good");
+    expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue/i);
   });
 
   test("returns real adapter onboarding templates without credential values", () => {

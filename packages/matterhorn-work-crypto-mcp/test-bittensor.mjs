@@ -490,6 +490,40 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/spec/examples") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_manifest_examples",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: {
+          adapter: url.searchParams.get("adapter"),
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        examples: [{
+          adapter: "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+          title: "Data search adapter manifest",
+          description: "Safe mocked example.",
+          manifest: {
+            version: "matterhorn.bittensor.adapter.v1",
+            serviceAdapter: "data_search",
+            safeModeRequired: true,
+            requestHashRequired: true,
+          },
+          validation: {
+            kind: "bittensor_subnet_adapter_manifest_validation",
+            status: "pass",
+            serviceCallReady: true,
+          },
+        }],
+        warnings: [],
+        nextActions: ["Validate after edits."],
+      },
+      cards: [{ kind: "adapter_manifest_validation", title: "Bittensor adapter manifest validation", items: [] }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/approvals") {
     res.end(JSON.stringify({
       success: true,
@@ -1211,6 +1245,7 @@ try {
     "bittensor_doctor_subnet_adapters",
     "bittensor_get_subnet_adapter_spec",
     "bittensor_validate_subnet_adapter_manifest",
+    "bittensor_get_subnet_adapter_manifest_examples",
     "bittensor_audit_subnet_adapter_approvals",
     "bittensor_create_subnet_adapter_approval_template",
     "bittensor_build_subnet_adapter_canary_packet",
@@ -1245,6 +1280,7 @@ try {
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
+  assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
@@ -1355,6 +1391,14 @@ try {
   assert.equal(adapterManifestValidationPayload.validation.serviceCallReady, true);
   assert.equal(adapterManifestValidationPayload.cards[0].kind, "adapter_manifest_validation");
   assert.doesNotMatch(JSON.stringify(adapterManifestValidationPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterManifestExamples = await ask({ jsonrpc: "2.0", id: 45, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_manifest_examples", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterManifestExamplesPayload = JSON.parse(adapterManifestExamples.result.content[0].text);
+  assert.equal(adapterManifestExamplesPayload.success, true);
+  assert.equal(adapterManifestExamplesPayload.report.kind, "bittensor_subnet_adapter_manifest_examples");
+  assert.equal(adapterManifestExamplesPayload.report.examples[0].validation.serviceCallReady, true);
+  assert.equal(adapterManifestExamplesPayload.cards[0].kind, "adapter_manifest_validation");
+  assert.doesNotMatch(JSON.stringify(adapterManifestExamplesPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterApprovalAudit = await ask({ jsonrpc: "2.0", id: 39, method: "tools/call", params: { name: "bittensor_audit_subnet_adapter_approvals", arguments: {} } });
   const adapterApprovalAuditPayload = JSON.parse(adapterApprovalAudit.result.content[0].text);
