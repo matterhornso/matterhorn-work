@@ -34,6 +34,54 @@ export interface BittensorSubnetSummary {
   freshness?: string | null;
 }
 
+export type BittensorSubnetServiceAdapterKind =
+  | "universal"
+  | "inference"
+  | "data_search"
+  | "compute"
+  | "creative_media"
+  | "agent_tooling"
+  | "unsupported";
+
+export type BittensorSubnetServiceIntent =
+  | "explain"
+  | "metagraph"
+  | "stake_guidance"
+  | "wallet_guidance"
+  | "service_call";
+
+export interface BittensorSubnetServiceAdapterContract {
+  version: "matterhorn.bittensor.adapter.v1";
+  netuid: number;
+  adapter: BittensorSubnetServiceAdapterKind;
+  capabilityLevel: BittensorCapabilityManifest["capabilityLevel"];
+  supportedIntents: BittensorSubnetServiceIntent[];
+  endpointConfigured: boolean;
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  timeoutMs: number | null;
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  privacy: {
+    sendsTaskText: boolean;
+    sendsSs58Address: boolean;
+    sendsWalletData: false;
+    sendsKeyMaterial: false;
+  };
+  safetyNotes: string[];
+  unsupportedBehavior: {
+    status: "explain_and_monitor_only" | "adapter_missing" | "unsupported";
+    message: string;
+    fallbackIntents: BittensorSubnetServiceIntent[];
+  };
+}
+
+export interface BittensorSubnetServiceAdapterContractValidation {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -149,18 +197,12 @@ export interface BittensorCapabilityManifest {
   userBenefits: string[];
   examplePrompts: string[];
   supportedChatIntents: BittensorChatIntent[];
-  serviceAdapter:
-    | "universal"
-    | "inference"
-    | "data_search"
-    | "compute"
-    | "creative_media"
-    | "agent_tooling"
-    | "unsupported";
+  serviceAdapter: BittensorSubnetServiceAdapterKind;
   requiredAuth: "none" | "api_key" | "external_wallet" | "unknown";
   costModel: "free_read" | "tao_fee" | "provider_priced" | "unknown";
   requestSchema: Record<string, unknown>;
   resultSchema: Record<string, unknown>;
+  adapterContract: BittensorSubnetServiceAdapterContract;
   dataFreshness: {
     source: string;
     block: number | null;
@@ -2470,40 +2512,127 @@ function adapterStatusForCapability(
   };
 }
 
+function adapterContractPrivacy(adapter: BittensorSubnetServiceAdapterKind, configured: boolean): BittensorSubnetServiceAdapterContract["privacy"] {
+  return {
+    sendsTaskText: configured && adapter !== "universal" && adapter !== "unsupported",
+    sendsSs58Address: configured && adapter !== "universal" && adapter !== "unsupported",
+    sendsWalletData: false,
+    sendsKeyMaterial: false,
+  };
+}
+
+export function validateBittensorSubnetServiceAdapterContract(
+  contract: BittensorSubnetServiceAdapterContract,
+): BittensorSubnetServiceAdapterContractValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (contract.version !== "matterhorn.bittensor.adapter.v1") errors.push("Unsupported adapter contract version.");
+  if (!Number.isInteger(contract.netuid) || contract.netuid < 0) errors.push("Adapter contract netuid must be a non-negative integer.");
+  if (!contract.supportedIntents.length) errors.push("Adapter contract must declare at least one supported intent.");
+  if (contract.privacy.sendsKeyMaterial !== false) errors.push("Adapter contract must explicitly forbid sending secrets.");
+  if (contract.privacy.sendsWalletData !== false) errors.push("Adapter contract must explicitly forbid sending wallet data.");
+  if (secretFieldPath(contract.requestSchema)) errors.push("Request schema contains a secret-shaped field.");
+  if (secretFieldPath(contract.resultSchema)) errors.push("Result schema contains a secret-shaped field.");
+  if (contract.adapter !== "universal" && contract.adapter !== "unsupported" && !contract.endpointConfigured) {
+    warnings.push("Direct service adapter is not configured; service calls must return unsupported behavior.");
+  }
+  if (contract.endpointConfigured && !contract.supportedIntents.includes("service_call")) {
+    warnings.push("Configured adapter does not declare service_call support.");
+  }
+  if (!contract.safetyNotes.length) warnings.push("Adapter contract should include safety notes.");
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+export function buildBittensorSubnetServiceAdapterContract(input: {
+  netuid: number;
+  adapter: BittensorSubnetServiceAdapterKind;
+  capabilityLevel: BittensorCapabilityManifest["capabilityLevel"];
+  adapterStatus: BittensorCapabilityManifest["adapterStatus"];
+  configuredAdapter: BittensorConfiguredSubnetAdapter | null;
+  requestSchema: Record<string, unknown>;
+  resultSchema: Record<string, unknown>;
+  safetyNotes: string[];
+}): BittensorSubnetServiceAdapterContract {
+  const configured = Boolean(input.configuredAdapter && input.adapterStatus.configured && input.adapter !== "unsupported");
+  const fallbackIntents: BittensorSubnetServiceIntent[] = ["explain", "metagraph", "stake_guidance", "wallet_guidance"];
+  return {
+    version: "matterhorn.bittensor.adapter.v1",
+    netuid: input.netuid,
+    adapter: input.adapter,
+    capabilityLevel: input.capabilityLevel,
+    supportedIntents: configured ? [...fallbackIntents, "service_call"] : fallbackIntents,
+    endpointConfigured: configured,
+    requiredAuth: input.adapterStatus.requiredAuth,
+    costModel: input.adapterStatus.costModel,
+    timeoutMs: configured ? input.configuredAdapter?.timeoutMs ?? null : null,
+    requestSchema: input.requestSchema,
+    resultSchema: input.resultSchema,
+    privacy: adapterContractPrivacy(input.adapter, configured),
+    safetyNotes: input.safetyNotes,
+    unsupportedBehavior: {
+      status: input.adapter === "unsupported" ? "unsupported" : configured ? "explain_and_monitor_only" : "adapter_missing",
+      message: configured
+        ? "Adapter contract is ready for explicit preview and invocation gates."
+        : "Matterhorn can explain, compare, monitor, and prepare safe previews, but direct subnet service execution requires a configured adapter.",
+      fallbackIntents,
+    },
+  };
+}
+
 export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorCapabilityManifest {
   const configuredAdapter = getConfiguredSubnetAdapter(subnet.netuid);
   const adapter = configuredAdapter?.serviceAdapter === "unsupported"
     ? adapterForCategory(subnet.category)
     : configuredAdapter?.serviceAdapter ?? adapterForCategory(subnet.category);
   const adapterStatus = adapterStatusForCapability(adapter, configuredAdapter);
+  const requestSchema = {
+    type: "object",
+    properties: {
+      intent: { enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] },
+      task: { type: "string" },
+      ss58Address: { type: "string" },
+    },
+  };
+  const resultSchema = {
+    type: "object",
+    properties: {
+      message: { type: "string" },
+      result: { type: "object" },
+      warnings: { type: "array", items: { type: "string" } },
+    },
+  };
+  const safetyNotes = [
+    "Universal support covers explanation, metagraph, staking guidance, wallet context, and monitoring.",
+    adapterStatus.message,
+    ...(configuredAdapter?.safetyNotes ?? []),
+    "Signed Bittensor actions require an external signer.",
+  ];
+  const capabilityLevel = capabilityLevelFor(adapter, configuredAdapter);
+  const adapterContract = buildBittensorSubnetServiceAdapterContract({
+    netuid: subnet.netuid,
+    adapter,
+    capabilityLevel,
+    adapterStatus,
+    configuredAdapter,
+    requestSchema,
+    resultSchema,
+    safetyNotes,
+  });
   return {
     netuid: subnet.netuid,
     name: subnet.name,
     category: subnet.category,
     utilitySummary: subnet.benefitSummary,
-    capabilityLevel: capabilityLevelFor(adapter, configuredAdapter),
+    capabilityLevel,
     userBenefits: benefitsForCapability(subnet, adapter),
     examplePrompts: examplePromptsForCapability(subnet),
     supportedChatIntents: ["learn", "discover", "wallet", "stake_plan", "monitor", "subnet_use"],
     serviceAdapter: adapter,
     requiredAuth: adapterStatus.requiredAuth,
     costModel: adapterStatus.costModel,
-    requestSchema: {
-      type: "object",
-      properties: {
-        intent: { enum: ["explain", "metagraph", "stake_guidance", "wallet_guidance", "service_call"] },
-        task: { type: "string" },
-        ss58Address: { type: "string" },
-      },
-    },
-    resultSchema: {
-      type: "object",
-      properties: {
-        message: { type: "string" },
-        result: { type: "object" },
-        warnings: { type: "array", items: { type: "string" } },
-      },
-    },
+    requestSchema,
+    resultSchema,
+    adapterContract,
     dataFreshness: {
       source: subnet.source,
       block: subnet.block ?? null,
@@ -2512,12 +2641,7 @@ export function capabilityFromSubnet(subnet: BittensorSubnetSummary): BittensorC
       liveReadReady: subnet.source !== "curated-fallback",
     },
     adapterStatus,
-    safetyNotes: [
-      "Universal support covers explanation, metagraph, staking guidance, wallet context, and monitoring.",
-      adapterStatus.message,
-      ...(configuredAdapter?.safetyNotes ?? []),
-      "Signed Bittensor actions require an external signer.",
-    ],
+    safetyNotes,
   };
 }
 

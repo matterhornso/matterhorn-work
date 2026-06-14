@@ -24,6 +24,7 @@ import {
   buildBittensorValidatorComparisonCards,
   buildBittensorValidatorIntelligenceCard,
   buildBittensorWalletCard,
+  buildBittensorSubnetServiceAdapterContract,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -50,6 +51,7 @@ import {
   scoreBittensorSubnetForGoal,
   submitSignedBittensorExtrinsic,
   TaoAppBittensorProvider,
+  validateBittensorSubnetServiceAdapterContract,
 } from "./bittensor.js";
 
 process.env.BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE = "1";
@@ -890,6 +892,11 @@ describe("capabilityFromSubnet", () => {
     expect(capability.examplePrompts.join(" ")).toContain("subnet 14");
     expect(capability.adapterStatus.configured).toBe(false);
     expect(capability.dataFreshness.source).toBe("test");
+    expect(capability.adapterContract.version).toBe("matterhorn.bittensor.adapter.v1");
+    expect(capability.adapterContract.endpointConfigured).toBe(false);
+    expect(capability.adapterContract.privacy.sendsKeyMaterial).toBe(false);
+    expect(capability.adapterContract.unsupportedBehavior.status).toBe("adapter_missing");
+    expect(validateBittensorSubnetServiceAdapterContract(capability.adapterContract).ok).toBe(true);
   });
 
   test("reflects configured service adapters without exposing auth values", () => {
@@ -927,6 +934,10 @@ describe("capabilityFromSubnet", () => {
     expect(capability.adapterStatus.message).toContain("Mock compute adapter");
     expect(capability.requiredAuth).toBe("api_key");
     expect(capability.costModel).toBe("provider_priced");
+    expect(capability.adapterContract.endpointConfigured).toBe(true);
+    expect(capability.adapterContract.supportedIntents).toContain("service_call");
+    expect(capability.adapterContract.privacy.sendsWalletData).toBe(false);
+    expect(validateBittensorSubnetServiceAdapterContract(capability.adapterContract).ok).toBe(true);
     expect(JSON.stringify(capability)).not.toContain("BITTENSOR_MOCK_ADAPTER_TOKEN");
 
     if (previous === undefined) {
@@ -952,6 +963,34 @@ describe("capabilityFromSubnet", () => {
     const card = buildBittensorInvocationPreviewCard(preview);
     expect(["subnet_result", "unsupported_adapter"]).toContain(card.kind);
     expect(card.items.some((item) => item.label === "Cost model")).toBe(true);
+  });
+
+  test("rejects unsafe adapter contracts with secret-shaped schemas", () => {
+    const contract = buildBittensorSubnetServiceAdapterContract({
+      netuid: 14,
+      adapter: "compute",
+      capabilityLevel: "adapter_required",
+      adapterStatus: {
+        configured: false,
+        adapter: "compute",
+        message: "No compute adapter configured.",
+        requiredAuth: "api_key",
+        costModel: "provider_priced",
+      },
+      configuredAdapter: null,
+      requestSchema: {
+        type: "object",
+        properties: {
+          task: { type: "string" },
+          privateKey: { type: "string" },
+        },
+      },
+      resultSchema: { type: "object", properties: { message: { type: "string" } } },
+      safetyNotes: ["Never send secrets to subnet service adapters."],
+    });
+    const validation = validateBittensorSubnetServiceAdapterContract(contract);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(" ")).toContain("Request schema contains a secret-shaped field");
   });
 });
 
