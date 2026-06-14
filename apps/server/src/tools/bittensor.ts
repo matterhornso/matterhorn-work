@@ -1228,6 +1228,18 @@ export interface BittensorSubnetAdapterRuntimeApprovalAudit {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterRuntimeApprovalTemplate {
+  kind: "bittensor_subnet_adapter_runtime_approval_template";
+  generatedAt: string;
+  approval: BittensorSubnetAdapterRuntimeApproval;
+  env: {
+    key: "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON";
+    value: string;
+  };
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -1629,6 +1641,63 @@ export function auditBittensorSubnetAdapterRuntimeApprovals(): BittensorSubnetAd
     nextActions: activeCount
       ? ["Use approvals only for the exact reviewed canary request SHA-256.", "Remove approvals after canary completion or expiry."]
       : ["Run preview, review evidence, and add one short-lived exact request SHA-256 approval if a real canary is explicitly approved."],
+  };
+}
+
+function isSha256Hex(value: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(value);
+}
+
+export function buildBittensorSubnetAdapterRuntimeApprovalTemplate(input: {
+  netuid: number;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  requestSha256: string;
+  approvedBy?: string | null;
+  reason?: string | null;
+  ttlMinutes?: number | null;
+}): BittensorSubnetAdapterRuntimeApprovalTemplate {
+  if (!Number.isInteger(input.netuid) || input.netuid < 0) {
+    throw new Error("netuid must be a non-negative integer");
+  }
+  if (!isSha256Hex(input.requestSha256)) {
+    throw new Error("requestSha256 must be a 64-character SHA-256 hex string");
+  }
+  const serviceAdapter = normalizeServiceAdapter(input.serviceAdapter, "unsupported");
+  if (serviceAdapter === "universal" || serviceAdapter === "unsupported") {
+    throw new Error("serviceAdapter must be a direct subnet adapter kind");
+  }
+  const ttl = Number.isFinite(input.ttlMinutes ?? null)
+    ? Math.min(24 * 60, Math.max(5, Number(input.ttlMinutes)))
+    : 60;
+  const generatedAt = nowIso();
+  const expiresAt = new Date(Date.parse(generatedAt) + ttl * 60_000).toISOString();
+  const approval: BittensorSubnetAdapterRuntimeApproval = {
+    netuid: input.netuid,
+    serviceAdapter,
+    requestSha256: input.requestSha256.toLowerCase(),
+    approvedBy: input.approvedBy?.trim() || "operator",
+    approvedAt: generatedAt,
+    expiresAt,
+    reason: input.reason?.trim() || "Reviewed canary fixture, evidence bundle, and rollback plan.",
+  };
+  return {
+    kind: "bittensor_subnet_adapter_runtime_approval_template",
+    generatedAt,
+    approval,
+    env: {
+      key: "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON",
+      value: JSON.stringify([approval], null, 2),
+    },
+    warnings: [
+      "This template does not invoke a subnet service and does not authorize anything until an operator deliberately configures it.",
+      "Use short-lived approvals for reviewed canaries only; remove them after the canary completes.",
+      "The request SHA-256 must match the preview card exactly.",
+    ],
+    nextActions: [
+      "Confirm evidence review, provider identity, canary fixture, and rollback owner before using this template.",
+      "Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window.",
+      "Audit approvals after the canary and remove stale entries.",
+    ],
   };
 }
 

@@ -6,6 +6,7 @@ import {
   auditBittensorReadiness,
   auditBittensorSubnetAdapterRuntimeApprovals,
   buildBittensorAdapterApprovalAuditCard,
+  buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
   buildBittensorAdapterLaunchGateCard,
@@ -867,6 +868,44 @@ describe("executeBittensorChatWorkflow", () => {
         process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
       }
     }
+  });
+
+  test("builds short-lived real adapter approval templates without invoking services", () => {
+    const template = buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+      netuid: 77,
+      serviceAdapter: "data_search",
+      requestSha256: "B".repeat(64),
+      approvedBy: "operator",
+      reason: "Reviewed canary fixture and rollback owner.",
+      ttlMinutes: 15,
+    });
+    expect(template.kind).toBe("bittensor_subnet_adapter_runtime_approval_template");
+    expect(template.approval.netuid).toBe(77);
+    expect(template.approval.serviceAdapter).toBe("data_search");
+    expect(template.approval.requestSha256).toBe("b".repeat(64));
+    expect(template.env.key).toBe("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+    expect(JSON.parse(template.env.value)[0].requestSha256).toBe("b".repeat(64));
+    expect(template.warnings.join(" ")).toContain("does not invoke");
+    expect(template.nextActions.join(" ")).toContain("BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1");
+    expect(JSON.stringify(template)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("rejects approval templates for universal adapters and malformed hashes", () => {
+    expect(() => buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+      netuid: 77,
+      serviceAdapter: "universal",
+      requestSha256: "b".repeat(64),
+    })).toThrow("serviceAdapter must be a direct subnet adapter kind");
+    expect(() => buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+      netuid: 77,
+      serviceAdapter: "unsupported",
+      requestSha256: "b".repeat(64),
+    })).toThrow("serviceAdapter must be a direct subnet adapter kind");
+    expect(() => buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+      netuid: 77,
+      serviceAdapter: "data_search",
+      requestSha256: "too-short",
+    })).toThrow("requestSha256 must be a 64-character SHA-256 hex string");
   });
 
   test("runs the mock data-search adapter through preview, confirmation hash, and invocation", async () => {

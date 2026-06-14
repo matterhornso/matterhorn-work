@@ -464,6 +464,35 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/approval-template") {
+    const requestSha256 = (url.searchParams.get("requestSha256") || "b".repeat(64)).toLowerCase();
+    const netuid = Number(url.searchParams.get("netuid") || 14);
+    const serviceAdapter = url.searchParams.get("serviceAdapter") || url.searchParams.get("adapter") || "data_search";
+    const approval = {
+      netuid,
+      serviceAdapter,
+      requestSha256,
+      approvedBy: url.searchParams.get("approvedBy") || "operator",
+      approvedAt: "2026-06-09T00:00:00.000Z",
+      expiresAt: "2026-06-09T01:00:00.000Z",
+      reason: url.searchParams.get("reason") || "Reviewed canary fixture.",
+    };
+    res.end(JSON.stringify({
+      success: true,
+      template: {
+        kind: "bittensor_subnet_adapter_runtime_approval_template",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        approval,
+        env: {
+          key: "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON",
+          value: JSON.stringify([approval], null, 2),
+        },
+        warnings: ["This template does not invoke a subnet service."],
+        nextActions: ["Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/templates") {
     res.end(JSON.stringify({
       success: true,
@@ -1065,6 +1094,7 @@ try {
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
     "bittensor_audit_subnet_adapter_approvals",
+    "bittensor_create_subnet_adapter_approval_template",
     "bittensor_get_subnet_adapter_candidates",
     "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_check_subnet_adapter_launch_gate",
@@ -1094,6 +1124,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
+  assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
@@ -1184,6 +1215,14 @@ try {
   assert.equal(adapterApprovalAuditPayload.cards[0].kind, "adapter_approval_audit");
   assert.equal(adapterApprovalAuditPayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterApprovalAuditPayload), /seed|mnemonic|privateKey|wallet export|[a-f0-9]{64}|super-secret-token-value/i);
+
+  const adapterApprovalTemplate = await ask({ jsonrpc: "2.0", id: 40, method: "tools/call", params: { name: "bittensor_create_subnet_adapter_approval_template", arguments: { adapter: "data_search", netuid: 14, requestSha256: "b".repeat(64), ttlMinutes: 15 } } });
+  const adapterApprovalTemplatePayload = JSON.parse(adapterApprovalTemplate.result.content[0].text);
+  assert.equal(adapterApprovalTemplatePayload.success, true);
+  assert.equal(adapterApprovalTemplatePayload.template.kind, "bittensor_subnet_adapter_runtime_approval_template");
+  assert.equal(adapterApprovalTemplatePayload.template.env.key, "BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
+  assert.match(adapterApprovalTemplatePayload.template.warnings.join(" "), /does not invoke/i);
+  assert.doesNotMatch(JSON.stringify(adapterApprovalTemplatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterCandidates = await ask({ jsonrpc: "2.0", id: 32, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_candidates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterCandidatePayload = JSON.parse(adapterCandidates.result.content[0].text);

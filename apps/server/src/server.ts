@@ -46,6 +46,7 @@ import {
   analyzeBittensorSubnetIntelligence,
   analyzeBittensorWalletIntelligence,
   bittensorProvider,
+  buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorStakingPlan,
@@ -4093,6 +4094,33 @@ function createRoutes(
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {
     const report = auditBittensorSubnetAdapterRuntimeApprovals();
     return jsonResponse({ success: true, report, cards: [buildBittensorAdapterApprovalAuditCard(report)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/approval-template", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid === null || !Number.isInteger(netuid) || netuid < 0) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const requestSha256 = ctx.url.searchParams.get("requestSha256") ?? ctx.url.searchParams.get("request_sha256") ?? "";
+    const ttlParam = ctx.url.searchParams.get("ttlMinutes") ?? ctx.url.searchParams.get("ttl_minutes");
+    const ttlMinutes = ttlParam === null || ttlParam === "" ? null : Number(ttlParam);
+    if (ttlMinutes !== null && (!Number.isFinite(ttlMinutes) || ttlMinutes < 1)) {
+      throw new ApiError(400, "invalid_ttl", "ttlMinutes must be a positive number");
+    }
+    try {
+      const template = buildBittensorSubnetAdapterRuntimeApprovalTemplate({
+        netuid,
+        serviceAdapter: ctx.url.searchParams.get("serviceAdapter") ?? ctx.url.searchParams.get("adapter") ?? "unsupported",
+        requestSha256,
+        approvedBy: ctx.url.searchParams.get("approvedBy") ?? ctx.url.searchParams.get("approved_by"),
+        reason: ctx.url.searchParams.get("reason"),
+        ttlMinutes,
+      });
+      return jsonResponse({ success: true, template });
+    } catch (err) {
+      throw new ApiError(400, "invalid_approval_template", err instanceof Error ? err.message : "Invalid approval template request");
+    }
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/templates", "client", async (ctx) => {
