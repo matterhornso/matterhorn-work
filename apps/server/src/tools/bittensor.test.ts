@@ -50,6 +50,7 @@ import {
   isValidSs58Address,
   invokeBittensorSubnet,
   planBittensorChat,
+  probeBittensorSubnetAdapterConformance,
   previewBittensorSubnetInvocation,
   prepareBittensorExtrinsic,
   parseAmountTao,
@@ -1233,6 +1234,117 @@ describe("executeBittensorChatWorkflow", () => {
         delete process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN;
       } else {
         process.env.BITTENSOR_DATA_SEARCH_ADAPTER_TOKEN = previousToken;
+      }
+    }
+  });
+
+  test("probes mock adapter conformance without user task execution", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock data-search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "mock://data-search",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock adapter safety note."],
+      }]);
+      const report = await probeBittensorSubnetAdapterConformance({ netuid: 77 });
+      expect(report.kind).toBe("bittensor_subnet_adapter_conformance");
+      expect(report.status).toBe("pass");
+      expect(report.passed).toBe(1);
+      expect(report.cases[0]?.metadata?.requestHashRequired).toBe(true);
+      expect(report.cases[0]?.checks.some((check) => check.id === "no_user_task" && check.status === "pass")).toBe(true);
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("probes HTTPS adapter metadata conformance without sending request bodies or credentials", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+    const previousToken = process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+    const nativeFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+      process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "super-secret-token-value";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "HTTP data search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.invalid/invoke",
+        metadataEndpoint: "https://adapter.invalid/.well-known/matterhorn-bittensor-adapter.json",
+        requiredAuth: "api_key",
+        authEnv: "BITTENSOR_HTTP_ADAPTER_TOKEN",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTP adapter safety note."],
+      }]);
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        calls.push({ url, init });
+        expect(init?.method).toBe("GET");
+        expect(init?.body).toBeUndefined();
+        expect(JSON.stringify(init?.headers ?? {})).not.toContain("super-secret-token-value");
+        if (url === "https://adapter.invalid/.well-known/matterhorn-bittensor-adapter.json") {
+          return new Response(JSON.stringify({
+            version: "matterhorn.bittensor.adapter.v1",
+            netuid: 77,
+            serviceAdapter: "data_search",
+            supportedIntents: ["service_call"],
+            safeModeRequired: true,
+            requestHashRequired: true,
+            maxResponseBytes: 64_000,
+            privacy: {
+              sendsTaskText: true,
+              sendsSs58Address: true,
+              sendsWalletData: false,
+              sendsKeyMaterial: false,
+            },
+            requestSchema: { type: "object", properties: { task: { type: "string" } } },
+            resultSchema: { type: "object", properties: { result: { type: "object" } } },
+            health: { status: "ok" },
+          }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        return nativeFetch(input, init);
+      }) as typeof fetch;
+      const report = await probeBittensorSubnetAdapterConformance({ netuid: 77 });
+      expect(report.status).toBe("pass");
+      expect(report.cases[0]?.mode).toBe("https");
+      expect(report.cases[0]?.metadata?.healthStatus).toBe("ok");
+      expect(report.cases[0]?.checks.every((check) => check.status === "pass")).toBe(true);
+      expect(calls).toHaveLength(1);
+      expect(JSON.stringify(report)).not.toContain("super-secret-token-value");
+      expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      globalThis.fetch = nativeFetch;
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+      }
+      if (previousToken === undefined) {
+        delete process.env.BITTENSOR_HTTP_ADAPTER_TOKEN;
+      } else {
+        process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = previousToken;
       }
     }
   });
