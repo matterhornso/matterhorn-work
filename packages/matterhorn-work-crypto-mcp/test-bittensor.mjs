@@ -431,6 +431,35 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/spec") {
+    res.end(JSON.stringify({
+      success: true,
+      spec: {
+        kind: "bittensor_subnet_adapter_spec",
+        version: "matterhorn.bittensor.adapter.v1",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        supportedServiceAdapters: ["data_search", "inference", "compute", "creative_media", "agent_tooling"],
+        requiredMetadata: {
+          safeModeRequired: "Must be true.",
+          requestHashRequired: "Must be true.",
+          privacy: "Must declare no wallet or key material.",
+        },
+        invocationContract: {
+          previewRequired: true,
+          exactRequestHashRequired: true,
+          userTaskSentOnlyOnInvoke: true,
+          missingHashBehavior: "reject",
+          mismatchedHashBehavior: "reject",
+          defaultRealAdapterState: "disabled",
+        },
+        forbiddenFields: ["seed", "mnemonic", "privateKey", "walletExport"],
+        responseLimits: { defaultMaxBytes: 256000, hardMaxBytes: 2000000 },
+        safetyNotes: ["No credentials in spec."],
+        nextActions: ["Run adapter doctor."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/approvals") {
     res.end(JSON.stringify({
       success: true,
@@ -1150,6 +1179,7 @@ try {
     "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
+    "bittensor_get_subnet_adapter_spec",
     "bittensor_audit_subnet_adapter_approvals",
     "bittensor_create_subnet_adapter_approval_template",
     "bittensor_build_subnet_adapter_canary_packet",
@@ -1182,6 +1212,7 @@ try {
   assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
+  assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
@@ -1266,6 +1297,14 @@ try {
   assert.equal(adapterDoctorPayload.report.kind, "bittensor_subnet_adapter_doctor");
   assert.equal(adapterDoctorPayload.report.readyCount, 1);
   assert.doesNotMatch(JSON.stringify(adapterDoctorPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterSpec = await ask({ jsonrpc: "2.0", id: 43, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_spec", arguments: {} } });
+  const adapterSpecPayload = JSON.parse(adapterSpec.result.content[0].text);
+  assert.equal(adapterSpecPayload.success, true);
+  assert.equal(adapterSpecPayload.spec.kind, "bittensor_subnet_adapter_spec");
+  assert.equal(adapterSpecPayload.spec.invocationContract.exactRequestHashRequired, true);
+  assert.equal(adapterSpecPayload.spec.invocationContract.missingHashBehavior, "reject");
+  assert.doesNotMatch(JSON.stringify(adapterSpecPayload), /super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterApprovalAudit = await ask({ jsonrpc: "2.0", id: 39, method: "tools/call", params: { name: "bittensor_audit_subnet_adapter_approvals", arguments: {} } });
   const adapterApprovalAuditPayload = JSON.parse(adapterApprovalAudit.result.content[0].text);

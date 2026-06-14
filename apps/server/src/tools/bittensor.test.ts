@@ -61,6 +61,7 @@ import {
   getBittensorSignerStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
+  getBittensorSubnetAdapterSpec,
   getBittensorSubnetAdapterTemplates,
   getSubtensorSidecarStatus,
   isValidSs58Address,
@@ -1490,6 +1491,19 @@ describe("executeBittensorChatWorkflow", () => {
         process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
       }
     }
+  });
+
+  test("returns the machine-readable subnet adapter spec without credential values", () => {
+    const spec = getBittensorSubnetAdapterSpec();
+    expect(spec.kind).toBe("bittensor_subnet_adapter_spec");
+    expect(spec.version).toBe("matterhorn.bittensor.adapter.v1");
+    expect(spec.supportedServiceAdapters).toContain("data_search");
+    expect(spec.invocationContract.previewRequired).toBe(true);
+    expect(spec.invocationContract.exactRequestHashRequired).toBe(true);
+    expect(spec.invocationContract.missingHashBehavior).toBe("reject");
+    expect(spec.forbiddenFields).toContain("privateKey");
+    expect(spec.responseLimits.defaultMaxBytes).toBeGreaterThan(0);
+    expect(JSON.stringify(spec)).not.toMatch(/super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue=/i);
   });
 
   test("returns real adapter onboarding templates without credential values", () => {
