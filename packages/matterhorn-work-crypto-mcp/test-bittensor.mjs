@@ -559,6 +559,30 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/launch-gate") {
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_launch_gate",
+        checkedAt: "2026-06-09T00:00:00.000Z",
+        status: "mock_ready",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        readyMockCount: 1,
+        readyRealCount: 0,
+        blockedCount: 0,
+        requirements: [
+          { id: "mock_canary", status: "pass" },
+          { id: "user_confirmation", status: "manual_review" },
+        ],
+        warnings: [],
+        nextActions: ["Run the mock adapter dry-run harness."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/conformance") {
     res.end(JSON.stringify({
       success: true,
@@ -902,6 +926,7 @@ try {
     "bittensor_doctor_subnet_adapters",
     "bittensor_get_subnet_adapter_candidates",
     "bittensor_plan_subnet_adapter_onboarding",
+    "bittensor_check_subnet_adapter_launch_gate",
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_dry_run_subnet_adapters",
@@ -925,6 +950,7 @@ try {
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
@@ -1015,6 +1041,14 @@ try {
   assert.equal(adapterOnboardingPayload.cards[0].kind, "adapter_onboarding");
   assert.equal(adapterOnboardingPayload.cards[0].actions[0].kind, "send_to_chat");
   assert.doesNotMatch(JSON.stringify(adapterOnboardingPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+
+  const adapterLaunchGate = await ask({ jsonrpc: "2.0", id: 34, method: "tools/call", params: { name: "bittensor_check_subnet_adapter_launch_gate", arguments: { adapter: "data_search", netuid: 14 } } });
+  const adapterLaunchGatePayload = JSON.parse(adapterLaunchGate.result.content[0].text);
+  assert.equal(adapterLaunchGatePayload.success, true);
+  assert.equal(adapterLaunchGatePayload.report.kind, "bittensor_subnet_adapter_launch_gate");
+  assert.equal(adapterLaunchGatePayload.report.status, "mock_ready");
+  assert.equal(adapterLaunchGatePayload.report.requirements.find((requirement) => requirement.id === "user_confirmation").status, "manual_review");
+  assert.doesNotMatch(JSON.stringify(adapterLaunchGatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value/i);
 
   const adapterTemplates = await ask({ jsonrpc: "2.0", id: 30, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_templates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterTemplatePayload = JSON.parse(adapterTemplates.result.content[0].text);

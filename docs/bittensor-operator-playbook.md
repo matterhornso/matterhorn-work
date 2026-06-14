@@ -574,6 +574,21 @@ bittensor_plan_subnet_adapter_onboarding({
 })
 ```
 
+After onboarding is clean, check the launch gate. This does not invoke subnet services; it only reports whether the adapter path is still blocked, mock-ready, or requires manual review for a real HTTPS canary:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/launch-gate?adapter=data_search&netuid=77"
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_check_subnet_adapter_launch_gate({
+  "adapter": "data_search",
+  "netuid": 77
+})
+```
+
 Use lower-level candidate profiles when you want to inspect only the no-execution canary contract. This describes the adapter category, required gates, canary fixture, forbidden field classes, and operator questions before any provider endpoint is configured:
 
 ```bash
@@ -744,15 +759,16 @@ Use the Matterhorn Work MCP server for Bittensor.
 9. For lower-level action workflows, call `matterhorn_bittensor_prepare_extrinsic`, then `matterhorn_bittensor_create_signing_handoff`.
 10. Submit only after external signing with `matterhorn_bittensor_submit_signed_extrinsic`, and only with public signer metadata plus the externally signed payload.
 11. Before real adapter setup, call `bittensor_plan_subnet_adapter_onboarding` for the target adapter kind and netuid; it combines candidate, template, doctor, conformance, gates, warnings, and next actions without invoking a subnet service.
-12. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
-13. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-14. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-15. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-16. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-17. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-18. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-19. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-20. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+12. After onboarding is clean, call `bittensor_check_subnet_adapter_launch_gate`; `mock_ready` means only mock rehearsal can proceed, while `manual_review_required` means a real adapter still needs provider/canary/rollback review.
+13. If you need lower-level detail, call `bittensor_get_subnet_adapter_candidates` to inspect the no-execution candidate profile and canary contract.
+14. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+15. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+16. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+17. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+18. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+19. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+20. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+21. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 14. What Good Looks Like

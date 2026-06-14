@@ -221,6 +221,31 @@ export interface BittensorSubnetAdapterOnboardingPlan {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterLaunchGateRequirement {
+  id: string;
+  label: string;
+  status: "pass" | "manual_review" | "blocked" | "not_configured";
+  detail: string;
+  nextAction: string;
+}
+
+export interface BittensorSubnetAdapterLaunchGateReport {
+  kind: "bittensor_subnet_adapter_launch_gate";
+  checkedAt: string;
+  status: "blocked" | "mock_ready" | "manual_review_required";
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  onboarding: BittensorSubnetAdapterOnboardingPlan;
+  readyMockCount: number;
+  readyRealCount: number;
+  blockedCount: number;
+  requirements: BittensorSubnetAdapterLaunchGateRequirement[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -1903,6 +1928,124 @@ export async function planBittensorSubnetAdapterOnboarding(input: {
     doctor,
     conformance,
     gates,
+    warnings,
+    nextActions,
+  };
+}
+
+export async function checkBittensorSubnetAdapterLaunchGate(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterLaunchGateReport> {
+  const onboarding = await planBittensorSubnetAdapterOnboarding(input);
+  const scopedEntries = onboarding.doctor.entries.filter((entry) => {
+    const adapterMatches = onboarding.requested.adapter === null || entry.serviceAdapter === onboarding.requested.adapter;
+    const netuidMatches = onboarding.requested.netuid === null || entry.netuid === onboarding.requested.netuid;
+    return adapterMatches && netuidMatches;
+  });
+  const readyEntries = scopedEntries.filter((entry) => entry.serviceCallReady && entry.status === "ready");
+  const readyMockCount = readyEntries.filter((entry) => entry.endpoint.mode === "mock").length;
+  const readyRealCount = readyEntries.filter((entry) => entry.endpoint.mode === "http").length;
+  const blockedCount = scopedEntries.filter((entry) => entry.status === "blocked").length;
+  const requirements: BittensorSubnetAdapterLaunchGateRequirement[] = [
+    {
+      id: "onboarding_plan",
+      label: "Onboarding plan",
+      status: onboarding.status === "ready_for_preview_review" ? "pass" : onboarding.status === "needs_configuration" ? "not_configured" : "blocked",
+      detail: `Onboarding status is ${onboarding.status}.`,
+      nextAction: onboarding.nextActions[0] ?? "Complete adapter onboarding before launch review.",
+    },
+    {
+      id: "adapter_doctor",
+      label: "Adapter doctor",
+      status: !onboarding.doctor.rawConfigured
+        ? "not_configured"
+        : onboarding.doctor.status === "pass"
+          ? "pass"
+          : "blocked",
+      detail: `${onboarding.doctor.readyCount} ready, ${onboarding.doctor.warningCount} warning, ${onboarding.doctor.blockedCount} blocked adapter entries.`,
+      nextAction: onboarding.doctor.status === "pass"
+        ? "Keep adapter endpoint and auth values out of logs and user-facing payloads."
+        : "Fix adapter doctor blockers before preview review.",
+    },
+    {
+      id: "metadata_conformance",
+      label: "Metadata conformance",
+      status: !onboarding.doctor.rawConfigured
+        ? "not_configured"
+        : onboarding.conformance.status === "pass"
+          ? "pass"
+          : "blocked",
+      detail: `${onboarding.conformance.passed} passed, ${onboarding.conformance.failed} failed, ${onboarding.conformance.skipped} skipped conformance case(s).`,
+      nextAction: onboarding.conformance.status === "pass"
+        ? "Proceed only to reviewed preview/canary planning."
+        : "Fix metadata conformance before launch review.",
+    },
+    {
+      id: "mock_canary",
+      label: "Mock canary",
+      status: readyMockCount ? "pass" : "not_configured",
+      detail: `${readyMockCount} mock adapter(s) are ready for preview-confirm-invoke testing.`,
+      nextAction: readyMockCount
+        ? "Run mock dry-run before any real adapter canary review."
+        : "Configure a mock adapter first when possible, then rerun the launch gate.",
+    },
+    {
+      id: "real_adapter_review",
+      label: "Real adapter review",
+      status: readyRealCount ? "manual_review" : "not_configured",
+      detail: readyRealCount
+        ? `${readyRealCount} real HTTPS adapter(s) are technically ready but still require manual canary review.`
+        : "No real HTTPS adapter is ready for manual canary review.",
+      nextAction: readyRealCount
+        ? "Manually review provider identity, endpoint ownership, privacy policy, canary task, and rollback plan before any real invocation."
+        : "Do not configure a real adapter until mock and metadata gates are clean.",
+    },
+    {
+      id: "user_confirmation",
+      label: "User confirmation",
+      status: "manual_review",
+      detail: "Every subnet service call still requires preview text, exact request SHA-256, and explicit user confirmation.",
+      nextAction: "Never bypass preview-confirm-invoke, even after this launch gate passes.",
+    },
+  ];
+  const status: BittensorSubnetAdapterLaunchGateReport["status"] = onboarding.status !== "ready_for_preview_review" || blockedCount > 0
+    ? "blocked"
+    : readyRealCount > 0
+      ? "manual_review_required"
+      : readyMockCount > 0
+        ? "mock_ready"
+        : "blocked";
+  const warnings = uniqueWarnings(
+    onboarding.warnings,
+    readyRealCount ? ["Real HTTPS adapters require manual provider and canary review before any invocation."] : [],
+    readyMockCount ? [] : ["No mock adapter is ready for dry-run launch rehearsal."],
+  );
+  const nextActions = status === "blocked"
+    ? [
+      "Resolve blocked or missing onboarding gates before launch review.",
+      "Prefer a mock adapter dry-run before configuring real HTTPS adapters.",
+    ]
+    : status === "mock_ready"
+      ? [
+        "Run the mock adapter dry-run harness and inspect preview/hash/redaction results.",
+        "Keep real subnet execution disabled until a separate manual canary review passes.",
+      ]
+      : [
+        "Complete manual provider, endpoint, privacy, canary, and rollback review.",
+        "Only then run a reviewed real canary preview and require exact request SHA-256 confirmation.",
+      ];
+  return {
+    kind: "bittensor_subnet_adapter_launch_gate",
+    checkedAt: nowIso(),
+    status,
+    requested: onboarding.requested,
+    onboarding,
+    readyMockCount,
+    readyRealCount,
+    blockedCount,
+    requirements,
     warnings,
     nextActions,
   };
