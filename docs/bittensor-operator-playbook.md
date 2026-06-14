@@ -6,6 +6,8 @@ Use the general [Agent Operator Workflow](./agent-operator-workflow.md) first to
 
 For a repeatable pass/fail probe of this playbook, run [Matterhorn Work Bittensor Live QA](./bittensor-live-qa.md).
 
+For direct subnet service execution planning, use [Bittensor Subnet Service Adapter Contracts](./bittensor-subnet-service-adapter-contracts.md). Matterhorn must pass the adapter contract gate before it can call any configured subnet service.
+
 The product rule is:
 
 ```text
