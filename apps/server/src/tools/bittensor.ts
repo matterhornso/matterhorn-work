@@ -269,6 +269,26 @@ export interface BittensorSubnetAdapterCanaryReviewChecklist {
   warnings: string[];
 }
 
+export interface BittensorSubnetAdapterEvidenceBundle {
+  kind: "bittensor_subnet_adapter_evidence_bundle";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  onboarding: BittensorSubnetAdapterOnboardingPlan;
+  launchGate: BittensorSubnetAdapterLaunchGateReport;
+  canaryReview: BittensorSubnetAdapterCanaryReviewChecklist;
+  requiredArtifacts: Array<{
+    id: string;
+    label: string;
+    source: "onboarding" | "launch_gate" | "canary_review" | "operator";
+    requiredBeforeRealCanary: boolean;
+  }>;
+  exportWarnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -2166,6 +2186,65 @@ export function getBittensorSubnetAdapterCanaryReviewChecklist(input: {
       "Require explicit operator/user confirmation of the exact request SHA-256 before any canary invocation.",
     ],
     warnings: candidateReport.warnings,
+  };
+}
+
+export async function buildBittensorSubnetAdapterEvidenceBundle(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterEvidenceBundle> {
+  const onboarding = await planBittensorSubnetAdapterOnboarding(input);
+  const launchGate = await checkBittensorSubnetAdapterLaunchGate(input);
+  const canaryReview = getBittensorSubnetAdapterCanaryReviewChecklist(input);
+  const requiredArtifacts: BittensorSubnetAdapterEvidenceBundle["requiredArtifacts"] = [
+    {
+      id: "onboarding_plan",
+      label: "Onboarding plan with candidate, template, doctor, conformance, gates, warnings, and next actions",
+      source: "onboarding",
+      requiredBeforeRealCanary: true,
+    },
+    {
+      id: "launch_gate",
+      label: "Launch gate status showing blocked, mock-ready, or manual-review-required state",
+      source: "launch_gate",
+      requiredBeforeRealCanary: true,
+    },
+    ...canaryReview.reviewItems.map((item) => ({
+      id: `canary_${item.id}`,
+      label: item.label,
+      source: "canary_review" as const,
+      requiredBeforeRealCanary: item.required,
+    })),
+    {
+      id: "operator_approval",
+      label: "Human/operator approval of provider identity, canary fixture, rollback plan, and exact request SHA-256",
+      source: "operator",
+      requiredBeforeRealCanary: true,
+    },
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_evidence_bundle",
+    generatedAt: nowIso(),
+    requested: onboarding.requested,
+    onboarding,
+    launchGate,
+    canaryReview,
+    requiredArtifacts,
+    exportWarnings: uniqueWarnings(
+      onboarding.warnings,
+      launchGate.warnings,
+      canaryReview.warnings,
+      [
+        "This bundle is evidence for review only; it does not authorize real subnet service execution.",
+        "Do not paste credential values, signing material, wallet recovery material, host tokens, or private user data into evidence notes.",
+      ],
+    ),
+    nextActions: [
+      "Collect evidence for every required artifact before any real HTTPS canary.",
+      "Run mock dry-run and metadata conformance before manual real-adapter review.",
+      "Require exact preview request SHA-256 confirmation for any future canary invocation.",
+    ],
   };
 }
 

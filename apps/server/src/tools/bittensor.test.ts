@@ -29,6 +29,7 @@ import {
   buildBittensorWalletCard,
   buildBittensorSubnetServiceAdapterContract,
   buildBittensorSubnetServiceAdapterContractTestFixtures,
+  buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1265,6 +1266,17 @@ describe("executeBittensorChatWorkflow", () => {
     expect(checklist.stopConditions.join(" ")).toContain("Stop if metadata conformance does not pass");
     expect(checklist.allowedNextActions.join(" ")).toContain("exact request SHA-256");
     expect(JSON.stringify(checklist)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
+  });
+
+  test("builds adapter evidence bundle for review without authorizing execution", async () => {
+    const bundle = await buildBittensorSubnetAdapterEvidenceBundle({ adapter: "data_search", netuid: 18 });
+    expect(bundle.kind).toBe("bittensor_subnet_adapter_evidence_bundle");
+    expect(bundle.onboarding.kind).toBe("bittensor_subnet_adapter_onboarding_plan");
+    expect(bundle.launchGate.kind).toBe("bittensor_subnet_adapter_launch_gate");
+    expect(bundle.canaryReview.kind).toBe("bittensor_subnet_adapter_canary_review");
+    expect(bundle.requiredArtifacts.map((artifact) => artifact.id)).toContain("operator_approval");
+    expect(bundle.exportWarnings.join(" ")).toContain("does not authorize real subnet service execution");
+    expect(JSON.stringify(bundle)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value/i);
   });
 
   test("builds one safe adapter onboarding plan before real execution", async () => {
