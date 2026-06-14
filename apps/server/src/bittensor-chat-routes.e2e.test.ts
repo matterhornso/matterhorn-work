@@ -4,7 +4,7 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { startServer } from "./server.ts";
+import { startServer } from "./server.js";
 import type { ServerConfig } from "./types.js";
 
 type Served = {

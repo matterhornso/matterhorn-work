@@ -220,6 +220,7 @@ export interface BittensorPlan {
     | "subnet_result"
     | "watchlist"
     | "intelligence_report"
+    | "readiness_report"
   >;
   requiresClarification: boolean;
   clarificationQuestion: string | null;
@@ -948,6 +949,8 @@ export interface BittensorSubnetDiscoveryResult {
   goal: string;
   matches: BittensorSubnetDiscoveryMatch[];
   cards: BittensorChatCard[];
+  source: string;
+  warnings: string[];
 }
 
 type CacheEntry<T> = { at: number; data: T };
@@ -3838,7 +3841,12 @@ export async function findBittensorSubnetsForGoal(input: { goal: string; limit?:
       data: { ...(card.data ?? {}), match },
     };
   });
-  return { goal, matches, cards };
+  const sources = [...new Set(matches.map((match) => match.subnet.source))];
+  const source = sources.length === 1 ? sources[0] ?? "unknown" : sources.length > 1 ? "mixed" : "unknown";
+  const warnings = matches.some((match) => match.subnet.source === "curated-fallback")
+    ? ["Some subnet matches use curated fallback metadata because live provider data was unavailable."]
+    : [];
+  return { goal, matches, cards, source, warnings };
 }
 
 export async function listBittensorCapabilities(): Promise<BittensorCapabilityManifest[]> {
@@ -6660,7 +6668,7 @@ export function buildBittensorSigningSafetyChecklistCard(checklist: BittensorSig
       cardItem("Warnings", warnings, warnings ? "warning" : "muted"),
       cardItem("Failed", failed, failed ? "danger" : "muted"),
       cardItem("External signer", "Required", "warning"),
-      cardItem("First check", checklist.checks[0]?.summary ?? "Unavailable", checklist.checks[0]?.status === "pass" ? "good" : checklist.checks[0]?.status ?? "muted"),
+      cardItem("First check", checklist.checks[0]?.summary ?? "Unavailable", checklist.checks[0]?.status === "pass" ? "good" : checklist.checks[0]?.status === "fail" ? "danger" : checklist.checks[0]?.status ?? "muted"),
     ],
     actions: [{
       label: checklist.status === "fail" ? "Rebuild preview" : "Create signing handoff",
