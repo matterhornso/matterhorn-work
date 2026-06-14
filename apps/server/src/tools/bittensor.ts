@@ -6544,6 +6544,28 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   }
 
   try {
+    const conformance = await probeBittensorSubnetAdapterConformance();
+    checks.push({
+      id: "subnet_adapter_conformance",
+      label: "Subnet adapter conformance",
+      status: conformance.status === "fail" ? "fail" : conformance.status === "pass" ? "pass" : "warning",
+      summary: conformance.total
+        ? conformance.status === "pass"
+          ? `${conformance.passed} subnet service adapter metadata probe(s) passed without sending user task text.`
+          : `${conformance.failed} failed and ${conformance.skipped} skipped subnet service adapter conformance probe(s) need review.`
+        : "No direct subnet service adapters are configured for metadata conformance probing.",
+      details: {
+        total: conformance.total,
+        passed: conformance.passed,
+        failed: conformance.failed,
+        skipped: conformance.skipped,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_conformance", label: "Subnet adapter conformance", status: "fail", summary: err instanceof Error ? err.message : "Adapter conformance probe failed." });
+  }
+
+  try {
     const wallet = await bittensorProvider.getWallet("invalid-ss58");
     checks.push({
       id: "wallet_safety",
