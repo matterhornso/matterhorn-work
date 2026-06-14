@@ -7,6 +7,7 @@ import {
   auditBittensorSubnetAdapterRuntimeApprovals,
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
+  buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
@@ -37,6 +38,7 @@ import {
   buildBittensorSubnetServiceAdapterContractTestFixtures,
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
+  buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1581,6 +1583,94 @@ describe("executeBittensorChatWorkflow", () => {
     expect(card.items.find((item) => item.label === "Missing required")?.value).toBe(String(review.missingRequiredArtifactCount));
     expect(card.actions?.[0]?.payload?.prompt).toContain("unblock");
     expect(JSON.stringify(review)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("builds blocked canary operator packets without approval templates", async () => {
+    const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket({
+      adapter: "data_search",
+      netuid: 77,
+      requestSha256: "b".repeat(64),
+    });
+    expect(packet.kind).toBe("bittensor_subnet_adapter_canary_operator_packet");
+    expect(packet.status).toBe("blocked");
+    expect(packet.approvalTemplate).toBeNull();
+    expect(packet.warnings.join(" ")).toContain("Evidence review is blocked");
+    const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
+    expect(card.kind).toBe("adapter_canary_packet");
+    expect(card.actions?.some((action) => action.kind === "copy_payload")).toBe(false);
+    expect(JSON.stringify(packet)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    expect(JSON.stringify(card)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("builds approval-ready canary packets only after real adapter manual review gates", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+    const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+    const previousFetch = globalThis.fetch;
+    const calls: string[] = [];
+    try {
+      process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Reviewed HTTPS adapter",
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.invalid/invoke",
+        metadataEndpoint: "https://adapter.invalid/.well-known/matterhorn-bittensor-adapter.json",
+        requiredAuth: "none",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTPS adapter safety note."],
+      }]);
+      globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(`${String(init?.method ?? "GET")} ${String(input)}`);
+        if (String(input).startsWith("https://adapter.invalid/.well-known")) {
+          return Promise.resolve(new Response(JSON.stringify({
+            version: "matterhorn.bittensor.adapter.v1",
+            netuid: 77,
+            serviceAdapter: "data_search",
+            supportedIntents: ["service_call"],
+            safeModeRequired: true,
+            requestHashRequired: true,
+            maxResponseBytes: 256000,
+            healthStatus: "ok",
+            privacy: { sendsWalletData: false, sendsKeyMaterial: false },
+          }), { status: 200 }));
+        }
+        return previousFetch(input, init);
+      }) as typeof fetch;
+      const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket({
+        adapter: "data_search",
+        netuid: 77,
+        requestSha256: "c".repeat(64),
+        ttlMinutes: 15,
+      });
+      expect(packet.status).toBe("approval_template_ready");
+      expect(packet.approvalTemplate?.approval.requestSha256).toBe("c".repeat(64));
+      expect(packet.evidenceReview.status).toBe("manual_real_canary_review_required");
+      expect(calls.every((call) => call.includes(".well-known"))).toBe(true);
+      const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
+      expect(card.kind).toBe("adapter_canary_packet");
+      expect(card.actions?.[0]?.kind).toBe("copy_payload");
+      expect(JSON.stringify(packet)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+      expect(JSON.stringify(card)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+      }
+      if (previousReal === undefined) {
+        delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+      }
+    }
   });
 
   test("builds one safe adapter onboarding plan before real execution", async () => {

@@ -499,6 +499,40 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/canary-packet") {
+    res.end(JSON.stringify({
+      success: true,
+      packet: {
+        kind: "bittensor_subnet_adapter_canary_operator_packet",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: {
+          adapter: url.searchParams.get("adapter") || "data_search",
+          netuid: Number(url.searchParams.get("netuid") || 14),
+        },
+        status: "blocked",
+        previewRequestSha256Prefix: null,
+        evidenceExport: {
+          kind: "bittensor_subnet_adapter_evidence_export",
+          warnings: ["Evidence for review only."],
+        },
+        evidenceReview: {
+          kind: "bittensor_subnet_adapter_evidence_review",
+          status: "blocked",
+          launchGateStatus: "blocked",
+        },
+        approvalTemplate: null,
+        warnings: ["Evidence review is blocked."],
+        nextActions: ["Resolve blocked evidence review items."],
+      },
+      cards: [{
+        kind: "adapter_canary_packet",
+        title: "Bittensor adapter canary packet",
+        items: [{ label: "Packet status", value: "Blocked" }],
+        actions: [{ label: "Continue safely", kind: "send_to_chat", payload: { prompt: "Help me unblock the Bittensor adapter canary packet." } }],
+      }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/templates") {
     res.end(JSON.stringify({
       success: true,
@@ -1101,6 +1135,7 @@ try {
     "bittensor_doctor_subnet_adapters",
     "bittensor_audit_subnet_adapter_approvals",
     "bittensor_create_subnet_adapter_approval_template",
+    "bittensor_build_subnet_adapter_canary_packet",
     "bittensor_get_subnet_adapter_candidates",
     "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_check_subnet_adapter_launch_gate",
@@ -1131,6 +1166,7 @@ try {
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_audit_subnet_adapter_approvals"), /without exposing full hashes or credential values/i);
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
@@ -1231,6 +1267,15 @@ try {
   assert.equal(adapterApprovalTemplatePayload.cards[0].actions[0].kind, "copy_payload");
   assert.match(adapterApprovalTemplatePayload.template.warnings.join(" "), /does not invoke/i);
   assert.doesNotMatch(JSON.stringify(adapterApprovalTemplatePayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+
+  const adapterCanaryPacket = await ask({ jsonrpc: "2.0", id: 41, method: "tools/call", params: { name: "bittensor_build_subnet_adapter_canary_packet", arguments: { adapter: "data_search", netuid: 14, requestSha256: "b".repeat(64), ttlMinutes: 15 } } });
+  const adapterCanaryPacketPayload = JSON.parse(adapterCanaryPacket.result.content[0].text);
+  assert.equal(adapterCanaryPacketPayload.success, true);
+  assert.equal(adapterCanaryPacketPayload.packet.kind, "bittensor_subnet_adapter_canary_operator_packet");
+  assert.equal(adapterCanaryPacketPayload.packet.approvalTemplate, null);
+  assert.equal(adapterCanaryPacketPayload.cards[0].kind, "adapter_canary_packet");
+  assert.equal(adapterCanaryPacketPayload.cards[0].actions[0].kind, "send_to_chat");
+  assert.doesNotMatch(JSON.stringify(adapterCanaryPacketPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterCandidates = await ask({ jsonrpc: "2.0", id: 32, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_candidates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterCandidatePayload = JSON.parse(adapterCandidates.result.content[0].text);
