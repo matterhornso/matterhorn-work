@@ -762,11 +762,20 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
       return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "signer_status":
     case "readiness_report":
+    case "adapter_manifest_validation":
+    case "adapter_onboarding":
+    case "adapter_evidence_bundle":
+    case "adapter_approval_audit":
       return <BadgeCheck className={className} strokeWidth={1.9} />;
     case "watchlist":
       return <Activity className={className} strokeWidth={1.9} />;
     case "unsupported_adapter":
       return <CircleAlert className={className} strokeWidth={1.9} />;
+    case "adapter_launch_gate":
+    case "adapter_evidence_review":
+    case "adapter_approval_template":
+    case "adapter_canary_packet":
+      return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "subnet_result":
       return <Zap className={className} strokeWidth={1.9} />;
     default:
