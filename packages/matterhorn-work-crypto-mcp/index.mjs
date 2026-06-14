@@ -819,6 +819,15 @@ async function bittensor_get_subnet_adapter_templates(args = {}) {
   return { success: true, report: res.report };
 }
 
+async function bittensor_get_subnet_adapter_candidates(args = {}) {
+  const params = new URLSearchParams();
+  if (typeof args.adapter === "string") params.set("adapter", args.adapter);
+  if (Number.isFinite(args.netuid)) params.set("netuid", String(args.netuid));
+  const query = params.toString();
+  const res = await callServer(`/api/bittensor/adapters/candidates${query ? `?${query}` : ""}`);
+  return { success: true, report: res.report };
+}
+
 async function bittensor_probe_subnet_adapter_conformance(args = {}) {
   const params = new URLSearchParams();
   if (Number.isFinite(args.netuid)) params.set("netuid", String(args.netuid));
@@ -980,6 +989,7 @@ const tools = [
   { name: "bittensor_get_sidecar_health", description: "Probe whether the configured Bittensor Subtensor sidecar is reachable, without exposing its endpoint URL.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_readiness_audit", description: "Run the Bittensor readiness gate across chat planning, discovery, wallet safety, signing safety, capabilities, monitoring, validator comparison, and sidecar status.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_doctor_subnet_adapters", description: "Inspect configured Bittensor subnet service adapters for endpoint allowlisting, auth readiness, schema safety, and preview-confirm-invoke readiness without exposing token values or auth env names.", inputSchema: { type: "object", properties: {} } },
+  { name: "bittensor_get_subnet_adapter_candidates", description: "Return no-execution candidate profiles and canary contracts for future real Bittensor subnet adapters. Use before configuring a provider endpoint.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" } } } },
   { name: "bittensor_get_subnet_adapter_templates", description: "Return sanitized real-adapter onboarding templates for data-search or inference subnet adapters, including config placeholders, allowlist/auth env names, schemas, and preflight steps. Never returns credential values.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" } } } },
   { name: "bittensor_probe_subnet_adapter_conformance", description: "Probe configured subnet adapter metadata/health conformance without sending user task text, wallet data, signing payloads, or request bodies. Use before any real adapter invocation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_dry_run_subnet_adapters", description: "Run the safe subnet adapter dry-run harness for configured mock adapters: preview, missing-hash rejection, mismatched-hash rejection, confirmed invocation, and redaction checks. Non-mock adapters are skipped.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
@@ -1115,6 +1125,7 @@ function handleMessage(msg) {
         case "bittensor_get_sidecar_health": return bittensor_get_sidecar_health().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_readiness_audit": return bittensor_readiness_audit().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_doctor_subnet_adapters": return bittensor_doctor_subnet_adapters().then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_get_subnet_adapter_candidates": return bittensor_get_subnet_adapter_candidates(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_adapter_templates": return bittensor_get_subnet_adapter_templates(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_probe_subnet_adapter_conformance": return bittensor_probe_subnet_adapter_conformance(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_dry_run_subnet_adapters": return bittensor_dry_run_subnet_adapters(args).then(r => respond(textResult(r))).catch(catchErr);

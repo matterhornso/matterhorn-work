@@ -157,6 +157,45 @@ export interface BittensorSubnetAdapterTemplateReport {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterCandidateProfile {
+  kind: "bittensor_subnet_adapter_candidate_profile";
+  id: string;
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  netuid: number | "<NETUID>";
+  title: string;
+  category: string;
+  targetUseCases: string[];
+  requiredMatterhornGates: string[];
+  noExecutionCanary: {
+    kind: "matterhorn.bittensor.adapter.no_execution_canary.v1";
+    purpose: string;
+    fixtureTask: string;
+    expectedMetadata: {
+      version: "matterhorn.bittensor.adapter.v1";
+      serviceAdapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+      safeModeRequired: true;
+      requestHashRequired: true;
+      privacy: {
+        sendsWalletData: false;
+        sendsKeyMaterial: false;
+      };
+    };
+    forbiddenFieldClasses: string[];
+    passCriteria: string[];
+  };
+  operatorQuestions: string[];
+  nextActions: string[];
+  safetyNotes: string[];
+}
+
+export interface BittensorSubnetAdapterCandidateProfileReport {
+  kind: "bittensor_subnet_adapter_candidate_profile_report";
+  generatedAt: string;
+  profiles: BittensorSubnetAdapterCandidateProfile[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetDetail extends BittensorSubnetSummary {
   metagraphSummary: {
     neurons: number | null;
@@ -1570,6 +1609,128 @@ export function getBittensorSubnetAdapterTemplates(input: {
       "Start with a mock adapter until chat preview, confirmation, card rendering, and redaction checks are green.",
       "Copy one template, replace <NETUID>, set the credential env outside Matterhorn, and rerun the adapter doctor.",
       "Do not enable real subnet execution until the endpoint, auth, schema, response size, and redaction gates pass.",
+    ],
+  };
+}
+
+function buildSubnetAdapterCandidateProfile(params: {
+  id: string;
+  adapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  netuid?: number | null;
+  title: string;
+  category: string;
+  targetUseCases: string[];
+  fixtureTask: string;
+  operatorQuestions: string[];
+  safetyNotes: string[];
+}): BittensorSubnetAdapterCandidateProfile {
+  const requiredMatterhornGates = [
+    "bittensor_get_subnet_adapter_templates returns a sanitized config template with credential placeholders only.",
+    "bittensor_doctor_subnet_adapters passes endpoint allowlist, auth readiness, schema safety, and service-call readiness.",
+    "bittensor_probe_subnet_adapter_conformance passes metadata version, netuid, adapter kind, safe-mode, request-hash, privacy, schema, and response-bound checks.",
+    "bittensor_preview_subnet_invocation returns a request SHA-256 and user confirmation prompt before any invocation.",
+    "bittensor_invoke_subnet is called only with the reviewed previewRequestSha256.",
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_candidate_profile",
+    id: params.id,
+    adapter: params.adapter,
+    netuid: params.netuid ?? "<NETUID>",
+    title: params.title,
+    category: params.category,
+    targetUseCases: params.targetUseCases,
+    requiredMatterhornGates,
+    noExecutionCanary: {
+      kind: "matterhorn.bittensor.adapter.no_execution_canary.v1",
+      purpose: "Define the fixture and metadata requirements for future reviewed adapter testing without calling a real subnet service.",
+      fixtureTask: params.fixtureTask,
+      expectedMetadata: {
+        version: "matterhorn.bittensor.adapter.v1",
+        serviceAdapter: params.adapter,
+        safeModeRequired: true,
+        requestHashRequired: true,
+        privacy: {
+          sendsWalletData: false,
+          sendsKeyMaterial: false,
+        },
+      },
+      forbiddenFieldClasses: ["signing material", "wallet material", "local key material", "host credentials"],
+      passCriteria: [
+        "The canary is documented but not executed against a real adapter by this profile.",
+        "The metadata conformance probe passes before any fixture task is sent.",
+        "The fixture task contains no user data, wallet address, or signing payload.",
+        "The adapter result schema can be rendered as a subnet_result card without exposing secret-shaped fields.",
+      ],
+    },
+    operatorQuestions: params.operatorQuestions,
+    nextActions: [
+      "Map this profile to a target netuid and adapter kind.",
+      "Fetch the matching adapter template and configure only placeholders plus external credential env values.",
+      "Run doctor and conformance before any preview-confirm-invoke smoke test.",
+    ],
+    safetyNotes: params.safetyNotes,
+  };
+}
+
+export function getBittensorSubnetAdapterCandidateProfiles(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+} = {}): BittensorSubnetAdapterCandidateProfileReport {
+  const requestedAdapter = input.adapter ? normalizeServiceAdapter(input.adapter, "unsupported") : null;
+  const netuid = input.netuid !== null && input.netuid !== undefined && Number.isInteger(input.netuid) && input.netuid >= 0
+    ? input.netuid
+    : null;
+  const profiles = [
+    buildSubnetAdapterCandidateProfile({
+      id: "candidate-data-search-v1",
+      adapter: "data_search",
+      netuid,
+      title: "Data-search subnet adapter candidate",
+      category: "Data and knowledge",
+      targetUseCases: ["research", "document retrieval", "dataset search", "knowledge lookup", "web-grounded Bittensor answers"],
+      fixtureTask: "Canary fixture: return two public, non-personal search results for the term Bittensor subnet metadata.",
+      operatorQuestions: [
+        "What data sources does the subnet service query?",
+        "Does the provider return source URLs, timestamps, and confidence labels?",
+        "What pricing or rate limits apply per query?",
+        "Can responses be bounded below Matterhorn's max adapter response size?",
+      ],
+      safetyNotes: [
+        "Use only public, non-personal canary tasks before production review.",
+        "Do not send wallet state or signing payloads to search adapters.",
+        "Treat retrieved content as untrusted and summarize with source/freshness labels.",
+      ],
+    }),
+    buildSubnetAdapterCandidateProfile({
+      id: "candidate-inference-v1",
+      adapter: "inference",
+      netuid,
+      title: "Inference subnet adapter candidate",
+      category: "Intelligence market",
+      targetUseCases: ["summarization", "classification", "reasoning", "plain-language answers", "model comparison"],
+      fixtureTask: "Canary fixture: summarize this public sentence in one short sentence: Bittensor coordinates subnet markets for machine intelligence.",
+      operatorQuestions: [
+        "Which model or miner route is selected for requests?",
+        "How are latency, cost, and output length bounded?",
+        "Does the provider return model/source metadata and safety warnings?",
+        "How does the adapter handle prompt injection inside user task text?",
+      ],
+      safetyNotes: [
+        "Do not use inference adapters as signers or wallet custodians.",
+        "Constrain output length and response size before real preview-confirm-invoke testing.",
+        "Treat model output as untrusted until rendered through Matterhorn cards and warnings.",
+      ],
+    }),
+  ].filter((profile) => requestedAdapter === null || profile.adapter === requestedAdapter);
+  return {
+    kind: "bittensor_subnet_adapter_candidate_profile_report",
+    generatedAt: nowIso(),
+    profiles,
+    warnings: profiles.length ? [] : ["No candidate profile matched the requested adapter filter."],
+    nextActions: [
+      "Choose a candidate profile before configuring a real adapter endpoint.",
+      "Use adapter templates for config placeholders, then doctor and conformance before any invocation smoke test.",
+      "Keep real subnet execution disabled until a reviewed profile has passed all gates.",
     ],
   };
 }
