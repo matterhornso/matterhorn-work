@@ -22,6 +22,7 @@ It validates the Bittensor product behavior that matters most for operators:
 - optional watch-only wallet reads return wallet cards when a public address is supplied;
 - optional follow-up stake-position reads reuse public Bittensor context;
 - optional wallet intelligence returns an explainable risk/exposure report when a public address is supplied;
+- optional wallet change-baseline checks compare current public exposure against the last in-memory public baseline;
 - image-generation subnet discovery returns subnet comparison cards;
 - subnet intelligence returns an explainable report for the selected subnet;
 - validator comparison returns validator selection cards;
@@ -60,7 +61,7 @@ node scripts/bittensor-live-qa.mjs \
   --json
 ```
 
-The full run still does not sign or broadcast anything. It adds watch-only wallet snapshot, stake-position, wallet-intelligence, lower-level unsigned extrinsic preview, and external-signing handoff checks. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
+The full run still does not sign or broadcast anything. It adds watch-only wallet snapshot, stake-position, wallet-intelligence, wallet-change baseline, lower-level unsigned extrinsic preview, and external-signing handoff checks. The expected staking result is `unsigned_preview` with `requiresExternalSignature: true`.
 
 ## Useful Options
 

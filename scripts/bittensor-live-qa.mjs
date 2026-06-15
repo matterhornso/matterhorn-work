@@ -264,10 +264,28 @@ async function runChatCore() {
         cards: cardKinds(result.body),
       };
     });
+
+    await runStep("bittensor.wallet.change_baseline", "Compare wallet exposure against the last public baseline", async () => {
+      const result = await chat("what changed in my Bittensor wallet since last time?", walletContextId ? { contextId: walletContextId, ss58Address: config.ss58Address } : { ss58Address: config.ss58Address });
+      expectExecution(result.body, "answered");
+      expectCard(result.body, "intelligence_report");
+      const change = result.body?.data?.walletChange || {};
+      if (change.kind !== "wallet_change") {
+        throw new Error("wallet change response did not include a wallet_change report");
+      }
+      return {
+        latencyMs: result.latencyMs,
+        execution: result.body?.execution,
+        baselineAvailable: change.baselineAvailable ?? null,
+        changedPositions: Array.isArray(change.changedPositions) ? change.changedPositions.length : null,
+        cards: cardKinds(result.body),
+      };
+    });
   } else {
     add("skip", "bittensor.wallet.snapshot", "Read watch-only TAO wallet snapshot", { hint: "Pass --ss58-address with a public coldkey address to test wallet reads." });
     add("skip", "bittensor.wallet.stake_positions", "Read stake positions from public wallet context", { hint: "Pass --ss58-address with a public coldkey address to test stake-position reads." });
     add("skip", "bittensor.wallet.intelligence", "Analyze watch-only wallet risk and exposure", { hint: "Pass --ss58-address with a public coldkey address to test wallet intelligence." });
+    add("skip", "bittensor.wallet.change_baseline", "Compare wallet exposure against the last public baseline", { hint: "Pass --ss58-address with a public coldkey address to test wallet change comparisons." });
   }
 
   await runStep("bittensor.discover.image", "Discover image-generation subnets", async () => {
