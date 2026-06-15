@@ -401,6 +401,7 @@ try {
     "matterhorn_bittensor_get_subnet_capability",
     "matterhorn_bittensor_prepare_extrinsic",
     "matterhorn_bittensor_create_signing_handoff",
+    "matterhorn_bittensor_check_signing_handoff",
     "matterhorn_bittensor_submit_signed_extrinsic",
     "matterhorn_bittensor_preview_subnet_invocation",
     "matterhorn_bittensor_invoke_subnet",
@@ -629,6 +630,37 @@ try {
     arguments: { preview: extrinsicPreview.preview },
   }));
   assert.equal(signingHandoff.handoff.payloadSha256.length, 64);
+
+  const signingHandoffCheck = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_check_signing_handoff",
+    arguments: {
+      handoff: {
+        handoff: {
+          ...signingHandoff.handoff,
+          requiresExternalSignature: true,
+          preview: { action: "stake", netuid: 14, amountTao: "1" },
+        },
+      },
+      expectedSha: signingHandoff.handoff.payloadSha256,
+      now: "2026-06-12T19:00:00.000Z",
+      strict: true,
+    },
+  }));
+  assert.equal(signingHandoffCheck.readyToSign, true);
+  assert.equal(signingHandoffCheck.safety.signsOrBroadcasts, false);
+  assert.match(signingHandoffCheck.markdown, /READY_FOR_EXTERNAL_SIGNER/);
+
+  const badSigningHandoffCheck = await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_check_signing_handoff",
+    arguments: {
+      handoff: {
+        payloadSha256: signingHandoff.handoff.payloadSha256,
+        expiresAt: "2026-06-12T20:00:00.000Z",
+        signature: "0x1234",
+      },
+    },
+  });
+  assert.match(badSigningHandoffCheck.error?.message || "", /forbidden signing or credential field/i);
 
   const signedSubmit = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_submit_signed_extrinsic",

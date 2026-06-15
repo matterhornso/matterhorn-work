@@ -453,6 +453,21 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_bittensor_check_signing_handoff",
+    description: "Validate a Bittensor external-signer handoff before a user signs it. Checks payload hash, expiry, action context, external-signer marker, and rejects credential or already-signed payload fields. Does not sign, submit, or broadcast.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        handoff: { type: "object", description: "External signer handoff object returned by Matterhorn Work." },
+        expectedSha: { type: "string", description: "Optional expected payload SHA-256 from the unsigned preview." },
+        expectedPayloadSha256: { type: "string", description: "Alias for expectedSha." },
+        now: { type: "string", description: "Optional ISO timestamp override for deterministic checks." },
+        strict: { type: "boolean", description: "When true, unsafe handoffs raise an MCP error instead of returning a not-ready summary." },
+      },
+      required: ["handoff"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_submit_signed_extrinsic",
     description: "Submit an externally signed Bittensor extrinsic through a configured sidecar, if available.",
     inputSchema: {
@@ -1329,6 +1344,149 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
   };
 }
 
+const BITTENSOR_HANDOFF_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|signedPayload|signed_payload)/i;
+const BITTENSOR_HANDOFF_FORBIDDEN_EXACT_KEY_RE = /^(signature|signedExtrinsic|signed_extrinsic|signedPayload|signed_payload)$/i;
+
+function bittensorHandoffObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function assertBittensorHandoffHasNoSigningMaterial(value, label, path = []) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertBittensorHandoffHasNoSigningMaterial(child, label, [...path, String(index)]));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (BITTENSOR_HANDOFF_FORBIDDEN_EXACT_KEY_RE.test(key) || BITTENSOR_HANDOFF_FORBIDDEN_KEY_RE.test(key)) {
+      throw new Error(label + " contains forbidden signing or credential field: " + [...path, key].join("."));
+    }
+    assertBittensorHandoffHasNoSigningMaterial(child, label, [...path, key]);
+  }
+}
+
+function bittensorHandoffEnvelope(input) {
+  const root = bittensorHandoffObject(input);
+  return bittensorHandoffObject(root.handoff).payloadSha256 ? bittensorHandoffObject(root.handoff) : root;
+}
+
+function normalizeBittensorHandoffSha(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isBittensorHandoffSha256(value) {
+  return /^[a-f0-9]{64}$/.test(normalizeBittensorHandoffSha(value));
+}
+
+function addBittensorHandoffFinding(findings, status, area, detail, severity = "") {
+  findings.push({ status, area, detail, severity });
+}
+
+function checkBittensorHandoffExpiry(value, now) {
+  if (!value) return { status: "warn", detail: "No expiry timestamp is present." };
+  const expiresAtMs = Date.parse(value);
+  if (!Number.isFinite(expiresAtMs)) return { status: "fail", detail: "Expiry is not a valid timestamp: " + value };
+  if (expiresAtMs <= now.getTime()) return { status: "fail", detail: "Handoff expired at " + value + "." };
+  return { status: "pass", detail: "Handoff expires at " + value + "." };
+}
+
+function countBittensorHandoffFindings(findings, status) {
+  return findings.filter((finding) => finding.status === status).length;
+}
+
+function escapeBittensorHandoffCell(value) {
+  return String(value ?? "").replace(/\r?\n/g, " ").replace(/\|/g, "\\|").trim();
+}
+
+function renderBittensorSigningHandoffMarkdown(summary) {
+  const rows = summary.findings
+    .map((finding) => "| " + escapeBittensorHandoffCell(finding.status) + " | " + escapeBittensorHandoffCell(finding.area) + " | " + escapeBittensorHandoffCell(finding.detail) + " | " + escapeBittensorHandoffCell(finding.severity || "-") + " |")
+    .join("\n");
+  return [
+    "# Matterhorn Work Bittensor Signing Handoff Check",
+    "",
+    "## Decision",
+    "",
+    "- Result: " + (summary.readyToSign ? "READY_FOR_EXTERNAL_SIGNER" : "DO_NOT_SIGN"),
+    "- Safety posture: this MCP tool validates an unsigned handoff only. Matterhorn still does not import keys, sign payloads, submit, or broadcast by default.",
+    "",
+    "## Handoff Summary",
+    "",
+    "- Payload SHA-256: " + (summary.payloadSha256 || "missing"),
+    "- Action: " + (summary.action || "unknown"),
+    "- Netuid: " + (summary.netuid ?? "unknown"),
+    "- Amount TAO: " + (summary.amountTao ?? "unknown"),
+    "- Expires at: " + (summary.expiresAt || "missing"),
+    "",
+    "## Checks",
+    "",
+    "| Status | Area | Detail | Severity |",
+    "| --- | --- | --- | --- |",
+    rows,
+    "",
+  ].join("\n");
+}
+
+function matterhornBittensorCheckSigningHandoff(args = {}) {
+  const input = args.handoff;
+  if (!input || typeof input !== "object") throw new Error("handoff object is required.");
+  assertBittensorHandoffHasNoSigningMaterial(input, "Bittensor signing handoff");
+  const handoff = bittensorHandoffEnvelope(input);
+  const preview = bittensorHandoffObject(input.preview || handoff.preview || handoff.unsignedPreview);
+  const payloadSha256 = normalizeBittensorHandoffSha(handoff.payloadSha256 || handoff.requestSha256 || input.payloadSha256);
+  const expectedSha = normalizeBittensorHandoffSha(args.expectedSha || args.expectedPayloadSha256);
+  const now = args.now ? new Date(args.now) : new Date();
+  const findings = [];
+
+  if (isBittensorHandoffSha256(payloadSha256)) addBittensorHandoffFinding(findings, "pass", "Payload hash", "Payload SHA-256 is present and well formed.");
+  else addBittensorHandoffFinding(findings, "fail", "Payload hash", "Missing or invalid 64-character payload SHA-256.", "P1");
+
+  if (expectedSha) {
+    if (!isBittensorHandoffSha256(expectedSha)) addBittensorHandoffFinding(findings, "fail", "Expected hash", "Expected payload SHA-256 is not valid.", "P1");
+    else if (expectedSha !== payloadSha256) addBittensorHandoffFinding(findings, "fail", "Expected hash", "Expected payload SHA-256 does not match the handoff payload SHA-256.", "P1");
+    else addBittensorHandoffFinding(findings, "pass", "Expected hash", "Expected payload SHA-256 matches the handoff.");
+  }
+
+  const expiry = checkBittensorHandoffExpiry(handoff.expiresAt || input.expiresAt, now);
+  addBittensorHandoffFinding(findings, expiry.status, "Expiry", expiry.detail, expiry.status === "fail" ? "P1" : expiry.status === "warn" ? "P2" : "");
+
+  if (preview.action || handoff.action || input.action) addBittensorHandoffFinding(findings, "pass", "Action context", "Action context is present.");
+  else addBittensorHandoffFinding(findings, "warn", "Action context", "No action context was found in the handoff.", "P2");
+
+  if (preview.requiresExternalSignature === true || handoff.requiresExternalSignature === true || input.requiresExternalSignature === true) {
+    addBittensorHandoffFinding(findings, "pass", "External signer", "Handoff explicitly requires an external signer.");
+  } else {
+    addBittensorHandoffFinding(findings, "warn", "External signer", "Handoff does not explicitly mark external signer requirement.", "P2");
+  }
+
+  const readyToSign = countBittensorHandoffFindings(findings, "fail") === 0;
+  const summary = {
+    ok: true,
+    readyToSign,
+    payloadSha256,
+    action: preview.action || handoff.action || input.action || "",
+    netuid: preview.netuid ?? handoff.netuid ?? input.netuid ?? null,
+    amountTao: preview.amountTao ?? handoff.amountTao ?? input.amountTao ?? null,
+    expiresAt: handoff.expiresAt || input.expiresAt || "",
+    findings,
+    summary: {
+      pass: countBittensorHandoffFindings(findings, "pass"),
+      warn: countBittensorHandoffFindings(findings, "warn"),
+      fail: countBittensorHandoffFindings(findings, "fail"),
+    },
+    safety: {
+      custody: "none",
+      acceptsCredentialMaterial: false,
+      signsOrBroadcasts: false,
+      source: "matterhorn_bittensor_check_signing_handoff",
+    },
+  };
+  const result = { ...summary, markdown: renderBittensorSigningHandoffMarkdown(summary) };
+  if (args.strict === true && !readyToSign) throw new Error("Bittensor signing handoff is not safe to sign.");
+  return result;
+}
+
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1444,6 +1602,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
     case "matterhorn_bittensor_create_signing_handoff":
       return callServer("/api/bittensor/extrinsics/handoff", { method: "POST", body: args });
+    case "matterhorn_bittensor_check_signing_handoff":
+      return matterhornBittensorCheckSigningHandoff(args);
     case "matterhorn_bittensor_submit_signed_extrinsic":
       return callServer("/api/bittensor/extrinsics/submit", { method: "POST", body: args });
     case "matterhorn_bittensor_preview_subnet_invocation":
