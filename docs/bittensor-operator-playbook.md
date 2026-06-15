@@ -1032,6 +1032,12 @@ Expected roadmap behavior:
 
 For a copy-pasteable roadmap handoff, export the same planning evidence as redacted markdown:
 
+Chat:
+
+```text
+Export the Bittensor adapter roadmap as markdown for data search.
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/roadmap-export?goal=data%20search&limit=3" \
   | jq -r '.roadmapExport.markdown'

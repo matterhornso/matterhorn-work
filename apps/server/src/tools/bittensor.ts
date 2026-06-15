@@ -5417,7 +5417,8 @@ function isSubnetAdapterMarketplaceQuestion(message: string): boolean {
 }
 
 function isSubnetAdapterMarketplaceExportQuestion(message: string): boolean {
-  return /\b(adapter|subnet service|service adapter|marketplace)\b/i.test(message) &&
+  return !/\b(roadmap|prioriti[sz]e|what .*build next|next adapter|adapter work|next direct service)\b/i.test(message) &&
+    /\b(adapter|subnet service|service adapter|marketplace)\b/i.test(message) &&
     /\b(export|markdown|copy[-\s]?paste|handoff doc|handoff markdown|report)\b/i.test(message) &&
     /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
 }
@@ -5425,6 +5426,13 @@ function isSubnetAdapterMarketplaceExportQuestion(message: string): boolean {
 function isSubnetAdapterRoadmapQuestion(message: string): boolean {
   return /\b(adapter|subnet service|service adapter|direct service)\b/i.test(message) &&
     /\b(roadmap|prioriti[sz]e|what .*build next|next adapter|adapter work|next direct service|which .*adapter .*next)\b/i.test(message) &&
+    /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
+}
+
+function isSubnetAdapterRoadmapExportQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|direct service|roadmap)\b/i.test(message) &&
+    /\b(export|markdown|copy[-\s]?paste|handoff doc|handoff markdown|report)\b/i.test(message) &&
+    /\b(roadmap|prioriti[sz]e|what .*build next|next adapter|adapter work|next direct service)\b/i.test(message) &&
     /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
 }
 
@@ -5782,6 +5790,38 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       }],
       data: { marketplaceExport, marketplace },
       warnings: uniqueWarnings(warnings, marketplaceExport.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterRoadmapExportQuestion(message)) {
+    const roadmapExport = await exportBittensorSubnetAdapterRoadmap({
+      goal: message,
+      limit: resolveExecutionLimit(input, 5),
+    });
+    const roadmap = await planBittensorSubnetAdapterRoadmap({
+      goal: message,
+      limit: resolveExecutionLimit(input, 5),
+    });
+    const card = buildBittensorAdapterRoadmapCard(roadmap);
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_roadmap"] },
+      responseText: `Built a redacted Bittensor adapter roadmap markdown export with ${roadmapExport.summary.recommendationCount} recommendation${roadmapExport.summary.recommendationCount === 1 ? "" : "s"}. This is planning evidence only; it does not configure, invoke, approve, sign, or broadcast anything.`,
+      cards: [{
+        ...card,
+        actions: [
+          ...(card.actions ?? []),
+          {
+            label: "Copy markdown",
+            kind: "copy_payload",
+            payload: { markdown: roadmapExport.markdown },
+          },
+        ],
+      }],
+      data: { roadmapExport, roadmap },
+      warnings: uniqueWarnings(warnings, roadmapExport.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
