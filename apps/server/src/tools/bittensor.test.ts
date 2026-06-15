@@ -44,6 +44,7 @@ import {
   buildBittensorSubnetAdapterCanaryPacketExport,
   buildBittensorSubnetAdapterPreflightPacket,
   buildBittensorSubnetAdapterPreflightPacketExport,
+  buildBittensorSubnetAdapterDryRunExport,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -2278,6 +2279,52 @@ describe("executeBittensorChatWorkflow", () => {
         expect(runCase?.redactionPassed).toBe(true);
         expect(runCase?.requestSha256).toHaveLength(64);
         expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
+  });
+
+  test("exports mock subnet adapter dry-run evidence without raw task or full hashes", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      try {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Mock inference adapter",
+          serviceAdapter: "inference",
+          endpoint: "mock://inference",
+          requiredAuth: "none",
+          costModel: "free_read",
+          safetyNotes: ["Mock inference adapter safety note."],
+        }]);
+        const dryRunExport = await buildBittensorSubnetAdapterDryRunExport({
+          netuid: 77,
+          task: "Dry-run task with private context that must not appear in markdown.",
+          ss58Address: VALID_SS58,
+        });
+        expect(dryRunExport.kind).toBe("bittensor_subnet_adapter_dry_run_export");
+        expect(dryRunExport.status).toBe("pass");
+        expect(dryRunExport.summary.passed).toBe(1);
+        expect(dryRunExport.markdown).toContain("Bittensor Mock Adapter Dry-Run Export");
+        expect(dryRunExport.markdown).toContain("Missing hash rejected: yes");
+        expect(dryRunExport.markdown).toContain("Mismatched hash rejected: yes");
+        expect(dryRunExport.markdown).toContain("Confirmed invocation supported: yes");
+        expect(dryRunExport.markdown).not.toContain("private context");
+        expect(dryRunExport.markdown).not.toMatch(/[a-f0-9]{64}/i);
+        expect(dryRunExport.warnings.join(" ")).toMatch(/do(?:es)? not authorize real subnet service execution/i);
+        expect(JSON.stringify(dryRunExport)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token|Bearer [A-Za-z0-9._-]{8,}/i);
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;

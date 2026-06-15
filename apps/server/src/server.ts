@@ -57,6 +57,7 @@ import {
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterPreflightPacket,
   buildBittensorSubnetAdapterPreflightPacketExport,
+  buildBittensorSubnetAdapterDryRunExport,
   buildBittensorStakingPlan,
   checkBittensorSubnetAdapterLaunchGate,
   checkSubtensorSidecarHealth,
@@ -4430,6 +4431,21 @@ function createRoutes(
       limit: ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : null,
     });
     return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/dry-run-export", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const dryRunExport = await buildBittensorSubnetAdapterDryRunExport({
+      netuid,
+      task: ctx.url.searchParams.get("task"),
+      ss58Address: ctx.url.searchParams.get("ss58Address"),
+      limit: ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : null,
+    });
+    return jsonResponse({ success: true, dryRunExport });
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/prepare", "client", async (ctx) => {

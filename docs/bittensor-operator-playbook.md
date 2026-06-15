@@ -974,6 +974,29 @@ Expected dry-run behavior:
 - invocation with the exact reviewed request hash succeeds;
 - returned payloads do not expose token values, auth env names, seed phrases, private keys, wallet exports, or similar signing material.
 
+For review handoff, export the same dry-run evidence as redacted markdown. This export is mock-adapter evidence only and does not authorize any real subnet service execution:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/dry-run-export?netuid=77&task=Answer%20this%20Bittensor%20subnet%20question" \
+  | jq -r '.dryRunExport.markdown'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_export_subnet_adapter_dry_run({
+  "netuid": 77,
+  "task": "Answer this Bittensor subnet question"
+})
+```
+
+Expected dry-run export behavior:
+
+- includes pass/fail/skipped counts and per-case gate status;
+- shows only short request SHA-256 prefixes;
+- omits raw task text, raw adapter result payloads, credentials, and wallet/private data;
+- repeats the safety boundary that real subnet service execution needs separate reviewed approval.
+
 Preview:
 
 ```bash
@@ -1139,12 +1162,14 @@ Use the Matterhorn Work MCP server for Bittensor.
 24. For handoff, call `bittensor_export_subnet_adapter_preflight_packet`; the markdown omits raw manifest/result payloads.
 25. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
 26. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-27. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-28. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-29. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-30. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-31. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-32. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+27. For mock adapter rehearsal, call `bittensor_dry_run_subnet_adapters`; it should pass preview support, missing-hash rejection, mismatched-hash rejection, confirmed invocation, and redaction checks.
+28. For handoff, call `bittensor_export_subnet_adapter_dry_run`; the markdown omits raw task text, full hashes, credentials, and private wallet data.
+29. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+30. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+31. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+32. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+33. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+34. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like
