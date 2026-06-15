@@ -16,6 +16,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Upstream OpenWork intake | Sync playbook and remote-aware checker output | `matterhorn_upstream_openwork_check` | `matterhorn-work upstream openwork check`, `pnpm upstream:openwork:check` | `test:upstream-openwork-sync`, `test:upstream-openwork-cli`, `test:agent-control-mcp` |
 | Bittensor operator playbook | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness`, extrinsic prepare/handoff/submit routes, subnet preview/invoke routes, Bittensor monitoring routes | `matterhorn_bittensor_chat`, `matterhorn_bittensor_readiness`, `matterhorn_bittensor_*extrinsic*`, `matterhorn_bittensor_*signing*`, `matterhorn_bittensor_*subnet*`, `matterhorn_bittensor_*_watch*` | `matterhorn-work bittensor chat`, `matterhorn-work bittensor readiness`, `matterhorn-work bittensor extrinsic`, `matterhorn-work bittensor subnet-preview`, `matterhorn-work bittensor watch` | `test:bittensor-operator-playbook`, `test:bittensor-cli-fallback` |
 | Bittensor live QA harness | `POST /api/bittensor/chat/execute`, `GET /api/bittensor/readiness`, `POST /api/bittensor/subnets/:netuid/preview` | Uses MCP-compatible Bittensor contracts | `node scripts/bittensor-live-qa.mjs` | `test:bittensor-live-qa`, `test:bittensor-live-report` |
+| Bittensor customer-readiness gate | Aggregates live QA and CI evidence | Uses MCP-compatible Bittensor and agent-control contracts indirectly | `node scripts/bittensor-customer-readiness-gate.mjs` | `test:bittensor-customer-readiness-gate` |
 | Unified readiness doctor | Aggregates stable local routes | `matterhorn_doctor` | `matterhorn-work doctor` | `test:agent-control-doctor`, `test:agent-control-mcp`, `test:agent-control-coverage-matrix` |
 | End-to-end agent QA harness | Stable server/session/file/Bittensor routes | Uses MCP-compatible contracts | `node scripts/agent-control-live-qa.mjs` | `test:agent-control-live-qa` |
 | Health/status/capabilities | `GET /health`, `GET /status`, `GET /capabilities` | `matterhorn_status` | `matterhorn-work status` | `test:agent-control-mcp`, `test:agent-control-api-docs` |
@@ -70,6 +71,7 @@ pnpm test:agent-operator-workflow
 pnpm test:bittensor-operator-playbook
 pnpm test:bittensor-live-qa
 pnpm test:bittensor-live-report
+pnpm test:bittensor-customer-readiness-gate
 pnpm test:agent-control-doctor
 pnpm test:agent-control-live-qa
 pnpm test:agent-control-api-docs

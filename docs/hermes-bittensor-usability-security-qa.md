@@ -115,6 +115,21 @@ curl -s -X POST http://127.0.0.1:3000/api/bittensor/chat/execute \
   --data '{"message":"which subnet is useful for image generation?","limit":5}'
 ```
 
+## Customer Readiness Gate
+
+After the Bittensor live QA and agent-control live QA runs, aggregate the evidence into a single release decision:
+
+```bash
+node scripts/bittensor-customer-readiness-gate.mjs \
+  --bittensor-live-qa /tmp/bittensor-live-qa.json \
+  --agent-control-live-qa /tmp/agent-control-live-qa.json \
+  --ci /tmp/github-ci.json \
+  --output /tmp/matterhorn-bittensor-customer-readiness.md \
+  --strict
+```
+
+Use `--require-wallet` for a full wallet/stake preview pass and `--require-ci` when the GitHub check evidence must be attached to the report.
+
 ## Agent Control Smoke
 
 Verify the external-agent loop:
