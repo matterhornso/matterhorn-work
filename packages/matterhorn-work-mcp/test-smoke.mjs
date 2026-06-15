@@ -399,6 +399,7 @@ try {
     "matterhorn_bittensor_chat",
     "matterhorn_bittensor_list_capabilities",
     "matterhorn_bittensor_get_subnet_capability",
+    "matterhorn_bittensor_adapter_canary_gate",
     "matterhorn_bittensor_prepare_extrinsic",
     "matterhorn_bittensor_create_signing_handoff",
     "matterhorn_bittensor_check_signing_handoff",
@@ -618,6 +619,42 @@ try {
     arguments: { netuid: 14 },
   }));
   assert.equal(capability.capability.serviceAdapter, "inference");
+
+  const adapterCanaryGate = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_adapter_canary_gate",
+    arguments: {
+      netuid: 14,
+      capability: {
+        netuid: 14,
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.example.com/search",
+        configured: true,
+        requiredAuth: "none",
+        costModel: "free_read",
+      },
+      allowedHosts: ["adapter.example.com"],
+      requireConfigured: true,
+      strict: true,
+    },
+  }));
+  assert.equal(adapterCanaryGate.readyForCanary, true);
+  assert.equal(adapterCanaryGate.safety.callsAdapterService, false);
+
+  const badAdapterCanaryGate = await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_adapter_canary_gate",
+    arguments: {
+      netuid: 14,
+      capability: {
+        netuid: 14,
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.example.com/search",
+        configured: true,
+        seedPhrase: "never",
+      },
+      allowedHosts: ["adapter.example.com"],
+    },
+  });
+  assert.match(badAdapterCanaryGate.error?.message || "", /forbidden credential or signing field/i);
 
   const extrinsicPreview = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_prepare_extrinsic",
