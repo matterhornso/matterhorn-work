@@ -1417,3 +1417,26 @@ A bad Bittensor operator response:
 - claims to have used a subnet service without an adapter;
 - gives financial advice;
 - submits or signs without explicit external confirmation.
+
+## Watch Autopilot
+
+For a read-only alert report that agents can use during a customer demo or daily operator pass:
+
+```bash
+node scripts/bittensor-watch-autopilot.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token "<client-token>" \
+  --output /tmp/bittensor-watch-autopilot.md \
+  --json-output /tmp/bittensor-watch-autopilot.json \
+  --strict
+```
+
+Expected behavior:
+
+- the script reads `/api/bittensor/monitoring/check`;
+- active watch alerts are converted into safe Bittensor chat prompts;
+- the report states that it does not sign, submit, broadcast, move stake, transfer TAO, or invoke subnet services;
+- any credential-shaped or signed-payload-shaped field in the monitoring response fails closed.
+
+Use the generated prompts in chat. Do not treat the report as permission to execute a financial action.
+
