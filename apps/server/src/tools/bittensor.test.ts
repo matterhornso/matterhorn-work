@@ -1700,6 +1700,47 @@ describe("executeBittensorChatWorkflow", () => {
     }
   });
 
+  test("routes adapter roadmap export chat prompts to redacted markdown data", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const result = await executeBittensorChatWorkflow({
+        message: "Export the Bittensor adapter roadmap as markdown for compute.",
+        limit: 3,
+      });
+      expect(result.execution).toBe("answered");
+      expect(result.responseText).toContain("roadmap markdown export");
+      expect(result.cards[0]?.kind).toBe("adapter_roadmap");
+      expect(result.cards[0]?.actions?.some((action) => action.kind === "copy_payload")).toBe(true);
+      const roadmapExport = result.data.roadmapExport as { kind?: string; markdown?: string } | undefined;
+      expect(roadmapExport?.kind).toBe("bittensor_subnet_adapter_roadmap_export");
+      expect(roadmapExport?.markdown).toContain("Bittensor Subnet Adapter Roadmap Export");
+      expect(roadmapExport?.markdown).not.toContain("mock://compute");
+      expect(JSON.stringify(result)).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|secretSeed|seedPhrase|mnemonicPhrase|wallet export|mock:\/\/compute/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
   test("returns the machine-readable subnet adapter spec without credential values", () => {
     const spec = getBittensorSubnetAdapterSpec();
     expect(spec.kind).toBe("bittensor_subnet_adapter_spec");
