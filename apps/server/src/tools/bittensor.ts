@@ -1110,6 +1110,7 @@ export type BittensorChatCardKind =
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
+  | "adapter_canary_gate"
   | "adapter_manifest_validation"
   | "adapter_result_validation"
   | "intelligence_report";
@@ -1508,6 +1509,31 @@ export interface BittensorSubnetAdapterCanaryPacketExport {
   status: BittensorSubnetAdapterCanaryOperatorPacket["status"];
   markdown: string;
   warnings: string[];
+}
+
+export interface BittensorSubnetAdapterCanaryGateAudit {
+  kind: "bittensor_subnet_adapter_canary_gate_audit";
+  checkedAt: string;
+  status: "safe_idle" | "preview_ready" | "canary_armed" | "blocked";
+  realAdaptersEnabled: boolean;
+  canaryAcknowledgementEnabled: boolean;
+  endpointAllowlistCount: number;
+  configuredAdapterCount: number;
+  configuredRealAdapterCount: number;
+  readyRealAdapterCount: number;
+  activeApprovalCount: number;
+  expiredApprovalCount: number;
+  invalidApprovalCount: number;
+  blockers: string[];
+  warnings: string[];
+  nextActions: string[];
+  approvalAudit: BittensorSubnetAdapterRuntimeApprovalAudit;
+  doctorSummary: {
+    status: BittensorSubnetAdapterDoctorReport["status"];
+    readyCount: number;
+    warningCount: number;
+    blockedCount: number;
+  };
 }
 
 export interface BittensorSubnetAdapterSpec {
@@ -2258,6 +2284,89 @@ export function auditBittensorSubnetAdapterRuntimeApprovals(): BittensorSubnetAd
     nextActions: activeCount
       ? ["Use approvals only for the exact reviewed canary request SHA-256.", "Remove approvals after canary completion or expiry."]
       : ["Run preview, review evidence, and add one short-lived exact request SHA-256 approval if a real canary is explicitly approved."],
+  };
+}
+
+export function auditBittensorSubnetAdapterCanaryGate(): BittensorSubnetAdapterCanaryGateAudit {
+  const checkedAt = nowIso();
+  const approvalAudit = auditBittensorSubnetAdapterRuntimeApprovals();
+  const doctor = doctorBittensorSubnetAdapters();
+  const realAdaptersEnabled = realSubnetAdaptersEnabled();
+  const canaryAcknowledgementEnabled = realSubnetAdapterCanaryAcknowledged();
+  const endpointAllowlistCount = subnetAdapterEndpointAllowlist().length;
+  const configuredAdapterCount = doctor.entries.length;
+  const configuredRealAdapterCount = doctor.entries.filter((entry) => entry.endpoint.mode !== "mock").length;
+  const readyRealAdapterCount = doctor.entries.filter((entry) => entry.endpoint.mode !== "mock" && entry.serviceCallReady).length;
+  const blockers = uniqueWarnings(
+    canaryAcknowledgementEnabled && !realAdaptersEnabled
+      ? ["BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 is set while BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS is off. Remove stale canary acknowledgement unless a reviewed canary is actively running."]
+      : [],
+    canaryAcknowledgementEnabled && approvalAudit.activeCount === 0
+      ? ["BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 is set but no active exact request approvals are configured."]
+      : [],
+    canaryAcknowledgementEnabled && readyRealAdapterCount === 0
+      ? ["BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 is set but no configured real adapter passed doctor checks."]
+      : [],
+    realAdaptersEnabled && configuredRealAdapterCount > 0 && readyRealAdapterCount === 0
+      ? ["Real subnet adapters are enabled, but configured real adapters are blocked by doctor checks."]
+      : [],
+  );
+  const warnings = uniqueWarnings(
+    realAdaptersEnabled
+      ? ["BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS is enabled. Keep this scoped to reviewed adapter canary windows."]
+      : [],
+    canaryAcknowledgementEnabled && approvalAudit.activeCount > 0
+      ? ["Real subnet adapter invocation is armed for active exact request approval(s). Remove BITTENSOR_SUBNET_ADAPTER_CANARY_ACK after the canary."]
+      : [],
+    approvalAudit.activeCount > 0 && !canaryAcknowledgementEnabled
+      ? ["Active exact request approvals exist, but canary acknowledgement is off; real invocation remains blocked until the reviewed canary window starts."]
+      : [],
+    approvalAudit.warnings,
+    doctor.warnings,
+  );
+  const status: BittensorSubnetAdapterCanaryGateAudit["status"] = blockers.length
+    ? "blocked"
+    : realAdaptersEnabled && canaryAcknowledgementEnabled && approvalAudit.activeCount > 0 && readyRealAdapterCount > 0
+      ? "canary_armed"
+      : realAdaptersEnabled && approvalAudit.activeCount > 0 && readyRealAdapterCount > 0
+        ? "preview_ready"
+        : "safe_idle";
+  const nextActions = status === "canary_armed"
+    ? [
+      "Run only the exact reviewed canary request, capture the result, then unset BITTENSOR_SUBNET_ADAPTER_CANARY_ACK.",
+      "Remove or let expire the exact request approval after the canary window closes.",
+    ]
+    : status === "preview_ready"
+      ? [
+        "Confirm the preview request hash, provider identity, evidence review, and rollback owner before setting BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1.",
+        "Keep general real subnet service execution disabled until the canary report is accepted.",
+      ]
+      : status === "blocked"
+        ? ["Resolve canary blockers before invoking any real subnet service adapter.", "Unset stale canary acknowledgement flags when not actively running a reviewed canary."]
+        : ["Keep real adapter execution disabled by default.", "Use mock adapters, marketplace exports, and canary packets before any real subnet execution."];
+  return {
+    kind: "bittensor_subnet_adapter_canary_gate_audit",
+    checkedAt,
+    status,
+    realAdaptersEnabled,
+    canaryAcknowledgementEnabled,
+    endpointAllowlistCount,
+    configuredAdapterCount,
+    configuredRealAdapterCount,
+    readyRealAdapterCount,
+    activeApprovalCount: approvalAudit.activeCount,
+    expiredApprovalCount: approvalAudit.expiredCount,
+    invalidApprovalCount: approvalAudit.invalidCount,
+    blockers,
+    warnings,
+    nextActions,
+    approvalAudit,
+    doctorSummary: {
+      status: doctor.status,
+      readyCount: doctor.readyCount,
+      warningCount: doctor.warningCount,
+      blockedCount: doctor.blockedCount,
+    },
   };
 }
 
@@ -5735,6 +5844,11 @@ function isSubnetAdapterOperatorHandoffQuestion(message: string): boolean {
     /\b(operator handoff|handoff packet|review packet|launch packet|go\/no-go|go no go|gate summary|evidence packet)\b/i.test(message);
 }
 
+function isSubnetAdapterCanaryGateQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|real adapter|canary)\b/i.test(message) &&
+    /\b(canary gate|canary status|gate audit|runtime gate|acknowledgement|acknowledgment|armed|approval status|safe to invoke)\b/i.test(message);
+}
+
 function isSubnetAdapterMarketplaceQuestion(message: string): boolean {
   return /\b(adapter|subnet service|service adapter|direct service|call directly|invoke|marketplace)\b/i.test(message) &&
     /\b(marketplace|status|available|ready|configured|supported|which|list|show|can matterhorn|can you call|can it call|call directly)\b/i.test(message) &&
@@ -6304,6 +6418,20 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [buildBittensorReadinessOperatorCard(operatorReport)],
       data: { readiness: report, operatorReport },
       warnings: uniqueWarnings(warnings, operatorReport.warnings, operatorReport.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterCanaryGateQuestion(message)) {
+    const canaryGate = auditBittensorSubnetAdapterCanaryGate();
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_canary_gate"] },
+      responseText: `Bittensor real-adapter canary gate is ${canaryGate.status.replace(/_/g, " ")}. This is a read-only audit; it does not invoke or authorize any subnet service.`,
+      cards: [buildBittensorAdapterCanaryGateCard(canaryGate)],
+      data: { canaryGate },
+      warnings: uniqueWarnings(warnings, canaryGate.warnings, canaryGate.blockers),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -11361,6 +11489,45 @@ export function buildBittensorAdapterApprovalAuditCard(report: BittensorSubnetAd
     }],
     warnings: report.warnings,
     data: { report },
+  };
+}
+
+export function buildBittensorAdapterCanaryGateCard(audit: BittensorSubnetAdapterCanaryGateAudit): BittensorChatCard {
+  const tone = audit.status === "blocked" ? "danger" : audit.status === "safe_idle" ? "good" : "warning";
+  const nextPrompt = audit.status === "canary_armed"
+    ? "Help me close the Bittensor real-adapter canary window safely."
+    : audit.status === "preview_ready"
+      ? "Help me prepare the final reviewed Bittensor adapter canary acknowledgement checklist."
+      : audit.status === "blocked"
+        ? "Explain the Bittensor adapter canary gate blockers and how to fix them."
+        : "Show the next safe Bittensor subnet adapter rehearsal step without real execution.";
+  return {
+    kind: "adapter_canary_gate",
+    title: "Bittensor adapter canary gate",
+    subtitle: audit.status.replace(/_/g, " "),
+    summary: audit.blockers[0] ?? audit.warnings[0] ?? "Real subnet adapter invocation is idle and gated.",
+    tone,
+    items: [
+      cardItem("Real adapters", audit.realAdaptersEnabled ? "Enabled" : "Off", audit.realAdaptersEnabled ? "warning" : "good"),
+      cardItem("Canary ack", audit.canaryAcknowledgementEnabled ? "Enabled" : "Off", audit.canaryAcknowledgementEnabled ? "warning" : "good"),
+      cardItem("Ready real adapters", audit.readyRealAdapterCount, audit.readyRealAdapterCount ? "warning" : "muted"),
+      cardItem("Active approvals", audit.activeApprovalCount, audit.activeApprovalCount ? "warning" : "muted"),
+      cardItem("Invalid approvals", audit.invalidApprovalCount, audit.invalidApprovalCount ? "danger" : "muted"),
+      cardItem("Allowlist entries", audit.endpointAllowlistCount, audit.endpointAllowlistCount ? "muted" : "warning"),
+      cardItem("Checked", audit.checkedAt, "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        canaryGateStatus: audit.status,
+        realAdaptersEnabled: audit.realAdaptersEnabled,
+        canaryAcknowledgementEnabled: audit.canaryAcknowledgementEnabled,
+      },
+    }],
+    warnings: uniqueWarnings(audit.blockers, audit.warnings),
+    data: { audit },
   };
 }
 
