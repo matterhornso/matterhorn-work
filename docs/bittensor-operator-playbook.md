@@ -1004,6 +1004,12 @@ Expected marketplace behavior:
 
 To decide what adapter work should happen next, ask for a roadmap:
 
+Chat:
+
+```text
+What Bittensor subnet service adapter should we build next for data search?
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/roadmap?goal=data%20search&limit=3" \
   | jq '.roadmap.recommendations'

@@ -16,6 +16,7 @@ import {
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterMarketplaceCard,
   buildBittensorAdapterOnboardingCard,
+  buildBittensorAdapterRoadmapCard,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationPreviewCard,
   buildBittensorInvocationCard,
@@ -1609,7 +1610,46 @@ describe("executeBittensorChatWorkflow", () => {
       expect(roadmap.recommendations[0]?.serviceAdapter).toBe("compute");
       expect(roadmap.recommendations[0]?.nextPrompt).toContain("compute");
       expect(roadmap.warnings.join(" ")).toContain("does not authorize real subnet service execution");
+      const card = buildBittensorAdapterRoadmapCard(roadmap);
+      expect(card.kind).toBe("adapter_roadmap");
+      expect(card.actions?.[0]?.kind).toBe("send_to_chat");
       expect(JSON.stringify(roadmap)).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("routes adapter roadmap chat prompts to roadmap cards", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const result = await executeBittensorChatWorkflow({
+        message: "What Bittensor subnet service adapter should we build next for compute?",
+      });
+      expect(result.execution).toBe("answered");
+      expect(result.responseText).toContain("adapter roadmap");
+      expect(result.cards[0]?.kind).toBe("adapter_roadmap");
+      expect((result.data.roadmap as { kind?: string } | undefined)?.kind).toBe("bittensor_subnet_adapter_roadmap");
+      expect(JSON.stringify(result)).not.toMatch(/privateKey|ADAPTER_TOKEN|adapter-token|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
     } finally {
       if (previousAdapters === undefined) {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
