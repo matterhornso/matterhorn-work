@@ -59,6 +59,7 @@ The intended user experience:
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
 - Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, and required QA docs.
 - Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet, with optional adapter-canary evidence for real-adapter demos.
+- Customer evidence bundle can include accepted receipt-check evidence so external signer returns are tied back to payload hash, action/netuid context, and public wallet-diff follow-up prompts.
 - Hermes QA guide with latest commands for signing handoff checks, watch autopilot, adapter canary gates, and evidence-bundle runs.
 
 ### Agent Control Surface

@@ -48,6 +48,32 @@ Expected behavior:
 
 This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Work for an external signer.
 
+## Receipt Evidence Bundle
+
+After an external signer returns a transaction receipt, validate it and include it in the customer evidence bundle:
+
+```bash
+node scripts/bittensor-receipt-check.mjs \
+  --receipt /tmp/bittensor-receipt.json \
+  --expected-payload-sha "<payload-sha256-from-handoff>" \
+  --expected-action stake \
+  --expected-netuid 14 \
+  --json-output /tmp/bittensor-receipt-check.json \
+  --strict
+
+node scripts/bittensor-customer-evidence-bundle.mjs \
+  --bittensor-live-qa /tmp/bittensor-live-qa.json \
+  --agent-control-live-qa /tmp/agent-control-live-qa.json \
+  --ci /tmp/github-ci.json \
+  --readiness-gate /tmp/bittensor-customer-readiness-gate.md \
+  --receipt-check /tmp/bittensor-receipt-check.json \
+  --require-receipt-check \
+  --output /tmp/customer-evidence.md \
+  --strict
+```
+
+The bundle treats receipt evidence as optional unless `--require-receipt-check` is set. Required receipt evidence must be accepted, must not contain raw signatures or signed payloads, and should include a public wallet-diff follow-up prompt before an operator calls the customer flow complete.
+
 ## 1. Readiness
 
 Run readiness before any Bittensor workflow:

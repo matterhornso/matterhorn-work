@@ -5,7 +5,8 @@ import { basename } from "node:path";
 const args = process.argv.slice(2);
 
 const FORBIDDEN_KEY_RE =
-  /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token)/i;
+  /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const FORBIDDEN_EXACT_KEY_RE = /^(signature)$/i;
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -25,10 +26,12 @@ const config = {
   readinessGate: arg("--readiness-gate"),
   walletTimeline: arg("--wallet-timeline"),
   adapterCanary: arg("--adapter-canary"),
+  receiptCheck: arg("--receipt-check"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireAdapterCanary: flag("--require-adapter-canary"),
+  requireReceiptCheck: flag("--require-receipt-check"),
   title: arg("--title") || "Matterhorn Work Bittensor Customer Evidence Bundle",
 };
 
@@ -44,7 +47,9 @@ function usage() {
     "  --readiness-gate <path>        Markdown output from scripts/bittensor-customer-readiness-gate.mjs.",
     "  --wallet-timeline <path>       Optional public-data wallet timeline status/export JSON.",
     "  --adapter-canary <path>        Optional JSON from scripts/bittensor-adapter-canary-gate.mjs.",
+    "  --receipt-check <path>         Optional JSON from scripts/bittensor-receipt-check.mjs.",
     "  --require-adapter-canary       Require adapter canary evidence to be ready.",
+    "  --require-receipt-check        Require post-signer receipt check evidence to be accepted.",
     "  --output, -o <path>            Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>           Write machine-readable evidence summary JSON.",
     "  --strict                       Exit nonzero when the bundle is not customer-ready.",
@@ -63,7 +68,7 @@ function assertNoForbiddenKeys(value, label, path = []) {
     return;
   }
   for (const [key, child] of Object.entries(value)) {
-    if (FORBIDDEN_KEY_RE.test(key)) {
+    if (FORBIDDEN_EXACT_KEY_RE.test(key) || FORBIDDEN_KEY_RE.test(key)) {
       throw new Error(`${label} contains forbidden secret-shaped field: ${[...path, key].join(".")}`);
     }
     assertNoForbiddenKeys(child, label, [...path, key]);
@@ -187,6 +192,30 @@ function adapterCanarySummary(canary) {
   };
 }
 
+function receiptCheckSummary(receiptCheck) {
+  if (!receiptCheck) return null;
+  const findings = asArray(receiptCheck.findings);
+  const failCount = Number(receiptCheck.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(receiptCheck.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const accepted = receiptCheck.accepted === true || receiptCheck.result === "RECEIPT_CAPTURED";
+  const ready = accepted && failCount === 0;
+  const txHash = String(receiptCheck.txHash || "").trim();
+  const status = String(receiptCheck.status || "unknown").trim() || "unknown";
+  const action = String(receiptCheck.action || "unknown").trim() || "unknown";
+  const netuid = receiptCheck.netuid ?? null;
+  return {
+    ready,
+    accepted,
+    txHash,
+    status,
+    action,
+    netuid,
+    detail: ready ? `Receipt check accepted; status ${status}` : `${failCount} failed, ${warnCount} warnings`,
+    findings: findings.slice(0, 8).map((finding) => `${finding.area || "Finding"}: ${finding.status || "unknown"}`),
+    followUpPrompt: receiptCheck.followUpPrompt || "",
+  };
+}
+
 function escapeCell(value) {
   return String(value ?? "")
     .replace(/\r?\n/g, " ")
@@ -226,6 +255,13 @@ function renderMarkdown(summary) {
         ? summary.adapterCanary.detail
         : config.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided",
     ],
+    [
+      "Receipt check",
+      summary.receiptCheck ? (summary.receiptCheck.ready ? "pass" : "warn") : "warn",
+      summary.receiptCheck
+        ? summary.receiptCheck.detail
+        : config.requireReceiptCheck ? "Receipt check evidence required but missing" : "No post-signer receipt check evidence provided",
+    ],
   ];
   return [
     `# ${config.title}`,
@@ -245,6 +281,7 @@ function renderMarkdown(summary) {
     `- Customer readiness gate: ${basenameOrMissing(config.readinessGate)}`,
     `- Wallet timeline: ${basenameOrMissing(config.walletTimeline)}`,
     `- Adapter canary: ${basenameOrMissing(config.adapterCanary)}`,
+    `- Receipt check: ${basenameOrMissing(config.receiptCheck)}`,
     "",
     "## Gate Summary",
     "",
@@ -270,6 +307,7 @@ function renderMarkdown(summary) {
     "- Keep real SS58 wallet evidence public-only and redact customer-identifying notes.",
     "- Re-run the full readiness gate with `--require-wallet --require-ci` for any customer session involving wallet/stake preview.",
     "- Do not enable real subnet service adapters until the adapter canary has an allowlisted endpoint, timeout, hash confirmation, and rollback note.",
+    "- After any external signer return, attach a receipt check and run a public wallet diff follow-up before calling the customer flow complete.",
     "",
   ].join("\n");
 }
@@ -284,6 +322,7 @@ const agentControl = await readJson(config.agentControlLiveQa, "Agent control li
 const ci = await readJson(config.ci, "CI");
 const timeline = await readJson(config.walletTimeline, "Wallet timeline");
 const adapterCanary = await readJson(config.adapterCanary, "Adapter canary");
+const receiptCheck = await readJson(config.receiptCheck, "Receipt check");
 const readinessGate = await readText(config.readinessGate);
 
 const ciSummary = summarizeCi(ci);
@@ -291,12 +330,15 @@ const bittensorReady = isReady(bittensor) && summaryValue(bittensor, "fail") ===
 const agentReady = !agentControl || (isReady(agentControl) && summaryValue(agentControl, "fail") === 0);
 const gateReady = readinessGateReady(readinessGate);
 const adapterSummary = adapterCanarySummary(adapterCanary);
+const receiptSummary = receiptCheckSummary(receiptCheck);
 const adapterReady = !config.requireAdapterCanary || adapterSummary?.ready === true;
+const receiptReady = !config.requireReceiptCheck || receiptSummary?.ready === true;
 const ready = Boolean(
   bittensorReady &&
     agentReady &&
     gateReady &&
     adapterReady &&
+    receiptReady &&
     ciSummary.failed.length === 0 &&
     ciSummary.pending.length === 0 &&
     ciSummary.total > 0,
@@ -326,6 +368,7 @@ const summary = {
   },
   walletTimeline: walletTimelineSummary(timeline),
   adapterCanary: adapterSummary,
+  receiptCheck: receiptSummary,
 };
 
 const markdown = renderMarkdown(summary);
