@@ -355,10 +355,21 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate") => {
+  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence") => {
     const command = kind === "live-qa"
       ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
-      : "pnpm test:bittensor-customer-readiness-gate";
+      : kind === "gate"
+        ? "pnpm test:bittensor-customer-readiness-gate"
+        : [
+            "node scripts/bittensor-customer-evidence-bundle.mjs",
+            "--bittensor-live-qa /tmp/bittensor-live-qa.json",
+            "--agent-control-live-qa /tmp/agent-control-live-qa.json",
+            "--ci /tmp/github-ci.json",
+            "--readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md",
+            "--wallet-timeline /tmp/wallet-timeline-status.json",
+            "--output /tmp/matterhorn-bittensor-customer-evidence.md",
+            "--strict",
+          ].join(" ");
     await navigator.clipboard?.writeText(command);
     setCopiedReadinessCommand(kind);
     window.setTimeout(() => setCopiedReadinessCommand(null), 2000);
@@ -505,12 +516,15 @@ export default function BittensorPanel() {
                     Ask Chat
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("live-qa")}>
                     {copiedReadinessCommand === "live-qa" ? "Copied" : "Copy Live QA"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("gate")}>
                     {copiedReadinessCommand === "gate" ? "Copied" : "Copy Gate"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("evidence")}>
+                    {copiedReadinessCommand === "evidence" ? "Copied" : "Copy Evidence"}
                   </Button>
                 </div>
               </div>
