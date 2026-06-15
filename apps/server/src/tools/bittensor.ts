@@ -518,6 +518,18 @@ export interface BittensorSubnetAdapterMarketplace {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterMarketplaceExport {
+  kind: "bittensor_subnet_adapter_marketplace_export";
+  generatedAt: string;
+  status: BittensorSubnetAdapterMarketplace["status"];
+  summary: BittensorSubnetAdapterMarketplace["summary"] & {
+    total: number;
+    warningCount: number;
+  };
+  markdown: string;
+  warnings: string[];
+}
+
 export interface BittensorSignerStatus {
   mode: "read_only" | "injected_substrate" | "desktop_handoff" | "sidecar";
   available: boolean;
@@ -6861,6 +6873,70 @@ export async function listBittensorSubnetAdapterMarketplace(input: {
     entries,
     warnings,
     nextActions,
+  };
+}
+
+export async function exportBittensorSubnetAdapterMarketplace(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterMarketplaceExport> {
+  const marketplace = await listBittensorSubnetAdapterMarketplace(input);
+  const lines = [
+    "# Bittensor Subnet Adapter Marketplace Export",
+    "",
+    `Generated: ${marketplace.generatedAt}`,
+    `Status: ${marketplace.status}`,
+    `Total shown: ${marketplace.total}`,
+    "",
+    "## Summary",
+    "",
+    `- Universal-only: ${marketplace.summary.universalOnly}`,
+    `- Needs adapter: ${marketplace.summary.needsAdapter}`,
+    `- Mock-ready: ${marketplace.summary.mockReady}`,
+    `- Manual review required: ${marketplace.summary.manualReviewRequired}`,
+    `- Blocked: ${marketplace.summary.blocked}`,
+    `- Unsupported: ${marketplace.summary.unsupported}`,
+    "",
+    "## Entries",
+    "",
+    ...marketplace.entries.flatMap((entry) => [
+      `### ${entry.name} (netuid ${entry.netuid})`,
+      "",
+      `- Status: ${entry.status}`,
+      `- Adapter: ${entry.serviceAdapter}`,
+      `- Category: ${entry.category}`,
+      `- Capability: ${entry.capabilityLevel}`,
+      `- Endpoint mode: ${entry.endpointMode}`,
+      `- Service call ready: ${entry.serviceCallReady ? "yes" : "no"}`,
+      `- Required auth: ${entry.requiredAuth}`,
+      `- Cost model: ${entry.costModel}`,
+      `- Source: ${entry.source}`,
+      `- Freshness: ${entry.freshness ?? "unknown"}`,
+      `- Next action: ${entry.nextActions[0] ?? "Review in Matterhorn."}`,
+      "",
+    ]),
+    "## Safety",
+    "",
+    "- This export is evidence only and does not authorize or invoke subnet services.",
+    "- It intentionally omits endpoint URLs, credential values, auth environment names, raw task text, wallet data, signing payloads, and full request hashes.",
+    "- Real subnet service invocation still requires preview, exact request SHA-256 confirmation, short-lived approval, and explicit operator/user confirmation.",
+    "",
+    "## Next Actions",
+    "",
+    ...(marketplace.nextActions.length ? marketplace.nextActions.map((action) => `- ${action}`) : ["- Use universal explain, compare, monitor, and staking guidance until an adapter is ready."]),
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_marketplace_export",
+    generatedAt: nowIso(),
+    status: marketplace.status,
+    summary: {
+      ...marketplace.summary,
+      total: marketplace.total,
+      warningCount: marketplace.warnings.length,
+    },
+    markdown: lines.join("\n"),
+    warnings: marketplace.warnings,
   };
 }
 

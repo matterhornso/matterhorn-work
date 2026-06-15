@@ -64,6 +64,7 @@ import {
   doctorBittensorSubnetAdapters,
   evaluateBittensorWatch,
   executeBittensorChatWorkflow,
+  exportBittensorSubnetAdapterMarketplace,
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
@@ -1542,6 +1543,42 @@ describe("executeBittensorChatWorkflow", () => {
         delete process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN;
       } else {
         process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN = previousToken;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("exports subnet adapter marketplace as redacted markdown", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const marketplaceExport = await exportBittensorSubnetAdapterMarketplace({ adapter: "compute", netuid: 14, limit: 3 });
+      expect(marketplaceExport.kind).toBe("bittensor_subnet_adapter_marketplace_export");
+      expect(marketplaceExport.markdown).toContain("Bittensor Subnet Adapter Marketplace Export");
+      expect(marketplaceExport.markdown).toContain("Mock-ready: 1");
+      expect(marketplaceExport.markdown).toContain("Endpoint mode: mock");
+      expect(marketplaceExport.markdown).not.toContain("mock://compute");
+      expect(marketplaceExport.markdown).toContain("does not authorize or invoke subnet services");
+      expect(JSON.stringify(marketplaceExport)).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
       }
       if (previousMock === undefined) {
         delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;

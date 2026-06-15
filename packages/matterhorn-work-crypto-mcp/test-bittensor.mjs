@@ -468,6 +468,20 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/marketplace-export") {
+    res.end(JSON.stringify({
+      success: true,
+      marketplaceExport: {
+        kind: "bittensor_subnet_adapter_marketplace_export",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        status: "pass",
+        summary: { total: 1, universalOnly: 0, needsAdapter: 0, mockReady: 1, manualReviewRequired: 0, blocked: 0, unsupported: 0, warningCount: 1 },
+        markdown: "# Bittensor Subnet Adapter Marketplace Export\n\nStatus: pass\n\n- Mock-ready: 1\n\nEvidence only; does not authorize or invoke subnet services.",
+        warnings: ["Marketplace status is read-only evidence; it does not authorize real subnet service execution."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/spec") {
     res.end(JSON.stringify({
       success: true,
@@ -1387,6 +1401,7 @@ try {
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
     "bittensor_list_subnet_adapter_marketplace",
+    "bittensor_export_subnet_adapter_marketplace",
     "bittensor_get_subnet_adapter_spec",
     "bittensor_validate_subnet_adapter_manifest",
     "bittensor_get_subnet_adapter_manifest_examples",
@@ -1429,6 +1444,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
   assert.match(descriptionFor("bittensor_list_subnet_adapter_marketplace"), /Evidence only; does not invoke subnet services/i);
+  assert.match(descriptionFor("bittensor_export_subnet_adapter_marketplace"), /redacted markdown for operator handoff/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
@@ -1530,6 +1546,13 @@ try {
   assert.equal(adapterMarketplacePayload.marketplace.summary.mockReady, 1);
   assert.equal(adapterMarketplacePayload.cards[0].kind, "adapter_marketplace");
   assert.doesNotMatch(JSON.stringify(adapterMarketplacePayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterMarketplaceExport = await ask({ jsonrpc: "2.0", id: 282, method: "tools/call", params: { name: "bittensor_export_subnet_adapter_marketplace", arguments: { adapter: "compute", limit: 2 } } });
+  const adapterMarketplaceExportPayload = JSON.parse(adapterMarketplaceExport.result.content[0].text);
+  assert.equal(adapterMarketplaceExportPayload.success, true);
+  assert.equal(adapterMarketplaceExportPayload.marketplaceExport.kind, "bittensor_subnet_adapter_marketplace_export");
+  assert.match(adapterMarketplaceExportPayload.marketplaceExport.markdown, /Marketplace Export/);
+  assert.doesNotMatch(JSON.stringify(adapterMarketplaceExportPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterSpec = await ask({ jsonrpc: "2.0", id: 43, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_spec", arguments: {} } });
   const adapterSpecPayload = JSON.parse(adapterSpec.result.content[0].text);
