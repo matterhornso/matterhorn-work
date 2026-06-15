@@ -1030,6 +1030,8 @@ Expected roadmap behavior:
 - returns candidate netuids, priority, rationale, next prompt, and safety warnings;
 - remains planning evidence only: it does not configure endpoints, invoke adapters, approve requests, or sign/broadcast anything.
 
+The main Bittensor readiness audit also includes this roadmap signal, so `GET /api/bittensor/readiness` should show `subnet_adapter_roadmap` with recommendation counts and the top adapter candidate before operators choose the next direct subnet service slice.
+
 When an agent or operator needs one compact packet instead of separate evidence, conformance, and dry-run exports, build the operator handoff. It summarizes the evidence review, conformance export, and mock dry-run export into one redacted go/no-go artifact:
 
 Chat:
