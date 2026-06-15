@@ -975,6 +975,12 @@ bittensor_list_subnet_adapter_marketplace({
 
 For handoff, export the same marketplace status as redacted markdown:
 
+Chat:
+
+```text
+Export the Bittensor adapter marketplace as markdown.
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/marketplace-export?adapter=data_search&limit=10" \
   | jq -r '.marketplaceExport.markdown'
