@@ -118,3 +118,9 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_customer_evidence_bundle` accepts optional `receiptCheck` evidence and `requireReceiptCheck` for customer demos that involve an external signer return.
 - Required receipt evidence must be accepted by the receipt checker and must not include raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.
 - This keeps the MCP customer handoff aligned with the CLI evidence bundle while remaining non-custodial.
+
+## Bittensor Read-Only Adapter Canary Evidence Through MCP
+
+- `matterhorn_bittensor_customer_evidence_bundle` accepts optional `readonlyAdapterCanary` evidence and `requireReadonlyAdapterCanary` for demos that include direct subnet service canaries.
+- This evidence is distinct from the inspect-only adapter canary gate: it proves the preview-confirm-invoke path ran with explicit invoke confirmation.
+- The MCP bundle still rejects credential-shaped fields and remains non-custodial.
