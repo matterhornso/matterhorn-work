@@ -52,6 +52,86 @@ Expected behavior:
 - Provider/source/freshness warnings are visible when data is fallback or stale.
 - Missing SS58, netuid, hotkey, amount, or rate-tolerance context produces one clear clarification question instead of guessing.
 
+## Latest Bittensor Operator Checks
+
+Run these after the normal live QA and readiness gate when testing the advanced Bittensor interface.
+
+### External Signer Handoff
+
+```bash
+node scripts/bittensor-signing-handoff-check.mjs \
+  --handoff /tmp/bittensor-handoff.json \
+  --expected-sha "<payload-sha256-from-preview>" \
+  --output /tmp/bittensor-handoff-check.md \
+  --json-output /tmp/bittensor-handoff-check.json \
+  --strict
+```
+
+Pass criteria:
+
+- result is `READY_FOR_EXTERNAL_SIGNER`;
+- payload SHA-256 matches the unsigned preview;
+- expiry is in the future;
+- action context and external signer marker are present;
+- no seed phrase, mnemonic, private key, keyfile, wallet export, signature, signed extrinsic, or signed payload fields appear.
+
+### Watch Autopilot
+
+```bash
+node scripts/bittensor-watch-autopilot.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token "<client-token>" \
+  --output /tmp/bittensor-watch-autopilot.md \
+  --json-output /tmp/bittensor-watch-autopilot.json \
+  --strict
+```
+
+Pass criteria:
+
+- result is a read-only alert report;
+- active alerts become safe chat prompts;
+- report says it does not sign, submit, broadcast, transfer TAO, move stake, or invoke subnet services;
+- credential-shaped or signed-payload-shaped fields fail closed.
+
+### Adapter Canary Gate
+
+```bash
+node scripts/bittensor-adapter-canary-gate.mjs \
+  --netuid 14 \
+  --allowed-hosts adapter.example.com \
+  --require-configured \
+  --output /tmp/bittensor-adapter-canary-gate.md \
+  --json-output /tmp/bittensor-adapter-canary-gate.json \
+  --strict
+```
+
+Pass criteria for a real adapter canary:
+
+- result is `READY_FOR_CANARY`;
+- adapter endpoint uses `https:`;
+- endpoint host is allowlisted;
+- mock endpoints are blocked unless `--allow-mock` is explicitly used;
+- no adapter service call is made by the gate itself.
+
+### Customer Evidence With Adapter Canary
+
+For demos involving direct subnet adapter canaries, include adapter canary evidence:
+
+```bash
+node scripts/bittensor-customer-evidence-bundle.mjs \
+  --bittensor-live-qa /tmp/bittensor-live-qa.json \
+  --agent-control-live-qa /tmp/agent-control-live-qa.json \
+  --ci /tmp/github-ci.json \
+  --readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md \
+  --wallet-timeline /tmp/wallet-timeline-status.json \
+  --adapter-canary /tmp/bittensor-adapter-canary-gate.json \
+  --require-adapter-canary \
+  --output /tmp/matterhorn-bittensor-customer-evidence.md \
+  --strict
+```
+
+Keep `--require-adapter-canary` off for normal read-only Bittensor demos that do not include a real subnet adapter canary.
+
 ## Security Audit Checklist
 
 Run these adversarial prompts and mark pass/fail:
