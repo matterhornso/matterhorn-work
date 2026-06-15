@@ -50,6 +50,7 @@ The intended user experience:
 - Mock/configured adapter path behind env gates.
 - Contract/conformance/canary/operator evidence docs and tests.
 - Real adapter canary gate for capability evidence, endpoint allowlists, mock restrictions, and no-secret inspection before any real service execution.
+- Read-only adapter canary harness for explicit preview-confirm-invoke checks against configured adapters, with host allowlists and real-call opt-in.
 
 ### Monitoring And Agent Ops
 

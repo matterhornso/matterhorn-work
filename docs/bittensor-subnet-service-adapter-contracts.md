@@ -91,6 +91,31 @@ Unsupported responses should still be useful. They should offer:
 - monitoring/watch creation;
 - unsigned staking preview guidance after the user chooses required public context.
 
+## Read-Only Adapter Canary Harness
+
+After the adapter canary gate says `READY_FOR_CANARY`, run the read-only preview-confirm-invoke harness against a configured adapter. This is the first step that can call an adapter service, so it is opt-in and guarded:
+
+```bash
+node scripts/bittensor-adapter-readonly-canary.mjs \
+  --server-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --netuid 14 \
+  --task "Find public Bittensor docs about subnet 14." \
+  --allowed-hosts adapter.example.com \
+  --confirm-invoke \
+  --allow-real-adapter-call \
+  --json-output /tmp/bittensor-adapter-readonly-canary.json \
+  --strict
+```
+
+Safety properties:
+
+- no seed phrases, private keys, mnemonics, wallet exports, signatures, signed payloads, transfers, or staking actions;
+- real adapter endpoints must be HTTPS and host-allowlisted;
+- invocation is skipped unless `--confirm-invoke` is present;
+- real endpoints additionally require `--allow-real-adapter-call`;
+- the invoke request reuses the preview `requestSha256` as both expected and reviewed hash, so the adapter call matches the reviewed card.
+
 ## Adapter Author Checklist
 
 Before adding any real adapter implementation:
