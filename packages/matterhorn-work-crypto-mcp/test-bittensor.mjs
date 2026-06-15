@@ -506,6 +506,21 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/roadmap-export") {
+    res.end(JSON.stringify({
+      success: true,
+      roadmapExport: {
+        kind: "bittensor_subnet_adapter_roadmap_export",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        status: "pass",
+        goal: url.searchParams.get("goal"),
+        summary: { recommendationCount: 1, highPriority: 0, mediumPriority: 1, lowPriority: 0, warningCount: 1 },
+        markdown: "# Bittensor Subnet Adapter Roadmap Export\n\nStatus: pass\n\n- Recommendations: 1\n\n- mock_ready=1\n\nEvidence only; does not configure, approve, invoke, or authorize subnet services.",
+        warnings: ["Roadmap is evidence only; it does not authorize real subnet service execution."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/spec") {
     res.end(JSON.stringify({
       success: true,
@@ -1427,6 +1442,7 @@ try {
     "bittensor_list_subnet_adapter_marketplace",
     "bittensor_export_subnet_adapter_marketplace",
     "bittensor_plan_subnet_adapter_roadmap",
+    "bittensor_export_subnet_adapter_roadmap",
     "bittensor_get_subnet_adapter_spec",
     "bittensor_validate_subnet_adapter_manifest",
     "bittensor_get_subnet_adapter_manifest_examples",
@@ -1471,6 +1487,7 @@ try {
   assert.match(descriptionFor("bittensor_list_subnet_adapter_marketplace"), /Evidence only; does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_export_subnet_adapter_marketplace"), /redacted markdown for operator handoff/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_roadmap"), /does not configure, invoke, or approve subnet services/i);
+  assert.match(descriptionFor("bittensor_export_subnet_adapter_roadmap"), /redacted markdown for operator handoff/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
@@ -1586,6 +1603,13 @@ try {
   assert.equal(adapterRoadmapPayload.roadmap.kind, "bittensor_subnet_adapter_roadmap");
   assert.equal(adapterRoadmapPayload.roadmap.recommendations[0].serviceAdapter, "compute");
   assert.doesNotMatch(JSON.stringify(adapterRoadmapPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterRoadmapExport = await ask({ jsonrpc: "2.0", id: 284, method: "tools/call", params: { name: "bittensor_export_subnet_adapter_roadmap", arguments: { goal: "compute", limit: 2 } } });
+  const adapterRoadmapExportPayload = JSON.parse(adapterRoadmapExport.result.content[0].text);
+  assert.equal(adapterRoadmapExportPayload.success, true);
+  assert.equal(adapterRoadmapExportPayload.roadmapExport.kind, "bittensor_subnet_adapter_roadmap_export");
+  assert.match(adapterRoadmapExportPayload.roadmapExport.markdown, /Roadmap Export/);
+  assert.doesNotMatch(JSON.stringify(adapterRoadmapExportPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterSpec = await ask({ jsonrpc: "2.0", id: 43, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_spec", arguments: {} } });
   const adapterSpecPayload = JSON.parse(adapterSpec.result.content[0].text);

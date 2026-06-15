@@ -73,6 +73,7 @@ import {
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
   exportBittensorSubnetAdapterMarketplace,
+  exportBittensorSubnetAdapterRoadmap,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorChatContext,
@@ -4160,6 +4161,20 @@ function createRoutes(
       limit,
     });
     return jsonResponse({ success: true, roadmap });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/roadmap-export", "client", async (ctx) => {
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const roadmapExport = await exportBittensorSubnetAdapterRoadmap({
+      goal: ctx.url.searchParams.get("goal"),
+      query: ctx.url.searchParams.get("query"),
+      limit,
+    });
+    return jsonResponse({ success: true, roadmapExport });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/spec", "client", async () => {

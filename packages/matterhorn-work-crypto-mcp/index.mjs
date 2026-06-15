@@ -842,6 +842,16 @@ async function bittensor_plan_subnet_adapter_roadmap(args = {}) {
   return { success: true, roadmap: res.roadmap };
 }
 
+async function bittensor_export_subnet_adapter_roadmap(args = {}) {
+  const params = new URLSearchParams();
+  if (typeof args.goal === "string") params.set("goal", args.goal);
+  if (typeof args.query === "string" && !params.has("goal")) params.set("query", args.query);
+  if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
+  const query = params.toString();
+  const res = await callServer(`/api/bittensor/adapters/roadmap-export${query ? `?${query}` : ""}`);
+  return { success: true, roadmapExport: res.roadmapExport };
+}
+
 async function bittensor_get_subnet_adapter_spec() {
   const res = await callServer("/api/bittensor/adapters/spec");
   return { success: true, spec: res.spec };
@@ -1214,6 +1224,7 @@ const tools = [
   { name: "bittensor_list_subnet_adapter_marketplace", description: "List the read-only Bittensor subnet adapter marketplace/status surface: universal-only, needs-adapter, mock-ready, manual-review-required, blocked, and unsupported entries. Evidence only; does not invoke subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_export_subnet_adapter_marketplace", description: "Export the read-only Bittensor subnet adapter marketplace as redacted markdown for operator handoff. Evidence only; omits endpoints, credentials, raw task text, wallet data, signing payloads, and full hashes.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_plan_subnet_adapter_roadmap", description: "Plan the next safe Bittensor subnet service adapter work from marketplace status and an optional goal. Evidence only; does not configure, invoke, or approve subnet services.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
+  { name: "bittensor_export_subnet_adapter_roadmap", description: "Export the safe Bittensor subnet adapter roadmap as redacted markdown for operator handoff. Evidence only; omits endpoints, credentials, raw task text, wallet data, signing payloads, and full hashes.", inputSchema: { type: "object", properties: { goal: { type: "string" }, query: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_get_subnet_adapter_spec", description: "Return the machine-readable Matterhorn Bittensor subnet adapter contract: metadata fields, preview-confirm-invoke rules, response limits, and forbidden secret fields.", inputSchema: { type: "object", properties: {} } },
   { name: "bittensor_validate_subnet_adapter_manifest", description: "Validate a proposed Bittensor subnet adapter metadata manifest against Matterhorn's safe adapter contract without invoking a subnet service.", inputSchema: { type: "object", properties: { manifest: { type: "object" }, version: { type: "string" }, name: { type: "string" }, netuid: { type: "number" }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, supportedIntents: { type: "array", items: { type: "string" } }, safeModeRequired: { type: "boolean" }, requestHashRequired: { type: "boolean" }, maxResponseBytes: { type: "number" }, healthStatus: { type: "string", enum: ["ok", "degraded", "unavailable"] }, requiredAuth: { type: "string", enum: ["none", "api_key", "external_wallet", "unknown"] }, costModel: { type: "string", enum: ["free_read", "tao_fee", "provider_priced", "unknown"] }, endpointConfigured: { type: "boolean" }, requestSchema: { type: "object" }, resultSchema: { type: "object" }, privacy: { type: "object" }, safetyNotes: { type: "array", items: { type: "string" } } } } },
   { name: "bittensor_get_subnet_adapter_manifest_examples", description: "Return copy-pasteable, self-validated Bittensor subnet adapter manifest examples for safe adapter onboarding. Does not configure or invoke adapters.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
@@ -1372,6 +1383,7 @@ function handleMessage(msg) {
         case "bittensor_list_subnet_adapter_marketplace": return bittensor_list_subnet_adapter_marketplace(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_export_subnet_adapter_marketplace": return bittensor_export_subnet_adapter_marketplace(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_plan_subnet_adapter_roadmap": return bittensor_plan_subnet_adapter_roadmap(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_export_subnet_adapter_roadmap": return bittensor_export_subnet_adapter_roadmap(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_adapter_spec": return bittensor_get_subnet_adapter_spec().then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_validate_subnet_adapter_manifest": return bittensor_validate_subnet_adapter_manifest(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_adapter_manifest_examples": return bittensor_get_subnet_adapter_manifest_examples(args).then(r => respond(textResult(r))).catch(catchErr);
