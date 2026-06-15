@@ -9160,6 +9160,31 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   }
 
   try {
+    const marketplace = await listBittensorSubnetAdapterMarketplace({ limit: 20 });
+    checks.push({
+      id: "subnet_adapter_marketplace",
+      label: "Subnet adapter marketplace",
+      status: marketplace.status,
+      summary: marketplace.status === "pass"
+        ? "Subnet adapter marketplace has at least one adapter ready for mock rehearsal or manual review."
+        : marketplace.status === "fail"
+          ? "Subnet adapter marketplace has blocked entries that must not be invoked."
+          : "Subnet adapter marketplace is available, but no direct subnet service adapter is ready yet.",
+      details: {
+        total: marketplace.total,
+        universalOnly: marketplace.summary.universalOnly,
+        needsAdapter: marketplace.summary.needsAdapter,
+        mockReady: marketplace.summary.mockReady,
+        manualReviewRequired: marketplace.summary.manualReviewRequired,
+        blocked: marketplace.summary.blocked,
+        unsupported: marketplace.summary.unsupported,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_marketplace", label: "Subnet adapter marketplace", status: "fail", summary: err instanceof Error ? err.message : "Adapter marketplace check failed." });
+  }
+
+  try {
     const handoff = await buildBittensorSubnetAdapterOperatorHandoff({
       adapter: "data_search",
       netuid: 18,
