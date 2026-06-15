@@ -433,6 +433,7 @@ export interface BittensorPlan {
     | "intelligence_report"
     | "readiness_report"
     | "adapter_marketplace"
+    | "adapter_roadmap"
   >;
   requiresClarification: boolean;
   clarificationQuestion: string | null;
@@ -1001,6 +1002,7 @@ export type BittensorChatCardKind =
   | "adapter_evidence_review"
   | "adapter_operator_handoff"
   | "adapter_marketplace"
+  | "adapter_roadmap"
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
@@ -5404,6 +5406,12 @@ function isSubnetAdapterMarketplaceExportQuestion(message: string): boolean {
     /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
 }
 
+function isSubnetAdapterRoadmapQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|direct service)\b/i.test(message) &&
+    /\b(roadmap|prioriti[sz]e|what .*build next|next adapter|adapter work|next direct service|which .*adapter .*next)\b/i.test(message) &&
+    /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
+}
+
 function extractSubnetAdapterKindFromMessage(message: string): Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported"> | null {
   if (/\b(data[_\s-]?search|search|retrieval|data)\b/i.test(message)) return "data_search";
   if (/\b(inference|model|llm)\b/i.test(message)) return "inference";
@@ -5758,6 +5766,23 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       }],
       data: { marketplaceExport, marketplace },
       warnings: uniqueWarnings(warnings, marketplaceExport.warnings),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterRoadmapQuestion(message)) {
+    const roadmap = await planBittensorSubnetAdapterRoadmap({
+      goal: message,
+      limit: resolveExecutionLimit(input, 5),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_roadmap"] },
+      responseText: `Built a Bittensor adapter roadmap with ${roadmap.recommendations.length} recommendation${roadmap.recommendations.length === 1 ? "" : "s"}. This is planning evidence only; it does not configure, invoke, approve, sign, or broadcast anything.`,
+      cards: [buildBittensorAdapterRoadmapCard(roadmap)],
+      data: { roadmap },
+      warnings: uniqueWarnings(warnings, roadmap.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -10537,6 +10562,38 @@ export function buildBittensorAdapterMarketplaceCard(marketplace: BittensorSubne
     }],
     warnings: marketplace.warnings,
     data: { marketplace },
+  };
+}
+
+export function buildBittensorAdapterRoadmapCard(roadmap: BittensorSubnetAdapterRoadmap): BittensorChatCard {
+  const top = roadmap.recommendations[0] ?? null;
+  const highPriority = roadmap.recommendations.filter((recommendation) => recommendation.priority === "high").length;
+  const mediumPriority = roadmap.recommendations.filter((recommendation) => recommendation.priority === "medium").length;
+  return {
+    kind: "adapter_roadmap",
+    title: "Bittensor adapter roadmap",
+    subtitle: roadmap.goal ?? "Marketplace-based plan",
+    summary: top?.rationale ?? "No immediate direct subnet service adapter work is visible in the current marketplace slice.",
+    tone: highPriority ? "warning" : roadmap.status === "pass" ? "good" : "warning",
+    items: [
+      cardItem("Recommendations", roadmap.recommendations.length, roadmap.recommendations.length ? "default" : "muted"),
+      cardItem("High priority", highPriority, highPriority ? "warning" : "muted"),
+      cardItem("Medium priority", mediumPriority, mediumPriority ? "default" : "muted"),
+      cardItem("Top adapter", top?.serviceAdapter.replace(/_/g, " ") ?? "None", top ? "default" : "muted"),
+      cardItem("Candidate netuids", top?.candidateNetuids.length ? top.candidateNetuids.join(", ") : "None", top?.candidateNetuids.length ? "default" : "muted"),
+      cardItem("Blocked marketplace entries", roadmap.marketplaceSummary.blocked, roadmap.marketplaceSummary.blocked ? "danger" : "good"),
+    ],
+    actions: top ? [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: top.nextPrompt,
+        serviceAdapter: top.serviceAdapter,
+        candidateNetuids: top.candidateNetuids,
+      },
+    }] : [],
+    warnings: roadmap.warnings,
+    data: { roadmap },
   };
 }
 
