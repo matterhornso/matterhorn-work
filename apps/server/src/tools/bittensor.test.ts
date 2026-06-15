@@ -3113,6 +3113,9 @@ describe("auditBittensorReadiness", () => {
     expect((capabilityCheck?.details as { missingServiceMarketplaceNetuids?: number[] })?.missingServiceMarketplaceNetuids).toEqual([]);
     expect(report.checks.some((check) => check.id === "subnet_adapter_conformance")).toBe(true);
     expect(report.checks.some((check) => check.id === "subnet_adapter_preflight")).toBe(true);
+    const handoffCheck = report.checks.find((check) => check.id === "subnet_adapter_operator_handoff");
+    expect(handoffCheck).toBeDefined();
+    expect(handoffCheck?.status).not.toBe("fail");
     expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
     const card = buildBittensorReadinessCard(report);
     expect(card.kind).toBe("readiness_report");
