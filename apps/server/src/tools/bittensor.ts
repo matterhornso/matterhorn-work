@@ -10848,6 +10848,45 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   }
 
   try {
+    const fixtureHash = "f".repeat(64);
+    const outcome = buildBittensorSubnetAdapterCanaryOutcomeReport({
+      adapter: "data_search",
+      netuid: 18,
+      expectedRequestSha256: fixtureHash,
+      result: {
+        ok: true,
+        mode: "mock",
+        adapterKind: "data_search",
+        netuid: 18,
+        requestSha256: fixtureHash,
+        message: "Readiness canary outcome fixture.",
+        output: { summary: "readiness fixture" },
+        warnings: [],
+        usage: { units: 1, label: "readiness_fixture" },
+        costEstimate: { amount: 0, currency: "TAO", model: "free_read" },
+      },
+    });
+    checks.push({
+      id: "subnet_adapter_canary_outcome",
+      label: "Subnet adapter canary outcome",
+      status: outcome.resultValidation.status === "fail" || !outcome.requestHash.matches ? "fail" : "pass",
+      summary: outcome.requestHash.matches && outcome.resultValidation.status !== "fail"
+        ? "Canary outcome reports can validate result envelopes, prove request-hash continuity, and redact full hashes for operator review."
+        : "Canary outcome report fixture failed request-hash or adapter-result validation.",
+      details: {
+        reportStatus: outcome.status,
+        resultValidationStatus: outcome.resultValidation.status,
+        requestHashMatched: outcome.requestHash.matches,
+        canaryGateStatus: outcome.canaryGate.status,
+        fullHashRedacted: outcome.summary.fullHashRedacted,
+        warningCount: outcome.warnings.length,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_canary_outcome", label: "Subnet adapter canary outcome", status: "fail", summary: err instanceof Error ? err.message : "Adapter canary outcome check failed." });
+  }
+
+  try {
     const wallet = await bittensorProvider.getWallet("invalid-ss58");
     checks.push({
       id: "wallet_safety",
@@ -10971,6 +11010,7 @@ export function buildBittensorReadinessOperatorReport(report: BittensorReadiness
   const sidecarCheck = report.checks.find((check) => check.id === "sidecar_status");
   const liveReadCheck = report.checks.find((check) => check.id === "live_read_freshness");
   const roadmapCheck = report.checks.find((check) => check.id === "subnet_adapter_roadmap");
+  const canaryOutcomeCheck = report.checks.find((check) => check.id === "subnet_adapter_canary_outcome");
   const operatorPrompts = [
     ...(blockedChecks.length ? [
       copilotAction(
@@ -10993,6 +11033,14 @@ export function buildBittensorReadinessOperatorReport(report: BittensorReadiness
         "Export adapter roadmap",
         "Export the Bittensor adapter roadmap as markdown.",
         "The roadmap export gives agents a redacted, copy-pasteable next-adapter plan without enabling real subnet execution.",
+        "medium",
+      ),
+    ] : []),
+    ...(canaryOutcomeCheck ? [
+      copilotAction(
+        "Build canary outcome report",
+        "Build a Bittensor adapter canary outcome report for data search subnet 18.",
+        "Outcome reports give operators a sanitized post-canary artifact with request-hash continuity and result validation.",
         "medium",
       ),
     ] : []),
