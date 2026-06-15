@@ -53,6 +53,7 @@ import {
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
+  buildBittensorSubnetAdapterConformanceExport,
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterPreflightPacket,
@@ -4416,6 +4417,19 @@ function createRoutes(
       limit: ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : null,
     });
     return jsonResponse({ success: true, report });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/conformance-export", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const conformanceExport = await buildBittensorSubnetAdapterConformanceExport({
+      netuid,
+      limit: ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : null,
+    });
+    return jsonResponse({ success: true, conformanceExport });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/dry-run", "client", async (ctx) => {

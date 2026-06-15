@@ -1196,6 +1196,21 @@ export interface BittensorSubnetAdapterConformanceReport {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterConformanceExport {
+  kind: "bittensor_subnet_adapter_conformance_export";
+  generatedAt: string;
+  status: BittensorSubnetAdapterConformanceReport["status"];
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    skipped: number;
+    warningCount: number;
+  };
+  markdown: string;
+  warnings: string[];
+}
+
 export interface BittensorSubnetAdapterRunResult {
   ok: boolean;
   mode: "mock" | "http";
@@ -4295,6 +4310,88 @@ export async function probeBittensorSubnetAdapterConformance(input: {
       : passed
         ? ["Run preview-confirm-invoke smoke tests against a reviewed adapter before enabling production usage."]
         : ["Configure an adapter and metadata endpoint, then rerun the conformance probe."],
+  };
+}
+
+function renderBittensorSubnetAdapterConformanceMarkdown(report: BittensorSubnetAdapterConformanceReport): string {
+  const cases = report.cases.map((conformanceCase, index) => {
+    const checks = conformanceCase.checks.map((check) => (
+      `- ${sanitizeEvidenceMarkdownText(check.label)}: ${sanitizeEvidenceMarkdownText(check.status)}. ${sanitizeEvidenceMarkdownText(check.summary)}`
+    ));
+    return [
+      `### Case ${index + 1}: ${sanitizeEvidenceMarkdownText(conformanceCase.name)}`,
+      "",
+      markdownBullet(`Status: ${conformanceCase.status}`),
+      markdownBullet(`Netuid: ${conformanceCase.netuid}`),
+      markdownBullet(`Adapter: ${conformanceCase.adapter}`),
+      markdownBullet(`Mode: ${conformanceCase.mode}`),
+      markdownBullet(`Metadata version: ${conformanceCase.metadata?.version ?? "not available"}`),
+      markdownBullet(`Metadata safe mode required: ${conformanceCase.metadata?.safeModeRequired === null || conformanceCase.metadata?.safeModeRequired === undefined ? "not available" : conformanceCase.metadata.safeModeRequired ? "yes" : "no"}`),
+      markdownBullet(`Metadata request hash required: ${conformanceCase.metadata?.requestHashRequired === null || conformanceCase.metadata?.requestHashRequired === undefined ? "not available" : conformanceCase.metadata.requestHashRequired ? "yes" : "no"}`),
+      markdownBullet(`Metadata max response bytes: ${conformanceCase.metadata?.maxResponseBytes ?? "not available"}`),
+      "",
+      "Checks:",
+      ...(checks.length ? checks : ["- No checks were produced."]),
+      "",
+      "Errors:",
+      ...(conformanceCase.errors.length ? conformanceCase.errors.map(markdownBullet) : ["- None"]),
+      "",
+      "Warnings:",
+      ...(conformanceCase.warnings.length ? conformanceCase.warnings.map(markdownBullet) : ["- None"]),
+      "",
+    ].join("\n");
+  });
+  return [
+    "# Bittensor Adapter Conformance Export",
+    "",
+    `Generated: ${sanitizeEvidenceMarkdownText(nowIso())}`,
+    `Checked: ${sanitizeEvidenceMarkdownText(report.checkedAt)}`,
+    `Status: ${sanitizeEvidenceMarkdownText(report.status)}`,
+    "",
+    "## Summary",
+    markdownBullet(`Total cases: ${report.total}`),
+    markdownBullet(`Passed: ${report.passed}`),
+    markdownBullet(`Failed: ${report.failed}`),
+    markdownBullet(`Skipped: ${report.skipped}`),
+    "",
+    "## Cases",
+    ...(cases.length ? cases : ["- No conformance cases were produced."]),
+    "",
+    "## Warnings",
+    ...(report.warnings.length ? report.warnings.map(markdownBullet) : ["- None"]),
+    "",
+    "## Next Actions",
+    ...(report.nextActions.length ? report.nextActions.map(markdownBullet) : ["- None"]),
+    "",
+    "## Safety Boundary",
+    "- This export covers metadata conformance only. It sends no user task text, wallet data, signing payloads, or request body.",
+    "- Raw metadata payloads and endpoint URLs are intentionally omitted from the markdown export.",
+    "- Passing conformance does not authorize real subnet service execution; preview, reviewed request SHA-256 confirmation, and operator approval remain required.",
+    "",
+  ].join("\n");
+}
+
+export async function buildBittensorSubnetAdapterConformanceExport(input: {
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterConformanceExport> {
+  const report = await probeBittensorSubnetAdapterConformance(input);
+  return {
+    kind: "bittensor_subnet_adapter_conformance_export",
+    generatedAt: nowIso(),
+    status: report.status,
+    summary: {
+      total: report.total,
+      passed: report.passed,
+      failed: report.failed,
+      skipped: report.skipped,
+      warningCount: report.warnings.length + report.cases.reduce((count, conformanceCase) => count + conformanceCase.warnings.length, 0),
+    },
+    markdown: renderBittensorSubnetAdapterConformanceMarkdown(report),
+    warnings: uniqueWarnings(
+      report.warnings,
+      ["Conformance exports are metadata evidence only and do not authorize real subnet service execution."],
+    ),
   };
 }
 
