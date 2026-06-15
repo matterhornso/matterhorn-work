@@ -1013,7 +1013,7 @@ async function bittensor_build_subnet_adapter_operator_handoff(args = {}) {
   if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
   const query = params.toString();
   const res = await callServer(`/api/bittensor/adapters/operator-handoff${query ? `?${query}` : ""}`);
-  return { success: true, handoff: res.handoff };
+  return { success: true, handoff: res.handoff, cards: res.cards || [] };
 }
 
 async function bittensor_dry_run_subnet_adapters(args = {}) {

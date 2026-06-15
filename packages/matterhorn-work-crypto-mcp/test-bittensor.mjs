@@ -1028,6 +1028,7 @@ const server = createServer(async (req, res) => {
         warnings: ["This handoff is evidence only and does not authorize real subnet service execution."],
         nextActions: ["Keep real subnet adapters disabled."],
       },
+      cards: [{ kind: "adapter_operator_handoff", title: "Bittensor adapter operator handoff", actions: [{ kind: "send_to_chat" }] }],
     }));
     return;
   }
@@ -1683,6 +1684,7 @@ try {
   assert.equal(adapterOperatorHandoffPayload.handoff.status, "mock_rehearsal_ready");
   assert.match(adapterOperatorHandoffPayload.handoff.markdown, /Bittensor Adapter Operator Handoff/);
   assert.match(adapterOperatorHandoffPayload.handoff.warnings.join(" "), /does not authorize real subnet service execution/i);
+  assert.equal(adapterOperatorHandoffPayload.cards[0].kind, "adapter_operator_handoff");
   assert.doesNotMatch(JSON.stringify(adapterOperatorHandoffPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterDryRun = await ask({ jsonrpc: "2.0", id: 29, method: "tools/call", params: { name: "bittensor_dry_run_subnet_adapters", arguments: { netuid: 14, task: "dry run task" } } });

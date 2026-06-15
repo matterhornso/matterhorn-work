@@ -29,6 +29,7 @@ import {
   buildBittensorAdapterLaunchGateCard,
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
+  buildBittensorAdapterOperatorHandoffCard,
   buildBittensorReadinessCard,
   buildBittensorSignerCard,
   buildBittensorSidecarHealthCard,
@@ -4451,7 +4452,7 @@ function createRoutes(
       ss58Address: ctx.url.searchParams.get("ss58Address"),
       limit,
     });
-    return jsonResponse({ success: true, handoff });
+    return jsonResponse({ success: true, handoff, cards: [buildBittensorAdapterOperatorHandoffCard(handoff)] });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/dry-run", "client", async (ctx) => {

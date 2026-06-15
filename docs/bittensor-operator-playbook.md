@@ -953,6 +953,12 @@ Expected conformance export behavior:
 
 When an agent or operator needs one compact packet instead of separate evidence, conformance, and dry-run exports, build the operator handoff. It summarizes the evidence review, conformance export, and mock dry-run export into one redacted go/no-go artifact:
 
+Chat:
+
+```text
+Build a data search adapter operator handoff packet for subnet 77.
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/operator-handoff?adapter=data_search&netuid=77&task=Answer%20this%20Bittensor%20subnet%20question" \
   | jq -r '.handoff.markdown'
