@@ -45,7 +45,7 @@ Good readiness output should make these visible:
 - whether sidecar/live reads are configured;
 - whether Bittensor remains non-custodial;
 - whether capability data has source/freshness labels;
-- whether subnet adapter doctor, conformance, preflight, and operator handoff checks are safe before any service execution;
+- whether subnet adapter doctor, marketplace, conformance, preflight, and operator handoff checks are safe before any service execution;
 - whether signing/submission is disabled or externally signed only.
 
 ## 2. Beginner Explanation
