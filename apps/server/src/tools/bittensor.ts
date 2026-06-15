@@ -9719,6 +9719,7 @@ export function buildBittensorReadinessOperatorReport(report: BittensorReadiness
   const blockedChecks = report.checks.filter((check) => check.status === "fail");
   const sidecarCheck = report.checks.find((check) => check.id === "sidecar_status");
   const liveReadCheck = report.checks.find((check) => check.id === "live_read_freshness");
+  const roadmapCheck = report.checks.find((check) => check.id === "subnet_adapter_roadmap");
   const operatorPrompts = [
     ...(blockedChecks.length ? [
       copilotAction(
@@ -9733,6 +9734,14 @@ export function buildBittensorReadinessOperatorReport(report: BittensorReadiness
         "Inspect fallback data",
         "Show which Bittensor flows are using fallback data and how to upgrade them to live Finney reads.",
         "Fallback data is acceptable when clearly labeled, but operators need to know it is not live.",
+        "medium",
+      ),
+    ] : []),
+    ...(roadmapCheck ? [
+      copilotAction(
+        "Export adapter roadmap",
+        "Export the Bittensor adapter roadmap as markdown.",
+        "The roadmap export gives agents a redacted, copy-pasteable next-adapter plan without enabling real subnet execution.",
         "medium",
       ),
     ] : []),
