@@ -112,3 +112,9 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_check_receipt` validates post-signing Bittensor receipts and produces a public wallet diff follow-up prompt.
 - It checks transaction hash/status, payload-hash continuity, expected action/netuid context, and rejects raw signatures or signed payload fields.
 - It does not sign, submit, broadcast, import keys, or store signed payloads.
+
+## Bittensor Receipt Evidence Through MCP
+
+- `matterhorn_bittensor_customer_evidence_bundle` accepts optional `receiptCheck` evidence and `requireReceiptCheck` for customer demos that involve an external signer return.
+- Required receipt evidence must be accepted by the receipt checker and must not include raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.
+- This keeps the MCP customer handoff aligned with the CLI evidence bundle while remaining non-custodial.

@@ -404,7 +404,9 @@ const tools = [
         },
         walletTimeline: { type: "object", description: "Optional public wallet timeline status or export summary." },
         adapterCanary: { type: "object", description: "Optional JSON output from the Bittensor adapter canary gate." },
+        receiptCheck: { type: "object", description: "Optional JSON output from the Bittensor receipt check." },
         requireAdapterCanary: { type: "boolean", description: "Require adapter canary evidence to be ready for real-adapter customer demos." },
+        requireReceiptCheck: { type: "boolean", description: "Require post-signer receipt evidence to be accepted." },
         title: { type: "string" },
       },
       required: ["bittensorLiveQa", "ci", "readinessGate"],
@@ -1203,7 +1205,8 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
   };
 }
 
-const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token)/i;
+const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE = /^(signature)$/i;
 
 function customerEvidenceArray(value) {
   return Array.isArray(value) ? value : [];
@@ -1216,7 +1219,7 @@ function assertCustomerEvidenceHasNoCredentials(value, label, path = []) {
     return;
   }
   for (const [key, child] of Object.entries(value)) {
-    if (CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE.test(key)) {
+    if (CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE.test(key) || CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE.test(key)) {
       throw new Error(label + " contains forbidden credential-shaped field: " + [...path, key].join("."));
     }
     assertCustomerEvidenceHasNoCredentials(child, label, [...path, key]);
@@ -1301,6 +1304,26 @@ function customerEvidenceAdapterCanarySummary(canary) {
   };
 }
 
+function customerEvidenceReceiptCheckSummary(receiptCheck) {
+  if (!receiptCheck || typeof receiptCheck !== "object") return null;
+  const findings = customerEvidenceArray(receiptCheck.findings);
+  const failCount = Number(receiptCheck.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(receiptCheck.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const accepted = receiptCheck.accepted === true || receiptCheck.result === "RECEIPT_CAPTURED";
+  const ready = accepted && failCount === 0;
+  return {
+    ready,
+    accepted,
+    txHash: String(receiptCheck.txHash || "").trim(),
+    status: String(receiptCheck.status || "unknown").trim() || "unknown",
+    action: String(receiptCheck.action || "unknown").trim() || "unknown",
+    netuid: receiptCheck.netuid ?? null,
+    detail: ready ? "Receipt check accepted; status " + String(receiptCheck.status || "unknown") : failCount + " failed, " + warnCount + " warnings",
+    findings: findings.slice(0, 8).map((finding) => String(finding.area || "Finding") + ": " + String(finding.status || "unknown")),
+    followUpPrompt: receiptCheck.followUpPrompt || "",
+  };
+}
+
 function customerEvidenceWalletTimelineSummary(timeline) {
   if (!timeline || typeof timeline !== "object") return null;
   return {
@@ -1322,6 +1345,7 @@ function renderCustomerEvidenceMarkdown(summary, title) {
     ["CI evidence", summary.ci.failed.length === 0 && summary.ci.pending.length === 0 && summary.ci.total > 0 ? "pass" : "warn", summary.ci.passed.length + " passed, " + summary.ci.failed.length + " failed, " + summary.ci.pending.length + " pending"],
     ["Wallet timeline", summary.walletTimeline ? "pass" : "warn", summary.walletTimeline ? summary.walletTimeline.snapshots + " public snapshots" : "No wallet timeline evidence provided"],
     ["Adapter canary", summary.adapterCanary ? (summary.adapterCanary.ready ? "pass" : "warn") : "warn", summary.adapterCanary ? summary.adapterCanary.detail : summary.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided"],
+    ["Receipt check", summary.receiptCheck ? (summary.receiptCheck.ready ? "pass" : "warn") : "warn", summary.receiptCheck ? summary.receiptCheck.detail : summary.requireReceiptCheck ? "Receipt check evidence required but missing" : "No post-signer receipt check evidence provided"],
   ];
   return [
     "# " + title,
@@ -1361,11 +1385,14 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
   const agentReady = !agentControl || (customerEvidenceIsReady(agentControl) && customerEvidenceSummaryValue(agentControl, "fail") === 0);
   const gateReady = customerEvidenceReadinessReady(readinessGate);
   const adapterCanary = customerEvidenceAdapterCanarySummary(args.adapterCanary);
+  const receiptCheck = customerEvidenceReceiptCheckSummary(args.receiptCheck);
   const adapterReady = args.requireAdapterCanary === true ? adapterCanary?.ready === true : true;
+  const receiptReady = args.requireReceiptCheck === true ? receiptCheck?.ready === true : true;
   const summary = {
     generatedAt: new Date().toISOString(),
-    ready: Boolean(bittensorReady && agentReady && gateReady && adapterReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
+    ready: Boolean(bittensorReady && agentReady && gateReady && adapterReady && receiptReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
     requireAdapterCanary: args.requireAdapterCanary === true,
+    requireReceiptCheck: args.requireReceiptCheck === true,
     bittensor: {
       ready: bittensorReady,
       detail: bittensor ? customerEvidenceSummaryValue(bittensor, "pass") + " passed, " + customerEvidenceSummaryValue(bittensor, "fail") + " failed, " + customerEvidenceSummaryValue(bittensor, "skip") + " skipped" : "Missing Bittensor evidence",
@@ -1383,6 +1410,7 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
     },
     walletTimeline: customerEvidenceWalletTimelineSummary(args.walletTimeline),
     adapterCanary,
+    receiptCheck,
   };
   return {
     ok: true,
