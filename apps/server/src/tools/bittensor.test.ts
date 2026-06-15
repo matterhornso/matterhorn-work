@@ -2189,6 +2189,42 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("routes ordinary adapter marketplace chat prompts to the marketplace card", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const result = await executeBittensorChatWorkflow({
+        message: "Which Bittensor subnet service adapters can Matterhorn call directly for compute?",
+      });
+      expect(result.execution).toBe("answered");
+      expect(result.responseText).toContain("adapter marketplace");
+      expect(result.cards[0]?.kind).toBe("adapter_marketplace");
+      expect((result.data.marketplace as { kind?: string } | undefined)?.kind).toBe("bittensor_subnet_adapter_marketplace");
+      expect(JSON.stringify(result)).not.toMatch(/privateKey|ADAPTER_TOKEN|adapter-token|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
   test("probes HTTPS adapter metadata conformance without sending request bodies or credentials", async () => {
     const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
     const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
