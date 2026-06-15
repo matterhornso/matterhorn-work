@@ -8437,6 +8437,39 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   }
 
   try {
+    const example = getBittensorSubnetAdapterManifestExamples({ adapter: "data_search", netuid: 18, limit: 1 }).examples[0];
+    const preflight = example
+      ? buildBittensorSubnetAdapterPreflightPacket({
+        manifest: example.manifest,
+        result: {
+          mode: "mock",
+          requestSha256: "e".repeat(64),
+          output: "Readiness sample output.",
+          warnings: [],
+        },
+      })
+      : null;
+    checks.push({
+      id: "subnet_adapter_preflight",
+      label: "Subnet adapter preflight",
+      status: preflight?.status === "fail" ? "fail" : preflight ? "pass" : "warning",
+      summary: preflight
+        ? preflight.readyForCanaryEvidence
+          ? "Adapter manifest and result preflight checks pass before endpoint conformance or canary review."
+          : "Adapter preflight is available, but canary evidence is incomplete."
+        : "No adapter manifest example was available for preflight.",
+      details: {
+        readyForConformance: preflight?.readyForConformance ?? false,
+        readyForCanaryEvidence: preflight?.readyForCanaryEvidence ?? false,
+        manifestStatus: preflight?.manifestValidation.status ?? null,
+        resultStatus: preflight?.resultValidation?.status ?? null,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_preflight", label: "Subnet adapter preflight", status: "fail", summary: err instanceof Error ? err.message : "Adapter preflight check failed." });
+  }
+
+  try {
     const wallet = await bittensorProvider.getWallet("invalid-ss58");
     checks.push({
       id: "wallet_safety",
