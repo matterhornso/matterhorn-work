@@ -3438,6 +3438,7 @@ describe("auditBittensorReadiness", () => {
     const operatorReport = buildBittensorReadinessOperatorReport(report);
     expect(operatorReport.kind).toBe("readiness_operator_report");
     expect(operatorReport.operatorPrompts.length).toBeGreaterThan(0);
+    expect(operatorReport.operatorPrompts.some((action) => action.prompt.includes("adapter roadmap"))).toBe(true);
     const operatorCard = buildBittensorReadinessOperatorCard(operatorReport);
     expect(operatorCard.kind).toBe("readiness_report");
     expect(operatorCard.actions?.some((action) => action.kind === "send_to_chat")).toBe(true);
