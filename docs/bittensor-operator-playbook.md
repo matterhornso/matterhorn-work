@@ -864,6 +864,24 @@ bittensor_build_subnet_adapter_preflight_packet({
 
 Use the preflight packet before endpoint conformance or canary review. `readyForConformance=true` means metadata can move to endpoint checks; `readyForCanaryEvidence=true` means both manifest and sample result are non-failing.
 
+For handoff to another agent, export the preflight packet as redacted markdown. The export intentionally omits raw manifest and result payloads:
+
+```bash
+curl -s -X POST "http://localhost:8787/api/bittensor/adapters/preflight-export" \
+  -H "Content-Type: application/json" \
+  -d '{ "manifest": { "...": "adapter metadata" }, "result": { "...": "sample adapter result" } }' \
+  | jq -r '.preflightExport.markdown'
+```
+
+MCP equivalent:
+
+```text
+bittensor_export_subnet_adapter_preflight_packet({
+  "manifest": { "...": "adapter metadata" },
+  "result": { "...": "sample adapter result" }
+})
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/templates?adapter=data_search&netuid=77"
 ```
@@ -1118,14 +1136,15 @@ Use the Matterhorn Work MCP server for Bittensor.
 21. Validate the proposed metadata with `bittensor_validate_subnet_adapter_manifest`; treat `status=fail` as a hard stop before endpoint setup.
 22. Validate sample adapter results with `bittensor_validate_subnet_adapter_result` before using them in canary evidence or chat rendering.
 23. Build a combined packet with `bittensor_build_subnet_adapter_preflight_packet`; use it to decide whether metadata is ready for conformance and whether sample output is ready for canary evidence.
-24. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
-25. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
-26. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
-27. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
-28. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
-29. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
-30. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
-31. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
+24. For handoff, call `bittensor_export_subnet_adapter_preflight_packet`; the markdown omits raw manifest/result payloads.
+25. Then call `bittensor_get_subnet_adapter_templates` for sanitized placeholders only; set credential values outside Matterhorn.
+26. Before any real adapter invocation, call `bittensor_probe_subnet_adapter_conformance`; proceed only if metadata, safe-mode, request-hash, privacy, schema, and response-bound checks pass.
+27. For subnet service use, call `matterhorn_bittensor_get_subnet_capability` first to inspect adapter support, auth, cost, schemas, benefits, and safety notes.
+28. Then call `matterhorn_bittensor_preview_subnet_invocation`, ask the user to confirm the request SHA-256, and call `matterhorn_bittensor_invoke_subnet` with `previewRequestSha256` only if a configured adapter exists.
+29. For ongoing monitoring, create watches with chat or the lower-level watch APIs.
+30. Call `matterhorn_bittensor_watch_digest` to get a compact alert queue, then use each alert's prompt/action label as the next safe chat step.
+31. Treat every action output as unsigned preview or external-signing handoff unless Matterhorn explicitly reports a safe signed-submission path.
+32. Never request seed phrases, mnemonics, private keys, keyfiles, wallet exports, or host tokens.
 ```
 
 ## 15. What Good Looks Like

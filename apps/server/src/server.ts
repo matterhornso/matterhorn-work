@@ -56,6 +56,7 @@ import {
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterPreflightPacket,
+  buildBittensorSubnetAdapterPreflightPacketExport,
   buildBittensorStakingPlan,
   checkBittensorSubnetAdapterLaunchGate,
   checkSubtensorSidecarHealth,
@@ -4163,6 +4164,22 @@ function createRoutes(
       ...(packet.resultValidation ? [buildBittensorAdapterResultValidationCard(packet.resultValidation)] : []),
     ];
     return jsonResponse({ success: packet.status !== "fail", packet, cards });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/adapters/preflight-export", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const maxResponseBytes = body.maxResponseBytes === null || body.maxResponseBytes === undefined || body.maxResponseBytes === ""
+      ? null
+      : Number(body.maxResponseBytes);
+    if (maxResponseBytes !== null && (!Number.isInteger(maxResponseBytes) || maxResponseBytes < 1)) {
+      throw new ApiError(400, "invalid_max_response_bytes", "maxResponseBytes must be a positive integer");
+    }
+    const preflightExport = buildBittensorSubnetAdapterPreflightPacketExport({
+      manifest: body.manifest,
+      result: body.result,
+      maxResponseBytes,
+    });
+    return jsonResponse({ success: preflightExport.status !== "fail", preflightExport });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/approvals", "client", async () => {

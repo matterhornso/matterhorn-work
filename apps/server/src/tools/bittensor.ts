@@ -1376,6 +1376,14 @@ export interface BittensorSubnetAdapterPreflightPacket {
   nextActions: string[];
 }
 
+export interface BittensorSubnetAdapterPreflightPacketExport {
+  kind: "bittensor_subnet_adapter_preflight_packet_export";
+  generatedAt: string;
+  status: BittensorSubnetAdapterPreflightPacket["status"];
+  markdown: string;
+  warnings: string[];
+}
+
 export interface BittensorSubnetDiscoveryMatch {
   subnet: BittensorSubnetSummary;
   score: number;
@@ -3434,6 +3442,65 @@ export function buildBittensorSubnetAdapterPreflightPacket(input: {
       : readyForCanaryEvidence
         ? ["Run endpoint metadata conformance, then attach this preflight packet to the canary evidence bundle."]
         : ["Add a validated adapter result sample before canary evidence review.", "Run endpoint metadata conformance only after manifest validation remains non-failing."],
+  };
+}
+
+function renderBittensorSubnetAdapterPreflightPacketMarkdown(packet: BittensorSubnetAdapterPreflightPacket): string {
+  return [
+    "# Bittensor Adapter Preflight Packet",
+    "",
+    `- Checked: ${packet.checkedAt}`,
+    `- Status: ${packet.status}`,
+    `- Ready for conformance: ${packet.readyForConformance ? "yes" : "no"}`,
+    `- Ready for canary evidence: ${packet.readyForCanaryEvidence ? "yes" : "no"}`,
+    "",
+    "## Manifest Validation",
+    `- Status: ${packet.manifestValidation.status}`,
+    `- Adapter: ${packet.manifestValidation.manifest.serviceAdapter}`,
+    `- Netuid: ${packet.manifestValidation.manifest.netuid ?? "missing"}`,
+    `- Service call ready: ${packet.manifestValidation.serviceCallReady ? "yes" : "no"}`,
+    `- Health: ${packet.manifestValidation.manifest.healthStatus ?? "missing"}`,
+    "",
+    "## Result Validation",
+    packet.resultValidation
+      ? [
+        `- Status: ${packet.resultValidation.status}`,
+        `- Mode: ${packet.resultValidation.summary.mode ?? "unknown"}`,
+        `- Request SHA-256 prefix: ${packet.resultValidation.summary.requestSha256Prefix ?? "missing"}`,
+        `- Response bytes: ${packet.resultValidation.summary.responseBytes}`,
+        `- Output present: ${packet.resultValidation.summary.outputPresent ? "yes" : "no"}`,
+      ].join("\n")
+      : "- Not supplied.",
+    "",
+    "## Errors",
+    ...(packet.errors.length ? packet.errors.map(markdownBullet) : ["- None"]),
+    "",
+    "## Warnings",
+    ...(packet.warnings.length ? packet.warnings.map(markdownBullet) : ["- None"]),
+    "",
+    "## Next Actions",
+    ...(packet.nextActions.length ? packet.nextActions.map(markdownBullet) : ["- None"]),
+    "",
+    "## Safety Boundary",
+    "- This export is for review and handoff only. It does not invoke a subnet service.",
+    "- Raw manifest and result payloads are intentionally omitted from this markdown export.",
+    "- Never include seed phrases, mnemonics, private keys, wallet exports, host tokens, or adapter credential values in review notes.",
+    "",
+  ].join("\n");
+}
+
+export function buildBittensorSubnetAdapterPreflightPacketExport(input: {
+  manifest: unknown;
+  result?: unknown;
+  maxResponseBytes?: number | null;
+}): BittensorSubnetAdapterPreflightPacketExport {
+  const packet = buildBittensorSubnetAdapterPreflightPacket(input);
+  return {
+    kind: "bittensor_subnet_adapter_preflight_packet_export",
+    generatedAt: nowIso(),
+    status: packet.status,
+    markdown: renderBittensorSubnetAdapterPreflightPacketMarkdown(packet),
+    warnings: uniqueWarnings(packet.warnings, ["Raw manifest and result payloads are intentionally omitted from this export."]),
   };
 }
 

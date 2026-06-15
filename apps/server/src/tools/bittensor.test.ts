@@ -43,6 +43,7 @@ import {
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
   buildBittensorSubnetAdapterPreflightPacket,
+  buildBittensorSubnetAdapterPreflightPacketExport,
   buildBittensorSubnetIntelligenceCard,
   buildBittensorWalletIntelligenceCard,
   buildBittensorWatchDigest,
@@ -1657,6 +1658,24 @@ describe("executeBittensorChatWorkflow", () => {
     expect(packet.manifestValidation.status).toBe("pass");
     expect(packet.resultValidation?.status).toBe("pass");
     expect(JSON.stringify(packet)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue/i);
+  });
+
+  test("exports preflight packets as redacted markdown without raw payloads", () => {
+    const manifest = getBittensorSubnetAdapterManifestExamples({ adapter: "data_search", netuid: 18 }).examples[0]!.manifest;
+    const preflightExport = buildBittensorSubnetAdapterPreflightPacketExport({
+      manifest,
+      result: {
+        mode: "mock",
+        requestSha256: "d".repeat(64),
+        output: "Bounded preflight output.",
+        warnings: [],
+      },
+    });
+    expect(preflightExport.kind).toBe("bittensor_subnet_adapter_preflight_packet_export");
+    expect(preflightExport.markdown).toContain("Bittensor Adapter Preflight Packet");
+    expect(preflightExport.markdown).toContain("Raw manifest and result payloads are intentionally omitted");
+    expect(preflightExport.markdown).not.toContain("Bounded preflight output");
+    expect(JSON.stringify(preflightExport)).not.toMatch(/privateKey|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|credentialValue/i);
   });
 
   test("returns real adapter onboarding templates without credential values", () => {
