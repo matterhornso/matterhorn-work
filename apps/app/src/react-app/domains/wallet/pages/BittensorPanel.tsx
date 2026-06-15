@@ -355,7 +355,7 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff") => {
+  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-canary" | "readonly-canary") => {
     const command = kind === "live-qa"
       ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
       : kind === "gate"
@@ -369,16 +369,43 @@ export default function BittensorPanel() {
               "--json-output /tmp/bittensor-handoff-check.json",
               "--strict",
             ].join(" ")
-          : [
-              "node scripts/bittensor-customer-evidence-bundle.mjs",
-              "--bittensor-live-qa /tmp/bittensor-live-qa.json",
-              "--agent-control-live-qa /tmp/agent-control-live-qa.json",
-              "--ci /tmp/github-ci.json",
-              "--readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md",
-              "--wallet-timeline /tmp/wallet-timeline-status.json",
-              "--output /tmp/matterhorn-bittensor-customer-evidence.md",
-              "--strict",
-            ].join(" ");
+          : kind === "adapter-canary"
+            ? [
+                "node scripts/bittensor-adapter-canary-gate.mjs",
+                "--server-url http://127.0.0.1:8787",
+                "--token <client-token>",
+                "--netuid 14",
+                "--allowed-hosts <adapter-host>",
+                "--require-configured",
+                "--json-output /tmp/bittensor-adapter-canary.json",
+                "--strict",
+              ].join(" ")
+            : kind === "readonly-canary"
+              ? [
+                  "node scripts/bittensor-adapter-readonly-canary.mjs",
+                  "--server-url http://127.0.0.1:8787",
+                  "--token <client-token>",
+                  "--netuid 14",
+                  "--task \"Find public Bittensor docs about subnet 14.\"",
+                  "--allowed-hosts <adapter-host>",
+                  "--confirm-invoke",
+                  "--allow-real-adapter-call",
+                  "--json-output /tmp/bittensor-adapter-readonly-canary.json",
+                  "--strict",
+                ].join(" ")
+              : [
+                  "node scripts/bittensor-customer-evidence-bundle.mjs",
+                  "--bittensor-live-qa /tmp/bittensor-live-qa.json",
+                  "--agent-control-live-qa /tmp/agent-control-live-qa.json",
+                  "--ci /tmp/github-ci.json",
+                  "--readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md",
+                  "--wallet-timeline /tmp/wallet-timeline-status.json",
+                  "--adapter-canary /tmp/bittensor-adapter-canary.json",
+                  "--readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json",
+                  "--receipt-check /tmp/bittensor-receipt-check.json",
+                  "--output /tmp/matterhorn-bittensor-customer-evidence.md",
+                  "--strict",
+                ].join(" ");
     await navigator.clipboard?.writeText(command);
     setCopiedReadinessCommand(kind);
     window.setTimeout(() => setCopiedReadinessCommand(null), 2000);
@@ -525,12 +552,18 @@ export default function BittensorPanel() {
                     Ask Chat
                   </Button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("live-qa")}>
                     {copiedReadinessCommand === "live-qa" ? "Copied" : "Copy Live QA"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("gate")}>
                     {copiedReadinessCommand === "gate" ? "Copied" : "Copy Gate"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("adapter-canary")}>
+                    {copiedReadinessCommand === "adapter-canary" ? "Copied" : "Copy Canary"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("readonly-canary")}>
+                    {copiedReadinessCommand === "readonly-canary" ? "Copied" : "Copy Invoke"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("evidence")}>
                     {copiedReadinessCommand === "evidence" ? "Copied" : "Copy Evidence"}
