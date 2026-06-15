@@ -425,6 +425,22 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_bittensor_adapter_canary_gate",
+    description: "Inspect Bittensor subnet adapter capability evidence before a real adapter canary. Does not call the adapter service, sign, submit, or broadcast.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        netuid: { type: "number" },
+        capability: { type: "object", description: "Optional capability manifest. If omitted, the configured Matterhorn server is queried by netuid." },
+        allowedHosts: { type: "array", items: { type: "string" }, description: "Optional endpoint host allowlist." },
+        allowMock: { type: "boolean", description: "Allow mock:// endpoints for local adapter tests." },
+        requireConfigured: { type: "boolean", description: "Fail when the adapter is not configured." },
+        strict: { type: "boolean", description: "When true, unsafe canary evidence raises an MCP error." },
+      },
+      required: ["netuid"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_prepare_extrinsic",
     description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.",
     inputSchema: {
@@ -1487,6 +1503,112 @@ function matterhornBittensorCheckSigningHandoff(args = {}) {
 }
 
 
+const ADAPTER_CANARY_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|signature|signedPayload|signed_payload)/i;
+
+function assertAdapterCanaryNoForbiddenKeys(value, label, path = []) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertAdapterCanaryNoForbiddenKeys(child, label, [...path, String(index)]));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (ADAPTER_CANARY_FORBIDDEN_KEY_RE.test(key)) {
+      throw new Error(label + " contains forbidden credential or signing field: " + [...path, key].join("."));
+    }
+    assertAdapterCanaryNoForbiddenKeys(child, label, [...path, key]);
+  }
+}
+
+function adapterCanaryAddFinding(findings, status, area, detail, severity = "") {
+  findings.push({ status, area, detail, severity });
+}
+
+function adapterCanaryEndpointOf(capability) {
+  return capability.endpoint || capability.serviceEndpoint || capability.adapter?.endpoint || capability.adapterStatus?.endpoint || "";
+}
+
+function adapterCanaryConfiguredOf(capability) {
+  if (typeof capability.adapterStatus?.configured === "boolean") return capability.adapterStatus.configured;
+  if (typeof capability.configured === "boolean") return capability.configured;
+  return Boolean(adapterCanaryEndpointOf(capability) && capability.serviceAdapter && capability.serviceAdapter !== "none");
+}
+
+function adapterCanaryCheckEndpoint(endpoint, findings, args) {
+  const allowedHosts = Array.isArray(args.allowedHosts) ? args.allowedHosts.map((item) => String(item).trim()).filter(Boolean) : [];
+  if (!endpoint) {
+    adapterCanaryAddFinding(findings, "warn", "Endpoint", "No adapter endpoint is exposed in the capability manifest.", "P2");
+    return;
+  }
+  if (String(endpoint).startsWith("mock://")) {
+    if (args.allowMock === true) adapterCanaryAddFinding(findings, "pass", "Endpoint", "mock:// endpoint allowed for local adapter tests.");
+    else adapterCanaryAddFinding(findings, "fail", "Endpoint", "mock:// endpoint is not allowed for a real canary without allowMock.", "P1");
+    return;
+  }
+  let parsed;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    adapterCanaryAddFinding(findings, "fail", "Endpoint", "Endpoint is not a valid URL: " + endpoint, "P1");
+    return;
+  }
+  if (parsed.protocol !== "https:") adapterCanaryAddFinding(findings, "fail", "Endpoint", "Real adapter endpoint must use https:, received " + parsed.protocol, "P1");
+  else if (allowedHosts.length && !allowedHosts.includes(parsed.hostname)) adapterCanaryAddFinding(findings, "fail", "Endpoint allowlist", parsed.hostname + " is not in allowedHosts.", "P1");
+  else adapterCanaryAddFinding(findings, "pass", "Endpoint", "Endpoint host " + parsed.hostname + " is allowed.");
+}
+
+function adapterCanarySummarizeCapability(capability, args = {}) {
+  assertAdapterCanaryNoForbiddenKeys(capability, "Bittensor adapter canary capability");
+  const findings = [];
+  const endpoint = adapterCanaryEndpointOf(capability);
+  const configured = adapterCanaryConfiguredOf(capability);
+  const serviceAdapter = capability.serviceAdapter || capability.adapter?.type || "";
+  const netuid = Number(args.netuid);
+
+  if (Number(capability.netuid) === netuid) adapterCanaryAddFinding(findings, "pass", "Netuid", "Capability netuid " + capability.netuid + " matches.");
+  else adapterCanaryAddFinding(findings, "fail", "Netuid", "Expected netuid " + netuid + ", received " + (capability.netuid ?? "missing") + ".", "P1");
+  if (serviceAdapter && serviceAdapter !== "none") adapterCanaryAddFinding(findings, "pass", "Adapter", "Service adapter is " + serviceAdapter + ".");
+  else adapterCanaryAddFinding(findings, "fail", "Adapter", "No service adapter is declared.", "P1");
+  if (configured) adapterCanaryAddFinding(findings, "pass", "Configuration", "Adapter is marked configured or exposes an endpoint.");
+  else if (args.requireConfigured === true) adapterCanaryAddFinding(findings, "fail", "Configuration", "Adapter is not configured.", "P1");
+  else adapterCanaryAddFinding(findings, "warn", "Configuration", "Adapter is not configured yet.", "P2");
+
+  adapterCanaryCheckEndpoint(endpoint, findings, args);
+  if (capability.requiredAuth && capability.requiredAuth !== "none") adapterCanaryAddFinding(findings, "warn", "Authentication", "Adapter requires " + capability.requiredAuth + "; verify server-side credential handling before canary.", "P2");
+  else adapterCanaryAddFinding(findings, "pass", "Authentication", "No adapter authentication is required or exposed to the client.");
+  if (/free|read/i.test(String(capability.costModel || ""))) adapterCanaryAddFinding(findings, "pass", "Cost model", "Cost model is " + capability.costModel + ".");
+  else adapterCanaryAddFinding(findings, "warn", "Cost model", "Review cost model before customer canary: " + (capability.costModel || "missing") + ".", "P2");
+
+  const readyForCanary = findings.every((finding) => finding.status !== "fail");
+  return {
+    ok: true,
+    readyForCanary,
+    netuid,
+    serviceAdapter,
+    configured,
+    findings,
+    summary: {
+      pass: findings.filter((finding) => finding.status === "pass").length,
+      warn: findings.filter((finding) => finding.status === "warn").length,
+      fail: findings.filter((finding) => finding.status === "fail").length,
+    },
+    safety: {
+      callsAdapterService: false,
+      signsOrBroadcasts: false,
+      acceptsCredentialMaterial: false,
+      source: "matterhorn_bittensor_adapter_canary_gate",
+    },
+  };
+}
+
+async function matterhornBittensorAdapterCanaryGate(args = {}) {
+  const rawCapability = args.capability || await callServer(`/api/bittensor/capabilities/${encodeURIComponent(String(args.netuid))}`);
+  const capability = rawCapability.capability || rawCapability;
+  const result = adapterCanarySummarizeCapability(capability, args);
+  if (args.strict === true && !result.readyForCanary) throw new Error("Bittensor adapter canary gate is not ready.");
+  return result;
+}
+
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1598,6 +1720,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/capabilities");
     case "matterhorn_bittensor_get_subnet_capability":
       return callServer(`/api/bittensor/capabilities/${encodeURIComponent(String(args.netuid))}`);
+    case "matterhorn_bittensor_adapter_canary_gate":
+      return matterhornBittensorAdapterCanaryGate(args);
     case "matterhorn_bittensor_prepare_extrinsic":
       return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
     case "matterhorn_bittensor_create_signing_handoff":

@@ -95,3 +95,9 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - The `matterhorn_bittensor_check_signing_handoff` MCP tool validates an external-signer handoff before the user signs it.
 - It checks payload SHA-256, expiry, action context, explicit external-signer marker, and forbidden credential/signed-output fields.
 - It never signs, submits, broadcasts, imports wallet material, or accepts custody.
+
+## Bittensor Adapter Canary Gate MCP
+
+- `matterhorn_bittensor_adapter_canary_gate` inspects subnet adapter capability evidence before real adapter canaries.
+- It checks netuid, adapter declaration, configuration, endpoint policy, host allowlist, mock gating, auth/cost warnings, and forbidden credential/signed-output fields.
+- It does not call adapter services, sign, submit, broadcast, move stake, or transfer TAO.
