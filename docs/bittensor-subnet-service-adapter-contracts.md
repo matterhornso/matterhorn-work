@@ -174,6 +174,7 @@ Expected behavior:
 - with the flag enabled, preview returns a request SHA-256;
 - invocation refuses to run unless `reviewedRequestSha256` matches the preview hash;
 - successful invocation returns a standardized adapter runner envelope with `mode: "mock"`, `adapterKind`, `requestSha256`, `output`, `warnings`, `usage`, and `costEstimate`;
+- real HTTPS adapter previews can be enabled for review with `BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1` plus an allowlisted endpoint, but actual invocation also requires the exact `BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON` request hash and `BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1` for that reviewed canary window;
 - `mock://data-search` returns deterministic fixture search results;
 - `mock://inference` returns a deterministic fixture completion with model `matterhorn-mock-inference-v0`;
 - no real Bittensor subnet service is called.
@@ -218,12 +219,14 @@ Do not combine a new service adapter with signing, custody, wallet import, or br
 
 ## Current Status
 
-Current support is contract-ready, not service-execution-ready:
+Current support is mock-execution-ready and real-canary-gated:
 
 - capability manifests expose adapter contracts;
 - preview and invocation paths are contract-gated;
 - unconfigured subnets return unsupported behavior;
 - chat cards show contract validity;
-- the reusable test harness covers safe, missing, and unsafe contracts.
+- the reusable test harness covers safe, missing, and unsafe contracts;
+- mock data-search and inference adapters can prove the preview-confirm-invoke loop when explicitly enabled;
+- real HTTPS adapters can be previewed for review, but invocation requires endpoint allowlisting, `BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1`, an exact short-lived request-hash approval, and `BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1`.
 
-The next safe step is to add a mocked adapter for one high-value category, prove the full preview-confirm-invoke flow against the harness, and keep it disabled unless explicitly configured.
+The next safe step is to run one reviewed real-adapter canary against a known provider endpoint, collect evidence, and keep general direct subnet execution disabled until the canary report is accepted.

@@ -929,6 +929,98 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("requires canary acknowledgement before invoking reviewed real HTTPS adapters", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+      const previousFetch = globalThis.fetch;
+      let adapterCalls = 0;
+      try {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+        process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Reviewed HTTPS adapter",
+          serviceAdapter: "data_search",
+          endpoint: "https://adapter.invalid/invoke",
+          requiredAuth: "none",
+          costModel: "provider_priced",
+          safetyNotes: ["HTTPS adapter safety note."],
+        }]);
+        globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input).startsWith("https://adapter.invalid")) {
+            adapterCalls += 1;
+            throw new Error("adapter should not be called without canary acknowledgement");
+          }
+          return previousFetch(input, init);
+        }) as typeof fetch;
+
+        const preview = await previewBittensorSubnetInvocation(77, {
+          intent: "service_call",
+          task: "Use this reviewed adapter.",
+          ss58Address: VALID_SS58,
+        });
+        expect(preview.supported).toBe(true);
+        expect(preview.requestSha256).toHaveLength(64);
+
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([{
+          netuid: 77,
+          serviceAdapter: "data_search",
+          requestSha256: preview.requestSha256,
+          approvedBy: "unit-test",
+          approvedAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          reason: "Canary unit test approval.",
+        }]);
+
+        const invocation = await invokeBittensorSubnet(77, {
+          intent: "service_call",
+          task: "Use this reviewed adapter.",
+          ss58Address: VALID_SS58,
+          reviewedRequestSha256: preview.requestSha256,
+        });
+        const result = invocation.result as { blockers?: string[] };
+        expect(invocation.supported).toBe(false);
+        expect(invocation.message).toContain("will not invoke");
+        expect(invocation.warnings.join(" ")).toContain("BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1");
+        expect(result.blockers?.join(" ")).toContain("BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1");
+        expect(adapterCalls).toBe(0);
+        expect(JSON.stringify(invocation)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|adapter-token|Bearer [A-Za-z0-9._-]{8,}/i);
+      } finally {
+        globalThis.fetch = previousFetch;
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousAllowlist === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+        }
+        if (previousReal === undefined) {
+          delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+        }
+        if (previousApprovals === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+        }
+        if (previousAck === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
+        }
+      }
+    });
+  });
+
   test("requires exact request approval before real HTTPS adapter invocation", async () => {
     await withMockedFivePromptSidecar(async () => {
       const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
