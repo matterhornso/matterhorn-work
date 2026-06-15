@@ -1012,6 +1012,25 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/operator-handoff") {
+    res.end(JSON.stringify({
+      success: true,
+      handoff: {
+        kind: "bittensor_subnet_adapter_operator_handoff",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: { adapter: "data_search", netuid: 14 },
+        status: "mock_rehearsal_ready",
+        evidenceReview: { kind: "bittensor_subnet_adapter_evidence_review", status: "mock_dry_run_ready", blockedReasons: [], warnings: [], nextPrompt: "Run dry-run." },
+        evidenceExport: { kind: "bittensor_subnet_adapter_evidence_export", summary: { warningCount: 0 }, warnings: [] },
+        conformanceExport: { kind: "bittensor_subnet_adapter_conformance_export", status: "pass", summary: { total: 1, passed: 1, failed: 0, skipped: 0, warningCount: 0 }, warnings: [] },
+        dryRunExport: { kind: "bittensor_subnet_adapter_dry_run_export", status: "pass", summary: { total: 1, passed: 1, failed: 0, skipped: 0, warningCount: 0 }, warnings: [] },
+        markdown: "# Bittensor Adapter Operator Handoff\n\n- This handoff is an operator review artifact.",
+        warnings: ["This handoff is evidence only and does not authorize real subnet service execution."],
+        nextActions: ["Keep real subnet adapters disabled."],
+      },
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/dry-run") {
     res.end(JSON.stringify({
       success: true,
@@ -1349,6 +1368,7 @@ try {
     "bittensor_get_subnet_adapter_templates",
     "bittensor_probe_subnet_adapter_conformance",
     "bittensor_export_subnet_adapter_conformance",
+    "bittensor_build_subnet_adapter_operator_handoff",
     "bittensor_dry_run_subnet_adapters",
     "bittensor_export_subnet_adapter_dry_run",
     "bittensor_prepare_extrinsic",
@@ -1389,6 +1409,7 @@ try {
   assert.match(descriptionFor("bittensor_get_subnet_adapter_templates"), /Never returns credential values/i);
   assert.match(descriptionFor("bittensor_probe_subnet_adapter_conformance"), /without sending user task text/i);
   assert.match(descriptionFor("bittensor_export_subnet_adapter_conformance"), /does not authorize or invoke real subnet services/i);
+  assert.match(descriptionFor("bittensor_build_subnet_adapter_operator_handoff"), /does not authorize real subnet services/i);
   assert.match(descriptionFor("bittensor_dry_run_subnet_adapters"), /Non-mock adapters are skipped/i);
   assert.match(descriptionFor("bittensor_export_subnet_adapter_dry_run"), /does not authorize or invoke real subnet services/i);
   assert.match(descriptionFor("bittensor_preview_subnet_invocation"), /First inspect bittensor_get_subnet_capabilities/i);
@@ -1654,6 +1675,15 @@ try {
   assert.match(adapterConformanceExportPayload.conformanceExport.markdown, /Bittensor Adapter Conformance Export/);
   assert.match(adapterConformanceExportPayload.conformanceExport.warnings.join(" "), /do(?:es)? not authorize real subnet service execution/i);
   assert.doesNotMatch(JSON.stringify(adapterConformanceExportPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+
+  const adapterOperatorHandoff = await ask({ jsonrpc: "2.0", id: 51, method: "tools/call", params: { name: "bittensor_build_subnet_adapter_operator_handoff", arguments: { adapter: "data_search", netuid: 14, task: "dry run task" } } });
+  const adapterOperatorHandoffPayload = JSON.parse(adapterOperatorHandoff.result.content[0].text);
+  assert.equal(adapterOperatorHandoffPayload.success, true);
+  assert.equal(adapterOperatorHandoffPayload.handoff.kind, "bittensor_subnet_adapter_operator_handoff");
+  assert.equal(adapterOperatorHandoffPayload.handoff.status, "mock_rehearsal_ready");
+  assert.match(adapterOperatorHandoffPayload.handoff.markdown, /Bittensor Adapter Operator Handoff/);
+  assert.match(adapterOperatorHandoffPayload.handoff.warnings.join(" "), /does not authorize real subnet service execution/i);
+  assert.doesNotMatch(JSON.stringify(adapterOperatorHandoffPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
 
   const adapterDryRun = await ask({ jsonrpc: "2.0", id: 29, method: "tools/call", params: { name: "bittensor_dry_run_subnet_adapters", arguments: { netuid: 14, task: "dry run task" } } });
   const adapterDryRunPayload = JSON.parse(adapterDryRun.result.content[0].text);
