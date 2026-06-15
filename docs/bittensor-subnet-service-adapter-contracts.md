@@ -253,3 +253,5 @@ The report must include:
 
 The report must not include full request hashes, endpoint URLs, credentials, task text, seed phrases, private keys, mnemonics, wallet exports, approval env values, host tokens, or raw adapter payloads. Use it as the copy-pasteable customer/security review artifact; keep raw canary material inside the reviewed operator environment only.
 
+- readiness audits include a canary outcome report fixture so operators can verify the sanitized post-canary artifact path before any real direct subnet execution.
+

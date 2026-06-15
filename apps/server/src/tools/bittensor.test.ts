@@ -4053,6 +4053,10 @@ describe("auditBittensorReadiness", () => {
     expect(report.checks.some((check) => check.id === "subnet_adapter_preflight")).toBe(true);
     expect(report.checks.some((check) => check.id === "subnet_adapter_marketplace")).toBe(true);
     expect(report.checks.some((check) => check.id === "subnet_adapter_roadmap")).toBe(true);
+    const canaryOutcomeCheck = report.checks.find((check) => check.id === "subnet_adapter_canary_outcome");
+    expect(canaryOutcomeCheck).toBeDefined();
+    expect(canaryOutcomeCheck?.status).toBe("pass");
+    expect((canaryOutcomeCheck?.details as { fullHashRedacted?: boolean })?.fullHashRedacted).toBe(true);
     const handoffCheck = report.checks.find((check) => check.id === "subnet_adapter_operator_handoff");
     expect(handoffCheck).toBeDefined();
     expect(handoffCheck?.status).not.toBe("fail");
@@ -4063,6 +4067,7 @@ describe("auditBittensorReadiness", () => {
     expect(operatorReport.kind).toBe("readiness_operator_report");
     expect(operatorReport.operatorPrompts.length).toBeGreaterThan(0);
     expect(operatorReport.operatorPrompts.some((action) => action.prompt.includes("adapter roadmap"))).toBe(true);
+    expect(operatorReport.operatorPrompts.some((action) => action.prompt.includes("canary outcome report"))).toBe(true);
     const operatorCard = buildBittensorReadinessOperatorCard(operatorReport);
     expect(operatorCard.kind).toBe("readiness_report");
     expect(operatorCard.actions?.some((action) => action.kind === "send_to_chat")).toBe(true);
