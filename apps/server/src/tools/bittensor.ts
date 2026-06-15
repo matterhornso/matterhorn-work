@@ -5377,6 +5377,12 @@ function isSubnetAdapterMarketplaceQuestion(message: string): boolean {
     /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
 }
 
+function isSubnetAdapterMarketplaceExportQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|marketplace)\b/i.test(message) &&
+    /\b(export|markdown|copy[-\s]?paste|handoff doc|handoff markdown|report)\b/i.test(message) &&
+    /\b(bittensor|tao|subnet|netuid|adapter|service)\b/i.test(message);
+}
+
 function extractSubnetAdapterKindFromMessage(message: string): Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported"> | null {
   if (/\b(data[_\s-]?search|search|retrieval|data)\b/i.test(message)) return "data_search";
   if (/\b(inference|model|llm)\b/i.test(message)) return "inference";
@@ -5697,6 +5703,29 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [buildBittensorReadinessOperatorCard(operatorReport)],
       data: { readiness: report, operatorReport },
       warnings: uniqueWarnings(warnings, operatorReport.warnings, operatorReport.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterMarketplaceExportQuestion(message)) {
+    const marketplaceExport = await exportBittensorSubnetAdapterMarketplace({
+      adapter: extractSubnetAdapterKindFromMessage(message),
+      netuid: resolveExecutionNetuid(input, plan),
+      limit: resolveExecutionLimit(input, 12),
+    });
+    const marketplace = await listBittensorSubnetAdapterMarketplace({
+      adapter: extractSubnetAdapterKindFromMessage(message),
+      netuid: resolveExecutionNetuid(input, plan),
+      limit: resolveExecutionLimit(input, 12),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_marketplace"] },
+      responseText: `Built a redacted Bittensor adapter marketplace markdown export with ${marketplaceExport.summary.total} entr${marketplaceExport.summary.total === 1 ? "y" : "ies"}. This is evidence only; it does not invoke or authorize real subnet service execution.`,
+      cards: [buildBittensorAdapterMarketplaceCard(marketplace)],
+      data: { marketplaceExport, marketplace },
+      warnings: uniqueWarnings(warnings, marketplaceExport.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",

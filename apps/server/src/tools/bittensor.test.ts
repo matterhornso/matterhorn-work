@@ -2262,6 +2262,45 @@ describe("executeBittensorChatWorkflow", () => {
     }
   });
 
+  test("routes adapter marketplace export chat prompts to redacted markdown data", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const result = await executeBittensorChatWorkflow({
+        message: "Export the Bittensor adapter marketplace as markdown for compute.",
+      });
+      expect(result.execution).toBe("answered");
+      expect(result.responseText).toContain("markdown export");
+      expect(result.cards[0]?.kind).toBe("adapter_marketplace");
+      const marketplaceExport = result.data.marketplaceExport as { kind?: string; markdown?: string } | undefined;
+      expect(marketplaceExport?.kind).toBe("bittensor_subnet_adapter_marketplace_export");
+      expect(marketplaceExport?.markdown).toContain("Bittensor Subnet Adapter Marketplace Export");
+      expect(marketplaceExport?.markdown).not.toContain("mock://compute");
+      expect(JSON.stringify(result)).not.toMatch(/privateKey|ADAPTER_TOKEN|adapter-token|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
   test("probes HTTPS adapter metadata conformance without sending request bodies or credentials", async () => {
     const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
     const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
