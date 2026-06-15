@@ -52,7 +52,8 @@ Current implementation:
 - Follow-up prompts such as `what changed in my wallet since last time?` compare the current watch-only wallet snapshot against the prior baseline.
 - Change cards show free TAO, staked TAO, estimated value, position-count, subnet, validator, top-position, freshness, and source deltas.
 - Follow-up prompts such as `clear my Bittensor wallet baseline` remove the in-memory public baseline for the active SS58 address before the next comparison.
-- No persistence, custody, signing, seed import, private keys, mnemonics, wallet exports, or transaction broadcast are involved.
+- Optional durable wallet timeline snapshots can be enabled with `BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE=1`; the store is public-data-only, versioned, hash-validated, retention-limited, and cleared by the same baseline reset flow.
+- No default persistence, custody, signing, seed import, private keys, mnemonics, wallet exports, or transaction broadcast are involved; the optional timeline store contains only public watch-only wallet snapshots.
 
 ## Phase 3: Advanced Staking Planner
 

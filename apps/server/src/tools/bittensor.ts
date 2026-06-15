@@ -924,9 +924,46 @@ export interface BittensorWalletBaselineClearReport {
   ss58Address: string;
   cleared: boolean;
   previousUpdatedAt: string | null;
+  persistentSnapshotsCleared: number;
   updatedAt: string;
   summary: string;
   warnings: string[];
+}
+
+export interface BittensorWalletTimelineSnapshot {
+  kind: "wallet_timeline_snapshot";
+  version: "matterhorn.bittensor.wallet_timeline.v1";
+  ss58Address: string;
+  capturedAt: string;
+  walletUpdatedAt: string;
+  taoBalance: number | null;
+  stakeTotalTao: number | null;
+  estimatedValueTao: number | null;
+  positionCount: number;
+  positions: BittensorStakePosition[];
+  providerStatus: BittensorProviderStatus;
+  source: string;
+  block: number | null;
+  freshness: string | null;
+  warnings: string[];
+  contentSha256: string;
+}
+
+export interface BittensorWalletTimelineValidation {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BittensorWalletTimelineStoreStatus {
+  kind: "wallet_timeline_store_status";
+  enabled: boolean;
+  path: string | null;
+  walletCount: number;
+  snapshotCount: number;
+  retentionLimit: number;
+  warnings: string[];
+  updatedAt: string;
 }
 
 export interface BittensorDecisionOption {
@@ -1599,7 +1636,9 @@ const cache = new Map<string, CacheEntry<unknown>>();
 const watchlist = new Map<string, BittensorWatch>();
 const chatContexts = new Map<string, BittensorChatContext>();
 const walletSnapshotBaselines = new Map<string, { wallet: BittensorWalletSnapshot; updatedAt: string }>();
+const walletTimelineSnapshots = new Map<string, BittensorWalletTimelineSnapshot[]>();
 let watchlistLoadedFromDisk = false;
+let walletTimelineLoadedFromDisk = false;
 
 const FALLBACK_SUBNETS: BittensorSubnetSummary[] = [
   {
@@ -1659,6 +1698,22 @@ function bittensorWatchlistPath(): string | null {
   return readEnv("BITTENSOR_WATCHLIST_PATH") || join(homedir(), ".openwork", "openwork-server", "bittensor-watchlist.json");
 }
 
+function bittensorWalletTimelinePersistenceEnabled(): boolean {
+  const enabled = readEnv("BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE").toLowerCase();
+  return enabled === "1" || enabled === "true" || enabled === "yes";
+}
+
+function bittensorWalletTimelinePath(): string | null {
+  if (readEnv("BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE") === "1") return null;
+  if (!bittensorWalletTimelinePersistenceEnabled()) return null;
+  return readEnv("BITTENSOR_WALLET_TIMELINE_PATH") || join(homedir(), ".matterhorn-work", "bittensor-wallet-timeline.json");
+}
+
+function bittensorWalletTimelineRetentionLimit(): number {
+  const parsed = Number(readEnv("BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT"));
+  return Number.isFinite(parsed) && parsed > 0 ? Math.min(365, Math.max(2, Math.floor(parsed))) : 24;
+}
+
 function normalizePersistedWatch(value: unknown): BittensorWatch | null {
   const record = asRecord(value);
   const id = firstString(record, ["id"]);
@@ -1708,6 +1763,191 @@ function persistWatchlist(): void {
   } catch {
     // Persistence is best-effort; watch creation still returns the in-memory entry.
   }
+}
+
+function normalizePersistedTimelinePosition(value: unknown): BittensorStakePosition | null {
+  const record = asRecord(value);
+  const netuid = firstNumber(record, ["netuid"]);
+  const subnetName = firstString(record, ["subnetName", "subnet_name"]);
+  const validatorHotkey = firstString(record, ["validatorHotkey", "validator_hotkey", "hotkey"]);
+  const slippageRisk = firstString(record, ["slippageRisk", "slippage_risk"]);
+  if (netuid === null || !Number.isInteger(netuid) || netuid < 0) return null;
+  return {
+    netuid,
+    subnetName: subnetName ?? `Subnet ${netuid}`,
+    validatorHotkey: validatorHotkey && isValidSs58Address(validatorHotkey) ? validatorHotkey : null,
+    alphaAmount: firstNumber(record, ["alphaAmount", "alpha_amount"]),
+    taoValue: firstNumber(record, ["taoValue", "tao_value"]),
+    slippageRisk: slippageRisk === "low" || slippageRisk === "medium" || slippageRisk === "high" ? slippageRisk : "unknown",
+  };
+}
+
+function normalizePersistedTimelineSnapshot(value: unknown): BittensorWalletTimelineSnapshot | null {
+  const record = asRecord(value);
+  const ss58Address = firstString(record, ["ss58Address", "ss58_address"]);
+  if (!ss58Address || !isValidSs58Address(ss58Address)) return null;
+  const positions = arrayFrom(record.positions).map(normalizePersistedTimelinePosition).filter((position): position is BittensorStakePosition => Boolean(position));
+  const providerStatus = firstString(record, ["providerStatus", "provider_status"]);
+  const snapshot: BittensorWalletTimelineSnapshot = {
+    kind: "wallet_timeline_snapshot",
+    version: "matterhorn.bittensor.wallet_timeline.v1",
+    ss58Address,
+    capturedAt: firstString(record, ["capturedAt", "captured_at"]) ?? nowIso(),
+    walletUpdatedAt: firstString(record, ["walletUpdatedAt", "wallet_updated_at", "updatedAt", "updated_at"]) ?? nowIso(),
+    taoBalance: firstNumber(record, ["taoBalance", "tao_balance"]),
+    stakeTotalTao: firstNumber(record, ["stakeTotalTao", "stake_total_tao"]),
+    estimatedValueTao: firstNumber(record, ["estimatedValueTao", "estimated_value_tao"]),
+    positionCount: firstNumber(record, ["positionCount", "position_count"]) ?? positions.length,
+    positions,
+    providerStatus: providerStatus === "ok" || providerStatus === "provider_unavailable" ? providerStatus : "provider_unavailable",
+    source: firstString(record, ["source"]) ?? "unknown",
+    block: firstNumber(record, ["block"]),
+    freshness: firstString(record, ["freshness"]),
+    warnings: arrayFrom(record.warnings).filter((warning): warning is string => typeof warning === "string").slice(0, 8),
+    contentSha256: firstString(record, ["contentSha256", "content_sha256"]) ?? "",
+  };
+  return validateBittensorWalletTimelineSnapshot(snapshot).ok ? snapshot : null;
+}
+
+function loadPersistedWalletTimeline(): void {
+  if (walletTimelineLoadedFromDisk) return;
+  walletTimelineLoadedFromDisk = true;
+  const file = bittensorWalletTimelinePath();
+  if (!file || !existsSync(file)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    const rows = Array.isArray(asRecord(parsed).snapshots) ? asRecord(parsed).snapshots as unknown[] : arrayFrom(parsed);
+    for (const row of rows) {
+      const snapshot = normalizePersistedTimelineSnapshot(row);
+      if (!snapshot) continue;
+      const current = walletTimelineSnapshots.get(snapshot.ss58Address) ?? [];
+      current.push(snapshot);
+      walletTimelineSnapshots.set(snapshot.ss58Address, current.slice(-bittensorWalletTimelineRetentionLimit()));
+    }
+  } catch {
+    // Corrupt or stale timeline persistence must not break watch-only wallet flows.
+  }
+}
+
+function persistWalletTimeline(): void {
+  const file = bittensorWalletTimelinePath();
+  if (!file) return;
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    const snapshots = [...walletTimelineSnapshots.values()].flat();
+    writeFileSync(file, `${JSON.stringify({ version: "matterhorn.bittensor.wallet_timeline.v1", snapshots }, null, 2)}\n`, "utf8");
+  } catch {
+    // Timeline persistence is best-effort; wallet reads still keep an in-memory baseline.
+  }
+}
+
+function timelineSnapshotPayload(snapshot: Omit<BittensorWalletTimelineSnapshot, "contentSha256">): string {
+  return stableJson(snapshot);
+}
+
+export function validateBittensorWalletTimelineSnapshot(snapshot: BittensorWalletTimelineSnapshot): BittensorWalletTimelineValidation {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (snapshot.kind !== "wallet_timeline_snapshot") errors.push("Wallet timeline snapshot has an unsupported kind.");
+  if (snapshot.version !== "matterhorn.bittensor.wallet_timeline.v1") errors.push("Wallet timeline snapshot has an unsupported version.");
+  if (!isValidSs58Address(snapshot.ss58Address)) errors.push("Wallet timeline snapshot must use a valid public SS58 address.");
+  if (secretFieldPath(snapshot)) errors.push("Wallet timeline snapshot contains a secret-shaped field.");
+  if (snapshot.positions.some((position) => position.validatorHotkey && !isValidSs58Address(position.validatorHotkey))) errors.push("Wallet timeline snapshot contains an invalid validator hotkey.");
+  if (snapshot.positionCount !== snapshot.positions.length) warnings.push("Wallet timeline snapshot positionCount did not match positions length.");
+  const { contentSha256: _contentSha256, ...payload } = snapshot;
+  const expectedHash = createHash("sha256").update(timelineSnapshotPayload(payload)).digest("hex");
+  if (!/^[a-f0-9]{64}$/i.test(snapshot.contentSha256)) errors.push("Wallet timeline snapshot must include a SHA-256 content hash.");
+  if (snapshot.contentSha256 && snapshot.contentSha256 !== expectedHash) errors.push("Wallet timeline snapshot content hash did not match its public payload.");
+  return { ok: errors.length === 0, errors, warnings };
+}
+
+export function buildBittensorWalletTimelineSnapshot(wallet: BittensorWalletSnapshot, capturedAt = nowIso()): BittensorWalletTimelineSnapshot {
+  const positions = wallet.stakePositions
+    .map((position) => ({ ...position }))
+    .sort((a, b) => a.netuid - b.netuid || String(a.validatorHotkey ?? "").localeCompare(String(b.validatorHotkey ?? "")));
+  const payload: Omit<BittensorWalletTimelineSnapshot, "contentSha256"> = {
+    kind: "wallet_timeline_snapshot",
+    version: "matterhorn.bittensor.wallet_timeline.v1",
+    ss58Address: wallet.ss58Address,
+    capturedAt,
+    walletUpdatedAt: wallet.updatedAt,
+    taoBalance: wallet.taoBalance,
+    stakeTotalTao: walletStakeTotal(wallet),
+    estimatedValueTao: wallet.estimatedValueTao,
+    positionCount: positions.length,
+    positions,
+    providerStatus: wallet.providerStatus,
+    source: wallet.source ?? "provider",
+    block: wallet.block ?? null,
+    freshness: wallet.freshness ?? null,
+    warnings: wallet.warnings?.slice(0, 8) ?? [],
+  };
+  return {
+    ...payload,
+    contentSha256: createHash("sha256").update(timelineSnapshotPayload(payload)).digest("hex"),
+  };
+}
+
+function walletFromTimelineSnapshot(snapshot: BittensorWalletTimelineSnapshot): BittensorWalletSnapshot {
+  return {
+    ss58Address: snapshot.ss58Address,
+    taoBalance: snapshot.taoBalance,
+    stakePositions: snapshot.positions.map((position) => ({ ...position })),
+    estimatedValueTao: snapshot.estimatedValueTao,
+    providerStatus: snapshot.providerStatus,
+    updatedAt: snapshot.walletUpdatedAt,
+    source: snapshot.source,
+    block: snapshot.block,
+    freshness: snapshot.freshness,
+    warnings: snapshot.warnings,
+  };
+}
+
+function rememberBittensorWalletTimelineSnapshot(wallet: BittensorWalletSnapshot): void {
+  const file = bittensorWalletTimelinePath();
+  if (!file) return;
+  loadPersistedWalletTimeline();
+  const snapshot = buildBittensorWalletTimelineSnapshot(wallet);
+  const validation = validateBittensorWalletTimelineSnapshot(snapshot);
+  if (!validation.ok) return;
+  const current = walletTimelineSnapshots.get(wallet.ss58Address) ?? [];
+  walletTimelineSnapshots.set(wallet.ss58Address, [...current, snapshot].slice(-bittensorWalletTimelineRetentionLimit()));
+  persistWalletTimeline();
+}
+
+function latestBittensorWalletTimelineBaseline(ss58Address: string): { wallet: BittensorWalletSnapshot; updatedAt: string } | null {
+  if (!bittensorWalletTimelinePath()) return null;
+  loadPersistedWalletTimeline();
+  const snapshot = walletTimelineSnapshots.get(ss58Address)?.at(-1) ?? null;
+  return snapshot ? { wallet: walletFromTimelineSnapshot(snapshot), updatedAt: snapshot.capturedAt } : null;
+}
+
+function clearBittensorWalletTimeline(ss58Address: string): { cleared: number; previousUpdatedAt: string | null } {
+  if (!bittensorWalletTimelinePath()) return { cleared: 0, previousUpdatedAt: null };
+  loadPersistedWalletTimeline();
+  const snapshots = walletTimelineSnapshots.get(ss58Address) ?? [];
+  const previousUpdatedAt = snapshots.at(-1)?.capturedAt ?? null;
+  walletTimelineSnapshots.delete(ss58Address);
+  persistWalletTimeline();
+  return { cleared: snapshots.length, previousUpdatedAt };
+}
+
+export function getBittensorWalletTimelineStoreStatus(): BittensorWalletTimelineStoreStatus {
+  const file = bittensorWalletTimelinePath();
+  if (file) loadPersistedWalletTimeline();
+  const snapshots = [...walletTimelineSnapshots.values()].flat();
+  return {
+    kind: "wallet_timeline_store_status",
+    enabled: Boolean(file),
+    path: file,
+    walletCount: walletTimelineSnapshots.size,
+    snapshotCount: snapshots.length,
+    retentionLimit: bittensorWalletTimelineRetentionLimit(),
+    warnings: file
+      ? ["Wallet timeline persistence stores public watch-only wallet snapshots only."]
+      : ["Wallet timeline persistence is disabled unless BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE=1."],
+    updatedAt: nowIso(),
+  };
 }
 
 function taoAppClient(): ApiClient {
@@ -5798,16 +6038,20 @@ function rememberBittensorWalletSnapshot(wallet: BittensorWalletSnapshot): void 
     if (!firstKey) break;
     walletSnapshotBaselines.delete(firstKey);
   }
+  rememberBittensorWalletTimelineSnapshot(wallet);
 }
 
 export function clearBittensorWalletSnapshotBaseline(ss58Address: string): BittensorWalletBaselineClearReport {
   const baseline = walletSnapshotBaselines.get(ss58Address) ?? null;
-  const cleared = walletSnapshotBaselines.delete(ss58Address);
+  const timeline = clearBittensorWalletTimeline(ss58Address);
+  const cleared = walletSnapshotBaselines.delete(ss58Address) || timeline.cleared > 0;
+  const previousUpdatedAt = baseline?.updatedAt ?? timeline.previousUpdatedAt ?? null;
   return {
     kind: "wallet_baseline_clear",
     ss58Address,
     cleared,
-    previousUpdatedAt: baseline?.updatedAt ?? null,
+    previousUpdatedAt,
+    persistentSnapshotsCleared: timeline.cleared,
     updatedAt: nowIso(),
     summary: cleared
       ? `Cleared the public wallet baseline for ${shortSs58(ss58Address)}.`
@@ -5820,7 +6064,7 @@ export function clearBittensorWalletSnapshotBaseline(ss58Address: string): Bitte
 }
 
 function buildBittensorWalletChangeReport(current: BittensorWalletSnapshot): BittensorWalletChangeReport {
-  const baseline = walletSnapshotBaselines.get(current.ss58Address) ?? null;
+  const baseline = walletSnapshotBaselines.get(current.ss58Address) ?? latestBittensorWalletTimelineBaseline(current.ss58Address);
   const currentUpdatedAt = nowIso();
   const previous = baseline?.wallet ?? null;
   const previousStakeTotal = previous ? walletStakeTotal(previous) : null;
@@ -5955,6 +6199,7 @@ function buildBittensorWalletBaselineClearCard(report: BittensorWalletBaselineCl
     items: [
       cardItem("Baseline removed", report.cleared ? "Yes" : "No stored baseline", report.cleared ? "default" : "warning"),
       cardItem("Previous baseline", report.previousUpdatedAt ?? "None", report.previousUpdatedAt ? "default" : "muted"),
+      cardItem("Persisted snapshots cleared", report.persistentSnapshotsCleared),
       cardItem("Updated", report.updatedAt, "muted"),
       cardItem("Data class", "Public watch-only wallet snapshot"),
       cardItem("Next comparison", "Creates a fresh baseline on the next wallet read"),
