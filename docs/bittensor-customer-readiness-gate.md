@@ -85,3 +85,21 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
 ```
 
 The evidence bundle refuses secret-shaped JSON fields such as seed, mnemonic, private key, API key, token, password, keyfile, SURI, or wallet export. It is intended for operator/customer-readiness handoff, not for transaction signing or real subnet service execution.
+
+## Adapter Canary Evidence
+
+When a customer demo includes direct subnet adapter execution, include the adapter canary gate in the evidence bundle:
+
+```bash
+node scripts/bittensor-customer-evidence-bundle.mjs \
+  --bittensor-live-qa /tmp/bittensor-live-qa.json \
+  --agent-control-live-qa /tmp/agent-control-live-qa.json \
+  --ci /tmp/github-ci.json \
+  --readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md \
+  --adapter-canary /tmp/bittensor-adapter-canary-gate.json \
+  --require-adapter-canary \
+  --output /tmp/matterhorn-bittensor-customer-evidence.md \
+  --strict
+```
+
+Keep this optional for normal read-only Bittensor demos. Use `--require-adapter-canary` only when real adapter canary execution is part of the customer session.

@@ -24,9 +24,11 @@ const config = {
   ci: arg("--ci"),
   readinessGate: arg("--readiness-gate"),
   walletTimeline: arg("--wallet-timeline"),
+  adapterCanary: arg("--adapter-canary"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
+  requireAdapterCanary: flag("--require-adapter-canary"),
   title: arg("--title") || "Matterhorn Work Bittensor Customer Evidence Bundle",
 };
 
@@ -41,6 +43,8 @@ function usage() {
     "  --ci <path>                    JSON containing GitHub check/workflow conclusions.",
     "  --readiness-gate <path>        Markdown output from scripts/bittensor-customer-readiness-gate.mjs.",
     "  --wallet-timeline <path>       Optional public-data wallet timeline status/export JSON.",
+    "  --adapter-canary <path>        Optional JSON from scripts/bittensor-adapter-canary-gate.mjs.",
+    "  --require-adapter-canary       Require adapter canary evidence to be ready.",
     "  --output, -o <path>            Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>           Write machine-readable evidence summary JSON.",
     "  --strict                       Exit nonzero when the bundle is not customer-ready.",
@@ -168,6 +172,21 @@ function readinessGateReady(markdown) {
   return /READY_FOR_TEST_CUSTOMERS|passes this evidence-backed Bittensor customer-readiness gate/i.test(markdown);
 }
 
+function adapterCanarySummary(canary) {
+  if (!canary) return null;
+  const findings = asArray(canary.findings);
+  const failCount = Number(canary.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(canary.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const ready = canary.readyForCanary === true || canary.ready === true || canary.status === "ready";
+  return {
+    ready,
+    netuid: canary.netuid ?? null,
+    serviceAdapter: canary.serviceAdapter || canary.adapter || "",
+    detail: ready ? "Adapter canary gate says ready" : `${failCount} failed, ${warnCount} warnings`,
+    findings: findings.slice(0, 8).map((finding) => `${finding.area || "Finding"}: ${finding.status || "unknown"}`),
+  };
+}
+
 function escapeCell(value) {
   return String(value ?? "")
     .replace(/\r?\n/g, " ")
@@ -200,6 +219,13 @@ function renderMarkdown(summary) {
         ? `${summary.walletTimeline.snapshots} public snapshots; latest ${summary.walletTimeline.latestSnapshotAt || "unknown"}`
         : "No wallet timeline evidence provided",
     ],
+    [
+      "Adapter canary",
+      summary.adapterCanary ? (summary.adapterCanary.ready ? "pass" : "warn") : "warn",
+      summary.adapterCanary
+        ? summary.adapterCanary.detail
+        : config.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided",
+    ],
   ];
   return [
     `# ${config.title}`,
@@ -218,6 +244,7 @@ function renderMarkdown(summary) {
     `- CI evidence: ${basenameOrMissing(config.ci)}`,
     `- Customer readiness gate: ${basenameOrMissing(config.readinessGate)}`,
     `- Wallet timeline: ${basenameOrMissing(config.walletTimeline)}`,
+    `- Adapter canary: ${basenameOrMissing(config.adapterCanary)}`,
     "",
     "## Gate Summary",
     "",
@@ -256,16 +283,20 @@ const bittensor = await readJson(config.bittensorLiveQa, "Bittensor live QA");
 const agentControl = await readJson(config.agentControlLiveQa, "Agent control live QA");
 const ci = await readJson(config.ci, "CI");
 const timeline = await readJson(config.walletTimeline, "Wallet timeline");
+const adapterCanary = await readJson(config.adapterCanary, "Adapter canary");
 const readinessGate = await readText(config.readinessGate);
 
 const ciSummary = summarizeCi(ci);
 const bittensorReady = isReady(bittensor) && summaryValue(bittensor, "fail") === 0;
 const agentReady = !agentControl || (isReady(agentControl) && summaryValue(agentControl, "fail") === 0);
 const gateReady = readinessGateReady(readinessGate);
+const adapterSummary = adapterCanarySummary(adapterCanary);
+const adapterReady = !config.requireAdapterCanary || adapterSummary?.ready === true;
 const ready = Boolean(
   bittensorReady &&
     agentReady &&
     gateReady &&
+    adapterReady &&
     ciSummary.failed.length === 0 &&
     ciSummary.pending.length === 0 &&
     ciSummary.total > 0,
@@ -294,6 +325,7 @@ const summary = {
     detail: readinessGate ? (gateReady ? "Readiness gate says ready" : "Readiness gate does not say ready") : "No readiness gate Markdown provided",
   },
   walletTimeline: walletTimelineSummary(timeline),
+  adapterCanary: adapterSummary,
 };
 
 const markdown = renderMarkdown(summary);

@@ -16,6 +16,7 @@ try {
   const ci = path.join(tmp, "github-ci.json");
   const gate = path.join(tmp, "readiness.md");
   const timeline = path.join(tmp, "wallet-timeline.json");
+  const adapterCanary = path.join(tmp, "adapter-canary.json");
   const output = path.join(tmp, "bundle.md");
   const jsonOutput = path.join(tmp, "bundle.json");
 
@@ -44,6 +45,13 @@ try {
   );
   await writeFile(gate, "# Gate\n\nResult: READY_FOR_TEST_CUSTOMERS\n");
   await writeFile(timeline, JSON.stringify({ enabled: true, snapshotCount: 2, latestSnapshotAt: "2026-06-15T00:00:00.000Z" }));
+  await writeFile(adapterCanary, JSON.stringify({
+    readyForCanary: true,
+    netuid: 14,
+    serviceAdapter: "data_search",
+    summary: { pass: 6, warn: 1, fail: 0 },
+    findings: [{ area: "Endpoint", status: "pass" }],
+  }));
 
   execFileSync("node", [
     script,
@@ -57,6 +65,9 @@ try {
     gate,
     "--wallet-timeline",
     timeline,
+    "--adapter-canary",
+    adapterCanary,
+    "--require-adapter-canary",
     "--output",
     output,
     "--json-output",
@@ -68,11 +79,13 @@ try {
   assert.match(markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(markdown, /Wallet snapshot/);
   assert.match(markdown, /wallet-timeline\.json/);
+  assert.match(markdown, /adapter-canary\.json/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const summary = JSON.parse(await readFile(jsonOutput, "utf8"));
   assert.equal(summary.ready, true);
   assert.equal(summary.walletTimeline.snapshots, 2);
+  assert.equal(summary.adapterCanary.ready, true);
 
   const bad = path.join(tmp, "bad.json");
   await writeFile(bad, JSON.stringify({ ready: true, seedPhrase: "never" }));
