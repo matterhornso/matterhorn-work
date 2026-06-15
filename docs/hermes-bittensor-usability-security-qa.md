@@ -203,14 +203,16 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
   --adapter-canary /tmp/bittensor-adapter-canary-gate.json \
   --readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json \
   --receipt-check /tmp/bittensor-receipt-check.json \
+  --watch-autopilot-scheduler /tmp/bittensor-watch-autopilot-scheduler-summary.json \
   --require-adapter-canary \
   --require-readonly-adapter-canary \
   --require-receipt-check \
+  --require-watch-autopilot-scheduler \
   --output /tmp/matterhorn-bittensor-customer-evidence.md \
   --strict
 ```
 
-Keep the adapter and receipt `--require-*` flags off for normal read-only Bittensor demos that do not include a real subnet adapter canary or externally signed receipt.
+Keep the adapter, receipt, and scheduled-watch `--require-*` flags off for normal read-only Bittensor demos that do not include a real subnet adapter canary, externally signed receipt, or overnight monitoring evidence.
 
 ## Security Audit Checklist
 

@@ -28,12 +28,14 @@ const config = {
   adapterCanary: arg("--adapter-canary"),
   readonlyAdapterCanary: arg("--readonly-adapter-canary"),
   receiptCheck: arg("--receipt-check"),
+  watchAutopilotScheduler: arg("--watch-autopilot-scheduler"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireAdapterCanary: flag("--require-adapter-canary"),
   requireReadonlyAdapterCanary: flag("--require-readonly-adapter-canary"),
   requireReceiptCheck: flag("--require-receipt-check"),
+  requireWatchAutopilotScheduler: flag("--require-watch-autopilot-scheduler"),
   title: arg("--title") || "Matterhorn Work Bittensor Customer Evidence Bundle",
 };
 
@@ -51,9 +53,11 @@ function usage() {
     "  --adapter-canary <path>        Optional JSON from scripts/bittensor-adapter-canary-gate.mjs.",
     "  --readonly-adapter-canary <path> Optional JSON from scripts/bittensor-adapter-readonly-canary.mjs.",
     "  --receipt-check <path>         Optional JSON from scripts/bittensor-receipt-check.mjs.",
+    "  --watch-autopilot-scheduler <path> Optional JSON summary from scripts/bittensor-watch-autopilot-scheduler.mjs.",
     "  --require-adapter-canary       Require adapter canary evidence to be ready.",
     "  --require-readonly-adapter-canary Require read-only adapter canary evidence to be ready.",
     "  --require-receipt-check        Require post-signer receipt check evidence to be accepted.",
+    "  --require-watch-autopilot-scheduler Require scheduled watch autopilot evidence to be successful.",
     "  --output, -o <path>            Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>           Write machine-readable evidence summary JSON.",
     "  --strict                       Exit nonzero when the bundle is not customer-ready.",
@@ -237,6 +241,30 @@ function receiptCheckSummary(receiptCheck) {
   };
 }
 
+function watchAutopilotSchedulerSummary(scheduler) {
+  if (!scheduler) return null;
+  const failedChecks = Number(scheduler.failedChecks ?? scheduler.summary?.failedChecks ?? 0);
+  const iterations = Number(scheduler.iterations ?? scheduler.runs?.length ?? 0);
+  const totalAlerts = Number(scheduler.totalAlerts ?? scheduler.summary?.totalAlerts ?? 0);
+  const totalEvaluations = Number(scheduler.totalEvaluations ?? scheduler.summary?.totalEvaluations ?? 0);
+  const ok = scheduler.ok === true || scheduler.ready === true || scheduler.status === "ready";
+  const ready = ok && failedChecks === 0;
+  const latestCheckedAt = scheduler.latest?.checkedAt || scheduler.latestCheckedAt || "";
+  return {
+    ready,
+    iterations,
+    totalAlerts,
+    totalEvaluations,
+    failedChecks,
+    latestCheckedAt,
+    detail: ready
+      ? `${iterations} scheduled checks, ${totalAlerts} alerts, ${totalEvaluations} evaluations`
+      : `${failedChecks} failed checks across ${iterations} scheduled checks`,
+    safety: scheduler.safety || {},
+    source: scheduler.source || "matterhorn_bittensor_watch_autopilot_scheduler",
+  };
+}
+
 function escapeCell(value) {
   return String(value ?? "")
     .replace(/\r?\n/g, " ")
@@ -290,6 +318,13 @@ function renderMarkdown(summary) {
         ? summary.receiptCheck.detail
         : config.requireReceiptCheck ? "Receipt check evidence required but missing" : "No post-signer receipt check evidence provided",
     ],
+    [
+      "Scheduled watch autopilot",
+      summary.watchAutopilotScheduler ? (summary.watchAutopilotScheduler.ready ? "pass" : "warn") : "warn",
+      summary.watchAutopilotScheduler
+        ? summary.watchAutopilotScheduler.detail
+        : config.requireWatchAutopilotScheduler ? "Scheduled watch autopilot evidence required but missing" : "No scheduled watch autopilot evidence provided",
+    ],
   ];
   return [
     `# ${config.title}`,
@@ -311,6 +346,7 @@ function renderMarkdown(summary) {
     `- Adapter canary: ${basenameOrMissing(config.adapterCanary)}`,
     `- Read-only adapter canary: ${basenameOrMissing(config.readonlyAdapterCanary)}`,
     `- Receipt check: ${basenameOrMissing(config.receiptCheck)}`,
+    `- Scheduled watch autopilot: ${basenameOrMissing(config.watchAutopilotScheduler)}`,
     "",
     "## Gate Summary",
     "",
@@ -337,6 +373,7 @@ function renderMarkdown(summary) {
     "- Re-run the full readiness gate with `--require-wallet --require-ci` for any customer session involving wallet/stake preview.",
     "- Do not enable real subnet service adapters until the adapter canary has an allowlisted endpoint, timeout, hash confirmation, and rollback note.",
     "- After any external signer return, attach a receipt check and run a public wallet diff follow-up before calling the customer flow complete.",
+    "- If monitoring ran while the operator was away, attach the scheduled watch autopilot summary and inspect any safe chat prompts before the demo.",
     "",
   ].join("\n");
 }
@@ -353,6 +390,7 @@ const timeline = await readJson(config.walletTimeline, "Wallet timeline");
 const adapterCanary = await readJson(config.adapterCanary, "Adapter canary");
 const readonlyAdapterCanary = await readJson(config.readonlyAdapterCanary, "Read-only adapter canary");
 const receiptCheck = await readJson(config.receiptCheck, "Receipt check");
+const watchAutopilotScheduler = await readJson(config.watchAutopilotScheduler, "Scheduled watch autopilot");
 const readinessGate = await readText(config.readinessGate);
 
 const ciSummary = summarizeCi(ci);
@@ -362,9 +400,11 @@ const gateReady = readinessGateReady(readinessGate);
 const adapterSummary = adapterCanarySummary(adapterCanary);
 const readonlyAdapterSummary = readonlyAdapterCanarySummary(readonlyAdapterCanary);
 const receiptSummary = receiptCheckSummary(receiptCheck);
+const watchAutopilotSchedulerSummaryValue = watchAutopilotSchedulerSummary(watchAutopilotScheduler);
 const adapterReady = !config.requireAdapterCanary || adapterSummary?.ready === true;
 const readonlyAdapterReady = !config.requireReadonlyAdapterCanary || readonlyAdapterSummary?.ready === true;
 const receiptReady = !config.requireReceiptCheck || receiptSummary?.ready === true;
+const watchAutopilotSchedulerReady = !config.requireWatchAutopilotScheduler || watchAutopilotSchedulerSummaryValue?.ready === true;
 const ready = Boolean(
   bittensorReady &&
     agentReady &&
@@ -372,6 +412,7 @@ const ready = Boolean(
     adapterReady &&
     readonlyAdapterReady &&
     receiptReady &&
+    watchAutopilotSchedulerReady &&
     ciSummary.failed.length === 0 &&
     ciSummary.pending.length === 0 &&
     ciSummary.total > 0,
@@ -403,6 +444,7 @@ const summary = {
   adapterCanary: adapterSummary,
   readonlyAdapterCanary: readonlyAdapterSummary,
   receiptCheck: receiptSummary,
+  watchAutopilotScheduler: watchAutopilotSchedulerSummaryValue,
 };
 
 const markdown = renderMarkdown(summary);
