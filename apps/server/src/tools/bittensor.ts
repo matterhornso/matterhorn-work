@@ -8936,6 +8936,34 @@ export async function auditBittensorReadiness(): Promise<BittensorReadinessRepor
   }
 
   try {
+    const handoff = await buildBittensorSubnetAdapterOperatorHandoff({
+      adapter: "data_search",
+      netuid: 18,
+      task: "Matterhorn adapter readiness handoff fixture.",
+      limit: 1,
+    });
+    checks.push({
+      id: "subnet_adapter_operator_handoff",
+      label: "Subnet adapter operator handoff",
+      status: handoff.status === "blocked" ? "warning" : "pass",
+      summary: handoff.status === "mock_rehearsal_ready"
+        ? "Adapter operator handoff can summarize evidence, conformance, and dry-run gates for mock rehearsal."
+        : handoff.status === "manual_review_required"
+          ? "Adapter operator handoff is available for manual real-canary review, but does not authorize execution."
+          : "Adapter operator handoff is available but blocked or incomplete until adapter evidence, conformance, and dry-run gates are resolved.",
+      details: {
+        status: handoff.status,
+        evidenceReviewStatus: handoff.evidenceReview.status,
+        conformanceStatus: handoff.conformanceExport.status,
+        dryRunStatus: handoff.dryRunExport.status,
+        warningCount: handoff.warnings.length,
+      },
+    });
+  } catch (err) {
+    checks.push({ id: "subnet_adapter_operator_handoff", label: "Subnet adapter operator handoff", status: "fail", summary: err instanceof Error ? err.message : "Adapter operator handoff check failed." });
+  }
+
+  try {
     const wallet = await bittensorProvider.getWallet("invalid-ss58");
     checks.push({
       id: "wallet_safety",
