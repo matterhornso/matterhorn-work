@@ -2282,6 +2282,7 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.execution).toBe("answered");
       expect(result.responseText).toContain("markdown export");
       expect(result.cards[0]?.kind).toBe("adapter_marketplace");
+      expect(result.cards[0]?.actions?.some((action) => action.label === "Copy markdown" && action.kind === "copy_payload")).toBe(true);
       const marketplaceExport = result.data.marketplaceExport as { kind?: string; markdown?: string } | undefined;
       expect(marketplaceExport?.kind).toBe("bittensor_subnet_adapter_marketplace_export");
       expect(marketplaceExport?.markdown).toContain("Bittensor Subnet Adapter Marketplace Export");
