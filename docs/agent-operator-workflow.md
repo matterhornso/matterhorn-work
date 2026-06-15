@@ -275,7 +275,52 @@ Use the Matterhorn Work MCP server.
 14. Never request or transmit seed phrases, mnemonics, private keys, wallet exports, or host tokens.
 ```
 
-## 7. Approval Loop
+## 7. Bittensor Adapter Canary Evidence Loop
+
+Use this only for subnet service adapter review. It does not enable direct subnet execution by itself.
+
+For ordinary Bittensor questions, keep using `bittensor_chat` first. For adapter launch review, use the lower-level MCP tools in this order:
+
+```json
+{ "tool": "bittensor_readiness_audit", "arguments": {} }
+```
+
+```json
+{ "tool": "bittensor_build_subnet_adapter_operator_handoff", "arguments": { "adapter": "data_search", "netuid": 14, "task": "dry run task" } }
+```
+
+```json
+{ "tool": "bittensor_dry_run_subnet_adapters", "arguments": { "netuid": 14, "task": "dry run task" } }
+```
+
+When a dry run or reviewed canary returns an adapter result envelope, build the sanitized outcome report:
+
+```json
+{
+  "tool": "bittensor_build_subnet_adapter_canary_outcome_report",
+  "arguments": {
+    "adapter": "data_search",
+    "netuid": 14,
+    "expectedRequestSha256": "<full-preview-request-sha256-kept-in-operator-env>",
+    "result": {
+      "ok": true,
+      "mode": "mock",
+      "adapterKind": "data_search",
+      "netuid": 14,
+      "requestSha256": "<same-full-preview-request-sha256-kept-in-operator-env>",
+      "message": "mock canary result",
+      "output": { "summary": "bounded result summary" },
+      "warnings": []
+    }
+  }
+}
+```
+
+The returned report is safe to paste into customer/security notes because it keeps only hash prefixes and booleans. Do not paste raw task text, endpoint URLs, credentials, host tokens, approval env values, seed phrases, mnemonics, private keys, wallet exports, or full request hashes into tickets or docs.
+
+If `requestHash.matches` is false, or `resultValidation.status` is `fail`, stop the canary. Fix the preview-confirm-invoke loop before any further adapter promotion.
+
+## 8. Approval Loop
 
 Some writes or host actions can require approval. A trusted operator can inspect approvals:
 
@@ -303,7 +348,7 @@ matterhorn-work approvals reply "<approval-id>" \
   --host-token "$MATTERHORN_WORK_HOST_TOKEN"
 ```
 
-## 8. Safety Checklist
+## 9. Safety Checklist
 
 - Use `matterhorn_doctor` or `matterhorn-work doctor` before handing off to an agent.
 - Prefer read-only file sessions until the user explicitly asks for edits.
