@@ -953,6 +953,12 @@ Expected conformance export behavior:
 
 Before deep-diving one adapter, ask for the read-only adapter marketplace. This is the operator-friendly status surface for every direct subnet service path Matterhorn knows about:
 
+Chat:
+
+```text
+Which Bittensor subnet service adapters can Matterhorn call directly?
+```
+
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/marketplace?adapter=data_search&limit=10" \
   | jq '.marketplace.summary'
