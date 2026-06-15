@@ -591,9 +591,18 @@ try {
       },
       readinessGate: "READY_FOR_TEST_CUSTOMERS",
       walletTimeline: { enabled: true, snapshotCount: 2 },
+      adapterCanary: {
+        readyForCanary: true,
+        netuid: 14,
+        serviceAdapter: "data_search",
+        summary: { pass: 6, warn: 1, fail: 0 },
+        findings: [{ area: "Endpoint", status: "pass" }],
+      },
+      requireAdapterCanary: true,
     },
   }));
   assert.equal(customerEvidenceBundle.ready, true);
+  assert.equal(customerEvidenceBundle.summary.adapterCanary.ready, true);
   assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
   assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);

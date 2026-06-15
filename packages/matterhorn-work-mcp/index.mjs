@@ -403,6 +403,8 @@ const tools = [
           description: "Readiness gate Markdown or a structured readiness result.",
         },
         walletTimeline: { type: "object", description: "Optional public wallet timeline status or export summary." },
+        adapterCanary: { type: "object", description: "Optional JSON output from the Bittensor adapter canary gate." },
+        requireAdapterCanary: { type: "boolean", description: "Require adapter canary evidence to be ready for real-adapter customer demos." },
         title: { type: "string" },
       },
       required: ["bittensorLiveQa", "ci", "readinessGate"],
@@ -1268,6 +1270,22 @@ function customerEvidenceReadinessReady(value) {
   return customerEvidenceIsReady(value) || value.result === "READY_FOR_TEST_CUSTOMERS";
 }
 
+
+function customerEvidenceAdapterCanarySummary(canary) {
+  if (!canary || typeof canary !== "object") return null;
+  const findings = customerEvidenceArray(canary.findings);
+  const failCount = Number(canary.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(canary.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const ready = canary.readyForCanary === true || canary.ready === true || canary.status === "ready";
+  return {
+    ready,
+    netuid: canary.netuid ?? null,
+    serviceAdapter: canary.serviceAdapter || canary.adapter || "",
+    detail: ready ? "Adapter canary gate says ready" : failCount + " failed, " + warnCount + " warnings",
+    findings: findings.slice(0, 8).map((finding) => String(finding.area || "Finding") + ": " + String(finding.status || "unknown")),
+  };
+}
+
 function customerEvidenceWalletTimelineSummary(timeline) {
   if (!timeline || typeof timeline !== "object") return null;
   return {
@@ -1288,6 +1306,7 @@ function renderCustomerEvidenceMarkdown(summary, title) {
     ["Customer readiness gate", summary.readinessGate.ready ? "pass" : "warn", summary.readinessGate.detail],
     ["CI evidence", summary.ci.failed.length === 0 && summary.ci.pending.length === 0 && summary.ci.total > 0 ? "pass" : "warn", summary.ci.passed.length + " passed, " + summary.ci.failed.length + " failed, " + summary.ci.pending.length + " pending"],
     ["Wallet timeline", summary.walletTimeline ? "pass" : "warn", summary.walletTimeline ? summary.walletTimeline.snapshots + " public snapshots" : "No wallet timeline evidence provided"],
+    ["Adapter canary", summary.adapterCanary ? (summary.adapterCanary.ready ? "pass" : "warn") : "warn", summary.adapterCanary ? summary.adapterCanary.detail : summary.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided"],
   ];
   return [
     "# " + title,
@@ -1326,9 +1345,12 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
   const bittensorReady = customerEvidenceIsReady(bittensor) && customerEvidenceSummaryValue(bittensor, "fail") === 0;
   const agentReady = !agentControl || (customerEvidenceIsReady(agentControl) && customerEvidenceSummaryValue(agentControl, "fail") === 0);
   const gateReady = customerEvidenceReadinessReady(readinessGate);
+  const adapterCanary = customerEvidenceAdapterCanarySummary(args.adapterCanary);
+  const adapterReady = args.requireAdapterCanary === true ? adapterCanary?.ready === true : true;
   const summary = {
     generatedAt: new Date().toISOString(),
-    ready: Boolean(bittensorReady && agentReady && gateReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
+    ready: Boolean(bittensorReady && agentReady && gateReady && adapterReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
+    requireAdapterCanary: args.requireAdapterCanary === true,
     bittensor: {
       ready: bittensorReady,
       detail: bittensor ? customerEvidenceSummaryValue(bittensor, "pass") + " passed, " + customerEvidenceSummaryValue(bittensor, "fail") + " failed, " + customerEvidenceSummaryValue(bittensor, "skip") + " skipped" : "Missing Bittensor evidence",
@@ -1345,6 +1367,7 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
       detail: gateReady ? "Readiness gate says ready" : "Readiness gate does not say ready",
     },
     walletTimeline: customerEvidenceWalletTimelineSummary(args.walletTimeline),
+    adapterCanary,
   };
   return {
     ok: true,
