@@ -88,6 +88,7 @@ import {
   listBittensorCapabilities,
   listBittensorSubnetAdapterMarketplace,
   listBittensorWatches,
+  planBittensorSubnetAdapterRoadmap,
   planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
   probeBittensorSubnetAdapterConformance,
@@ -4146,6 +4147,19 @@ function createRoutes(
       limit,
     });
     return jsonResponse({ success: true, marketplaceExport });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/roadmap", "client", async (ctx) => {
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const roadmap = await planBittensorSubnetAdapterRoadmap({
+      goal: ctx.url.searchParams.get("goal") ?? ctx.url.searchParams.get("query"),
+      limit,
+    });
+    return jsonResponse({ success: true, roadmap });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/spec", "client", async () => {

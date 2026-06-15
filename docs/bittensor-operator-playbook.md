@@ -1002,6 +1002,28 @@ Expected marketplace behavior:
 - returns an `adapter_marketplace` card with a safe continuation prompt;
 - never invokes a subnet service, never returns credential values, and never authorizes real subnet execution.
 
+To decide what adapter work should happen next, ask for a roadmap:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/roadmap?goal=data%20search&limit=3" \
+  | jq '.roadmap.recommendations'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_plan_subnet_adapter_roadmap({
+  "goal": "data search",
+  "limit": 3
+})
+```
+
+Expected roadmap behavior:
+
+- ranks adapter categories using marketplace status and an optional goal;
+- returns candidate netuids, priority, rationale, next prompt, and safety warnings;
+- remains planning evidence only: it does not configure endpoints, invoke adapters, approve requests, or sign/broadcast anything.
+
 When an agent or operator needs one compact packet instead of separate evidence, conformance, and dry-run exports, build the operator handoff. It summarizes the evidence review, conformance export, and mock dry-run export into one redacted go/no-go artifact:
 
 Chat:
