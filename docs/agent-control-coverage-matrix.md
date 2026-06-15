@@ -101,3 +101,8 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_adapter_canary_gate` inspects subnet adapter capability evidence before real adapter canaries.
 - It checks netuid, adapter declaration, configuration, endpoint policy, host allowlist, mock gating, auth/cost warnings, and forbidden credential/signed-output fields.
 - It does not call adapter services, sign, submit, broadcast, move stake, or transfer TAO.
+
+## Bittensor Adapter Canary Evidence Through MCP
+
+- `matterhorn_bittensor_customer_evidence_bundle` accepts optional `adapterCanary` evidence and `requireAdapterCanary` for customer demos involving real subnet adapter canaries.
+- This mirrors the CLI evidence bundle and keeps adapter-canary readiness visible to Codex, Claude Code, Claude Desktop, and Cursor operators.
