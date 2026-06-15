@@ -17,6 +17,7 @@ import {
   buildBittensorAdapterProviderRegistryCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
+  buildBittensorAdapterCanaryOutcomeReportCard,
   buildBittensorAdapterManifestValidationCard,
   buildBittensorAdapterResultValidationCard,
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
@@ -53,6 +54,7 @@ import {
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
+  buildBittensorSubnetAdapterCanaryOutcomeReport,
   buildBittensorSubnetAdapterConformanceExport,
   buildBittensorSubnetAdapterOperatorHandoff,
   buildBittensorSubnetAdapterPreflightPacket,
@@ -2539,6 +2541,69 @@ describe("executeBittensorChatWorkflow", () => {
         }
       }
     });
+  });
+
+  test("builds sanitized canary outcome reports from adapter results", () => {
+    const expected = "a".repeat(64);
+    const report = buildBittensorSubnetAdapterCanaryOutcomeReport({
+      adapter: "data_search",
+      netuid: 77,
+      expectedRequestSha256: expected,
+      result: {
+        ok: true,
+        mode: "mock",
+        adapterKind: "data_search",
+        netuid: 77,
+        requestSha256: expected,
+        message: "Mock canary result.",
+        output: { summary: "mock output" },
+        warnings: [],
+        usage: { units: 1, label: "mock" },
+        costEstimate: { amount: 0, currency: "TAO", model: "free_read" },
+      },
+    });
+    expect(report.kind).toBe("bittensor_subnet_adapter_canary_outcome_report");
+    expect(report.status).toBe("warning");
+    expect(report.requestHash.matches).toBe(true);
+    expect(report.requestHash.expectedPrefix).toBe("a".repeat(12));
+    expect(report.resultValidation.status).toBe("pass");
+    expect(report.summary.fullHashRedacted).toBe(true);
+    expect(report.markdown).toContain("Full hash redacted: yes");
+    expect(report.markdown).not.toContain(expected);
+    const card = buildBittensorAdapterCanaryOutcomeReportCard(report);
+    expect(card.kind).toBe("adapter_canary_outcome_report");
+    expect(card.items.find((item) => item.label === "Request hash")?.value).toBe("Matched");
+    expect(JSON.stringify({ report, card })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+  });
+
+  test("fails canary outcome reports when request hashes diverge", () => {
+    const report = buildBittensorSubnetAdapterCanaryOutcomeReport({
+      adapter: "data_search",
+      netuid: 77,
+      expectedRequestSha256: "b".repeat(64),
+      result: {
+        ok: true,
+        mode: "mock",
+        adapterKind: "data_search",
+        netuid: 77,
+        requestSha256: "a".repeat(64),
+        message: "Mock canary result.",
+        output: { summary: "mock output" },
+        warnings: [],
+      },
+    });
+    expect(report.status).toBe("fail");
+    expect(report.requestHash.matches).toBe(false);
+    expect(report.warnings.join(" ")).toContain("does not match");
+    expect(report.markdown).not.toContain("a".repeat(64));
+    expect(report.markdown).not.toContain("b".repeat(64));
+  });
+
+  test("routes canary outcome report prompts through Bittensor chat", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "Build a Bittensor adapter canary outcome report for data search subnet 77." });
+    expect(result.execution).toBe("answered");
+    expect(result.cards[0]?.kind).toBe("adapter_canary_outcome_report");
+    expect((result.data.canaryOutcome as { kind?: string })?.kind).toBe("bittensor_subnet_adapter_canary_outcome_report");
   });
 
   test("adds provider registry evidence to canary operator packets", async () => {
