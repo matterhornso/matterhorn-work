@@ -233,3 +233,23 @@ Current support is mock-execution-ready and real-canary-gated:
 - canary packets and operator handoffs include a redacted provider-registry reference summary so reviewers can see whether matching provider evidence exists without exposing endpoint URLs or credentials.
 
 The next safe step is to run one reviewed real-adapter canary against a known provider endpoint from the provider registry, collect evidence, audit the gate afterward, and keep general direct subnet execution disabled until the canary report is accepted.
+
+## Canary Outcome Reports
+
+Before Matterhorn Work promotes any direct subnet service adapter beyond mock or manually reviewed canary use, operators need a sanitized outcome artifact. The outcome report is intentionally separate from the approval packet:
+
+- approval packet: prepares a short-lived reviewed request hash for a canary window.
+- outcome report: records what the preview-confirm-invoke loop produced after the canary or mock rehearsal.
+
+The report must include:
+
+- adapter kind and netuid.
+- invocation mode (mock, http, https, or unknown).
+- request-hash continuity as prefixes plus a match boolean, never the full hash.
+- adapter result validation status.
+- canary gate status.
+- provider-registry evidence counts and provider IDs only where already redacted by the registry reference.
+- warnings and next actions.
+
+The report must not include full request hashes, endpoint URLs, credentials, task text, seed phrases, private keys, mnemonics, wallet exports, approval env values, host tokens, or raw adapter payloads. Use it as the copy-pasteable customer/security review artifact; keep raw canary material inside the reviewed operator environment only.
+

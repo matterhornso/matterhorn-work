@@ -1110,6 +1110,7 @@ export type BittensorChatCardKind =
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
+  | "adapter_canary_outcome_report"
   | "adapter_canary_gate"
   | "adapter_provider_registry"
   | "adapter_manifest_validation"
@@ -1512,6 +1513,38 @@ export interface BittensorSubnetAdapterCanaryPacketExport {
   status: BittensorSubnetAdapterCanaryOperatorPacket["status"];
   markdown: string;
   warnings: string[];
+}
+
+export interface BittensorSubnetAdapterCanaryOutcomeReport {
+  kind: "bittensor_subnet_adapter_canary_outcome_report";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  status: "blocked" | "pass" | "warning" | "fail";
+  mode: "mock" | "http" | "https" | "unknown";
+  supported: boolean;
+  requestHash: {
+    expectedPrefix: string | null;
+    actualPrefix: string | null;
+    matches: boolean;
+    expectedPresent: boolean;
+    actualPresent: boolean;
+  };
+  resultValidation: BittensorSubnetAdapterResultValidation;
+  canaryGate: BittensorSubnetAdapterCanaryGateAudit;
+  providerRegistry: BittensorSubnetAdapterProviderRegistryReference;
+  summary: {
+    validationStatus: BittensorSubnetAdapterResultValidation["status"];
+    canaryGateStatus: BittensorSubnetAdapterCanaryGateAudit["status"];
+    matchingReviewedProviderCount: number;
+    warningCount: number;
+    fullHashRedacted: true;
+  };
+  markdown: string;
+  warnings: string[];
+  nextActions: string[];
 }
 
 export interface BittensorSubnetAdapterCanaryGateAudit {
@@ -3633,6 +3666,157 @@ export async function buildBittensorSubnetAdapterCanaryPacketExport(input: {
     status: packet.status,
     markdown: renderBittensorSubnetAdapterCanaryPacketMarkdown(packet),
     warnings: uniqueWarnings(packet.warnings, ["Full approval env values are intentionally omitted from this export."]),
+  };
+}
+
+function normalizedCanaryOutcomeMode(value: string | null): BittensorSubnetAdapterCanaryOutcomeReport["mode"] {
+  if (value === "mock" || value === "http" || value === "https") return value;
+  return "unknown";
+}
+
+function requestHashPrefix(value: string | null): string | null {
+  return value && isSha256Hex(value) ? value.slice(0, 12).toLowerCase() : null;
+}
+
+function requestHashFromResult(value: unknown): string | null {
+  const record = asRecord(value);
+  return firstString(record, ["requestSha256", "request_sha256", "previewRequestSha256", "preview_request_sha256"]);
+}
+
+function renderBittensorSubnetAdapterCanaryOutcomeMarkdown(report: Omit<BittensorSubnetAdapterCanaryOutcomeReport, "markdown">): string {
+  return [
+    "# Bittensor Adapter Canary Outcome Report",
+    "",
+    `Generated: ${sanitizeEvidenceMarkdownText(report.generatedAt)}`,
+    `Adapter: ${sanitizeEvidenceMarkdownText(report.requested.adapter ?? "not specified")}`,
+    `Netuid: ${sanitizeEvidenceMarkdownText(report.requested.netuid ?? "not specified")}`,
+    `Status: ${sanitizeEvidenceMarkdownText(report.status)}`,
+    `Mode: ${sanitizeEvidenceMarkdownText(report.mode)}`,
+    `Supported: ${report.supported ? "yes" : "no"}`,
+    "",
+    "## Request Hash",
+    markdownBullet("Expected prefix: " + (report.requestHash.expectedPrefix ? `${report.requestHash.expectedPrefix}...` : "missing")),
+    markdownBullet("Actual prefix: " + (report.requestHash.actualPrefix ? `${report.requestHash.actualPrefix}...` : "missing")),
+    markdownBullet("Match: " + (report.requestHash.matches ? "yes" : "no")),
+    markdownBullet("Full hash redacted: yes"),
+    "",
+    "## Validation",
+    markdownBullet("Result validation: " + report.resultValidation.status),
+    markdownBullet("Canary gate: " + report.canaryGate.status),
+    markdownBullet("Matching reviewed providers: " + report.providerRegistry.matchingReadyProviderCount),
+    "",
+    "## Warnings",
+    ...(report.warnings.length ? report.warnings.map(markdownBullet) : ["- None"]),
+    "",
+    "## Next Actions",
+    ...(report.nextActions.length ? report.nextActions.map(markdownBullet) : ["- None"]),
+    "",
+    "## Safety Boundary",
+    "- This report is a sanitized outcome artifact. It does not authorize future subnet service execution.",
+    "- Full request hashes, endpoint URLs, credentials, task text, wallet secrets, and approval env values are intentionally omitted.",
+    "- Archive the raw canary material only in the reviewed operator environment.",
+    "",
+  ].join("\n");
+}
+
+export function buildBittensorSubnetAdapterCanaryOutcomeReport(input: {
+  invocation?: BittensorSubnetInvocation | null;
+  result?: unknown;
+  expectedRequestSha256?: string | null;
+  adapter?: string | null;
+  netuid?: number | null;
+} = {}): BittensorSubnetAdapterCanaryOutcomeReport {
+  const adapterResult = input.result ?? (input.invocation ? adapterRunResultFromInvocation(input.invocation) : null);
+  const resultRecord = asRecord(adapterResult);
+  const actualRequestSha256 = requestHashFromResult(adapterResult);
+  const expectedRequestSha256 = input.expectedRequestSha256 && isSha256Hex(input.expectedRequestSha256)
+    ? input.expectedRequestSha256.toLowerCase()
+    : null;
+  const actualHashValid = Boolean(actualRequestSha256 && isSha256Hex(actualRequestSha256));
+  const expectedHashValid = Boolean(expectedRequestSha256);
+  const requestHashMatches = Boolean(expectedHashValid && actualHashValid && expectedRequestSha256 === actualRequestSha256?.toLowerCase());
+  const adapter = normalizeServiceAdapter(
+    input.adapter ?? input.invocation?.adapter ?? firstString(resultRecord, ["adapterKind", "adapter", "serviceAdapter"]),
+    "unsupported",
+  );
+  const netuid = input.netuid ?? input.invocation?.netuid ?? firstNumber(resultRecord, ["netuid"]);
+  const validation = validateBittensorSubnetAdapterResult(adapterResult);
+  const canaryGate = auditBittensorSubnetAdapterCanaryGate();
+  const providerRegistry = summarizeBittensorSubnetAdapterProviderRegistry({ adapter, netuid });
+  const supported = Boolean(input.invocation?.supported ?? (Object.keys(resultRecord).length > 0 && resultRecord["ok"] !== false));
+  const mode = normalizedCanaryOutcomeMode(firstString(resultRecord, ["mode", "adapterMode", "adapter_mode"]));
+  const hasResult = Object.keys(resultRecord).length > 0;
+  const hashMismatch = Boolean(expectedHashValid && actualHashValid && !requestHashMatches);
+  const status: BittensorSubnetAdapterCanaryOutcomeReport["status"] = !hasResult
+    ? "blocked"
+    : validation.status === "fail" || hashMismatch || !supported
+      ? "fail"
+      : validation.status === "warning" || !expectedHashValid || !actualHashValid || canaryGate.status !== "canary_armed"
+        ? "warning"
+        : "pass";
+  const warnings = uniqueWarnings(
+    validation.warnings,
+    validation.errors,
+    canaryGate.warnings,
+    canaryGate.blockers,
+    providerRegistry.warnings,
+    !hasResult ? ["No adapter result was supplied; run a preview-confirm-invoke loop before archiving a canary outcome."] : [],
+    !expectedHashValid ? ["Expected reviewed request SHA-256 was missing or malformed; the report cannot prove request continuity."] : [],
+    !actualHashValid ? ["Adapter result did not include a valid requestSha256 value."] : [],
+    hashMismatch ? ["Canary outcome request SHA-256 does not match the reviewed preview request SHA-256."] : [],
+    !supported ? ["Adapter invocation did not report a supported successful result."] : [],
+    status === "warning" && canaryGate.status !== "canary_armed" ? ["Canary gate is not armed; treat this as mock or rehearsal evidence only."] : [],
+  );
+  const nextActions = status === "pass"
+    ? [
+      "Archive this sanitized report with the operator canary notes.",
+      "Remove short-lived approvals after the canary window closes.",
+      "Review provider and rollback evidence before promoting the adapter beyond canary.",
+    ]
+    : status === "warning"
+      ? [
+        "Keep this as rehearsal evidence until the canary gate and provider evidence are complete.",
+        "Confirm the exact preview request SHA-256 and adapter result envelope before any real canary.",
+      ]
+      : status === "fail"
+        ? [
+          "Do not promote this adapter outcome.",
+          "Fix request hash, result validation, or invocation failures and rerun the preview-confirm-invoke loop.",
+        ]
+        : [
+          "Run a mock or reviewed canary invocation first.",
+          "Attach the adapter result and expected preview request SHA-256 to build an outcome report.",
+        ];
+  const base = {
+    kind: "bittensor_subnet_adapter_canary_outcome_report" as const,
+    generatedAt: nowIso(),
+    requested: { adapter, netuid },
+    status,
+    mode,
+    supported,
+    requestHash: {
+      expectedPrefix: requestHashPrefix(expectedRequestSha256),
+      actualPrefix: requestHashPrefix(actualRequestSha256),
+      matches: requestHashMatches,
+      expectedPresent: expectedHashValid,
+      actualPresent: actualHashValid,
+    },
+    resultValidation: validation,
+    canaryGate,
+    providerRegistry,
+    summary: {
+      validationStatus: validation.status,
+      canaryGateStatus: canaryGate.status,
+      matchingReviewedProviderCount: providerRegistry.matchingReadyProviderCount,
+      warningCount: warnings.length,
+      fullHashRedacted: true as const,
+    },
+    warnings,
+    nextActions,
+  };
+  return {
+    ...base,
+    markdown: renderBittensorSubnetAdapterCanaryOutcomeMarkdown(base),
   };
 }
 
@@ -5927,6 +6111,11 @@ function isSubnetAdapterCanaryGateQuestion(message: string): boolean {
     /\b(canary gate|canary status|gate audit|runtime gate|acknowledgement|acknowledgment|armed|approval status|safe to invoke)\b/i.test(message);
 }
 
+function isSubnetAdapterCanaryOutcomeQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|real adapter|canary)\b/i.test(message) &&
+    /\b(outcome report|outcome artifact|post[-\s]?canary|canary outcome|canary report|archive outcome|result report)\b/i.test(message);
+}
+
 function isSubnetAdapterProviderRegistryQuestion(message: string): boolean {
   return /\b(adapter|subnet service|service adapter|provider|registry|partner|vendor)\b/i.test(message) &&
     /\b(provider registry|provider review|provider template|provider status|provider evidence|registry template|partner registry|vendor registry)\b/i.test(message);
@@ -6501,6 +6690,23 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [buildBittensorReadinessOperatorCard(operatorReport)],
       data: { readiness: report, operatorReport },
       warnings: uniqueWarnings(warnings, operatorReport.warnings, operatorReport.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterCanaryOutcomeQuestion(message)) {
+    const report = buildBittensorSubnetAdapterCanaryOutcomeReport({
+      adapter: extractSubnetAdapterKindFromMessage(message),
+      netuid: resolveExecutionNetuid(input, plan),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_canary_outcome_report"] },
+      responseText: `Built a ${report.status} Bittensor adapter canary outcome report. This is a sanitized review artifact; it does not invoke or authorize any subnet service.`,
+      cards: [buildBittensorAdapterCanaryOutcomeReportCard(report)],
+      data: { canaryOutcome: report },
+      warnings: uniqueWarnings(warnings, report.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -12002,6 +12208,53 @@ export function buildBittensorAdapterCanaryOperatorPacketCard(packet: BittensorS
     actions,
     warnings: packet.warnings,
     data: { packet },
+  };
+}
+
+export function buildBittensorAdapterCanaryOutcomeReportCard(report: BittensorSubnetAdapterCanaryOutcomeReport): BittensorChatCard {
+  const tone = report.status === "pass"
+    ? "good"
+    : report.status === "warning"
+      ? "warning"
+      : "danger";
+  return {
+    kind: "adapter_canary_outcome_report",
+    title: "Bittensor adapter canary outcome",
+    subtitle: titleCase(report.status),
+    summary: report.status === "blocked"
+      ? "No adapter result is attached yet. Run a preview-confirm-invoke loop before archiving a canary outcome."
+      : report.status === "fail"
+        ? "The adapter outcome failed request-hash, result-validation, or invocation-success checks."
+        : "Sanitized adapter outcome evidence is ready for review. Full hashes and operator secrets are omitted.",
+    tone,
+    items: [
+      cardItem("Adapter", report.requested.adapter ?? "Any"),
+      cardItem("Netuid", report.requested.netuid ?? "Any", report.requested.netuid === null ? "muted" : "default"),
+      cardItem("Mode", titleCase(report.mode), report.mode === "mock" ? "warning" : "default"),
+      cardItem("Status", titleCase(report.status), report.status === "pass" ? "good" : report.status === "warning" ? "warning" : "danger"),
+      cardItem("Request hash", report.requestHash.matches ? "Matched" : "Not proven", report.requestHash.matches ? "good" : "warning"),
+      cardItem("Expected hash", report.requestHash.expectedPrefix ? `${report.requestHash.expectedPrefix}...` : "Missing", report.requestHash.expectedPrefix ? "muted" : "warning"),
+      cardItem("Actual hash", report.requestHash.actualPrefix ? `${report.requestHash.actualPrefix}...` : "Missing", report.requestHash.actualPrefix ? "muted" : "warning"),
+      cardItem("Result validation", titleCase(report.resultValidation.status), report.resultValidation.status === "pass" ? "good" : report.resultValidation.status === "warning" ? "warning" : "danger"),
+      cardItem("Canary gate", titleCase(report.canaryGate.status), report.canaryGate.status === "canary_armed" ? "warning" : "muted"),
+      cardItem("Provider evidence", report.providerRegistry.matchingReadyProviderCount, report.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
+      cardItem("Full hash redacted", "Yes", "good"),
+    ],
+    actions: [{
+      label: "Copy report markdown",
+      kind: "copy_payload",
+      payload: { markdown: report.markdown },
+    }, {
+      label: "Review gate",
+      kind: "send_to_chat",
+      payload: {
+        prompt: "Audit the Bittensor adapter canary gate status.",
+        adapter: report.requested.adapter,
+        netuid: report.requested.netuid,
+      },
+    }],
+    warnings: report.warnings,
+    data: { report },
   };
 }
 
