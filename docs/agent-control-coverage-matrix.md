@@ -106,3 +106,9 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 
 - `matterhorn_bittensor_customer_evidence_bundle` accepts optional `adapterCanary` evidence and `requireAdapterCanary` for customer demos involving real subnet adapter canaries.
 - This mirrors the CLI evidence bundle and keeps adapter-canary readiness visible to Codex, Claude Code, Claude Desktop, and Cursor operators.
+
+## Bittensor Receipt Check MCP
+
+- `matterhorn_bittensor_check_receipt` validates post-signing Bittensor receipts and produces a public wallet diff follow-up prompt.
+- It checks transaction hash/status, payload-hash continuity, expected action/netuid context, and rejects raw signatures or signed payload fields.
+- It does not sign, submit, broadcast, import keys, or store signed payloads.
