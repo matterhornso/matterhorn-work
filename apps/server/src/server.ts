@@ -23,6 +23,7 @@ import {
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
+  buildBittensorAdapterCanaryOutcomeReportCard,
   buildBittensorAdapterManifestValidationCard,
   buildBittensorAdapterResultValidationCard,
   buildBittensorAdapterOnboardingCard,
@@ -55,6 +56,7 @@ import {
   buildBittensorSubnetAdapterRuntimeApprovalTemplate,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
+  buildBittensorSubnetAdapterCanaryOutcomeReport,
   buildBittensorSubnetAdapterConformanceExport,
   buildBittensorSubnetAdapterEvidenceBundle,
   buildBittensorSubnetAdapterEvidenceExport,
@@ -4366,6 +4368,38 @@ function createRoutes(
       ttlMinutes,
     });
     return jsonResponse({ success: true, canaryPacketExport });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/adapters/canary-outcome", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const netuidRaw = body.netuid;
+    const netuid = netuidRaw === null || netuidRaw === undefined || netuidRaw === "" ? null : Number(netuidRaw);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const expectedRequestSha256 =
+      typeof body.expectedRequestSha256 === "string"
+        ? body.expectedRequestSha256
+        : typeof body.requestSha256 === "string"
+          ? body.requestSha256
+          : typeof body.previewRequestSha256 === "string"
+            ? body.previewRequestSha256
+            : null;
+    const report = buildBittensorSubnetAdapterCanaryOutcomeReport({
+      adapter: typeof body.adapter === "string"
+        ? body.adapter
+        : typeof body.serviceAdapter === "string"
+          ? body.serviceAdapter
+          : null,
+      netuid,
+      expectedRequestSha256,
+      result: body.result,
+    });
+    return jsonResponse({
+      success: report.status !== "fail" && report.status !== "blocked",
+      report,
+      cards: [buildBittensorAdapterCanaryOutcomeReportCard(report)],
+    });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/templates", "client", async (ctx) => {

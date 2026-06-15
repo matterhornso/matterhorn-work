@@ -791,6 +791,36 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/adapters/canary-outcome") {
+    const prefix = "dddddddddddd";
+    res.end(JSON.stringify({
+      success: true,
+      report: {
+        kind: "bittensor_subnet_adapter_canary_outcome_report",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        requested: { adapter: "data_search", netuid: 14 },
+        status: "warning",
+        mode: "mock",
+        supported: true,
+        requestHash: {
+          expectedPrefix: prefix,
+          actualPrefix: prefix,
+          matches: true,
+          expectedPresent: true,
+          actualPresent: true,
+        },
+        resultValidation: { kind: "bittensor_subnet_adapter_result_validation", status: "pass", warnings: [], errors: [] },
+        canaryGate: { kind: "bittensor_subnet_adapter_canary_gate_audit", status: "safe_idle" },
+        providerRegistry: { status: "not_configured", providerCount: 0, readyForCanaryCount: 0, matchingReadyProviderCount: 0, matchingProviderIds: [], warnings: [], nextActions: [] },
+        summary: { validationStatus: "pass", canaryGateStatus: "safe_idle", matchingReviewedProviderCount: 0, warningCount: 1, fullHashRedacted: true },
+        markdown: "# Bittensor Adapter Canary Outcome Report\n\nFull hash redacted: yes",
+        warnings: ["Canary gate is not armed; treat this as mock or rehearsal evidence only."],
+        nextActions: ["Keep this as rehearsal evidence."],
+      },
+      cards: [{ kind: "adapter_canary_outcome_report", title: "Bittensor adapter canary outcome", items: [{ label: "Request hash", value: "Matched" }] }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/templates") {
     res.end(JSON.stringify({
       success: true,
@@ -1453,6 +1483,7 @@ try {
     "bittensor_create_subnet_adapter_approval_template",
     "bittensor_build_subnet_adapter_canary_packet",
     "bittensor_export_subnet_adapter_canary_packet",
+    "bittensor_build_subnet_adapter_canary_outcome_report",
     "bittensor_get_subnet_adapter_candidates",
     "bittensor_plan_subnet_adapter_onboarding",
     "bittensor_check_subnet_adapter_launch_gate",
@@ -1498,6 +1529,7 @@ try {
   assert.match(descriptionFor("bittensor_create_subnet_adapter_approval_template"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_packet"), /no-execution operator packet/i);
   assert.match(descriptionFor("bittensor_export_subnet_adapter_canary_packet"), /redacted markdown/i);
+  assert.match(descriptionFor("bittensor_build_subnet_adapter_canary_outcome_report"), /sanitized Bittensor adapter canary outcome report/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_candidates"), /no-execution candidate profiles/i);
   assert.match(descriptionFor("bittensor_plan_subnet_adapter_onboarding"), /Does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_check_subnet_adapter_launch_gate"), /Does not invoke subnet services/i);
@@ -1715,6 +1747,19 @@ try {
   assert.equal(adapterCanaryPacketExportPayload.canaryPacketExport.kind, "bittensor_subnet_adapter_canary_packet_export");
   assert.match(adapterCanaryPacketExportPayload.canaryPacketExport.markdown, /intentionally omitted/i);
   assert.doesNotMatch(JSON.stringify(adapterCanaryPacketExportPayload), /seed|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}|[a-f0-9]{64}/i);
+
+  const canaryOutcomeHash = "d".repeat(64);
+  const adapterCanaryOutcome = await ask({ jsonrpc: "2.0", id: 421, method: "tools/call", params: { name: "bittensor_build_subnet_adapter_canary_outcome_report", arguments: {
+    adapter: "data_search",
+    netuid: 14,
+    expectedRequestSha256: canaryOutcomeHash,
+    result: { ok: true, mode: "mock", adapterKind: "data_search", netuid: 14, requestSha256: canaryOutcomeHash, message: "mock", output: { summary: "ok" }, warnings: [] },
+  } } });
+  const adapterCanaryOutcomePayload = JSON.parse(adapterCanaryOutcome.result.content[0].text);
+  assert.equal(adapterCanaryOutcomePayload.report.kind, "bittensor_subnet_adapter_canary_outcome_report");
+  assert.equal(adapterCanaryOutcomePayload.report.requestHash.matches, true);
+  assert.equal(adapterCanaryOutcomePayload.cards[0].kind, "adapter_canary_outcome_report");
+  assert.equal(JSON.stringify(adapterCanaryOutcomePayload).includes(canaryOutcomeHash), false);
 
   const adapterCandidates = await ask({ jsonrpc: "2.0", id: 32, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_candidates", arguments: { adapter: "data_search", netuid: 14 } } });
   const adapterCandidatePayload = JSON.parse(adapterCandidates.result.content[0].text);

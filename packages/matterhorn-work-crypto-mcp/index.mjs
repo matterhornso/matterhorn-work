@@ -951,6 +951,17 @@ async function bittensor_export_subnet_adapter_canary_packet(args = {}) {
   return { success: true, canaryPacketExport: res.canaryPacketExport };
 }
 
+async function bittensor_build_subnet_adapter_canary_outcome_report(args = {}) {
+  const res = await callServer("/api/bittensor/adapters/canary-outcome", "POST", {
+    adapter: args.adapter,
+    serviceAdapter: args.serviceAdapter,
+    netuid: args.netuid,
+    expectedRequestSha256: args.expectedRequestSha256 ?? args.requestSha256 ?? args.previewRequestSha256,
+    result: args.result,
+  });
+  return { success: res.success !== false, report: res.report, cards: res.cards || [] };
+}
+
 async function bittensor_get_subnet_adapter_templates(args = {}) {
   const params = new URLSearchParams();
   if (typeof args.adapter === "string") params.set("adapter", args.adapter);
@@ -1235,6 +1246,7 @@ const tools = [
   { name: "bittensor_create_subnet_adapter_approval_template", description: "Create a short-lived exact request SHA-256 approval manifest template for a reviewed Bittensor subnet adapter canary. Does not invoke subnet services.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, requestSha256: { type: "string" }, approvedBy: { type: "string" }, reason: { type: "string" }, ttlMinutes: { type: "number" } }, required: ["netuid", "requestSha256"] } },
   { name: "bittensor_build_subnet_adapter_canary_packet", description: "Build a no-execution operator packet that combines evidence export, evidence review, and a gated approval-template recommendation for a Bittensor subnet adapter canary.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, requestSha256: { type: "string" }, approvedBy: { type: "string" }, reason: { type: "string" }, ttlMinutes: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_export_subnet_adapter_canary_packet", description: "Export a redacted markdown Bittensor adapter canary packet for operator handoff. Omits full approval env values and does not invoke subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, requestSha256: { type: "string" }, approvedBy: { type: "string" }, reason: { type: "string" }, ttlMinutes: { type: "number" }, limit: { type: "number" } } } },
+  { name: "bittensor_build_subnet_adapter_canary_outcome_report", description: "Build a sanitized Bittensor adapter canary outcome report from an adapter result and expected preview request hash. Redacts full hashes, endpoints, task text, and secrets; does not invoke subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, serviceAdapter: { type: "string", enum: ["data_search", "inference", "compute", "creative_media", "agent_tooling"] }, netuid: { type: "number" }, expectedRequestSha256: { type: "string" }, requestSha256: { type: "string" }, previewRequestSha256: { type: "string" }, result: { type: "object" } }, required: ["result"] } },
   { name: "bittensor_get_subnet_adapter_candidates", description: "Return no-execution candidate profiles and canary contracts for future real Bittensor subnet adapters. Use before configuring a provider endpoint.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" } } } },
   { name: "bittensor_plan_subnet_adapter_onboarding", description: "Build one safe onboarding plan for a future real Bittensor subnet adapter by combining candidate profile, sanitized template, doctor status, and metadata conformance. Does not invoke subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_check_subnet_adapter_launch_gate", description: "Check whether configured Bittensor subnet adapters are blocked, mock-ready, or require manual real-adapter canary review. Does not invoke subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" }, limit: { type: "number" } } } },
@@ -1394,6 +1406,7 @@ function handleMessage(msg) {
         case "bittensor_create_subnet_adapter_approval_template": return bittensor_create_subnet_adapter_approval_template(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_build_subnet_adapter_canary_packet": return bittensor_build_subnet_adapter_canary_packet(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_export_subnet_adapter_canary_packet": return bittensor_export_subnet_adapter_canary_packet(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_build_subnet_adapter_canary_outcome_report": return bittensor_build_subnet_adapter_canary_outcome_report(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_get_subnet_adapter_candidates": return bittensor_get_subnet_adapter_candidates(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_plan_subnet_adapter_onboarding": return bittensor_plan_subnet_adapter_onboarding(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_check_subnet_adapter_launch_gate": return bittensor_check_subnet_adapter_launch_gate(args).then(r => respond(textResult(r))).catch(catchErr);
