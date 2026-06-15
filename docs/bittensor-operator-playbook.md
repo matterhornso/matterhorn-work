@@ -1418,6 +1418,32 @@ A bad Bittensor operator response:
 - gives financial advice;
 - submits or signs without explicit external confirmation.
 
+## External Signer Receipt Check
+
+After a user signs externally and returns a submission receipt, validate the receipt before treating it as customer evidence:
+
+```bash
+node scripts/bittensor-receipt-check.mjs \
+  --receipt /tmp/bittensor-receipt.json \
+  --expected-payload-sha "<payload-sha256-from-handoff>" \
+  --expected-action stake \
+  --expected-netuid 14 \
+  --output /tmp/bittensor-receipt-check.md \
+  --json-output /tmp/bittensor-receipt-check.json \
+  --strict
+```
+
+Expected behavior:
+
+- receipt status is submitted, in block, finalized, or success;
+- transaction hash is present when available;
+- payload SHA-256 matches the original handoff when provided;
+- action and netuid match expected context when provided;
+- raw signatures, signed payloads, signed extrinsics, seed phrases, private keys, mnemonics, keyfiles, and wallet exports are rejected;
+- the report suggests a public wallet diff prompt after finality.
+
+This check validates a post-signing receipt only. It does not sign, submit, broadcast, or store signed payloads.
+
 ## Watch Autopilot
 
 For a read-only alert report that agents can use during a customer demo or daily operator pass:
