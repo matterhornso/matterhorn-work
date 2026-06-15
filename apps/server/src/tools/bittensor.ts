@@ -2162,6 +2162,11 @@ function realSubnetAdaptersEnabled(): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
+function realSubnetAdapterCanaryAcknowledged(): boolean {
+  const value = readEnv("BITTENSOR_SUBNET_ADAPTER_CANARY_ACK")?.toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
 function configuredSubnetAdapterRuntimeApprovals(): BittensorSubnetAdapterRuntimeApproval[] {
   const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON");
   if (!raw) return [];
@@ -2308,6 +2313,7 @@ export function buildBittensorSubnetAdapterRuntimeApprovalTemplate(input: {
     nextActions: [
       "Confirm evidence review, provider identity, canary fixture, and rollback owner before using this template.",
       "Set BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 only for the reviewed canary window.",
+      "Set BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 only while invoking the reviewed canary request.",
       "Audit approvals after the canary and remove stale entries.",
     ],
   };
@@ -4071,12 +4077,16 @@ function subnetAdapterRuntimeGateBlockers(adapter: BittensorConfiguredSubnetAdap
   const realAdapterBlocked = endpoint.mode !== "mock" && !realSubnetAdaptersEnabled()
     ? "Real subnet service adapters are disabled until BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1 after evidence review and operator approval."
     : null;
+  const canaryAcknowledgementBlocked = endpoint.mode !== "mock" && requestSha256 && !realSubnetAdapterCanaryAcknowledged()
+    ? "Real subnet service adapter invocation requires BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1 for the reviewed canary window."
+    : null;
   const approvalBlocked = endpoint.mode !== "mock" && requestSha256 && !findSubnetAdapterRuntimeApproval(adapter, requestSha256)
     ? "Real subnet service adapter invocation requires BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON to include the exact reviewed request SHA-256."
     : null;
   return [
     endpoint.allowed ? null : endpoint.reason,
     realAdapterBlocked,
+    canaryAcknowledgementBlocked,
     approvalBlocked,
     ...auth.errors,
   ].filter((item): item is string => Boolean(item));
@@ -7047,6 +7057,7 @@ function evaluateSubnetServiceAdapterGate(
   capability: BittensorCapabilityManifest,
   configuredAdapter: BittensorConfiguredSubnetAdapter | null,
   intent: BittensorSubnetInvocation["intent"],
+  requestSha256?: string | null,
 ): {
   adapterContract: BittensorSubnetServiceAdapterContractRuntimeSummary;
   contractValidation: BittensorSubnetServiceAdapterContractValidation;
@@ -7063,7 +7074,7 @@ function evaluateSubnetServiceAdapterGate(
   if (!capability.adapterContract.endpointConfigured) blockers.push("Adapter contract declares endpointConfigured=false.");
   if (!supportsIntent) blockers.push(`Adapter contract does not declare ${intent} support.`);
   if (!contractValidation.ok) blockers.push(...contractValidation.errors);
-  if (configuredAdapter) blockers.push(...subnetAdapterRuntimeGateBlockers(configuredAdapter));
+  if (configuredAdapter) blockers.push(...subnetAdapterRuntimeGateBlockers(configuredAdapter, requestSha256));
 
   return {
     adapterContract: summarizeSubnetServiceAdapterContract(capability.adapterContract),
@@ -8306,10 +8317,16 @@ export async function invokeBittensorSubnet(netuid: number, input: BittensorSubn
   }
   if (intent === "service_call") {
     const configuredAdapter = getConfiguredSubnetAdapter(netuid);
-    const adapterGate = evaluateSubnetServiceAdapterGate(capability, configuredAdapter, intent);
     const reviewRequest = buildSubnetInvocationReviewRequest(netuid, input, intent);
+    const reviewedRequestMatches = Boolean(input.reviewedRequestSha256 && input.reviewedRequestSha256 === reviewRequest.requestSha256);
+    const adapterGate = evaluateSubnetServiceAdapterGate(
+      capability,
+      configuredAdapter,
+      intent,
+      reviewedRequestMatches ? reviewRequest.requestSha256 : null,
+    );
     if (adapterGate.supported && configuredAdapter) {
-      if (!input.reviewedRequestSha256 || input.reviewedRequestSha256 !== reviewRequest.requestSha256) {
+      if (!reviewedRequestMatches) {
         return {
           netuid,
           intent,
