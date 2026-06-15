@@ -3351,6 +3351,7 @@ describe("auditBittensorReadiness", () => {
     expect(report.checks.some((check) => check.id === "subnet_adapter_conformance")).toBe(true);
     expect(report.checks.some((check) => check.id === "subnet_adapter_preflight")).toBe(true);
     expect(report.checks.some((check) => check.id === "subnet_adapter_marketplace")).toBe(true);
+    expect(report.checks.some((check) => check.id === "subnet_adapter_roadmap")).toBe(true);
     const handoffCheck = report.checks.find((check) => check.id === "subnet_adapter_operator_handoff");
     expect(handoffCheck).toBeDefined();
     expect(handoffCheck?.status).not.toBe("fail");
