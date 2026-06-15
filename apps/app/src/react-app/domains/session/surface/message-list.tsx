@@ -774,6 +774,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
       return <CircleAlert className={className} strokeWidth={1.9} />;
     case "adapter_launch_gate":
     case "adapter_evidence_review":
+    case "adapter_operator_handoff":
     case "adapter_approval_template":
     case "adapter_canary_packet":
       return <ShieldAlert className={className} strokeWidth={1.9} />;

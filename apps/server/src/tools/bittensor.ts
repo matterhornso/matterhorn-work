@@ -917,6 +917,7 @@ export type BittensorChatCardKind =
   | "adapter_launch_gate"
   | "adapter_evidence_bundle"
   | "adapter_evidence_review"
+  | "adapter_operator_handoff"
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
@@ -5303,6 +5304,20 @@ function isBittensorReadinessQuestion(message: string): boolean {
     /\b(bittensor|tao|subtensor|finney|subnet|validator|wallet|sidecar)\b/i.test(message);
 }
 
+function isSubnetAdapterOperatorHandoffQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter)\b/i.test(message) &&
+    /\b(operator handoff|handoff packet|review packet|launch packet|go\/no-go|go no go|gate summary|evidence packet)\b/i.test(message);
+}
+
+function extractSubnetAdapterKindFromMessage(message: string): Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported"> | null {
+  if (/\b(data[_\s-]?search|search|retrieval|data)\b/i.test(message)) return "data_search";
+  if (/\b(inference|model|llm)\b/i.test(message)) return "inference";
+  if (/\b(compute|gpu)\b/i.test(message)) return "compute";
+  if (/\b(creative|media|image|video)\b/i.test(message)) return "creative_media";
+  if (/\b(agent|tooling|automation)\b/i.test(message)) return "agent_tooling";
+  return null;
+}
+
 function decisionPromptNeedsWallet(message: string): boolean {
   return /\b(my|wallet|portfolio|balance|coldkey|exposure|staked|where am i|my tao|positions?)\b/i.test(message);
 }
@@ -5614,6 +5629,31 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [buildBittensorReadinessOperatorCard(operatorReport)],
       data: { readiness: report, operatorReport },
       warnings: uniqueWarnings(warnings, operatorReport.warnings, operatorReport.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterOperatorHandoffQuestion(message)) {
+    const netuid = resolveExecutionNetuid(input, plan);
+    if (netuid === null) {
+      return clarificationResult(plan, "Which subnet netuid should I use for this Bittensor adapter operator handoff?");
+    }
+    const adapter = extractSubnetAdapterKindFromMessage(message);
+    const handoff = await buildBittensorSubnetAdapterOperatorHandoff({
+      adapter,
+      netuid,
+      task: message,
+      ss58Address: resolveExecutionSs58(input, plan),
+      limit: resolveExecutionLimit(input, 5),
+    });
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_operator_handoff"] },
+      responseText: `Built a ${handoff.status.replace(/_/g, " ")} Bittensor adapter handoff for subnet ${netuid}. This is evidence only; it does not authorize real subnet service execution.`,
+      cards: [buildBittensorAdapterOperatorHandoffCard(handoff)],
+      data: { handoff },
+      warnings: uniqueWarnings(warnings, handoff.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -9919,6 +9959,49 @@ export function buildBittensorAdapterEvidenceReviewCard(review: BittensorSubnetA
     }],
     warnings: review.warnings,
     data: { review },
+  };
+}
+
+export function buildBittensorAdapterOperatorHandoffCard(handoff: BittensorSubnetAdapterOperatorHandoff): BittensorChatCard {
+  const blocked = handoff.status === "blocked";
+  const nextPrompt = blocked
+    ? `Help me unblock the Bittensor adapter operator handoff${handoff.requested.netuid === null ? "" : ` for subnet ${handoff.requested.netuid}`}.`
+    : handoff.status === "mock_rehearsal_ready"
+      ? `Archive the Bittensor mock adapter handoff${handoff.requested.netuid === null ? "" : ` for subnet ${handoff.requested.netuid}`} and list the remaining real-canary blockers.`
+      : `Prepare the manual real-adapter canary packet${handoff.requested.netuid === null ? "" : ` for subnet ${handoff.requested.netuid}`} without invoking the subnet.`;
+  return {
+    kind: "adapter_operator_handoff",
+    title: "Bittensor adapter operator handoff",
+    subtitle: titleCase(handoff.status),
+    summary: handoff.nextActions[0] ?? "Review adapter handoff gates before any subnet service execution.",
+    tone: blocked ? "danger" : handoff.status === "mock_rehearsal_ready" ? "good" : "warning",
+    items: [
+      cardItem("Adapter", handoff.requested.adapter ?? "Any"),
+      cardItem("Netuid", handoff.requested.netuid ?? "Any", handoff.requested.netuid === null ? "muted" : "default"),
+      cardItem("Evidence review", titleCase(handoff.evidenceReview.status), handoff.evidenceReview.status === "blocked" ? "danger" : handoff.evidenceReview.status === "mock_dry_run_ready" ? "good" : "warning"),
+      cardItem("Conformance", titleCase(handoff.conformanceExport.status), handoff.conformanceExport.status === "pass" ? "good" : handoff.conformanceExport.status === "warning" ? "warning" : "danger"),
+      cardItem("Dry-run", titleCase(handoff.dryRunExport.status), handoff.dryRunExport.status === "pass" ? "good" : handoff.dryRunExport.status === "warning" ? "warning" : "danger"),
+      cardItem("Warnings", handoff.warnings.length, handoff.warnings.length ? "warning" : "muted"),
+      cardItem("Next actions", handoff.nextActions.length, handoff.nextActions.length ? "default" : "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: nextPrompt,
+        adapter: handoff.requested.adapter,
+        netuid: handoff.requested.netuid,
+        operatorHandoffStatus: handoff.status,
+      },
+    }, {
+      label: "Copy markdown",
+      kind: "copy_payload",
+      payload: {
+        markdown: handoff.markdown,
+      },
+    }],
+    warnings: handoff.warnings,
+    data: { handoff },
   };
 }
 
