@@ -229,6 +229,7 @@ Current support is mock-execution-ready and real-canary-gated:
 - mock data-search and inference adapters can prove the preview-confirm-invoke loop when explicitly enabled;
 - real HTTPS adapters can be previewed for review, but invocation requires endpoint allowlisting, `BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS=1`, an exact short-lived request-hash approval, and `BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1`;
 - operators can ask chat to audit the canary gate before and after a canary so stale acknowledgement flags or approvals are visible;
-- operators can maintain a reviewed provider registry with provider identity, privacy, terms, rate-limit, rollback, and canary-fixture evidence before any endpoint is configured for invocation.
+- operators can maintain a reviewed provider registry with provider identity, privacy, terms, rate-limit, rollback, and canary-fixture evidence before any endpoint is configured for invocation;
+- canary packets and operator handoffs include a redacted provider-registry reference summary so reviewers can see whether matching provider evidence exists without exposing endpoint URLs or credentials.
 
 The next safe step is to run one reviewed real-adapter canary against a known provider endpoint from the provider registry, collect evidence, audit the gate afterward, and keep general direct subnet execution disabled until the canary report is accepted.

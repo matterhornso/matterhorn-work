@@ -2481,6 +2481,108 @@ describe("executeBittensorChatWorkflow", () => {
     expect(JSON.stringify(review)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
+  test("adds provider registry evidence to adapter operator handoffs", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      const previousRegistry = process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      try {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Mock data-search adapter",
+          serviceAdapter: "data_search",
+          endpoint: "mock://data-search",
+          requiredAuth: "none",
+          costModel: "free_read",
+          safetyNotes: ["Mock adapter safety note."],
+        }]);
+        process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = JSON.stringify([{
+          providerId: "reviewed-provider",
+          displayName: "Reviewed Provider",
+          reviewStatus: "reviewed",
+          serviceAdapters: ["data_search"],
+          netuids: [77],
+          endpointOrigin: "https://adapter.invalid",
+          contact: "ops@example.com",
+          evidence: {
+            providerIdentityReviewed: true,
+            privacyReviewed: true,
+            termsReviewed: true,
+            rateLimitsDocumented: true,
+            rollbackOwnerConfirmed: true,
+            canaryFixtureReviewed: true,
+          },
+        }]);
+        const handoff = await buildBittensorSubnetAdapterOperatorHandoff({ adapter: "data_search", netuid: 77 });
+        expect(handoff.providerRegistry.matchingReadyProviderCount).toBe(1);
+        expect(handoff.providerRegistry.matchingProviderIds).toContain("reviewed-provider");
+        expect(handoff.markdown).toContain("Matching reviewed providers: 1");
+        const card = buildBittensorAdapterOperatorHandoffCard(handoff);
+        expect(card.items.find((item) => item.label === "Provider evidence")?.value).toBe("1");
+        expect(JSON.stringify(handoff)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+        if (previousRegistry === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = previousRegistry;
+        }
+      }
+    });
+  });
+
+  test("adds provider registry evidence to canary operator packets", async () => {
+    const previousRegistry = process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = JSON.stringify([{
+        providerId: "reviewed-provider",
+        displayName: "Reviewed Provider",
+        reviewStatus: "reviewed",
+        serviceAdapters: ["data_search"],
+        netuids: [77],
+        endpointOrigin: "https://adapter.invalid",
+        contact: "ops@example.com",
+        evidence: {
+          providerIdentityReviewed: true,
+          privacyReviewed: true,
+          termsReviewed: true,
+          rateLimitsDocumented: true,
+          rollbackOwnerConfirmed: true,
+          canaryFixtureReviewed: true,
+        },
+      }]);
+      const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket({
+        adapter: "data_search",
+        netuid: 77,
+        requestSha256: "b".repeat(64),
+      });
+      expect(packet.providerRegistry.matchingReadyProviderCount).toBe(1);
+      expect(packet.providerRegistry.matchingProviderIds).toContain("reviewed-provider");
+      const card = buildBittensorAdapterCanaryOperatorPacketCard(packet);
+      expect(card.items.find((item) => item.label === "Provider evidence")?.value).toBe("1");
+      const exported = renderBittensorSubnetAdapterCanaryPacketMarkdown(packet);
+      expect(exported).toContain("Provider Registry");
+      expect(exported).toContain("Matching reviewed providers: 1");
+      expect(exported).not.toContain("https://adapter.invalid");
+    } finally {
+      if (previousRegistry === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = previousRegistry;
+      }
+    }
+  });
+
   test("builds blocked canary operator packets without approval templates", async () => {
     const packet = await buildBittensorSubnetAdapterCanaryOperatorPacket({
       adapter: "data_search",
