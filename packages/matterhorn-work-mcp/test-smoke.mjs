@@ -599,6 +599,15 @@ try {
         summary: { pass: 6, warn: 1, fail: 0 },
         findings: [{ area: "Endpoint", status: "pass" }],
       },
+      readonlyAdapterCanary: {
+        ready: true,
+        netuid: 14,
+        serviceAdapter: "data_search",
+        invoked: true,
+        previewRequestSha256: "f".repeat(64),
+        summary: { pass: 5, warn: 0, fail: 0 },
+        findings: [{ area: "Invoke", status: "pass" }],
+      },
       receiptCheck: {
         accepted: true,
         txHash: "0x" + "d".repeat(64),
@@ -611,16 +620,20 @@ try {
         findings: [{ area: "Payload hash", status: "pass" }],
       },
       requireAdapterCanary: true,
+      requireReadonlyAdapterCanary: true,
       requireReceiptCheck: true,
     },
   }));
   assert.equal(customerEvidenceBundle.ready, true);
   assert.equal(customerEvidenceBundle.summary.adapterCanary.ready, true);
+  assert.equal(customerEvidenceBundle.summary.readonlyAdapterCanary.ready, true);
+  assert.equal(customerEvidenceBundle.summary.readonlyAdapterCanary.invoked, true);
   assert.equal(customerEvidenceBundle.summary.receiptCheck.ready, true);
   assert.equal(customerEvidenceBundle.summary.receiptCheck.status, "finalized");
   assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
   assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);
+  assert.match(customerEvidenceBundle.markdown, /Read-only canary ready/);
   assert.match(customerEvidenceBundle.markdown, /Receipt check accepted/);
 
   const badCustomerEvidenceBundle = await mcp.ask("tools/call", {
