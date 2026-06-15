@@ -3749,6 +3749,7 @@ function printHelp(): void {
     "  matterhorn-work bittensor subnet-preview --netuid <n> [options]",
     "  matterhorn-work bittensor subnet-invoke --netuid <n> --preview-request-sha256 <hash> [options]",
     "  matterhorn-work bittensor watch create|list|check|digest|act [options]",
+    "  matterhorn-work bittensor wallet-timeline status|export|clear [options]",
     "  matterhorn-work bittensor readiness [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
@@ -7355,7 +7356,7 @@ function selectBittensorWatchAction(
 async function runBittensor(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const rawSubcommand = args.positionals[1] ?? "chat";
-  const nestedSubcommand = ["extrinsic", "subnet", "watch"].includes(rawSubcommand) ? args.positionals[2] : undefined;
+  const nestedSubcommand = ["extrinsic", "subnet", "watch", "wallet-timeline", "timeline"].includes(rawSubcommand) ? args.positionals[2] : undefined;
   const subcommand = nestedSubcommand ? `${rawSubcommand}-${nestedSubcommand}` : rawSubcommand;
   const subcommandTailIndex = nestedSubcommand ? 3 : 2;
   const effectiveSubcommand = subcommand;
@@ -7450,6 +7451,49 @@ async function runBittensor(args: ParsedArgs) {
       const netuid = readSubnetNetuid();
       const result = await fetchJson(`${baseUrl}/api/bittensor/capabilities/${encodeURIComponent(String(netuid))}`, {
         headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "wallet-timeline-status" ||
+      effectiveSubcommand === "timeline-status" ||
+      effectiveSubcommand === "timeline"
+    ) {
+      const result = await fetchJson(`${baseUrl}/api/bittensor/wallet/timeline/status`, {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "wallet-timeline-export" ||
+      effectiveSubcommand === "timeline-export"
+    ) {
+      const ss58Address = readFlag(args.flags, "ss58-address");
+      const url = new URL(`${baseUrl}/api/bittensor/wallet/timeline/export`);
+      if (ss58Address) url.searchParams.set("ss58Address", ss58Address);
+      const result = await fetchJson(url.toString(), {
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      effectiveSubcommand === "wallet-timeline-clear" ||
+      effectiveSubcommand === "timeline-clear"
+    ) {
+      const ss58Address = readFlag(args.flags, "ss58-address");
+      if (!ss58Address) {
+        throw new Error("ss58-address is required for bittensor wallet-timeline clear");
+      }
+      const result = await fetchJson(`${baseUrl}/api/bittensor/wallet/timeline/clear`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ss58Address }),
       });
       outputResult(result, outputJson);
       return;
@@ -7671,7 +7715,7 @@ async function runBittensor(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("bittensor requires chat|capabilities|capability|extrinsic prepare|extrinsic handoff|extrinsic submit|subnet-preview|subnet-invoke|watch|readiness");
+    throw new Error("bittensor requires chat|capabilities|capability|extrinsic prepare|extrinsic handoff|extrinsic submit|subnet-preview|subnet-invoke|watch|wallet-timeline|readiness");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

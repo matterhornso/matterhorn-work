@@ -77,7 +77,10 @@ import {
   findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorChatContext,
+  clearBittensorWalletSnapshotBaseline,
+  exportBittensorWalletTimeline,
   getBittensorSignerStatus,
+  getBittensorWalletTimelineStoreStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
   getBittensorSubnetAdapterManifestExamples,
@@ -3938,6 +3941,25 @@ function createRoutes(
     }
     const subnet = await bittensorProvider.getSubnet(netuid);
     return jsonResponse({ success: true, subnet, cards: buildBittensorSubnetCards([subnet]) });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/wallet/timeline/status", "client", async () => {
+    return jsonResponse({ success: true, status: getBittensorWalletTimelineStoreStatus() });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/wallet/timeline/export", "client", async (ctx) => {
+    const ss58Address = ctx.url.searchParams.get("ss58Address") ?? ctx.url.searchParams.get("ss58_address");
+    if (ss58Address && !isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "invalid SS58 address");
+    const timeline = exportBittensorWalletTimeline({ ss58Address });
+    return jsonResponse({ success: true, timeline });
+  });
+
+  addRoute(routes, "POST", "/api/bittensor/wallet/timeline/clear", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const ss58Address = typeof body.ss58Address === "string" ? body.ss58Address : "";
+    if (!isValidSs58Address(ss58Address)) throw new ApiError(400, "invalid_ss58", "valid SS58 address is required");
+    const report = clearBittensorWalletSnapshotBaseline(ss58Address);
+    return jsonResponse({ success: true, report });
   });
 
   addRoute(routes, "GET", "/api/bittensor/wallet/:ss58Address", "client", async (ctx) => {
