@@ -57,12 +57,14 @@ The intended user experience:
 - Watch checks, alert keys, notification intents, digest, safe alert actions, and Watch autopilot operator report.
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
 - Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, and required QA docs.
-- Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet.
+- Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet, with optional adapter-canary evidence for real-adapter demos.
+- Hermes QA guide with latest commands for signing handoff checks, watch autopilot, adapter canary gates, and evidence-bundle runs.
 
 ### Agent Control Surface
 
 - Stable HTTP routes for sessions, prompts, files, approvals, Bittensor, and browser/control action contracts.
 - `matterhorn-work-mcp`, `matterhorn-work-crypto-mcp`, `matterhorn-work-wallet-mcp`, and `matterhorn-work-ui-mcp` surfaces.
+- MCP tools for Bittensor customer evidence bundles, signing handoff validation, adapter canary gates, watch digest/action handling, and safe chat workflows.
 - CLI fallback commands for sessions, files, approvals, Bittensor, doctor, and upstream OpenWork sync.
 - Docs for Codex, Claude Code, Claude Desktop, Cursor, browser control, session events, operator workflows, and coverage matrix.
 
@@ -94,6 +96,8 @@ Safety:
 
 ### Phase B: Customer Readiness UI
 
+Status: partially built. The app has a readiness panel and copy commands for live QA, readiness gate, evidence bundle, and signing handoff checks. Remaining work is richer local evidence state and clearer blocker display.
+
 Goal: make the release gate visible in the app, not only in CLI/docs.
 
 Build:
@@ -104,6 +108,8 @@ Build:
 - Surface P0/P1 blockers clearly before a test customer session.
 
 ### Phase C: Adapter Canary To First Real Adapter
+
+Status: foundation built. The contract, mock adapter path, preview-confirm-invoke loop, canary gate, MCP canary gate, and evidence integration are in place. Remaining work is one real read-only canary adapter.
 
 Goal: graduate from mock/configured adapters to one real low-risk read-only subnet service adapter.
 
@@ -116,6 +122,8 @@ Build:
 
 ### Phase D: External Signer UX
 
+Status: foundation built. Unsigned previews, handoff JSON, handoff validation script, MCP handoff validation, and copyable app command exist. Remaining work is signer status, receipt import, and post-action wallet diff UX.
+
 Goal: make non-custodial signing understandable enough for test customers without enabling custody.
 
 Build:
@@ -126,6 +134,8 @@ Build:
 - Post-action wallet diff prompt after finality.
 
 ### Phase E: Bittensor Autopilot
+
+Status: partially built. Watch creation/checks/digests/actions and a read-only watch autopilot report exist. Remaining work is scheduling, notifications, and event-stream integration for Bittensor state changes.
 
 Goal: make Matterhorn useful after the user leaves chat.
 
@@ -148,11 +158,11 @@ Build:
 
 ## Recommended Next Build Order
 
-1. Durable wallet timeline.
-2. Customer readiness UI and in-app evidence export.
-3. Real adapter canary.
-4. External signer UX polish.
-5. Scheduled Bittensor autopilot.
+1. External signer receipt UX: import/capture externally signed receipts, show status, and offer a post-action public wallet diff prompt.
+2. Real read-only adapter canary: choose one data/search or inference endpoint, pass the canary gate, run preview-confirm-invoke with endpoint allowlist/timeouts/rate limits, and keep it canary-only.
+3. Durable wallet timeline polish: timestamped public baselines, export/redaction, clear controls, and "since yesterday/last week" chat phrasing.
+4. Scheduled Bittensor autopilot: local schedule runner, notification summaries, and event-stream integration.
+5. Customer readiness UI: show latest local evidence state, missing artifacts, and P0/P1 blockers directly in the app.
 6. Matterhorn Lite alignment notes and shared copy.
 
 Do not start Hyperliquid or Polymarket until the Bittensor release gate passes on a clean machine and at least one test customer can complete the read-only Bittensor flow end to end.
