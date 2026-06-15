@@ -75,6 +75,34 @@ Pass criteria:
 - action context and external signer marker are present;
 - no seed phrase, mnemonic, private key, keyfile, wallet export, signature, signed extrinsic, or signed payload fields appear.
 
+This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Work for an external signer.
+
+### Receipt Check
+
+After an external signer returns a public transaction receipt, validate it before telling a customer that an action is complete:
+
+```bash
+node scripts/bittensor-receipt-check.mjs \
+  --receipt /tmp/bittensor-receipt.json \
+  --expected-payload-sha "<payload-sha256-from-handoff>" \
+  --expected-action stake \
+  --expected-netuid 14 \
+  --json-output /tmp/bittensor-receipt-check.json \
+  --strict
+```
+
+Pass criteria:
+
+- result is accepted;
+- receipt payload SHA-256 matches the handoff payload;
+- action, netuid, coldkey, hotkey, and transaction metadata match the preview context;
+- receipt includes only public confirmation evidence;
+- no seed phrase, mnemonic, private key, keyfile, wallet export, raw signature, signed payload, or signed extrinsic appears.
+
+Follow-up requirement:
+
+- after receipt acceptance, run a public wallet/stake read or wallet-diff prompt to prove post-action state from public chain data.
+
 ### Watch Autopilot
 
 ```bash
@@ -92,6 +120,29 @@ Pass criteria:
 - active alerts become safe chat prompts;
 - report says it does not sign, submit, broadcast, transfer TAO, move stake, or invoke subnet services;
 - credential-shaped or signed-payload-shaped fields fail closed.
+
+### Scheduled Watch Autopilot
+
+Use the scheduler when a reviewer wants repeated read-only watch checks while away from the desk:
+
+```bash
+node scripts/bittensor-watch-autopilot-scheduler.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token "<client-token>" \
+  --iterations 6 \
+  --interval-ms 60000 \
+  --jsonl-output /tmp/bittensor-watch-autopilot-scheduler.jsonl \
+  --json-output /tmp/bittensor-watch-autopilot-scheduler-summary.json \
+  --strict
+```
+
+Pass criteria:
+
+- every iteration is read-only;
+- summary reports completed checks, alert counts, and highest severity;
+- each alert routes to a safe chat prompt or operator action;
+- no iteration signs, submits, broadcasts, transfers TAO, moves stake, or invokes subnet services;
+- JSONL output contains no credential-shaped or signed-payload-shaped fields.
 
 ### Adapter Canary Gate
 
@@ -113,9 +164,34 @@ Pass criteria for a real adapter canary:
 - mock endpoints are blocked unless `--allow-mock` is explicitly used;
 - no adapter service call is made by the gate itself.
 
+### Read-Only Adapter Canary
+
+Use this after the adapter canary gate when a configured adapter must prove the preview-confirm-invoke loop without touching real paid subnet execution:
+
+```bash
+node scripts/bittensor-adapter-readonly-canary.mjs \
+  --server-url http://127.0.0.1:8787 \
+  --token "<client-token>" \
+  --netuid 14 \
+  --intent data_search \
+  --query "test Bittensor subnet capability" \
+  --allowed-hosts adapter.example.com \
+  --output /tmp/bittensor-adapter-readonly-canary.md \
+  --json-output /tmp/bittensor-adapter-readonly-canary.json \
+  --strict
+```
+
+Pass criteria:
+
+- capability inspect succeeds and identifies the configured adapter;
+- preview returns a request SHA-256 and approval context;
+- invoke is skipped unless `--confirm-invoke` is explicitly set;
+- real network adapter calls require `--allow-real-adapter-call`;
+- hash mismatch, non-allowlisted endpoints, and credential-shaped fields fail closed.
+
 ### Customer Evidence With Adapter Canary
 
-For demos involving direct subnet adapter canaries, include adapter canary evidence:
+For demos involving direct subnet adapter canaries, receipt checks, or scheduled monitoring, include the matching evidence:
 
 ```bash
 node scripts/bittensor-customer-evidence-bundle.mjs \
@@ -125,12 +201,16 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
   --readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md \
   --wallet-timeline /tmp/wallet-timeline-status.json \
   --adapter-canary /tmp/bittensor-adapter-canary-gate.json \
+  --readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json \
+  --receipt-check /tmp/bittensor-receipt-check.json \
   --require-adapter-canary \
+  --require-readonly-adapter-canary \
+  --require-receipt-check \
   --output /tmp/matterhorn-bittensor-customer-evidence.md \
   --strict
 ```
 
-Keep `--require-adapter-canary` off for normal read-only Bittensor demos that do not include a real subnet adapter canary.
+Keep the adapter and receipt `--require-*` flags off for normal read-only Bittensor demos that do not include a real subnet adapter canary or externally signed receipt.
 
 ## Security Audit Checklist
 
