@@ -86,7 +86,7 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 ## Bittensor Customer Evidence MCP
 
 - Tool: `matterhorn_bittensor_customer_evidence_bundle`
-- Purpose: let Codex, Claude Code, and other MCP clients turn already-collected Bittensor live QA, agent-control QA, CI, readiness-gate, and optional public wallet timeline evidence into a customer-safe Markdown handoff packet.
+- Purpose: let Codex, Claude Code, and other MCP clients turn already-collected Bittensor live QA, agent-control QA, CI, readiness-gate, optional public wallet timeline, and scheduled watch-autopilot evidence into a customer-safe Markdown handoff packet.
 - Safety: accepts only public evidence objects, rejects credential-shaped fields, does not sign, broadcast, or call subnet services.
 - Verification: `pnpm test:agent-control-mcp` / `node packages/matterhorn-work-mcp/test-smoke.mjs`.
 
@@ -124,3 +124,10 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_customer_evidence_bundle` accepts optional `readonlyAdapterCanary` evidence and `requireReadonlyAdapterCanary` for demos that include direct subnet service canaries.
 - This evidence is distinct from the inspect-only adapter canary gate: it proves the preview-confirm-invoke path ran with explicit invoke confirmation.
 - The MCP bundle still rejects credential-shaped fields and remains non-custodial.
+
+
+## Bittensor Scheduled Watch Evidence Through MCP
+
+- `matterhorn_bittensor_customer_evidence_bundle` accepts optional `watchAutopilotScheduler` evidence and `requireWatchAutopilotScheduler` for demos where monitoring ran while an operator was away.
+- The evidence summarizes repeated read-only watch checks, alert counts, and safe prompts; it does not sign, submit, broadcast, transfer TAO, move stake, or invoke subnet services.
+- This keeps Codex, Claude Code, Claude Desktop, and Cursor evidence bundles aligned with the CLI customer-evidence flow.
