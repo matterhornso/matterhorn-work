@@ -63,6 +63,7 @@
     "test:bittensor-customer-evidence-bundle": "node scripts/bittensor-customer-evidence-bundle.test.mjs",
     "test:bittensor-signing-handoff-check": "node scripts/bittensor-signing-handoff-check.test.mjs",
     "test:bittensor-watch-autopilot": "node scripts/bittensor-watch-autopilot.test.mjs",
+    "test:bittensor-watch-autopilot-scheduler": "node scripts/bittensor-watch-autopilot-scheduler.test.mjs",
     "test:bittensor-adapter-canary-gate": "node scripts/bittensor-adapter-canary-gate.test.mjs",
     "test:bittensor-adapter-readonly-canary": "node scripts/bittensor-adapter-readonly-canary.test.mjs",
     "test:bittensor-receipt-check": "node scripts/bittensor-receipt-check.test.mjs"
