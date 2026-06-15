@@ -530,6 +530,27 @@ export interface BittensorSubnetAdapterMarketplaceExport {
   warnings: string[];
 }
 
+export interface BittensorSubnetAdapterRoadmapRecommendation {
+  serviceAdapter: Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">;
+  priority: "high" | "medium" | "low";
+  candidateNetuids: number[];
+  statusCounts: Record<BittensorSubnetAdapterMarketplaceEntryStatus, number>;
+  rationale: string;
+  nextPrompt: string;
+  warnings: string[];
+}
+
+export interface BittensorSubnetAdapterRoadmap {
+  kind: "bittensor_subnet_adapter_roadmap";
+  generatedAt: string;
+  goal: string | null;
+  status: "pass" | "warning";
+  marketplaceSummary: BittensorSubnetAdapterMarketplace["summary"] & { total: number };
+  recommendations: BittensorSubnetAdapterRoadmapRecommendation[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSignerStatus {
   mode: "read_only" | "injected_substrate" | "desktop_handoff" | "sidecar";
   available: boolean;
@@ -6977,6 +6998,86 @@ export async function exportBittensorSubnetAdapterMarketplace(input: {
     },
     markdown: lines.join("\n"),
     warnings: marketplace.warnings,
+  };
+}
+
+function adapterRoadmapOrder(goal: string | null): Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">> {
+  const base: Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">> = ["data_search", "inference", "compute", "creative_media", "agent_tooling"];
+  if (!goal) return base;
+  const preferred = extractSubnetAdapterKindFromMessage(goal);
+  return preferred ? [preferred, ...base.filter((adapter) => adapter !== preferred)] : base;
+}
+
+export async function planBittensorSubnetAdapterRoadmap(input: {
+  goal?: string | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterRoadmap> {
+  const goal = typeof input.goal === "string" && input.goal.trim() ? input.goal.trim() : null;
+  const limit = Math.min(5, Math.max(1, Number(input.limit ?? 5) || 5));
+  const marketplace = await listBittensorSubnetAdapterMarketplace({ limit: 100 });
+  const recommendations = adapterRoadmapOrder(goal).map((serviceAdapter): BittensorSubnetAdapterRoadmapRecommendation => {
+    const entries = marketplace.entries.filter((entry) => entry.serviceAdapter === serviceAdapter);
+    const statusCounts = {
+      universal_only: entries.filter((entry) => entry.status === "universal_only").length,
+      needs_adapter: entries.filter((entry) => entry.status === "needs_adapter").length,
+      mock_ready: entries.filter((entry) => entry.status === "mock_ready").length,
+      manual_review_required: entries.filter((entry) => entry.status === "manual_review_required").length,
+      blocked: entries.filter((entry) => entry.status === "blocked").length,
+      unsupported: entries.filter((entry) => entry.status === "unsupported").length,
+    };
+    const candidateNetuids = entries
+      .filter((entry) => entry.status === "needs_adapter" || entry.status === "blocked" || entry.status === "mock_ready" || entry.status === "manual_review_required")
+      .map((entry) => entry.netuid)
+      .slice(0, 5);
+    const priority: BittensorSubnetAdapterRoadmapRecommendation["priority"] = statusCounts.blocked || statusCounts.needs_adapter
+      ? "high"
+      : statusCounts.mock_ready || statusCounts.manual_review_required
+        ? "medium"
+        : "low";
+    const nextPrompt = statusCounts.blocked
+      ? `Help me fix blocked ${serviceAdapter.replace(/_/g, " ")} Bittensor adapter entries.`
+      : statusCounts.mock_ready
+        ? `Build a ${serviceAdapter.replace(/_/g, " ")} adapter operator handoff packet for the mock-ready subnet.`
+        : statusCounts.manual_review_required
+          ? `Prepare a manual canary review for the ${serviceAdapter.replace(/_/g, " ")} Bittensor adapter without invoking it.`
+          : `Help me configure a ${serviceAdapter.replace(/_/g, " ")} Bittensor adapter without enabling real execution.`;
+    const rationale = statusCounts.blocked
+      ? `${statusCounts.blocked} configured ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.blocked === 1 ? "y is" : "ies are"} blocked.`
+      : statusCounts.needs_adapter
+        ? `${statusCounts.needs_adapter} subnet${statusCounts.needs_adapter === 1 ? "" : "s"} would benefit from a ${serviceAdapter.replace(/_/g, " ")} adapter.`
+        : statusCounts.mock_ready
+          ? `${statusCounts.mock_ready} ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.mock_ready === 1 ? "y is" : "ies are"} mock-ready and should move through evidence handoff.`
+          : statusCounts.manual_review_required
+            ? `${statusCounts.manual_review_required} ${serviceAdapter.replace(/_/g, " ")} adapter entr${statusCounts.manual_review_required === 1 ? "y needs" : "ies need"} manual canary review.`
+            : `No immediate ${serviceAdapter.replace(/_/g, " ")} adapter work is visible in the current marketplace slice.`;
+    return {
+      serviceAdapter,
+      priority,
+      candidateNetuids,
+      statusCounts,
+      rationale,
+      nextPrompt,
+      warnings: [
+        "Roadmap is planning evidence only and does not configure, invoke, or approve subnet services.",
+        ...(entries.some((entry) => entry.status === "blocked") ? ["Blocked adapter entries must be fixed before dry-run, handoff, or canary review."] : []),
+      ],
+    };
+  }).filter((recommendation) => recommendation.priority !== "low" || recommendation.candidateNetuids.length > 0).slice(0, limit);
+  const nextActions = recommendations.length
+    ? recommendations.map((recommendation) => recommendation.nextPrompt)
+    : ["Use adapter marketplace and templates to identify the next direct subnet service candidate."];
+  return {
+    kind: "bittensor_subnet_adapter_roadmap",
+    generatedAt: nowIso(),
+    goal,
+    status: recommendations.length ? "pass" : "warning",
+    marketplaceSummary: { ...marketplace.summary, total: marketplace.total },
+    recommendations,
+    warnings: uniqueWarnings(
+      marketplace.warnings,
+      ["Roadmap is evidence only; it does not authorize real subnet service execution."],
+    ),
+    nextActions,
   };
 }
 
