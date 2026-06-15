@@ -132,7 +132,7 @@ node scripts/bittensor-watch-autopilot-scheduler.mjs \
   --iterations 6 \
   --interval-ms 60000 \
   --jsonl-output /tmp/bittensor-watch-autopilot-scheduler.jsonl \
-  --json-output /tmp/bittensor-watch-autopilot-scheduler-summary.json \
+  --summary-output /tmp/bittensor-watch-autopilot-scheduler-summary.json \
   --strict
 ```
 
