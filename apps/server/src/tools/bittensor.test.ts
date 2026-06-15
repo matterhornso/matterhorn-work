@@ -42,6 +42,7 @@ import {
   buildBittensorSubnetAdapterEvidenceExport,
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
+  buildBittensorSubnetAdapterConformanceExport,
   buildBittensorSubnetAdapterPreflightPacket,
   buildBittensorSubnetAdapterPreflightPacketExport,
   buildBittensorSubnetAdapterDryRunExport,
@@ -1999,6 +2000,44 @@ describe("executeBittensorChatWorkflow", () => {
       expect(report.cases[0]?.metadata?.requestHashRequired).toBe(true);
       expect(report.cases[0]?.checks.some((check) => check.id === "no_user_task" && check.status === "pass")).toBe(true);
       expect(JSON.stringify(report)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("exports adapter conformance evidence without endpoints or raw metadata", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Mock data-search adapter",
+        serviceAdapter: "data_search",
+        endpoint: "mock://data-search",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Mock adapter safety note."],
+      }]);
+      const conformanceExport = await buildBittensorSubnetAdapterConformanceExport({ netuid: 77 });
+      expect(conformanceExport.kind).toBe("bittensor_subnet_adapter_conformance_export");
+      expect(conformanceExport.status).toBe("pass");
+      expect(conformanceExport.summary.passed).toBe(1);
+      expect(conformanceExport.markdown).toContain("Bittensor Adapter Conformance Export");
+      expect(conformanceExport.markdown).toContain("No user task sent");
+      expect(conformanceExport.markdown).toContain("Metadata request hash required: yes");
+      expect(conformanceExport.markdown).not.toContain("mock://data-search");
+      expect(conformanceExport.warnings.join(" ")).toMatch(/do(?:es)? not authorize real subnet service execution/i);
+      expect(JSON.stringify(conformanceExport)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token|Bearer [A-Za-z0-9._-]{8,}/i);
     } finally {
       if (previousAdapters === undefined) {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
