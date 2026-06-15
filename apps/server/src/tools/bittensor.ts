@@ -1211,6 +1211,23 @@ export interface BittensorSubnetAdapterConformanceExport {
   warnings: string[];
 }
 
+export interface BittensorSubnetAdapterOperatorHandoff {
+  kind: "bittensor_subnet_adapter_operator_handoff";
+  generatedAt: string;
+  requested: {
+    adapter: BittensorCapabilityManifest["serviceAdapter"] | null;
+    netuid: number | null;
+  };
+  status: "blocked" | "mock_rehearsal_ready" | "manual_review_required";
+  evidenceReview: BittensorSubnetAdapterEvidenceReviewDecision;
+  evidenceExport: BittensorSubnetAdapterEvidenceExport;
+  conformanceExport: BittensorSubnetAdapterConformanceExport;
+  dryRunExport: BittensorSubnetAdapterDryRunExport;
+  markdown: string;
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSubnetAdapterRunResult {
   ok: boolean;
   mode: "mock" | "http";
@@ -4392,6 +4409,108 @@ export async function buildBittensorSubnetAdapterConformanceExport(input: {
       report.warnings,
       ["Conformance exports are metadata evidence only and do not authorize real subnet service execution."],
     ),
+  };
+}
+
+function renderBittensorSubnetAdapterOperatorHandoffMarkdown(handoff: Omit<BittensorSubnetAdapterOperatorHandoff, "markdown">): string {
+  const adapter = handoff.requested.adapter ?? "not specified";
+  const netuid = handoff.requested.netuid === null ? "not specified" : String(handoff.requested.netuid);
+  return [
+    "# Bittensor Adapter Operator Handoff",
+    "",
+    `Generated: ${sanitizeEvidenceMarkdownText(handoff.generatedAt)}`,
+    `Adapter: ${sanitizeEvidenceMarkdownText(adapter)}`,
+    `Netuid: ${sanitizeEvidenceMarkdownText(netuid)}`,
+    `Status: ${sanitizeEvidenceMarkdownText(handoff.status)}`,
+    "",
+    "## Gate Summary",
+    markdownBullet(`Evidence review: ${handoff.evidenceReview.status}`),
+    markdownBullet(`Evidence export warnings: ${handoff.evidenceExport.summary.warningCount}`),
+    markdownBullet(`Conformance: ${handoff.conformanceExport.status}`),
+    markdownBullet(`Conformance passed: ${handoff.conformanceExport.summary.passed}/${handoff.conformanceExport.summary.total}`),
+    markdownBullet(`Dry-run: ${handoff.dryRunExport.status}`),
+    markdownBullet(`Dry-run passed: ${handoff.dryRunExport.summary.passed}/${handoff.dryRunExport.summary.total}`),
+    "",
+    "## Blockers",
+    ...(handoff.evidenceReview.blockedReasons.length ? handoff.evidenceReview.blockedReasons.map(markdownBullet) : ["- None from evidence review"]),
+    "",
+    "## Warnings",
+    ...(handoff.warnings.length ? handoff.warnings.map(markdownBullet) : ["- None"]),
+    "",
+    "## Next Actions",
+    ...(handoff.nextActions.length ? handoff.nextActions.map(markdownBullet) : ["- None"]),
+    "",
+    "## Subreports",
+    "- Export individual evidence, conformance, and dry-run markdown when the reviewer needs full detail.",
+    "- This handoff intentionally summarizes subreports instead of embedding raw metadata, task text, adapter output, endpoint URLs, credentials, or full request hashes.",
+    "",
+    "## Safety Boundary",
+    "- This handoff is an operator review artifact. It does not authorize real subnet service execution.",
+    "- Real adapter invocation still requires a separate preview, exact request SHA-256 confirmation, short-lived approval, and explicit operator/user confirmation.",
+    "- Never include seed phrases, mnemonics, private keys, wallet exports, host tokens, or adapter credential values in review notes.",
+    "",
+  ].join("\n");
+}
+
+export async function buildBittensorSubnetAdapterOperatorHandoff(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  task?: string | null;
+  ss58Address?: string | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterOperatorHandoff> {
+  const [evidenceReview, evidenceExport, conformanceExport, dryRunExport] = await Promise.all([
+    reviewBittensorSubnetAdapterEvidence(input),
+    buildBittensorSubnetAdapterEvidenceExport(input),
+    buildBittensorSubnetAdapterConformanceExport(input),
+    buildBittensorSubnetAdapterDryRunExport(input),
+  ]);
+  const blocked =
+    evidenceReview.status === "blocked" ||
+    conformanceExport.status === "fail" ||
+    dryRunExport.status === "fail";
+  const status: BittensorSubnetAdapterOperatorHandoff["status"] = blocked
+    ? "blocked"
+    : evidenceReview.status === "manual_real_canary_review_required"
+      ? "manual_review_required"
+      : "mock_rehearsal_ready";
+  const nextActions = status === "blocked"
+    ? [
+      "Resolve evidence, conformance, or dry-run blockers before any adapter launch work continues.",
+      "Export individual evidence/conformance/dry-run reports for detailed reviewer notes.",
+      "Do not invoke real subnet services.",
+    ]
+    : status === "mock_rehearsal_ready"
+      ? [
+        "Run or archive the mock dry-run evidence before any real adapter canary review.",
+        "Keep real subnet adapters disabled until manual provider/canary/rollback review passes.",
+      ]
+      : [
+        "Export individual evidence/conformance/dry-run reports for human review.",
+        "Prepare a real-adapter canary packet only after exact preview request SHA-256 confirmation.",
+      ];
+  const warnings = uniqueWarnings(
+    evidenceReview.warnings,
+    evidenceExport.warnings,
+    conformanceExport.warnings,
+    dryRunExport.warnings,
+    ["This handoff is evidence only and does not authorize real subnet service execution."],
+  );
+  const base = {
+    kind: "bittensor_subnet_adapter_operator_handoff" as const,
+    generatedAt: nowIso(),
+    requested: evidenceReview.requested,
+    status,
+    evidenceReview,
+    evidenceExport,
+    conformanceExport,
+    dryRunExport,
+    warnings,
+    nextActions,
+  };
+  return {
+    ...base,
+    markdown: renderBittensorSubnetAdapterOperatorHandoffMarkdown(base),
   };
 }
 

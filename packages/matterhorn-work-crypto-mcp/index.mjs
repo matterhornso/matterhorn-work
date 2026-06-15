@@ -1004,6 +1004,18 @@ async function bittensor_export_subnet_adapter_conformance(args = {}) {
   return { success: true, conformanceExport: res.conformanceExport };
 }
 
+async function bittensor_build_subnet_adapter_operator_handoff(args = {}) {
+  const params = new URLSearchParams();
+  if (typeof args.adapter === "string") params.set("adapter", args.adapter);
+  if (Number.isFinite(args.netuid)) params.set("netuid", String(args.netuid));
+  if (typeof args.task === "string") params.set("task", args.task);
+  if (typeof args.ss58Address === "string") params.set("ss58Address", args.ss58Address);
+  if (Number.isFinite(args.limit)) params.set("limit", String(args.limit));
+  const query = params.toString();
+  const res = await callServer(`/api/bittensor/adapters/operator-handoff${query ? `?${query}` : ""}`);
+  return { success: true, handoff: res.handoff };
+}
+
 async function bittensor_dry_run_subnet_adapters(args = {}) {
   const params = new URLSearchParams();
   if (Number.isFinite(args.netuid)) params.set("netuid", String(args.netuid));
@@ -1187,6 +1199,7 @@ const tools = [
   { name: "bittensor_get_subnet_adapter_templates", description: "Return sanitized real-adapter onboarding templates for data-search or inference subnet adapters, including config placeholders, allowlist/auth env names, schemas, and preflight steps. Never returns credential values.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" } } } },
   { name: "bittensor_probe_subnet_adapter_conformance", description: "Probe configured subnet adapter metadata/health conformance without sending user task text, wallet data, signing payloads, or request bodies. Use before any real adapter invocation.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, limit: { type: "number" } } } },
   { name: "bittensor_export_subnet_adapter_conformance", description: "Return a redacted markdown export for subnet adapter metadata conformance. Evidence only; it does not authorize or invoke real subnet services.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, limit: { type: "number" } } } },
+  { name: "bittensor_build_subnet_adapter_operator_handoff", description: "Return one redacted operator handoff packet combining adapter evidence review, evidence export, conformance export, and mock dry-run export. Evidence only; it does not authorize real subnet services.", inputSchema: { type: "object", properties: { adapter: { type: "string", enum: ["data_search", "inference"] }, netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_dry_run_subnet_adapters", description: "Run the safe subnet adapter dry-run harness for configured mock adapters: preview, missing-hash rejection, mismatched-hash rejection, confirmed invocation, and redaction checks. Non-mock adapters are skipped.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_export_subnet_adapter_dry_run", description: "Return a redacted markdown export for the mock adapter dry-run harness. Evidence only; it does not authorize or invoke real subnet services.", inputSchema: { type: "object", properties: { netuid: { type: "number" }, task: { type: "string" }, ss58Address: { type: "string" }, limit: { type: "number" } } } },
   { name: "bittensor_prepare_extrinsic", description: "Prepare an unsigned Bittensor extrinsic preview for external signing. No secret material is handled.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["stake", "unstake", "move_stake", "transfer", "set_child_hotkey", "register", "serve"] }, netuid: { type: "number" }, amountTao: { type: "string" }, coldkey: { type: "string" }, hotkey: { type: "string" }, destination: { type: "string" }, originNetuid: { type: "number" }, destinationNetuid: { type: "number" }, rateTolerance: { type: "number" } }, required: ["action"] } },
@@ -1341,6 +1354,7 @@ function handleMessage(msg) {
         case "bittensor_get_subnet_adapter_templates": return bittensor_get_subnet_adapter_templates(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_probe_subnet_adapter_conformance": return bittensor_probe_subnet_adapter_conformance(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_export_subnet_adapter_conformance": return bittensor_export_subnet_adapter_conformance(args).then(r => respond(textResult(r))).catch(catchErr);
+        case "bittensor_build_subnet_adapter_operator_handoff": return bittensor_build_subnet_adapter_operator_handoff(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_dry_run_subnet_adapters": return bittensor_dry_run_subnet_adapters(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_export_subnet_adapter_dry_run": return bittensor_export_subnet_adapter_dry_run(args).then(r => respond(textResult(r))).catch(catchErr);
         case "bittensor_prepare_extrinsic": return bittensor_prepare_extrinsic(args).then(r => respond(textResult(r))).catch(catchErr);

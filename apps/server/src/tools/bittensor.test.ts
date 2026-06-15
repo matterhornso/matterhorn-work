@@ -43,6 +43,7 @@ import {
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
   buildBittensorSubnetAdapterConformanceExport,
+  buildBittensorSubnetAdapterOperatorHandoff,
   buildBittensorSubnetAdapterPreflightPacket,
   buildBittensorSubnetAdapterPreflightPacketExport,
   buildBittensorSubnetAdapterDryRunExport,
@@ -2050,6 +2051,55 @@ describe("executeBittensorChatWorkflow", () => {
         process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
       }
     }
+  });
+
+  test("builds one redacted adapter operator handoff from evidence, conformance, and dry-run exports", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      try {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+          netuid: 77,
+          name: "Mock data-search adapter",
+          serviceAdapter: "data_search",
+          endpoint: "mock://data-search",
+          requiredAuth: "none",
+          costModel: "free_read",
+          safetyNotes: ["Mock adapter safety note."],
+        }]);
+        const handoff = await buildBittensorSubnetAdapterOperatorHandoff({
+          adapter: "data_search",
+          netuid: 77,
+          task: "Operator handoff task with private context that must not appear.",
+          ss58Address: VALID_SS58,
+        });
+        expect(handoff.kind).toBe("bittensor_subnet_adapter_operator_handoff");
+        expect(handoff.status).toBe("mock_rehearsal_ready");
+        expect(handoff.evidenceReview.status).toBe("mock_dry_run_ready");
+        expect(handoff.conformanceExport.status).toBe("pass");
+        expect(handoff.dryRunExport.status).toBe("pass");
+        expect(handoff.markdown).toContain("Bittensor Adapter Operator Handoff");
+        expect(handoff.markdown).toContain("Evidence review: mock_dry_run_ready");
+        expect(handoff.markdown).toContain("Conformance: pass");
+        expect(handoff.markdown).toContain("Dry-run: pass");
+        expect(handoff.markdown).not.toContain("private context");
+        expect(handoff.markdown).not.toContain("mock://data-search");
+        expect(handoff.warnings.join(" ")).toMatch(/does not authorize real subnet service execution/i);
+        expect(JSON.stringify(handoff)).not.toMatch(/privateKey|ADAPTER_TOKEN|adapter-token|super-secret-token-value|Bearer [A-Za-z0-9._-]{8,}/i);
+      } finally {
+        if (previousAdapters === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+        }
+        if (previousMock === undefined) {
+          delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+        } else {
+          process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+        }
+      }
+    });
   });
 
   test("probes HTTPS adapter metadata conformance without sending request bodies or credentials", async () => {
