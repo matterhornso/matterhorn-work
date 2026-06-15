@@ -30,6 +30,19 @@ const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 
 type Tab = "overview" | "subnets" | "wallet" | "actions";
 type ActionType = BittensorActionQuote["action"];
+type ReadinessCheck = {
+  id?: string;
+  label?: string;
+  status?: "pass" | "warning" | "fail" | "skip";
+  summary?: string;
+};
+type ReadinessReport = {
+  ready?: boolean;
+  checks?: ReadinessCheck[];
+  warnings?: string[];
+  blockers?: string[];
+  checkedAt?: string;
+};
 
 function isValidSs58Address(address: string): boolean {
   const trimmed = address.trim();
@@ -139,6 +152,8 @@ export default function BittensorPanel() {
   const [quote, setQuote] = useState<BittensorActionQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
@@ -167,6 +182,29 @@ export default function BittensorPanel() {
       setSidecarStatus(json.health as BittensorSubtensorSidecarHealth);
     } catch {
       setSidecarStatus(null);
+    }
+  }, []);
+
+  const loadReadiness = useCallback(async () => {
+    setReadinessLoading(true);
+    try {
+      const res = await fetch("/api/bittensor/readiness");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load Bittensor readiness");
+      setReadiness(json.report as ReadinessReport);
+    } catch (err) {
+      setReadiness({
+        ready: false,
+        checks: [{
+          id: "readiness_api",
+          label: "Readiness API",
+          status: "fail",
+          summary: err instanceof Error ? err.message : "Failed to load Bittensor readiness.",
+        }],
+        warnings: ["Readiness check could not run from the app."],
+      });
+    } finally {
+      setReadinessLoading(false);
     }
   }, []);
 
@@ -218,7 +256,8 @@ export default function BittensorPanel() {
 
   useEffect(() => {
     void loadSidecarStatus();
-  }, [loadSidecarStatus]);
+    void loadReadiness();
+  }, [loadReadiness, loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -299,6 +338,7 @@ export default function BittensorPanel() {
   const refreshBittensor = () => {
     void loadSubnets();
     void loadSidecarStatus();
+    void loadReadiness();
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>) => {
@@ -327,6 +367,11 @@ export default function BittensorPanel() {
     await sendToChat(prompt, { ss58Address: address, wallet });
   };
 
+  const askAgentAboutReadiness = async () => {
+    const prompt = "Use Bittensor chat mode. Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, what is safe to demo, and the next command or fix to run before a test customer session.";
+    await sendToChat(prompt, { readiness });
+  };
+
   const askAgentAboutQuote = async () => {
     if (!quote) return;
     const prompt = `Use Bittensor chat mode. Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
@@ -340,6 +385,18 @@ export default function BittensorPanel() {
       quote,
     });
   };
+
+  const readinessChecks = readiness?.checks ?? [];
+  const readinessFailures = readinessChecks.filter((check) => check.status === "fail");
+  const readinessWarnings = readinessChecks.filter((check) => check.status === "warning");
+  const readinessSkips = readinessChecks.filter((check) => check.status === "skip");
+  const readinessState = readiness
+    ? readiness.ready === true && readinessFailures.length === 0
+      ? "Ready"
+      : readinessFailures.length
+        ? "Blocked"
+        : "Review"
+    : "Unknown";
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -410,6 +467,36 @@ export default function BittensorPanel() {
             {sidecarStatus?.status === "unreachable" ? (
               <p className="text-xs leading-5 text-amber-300">{sidecarStatus.message}</p>
             ) : null}
+
+            <Section title="Customer Readiness" icon={<Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Gate" value={readinessState} compact />
+                  <Metric label="Checks" value={readinessChecks.length ? String(readinessChecks.length) : "—"} compact />
+                  <Metric label="Failures" value={String(readinessFailures.length)} compact />
+                  <Metric label="Warnings" value={String(readinessWarnings.length + readinessSkips.length)} compact />
+                </div>
+                {readinessFailures[0] ? (
+                  <p className="text-xs leading-5 text-red-300">{readinessFailures[0].label ?? "Readiness"}: {readinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
+                ) : readinessWarnings[0] ? (
+                  <p className="text-xs leading-5 text-amber-300">{readinessWarnings[0].label ?? "Readiness"}: {readinessWarnings[0].summary ?? "Review before customer demo."}</p>
+                ) : readiness?.ready ? (
+                  <p className="text-xs leading-5 text-emerald-300">Bittensor readiness checks are currently green for a customer demo.</p>
+                ) : (
+                  <p className="text-xs leading-5 text-dls-secondary">Run readiness before a test customer session.</p>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadReadiness} disabled={readinessLoading}>
+                    {readinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Run Check
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
+                    <BrainCircuit className="size-3.5" />
+                    Ask Chat
+                  </Button>
+                </div>
+              </div>
+            </Section>
 
             <Section title="Watched Wallet" icon={<Wallet className="size-4" />}>
               {watchAddress.trim() ? (
