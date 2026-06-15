@@ -7,8 +7,16 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const viteConfigPath = path.join(appRoot, "vite.config.ts");
 const source = await readFile(viteConfigPath, "utf8");
 
-function hasBlockTarget(blockName, target) {
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\function hasBlockTarget(blockName, target) {
   const expression = new RegExp(String.raw`${blockName}:\\s*\\{[\\s\\S]*?target:\\s*["']${target}["']`, "m");
+  return expression.test(source);
+}
+");
+}
+
+function hasBlockTarget(blockName, target) {
+  const expression = new RegExp(`${escapeRegex(blockName)}:\\s*\\{\\s*target:\\s*["']${escapeRegex(target)}["']`, "m");
   return expression.test(source);
 }
 
