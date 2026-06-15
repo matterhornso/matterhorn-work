@@ -44,6 +44,13 @@ Deliverable prompt:
 Explain my Bittensor wallet, what I am exposed to, and what I should monitor.
 ```
 
+Current implementation:
+
+- Wallet reads and wallet intelligence requests now maintain an in-memory public SS58 baseline for the active server process.
+- Follow-up prompts such as `what changed in my wallet since last time?` compare the current watch-only wallet snapshot against the prior baseline.
+- Change cards show free TAO, staked TAO, estimated value, position-count, subnet, validator, top-position, freshness, and source deltas.
+- No persistence, custody, signing, seed import, private keys, mnemonics, wallet exports, or transaction broadcast are involved.
+
 ## Phase 3: Advanced Staking Planner
 
 Goal: let users describe allocation goals and receive safe, unsigned staking plans.

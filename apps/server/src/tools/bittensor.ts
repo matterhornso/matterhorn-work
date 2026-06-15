@@ -888,6 +888,37 @@ export interface BittensorWalletIntelligenceReport {
   updatedAt: string;
 }
 
+export interface BittensorWalletChangeReport {
+  kind: "wallet_change";
+  ss58Address: string;
+  baselineAvailable: boolean;
+  previousUpdatedAt: string | null;
+  currentUpdatedAt: string;
+  freeTaoDelta: number | null;
+  stakeTotalDelta: number | null;
+  estimatedValueDelta: number | null;
+  positionCountDelta: number;
+  addedNetuids: number[];
+  removedNetuids: number[];
+  addedValidators: string[];
+  removedValidators: string[];
+  changedPositions: Array<{
+    netuid: number;
+    subnetName: string;
+    validatorHotkey: string | null;
+    previousTaoValue: number | null;
+    currentTaoValue: number | null;
+    deltaTao: number | null;
+  }>;
+  riskChanges: string[];
+  summary: string;
+  warnings: string[];
+  source: string;
+  block: number | null;
+  freshness: string | null;
+  updatedAt: string;
+}
+
 export interface BittensorDecisionOption {
   label: string;
   summary: string;
@@ -1557,6 +1588,7 @@ type CacheEntry<T> = { at: number; data: T };
 const cache = new Map<string, CacheEntry<unknown>>();
 const watchlist = new Map<string, BittensorWatch>();
 const chatContexts = new Map<string, BittensorChatContext>();
+const walletSnapshotBaselines = new Map<string, { wallet: BittensorWalletSnapshot; updatedAt: string }>();
 let watchlistLoadedFromDisk = false;
 
 const FALLBACK_SUBNETS: BittensorSubnetSummary[] = [
@@ -5451,8 +5483,16 @@ function decisionPromptNeedsWallet(message: string): boolean {
 }
 
 function isWalletIntelligenceQuestion(message: string, plan: BittensorPlan): boolean {
+  if (isWalletChangeQuestion(message, plan)) return true;
   if (!isBittensorIntelligenceQuestion(message)) return false;
   return plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake exposure|exposure)\b/i.test(message);
+}
+
+function isWalletChangeQuestion(message: string, plan: BittensorPlan): boolean {
+  return (
+    /\b(what changed|changed since|changes since|diff|difference|compare.*last|since last time|new exposure|removed exposure)\b/i.test(message) &&
+    (plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake|exposure|positions?)\b/i.test(message))
+  );
 }
 
 function isSubnetIntelligenceQuestion(message: string): boolean {
@@ -5708,6 +5748,162 @@ function buildStakePositionsCard(wallet: BittensorWalletSnapshot): BittensorChat
     ],
     warnings: wallet.providerStatus === "ok" ? wallet.warnings ?? [] : [wallet.message ?? "Wallet provider data is unavailable."],
     data: { wallet, positions: positions.slice(0, 8) },
+  };
+}
+
+function cloneWalletSnapshot(wallet: BittensorWalletSnapshot): BittensorWalletSnapshot {
+  return JSON.parse(JSON.stringify(wallet)) as BittensorWalletSnapshot;
+}
+
+function walletStakeTotal(wallet: BittensorWalletSnapshot): number | null {
+  const values = wallet.stakePositions
+    .map((position) => position.taoValue)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function numericDelta(current: number | null | undefined, previous: number | null | undefined): number | null {
+  return typeof current === "number" && Number.isFinite(current) && typeof previous === "number" && Number.isFinite(previous)
+    ? current - previous
+    : null;
+}
+
+function walletPositionKey(position: BittensorStakePosition): string {
+  return [position.netuid, position.validatorHotkey ?? "no-validator"].join(":");
+}
+
+function rememberBittensorWalletSnapshot(wallet: BittensorWalletSnapshot): void {
+  walletSnapshotBaselines.set(wallet.ss58Address, { wallet: cloneWalletSnapshot(wallet), updatedAt: nowIso() });
+  while (walletSnapshotBaselines.size > 128) {
+    const firstKey = walletSnapshotBaselines.keys().next().value;
+    if (!firstKey) break;
+    walletSnapshotBaselines.delete(firstKey);
+  }
+}
+
+function buildBittensorWalletChangeReport(current: BittensorWalletSnapshot): BittensorWalletChangeReport {
+  const baseline = walletSnapshotBaselines.get(current.ss58Address) ?? null;
+  const currentUpdatedAt = nowIso();
+  const previous = baseline?.wallet ?? null;
+  const previousStakeTotal = previous ? walletStakeTotal(previous) : null;
+  const currentStakeTotal = walletStakeTotal(current);
+  const previousNetuids = new Set(previous?.stakePositions.map((position) => position.netuid) ?? []);
+  const currentNetuids = new Set(current.stakePositions.map((position) => position.netuid));
+  const previousValidators = new Set(previous?.stakePositions.map((position) => position.validatorHotkey).filter((value): value is string => Boolean(value)) ?? []);
+  const currentValidators = new Set(current.stakePositions.map((position) => position.validatorHotkey).filter((value): value is string => Boolean(value)));
+  const previousPositions = new Map((previous?.stakePositions ?? []).map((position) => [walletPositionKey(position), position]));
+  const currentPositions = new Map(current.stakePositions.map((position) => [walletPositionKey(position), position]));
+  const changedPositions = [...new Set([...previousPositions.keys(), ...currentPositions.keys()])]
+    .map((key) => {
+      const oldPosition = previousPositions.get(key) ?? null;
+      const newPosition = currentPositions.get(key) ?? null;
+      const deltaTao = numericDelta(newPosition?.taoValue, oldPosition?.taoValue);
+      return {
+        netuid: newPosition?.netuid ?? oldPosition?.netuid ?? 0,
+        subnetName: newPosition?.subnetName ?? oldPosition?.subnetName ?? `Subnet ${newPosition?.netuid ?? oldPosition?.netuid ?? 0}`,
+        validatorHotkey: newPosition?.validatorHotkey ?? oldPosition?.validatorHotkey ?? null,
+        previousTaoValue: oldPosition?.taoValue ?? null,
+        currentTaoValue: newPosition?.taoValue ?? null,
+        deltaTao,
+      };
+    })
+    .filter((position) =>
+      position.previousTaoValue !== position.currentTaoValue &&
+      (position.deltaTao === null || Math.abs(position.deltaTao) > 0.000001)
+    )
+    .slice(0, 8);
+  const previousRiskCount = previous?.stakePositions.filter((position) => position.slippageRisk === "high" || position.slippageRisk === "medium").length ?? 0;
+  const currentRiskCount = current.stakePositions.filter((position) => position.slippageRisk === "high" || position.slippageRisk === "medium").length;
+  const riskChanges = previous
+    ? [
+      ...(currentRiskCount > previousRiskCount ? [`Risk-position count increased from ${previousRiskCount} to ${currentRiskCount}.`] : []),
+      ...(currentRiskCount < previousRiskCount ? [`Risk-position count decreased from ${previousRiskCount} to ${currentRiskCount}.`] : []),
+      ...(current.providerStatus !== previous.providerStatus ? [`Provider status changed from ${previous.providerStatus} to ${current.providerStatus}.`] : []),
+    ]
+    : [];
+  const addedNetuids = [...currentNetuids].filter((netuid) => !previousNetuids.has(netuid)).sort((a, b) => a - b);
+  const removedNetuids = [...previousNetuids].filter((netuid) => !currentNetuids.has(netuid)).sort((a, b) => a - b);
+  const addedValidators = [...currentValidators].filter((hotkey) => !previousValidators.has(hotkey)).sort();
+  const removedValidators = [...previousValidators].filter((hotkey) => !currentValidators.has(hotkey)).sort();
+  const changeCount = changedPositions.length + addedNetuids.length + removedNetuids.length + addedValidators.length + removedValidators.length + riskChanges.length;
+  const warnings = uniqueWarnings(
+    previous ? [] : ["No prior public wallet baseline was available. Matterhorn created one from this read."],
+    current.providerStatus === "ok" ? [] : [current.message ?? "Wallet provider data is unavailable."],
+    current.warnings ?? [],
+    ["This comparison uses public watch-only wallet data and is not financial advice."],
+  );
+  const report: BittensorWalletChangeReport = {
+    kind: "wallet_change",
+    ss58Address: current.ss58Address,
+    baselineAvailable: Boolean(previous),
+    previousUpdatedAt: baseline?.updatedAt ?? null,
+    currentUpdatedAt,
+    freeTaoDelta: numericDelta(current.taoBalance, previous?.taoBalance),
+    stakeTotalDelta: numericDelta(currentStakeTotal, previousStakeTotal),
+    estimatedValueDelta: numericDelta(current.estimatedValueTao, previous?.estimatedValueTao),
+    positionCountDelta: current.stakePositions.length - (previous?.stakePositions.length ?? 0),
+    addedNetuids,
+    removedNetuids,
+    addedValidators,
+    removedValidators,
+    changedPositions,
+    riskChanges,
+    summary: previous
+      ? changeCount
+        ? `Detected ${changeCount} public wallet exposure change${changeCount === 1 ? "" : "s"} since the last baseline.`
+        : "No material public wallet exposure changes were detected since the last baseline."
+      : "Created a first public wallet baseline; ask again after another read to compare changes.",
+    warnings,
+    source: current.source ?? "provider",
+    block: current.block ?? null,
+    freshness: current.freshness ?? null,
+    updatedAt: currentUpdatedAt,
+  };
+  rememberBittensorWalletSnapshot(current);
+  return report;
+}
+
+function formatSignedDelta(value: number | null, suffix = ""): string {
+  if (value === null) return "Unavailable";
+  if (Math.abs(value) <= 0.000001) return `0${suffix}`;
+  return `${value > 0 ? "+" : ""}${formatMetric(value)}${suffix}`;
+}
+
+function buildBittensorWalletChangeCard(report: BittensorWalletChangeReport): BittensorChatCard {
+  const topChange = report.changedPositions[0] ?? null;
+  return {
+    kind: "intelligence_report",
+    title: "Bittensor wallet changes",
+    subtitle: shortSs58(report.ss58Address),
+    summary: report.summary,
+    tone: report.baselineAvailable && (report.changedPositions.length || report.riskChanges.length || report.removedValidators.length || report.removedNetuids.length) ? "warning" : "default",
+    items: [
+      cardItem("Baseline", report.baselineAvailable ? "Available" : "Created now", report.baselineAvailable ? "default" : "warning"),
+      cardItem("Free TAO delta", formatSignedDelta(report.freeTaoDelta, " TAO")),
+      cardItem("Staked TAO delta", formatSignedDelta(report.stakeTotalDelta, " TAO")),
+      cardItem("Estimated value delta", formatSignedDelta(report.estimatedValueDelta, " TAO")),
+      cardItem("Position count delta", formatSignedDelta(report.positionCountDelta)),
+      cardItem("Added subnets", report.addedNetuids.length ? report.addedNetuids.join(", ") : "None"),
+      cardItem("Removed subnets", report.removedNetuids.length ? report.removedNetuids.join(", ") : "None", report.removedNetuids.length ? "warning" : "muted"),
+      cardItem("Validator changes", report.addedValidators.length + report.removedValidators.length),
+      cardItem("Top position change", topChange ? `${topChange.subnetName}: ${formatSignedDelta(topChange.deltaTao, " TAO")}` : "None"),
+      cardItem("Freshness", report.freshness ?? "Unavailable", report.freshness ? "default" : "muted"),
+      cardItem("Source", report.source, report.source.includes("fallback") ? "warning" : "muted"),
+    ],
+    actions: [
+      {
+        label: "Analyze wallet",
+        kind: "send_to_chat",
+        payload: { prompt: `Analyze my Bittensor wallet. SS58 address: ${report.ss58Address}` },
+      },
+      {
+        label: "Create watches",
+        kind: "send_to_chat",
+        payload: { prompt: `Create watches for my riskiest Bittensor positions. SS58 address: ${report.ss58Address}` },
+      },
+    ],
+    warnings: report.warnings,
+    data: { report },
   };
 }
 
@@ -6024,6 +6220,20 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     if (!ss58Address) {
       return clarificationResult(plan, "I can analyze your Bittensor exposure, but I need your SS58 coldkey public address.");
     }
+    if (isWalletChangeQuestion(message, plan)) {
+      const wallet = await bittensorProvider.getWallet(ss58Address);
+      const report = buildBittensorWalletChangeReport(wallet);
+      return {
+        plan: { ...answeredPlan, intent: "wallet", responseCards: ["intelligence_report"] },
+        responseText: `${report.summary} This is a watch-only comparison of public wallet data for ${shortSs58(ss58Address)}; it does not sign, move, stake, or broadcast anything.`,
+        cards: [buildBittensorWalletChangeCard(report)],
+        data: { walletChange: report },
+        warnings: uniqueWarnings(warnings, report.warnings),
+        requiresClarification: false,
+        clarificationQuestion: null,
+        execution: "answered",
+      };
+    }
     const report = await analyzeBittensorWalletIntelligence(ss58Address);
     return {
       plan: { ...answeredPlan, intent: "wallet", responseCards: ["intelligence_report"] },
@@ -6043,6 +6253,7 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       return clarificationResult(plan, "I can show your TAO and stake exposure, but I need your SS58 coldkey public address.");
     }
     const wallet = await bittensorProvider.getWallet(ss58Address);
+    rememberBittensorWalletSnapshot(wallet);
     const cards = [buildBittensorWalletCard(wallet)];
     if (isStakePositionQuestion(message) || wallet.stakePositions.length) cards.push(buildStakePositionsCard(wallet));
     const stakeTotal = wallet.stakePositions.reduce((sum, position) => sum + (position.taoValue ?? 0), 0);
@@ -8790,6 +9001,7 @@ export async function analyzeBittensorSubnetIntelligence(netuid: number): Promis
 
 export async function analyzeBittensorWalletIntelligence(ss58Address: string): Promise<BittensorWalletIntelligenceReport> {
   const wallet = await bittensorProvider.getWallet(ss58Address);
+  rememberBittensorWalletSnapshot(wallet);
   const positions = wallet.stakePositions;
   const stakeValues = positions.map((position) => position.taoValue).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
   const stakeTotalTao = stakeValues.length ? stakeValues.reduce((sum, value) => sum + value, 0) : null;
