@@ -30,7 +30,7 @@ The intended user experience:
 - Public wallet intelligence reports with free TAO, stake value, subnet/validator concentration, slippage exposure, stale-data risk, largest positions, warnings, next questions, copilot actions, and watch suggestions.
 - Subnet intelligence reports with score, source/freshness, market/metagraph context, mechanism-awareness, validator concentration, adapter readiness, warnings, next questions, and watch suggestions.
 - Validator intelligence and deep-dive flows for public validator hotkeys.
-- In-memory public wallet baselines and `what changed in my wallet since last time?` comparison cards.
+- In-memory public wallet baselines, `what changed in my wallet since last time?` comparison cards, and chat-level baseline reset/forget controls.
 
 ### Staking And Signing Safety
 
