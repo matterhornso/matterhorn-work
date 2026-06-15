@@ -568,6 +568,44 @@ try {
   }));
   assert.equal(readiness.ready, true);
 
+  const customerEvidenceBundle = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_customer_evidence_bundle",
+    arguments: {
+      bittensorLiveQa: {
+        ready: true,
+        summary: { pass: 7, fail: 0, skip: 0 },
+        stages: [
+          { id: "readiness", label: "Bittensor readiness", status: "pass" },
+          { id: "wallet.snapshot", label: "Wallet snapshot", status: "pass" },
+        ],
+      },
+      agentControlLiveQa: { ready: true, summary: { pass: 4, fail: 0 } },
+      ci: {
+        workflow_runs: [
+          { name: "Matterhorn Work Tests", conclusion: "success" },
+          { name: "i18n Audit", conclusion: "success" },
+          { name: "Alpha Channel macOS arm64", conclusion: "success" },
+        ],
+      },
+      readinessGate: "READY_FOR_TEST_CUSTOMERS",
+      walletTimeline: { enabled: true, snapshotCount: 2 },
+    },
+  }));
+  assert.equal(customerEvidenceBundle.ready, true);
+  assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
+  assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
+  assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);
+
+  const badCustomerEvidenceBundle = await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_customer_evidence_bundle",
+    arguments: {
+      bittensorLiveQa: { ready: true, seedPhrase: "never" },
+      ci: { workflow_runs: [{ name: "Matterhorn Work Tests", conclusion: "success" }] },
+      readinessGate: "READY_FOR_TEST_CUSTOMERS",
+    },
+  });
+  assert.match(badCustomerEvidenceBundle.error?.message || "", /credential-shaped field/i);
+
   const capabilities = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_list_capabilities",
     arguments: {},

@@ -82,3 +82,10 @@ pnpm test:upstream-openwork-sync
 ```
 
 The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.
+
+## Bittensor Customer Evidence MCP
+
+- Tool: `matterhorn_bittensor_customer_evidence_bundle`
+- Purpose: let Codex, Claude Code, and other MCP clients turn already-collected Bittensor live QA, agent-control QA, CI, readiness-gate, and optional public wallet timeline evidence into a customer-safe Markdown handoff packet.
+- Safety: accepts only public evidence objects, rejects credential-shaped fields, does not sign, broadcast, or call subnet services.
+- Verification: `pnpm test:agent-control-mcp` / `node packages/matterhorn-work-mcp/test-smoke.mjs`.

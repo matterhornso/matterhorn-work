@@ -390,6 +390,25 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_bittensor_customer_evidence_bundle",
+    description: "Create a customer-safe Bittensor readiness evidence bundle from already-collected public QA, CI, readiness, and wallet-timeline evidence.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bittensorLiveQa: { type: "object", description: "JSON output from the Bittensor live QA flow." },
+        agentControlLiveQa: { type: "object", description: "Optional JSON output from the agent-control live QA flow." },
+        ci: { type: "object", description: "GitHub checks, workflow runs, jobs, or statuses." },
+        readinessGate: {
+          oneOf: [{ type: "string" }, { type: "object" }],
+          description: "Readiness gate Markdown or a structured readiness result.",
+        },
+        walletTimeline: { type: "object", description: "Optional public wallet timeline status or export summary." },
+        title: { type: "string" },
+      },
+      required: ["bittensorLiveQa", "ci", "readinessGate"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_list_capabilities",
     description: "List Bittensor subnet capability manifests from the configured Matterhorn Work server. Use before previewing or invoking any direct subnet service.",
     inputSchema: { type: "object", properties: {} },
@@ -1136,6 +1155,180 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
   };
 }
 
+const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token)/i;
+
+function customerEvidenceArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function assertCustomerEvidenceHasNoCredentials(value, label, path = []) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertCustomerEvidenceHasNoCredentials(child, label, [...path, String(index)]));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE.test(key)) {
+      throw new Error(label + " contains forbidden credential-shaped field: " + [...path, key].join("."));
+    }
+    assertCustomerEvidenceHasNoCredentials(child, label, [...path, key]);
+  }
+}
+
+function customerEvidenceSummaryValue(report, key) {
+  const value = report?.summary?.[key];
+  return Number.isFinite(value) ? value : 0;
+}
+
+function customerEvidenceIsReady(report) {
+  return report?.ready === true || report?.ok === true || report?.status === "ready";
+}
+
+function customerEvidenceStageLabel(stage) {
+  return String(stage?.label || stage?.id || stage?.name || "").trim();
+}
+
+function customerEvidencePassedStages(report) {
+  return customerEvidenceArray(report?.stages)
+    .filter((stage) => /pass|ok|success/i.test(String(stage?.status || stage?.result || "")))
+    .map(customerEvidenceStageLabel)
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function customerEvidenceFailedStages(report) {
+  return customerEvidenceArray(report?.stages)
+    .filter((stage) => /fail|error/i.test(String(stage?.status || stage?.result || "")))
+    .map(customerEvidenceStageLabel)
+    .filter(Boolean);
+}
+
+function customerEvidenceCiItems(ci) {
+  return [
+    ...customerEvidenceArray(ci?.checks),
+    ...customerEvidenceArray(ci?.statuses),
+    ...customerEvidenceArray(ci?.workflow_runs),
+    ...customerEvidenceArray(ci?.runs),
+    ...customerEvidenceArray(ci?.jobs),
+  ];
+}
+
+function customerEvidenceCiName(item) {
+  return String(item?.name || item?.workflowName || item?.context || item?.check || item?.title || "").trim();
+}
+
+function customerEvidenceCiConclusion(item) {
+  return String(item?.conclusion || item?.status || item?.state || "").toLowerCase();
+}
+
+function customerEvidenceSummarizeCi(ci) {
+  const items = customerEvidenceCiItems(ci);
+  return {
+    total: items.length,
+    passed: items.filter((item) => /success|completed|pass|passed/.test(customerEvidenceCiConclusion(item))).map(customerEvidenceCiName).filter(Boolean),
+    failed: items.filter((item) => /failure|failed|error|cancelled|timed_out/.test(customerEvidenceCiConclusion(item))).map(customerEvidenceCiName).filter(Boolean),
+    pending: items.filter((item) => /pending|queued|in_progress|running/.test(customerEvidenceCiConclusion(item))).map(customerEvidenceCiName).filter(Boolean),
+  };
+}
+
+function customerEvidenceReadinessReady(value) {
+  if (!value) return false;
+  if (typeof value === "string") return /READY_FOR_TEST_CUSTOMERS|passes this evidence-backed Bittensor customer-readiness gate/i.test(value);
+  return customerEvidenceIsReady(value) || value.result === "READY_FOR_TEST_CUSTOMERS";
+}
+
+function customerEvidenceWalletTimelineSummary(timeline) {
+  if (!timeline || typeof timeline !== "object") return null;
+  return {
+    enabled: timeline.enabled !== false,
+    snapshots: Number(timeline.snapshotCount ?? timeline.snapshots?.length ?? timeline.count ?? 0),
+    latestSnapshotAt: timeline.latestSnapshotAt || timeline.latest?.capturedAt || timeline.latest?.timestamp || "",
+  };
+}
+
+function customerEvidenceBullet(items) {
+  return items.length ? items.map((item) => "- " + item).join("\n") : "None.";
+}
+
+function renderCustomerEvidenceMarkdown(summary, title) {
+  const rows = [
+    ["Bittensor live QA", summary.bittensor.ready ? "pass" : "fail", summary.bittensor.detail],
+    ["Agent control live QA", summary.agentControl.ready ? "pass" : "warn", summary.agentControl.detail],
+    ["Customer readiness gate", summary.readinessGate.ready ? "pass" : "warn", summary.readinessGate.detail],
+    ["CI evidence", summary.ci.failed.length === 0 && summary.ci.pending.length === 0 && summary.ci.total > 0 ? "pass" : "warn", summary.ci.passed.length + " passed, " + summary.ci.failed.length + " failed, " + summary.ci.pending.length + " pending"],
+    ["Wallet timeline", summary.walletTimeline ? "pass" : "warn", summary.walletTimeline ? summary.walletTimeline.snapshots + " public snapshots" : "No wallet timeline evidence provided"],
+  ];
+  return [
+    "# " + title,
+    "",
+    "## Decision",
+    "",
+    "- Result: " + (summary.ready ? "READY_FOR_TEST_CUSTOMERS" : "NEEDS_MORE_EVIDENCE"),
+    "- Generated at: " + summary.generatedAt,
+    "- Safety posture: non-custodial, public wallet reads only, unsigned previews and external signer handoff only.",
+    "- Redaction posture: this MCP bundle rejects credential-shaped fields and does not need local evidence paths.",
+    "",
+    "## Gate Summary",
+    "",
+    "| Area | Status | Detail |",
+    "| --- | --- | --- |",
+    ...rows.map(([area, status, detail]) => "| " + area + " | " + status + " | " + String(detail || "").replace(/\|/g, "\\|") + " |"),
+    "",
+    "## Covered Bittensor Paths",
+    "",
+    customerEvidenceBullet(summary.bittensor.passedStages),
+    "",
+    "## Open Bittensor Failures",
+    "",
+    customerEvidenceBullet(summary.bittensor.failedStages),
+    "",
+  ].join("\n");
+}
+
+function matterhornBittensorCustomerEvidenceBundle(args = {}) {
+  assertCustomerEvidenceHasNoCredentials(args, "Bittensor customer evidence bundle");
+  const bittensor = args.bittensorLiveQa || null;
+  const agentControl = args.agentControlLiveQa || null;
+  const ci = args.ci || null;
+  const readinessGate = args.readinessGate || "";
+  const ciSummary = customerEvidenceSummarizeCi(ci);
+  const bittensorReady = customerEvidenceIsReady(bittensor) && customerEvidenceSummaryValue(bittensor, "fail") === 0;
+  const agentReady = !agentControl || (customerEvidenceIsReady(agentControl) && customerEvidenceSummaryValue(agentControl, "fail") === 0);
+  const gateReady = customerEvidenceReadinessReady(readinessGate);
+  const summary = {
+    generatedAt: new Date().toISOString(),
+    ready: Boolean(bittensorReady && agentReady && gateReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
+    bittensor: {
+      ready: bittensorReady,
+      detail: bittensor ? customerEvidenceSummaryValue(bittensor, "pass") + " passed, " + customerEvidenceSummaryValue(bittensor, "fail") + " failed, " + customerEvidenceSummaryValue(bittensor, "skip") + " skipped" : "Missing Bittensor evidence",
+      passedStages: customerEvidencePassedStages(bittensor),
+      failedStages: customerEvidenceFailedStages(bittensor),
+    },
+    agentControl: {
+      ready: agentReady,
+      detail: agentControl ? customerEvidenceSummaryValue(agentControl, "pass") + " passed, " + customerEvidenceSummaryValue(agentControl, "fail") + " failed" : "No agent-control evidence provided",
+    },
+    ci: ciSummary,
+    readinessGate: {
+      ready: gateReady,
+      detail: gateReady ? "Readiness gate says ready" : "Readiness gate does not say ready",
+    },
+    walletTimeline: customerEvidenceWalletTimelineSummary(args.walletTimeline),
+  };
+  return {
+    ok: true,
+    ready: summary.ready,
+    summary,
+    markdown: renderCustomerEvidenceMarkdown(summary, args.title || "Matterhorn Work Bittensor Customer Evidence Bundle"),
+    safety: {
+      custody: "none",
+      acceptsCredentialMaterial: false,
+      signsOrBroadcasts: false,
+      source: "matterhorn_bittensor_customer_evidence_bundle",
+    },
+  };
+}
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1241,6 +1434,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
       return callServer("/api/bittensor/readiness");
+    case "matterhorn_bittensor_customer_evidence_bundle":
+      return matterhornBittensorCustomerEvidenceBundle(args);
     case "matterhorn_bittensor_list_capabilities":
       return callServer("/api/bittensor/capabilities");
     case "matterhorn_bittensor_get_subnet_capability":
