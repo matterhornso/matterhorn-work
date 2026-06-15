@@ -919,6 +919,16 @@ export interface BittensorWalletChangeReport {
   updatedAt: string;
 }
 
+export interface BittensorWalletBaselineClearReport {
+  kind: "wallet_baseline_clear";
+  ss58Address: string;
+  cleared: boolean;
+  previousUpdatedAt: string | null;
+  updatedAt: string;
+  summary: string;
+  warnings: string[];
+}
+
 export interface BittensorDecisionOption {
   label: string;
   summary: string;
@@ -5484,6 +5494,7 @@ function decisionPromptNeedsWallet(message: string): boolean {
 
 function isWalletIntelligenceQuestion(message: string, plan: BittensorPlan): boolean {
   if (isWalletChangeQuestion(message, plan)) return true;
+  if (isWalletBaselineClearQuestion(message, plan)) return true;
   if (!isBittensorIntelligenceQuestion(message)) return false;
   return plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake exposure|exposure)\b/i.test(message);
 }
@@ -5492,6 +5503,14 @@ function isWalletChangeQuestion(message: string, plan: BittensorPlan): boolean {
   return (
     /\b(what changed|changed since|changes since|diff|difference|compare.*last|since last time|new exposure|removed exposure)\b/i.test(message) &&
     (plan.intent === "wallet" || /\b(wallet|portfolio|my tao|balance|coldkey|stake|exposure|positions?)\b/i.test(message))
+  );
+}
+
+function isWalletBaselineClearQuestion(message: string, plan: BittensorPlan): boolean {
+  return (
+    /\b(clear|forget|reset|delete|remove)\b/i.test(message) &&
+    /\b(baseline|snapshot|history|last read|last time|wallet context)\b/i.test(message) &&
+    (plan.intent === "wallet" || /\b(bittensor|tao|wallet|portfolio|coldkey|ss58|stake|exposure)\b/i.test(message))
   );
 }
 
@@ -5781,6 +5800,25 @@ function rememberBittensorWalletSnapshot(wallet: BittensorWalletSnapshot): void 
   }
 }
 
+export function clearBittensorWalletSnapshotBaseline(ss58Address: string): BittensorWalletBaselineClearReport {
+  const baseline = walletSnapshotBaselines.get(ss58Address) ?? null;
+  const cleared = walletSnapshotBaselines.delete(ss58Address);
+  return {
+    kind: "wallet_baseline_clear",
+    ss58Address,
+    cleared,
+    previousUpdatedAt: baseline?.updatedAt ?? null,
+    updatedAt: nowIso(),
+    summary: cleared
+      ? `Cleared the public wallet baseline for ${shortSs58(ss58Address)}.`
+      : `No public wallet baseline was stored for ${shortSs58(ss58Address)}.`,
+    warnings: [
+      "Only public watch-only wallet baseline data is cleared; Matterhorn never stores seed phrases, private keys, mnemonics, wallet exports, signatures, or custody material.",
+      "Future wallet-change comparisons will create a fresh baseline from the next public wallet read.",
+    ],
+  };
+}
+
 function buildBittensorWalletChangeReport(current: BittensorWalletSnapshot): BittensorWalletChangeReport {
   const baseline = walletSnapshotBaselines.get(current.ss58Address) ?? null;
   const currentUpdatedAt = nowIso();
@@ -5900,6 +5938,32 @@ function buildBittensorWalletChangeCard(report: BittensorWalletChangeReport): Bi
         label: "Create watches",
         kind: "send_to_chat",
         payload: { prompt: `Create watches for my riskiest Bittensor positions. SS58 address: ${report.ss58Address}` },
+      },
+    ],
+    warnings: report.warnings,
+    data: { report },
+  };
+}
+
+function buildBittensorWalletBaselineClearCard(report: BittensorWalletBaselineClearReport): BittensorChatCard {
+  return {
+    kind: "intelligence_report",
+    title: "Bittensor wallet baseline cleared",
+    subtitle: shortSs58(report.ss58Address),
+    summary: report.summary,
+    tone: report.cleared ? "default" : "warning",
+    items: [
+      cardItem("Baseline removed", report.cleared ? "Yes" : "No stored baseline", report.cleared ? "default" : "warning"),
+      cardItem("Previous baseline", report.previousUpdatedAt ?? "None", report.previousUpdatedAt ? "default" : "muted"),
+      cardItem("Updated", report.updatedAt, "muted"),
+      cardItem("Data class", "Public watch-only wallet snapshot"),
+      cardItem("Next comparison", "Creates a fresh baseline on the next wallet read"),
+    ],
+    actions: [
+      {
+        label: "Show my TAO",
+        kind: "send_to_chat",
+        payload: { prompt: `Show my TAO. SS58 address: ${report.ss58Address}` },
       },
     ],
     warnings: report.warnings,
@@ -6219,6 +6283,19 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
     const ss58Address = resolveExecutionSs58(input, plan);
     if (!ss58Address) {
       return clarificationResult(plan, "I can analyze your Bittensor exposure, but I need your SS58 coldkey public address.");
+    }
+    if (isWalletBaselineClearQuestion(message, plan)) {
+      const baselineClear = clearBittensorWalletSnapshotBaseline(ss58Address);
+      return {
+        plan: { ...answeredPlan, intent: "wallet", responseCards: ["intelligence_report"] },
+        responseText: `${baselineClear.summary} Future wallet-change questions will start from the next public wallet read for ${shortSs58(ss58Address)}.`,
+        cards: [buildBittensorWalletBaselineClearCard(baselineClear)],
+        data: { walletBaseline: baselineClear },
+        warnings: uniqueWarnings(warnings, baselineClear.warnings),
+        requiresClarification: false,
+        clarificationQuestion: null,
+        execution: "answered",
+      };
     }
     if (isWalletChangeQuestion(message, plan)) {
       const wallet = await bittensorProvider.getWallet(ss58Address);

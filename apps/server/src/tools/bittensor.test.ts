@@ -593,6 +593,33 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("clears public wallet baseline before the next wallet-change comparison", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const baseline = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
+      const clear = await executeBittensorChatWorkflow({
+        message: "clear my Bittensor wallet baseline",
+        contextId: baseline.context?.id,
+      });
+      expect(clear.execution).toBe("answered");
+      expect(clear.cards[0]?.kind).toBe("intelligence_report");
+      expect(clear.cards[0]?.title).toBe("Bittensor wallet baseline cleared");
+      const clearReport = clear.data.walletBaseline as { cleared?: boolean; previousUpdatedAt?: string | null } | undefined;
+      expect(clearReport?.cleared).toBe(true);
+      expect(clearReport?.previousUpdatedAt).toBeTruthy();
+
+      const result = await executeBittensorChatWorkflow({
+        message: "what changed in my wallet since last time?",
+        contextId: baseline.context?.id,
+      });
+      const change = result.data.walletChange as { baselineAvailable?: boolean; summary?: string } | undefined;
+      expect(result.execution).toBe("answered");
+      expect(change?.baselineAvailable).toBe(false);
+      expect(change?.summary).toContain("Created a first public wallet baseline");
+      expect(JSON.stringify(clear)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
+    });
+  });
+
   test("discovers image-generation subnets with comparison cards", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "which subnet is useful for image generation?" });
