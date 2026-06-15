@@ -619,9 +619,20 @@ try {
         summary: { pass: 5, warn: 0, fail: 0 },
         findings: [{ area: "Payload hash", status: "pass" }],
       },
+      watchAutopilotScheduler: {
+        ok: true,
+        source: "matterhorn_bittensor_watch_autopilot_scheduler",
+        iterations: 6,
+        totalEvaluations: 18,
+        totalAlerts: 2,
+        failedChecks: 0,
+        latest: { checkedAt: "2026-06-15T00:05:00.000Z" },
+        safety: { custody: "none", signsOrBroadcasts: false, submitsTransactions: false, invokesSubnetServices: false },
+      },
       requireAdapterCanary: true,
       requireReadonlyAdapterCanary: true,
       requireReceiptCheck: true,
+      requireWatchAutopilotScheduler: true,
     },
   }));
   assert.equal(customerEvidenceBundle.ready, true);
@@ -630,11 +641,16 @@ try {
   assert.equal(customerEvidenceBundle.summary.readonlyAdapterCanary.invoked, true);
   assert.equal(customerEvidenceBundle.summary.receiptCheck.ready, true);
   assert.equal(customerEvidenceBundle.summary.receiptCheck.status, "finalized");
+  assert.equal(customerEvidenceBundle.summary.watchAutopilotScheduler.ready, true);
+  assert.equal(customerEvidenceBundle.summary.watchAutopilotScheduler.iterations, 6);
+  assert.equal(customerEvidenceBundle.summary.watchAutopilotScheduler.totalAlerts, 2);
   assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
   assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);
   assert.match(customerEvidenceBundle.markdown, /Read-only canary ready/);
   assert.match(customerEvidenceBundle.markdown, /Receipt check accepted/);
+  assert.match(customerEvidenceBundle.markdown, /Scheduled watch autopilot/);
+  assert.match(customerEvidenceBundle.markdown, /6 scheduled checks, 2 alerts, 18 evaluations/);
 
   const badCustomerEvidenceBundle = await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_customer_evidence_bundle",
