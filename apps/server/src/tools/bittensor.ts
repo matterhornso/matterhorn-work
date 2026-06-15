@@ -5720,10 +5720,21 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       netuid: resolveExecutionNetuid(input, plan),
       limit: resolveExecutionLimit(input, 12),
     });
+    const card = buildBittensorAdapterMarketplaceCard(marketplace);
     return {
       plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_marketplace"] },
       responseText: `Built a redacted Bittensor adapter marketplace markdown export with ${marketplaceExport.summary.total} entr${marketplaceExport.summary.total === 1 ? "y" : "ies"}. This is evidence only; it does not invoke or authorize real subnet service execution.`,
-      cards: [buildBittensorAdapterMarketplaceCard(marketplace)],
+      cards: [{
+        ...card,
+        actions: [
+          ...(card.actions ?? []),
+          {
+            label: "Copy markdown",
+            kind: "copy_payload",
+            payload: { markdown: marketplaceExport.markdown },
+          },
+        ],
+      }],
       data: { marketplaceExport, marketplace },
       warnings: uniqueWarnings(warnings, marketplaceExport.warnings),
       requiresClarification: false,
