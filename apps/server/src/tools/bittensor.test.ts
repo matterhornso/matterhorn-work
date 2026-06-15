@@ -2907,6 +2907,7 @@ describe("auditBittensorReadiness", () => {
     expect(capabilityCheck?.summary).toContain("schemas");
     expect((capabilityCheck?.details as { missingServiceMarketplaceNetuids?: number[] })?.missingServiceMarketplaceNetuids).toEqual([]);
     expect(report.checks.some((check) => check.id === "subnet_adapter_conformance")).toBe(true);
+    expect(report.checks.some((check) => check.id === "subnet_adapter_preflight")).toBe(true);
     expect(report.checks.some((check) => check.id === "signing_safety")).toBe(true);
     const card = buildBittensorReadinessCard(report);
     expect(card.kind).toBe("readiness_report");
