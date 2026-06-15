@@ -402,6 +402,7 @@ try {
     "matterhorn_bittensor_adapter_canary_gate",
     "matterhorn_bittensor_prepare_extrinsic",
     "matterhorn_bittensor_create_signing_handoff",
+    "matterhorn_bittensor_check_receipt",
     "matterhorn_bittensor_check_signing_handoff",
     "matterhorn_bittensor_submit_signed_extrinsic",
     "matterhorn_bittensor_preview_subnet_invocation",
@@ -707,6 +708,40 @@ try {
     },
   });
   assert.match(badSigningHandoffCheck.error?.message || "", /forbidden signing or credential field/i);
+
+  const receiptCheck = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_check_receipt",
+    arguments: {
+      receipt: {
+        txHash: "0x" + "d".repeat(64),
+        blockHash: "0x" + "e".repeat(64),
+        status: "finalized",
+        payloadSha256: signingHandoff.handoff.payloadSha256,
+        action: "stake",
+        netuid: 14,
+      },
+      expectedPayloadSha: signingHandoff.handoff.payloadSha256,
+      expectedAction: "stake",
+      expectedNetuid: 14,
+      strict: true,
+    },
+  }));
+  assert.equal(receiptCheck.accepted, true);
+  assert.equal(receiptCheck.safety.acceptsRawSignatures, false);
+  assert.match(receiptCheck.followUpPrompt, /Compare my public wallet state/i);
+
+  const badReceiptCheck = await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_check_receipt",
+    arguments: {
+      receipt: {
+        txHash: "0x" + "d".repeat(64),
+        status: "finalized",
+        payloadSha256: signingHandoff.handoff.payloadSha256,
+        signature: "0x1234",
+      },
+    },
+  });
+  assert.match(badReceiptCheck.error?.message || "", /forbidden signing or credential field/i);
 
   const signedSubmit = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_submit_signed_extrinsic",

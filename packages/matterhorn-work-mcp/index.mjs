@@ -471,6 +471,21 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_bittensor_check_receipt",
+    description: "Validate a post-signing Bittensor receipt and produce a safe public wallet diff follow-up prompt. Rejects raw signatures and signed payloads.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        receipt: { type: "object", description: "Externally signed/submitted Bittensor receipt object." },
+        expectedPayloadSha: { type: "string", description: "Optional payload SHA-256 from the original handoff." },
+        expectedAction: { type: "string", description: "Optional expected action such as stake." },
+        expectedNetuid: { type: "number", description: "Optional expected subnet netuid." },
+        strict: { type: "boolean", description: "When true, receipts with P1 mismatches raise an MCP error." },
+      },
+      required: ["receipt"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_check_signing_handoff",
     description: "Validate a Bittensor external-signer handoff before a user signs it. Checks payload hash, expiry, action context, external-signer marker, and rejects credential or already-signed payload fields. Does not sign, submit, or broadcast.",
     inputSchema: {
@@ -1632,6 +1647,127 @@ async function matterhornBittensorAdapterCanaryGate(args = {}) {
 }
 
 
+const BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const BITTENSOR_RECEIPT_FORBIDDEN_EXACT_KEY_RE = /^(signature)$/i;
+
+function receiptObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function assertBittensorReceiptNoForbiddenKeys(value, label, path = []) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertBittensorReceiptNoForbiddenKeys(child, label, [...path, String(index)]));
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (BITTENSOR_RECEIPT_FORBIDDEN_EXACT_KEY_RE.test(key) || BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE.test(key)) {
+      throw new Error(label + " contains forbidden signing or credential field: " + [...path, key].join("."));
+    }
+    assertBittensorReceiptNoForbiddenKeys(child, label, [...path, key]);
+  }
+}
+
+function receiptNormalizeSha(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function receiptIsSha256(value) {
+  return /^[a-f0-9]{64}$/.test(receiptNormalizeSha(value));
+}
+
+function receiptIsHash(value) {
+  return /^0x[a-f0-9]{64}$/i.test(String(value || "").trim());
+}
+
+function receiptAddFinding(findings, status, area, detail, severity = "") {
+  findings.push({ status, area, detail, severity });
+}
+
+function receiptEnvelope(input) {
+  const root = receiptObject(input);
+  return receiptObject(root.receipt).txHash || receiptObject(root.result).txHash ? receiptObject(root.receipt || root.result) : root;
+}
+
+function receiptStatusOf(receipt) {
+  return String(receipt.status || receipt.result || receipt.state || "").toLowerCase();
+}
+
+function receiptSucceeded(status) {
+  return /finalized|success|submitted|in_block|included|broadcast/.test(status);
+}
+
+function matterhornBittensorCheckReceipt(args = {}) {
+  if (!args.receipt || typeof args.receipt !== "object") throw new Error("receipt object is required.");
+  assertBittensorReceiptNoForbiddenKeys(args.receipt, "Bittensor receipt");
+  const receipt = receiptEnvelope(args.receipt);
+  const payloadSha256 = receiptNormalizeSha(receipt.payloadSha256 || receipt.requestSha256 || args.receipt.payloadSha256);
+  const expectedPayloadSha = receiptNormalizeSha(args.expectedPayloadSha || args.expectedSha);
+  const txHash = String(receipt.txHash || receipt.hash || "").trim();
+  const blockHash = String(receipt.blockHash || receipt.block || "").trim();
+  const status = receiptStatusOf(receipt);
+  const action = String(receipt.action || receiptObject(receipt.preview).action || args.receipt.action || "").trim();
+  const netuid = receipt.netuid ?? receiptObject(receipt.preview).netuid ?? args.receipt.netuid ?? null;
+  const findings = [];
+
+  if (txHash && receiptIsHash(txHash)) receiptAddFinding(findings, "pass", "Transaction hash", "Transaction hash is present and well formed.");
+  else receiptAddFinding(findings, "warn", "Transaction hash", "Transaction hash is missing or not a 0x-prefixed 32-byte hash.", "P2");
+  if (blockHash) receiptAddFinding(findings, receiptIsHash(blockHash) ? "pass" : "warn", "Block hash", receiptIsHash(blockHash) ? "Block hash is present and well formed." : "Block hash is present but malformed.", receiptIsHash(blockHash) ? "" : "P2");
+  else receiptAddFinding(findings, "warn", "Block hash", "No block hash is present yet; receipt may not be finalized.", "P2");
+  if (receiptSucceeded(status)) receiptAddFinding(findings, "pass", "Status", "Receipt status is " + status + ".");
+  else receiptAddFinding(findings, "warn", "Status", "Receipt status needs review: " + (status || "missing") + ".", "P2");
+
+  if (expectedPayloadSha) {
+    if (!receiptIsSha256(expectedPayloadSha)) receiptAddFinding(findings, "fail", "Expected payload hash", "Expected payload SHA-256 is invalid.", "P1");
+    else if (expectedPayloadSha !== payloadSha256) receiptAddFinding(findings, "fail", "Payload hash", "Receipt payload SHA-256 does not match the original handoff.", "P1");
+    else receiptAddFinding(findings, "pass", "Payload hash", "Receipt payload SHA-256 matches the original handoff.");
+  } else if (payloadSha256) {
+    receiptAddFinding(findings, receiptIsSha256(payloadSha256) ? "pass" : "warn", "Payload hash", receiptIsSha256(payloadSha256) ? "Payload SHA-256 is present." : "Payload SHA-256 is malformed.", receiptIsSha256(payloadSha256) ? "" : "P2");
+  } else {
+    receiptAddFinding(findings, "warn", "Payload hash", "No payload SHA-256 is present to connect receipt to handoff.", "P2");
+  }
+  if (args.expectedAction) {
+    if (action === args.expectedAction) receiptAddFinding(findings, "pass", "Action", "Action matches " + args.expectedAction + ".");
+    else receiptAddFinding(findings, "fail", "Action", "Expected action " + args.expectedAction + ", received " + (action || "missing") + ".", "P1");
+  }
+  if (args.expectedNetuid !== undefined) {
+    if (String(netuid) === String(args.expectedNetuid)) receiptAddFinding(findings, "pass", "Netuid", "Netuid matches " + args.expectedNetuid + ".");
+    else receiptAddFinding(findings, "fail", "Netuid", "Expected netuid " + args.expectedNetuid + ", received " + (netuid ?? "missing") + ".", "P1");
+  }
+
+  const accepted = findings.every((finding) => finding.status !== "fail");
+  const followUpPrompt = netuid !== null
+    ? "Use Bittensor chat mode. Compare my public wallet state after this " + (action || "Bittensor") + " receipt on subnet " + netuid + ". Explain what changed, source freshness, and any safe next steps without asking for seed phrases or private keys."
+    : "Use Bittensor chat mode. Review this Bittensor receipt and compare my public wallet state after finality. Explain what changed and any safe next steps without asking for seed phrases or private keys.";
+  const result = {
+    ok: true,
+    accepted,
+    txHash,
+    blockHash,
+    payloadSha256,
+    status,
+    action,
+    netuid,
+    findings,
+    followUpPrompt,
+    summary: {
+      pass: findings.filter((finding) => finding.status === "pass").length,
+      warn: findings.filter((finding) => finding.status === "warn").length,
+      fail: findings.filter((finding) => finding.status === "fail").length,
+    },
+    safety: {
+      custody: "none",
+      acceptsCredentialMaterial: false,
+      acceptsRawSignatures: false,
+      storesSignedPayloads: false,
+      source: "matterhorn_bittensor_check_receipt",
+    },
+  };
+  if (args.strict === true && !accepted) throw new Error("Bittensor receipt needs review.");
+  return result;
+}
+
+
 async function handleTool(name, args = {}) {
   switch (name) {
     case "matterhorn_doctor":
@@ -1749,6 +1885,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
     case "matterhorn_bittensor_create_signing_handoff":
       return callServer("/api/bittensor/extrinsics/handoff", { method: "POST", body: args });
+    case "matterhorn_bittensor_check_receipt":
+      return matterhornBittensorCheckReceipt(args);
     case "matterhorn_bittensor_check_signing_handoff":
       return matterhornBittensorCheckSigningHandoff(args);
     case "matterhorn_bittensor_submit_signed_extrinsic":
