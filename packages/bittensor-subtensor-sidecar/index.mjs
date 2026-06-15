@@ -16,6 +16,7 @@ const PYTHON_SUBNET_CACHE_MS = Number(process.env.BITTENSOR_SUBNET_CACHE_MS || "
 
 const here = dirname(fileURLToPath(import.meta.url));
 let pythonHealthCache = null;
+let pythonHealthRefresh = null;
 let pythonSubnetCache = null;
 let pythonSubnetRefresh = null;
 
@@ -357,14 +358,62 @@ function pythonBridge(action, payload) {
   });
 }
 
-async function cachedPythonHealth() {
+function startPythonHealthRefresh() {
+  if (pythonHealthRefresh) return;
+  pythonHealthRefresh = pythonBridge("health", {})
+    .then((payload) => {
+      pythonHealthCache = { cachedAt: Date.now(), payload };
+    })
+    .catch((err) => {
+      pythonHealthCache = {
+        cachedAt: Date.now(),
+        payload: {
+          ok: false,
+          status: "degraded",
+          mode: "python",
+          network: NETWORK,
+          sdkAvailable: false,
+          canRead: false,
+          canPrepare: false,
+          canSubmit: false,
+          block: null,
+          message: err instanceof Error ? err.message : "Python SDK health check failed.",
+        },
+      };
+    })
+    .finally(() => {
+      pythonHealthRefresh = null;
+    });
+}
+
+function cachedPythonHealth() {
   const now = Date.now();
-  if (pythonHealthCache && now - pythonHealthCache.cachedAt < PYTHON_HEALTH_CACHE_MS) {
-    return pythonHealthCache.payload;
+  const cached = pythonHealthCache;
+  if (cached && now - cached.cachedAt < PYTHON_HEALTH_CACHE_MS) {
+    return cached.payload;
   }
-  const payload = await pythonBridge("health", {});
-  pythonHealthCache = { cachedAt: now, payload };
-  return payload;
+  startPythonHealthRefresh();
+  if (cached) {
+    return {
+      ...cached.payload,
+      warnings: [
+        ...(Array.isArray(cached.payload.warnings) ? cached.payload.warnings : []),
+        "Returning cached Python SDK health while a live chain-head refresh runs in the background.",
+      ],
+    };
+  }
+  return {
+    ok: false,
+    status: "degraded",
+    mode: "python",
+    network: NETWORK,
+    sdkAvailable: false,
+    canRead: false,
+    canPrepare: false,
+    canSubmit: false,
+    block: null,
+    message: "Python SDK health is warming. Retry shortly for live Subtensor health.",
+  };
 }
 
 function startPythonSubnetRefresh(limit) {
@@ -424,9 +473,7 @@ async function dispatch(req, res) {
   }
 
   if (req.method === "GET" && (url.pathname === "/health" || url.pathname === "/status")) {
-    const bridgeHealth = MODE === "python"
-      ? await cachedPythonHealth().catch((err) => ({ ok: false, message: err instanceof Error ? err.message : "Python SDK health check failed." }))
-      : null;
+    const bridgeHealth = MODE === "python" ? cachedPythonHealth() : null;
     return json(res, 200, livenessPayload(bridgeHealth));
   }
 
