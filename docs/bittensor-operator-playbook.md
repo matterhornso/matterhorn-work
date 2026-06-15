@@ -607,13 +607,13 @@ bittensor_get_subnet_adapter_canary_review({
 })
 ```
 
-For review handoff or audit, export the evidence bundle. It combines onboarding, launch gate, canary review, required artifacts, warnings, and next actions without authorizing execution:
+For review handoff or audit, export the evidence bundle. It combines onboarding, launch gate, adapter preflight, canary review, required artifacts, warnings, and next actions without authorizing execution:
 
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/evidence-bundle?adapter=data_search&netuid=77"
 ```
 
-The response includes an `adapter_evidence_bundle` card with review status, required artifact count, warnings, and a safe chat continuation action.
+The response includes an `adapter_evidence_bundle` card with review status, preflight readiness, required artifact count, warnings, and a safe chat continuation action. Preflight readiness is evidence only: it means the manifest and bounded sample result are non-failing, not that a real subnet service may be invoked.
 
 Equivalent MCP tool:
 
@@ -624,7 +624,7 @@ bittensor_get_subnet_adapter_evidence_bundle({
 })
 ```
 
-For a copy-pasteable redacted review packet, export the same evidence as markdown. This remains evidence only; it does not authorize or invoke subnet services:
+For a copy-pasteable redacted review packet, export the same evidence as markdown. The export includes preflight status and readiness flags, but intentionally avoids raw manifest/result payloads. This remains evidence only; it does not authorize or invoke subnet services:
 
 ```bash
 curl -s "http://localhost:8787/api/bittensor/adapters/evidence-export?adapter=data_search&netuid=77" \
