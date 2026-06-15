@@ -53,7 +53,7 @@ The intended user experience:
 
 - Compact Bittensor customer readiness panel in the app overview, backed by the existing readiness API, direct chat handoff, and copyable live-QA/gate commands.
 - Watch creation from chat and wallet/subnet/validator intelligence.
-- Watch checks, alert keys, notification intents, digest, and safe alert actions.
+- Watch checks, alert keys, notification intents, digest, safe alert actions, and Watch autopilot operator report.
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
 - Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, and required QA docs.
 - Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet.
