@@ -10,8 +10,11 @@ import {
   buildBittensorWalletTimelineSnapshot,
   auditBittensorSubnetAdapterRuntimeApprovals,
   auditBittensorSubnetAdapterCanaryGate,
+  buildBittensorSubnetAdapterProviderRegistryTemplate,
+  getBittensorSubnetAdapterProviderRegistry,
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterCanaryGateCard,
+  buildBittensorAdapterProviderRegistryCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorAdapterManifestValidationCard,
@@ -1090,6 +1093,103 @@ describe("executeBittensorChatWorkflow", () => {
         }
       }
     });
+  });
+
+  test("builds and audits provider registry templates without execution", () => {
+    const previousRegistry = process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      const template = buildBittensorSubnetAdapterProviderRegistryTemplate({ adapter: "data_search", netuid: 18 });
+      expect(template.kind).toBe("bittensor_subnet_adapter_provider_registry_template");
+      expect(template.env.key).toBe("BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON");
+      expect(template.provider.readyForCanary).toBe(false);
+      const empty = getBittensorSubnetAdapterProviderRegistry();
+      expect(empty.status).toBe("empty");
+      const card = buildBittensorAdapterProviderRegistryCard(empty);
+      expect(card.kind).toBe("adapter_provider_registry");
+      expect(card.actions?.[0]?.kind).toBe("copy_payload");
+      expect(JSON.stringify(template)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+      expect(JSON.stringify(empty)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      if (previousRegistry === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = previousRegistry;
+      }
+    }
+  });
+
+  test("marks reviewed provider registry entries as canary-ready evidence", () => {
+    const previousRegistry = process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = JSON.stringify([{
+        providerId: "reviewed-provider",
+        displayName: "Reviewed Provider",
+        reviewStatus: "reviewed",
+        serviceAdapters: ["data_search"],
+        netuids: [18],
+        endpointOrigin: "https://adapter.invalid",
+        website: "https://adapter.invalid",
+        contact: "ops@example.com",
+        evidence: {
+          providerIdentityReviewed: true,
+          privacyReviewed: true,
+          termsReviewed: true,
+          rateLimitsDocumented: true,
+          rollbackOwnerConfirmed: true,
+          canaryFixtureReviewed: true,
+        },
+      }]);
+      const registry = getBittensorSubnetAdapterProviderRegistry();
+      expect(registry.status).toBe("ready_for_canary");
+      expect(registry.readyForCanaryCount).toBe(1);
+      expect(registry.entries[0]?.readyForCanary).toBe(true);
+      expect(registry.entries[0]?.endpointOrigin).toBe("https://adapter.invalid");
+      expect(registry.warnings.join(" ")).toContain("does not authorize real subnet execution");
+      const card = buildBittensorAdapterProviderRegistryCard(registry);
+      expect(card.items.find((item) => item.label === "Canary-ready")?.value).toBe("1");
+    } finally {
+      if (previousRegistry === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = previousRegistry;
+      }
+    }
+  });
+
+  test("blocks provider registry entries with secret-shaped fields", () => {
+    const previousRegistry = process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+    try {
+      process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = JSON.stringify([{
+        providerId: "unsafe-provider",
+        displayName: "Unsafe Provider",
+        serviceAdapters: ["inference"],
+        netuids: [4],
+        endpointOrigin: "https://adapter.invalid/invoke?token=do-not-use",
+        apiKey: "super-secret-token-value",
+      }]);
+      const registry = getBittensorSubnetAdapterProviderRegistry();
+      expect(registry.status).toBe("blocked");
+      expect(registry.blockedCount).toBe(1);
+      expect(registry.warnings.join(" ")).toContain("secret-shaped field");
+      expect(registry.warnings.join(" ")).toContain("origin only");
+      expect(JSON.stringify(registry)).not.toContain("super-secret-token-value");
+    } finally {
+      if (previousRegistry === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON = previousRegistry;
+      }
+    }
+  });
+
+  test("routes provider registry chat prompts to the registry card", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "Show the Bittensor adapter provider registry template." });
+    expect(result.execution).toBe("answered");
+    expect(result.responseText).toContain("provider registry");
+    expect(result.cards[0]?.kind).toBe("adapter_provider_registry");
+    expect(result.data.providerRegistry).toBeTruthy();
+    expect(JSON.stringify(result)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
   test("audits the real adapter canary gate without exposing secrets", () => {
