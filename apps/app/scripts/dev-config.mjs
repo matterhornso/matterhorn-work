@@ -7,40 +7,27 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const viteConfigPath = path.join(appRoot, "vite.config.ts");
 const source = await readFile(viteConfigPath, "utf8");
 
-function escapeRegex(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\function hasBlockTarget(blockName, target) {
-  const expression = new RegExp(String.raw`${blockName}:\\s*\\{[\\s\\S]*?target:\\s*["']${target}["']`, "m");
-  return expression.test(source);
-}
-");
-}
-
-function hasBlockTarget(blockName, target) {
-  const expression = new RegExp(`${escapeRegex(blockName)}:\\s*\\{\\s*target:\\s*["']${escapeRegex(target)}["']`, "m");
-  return expression.test(source);
-}
-
-assert.equal(
-  hasBlockTarget("esbuild", "esnext"),
-  true,
+assert.match(
+  source,
+  /esbuild:\s*\{\s*target:\s*["']esnext["']/m,
   "apps/app/vite.config.ts must keep esbuild.target at esnext so dev startup can prebundle modern dependencies like @ai-sdk/gateway.",
 );
 
-assert.equal(
-  /optimizeDeps:\s*\{[\s\S]*?esbuildOptions:\s*\{[\s\S]*?target:\s*["']esnext["']/m.test(source),
-  true,
+assert.match(
+  source,
+  /optimizeDeps:\s*\{[\s\S]*?esbuildOptions:\s*\{[\s\S]*?target:\s*["']esnext["']/m,
   "apps/app/vite.config.ts must keep optimizeDeps.esbuildOptions.target at esnext for Vite dev dependency optimization.",
 );
 
-assert.equal(
-  hasBlockTarget("build", "esnext"),
-  true,
+assert.match(
+  source,
+  /build:\s*\{[\s\S]*?target:\s*["']esnext["']/m,
   "apps/app/vite.config.ts must keep build.target at esnext for app/electron parity.",
 );
 
-assert.equal(
-  /chrome87|edge88|firefox78|safari14/.test(source),
-  false,
+assert.doesNotMatch(
+  source,
+  /chrome87|edge88|firefox78|safari14/,
   "apps/app/vite.config.ts must not reintroduce the old browser target list that breaks destructuring transforms in Vite dev.",
 );
 
