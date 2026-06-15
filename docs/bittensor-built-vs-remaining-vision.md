@@ -36,6 +36,7 @@ The intended user experience:
 
 - Unsigned staking previews only.
 - External-signer handoff JSON with checksum and expiry.
+- External signer handoff checker for payload SHA-256, expiry, action context, external signer marker, and forbidden signing/credential fields.
 - Signed-result/receipt modeling without seed import or local custody.
 - Submit path remains gated and external-signed.
 - Safety tests and docs assert no secret-shaped fields in Bittensor/MCP/API payloads.
