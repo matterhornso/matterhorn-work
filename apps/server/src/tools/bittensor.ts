@@ -469,6 +469,54 @@ export interface BittensorCapabilityManifest {
   safetyNotes: string[];
 }
 
+export type BittensorSubnetAdapterMarketplaceEntryStatus =
+  | "universal_only"
+  | "needs_adapter"
+  | "mock_ready"
+  | "manual_review_required"
+  | "blocked"
+  | "unsupported";
+
+export interface BittensorSubnetAdapterMarketplaceEntry {
+  netuid: number;
+  name: string;
+  category: string;
+  utilitySummary: string;
+  serviceAdapter: BittensorCapabilityManifest["serviceAdapter"];
+  capabilityLevel: BittensorCapabilityManifest["capabilityLevel"];
+  status: BittensorSubnetAdapterMarketplaceEntryStatus;
+  configured: boolean;
+  serviceCallReady: boolean;
+  endpointMode: BittensorSubnetAdapterDoctorEndpoint["mode"] | "none";
+  requiredAuth: BittensorCapabilityManifest["requiredAuth"];
+  costModel: BittensorCapabilityManifest["costModel"];
+  source: string;
+  freshness: string | null;
+  block: number | null;
+  adapterMessage: string;
+  nextActions: string[];
+  warnings: string[];
+  examplePrompts: string[];
+}
+
+export interface BittensorSubnetAdapterMarketplace {
+  kind: "bittensor_subnet_adapter_marketplace";
+  generatedAt: string;
+  status: "pass" | "warning" | "fail";
+  total: number;
+  summary: {
+    universalOnly: number;
+    needsAdapter: number;
+    mockReady: number;
+    manualReviewRequired: number;
+    blocked: number;
+    unsupported: number;
+  };
+  entries: BittensorSubnetAdapterMarketplaceEntry[];
+  warnings: string[];
+  nextActions: string[];
+}
+
 export interface BittensorSignerStatus {
   mode: "read_only" | "injected_substrate" | "desktop_handoff" | "sidecar";
   available: boolean;
@@ -918,6 +966,7 @@ export type BittensorChatCardKind =
   | "adapter_evidence_bundle"
   | "adapter_evidence_review"
   | "adapter_operator_handoff"
+  | "adapter_marketplace"
   | "adapter_approval_audit"
   | "adapter_approval_template"
   | "adapter_canary_packet"
@@ -6640,6 +6689,156 @@ export async function getBittensorCapability(netuid: number): Promise<BittensorC
   return capabilityFromSubnet(detail);
 }
 
+function statusForAdapterMarketplaceEntry(
+  capability: BittensorCapabilityManifest,
+  doctorEntry: BittensorSubnetAdapterDoctorEntry | null,
+): BittensorSubnetAdapterMarketplaceEntryStatus {
+  if (capability.capabilityLevel === "unsupported" || capability.serviceAdapter === "unsupported") return "unsupported";
+  if (capability.capabilityLevel === "universal_read" || capability.serviceAdapter === "universal") return "universal_only";
+  if (doctorEntry?.serviceCallReady && doctorEntry.endpoint.mode === "mock") return "mock_ready";
+  if (doctorEntry?.serviceCallReady) return "manual_review_required";
+  if (doctorEntry && doctorEntry.status === "blocked") return "blocked";
+  if (doctorEntry?.endpoint.configured) return "blocked";
+  return "needs_adapter";
+}
+
+function nextActionsForAdapterMarketplaceEntry(
+  entryStatus: BittensorSubnetAdapterMarketplaceEntryStatus,
+  capability: BittensorCapabilityManifest,
+): string[] {
+  if (entryStatus === "mock_ready") {
+    return [
+      `Run a dry-run export for subnet ${capability.netuid} before any real service configuration.`,
+      `Build an operator handoff packet for subnet ${capability.netuid}.`,
+      "Keep real subnet execution disabled until manual canary review passes.",
+    ];
+  }
+  if (entryStatus === "manual_review_required") {
+    return [
+      `Review conformance, evidence, dry-run, and canary packets for subnet ${capability.netuid}.`,
+      "Require exact request-hash approval before any real adapter invocation.",
+      "Confirm rollback, rate limits, auth scope, and provider terms before enabling a real adapter.",
+    ];
+  }
+  if (entryStatus === "blocked") {
+    return [
+      `Fix the blocked adapter configuration for subnet ${capability.netuid}.`,
+      "Run adapter doctor and conformance again before dry-run or handoff.",
+    ];
+  }
+  if (entryStatus === "needs_adapter") {
+    return [
+      `Use Matterhorn's universal explain, monitor, metagraph, and staking guidance for subnet ${capability.netuid}.`,
+      `Create a sanitized ${capability.serviceAdapter.replace(/_/g, " ")} adapter template before any direct service work.`,
+    ];
+  }
+  if (entryStatus === "universal_only") {
+    return [
+      `Use universal Bittensor chat workflows for subnet ${capability.netuid}.`,
+      "Direct subnet service execution is not needed for this universal capability.",
+    ];
+  }
+  return [
+    `Do not attempt direct service execution for subnet ${capability.netuid}.`,
+    "Explain, compare, and monitor only.",
+  ];
+}
+
+export async function listBittensorSubnetAdapterMarketplace(input: {
+  adapter?: string | null;
+  netuid?: number | null;
+  limit?: number | null;
+} = {}): Promise<BittensorSubnetAdapterMarketplace> {
+  const requestedAdapter = input.adapter ? normalizeServiceAdapter(input.adapter, "unsupported") : null;
+  const requestedNetuid = Number.isInteger(input.netuid) && (input.netuid as number) >= 0 ? input.netuid as number : null;
+  const limit = Math.min(100, Math.max(1, Number(input.limit ?? 50) || 50));
+  const capabilities = await listBittensorCapabilities();
+  const doctor = doctorBittensorSubnetAdapters();
+  const doctorByNetuid = new Map<number, BittensorSubnetAdapterDoctorEntry>();
+  for (const entry of doctor.entries) {
+    if (Number.isInteger(entry.netuid)) doctorByNetuid.set(entry.netuid as number, entry);
+  }
+
+  const entries = capabilities
+    .filter((capability) => requestedNetuid === null || capability.netuid === requestedNetuid)
+    .filter((capability) => requestedAdapter === null || capability.serviceAdapter === requestedAdapter)
+    .map((capability): BittensorSubnetAdapterMarketplaceEntry => {
+      const doctorEntry = doctorByNetuid.get(capability.netuid) ?? null;
+      const status = statusForAdapterMarketplaceEntry(capability, doctorEntry);
+      return {
+        netuid: capability.netuid,
+        name: capability.name,
+        category: capability.category,
+        utilitySummary: capability.utilitySummary,
+        serviceAdapter: capability.serviceAdapter,
+        capabilityLevel: capability.capabilityLevel,
+        status,
+        configured: Boolean(doctorEntry?.endpoint.configured ?? capability.adapterStatus.configured),
+        serviceCallReady: Boolean(doctorEntry?.serviceCallReady),
+        endpointMode: doctorEntry?.endpoint.mode ?? "none",
+        requiredAuth: capability.requiredAuth,
+        costModel: capability.costModel,
+        source: capability.dataFreshness.source,
+        freshness: capability.dataFreshness.freshness,
+        block: capability.dataFreshness.block,
+        adapterMessage: doctorEntry
+          ? `${doctorEntry.endpoint.reason} ${doctorEntry.auth.message}`.trim()
+          : capability.adapterStatus.message,
+        nextActions: nextActionsForAdapterMarketplaceEntry(status, capability),
+        warnings: [...(doctorEntry?.warnings ?? []), ...capability.safetyNotes.filter((note) => /secret|sign|external|adapter/i.test(note)).slice(0, 3)],
+        examplePrompts: capability.examplePrompts.slice(0, 3),
+      };
+    })
+    .sort((a, b) => {
+      const rank: Record<BittensorSubnetAdapterMarketplaceEntryStatus, number> = {
+        blocked: 0,
+        mock_ready: 1,
+        manual_review_required: 2,
+        needs_adapter: 3,
+        universal_only: 4,
+        unsupported: 5,
+      };
+      return rank[a.status] - rank[b.status] || a.netuid - b.netuid;
+    })
+    .slice(0, limit);
+
+  const summary = {
+    universalOnly: entries.filter((entry) => entry.status === "universal_only").length,
+    needsAdapter: entries.filter((entry) => entry.status === "needs_adapter").length,
+    mockReady: entries.filter((entry) => entry.status === "mock_ready").length,
+    manualReviewRequired: entries.filter((entry) => entry.status === "manual_review_required").length,
+    blocked: entries.filter((entry) => entry.status === "blocked").length,
+    unsupported: entries.filter((entry) => entry.status === "unsupported").length,
+  };
+  const status: BittensorSubnetAdapterMarketplace["status"] = summary.blocked > 0
+    ? "fail"
+    : summary.mockReady + summary.manualReviewRequired > 0
+      ? "pass"
+      : "warning";
+  const warnings = [
+    ...(doctor.warnings ?? []),
+    ...(summary.blocked ? ["Some configured subnet service adapters are blocked and must not be invoked."] : []),
+    ...(summary.mockReady + summary.manualReviewRequired ? [] : ["No configured subnet service adapter is ready for mock rehearsal or manual review."]),
+    "Marketplace status is read-only evidence; it does not authorize real subnet service execution.",
+  ];
+  const nextActions = [
+    ...(summary.blocked ? ["Fix blocked adapter doctor entries first."] : []),
+    ...(summary.mockReady ? ["Run dry-run export and operator handoff for mock-ready adapters."] : []),
+    ...(summary.manualReviewRequired ? ["Run manual canary review before enabling any real adapter invocation."] : []),
+    ...(summary.needsAdapter ? ["Use adapter templates and candidate profiles to onboard the next direct subnet service safely."] : []),
+  ];
+  return {
+    kind: "bittensor_subnet_adapter_marketplace",
+    generatedAt: nowIso(),
+    status,
+    total: entries.length,
+    summary,
+    entries,
+    warnings,
+    nextActions,
+  };
+}
+
 export function getBittensorSignerStatus(address?: string | null): BittensorSignerStatus {
   const sidecar = readEnv("BITTENSOR_SUBTENSOR_SIDECAR_URL");
   if (sidecar) {
@@ -10030,6 +10229,47 @@ export function buildBittensorAdapterOperatorHandoffCard(handoff: BittensorSubne
     }],
     warnings: handoff.warnings,
     data: { handoff },
+  };
+}
+
+export function buildBittensorAdapterMarketplaceCard(marketplace: BittensorSubnetAdapterMarketplace): BittensorChatCard {
+  const firstActionable = marketplace.entries.find((entry) =>
+    entry.status === "mock_ready" || entry.status === "manual_review_required" || entry.status === "blocked" || entry.status === "needs_adapter"
+  );
+  const prompt = firstActionable
+    ? firstActionable.status === "mock_ready"
+      ? `Build a ${firstActionable.serviceAdapter.replace(/_/g, " ")} adapter operator handoff packet for subnet ${firstActionable.netuid}.`
+      : firstActionable.status === "manual_review_required"
+        ? `Prepare a manual canary review for the ${firstActionable.serviceAdapter.replace(/_/g, " ")} adapter on subnet ${firstActionable.netuid} without invoking it.`
+        : firstActionable.status === "blocked"
+          ? `Help me fix the blocked ${firstActionable.serviceAdapter.replace(/_/g, " ")} adapter for subnet ${firstActionable.netuid}.`
+          : `Help me configure a ${firstActionable.serviceAdapter.replace(/_/g, " ")} adapter for subnet ${firstActionable.netuid} without enabling real execution.`
+    : "Show me the next safest Bittensor subnet adapter onboarding step.";
+  return {
+    kind: "adapter_marketplace",
+    title: "Bittensor subnet adapter marketplace",
+    subtitle: titleCase(marketplace.status),
+    summary: marketplace.nextActions[0] ?? "Review which subnet service adapters are universal-only, missing, mock-ready, or waiting for manual review.",
+    tone: marketplace.status === "pass" ? "good" : marketplace.status === "fail" ? "danger" : "warning",
+    items: [
+      cardItem("Total shown", marketplace.total),
+      cardItem("Mock-ready", marketplace.summary.mockReady, marketplace.summary.mockReady ? "good" : "muted"),
+      cardItem("Manual review", marketplace.summary.manualReviewRequired, marketplace.summary.manualReviewRequired ? "warning" : "muted"),
+      cardItem("Needs adapter", marketplace.summary.needsAdapter, marketplace.summary.needsAdapter ? "warning" : "muted"),
+      cardItem("Blocked", marketplace.summary.blocked, marketplace.summary.blocked ? "danger" : "good"),
+      cardItem("Universal-only", marketplace.summary.universalOnly, marketplace.summary.universalOnly ? "default" : "muted"),
+    ],
+    actions: [{
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt,
+        marketplaceStatus: marketplace.status,
+        firstActionable,
+      },
+    }],
+    warnings: marketplace.warnings,
+    data: { marketplace },
   };
 }
 

@@ -951,6 +951,29 @@ Expected conformance export behavior:
 - omits raw metadata payloads, endpoint URLs, credentials, and wallet/private data;
 - repeats that passing conformance is evidence only, not approval for real subnet execution.
 
+Before deep-diving one adapter, ask for the read-only adapter marketplace. This is the operator-friendly status surface for every direct subnet service path Matterhorn knows about:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/marketplace?adapter=data_search&limit=10" \
+  | jq '.marketplace.summary'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_list_subnet_adapter_marketplace({
+  "adapter": "data_search",
+  "limit": 10
+})
+```
+
+Expected marketplace behavior:
+
+- classifies entries as `universal_only`, `needs_adapter`, `mock_ready`, `manual_review_required`, `blocked`, or `unsupported`;
+- shows netuid, category, utility, adapter kind, auth/cost model, source/freshness, endpoint mode, and next action;
+- returns an `adapter_marketplace` card with a safe continuation prompt;
+- never invokes a subnet service, never returns credential values, and never authorizes real subnet execution.
+
 When an agent or operator needs one compact packet instead of separate evidence, conformance, and dry-run exports, build the operator handoff. It summarizes the evidence review, conformance export, and mock dry-run export into one redacted go/no-go artifact:
 
 Chat:

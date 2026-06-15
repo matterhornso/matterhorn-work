@@ -14,6 +14,7 @@ import {
   buildBittensorAdapterEvidenceBundleCard,
   buildBittensorAdapterEvidenceReviewCard,
   buildBittensorAdapterLaunchGateCard,
+  buildBittensorAdapterMarketplaceCard,
   buildBittensorAdapterOnboardingCard,
   buildBittensorExtrinsicPreviewCard,
   buildBittensorInvocationPreviewCard,
@@ -74,6 +75,7 @@ import {
   getSubtensorSidecarStatus,
   isValidSs58Address,
   invokeBittensorSubnet,
+  listBittensorSubnetAdapterMarketplace,
   planBittensorSubnetAdapterOnboarding,
   planBittensorChat,
   probeBittensorSubnetAdapterConformance,
@@ -1499,6 +1501,52 @@ describe("executeBittensorChatWorkflow", () => {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
       } else {
         process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+    }
+  });
+
+  test("lists subnet adapter marketplace status without invoking services or leaking credentials", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousToken = process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN = "super-secret-token-value";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "api_key",
+        costModel: "provider_priced",
+        timeoutMs: 1000,
+        authEnv: "BITTENSOR_FIXTURE_ADAPTER_TOKEN",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const marketplace = await listBittensorSubnetAdapterMarketplace({ adapter: "compute", netuid: 14, limit: 3 });
+      expect(marketplace.kind).toBe("bittensor_subnet_adapter_marketplace");
+      expect(marketplace.entries[0]?.status).toBe("mock_ready");
+      expect(marketplace.summary.mockReady).toBeGreaterThan(0);
+      expect(marketplace.warnings.join(" ")).toContain("does not authorize real subnet service execution");
+      const card = buildBittensorAdapterMarketplaceCard(marketplace);
+      expect(card.kind).toBe("adapter_marketplace");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("operator handoff");
+      expect(JSON.stringify({ marketplace, card })).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousToken === undefined) {
+        delete process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN;
+      } else {
+        process.env.BITTENSOR_FIXTURE_ADAPTER_TOKEN = previousToken;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
       }
     }
   });

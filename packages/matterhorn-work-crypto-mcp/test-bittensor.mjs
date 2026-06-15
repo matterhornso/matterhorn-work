@@ -431,6 +431,43 @@ const server = createServer(async (req, res) => {
     }));
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/marketplace") {
+    res.end(JSON.stringify({
+      success: true,
+      marketplace: {
+        kind: "bittensor_subnet_adapter_marketplace",
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        status: "pass",
+        total: 1,
+        summary: { universalOnly: 0, needsAdapter: 0, mockReady: 1, manualReviewRequired: 0, blocked: 0, unsupported: 0 },
+        entries: [{
+          netuid: 14,
+          name: "Mock compute adapter",
+          category: "Compute and infrastructure",
+          utilitySummary: "Run a mocked compute task.",
+          serviceAdapter: "compute",
+          capabilityLevel: "adapter_ready",
+          status: "mock_ready",
+          configured: true,
+          serviceCallReady: true,
+          endpointMode: "mock",
+          requiredAuth: "none",
+          costModel: "free_read",
+          source: "mock",
+          freshness: "fresh",
+          block: null,
+          adapterMessage: "Mock adapter endpoint is enabled.",
+          nextActions: ["Build an operator handoff packet."],
+          warnings: ["Evidence only."],
+          examplePrompts: ["Use subnet 14 for a mocked compute task."],
+        }],
+        warnings: ["Marketplace status is read-only evidence; it does not authorize real subnet service execution."],
+        nextActions: ["Run dry-run export and operator handoff for mock-ready adapters."],
+      },
+      cards: [{ kind: "adapter_marketplace", title: "Bittensor subnet adapter marketplace", actions: [{ kind: "send_to_chat" }] }],
+    }));
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/bittensor/adapters/spec") {
     res.end(JSON.stringify({
       success: true,
@@ -1349,6 +1386,7 @@ try {
     "bittensor_get_sidecar_health",
     "bittensor_readiness_audit",
     "bittensor_doctor_subnet_adapters",
+    "bittensor_list_subnet_adapter_marketplace",
     "bittensor_get_subnet_adapter_spec",
     "bittensor_validate_subnet_adapter_manifest",
     "bittensor_get_subnet_adapter_manifest_examples",
@@ -1390,6 +1428,7 @@ try {
   assert.match(descriptionFor("bittensor_chat"), /Default first tool/i);
   assert.match(descriptionFor("bittensor_get_subnet_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("bittensor_doctor_subnet_adapters"), /without exposing token values or auth env names/i);
+  assert.match(descriptionFor("bittensor_list_subnet_adapter_marketplace"), /Evidence only; does not invoke subnet services/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_spec"), /machine-readable Matterhorn Bittensor subnet adapter contract/i);
   assert.match(descriptionFor("bittensor_validate_subnet_adapter_manifest"), /without invoking a subnet service/i);
   assert.match(descriptionFor("bittensor_get_subnet_adapter_manifest_examples"), /self-validated Bittensor subnet adapter manifest examples/i);
@@ -1483,6 +1522,14 @@ try {
   assert.equal(adapterDoctorPayload.report.kind, "bittensor_subnet_adapter_doctor");
   assert.equal(adapterDoctorPayload.report.readyCount, 1);
   assert.doesNotMatch(JSON.stringify(adapterDoctorPayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
+
+  const adapterMarketplace = await ask({ jsonrpc: "2.0", id: 281, method: "tools/call", params: { name: "bittensor_list_subnet_adapter_marketplace", arguments: { adapter: "compute", limit: 2 } } });
+  const adapterMarketplacePayload = JSON.parse(adapterMarketplace.result.content[0].text);
+  assert.equal(adapterMarketplacePayload.success, true);
+  assert.equal(adapterMarketplacePayload.marketplace.kind, "bittensor_subnet_adapter_marketplace");
+  assert.equal(adapterMarketplacePayload.marketplace.summary.mockReady, 1);
+  assert.equal(adapterMarketplacePayload.cards[0].kind, "adapter_marketplace");
+  assert.doesNotMatch(JSON.stringify(adapterMarketplacePayload), /seed|mnemonic|privateKey|wallet export|ADAPTER_TOKEN|adapter-token/i);
 
   const adapterSpec = await ask({ jsonrpc: "2.0", id: 43, method: "tools/call", params: { name: "bittensor_get_subnet_adapter_spec", arguments: {} } });
   const adapterSpecPayload = JSON.parse(adapterSpec.result.content[0].text);
