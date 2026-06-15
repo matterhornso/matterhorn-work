@@ -31,6 +31,7 @@ const outputPath = join(dir, "readiness.md");
 const stages = [
   { id: "bittensor.readiness", label: "Readiness", status: "pass" },
   { id: "bittensor.wallet.missing_address", label: "Show my TAO missing address", status: "pass" },
+  { id: "bittensor.wallet.change_baseline", label: "Wallet change baseline", status: "pass" },
   { id: "bittensor.validators.compare", label: "Compare validators", status: "pass" },
   { id: "bittensor.stake.unsigned_preview", label: "Unsigned staking preview", status: "pass" },
   { id: "bittensor.subnet.invocation_preview", label: "Subnet adapter preview", status: "pass" },

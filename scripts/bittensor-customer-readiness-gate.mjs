@@ -138,6 +138,7 @@ function evaluateBittensor(report, findings) {
   const requiredStages = [
     ["readiness", (stage) => /readiness/.test(stage.id || "")],
     ["wallet clarification or snapshot", (stage) => /wallet|show.*tao|missing.*address/i.test(`${stage.id} ${stage.label}`)],
+    ["wallet change baseline", (stage) => /wallet.*change|change_baseline|what changed/i.test(`${stage.id} ${stage.label}`)],
     ["validator comparison", (stage) => /validator/.test(stage.id || "")],
     ["staking clarification or preview", (stage) => /stake|extrinsic|handoff/.test(stage.id || "")],
     ["subnet adapter preview", (stage) => /subnet.*preview|invocation_preview|unsupported_adapter/.test(stage.id || "")],

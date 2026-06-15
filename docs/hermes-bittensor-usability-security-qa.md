@@ -35,6 +35,7 @@ Verify that Matterhorn Work exposes these Bittensor capabilities:
 - Subnet discovery: "Which subnet helps with image generation?"
 - Wallet read: "Show my TAO for `<SS58>`."
 - Stake read: "Where am I staked for `<SS58>`?"
+- Wallet change read: "What changed in my Bittensor wallet since last time?"
 - Validator comparison: "Compare validators on subnet 14."
 - Unsigned staking preview: "Prepare staking 1 TAO to subnet 14 with validator `<HOTKEY>`."
 - Unsupported service fallback: "Use subnet 14 for this task" should explain when no service adapter is available.
