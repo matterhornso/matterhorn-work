@@ -89,3 +89,9 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - Purpose: let Codex, Claude Code, and other MCP clients turn already-collected Bittensor live QA, agent-control QA, CI, readiness-gate, and optional public wallet timeline evidence into a customer-safe Markdown handoff packet.
 - Safety: accepts only public evidence objects, rejects credential-shaped fields, does not sign, broadcast, or call subnet services.
 - Verification: `pnpm test:agent-control-mcp` / `node packages/matterhorn-work-mcp/test-smoke.mjs`.
+
+## Bittensor Signing Handoff Validation
+
+- The `matterhorn_bittensor_check_signing_handoff` MCP tool validates an external-signer handoff before the user signs it.
+- It checks payload SHA-256, expiry, action context, explicit external-signer marker, and forbidden credential/signed-output fields.
+- It never signs, submits, broadcasts, imports wallet material, or accepts custody.
