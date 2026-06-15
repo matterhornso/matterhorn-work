@@ -1111,6 +1111,7 @@ export type BittensorChatCardKind =
   | "adapter_approval_template"
   | "adapter_canary_packet"
   | "adapter_canary_gate"
+  | "adapter_provider_registry"
   | "adapter_manifest_validation"
   | "adapter_result_validation"
   | "intelligence_report";
@@ -1534,6 +1535,57 @@ export interface BittensorSubnetAdapterCanaryGateAudit {
     warningCount: number;
     blockedCount: number;
   };
+}
+
+
+export interface BittensorSubnetAdapterProviderRegistryEvidence {
+  providerIdentityReviewed: boolean;
+  privacyReviewed: boolean;
+  termsReviewed: boolean;
+  rateLimitsDocumented: boolean;
+  rollbackOwnerConfirmed: boolean;
+  canaryFixtureReviewed: boolean;
+}
+
+export interface BittensorSubnetAdapterProviderRegistryEntry {
+  providerId: string;
+  displayName: string;
+  reviewStatus: "candidate" | "reviewed" | "blocked";
+  serviceAdapters: Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">>;
+  netuids: number[];
+  endpointOrigin: string | null;
+  website: string | null;
+  contact: string | null;
+  evidence: BittensorSubnetAdapterProviderRegistryEvidence;
+  readyForCanary: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface BittensorSubnetAdapterProviderRegistryTemplate {
+  kind: "bittensor_subnet_adapter_provider_registry_template";
+  generatedAt: string;
+  env: {
+    key: "BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON";
+    value: string;
+  };
+  provider: BittensorSubnetAdapterProviderRegistryEntry;
+  warnings: string[];
+  nextActions: string[];
+}
+
+export interface BittensorSubnetAdapterProviderRegistry {
+  kind: "bittensor_subnet_adapter_provider_registry";
+  generatedAt: string;
+  status: "empty" | "needs_review" | "ready_for_canary" | "blocked";
+  configured: boolean;
+  providerCount: number;
+  readyForCanaryCount: number;
+  blockedCount: number;
+  entries: BittensorSubnetAdapterProviderRegistryEntry[];
+  template: BittensorSubnetAdapterProviderRegistryTemplate;
+  warnings: string[];
+  nextActions: string[];
 }
 
 export interface BittensorSubnetAdapterSpec {
@@ -5849,6 +5901,11 @@ function isSubnetAdapterCanaryGateQuestion(message: string): boolean {
     /\b(canary gate|canary status|gate audit|runtime gate|acknowledgement|acknowledgment|armed|approval status|safe to invoke)\b/i.test(message);
 }
 
+function isSubnetAdapterProviderRegistryQuestion(message: string): boolean {
+  return /\b(adapter|subnet service|service adapter|provider|registry|partner|vendor)\b/i.test(message) &&
+    /\b(provider registry|provider review|provider template|provider status|provider evidence|registry template|partner registry|vendor registry)\b/i.test(message);
+}
+
 function isSubnetAdapterMarketplaceQuestion(message: string): boolean {
   return /\b(adapter|subnet service|service adapter|direct service|call directly|invoke|marketplace)\b/i.test(message) &&
     /\b(marketplace|status|available|ready|configured|supported|which|list|show|can matterhorn|can you call|can it call|call directly)\b/i.test(message) &&
@@ -6432,6 +6489,20 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
       cards: [buildBittensorAdapterCanaryGateCard(canaryGate)],
       data: { canaryGate },
       warnings: uniqueWarnings(warnings, canaryGate.warnings, canaryGate.blockers),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "answered",
+    };
+  }
+
+  if (isSubnetAdapterProviderRegistryQuestion(message)) {
+    const providerRegistry = getBittensorSubnetAdapterProviderRegistry();
+    return {
+      plan: { ...answeredPlan, intent: "subnet_use", responseCards: ["adapter_provider_registry"] },
+      responseText: `Bittensor adapter provider registry is ${providerRegistry.status.replace(/_/g, " ")} with ${providerRegistry.readyForCanaryCount} reviewed canary-ready provider(s). This is read-only evidence and does not configure or invoke a subnet service.`,
+      cards: [buildBittensorAdapterProviderRegistryCard(providerRegistry)],
+      data: { providerRegistry },
+      warnings: uniqueWarnings(warnings, providerRegistry.warnings),
       requiresClarification: false,
       clarificationQuestion: null,
       execution: "answered",
@@ -10020,6 +10091,208 @@ function secretFieldPath(value: unknown, path: string[] = []): string | null {
   return null;
 }
 
+
+function normalizeProviderReviewStatus(value: unknown): BittensorSubnetAdapterProviderRegistryEntry["reviewStatus"] {
+  return value === "reviewed" || value === "blocked" || value === "candidate" ? value : "candidate";
+}
+
+function providerRegistryEvidenceFromRecord(record: Record<string, unknown>): BittensorSubnetAdapterProviderRegistryEvidence {
+  const evidence = asRecord(record["evidence"] ?? record["review"]);
+  return {
+    providerIdentityReviewed: evidence["providerIdentityReviewed"] === true || evidence["provider_identity_reviewed"] === true,
+    privacyReviewed: evidence["privacyReviewed"] === true || evidence["privacy_reviewed"] === true,
+    termsReviewed: evidence["termsReviewed"] === true || evidence["terms_reviewed"] === true,
+    rateLimitsDocumented: evidence["rateLimitsDocumented"] === true || evidence["rate_limits_documented"] === true,
+    rollbackOwnerConfirmed: evidence["rollbackOwnerConfirmed"] === true || evidence["rollback_owner_confirmed"] === true,
+    canaryFixtureReviewed: evidence["canaryFixtureReviewed"] === true || evidence["canary_fixture_reviewed"] === true,
+  };
+}
+
+function providerRegistryAdaptersFromValue(value: unknown): Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">> {
+  const rawValues = (Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\s,]+/) : [])
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  const adapters: Array<Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">> = [];
+  for (const raw of rawValues) {
+    const adapter = normalizeServiceAdapter(raw, "unsupported");
+    if (directSubnetAdapterKind(adapter) && !adapters.includes(adapter)) adapters.push(adapter);
+  }
+  return adapters;
+}
+
+function providerRegistryNetuidsFromValue(value: unknown): number[] {
+  const rawValues = Array.isArray(value) ? value : typeof value === "number" || typeof value === "string" ? [value] : [];
+  return rawValues
+    .map((item) => typeof item === "number" ? item : Number(item))
+    .filter((item, index, all) => Number.isInteger(item) && item >= 0 && all.indexOf(item) === index);
+}
+
+function providerRegistryOrigin(value: unknown): { origin: string | null; error: string | null } {
+  if (typeof value !== "string" || !value.trim()) return { origin: null, error: null };
+  try {
+    const parsed = new URL(value.trim());
+    const hasPathOrSecretShape = parsed.pathname !== "/" || parsed.search.length > 0 || parsed.hash.length > 0;
+    if (parsed.protocol !== "https:") return { origin: parsed.origin, error: "Provider endpoint origin must use https." };
+    if (hasPathOrSecretShape) return { origin: parsed.origin, error: "Provider endpointOrigin must be an origin only, without paths, query strings, fragments, or tokens." };
+    return { origin: parsed.origin, error: null };
+  } catch {
+    return { origin: null, error: "Provider endpointOrigin must be a valid HTTPS origin." };
+  }
+}
+
+function buildProviderRegistryEntry(input: unknown, index: number): BittensorSubnetAdapterProviderRegistryEntry {
+  const record = asRecord(input);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const forbiddenField = secretFieldPath(record);
+  const forbiddenProviderField = Object.keys(record).find((key) => /(api[_-]?key|token|authorization|credential|secret|password)/i.test(key));
+  const forbiddenValue = secretValuePath(record);
+  if (forbiddenField) errors.push("Provider registry entry contains a secret-shaped field at " + forbiddenField + ".");
+  if (forbiddenProviderField) errors.push("Provider registry entry contains a secret-shaped field at " + forbiddenProviderField + ".");
+  if (forbiddenValue) errors.push("Provider registry entry contains a secret-shaped value at " + forbiddenValue + ".");
+  const providerId = firstString(record, ["providerId", "provider_id", "id", "slug"]) ?? "provider-" + (index + 1);
+  const displayName = firstString(record, ["displayName", "display_name", "name"]) ?? providerId;
+  const reviewStatus = normalizeProviderReviewStatus(record["reviewStatus"] ?? record["status"]);
+  const serviceAdapters = providerRegistryAdaptersFromValue(record["serviceAdapters"] ?? record["service_adapters"] ?? record["adapter"] ?? record["serviceAdapter"]);
+  const netuids = providerRegistryNetuidsFromValue(record["netuids"] ?? record["netuid"]);
+  const origin = providerRegistryOrigin(record["endpointOrigin"] ?? record["endpoint_origin"] ?? record["origin"]);
+  const websiteOrigin = providerRegistryOrigin(record["website"]);
+  const contact = firstString(record, ["contact", "contactEmail", "contact_email", "rollbackOwner", "rollback_owner"]);
+  const evidence = providerRegistryEvidenceFromRecord(record);
+  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(providerId)) errors.push("providerId must be 3-64 characters and use letters, numbers, dots, underscores, or hyphens.");
+  if (!serviceAdapters.length) errors.push("At least one direct service adapter kind is required.");
+  if (!netuids.length) warnings.push("No target netuids are declared yet.");
+  if (origin.error) errors.push(origin.error);
+  if (websiteOrigin.error) warnings.push(websiteOrigin.error);
+  if (!contact) warnings.push("Provider contact or rollback owner is not declared.");
+  const evidenceComplete = Object.values(evidence).every(Boolean);
+  if (!evidenceComplete) warnings.push("Provider evidence is incomplete; keep this provider in candidate review.");
+  const readyForCanary = errors.length === 0 && reviewStatus === "reviewed" && evidenceComplete;
+  return {
+    providerId,
+    displayName,
+    reviewStatus,
+    serviceAdapters,
+    netuids,
+    endpointOrigin: origin.origin,
+    website: websiteOrigin.origin,
+    contact,
+    evidence,
+    readyForCanary,
+    errors,
+    warnings,
+  };
+}
+
+export function buildBittensorSubnetAdapterProviderRegistryTemplate(input: {
+  providerId?: string | null;
+  displayName?: string | null;
+  adapter?: string | null;
+  netuid?: number | null;
+} = {}): BittensorSubnetAdapterProviderRegistryTemplate {
+  const adapter = directSubnetAdapterKind(normalizeServiceAdapter(input.adapter, "data_search"))
+    ? normalizeServiceAdapter(input.adapter, "data_search") as Exclude<BittensorSubnetServiceAdapterKind, "universal" | "unsupported">
+    : "data_search";
+  const netuid = Number.isInteger(input.netuid ?? null) && Number(input.netuid) >= 0 ? Number(input.netuid) : 18;
+  const rawProvider = {
+    providerId: input.providerId?.trim() || "reviewed-provider-example",
+    displayName: input.displayName?.trim() || "Reviewed provider example",
+    reviewStatus: "candidate",
+    serviceAdapters: [adapter],
+    netuids: [netuid],
+    endpointOrigin: "https://adapter-provider.example",
+    website: "https://adapter-provider.example",
+    contact: "ops@example.com",
+    evidence: {
+      providerIdentityReviewed: false,
+      privacyReviewed: false,
+      termsReviewed: false,
+      rateLimitsDocumented: false,
+      rollbackOwnerConfirmed: false,
+      canaryFixtureReviewed: false,
+    },
+  };
+  const provider = buildProviderRegistryEntry(rawProvider, 0);
+  return {
+    kind: "bittensor_subnet_adapter_provider_registry_template",
+    generatedAt: nowIso(),
+    env: {
+      key: "BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON",
+      value: JSON.stringify([rawProvider], null, 2),
+    },
+    provider,
+    warnings: ["This template is provider-review evidence only and does not configure or invoke a subnet service adapter."],
+    nextActions: [
+      "Replace placeholder provider identity, contact, netuids, adapter kind, and endpoint origin.",
+      "Mark review evidence true only after human review of provider identity, privacy, terms, rate limits, rollback owner, and canary fixture.",
+      "Run the provider registry audit before generating any real adapter canary packet.",
+    ],
+  };
+}
+
+export function getBittensorSubnetAdapterProviderRegistry(): BittensorSubnetAdapterProviderRegistry {
+  const generatedAt = nowIso();
+  const template = buildBittensorSubnetAdapterProviderRegistryTemplate();
+  const raw = readEnv("BITTENSOR_SUBNET_ADAPTER_PROVIDER_REGISTRY_JSON");
+  if (!raw) {
+    return {
+      kind: "bittensor_subnet_adapter_provider_registry",
+      generatedAt,
+      status: "empty",
+      configured: false,
+      providerCount: 0,
+      readyForCanaryCount: 0,
+      blockedCount: 0,
+      entries: [],
+      template,
+      warnings: ["No Bittensor subnet adapter provider registry is configured."],
+      nextActions: ["Copy the provider registry template, complete human evidence review, then rerun this audit."],
+    };
+  }
+  let parsed: unknown[];
+  let parseError: string | null = null;
+  try {
+    const value = JSON.parse(raw);
+    parsed = Array.isArray(value) ? value : [];
+    if (!Array.isArray(value)) parseError = "Provider registry JSON must be an array.";
+  } catch {
+    parsed = [];
+    parseError = "Provider registry JSON could not be parsed.";
+  }
+  const entries = parsed.map((entry, index) => buildProviderRegistryEntry(entry, index));
+  const readyForCanaryCount = entries.filter((entry) => entry.readyForCanary).length;
+  const blockedCount = entries.filter((entry) => entry.errors.length > 0 || entry.reviewStatus === "blocked").length;
+  const warnings = uniqueWarnings(
+    parseError ? [parseError] : [],
+    entries.flatMap((entry) => entry.warnings.map((warning) => entry.providerId + ": " + warning)),
+    entries.flatMap((entry) => entry.errors.map((error) => entry.providerId + ": " + error)),
+    readyForCanaryCount ? ["Provider registry has reviewed provider candidates, but this does not authorize real subnet execution."] : [],
+  );
+  const status: BittensorSubnetAdapterProviderRegistry["status"] = parseError || blockedCount
+    ? "blocked"
+    : entries.length === 0
+      ? "empty"
+      : readyForCanaryCount > 0
+        ? "ready_for_canary"
+        : "needs_review";
+  return {
+    kind: "bittensor_subnet_adapter_provider_registry",
+    generatedAt,
+    status,
+    configured: true,
+    providerCount: entries.length,
+    readyForCanaryCount,
+    blockedCount,
+    entries,
+    template,
+    warnings,
+    nextActions: status === "ready_for_canary"
+      ? ["Use reviewed provider entries as evidence input only; keep canary gates and exact request-hash approval separate.", "Audit the real-adapter canary gate before and after any canary."]
+      : status === "blocked"
+        ? ["Fix provider registry errors before using any provider entry in a canary packet."]
+        : ["Complete provider identity, privacy, terms, rate-limit, rollback, and canary-fixture review."],
+  };
+}
+
 export async function auditBittensorReadiness(): Promise<BittensorReadinessReport> {
   const checks: BittensorReadinessCheck[] = [];
   const checkedAt = nowIso();
@@ -11528,6 +11801,44 @@ export function buildBittensorAdapterCanaryGateCard(audit: BittensorSubnetAdapte
     }],
     warnings: uniqueWarnings(audit.blockers, audit.warnings),
     data: { audit },
+  };
+}
+
+export function buildBittensorAdapterProviderRegistryCard(registry: BittensorSubnetAdapterProviderRegistry): BittensorChatCard {
+  const tone = registry.status === "blocked" ? "danger" : registry.status === "ready_for_canary" ? "warning" : registry.status === "empty" ? "warning" : "default";
+  return {
+    kind: "adapter_provider_registry",
+    title: "Bittensor adapter provider registry",
+    subtitle: registry.status.replace(/_/g, " "),
+    summary: registry.warnings[0] ?? "Reviewed provider candidates are tracked as evidence only.",
+    tone,
+    items: [
+      cardItem("Configured", registry.configured ? "Yes" : "No", registry.configured ? "default" : "warning"),
+      cardItem("Providers", registry.providerCount, registry.providerCount ? "default" : "warning"),
+      cardItem("Canary-ready", registry.readyForCanaryCount, registry.readyForCanaryCount ? "warning" : "muted"),
+      cardItem("Blocked", registry.blockedCount, registry.blockedCount ? "danger" : "muted"),
+      cardItem("Template env", registry.template.env.key, "muted"),
+      cardItem("Generated", registry.generatedAt, "muted"),
+    ],
+    actions: [{
+      label: "Copy template",
+      kind: "copy_payload",
+      payload: {
+        envKey: registry.template.env.key,
+        envValue: registry.template.env.value,
+      },
+    }, {
+      label: "Continue safely",
+      kind: "send_to_chat",
+      payload: {
+        prompt: registry.status === "ready_for_canary"
+          ? "Audit the Bittensor adapter canary gate before using this provider registry evidence."
+          : "Help me complete the Bittensor adapter provider registry review without real execution.",
+        providerRegistryStatus: registry.status,
+      },
+    }],
+    warnings: registry.warnings,
+    data: { registry },
   };
 }
 
