@@ -765,6 +765,7 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
     case "adapter_manifest_validation":
     case "adapter_result_validation":
     case "adapter_marketplace":
+    case "adapter_roadmap":
     case "adapter_onboarding":
     case "adapter_evidence_bundle":
     case "adapter_approval_audit":
