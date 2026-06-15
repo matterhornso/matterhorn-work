@@ -72,6 +72,14 @@ const isElectronPackagedBuild = process.env.OPENWORK_ELECTRON_BUILD === "1";
 
 export default defineConfig({
   base: isElectronPackagedBuild ? "./" : "/",
+  esbuild: {
+    target: "esnext",
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: "esnext",
+    },
+  },
   define: {
     ...Object.fromEntries(
       Object.entries(migrationReleaseEnv).map(([k, v]) => [

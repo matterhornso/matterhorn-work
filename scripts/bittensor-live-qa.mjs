@@ -416,17 +416,23 @@ async function runChatCore() {
     const result = await chat(`Use subnet ${config.netuid} for this task: summarize a short prompt through its service adapter.`, {
       netuid: config.netuid,
     });
-    if (!["unsupported", "answered"].includes(result.body?.execution)) {
-      throw new Error(`expected unsupported or answered service-call execution, received ${result.body?.execution || "missing"}`);
+    if (!["unsupported", "answered", "unsigned_preview"].includes(result.body?.execution)) {
+      throw new Error(`expected unsupported, answered, or unsigned_preview service-call execution, received ${result.body?.execution || "missing"}`);
     }
-    expectCard(result.body, result.body?.execution === "unsupported" ? "unsupported_adapter" : "subnet_result");
     const invocation = result.body?.data?.invocation || {};
+    if (result.body?.execution === "unsupported") {
+      expectCard(result.body, "unsupported_adapter");
+    } else if (result.body?.execution === "unsigned_preview") {
+      expectCard(result.body, "subnet_invocation_preview");
+    } else {
+      expectCard(result.body, "subnet_result");
+    }
     return {
-      status: result.body?.execution === "unsupported" || invocation.supported === false ? "pass" : "warn",
+      status: result.body?.execution === "unsupported" || result.body?.execution === "unsigned_preview" || invocation.supported === false ? "pass" : "warn",
       latencyMs: result.latencyMs,
       execution: result.body?.execution,
       adapterSupported: invocation.supported ?? null,
-      hint: invocation.supported === true ? "A subnet adapter is configured, so the unsupported-adapter fallback was not exercised in this environment." : undefined,
+      hint: invocation.supported === true && result.body?.execution !== "unsigned_preview" ? "A subnet adapter is configured, so the unsupported-adapter fallback was not exercised in this environment." : undefined,
       cards: cardKinds(result.body),
     };
   });
