@@ -95,6 +95,47 @@ const server = createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/bittensor/wallet/timeline/status") {
+    return json(res, 200, {
+      success: true,
+      status: {
+        kind: "wallet_timeline_store_status",
+        enabled: true,
+        path: "/tmp/matterhorn-bittensor-timeline.json",
+        walletCount: 1,
+        snapshotCount: 2,
+        retentionLimit: 24,
+        warnings: ["public watch-only wallet snapshots only"],
+      },
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/bittensor/wallet/timeline/export") {
+    assert.equal(url.searchParams.get("ss58Address"), "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX");
+    return json(res, 200, {
+      success: true,
+      timeline: {
+        kind: "wallet_timeline_export",
+        ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX",
+        snapshots: [{ kind: "wallet_timeline_snapshot", contentSha256: "a".repeat(64) }],
+        warnings: ["public watch-only wallet data only"],
+      },
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/bittensor/wallet/timeline/clear") {
+    assert.equal(body.ss58Address, "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX");
+    return json(res, 200, {
+      success: true,
+      report: {
+        kind: "wallet_baseline_clear",
+        ss58Address: body.ss58Address,
+        cleared: true,
+        persistentSnapshotsCleared: 2,
+      },
+    });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/bittensor/capabilities/14") {
     return json(res, 200, {
       success: true,
@@ -321,6 +362,31 @@ try {
   assert.equal(capability.success, true);
   assert.equal(capability.capability.serviceAdapter, "inference");
 
+  const timelineStatus = await runCli(baseUrl, ["bittensor", "wallet-timeline", "status"]);
+  assert.equal(timelineStatus.success, true);
+  assert.equal(timelineStatus.status.enabled, true);
+  assert.equal(timelineStatus.status.snapshotCount, 2);
+
+  const timelineExport = await runCli(baseUrl, [
+    "bittensor",
+    "wallet-timeline",
+    "export",
+    "--ss58-address",
+    "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX",
+  ]);
+  assert.equal(timelineExport.success, true);
+  assert.equal(timelineExport.timeline.snapshots[0].contentSha256.length, 64);
+
+  const timelineClear = await runCli(baseUrl, [
+    "bittensor",
+    "wallet-timeline",
+    "clear",
+    "--ss58-address",
+    "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX",
+  ]);
+  assert.equal(timelineClear.success, true);
+  assert.equal(timelineClear.report.persistentSnapshotsCleared, 2);
+
   const extrinsicPrepare = await runCli(baseUrl, [
     "bittensor",
     "extrinsic",
@@ -457,6 +523,9 @@ try {
       "GET /api/bittensor/readiness",
       "GET /api/bittensor/capabilities",
       "GET /api/bittensor/capabilities/14",
+      "GET /api/bittensor/wallet/timeline/status",
+      "GET /api/bittensor/wallet/timeline/export",
+      "POST /api/bittensor/wallet/timeline/clear",
       "POST /api/bittensor/extrinsics/prepare",
       "POST /api/bittensor/extrinsics/handoff",
       "POST /api/bittensor/extrinsics/submit",

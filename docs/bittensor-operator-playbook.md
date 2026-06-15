@@ -110,7 +110,47 @@ Expected behavior:
 - if the SS58 address is missing, Matterhorn asks one clarification question;
 - Matterhorn never asks for a seed phrase or wallet export.
 
-## 4. Where Am I Staked?
+## 4. Wallet Timeline Controls
+
+Wallet timeline persistence is opt-in and public-data-only. It is useful for customer demos where a user wants "what changed since last time?" to survive process restarts.
+
+Enable it only when needed:
+
+```bash
+export BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE=1
+export BITTENSOR_WALLET_TIMELINE_PATH="$HOME/.matterhorn-work/bittensor-wallet-timeline.json"
+```
+
+CLI status:
+
+```bash
+matterhorn-work bittensor wallet-timeline status --json
+```
+
+CLI export for one public wallet:
+
+```bash
+matterhorn-work bittensor wallet-timeline export \
+  --ss58-address "<public-ss58-address>" \
+  --json
+```
+
+CLI clear for one public wallet:
+
+```bash
+matterhorn-work bittensor wallet-timeline clear \
+  --ss58-address "<public-ss58-address>" \
+  --json
+```
+
+Expected behavior:
+
+- status says whether persistence is enabled and where the local file lives;
+- export returns versioned public wallet snapshots with content hashes;
+- clear removes in-memory and persisted public baselines for that SS58 address;
+- no seed phrases, private keys, mnemonics, wallet exports, signatures, or signing payloads appear in timeline output.
+
+## 5. Where Am I Staked?
 
 CLI:
 
@@ -140,7 +180,7 @@ Expected behavior:
 - output explains subnet, netuid, validator hotkey, alpha amount, TAO value, and slippage or freshness warnings;
 - missing SS58 address returns a clarification, not fake wallet data.
 
-## 5. Find Subnets For A Goal
+## 6. Find Subnets For A Goal
 
 CLI:
 
@@ -180,7 +220,7 @@ Compare subnets for a creative media workflow.
 Which subnet category is relevant for this task: <task>?
 ```
 
-## 6. Compare Validators On A Subnet
+## 7. Compare Validators On A Subnet
 
 CLI:
 

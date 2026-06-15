@@ -966,6 +966,15 @@ export interface BittensorWalletTimelineStoreStatus {
   updatedAt: string;
 }
 
+export interface BittensorWalletTimelineExport {
+  kind: "wallet_timeline_export";
+  generatedAt: string;
+  ss58Address: string | null;
+  status: BittensorWalletTimelineStoreStatus;
+  snapshots: BittensorWalletTimelineSnapshot[];
+  warnings: string[];
+}
+
 export interface BittensorDecisionOption {
   label: string;
   summary: string;
@@ -1947,6 +1956,29 @@ export function getBittensorWalletTimelineStoreStatus(): BittensorWalletTimeline
       ? ["Wallet timeline persistence stores public watch-only wallet snapshots only."]
       : ["Wallet timeline persistence is disabled unless BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE=1."],
     updatedAt: nowIso(),
+  };
+}
+
+export function exportBittensorWalletTimeline(input: { ss58Address?: string | null } = {}): BittensorWalletTimelineExport {
+  const requested = input.ss58Address && isValidSs58Address(input.ss58Address) ? input.ss58Address : null;
+  if (bittensorWalletTimelinePath()) loadPersistedWalletTimeline();
+  const snapshots = requested
+    ? walletTimelineSnapshots.get(requested) ?? []
+    : [...walletTimelineSnapshots.values()].flat();
+  const validated = snapshots.filter((snapshot) => validateBittensorWalletTimelineSnapshot(snapshot).ok);
+  const status = getBittensorWalletTimelineStoreStatus();
+  return {
+    kind: "wallet_timeline_export",
+    generatedAt: nowIso(),
+    ss58Address: requested,
+    status,
+    snapshots: validated,
+    warnings: uniqueWarnings(
+      status.warnings,
+      requested && !validated.length ? ["No public wallet timeline snapshots found for " + shortSs58(requested) + "."] : [],
+      validated.length !== snapshots.length ? ["Some wallet timeline snapshots were omitted because validation failed."] : [],
+      ["This export contains public watch-only wallet data only."],
+    ),
   };
 }
 
