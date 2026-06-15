@@ -973,6 +973,22 @@ bittensor_list_subnet_adapter_marketplace({
 })
 ```
 
+For handoff, export the same marketplace status as redacted markdown:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/marketplace-export?adapter=data_search&limit=10" \
+  | jq -r '.marketplaceExport.markdown'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_export_subnet_adapter_marketplace({
+  "adapter": "data_search",
+  "limit": 10
+})
+```
+
 Expected marketplace behavior:
 
 - classifies entries as `universal_only`, `needs_adapter`, `mock_ready`, `manual_review_required`, `blocked`, or `unsupported`;

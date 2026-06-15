@@ -72,6 +72,7 @@ import {
   doctorBittensorSubnetAdapters,
   evaluateBittensorWatches,
   executeBittensorChatWorkflow,
+  exportBittensorSubnetAdapterMarketplace,
   findBittensorSubnetsForGoal,
   getBittensorCapability,
   getBittensorChatContext,
@@ -4126,6 +4127,25 @@ function createRoutes(
       limit,
     });
     return jsonResponse({ success: true, marketplace, cards: [buildBittensorAdapterMarketplaceCard(marketplace)] });
+  });
+
+  addRoute(routes, "GET", "/api/bittensor/adapters/marketplace-export", "client", async (ctx) => {
+    const netuidParam = ctx.url.searchParams.get("netuid");
+    const netuid = netuidParam === null || netuidParam === "" ? null : Number(netuidParam);
+    if (netuid !== null && (!Number.isInteger(netuid) || netuid < 0)) {
+      throw new ApiError(400, "invalid_netuid", "netuid must be a non-negative integer");
+    }
+    const limitParam = ctx.url.searchParams.get("limit");
+    const limit = limitParam === null || limitParam === "" ? null : Number(limitParam);
+    if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
+      throw new ApiError(400, "invalid_limit", "limit must be a positive integer");
+    }
+    const marketplaceExport = await exportBittensorSubnetAdapterMarketplace({
+      adapter: ctx.url.searchParams.get("adapter") ?? ctx.url.searchParams.get("serviceAdapter"),
+      netuid,
+      limit,
+    });
+    return jsonResponse({ success: true, marketplaceExport });
   });
 
   addRoute(routes, "GET", "/api/bittensor/adapters/spec", "client", async () => {
