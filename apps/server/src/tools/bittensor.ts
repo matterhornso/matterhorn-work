@@ -1415,6 +1415,7 @@ export interface BittensorSubnetAdapterOperatorHandoff {
   evidenceExport: BittensorSubnetAdapterEvidenceExport;
   conformanceExport: BittensorSubnetAdapterConformanceExport;
   dryRunExport: BittensorSubnetAdapterDryRunExport;
+  providerRegistry: BittensorSubnetAdapterProviderRegistryReference;
   markdown: string;
   warnings: string[];
   nextActions: string[];
@@ -1499,6 +1500,7 @@ export interface BittensorSubnetAdapterCanaryOperatorPacket {
   evidenceExport: BittensorSubnetAdapterEvidenceExport;
   evidenceReview: BittensorSubnetAdapterEvidenceReviewDecision;
   approvalTemplate: BittensorSubnetAdapterRuntimeApprovalTemplate | null;
+  providerRegistry: BittensorSubnetAdapterProviderRegistryReference;
   warnings: string[];
   nextActions: string[];
 }
@@ -1584,6 +1586,17 @@ export interface BittensorSubnetAdapterProviderRegistry {
   blockedCount: number;
   entries: BittensorSubnetAdapterProviderRegistryEntry[];
   template: BittensorSubnetAdapterProviderRegistryTemplate;
+  warnings: string[];
+  nextActions: string[];
+}
+
+
+export interface BittensorSubnetAdapterProviderRegistryReference {
+  status: BittensorSubnetAdapterProviderRegistry["status"];
+  providerCount: number;
+  readyForCanaryCount: number;
+  matchingReadyProviderCount: number;
+  matchingProviderIds: string[];
   warnings: string[];
   nextActions: string[];
 }
@@ -3497,9 +3510,11 @@ export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
   const serviceAdapter = normalizeServiceAdapter(requestedAdapter, "unsupported");
   const requestSha256 = (input.requestSha256 ?? "").trim();
   const hashIsValid = isSha256Hex(requestSha256);
+  const providerRegistry = summarizeBittensorSubnetAdapterProviderRegistry({ adapter: serviceAdapter, netuid: evidenceReview.requested.netuid });
   const warnings = uniqueWarnings(
     evidenceExport.warnings,
     evidenceReview.warnings,
+    providerRegistry.warnings,
     evidenceReview.status === "blocked" ? ["Evidence review is blocked. Resolve blockers before generating an approval template."] : [],
     evidenceReview.status === "mock_dry_run_ready" ? ["Mock dry-run is ready, but this is not enough to approve a real subnet adapter canary."] : [],
     requestSha256 && !hashIsValid ? ["The preview request SHA-256 is malformed; approval templates require a 64-character SHA-256 hex string."] : [],
@@ -3535,6 +3550,7 @@ export async function buildBittensorSubnetAdapterCanaryOperatorPacket(input: {
     evidenceExport,
     evidenceReview,
     approvalTemplate,
+    providerRegistry,
     warnings,
     nextActions: status === "approval_template_ready"
       ? [
@@ -3566,6 +3582,11 @@ export function renderBittensorSubnetAdapterCanaryPacketMarkdown(packet: Bittens
     `Evidence review: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.status)}`,
     `Launch gate: ${sanitizeEvidenceMarkdownText(packet.evidenceReview.launchGateStatus)}`,
     `Preview request SHA-256 prefix: ${sanitizeEvidenceMarkdownText(packet.previewRequestSha256Prefix ?? "not included")}`,
+    "",
+    "## Provider Registry",
+    markdownBullet("Registry status: " + packet.providerRegistry.status),
+    markdownBullet("Matching reviewed providers: " + packet.providerRegistry.matchingReadyProviderCount),
+    markdownBullet("Visible provider ids: " + (packet.providerRegistry.matchingProviderIds.length ? packet.providerRegistry.matchingProviderIds.join(", ") : "none")),
     "",
     "## Approval Template",
     approval
@@ -5018,6 +5039,8 @@ function renderBittensorSubnetAdapterOperatorHandoffMarkdown(handoff: Omit<Bitte
     markdownBullet(`Conformance passed: ${handoff.conformanceExport.summary.passed}/${handoff.conformanceExport.summary.total}`),
     markdownBullet(`Dry-run: ${handoff.dryRunExport.status}`),
     markdownBullet(`Dry-run passed: ${handoff.dryRunExport.summary.passed}/${handoff.dryRunExport.summary.total}`),
+    markdownBullet("Provider registry: " + handoff.providerRegistry.status),
+    markdownBullet("Matching reviewed providers: " + handoff.providerRegistry.matchingReadyProviderCount),
     "",
     "## Blockers",
     ...(handoff.evidenceReview.blockedReasons.length ? handoff.evidenceReview.blockedReasons.map(markdownBullet) : ["- None from evidence review"]),
@@ -5077,11 +5100,13 @@ export async function buildBittensorSubnetAdapterOperatorHandoff(input: {
         "Export individual evidence/conformance/dry-run reports for human review.",
         "Prepare a real-adapter canary packet only after exact preview request SHA-256 confirmation.",
       ];
+  const providerRegistry = summarizeBittensorSubnetAdapterProviderRegistry({ adapter: evidenceReview.requested.adapter, netuid: evidenceReview.requested.netuid });
   const warnings = uniqueWarnings(
     evidenceReview.warnings,
     evidenceExport.warnings,
     conformanceExport.warnings,
     dryRunExport.warnings,
+    providerRegistry.warnings,
     ["This handoff is evidence only and does not authorize real subnet service execution."],
   );
   const base = {
@@ -5093,6 +5118,7 @@ export async function buildBittensorSubnetAdapterOperatorHandoff(input: {
     evidenceExport,
     conformanceExport,
     dryRunExport,
+    providerRegistry,
     warnings,
     nextActions,
   };
@@ -10229,6 +10255,40 @@ export function buildBittensorSubnetAdapterProviderRegistryTemplate(input: {
   };
 }
 
+
+function summarizeBittensorSubnetAdapterProviderRegistry(input: {
+  adapter?: BittensorCapabilityManifest["serviceAdapter"] | string | null;
+  netuid?: number | null;
+}): BittensorSubnetAdapterProviderRegistryReference {
+  const registry = getBittensorSubnetAdapterProviderRegistry();
+  const adapter = normalizeServiceAdapter(input.adapter, "unsupported");
+  const hasDirectAdapter = directSubnetAdapterKind(adapter);
+  const netuid = Number.isInteger(input.netuid ?? null) && Number(input.netuid) >= 0 ? Number(input.netuid) : null;
+  const matching = registry.entries.filter((entry) => {
+    if (!entry.readyForCanary) return false;
+    if (hasDirectAdapter && !entry.serviceAdapters.includes(adapter)) return false;
+    if (netuid !== null && !entry.netuids.includes(netuid)) return false;
+    return true;
+  });
+  const warnings = uniqueWarnings(
+    registry.warnings,
+    matching.length
+      ? ["Matching reviewed provider evidence exists, but this does not authorize real subnet execution."]
+      : ["No matching canary-ready provider registry entry was found for the requested adapter/netuid."],
+  );
+  return {
+    status: registry.status,
+    providerCount: registry.providerCount,
+    readyForCanaryCount: registry.readyForCanaryCount,
+    matchingReadyProviderCount: matching.length,
+    matchingProviderIds: matching.map((entry) => entry.providerId).slice(0, 5),
+    warnings,
+    nextActions: matching.length
+      ? ["Use provider registry evidence as review context only; keep canary gate, exact request-hash approval, and user confirmation separate."]
+      : ["Add or review a provider registry entry before treating a real adapter canary as provider-reviewed."],
+  };
+}
+
 export function getBittensorSubnetAdapterProviderRegistry(): BittensorSubnetAdapterProviderRegistry {
   const generatedAt = nowIso();
   const template = buildBittensorSubnetAdapterProviderRegistryTemplate();
@@ -11636,6 +11696,7 @@ export function buildBittensorAdapterOperatorHandoffCard(handoff: BittensorSubne
       cardItem("Evidence review", titleCase(handoff.evidenceReview.status), handoff.evidenceReview.status === "blocked" ? "danger" : handoff.evidenceReview.status === "mock_dry_run_ready" ? "good" : "warning"),
       cardItem("Conformance", titleCase(handoff.conformanceExport.status), handoff.conformanceExport.status === "pass" ? "good" : handoff.conformanceExport.status === "warning" ? "warning" : "danger"),
       cardItem("Dry-run", titleCase(handoff.dryRunExport.status), handoff.dryRunExport.status === "pass" ? "good" : handoff.dryRunExport.status === "warning" ? "warning" : "danger"),
+      cardItem("Provider evidence", handoff.providerRegistry.matchingReadyProviderCount, handoff.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
       cardItem("Warnings", handoff.warnings.length, handoff.warnings.length ? "warning" : "muted"),
       cardItem("Next actions", handoff.nextActions.length, handoff.nextActions.length ? "default" : "muted"),
     ],
@@ -11935,6 +11996,7 @@ export function buildBittensorAdapterCanaryOperatorPacketCard(packet: BittensorS
       cardItem("Evidence review", titleCase(packet.evidenceReview.status), packet.evidenceReview.status === "manual_real_canary_review_required" ? "warning" : packet.evidenceReview.status === "mock_dry_run_ready" ? "good" : "danger"),
       cardItem("Launch gate", titleCase(packet.evidenceReview.launchGateStatus), packet.evidenceReview.launchGateStatus === "manual_review_required" ? "warning" : packet.evidenceReview.launchGateStatus === "mock_ready" ? "good" : "danger"),
       cardItem("Request hash", packet.previewRequestSha256Prefix ? `${packet.previewRequestSha256Prefix}...` : "Required", packet.previewRequestSha256Prefix ? "muted" : "warning"),
+      cardItem("Provider evidence", packet.providerRegistry.matchingReadyProviderCount, packet.providerRegistry.matchingReadyProviderCount ? "warning" : "muted"),
       cardItem("Approval env", packet.approvalTemplate ? packet.approvalTemplate.env.key : "Not included", packet.approvalTemplate ? "warning" : "muted"),
     ],
     actions,
