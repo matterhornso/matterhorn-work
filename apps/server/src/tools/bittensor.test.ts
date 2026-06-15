@@ -574,6 +574,25 @@ describe("executeBittensorChatWorkflow", () => {
     });
   });
 
+  test("compares public wallet exposure against the last baseline", async () => {
+    await withMockedFivePromptSidecar(async () => {
+      const baseline = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
+      const result = await executeBittensorChatWorkflow({
+        message: "what changed in my wallet since last time?",
+        contextId: baseline.context?.id,
+      });
+      expect(result.execution).toBe("answered");
+      expect(result.cards[0]?.kind).toBe("intelligence_report");
+      expect(result.cards[0]?.title).toBe("Bittensor wallet changes");
+      expect(result.responseText).toContain("watch-only comparison");
+      const change = result.data.walletChange as { baselineAvailable?: boolean; changedPositions?: unknown[]; summary?: string } | undefined;
+      expect(change?.baselineAvailable).toBe(true);
+      expect(change?.summary).toContain("No material");
+      expect(change?.changedPositions).toHaveLength(0);
+      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export/i);
+    });
+  });
+
   test("discovers image-generation subnets with comparison cards", async () => {
     await withMockedFivePromptSidecar(async () => {
       const result = await executeBittensorChatWorkflow({ message: "which subnet is useful for image generation?" });
