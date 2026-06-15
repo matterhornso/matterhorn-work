@@ -17,6 +17,7 @@ try {
   const gate = path.join(tmp, "readiness.md");
   const timeline = path.join(tmp, "wallet-timeline.json");
   const adapterCanary = path.join(tmp, "adapter-canary.json");
+  const readonlyAdapterCanary = path.join(tmp, "readonly-adapter-canary.json");
   const receiptCheck = path.join(tmp, "receipt-check.json");
   const output = path.join(tmp, "bundle.md");
   const jsonOutput = path.join(tmp, "bundle.json");
@@ -53,6 +54,15 @@ try {
     summary: { pass: 6, warn: 1, fail: 0 },
     findings: [{ area: "Endpoint", status: "pass" }],
   }));
+  await writeFile(readonlyAdapterCanary, JSON.stringify({
+    ready: true,
+    netuid: 14,
+    serviceAdapter: "data_search",
+    invoked: true,
+    previewRequestSha256: "d".repeat(64),
+    summary: { pass: 5, warn: 0, fail: 0 },
+    findings: [{ area: "Invoke", status: "pass" }],
+  }));
   await writeFile(receiptCheck, JSON.stringify({
     accepted: true,
     txHash: `0x${"a".repeat(64)}`,
@@ -80,9 +90,12 @@ try {
     timeline,
     "--adapter-canary",
     adapterCanary,
+    "--readonly-adapter-canary",
+    readonlyAdapterCanary,
     "--receipt-check",
     receiptCheck,
     "--require-adapter-canary",
+    "--require-readonly-adapter-canary",
     "--require-receipt-check",
     "--output",
     output,
@@ -96,7 +109,9 @@ try {
   assert.match(markdown, /Wallet snapshot/);
   assert.match(markdown, /wallet-timeline\.json/);
   assert.match(markdown, /adapter-canary\.json/);
+  assert.match(markdown, /readonly-adapter-canary\.json/);
   assert.match(markdown, /receipt-check\.json/);
+  assert.match(markdown, /Read-only canary ready/);
   assert.match(markdown, /Receipt check accepted/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
@@ -104,6 +119,8 @@ try {
   assert.equal(summary.ready, true);
   assert.equal(summary.walletTimeline.snapshots, 2);
   assert.equal(summary.adapterCanary.ready, true);
+  assert.equal(summary.readonlyAdapterCanary.ready, true);
+  assert.equal(summary.readonlyAdapterCanary.invoked, true);
   assert.equal(summary.receiptCheck.ready, true);
   assert.equal(summary.receiptCheck.status, "finalized");
 

@@ -26,11 +26,13 @@ const config = {
   readinessGate: arg("--readiness-gate"),
   walletTimeline: arg("--wallet-timeline"),
   adapterCanary: arg("--adapter-canary"),
+  readonlyAdapterCanary: arg("--readonly-adapter-canary"),
   receiptCheck: arg("--receipt-check"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireAdapterCanary: flag("--require-adapter-canary"),
+  requireReadonlyAdapterCanary: flag("--require-readonly-adapter-canary"),
   requireReceiptCheck: flag("--require-receipt-check"),
   title: arg("--title") || "Matterhorn Work Bittensor Customer Evidence Bundle",
 };
@@ -47,8 +49,10 @@ function usage() {
     "  --readiness-gate <path>        Markdown output from scripts/bittensor-customer-readiness-gate.mjs.",
     "  --wallet-timeline <path>       Optional public-data wallet timeline status/export JSON.",
     "  --adapter-canary <path>        Optional JSON from scripts/bittensor-adapter-canary-gate.mjs.",
+    "  --readonly-adapter-canary <path> Optional JSON from scripts/bittensor-adapter-readonly-canary.mjs.",
     "  --receipt-check <path>         Optional JSON from scripts/bittensor-receipt-check.mjs.",
     "  --require-adapter-canary       Require adapter canary evidence to be ready.",
+    "  --require-readonly-adapter-canary Require read-only adapter canary evidence to be ready.",
     "  --require-receipt-check        Require post-signer receipt check evidence to be accepted.",
     "  --output, -o <path>            Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>           Write machine-readable evidence summary JSON.",
@@ -192,6 +196,23 @@ function adapterCanarySummary(canary) {
   };
 }
 
+function readonlyAdapterCanarySummary(canary) {
+  if (!canary) return null;
+  const findings = asArray(canary.findings);
+  const failCount = Number(canary.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(canary.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const ready = canary.ready === true || canary.status === "ready";
+  return {
+    ready,
+    invoked: canary.invoked === true,
+    netuid: canary.netuid ?? null,
+    serviceAdapter: canary.serviceAdapter || canary.adapter || "",
+    previewRequestSha256: canary.previewRequestSha256 || "",
+    detail: ready ? "Read-only canary ready; invoked " + (canary.invoked === true ? "yes" : "no") : failCount + " failed, " + warnCount + " warnings",
+    findings: findings.slice(0, 8).map((finding) => String(finding.area || "Finding") + ": " + String(finding.status || "unknown")),
+  };
+}
+
 function receiptCheckSummary(receiptCheck) {
   if (!receiptCheck) return null;
   const findings = asArray(receiptCheck.findings);
@@ -256,6 +277,13 @@ function renderMarkdown(summary) {
         : config.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided",
     ],
     [
+      "Read-only adapter canary",
+      summary.readonlyAdapterCanary ? (summary.readonlyAdapterCanary.ready ? "pass" : "warn") : "warn",
+      summary.readonlyAdapterCanary
+        ? summary.readonlyAdapterCanary.detail
+        : config.requireReadonlyAdapterCanary ? "Read-only adapter canary evidence required but missing" : "No read-only adapter canary evidence provided",
+    ],
+    [
       "Receipt check",
       summary.receiptCheck ? (summary.receiptCheck.ready ? "pass" : "warn") : "warn",
       summary.receiptCheck
@@ -281,6 +309,7 @@ function renderMarkdown(summary) {
     `- Customer readiness gate: ${basenameOrMissing(config.readinessGate)}`,
     `- Wallet timeline: ${basenameOrMissing(config.walletTimeline)}`,
     `- Adapter canary: ${basenameOrMissing(config.adapterCanary)}`,
+    `- Read-only adapter canary: ${basenameOrMissing(config.readonlyAdapterCanary)}`,
     `- Receipt check: ${basenameOrMissing(config.receiptCheck)}`,
     "",
     "## Gate Summary",
@@ -322,6 +351,7 @@ const agentControl = await readJson(config.agentControlLiveQa, "Agent control li
 const ci = await readJson(config.ci, "CI");
 const timeline = await readJson(config.walletTimeline, "Wallet timeline");
 const adapterCanary = await readJson(config.adapterCanary, "Adapter canary");
+const readonlyAdapterCanary = await readJson(config.readonlyAdapterCanary, "Read-only adapter canary");
 const receiptCheck = await readJson(config.receiptCheck, "Receipt check");
 const readinessGate = await readText(config.readinessGate);
 
@@ -330,14 +360,17 @@ const bittensorReady = isReady(bittensor) && summaryValue(bittensor, "fail") ===
 const agentReady = !agentControl || (isReady(agentControl) && summaryValue(agentControl, "fail") === 0);
 const gateReady = readinessGateReady(readinessGate);
 const adapterSummary = adapterCanarySummary(adapterCanary);
+const readonlyAdapterSummary = readonlyAdapterCanarySummary(readonlyAdapterCanary);
 const receiptSummary = receiptCheckSummary(receiptCheck);
 const adapterReady = !config.requireAdapterCanary || adapterSummary?.ready === true;
+const readonlyAdapterReady = !config.requireReadonlyAdapterCanary || readonlyAdapterSummary?.ready === true;
 const receiptReady = !config.requireReceiptCheck || receiptSummary?.ready === true;
 const ready = Boolean(
   bittensorReady &&
     agentReady &&
     gateReady &&
     adapterReady &&
+    readonlyAdapterReady &&
     receiptReady &&
     ciSummary.failed.length === 0 &&
     ciSummary.pending.length === 0 &&
@@ -368,6 +401,7 @@ const summary = {
   },
   walletTimeline: walletTimelineSummary(timeline),
   adapterCanary: adapterSummary,
+  readonlyAdapterCanary: readonlyAdapterSummary,
   receiptCheck: receiptSummary,
 };
 
