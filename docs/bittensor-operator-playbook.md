@@ -74,6 +74,23 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
 
 The bundle treats receipt evidence as optional unless `--require-receipt-check` is set. Required receipt evidence must be accepted, must not contain raw signatures or signed payloads, and should include a public wallet-diff follow-up prompt before an operator calls the customer flow complete.
 
+## Scheduled Watch Autopilot
+
+For repeated read-only monitoring while an operator is away, run the scheduler. It writes one JSON line per watch check plus a final aggregate summary:
+
+```bash
+node scripts/bittensor-watch-autopilot-scheduler.mjs \
+  --server-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --iterations 12 \
+  --interval-ms 300000 \
+  --jsonl-output /tmp/bittensor-watch-autopilot.jsonl \
+  --summary-output /tmp/bittensor-watch-autopilot-summary.json \
+  --strict
+```
+
+The scheduler is read-only. It does not sign, submit, broadcast, move stake, transfer TAO, or invoke subnet services. Alerts become chat prompts and audit evidence only.
+
 ## 1. Readiness
 
 Run readiness before any Bittensor workflow:
