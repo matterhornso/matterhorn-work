@@ -66,6 +66,7 @@ import {
   evaluateBittensorWatch,
   executeBittensorChatWorkflow,
   exportBittensorSubnetAdapterMarketplace,
+  exportBittensorSubnetAdapterRoadmap,
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
@@ -1614,6 +1615,41 @@ describe("executeBittensorChatWorkflow", () => {
       expect(card.kind).toBe("adapter_roadmap");
       expect(card.actions?.[0]?.kind).toBe("send_to_chat");
       expect(JSON.stringify(roadmap)).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic|wallet export/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousMock === undefined) {
+        delete process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = previousMock;
+      }
+    }
+  });
+
+  test("exports subnet adapter roadmap as redacted markdown", async () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousMock = process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS;
+    try {
+      process.env.BITTENSOR_ENABLE_MOCK_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 14,
+        name: "Mock compute",
+        serviceAdapter: "compute",
+        endpoint: "mock://compute",
+        requiredAuth: "none",
+        costModel: "free_read",
+        safetyNotes: ["Use public task text only."],
+      }]);
+      const roadmapExport = await exportBittensorSubnetAdapterRoadmap({ goal: "compute and gpu subnet services", limit: 3 });
+      expect(roadmapExport.kind).toBe("bittensor_subnet_adapter_roadmap_export");
+      expect(roadmapExport.markdown).toContain("Bittensor Subnet Adapter Roadmap Export");
+      expect(roadmapExport.markdown).toContain("mock_ready=1");
+      expect(roadmapExport.markdown).toContain("does not configure, approve, invoke, or authorize subnet services");
+      expect(roadmapExport.markdown).not.toContain("mock://compute");
+      expect(JSON.stringify(roadmapExport)).not.toMatch(/super-secret-token-value|BITTENSOR_FIXTURE_ADAPTER_TOKEN|privateKey|seed phrase|mnemonic|wallet export/i);
     } finally {
       if (previousAdapters === undefined) {
         delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;

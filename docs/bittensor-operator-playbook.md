@@ -1030,6 +1030,24 @@ Expected roadmap behavior:
 - returns candidate netuids, priority, rationale, next prompt, and safety warnings;
 - remains planning evidence only: it does not configure endpoints, invoke adapters, approve requests, or sign/broadcast anything.
 
+For a copy-pasteable roadmap handoff, export the same planning evidence as redacted markdown:
+
+```bash
+curl -s "http://localhost:8787/api/bittensor/adapters/roadmap-export?goal=data%20search&limit=3" \
+  | jq -r '.roadmapExport.markdown'
+```
+
+Equivalent MCP tool:
+
+```text
+bittensor_export_subnet_adapter_roadmap({
+  "goal": "data search",
+  "limit": 3
+})
+```
+
+The export intentionally omits endpoint URLs, credential values, auth environment names, raw task text, wallet data, signing payloads, and full request hashes.
+
 The main Bittensor readiness audit also includes this roadmap signal, so `GET /api/bittensor/readiness` should show `subnet_adapter_roadmap` with recommendation counts and the top adapter candidate before operators choose the next direct subnet service slice.
 
 When an agent or operator needs one compact packet instead of separate evidence, conformance, and dry-run exports, build the operator handoff. It summarizes the evidence review, conformance export, and mock dry-run export into one redacted go/no-go artifact:
