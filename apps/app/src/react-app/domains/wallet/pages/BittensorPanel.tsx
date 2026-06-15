@@ -154,6 +154,7 @@ export default function BittensorPanel() {
   const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
+  const [copiedReadinessCommand, setCopiedReadinessCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
@@ -354,6 +355,15 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
+  const copyReadinessCommand = async (kind: "live-qa" | "gate") => {
+    const command = kind === "live-qa"
+      ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
+      : "pnpm test:bittensor-customer-readiness-gate";
+    await navigator.clipboard?.writeText(command);
+    setCopiedReadinessCommand(kind);
+    window.setTimeout(() => setCopiedReadinessCommand(null), 2000);
+  };
+
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
     const prompt = `Use Bittensor chat mode. Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
     await sendToChat(prompt, { netuid: subnet.netuid, subnet });
@@ -493,6 +503,14 @@ export default function BittensorPanel() {
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
                     <BrainCircuit className="size-3.5" />
                     Ask Chat
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("live-qa")}>
+                    {copiedReadinessCommand === "live-qa" ? "Copied" : "Copy Live QA"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("gate")}>
+                    {copiedReadinessCommand === "gate" ? "Copied" : "Copy Gate"}
                   </Button>
                 </div>
               </div>
