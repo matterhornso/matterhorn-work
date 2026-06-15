@@ -30,7 +30,7 @@ The intended user experience:
 - Public wallet intelligence reports with free TAO, stake value, subnet/validator concentration, slippage exposure, stale-data risk, largest positions, warnings, next questions, copilot actions, and watch suggestions.
 - Subnet intelligence reports with score, source/freshness, market/metagraph context, mechanism-awareness, validator concentration, adapter readiness, warnings, next questions, and watch suggestions.
 - Validator intelligence and deep-dive flows for public validator hotkeys.
-- In-memory public wallet baselines, `what changed in my wallet since last time?` comparison cards, and chat-level baseline reset/forget controls.
+- In-memory public wallet baselines, optional public-data-only wallet timeline snapshots, `what changed in my wallet since last time?` comparison cards, and chat-level baseline reset/forget controls.
 
 ### Staking And Signing Safety
 
@@ -78,8 +78,8 @@ Goal: make wallet-change comparisons survive process restarts and power real cus
 
 Build:
 
-- Optional local encrypted-or-redacted public wallet snapshot store.
-- Snapshot retention policy and export/redaction rules.
+- Harden the optional local public wallet snapshot store for customer machines, including storage-location UX and operator evidence.
+- Add export/redaction commands around the versioned snapshot format.
 - `what changed since yesterday/last week?` support using timestamped public baselines.
 - UI and CLI controls to clear public wallet baselines.
 

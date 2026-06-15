@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   analyzeBittensorSubnetIntelligence,
   analyzeBittensorValidatorIntelligence,
   analyzeBittensorWalletIntelligence,
   auditBittensorReadiness,
+  buildBittensorWalletTimelineSnapshot,
   auditBittensorSubnetAdapterRuntimeApprovals,
   buildBittensorAdapterApprovalAuditCard,
   buildBittensorAdapterApprovalTemplateCard,
@@ -70,6 +74,7 @@ import {
   getConfiguredSubnetAdapter,
   getBittensorChatContext,
   getBittensorSignerStatus,
+  getBittensorWalletTimelineStoreStatus,
   getBittensorSubnetAdapterCanaryReviewChecklist,
   getBittensorSubnetAdapterCandidateProfiles,
   getBittensorSubnetAdapterManifestExamples,
@@ -95,9 +100,14 @@ import {
   validateBittensorSubnetServiceAdapterContract,
   validateBittensorSubnetAdapterManifest,
   validateBittensorSubnetAdapterResult,
+  validateBittensorWalletTimelineSnapshot,
 } from "./bittensor.js";
 
 process.env.BITTENSOR_WATCHLIST_DISABLE_PERSISTENCE = "1";
+delete process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE;
+delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+delete process.env.BITTENSOR_WALLET_TIMELINE_PATH;
+delete process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT;
 
 const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
 
@@ -618,6 +628,93 @@ describe("executeBittensorChatWorkflow", () => {
       expect(JSON.stringify(clear)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
     });
+  });
+
+  test("builds validated public wallet timeline snapshots without secret-shaped fields", () => {
+    const snapshot = buildBittensorWalletTimelineSnapshot({
+      ss58Address: VALID_SS58,
+      taoBalance: 4.2,
+      stakePositions: [{
+        netuid: 14,
+        subnetName: "TAOHash",
+        validatorHotkey: VALID_SS58,
+        alphaAmount: 2,
+        taoValue: 1.5,
+        slippageRisk: "low",
+      }],
+      estimatedValueTao: 5.7,
+      providerStatus: "ok",
+      updatedAt: "2026-06-15T00:00:00.000Z",
+      source: "test",
+      block: 123,
+      freshness: "fresh",
+      warnings: ["public test snapshot"],
+    }, "2026-06-15T00:01:00.000Z");
+    expect(snapshot.kind).toBe("wallet_timeline_snapshot");
+    expect(snapshot.contentSha256).toHaveLength(64);
+    expect(validateBittensorWalletTimelineSnapshot(snapshot).ok).toBe(true);
+    expect(JSON.stringify(snapshot)).not.toMatch(/seed|mnemonic|privateKey|secret|keyfile|suri|wallet export/i);
+
+    const tampered = { ...snapshot, taoBalance: 99 };
+    const validation = validateBittensorWalletTimelineSnapshot(tampered);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(" ")).toContain("content hash");
+  });
+
+  test("persists and clears opt-in public wallet timeline snapshots", async () => {
+    const previousEnabled = process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+    const previousPath = process.env.BITTENSOR_WALLET_TIMELINE_PATH;
+    const previousDisable = process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE;
+    const previousRetention = process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT;
+    const dir = mkdtempSync(join(tmpdir(), "matterhorn-bittensor-wallet-timeline-"));
+    const file = join(dir, "timeline.json");
+    process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE = "1";
+    process.env.BITTENSOR_WALLET_TIMELINE_PATH = file;
+    process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT = "4";
+    delete process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE;
+
+    try {
+      await withMockedFivePromptSidecar(async () => {
+        const baseline = await executeBittensorChatWorkflow({ message: "show my TAO", ss58Address: VALID_SS58 });
+        const status = getBittensorWalletTimelineStoreStatus();
+        expect(status.enabled).toBe(true);
+        expect(status.path).toBe(file);
+        expect(status.snapshotCount).toBeGreaterThan(0);
+        const persisted = JSON.parse(readFileSync(file, "utf8")) as { snapshots?: Array<{ ss58Address?: string; contentSha256?: string }> };
+        expect(persisted.snapshots?.some((snapshot) => snapshot.ss58Address === VALID_SS58 && snapshot.contentSha256?.length === 64)).toBe(true);
+
+        const clear = await executeBittensorChatWorkflow({
+          message: "forget my Bittensor wallet baseline history",
+          contextId: baseline.context?.id,
+        });
+        const clearReport = clear.data.walletBaseline as { persistentSnapshotsCleared?: number } | undefined;
+        expect(clearReport?.persistentSnapshotsCleared).toBeGreaterThan(0);
+        const afterClear = JSON.parse(readFileSync(file, "utf8")) as { snapshots?: Array<{ ss58Address?: string }> };
+        expect(afterClear.snapshots?.some((snapshot) => snapshot.ss58Address === VALID_SS58)).toBe(false);
+      });
+    } finally {
+      if (previousEnabled === undefined) {
+        delete process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE;
+      } else {
+        process.env.BITTENSOR_WALLET_TIMELINE_ENABLE_PERSISTENCE = previousEnabled;
+      }
+      if (previousPath === undefined) {
+        delete process.env.BITTENSOR_WALLET_TIMELINE_PATH;
+      } else {
+        process.env.BITTENSOR_WALLET_TIMELINE_PATH = previousPath;
+      }
+      if (previousDisable === undefined) {
+        delete process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE;
+      } else {
+        process.env.BITTENSOR_WALLET_TIMELINE_DISABLE_PERSISTENCE = previousDisable;
+      }
+      if (previousRetention === undefined) {
+        delete process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT;
+      } else {
+        process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT = previousRetention;
+      }
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("discovers image-generation subnets with comparison cards", async () => {
