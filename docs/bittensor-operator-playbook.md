@@ -25,6 +25,29 @@ Chat is the primary Bittensor interface. Cards and tool output are for confirmat
 - If a prompt is missing required public context, ask one clarifying question instead of guessing.
 - If a subnet service adapter is missing, say that Matterhorn can explain, compare, monitor, and prepare guidance for that subnet, but cannot call the subnet service yet.
 
+## External Signer Handoff Check
+
+Before opening a Bittensor handoff in an external signer, validate the unsigned handoff packet:
+
+```bash
+node scripts/bittensor-signing-handoff-check.mjs \
+  --handoff /tmp/bittensor-handoff.json \
+  --expected-sha "<payload-sha256-from-preview>" \
+  --output /tmp/bittensor-handoff-check.md \
+  --json-output /tmp/bittensor-handoff-check.json \
+  --strict
+```
+
+Expected behavior:
+
+- the payload SHA-256 is present and matches the preview;
+- the handoff has not expired;
+- action context is visible before signing;
+- the packet explicitly requires an external signer;
+- no seed phrase, mnemonic, private key, keyfile, wallet export, signature, signed extrinsic, or signed payload field is present.
+
+This check never signs, submits, or broadcasts. It is an operator/customer trust gate before the user leaves Matterhorn Work for an external signer.
+
 ## 1. Readiness
 
 Run readiness before any Bittensor workflow:

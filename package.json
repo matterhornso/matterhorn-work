@@ -60,7 +60,8 @@
     "release:prepare:dry": "node scripts/release/prepare.mjs --dry-run",
     "release:ship": "node scripts/release/ship.mjs",
     "release:ship:watch": "node scripts/release/ship.mjs --watch",
-    "test:bittensor-customer-evidence-bundle": "node scripts/bittensor-customer-evidence-bundle.test.mjs"
+    "test:bittensor-customer-evidence-bundle": "node scripts/bittensor-customer-evidence-bundle.test.mjs",
+    "test:bittensor-signing-handoff-check": "node scripts/bittensor-signing-handoff-check.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
