@@ -255,3 +255,31 @@ The report must not include full request hashes, endpoint URLs, credentials, tas
 
 - readiness audits include a canary outcome report fixture so operators can verify the sanitized post-canary artifact path before any real direct subnet execution.
 
+## Real Adapter Canary Gate
+
+Before enabling a real read-only subnet service adapter for a test customer, run:
+
+```bash
+node scripts/bittensor-adapter-canary-gate.mjs \
+  --netuid 14 \
+  --allowed-hosts adapter.example.com \
+  --require-configured \
+  --output /tmp/bittensor-adapter-canary-gate.md \
+  --json-output /tmp/bittensor-adapter-canary-gate.json \
+  --strict
+```
+
+This gate inspects capability evidence only. It does not call the adapter service.
+
+The gate requires:
+
+- declared netuid matches the requested subnet;
+- a service adapter is declared;
+- configuration is present when `--require-configured` is used;
+- real endpoints use `https:`;
+- endpoint host is included in `--allowed-hosts` when an allowlist is provided;
+- mock endpoints require `--allow-mock`;
+- credential-shaped and signed-payload-shaped fields are absent from capability evidence.
+
+Use this before the first real adapter canary. Passing this gate is necessary, but not sufficient, for customer exposure: still run preview-confirm-invoke tests, timeout checks, rate-limit checks, and rollback review.
+
