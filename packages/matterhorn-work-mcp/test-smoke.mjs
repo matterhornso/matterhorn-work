@@ -599,14 +599,29 @@ try {
         summary: { pass: 6, warn: 1, fail: 0 },
         findings: [{ area: "Endpoint", status: "pass" }],
       },
+      receiptCheck: {
+        accepted: true,
+        txHash: "0x" + "d".repeat(64),
+        blockHash: "0x" + "e".repeat(64),
+        status: "finalized",
+        payloadSha256: "f".repeat(64),
+        action: "stake",
+        netuid: 14,
+        summary: { pass: 5, warn: 0, fail: 0 },
+        findings: [{ area: "Payload hash", status: "pass" }],
+      },
       requireAdapterCanary: true,
+      requireReceiptCheck: true,
     },
   }));
   assert.equal(customerEvidenceBundle.ready, true);
   assert.equal(customerEvidenceBundle.summary.adapterCanary.ready, true);
+  assert.equal(customerEvidenceBundle.summary.receiptCheck.ready, true);
+  assert.equal(customerEvidenceBundle.summary.receiptCheck.status, "finalized");
   assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
   assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);
+  assert.match(customerEvidenceBundle.markdown, /Receipt check accepted/);
 
   const badCustomerEvidenceBundle = await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_customer_evidence_bundle",
@@ -617,6 +632,17 @@ try {
     },
   });
   assert.match(badCustomerEvidenceBundle.error?.message || "", /credential-shaped field/i);
+
+  const badCustomerEvidenceReceipt = await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_customer_evidence_bundle",
+    arguments: {
+      bittensorLiveQa: { ready: true, summary: { pass: 1, fail: 0 } },
+      ci: { workflow_runs: [{ name: "Matterhorn Work Tests", conclusion: "success" }] },
+      readinessGate: "READY_FOR_TEST_CUSTOMERS",
+      receiptCheck: { accepted: true, signature: "0x1234" },
+    },
+  });
+  assert.match(badCustomerEvidenceReceipt.error?.message || "", /credential-shaped field/i);
 
   const capabilities = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_list_capabilities",
