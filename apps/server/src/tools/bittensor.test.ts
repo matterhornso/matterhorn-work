@@ -9,7 +9,9 @@ import {
   auditBittensorReadiness,
   buildBittensorWalletTimelineSnapshot,
   auditBittensorSubnetAdapterRuntimeApprovals,
+  auditBittensorSubnetAdapterCanaryGate,
   buildBittensorAdapterApprovalAuditCard,
+  buildBittensorAdapterCanaryGateCard,
   buildBittensorAdapterApprovalTemplateCard,
   buildBittensorAdapterCanaryOperatorPacketCard,
   buildBittensorAdapterManifestValidationCard,
@@ -1088,6 +1090,126 @@ describe("executeBittensorChatWorkflow", () => {
         }
       }
     });
+  });
+
+  test("audits the real adapter canary gate without exposing secrets", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+    const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+    const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+    const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+    try {
+      process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+      delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+      process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
+      process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
+        netuid: 77,
+        name: "Reviewed HTTPS adapter",
+        serviceAdapter: "data_search",
+        endpoint: "https://adapter.invalid/invoke",
+        requiredAuth: "none",
+        costModel: "provider_priced",
+        safetyNotes: ["HTTPS adapter safety note."],
+      }]);
+      process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = JSON.stringify([{
+        netuid: 77,
+        serviceAdapter: "data_search",
+        requestSha256: "d".repeat(64),
+        approvedBy: "operator",
+        approvedAt: "2026-06-09T00:00:00.000Z",
+        expiresAt: "2999-01-01T00:00:00.000Z",
+        reason: "Reviewed canary fixture.",
+      }]);
+      const audit = auditBittensorSubnetAdapterCanaryGate();
+      expect(audit.kind).toBe("bittensor_subnet_adapter_canary_gate_audit");
+      expect(audit.status).toBe("preview_ready");
+      expect(audit.realAdaptersEnabled).toBe(true);
+      expect(audit.canaryAcknowledgementEnabled).toBe(false);
+      expect(audit.activeApprovalCount).toBe(1);
+      expect(audit.readyRealAdapterCount).toBe(1);
+      expect(audit.warnings.join(" ")).toContain("canary acknowledgement is off");
+      const card = buildBittensorAdapterCanaryGateCard(audit);
+      expect(card.kind).toBe("adapter_canary_gate");
+      expect(card.items.find((item) => item.label === "Active approvals")?.value).toBe("1");
+      expect(card.actions?.[0]?.payload?.prompt).toContain("canary acknowledgement");
+      expect(JSON.stringify(audit)).not.toContain("d".repeat(64));
+      expect(JSON.stringify(audit)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|adapter-token|Bearer [A-Za-z0-9._-]{8,}/i);
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousAllowlist === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = previousAllowlist;
+      }
+      if (previousReal === undefined) {
+        delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+      }
+      if (previousAck === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
+      }
+      if (previousApprovals === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+      }
+    }
+  });
+
+  test("blocks stale canary acknowledgement in the canary gate audit", () => {
+    const previousAdapters = process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+    const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+    const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+    const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+    try {
+      delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = "1";
+      const audit = auditBittensorSubnetAdapterCanaryGate();
+      expect(audit.status).toBe("blocked");
+      expect(audit.blockers.join(" ")).toContain("BITTENSOR_SUBNET_ADAPTER_CANARY_ACK=1");
+      expect(audit.blockers.join(" ")).toContain("no active exact request approvals");
+      const card = buildBittensorAdapterCanaryGateCard(audit);
+      expect(card.tone).toBe("danger");
+    } finally {
+      if (previousAdapters === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = previousAdapters;
+      }
+      if (previousReal === undefined) {
+        delete process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
+      } else {
+        process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = previousReal;
+      }
+      if (previousAck === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
+      }
+      if (previousApprovals === undefined) {
+        delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      } else {
+        process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+      }
+    }
+  });
+
+  test("routes canary gate chat prompts to a read-only audit card", async () => {
+    const result = await executeBittensorChatWorkflow({ message: "Audit the Bittensor adapter canary gate status." });
+    expect(result.execution).toBe("answered");
+    expect(result.responseText).toContain("read-only audit");
+    expect(result.cards[0]?.kind).toBe("adapter_canary_gate");
+    expect(result.data.canaryGate).toBeTruthy();
+    expect(JSON.stringify(result)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
   });
 
   test("audits real adapter request approvals without exposing full hashes", () => {
