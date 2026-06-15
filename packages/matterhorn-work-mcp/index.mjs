@@ -406,9 +406,11 @@ const tools = [
         adapterCanary: { type: "object", description: "Optional JSON output from the Bittensor adapter canary gate." },
         readonlyAdapterCanary: { type: "object", description: "Optional JSON output from the Bittensor read-only adapter canary harness." },
         receiptCheck: { type: "object", description: "Optional JSON output from the Bittensor receipt check." },
+        watchAutopilotScheduler: { type: "object", description: "Optional JSON summary from the Bittensor watch autopilot scheduler." },
         requireAdapterCanary: { type: "boolean", description: "Require adapter canary evidence to be ready for real-adapter customer demos." },
         requireReadonlyAdapterCanary: { type: "boolean", description: "Require read-only adapter canary evidence to be ready." },
         requireReceiptCheck: { type: "boolean", description: "Require post-signer receipt evidence to be accepted." },
+        requireWatchAutopilotScheduler: { type: "boolean", description: "Require scheduled watch autopilot evidence to be successful." },
         title: { type: "string" },
       },
       required: ["bittensorLiveQa", "ci", "readinessGate"],
@@ -1343,6 +1345,28 @@ function customerEvidenceReceiptCheckSummary(receiptCheck) {
   };
 }
 
+function customerEvidenceWatchAutopilotSchedulerSummary(scheduler) {
+  if (!scheduler || typeof scheduler !== "object") return null;
+  const failedChecks = Number(scheduler.failedChecks ?? scheduler.summary?.failedChecks ?? 0);
+  const iterations = Number(scheduler.iterations ?? scheduler.runs?.length ?? 0);
+  const totalAlerts = Number(scheduler.totalAlerts ?? scheduler.summary?.totalAlerts ?? 0);
+  const totalEvaluations = Number(scheduler.totalEvaluations ?? scheduler.summary?.totalEvaluations ?? 0);
+  const ready = (scheduler.ok === true || scheduler.ready === true || scheduler.status === "ready") && failedChecks === 0;
+  return {
+    ready,
+    iterations,
+    totalAlerts,
+    totalEvaluations,
+    failedChecks,
+    latestCheckedAt: scheduler.latest?.checkedAt || scheduler.latestCheckedAt || "",
+    detail: ready
+      ? iterations + " scheduled checks, " + totalAlerts + " alerts, " + totalEvaluations + " evaluations"
+      : failedChecks + " failed checks across " + iterations + " scheduled checks",
+    safety: scheduler.safety || {},
+    source: scheduler.source || "matterhorn_bittensor_watch_autopilot_scheduler",
+  };
+}
+
 function customerEvidenceWalletTimelineSummary(timeline) {
   if (!timeline || typeof timeline !== "object") return null;
   return {
@@ -1366,6 +1390,7 @@ function renderCustomerEvidenceMarkdown(summary, title) {
     ["Adapter canary", summary.adapterCanary ? (summary.adapterCanary.ready ? "pass" : "warn") : "warn", summary.adapterCanary ? summary.adapterCanary.detail : summary.requireAdapterCanary ? "Adapter canary evidence required but missing" : "No adapter canary evidence provided"],
     ["Read-only adapter canary", summary.readonlyAdapterCanary ? (summary.readonlyAdapterCanary.ready ? "pass" : "warn") : "warn", summary.readonlyAdapterCanary ? summary.readonlyAdapterCanary.detail : summary.requireReadonlyAdapterCanary ? "Read-only adapter canary evidence required but missing" : "No read-only adapter canary evidence provided"],
     ["Receipt check", summary.receiptCheck ? (summary.receiptCheck.ready ? "pass" : "warn") : "warn", summary.receiptCheck ? summary.receiptCheck.detail : summary.requireReceiptCheck ? "Receipt check evidence required but missing" : "No post-signer receipt check evidence provided"],
+    ["Scheduled watch autopilot", summary.watchAutopilotScheduler ? (summary.watchAutopilotScheduler.ready ? "pass" : "warn") : "warn", summary.watchAutopilotScheduler ? summary.watchAutopilotScheduler.detail : summary.requireWatchAutopilotScheduler ? "Scheduled watch autopilot evidence required but missing" : "No scheduled watch autopilot evidence provided"],
   ];
   return [
     "# " + title,
@@ -1407,15 +1432,18 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
   const adapterCanary = customerEvidenceAdapterCanarySummary(args.adapterCanary);
   const readonlyAdapterCanary = customerEvidenceReadonlyAdapterCanarySummary(args.readonlyAdapterCanary);
   const receiptCheck = customerEvidenceReceiptCheckSummary(args.receiptCheck);
+  const watchAutopilotScheduler = customerEvidenceWatchAutopilotSchedulerSummary(args.watchAutopilotScheduler);
   const adapterReady = args.requireAdapterCanary === true ? adapterCanary?.ready === true : true;
   const readonlyAdapterReady = args.requireReadonlyAdapterCanary === true ? readonlyAdapterCanary?.ready === true : true;
   const receiptReady = args.requireReceiptCheck === true ? receiptCheck?.ready === true : true;
+  const watchAutopilotSchedulerReady = args.requireWatchAutopilotScheduler === true ? watchAutopilotScheduler?.ready === true : true;
   const summary = {
     generatedAt: new Date().toISOString(),
-    ready: Boolean(bittensorReady && agentReady && gateReady && adapterReady && readonlyAdapterReady && receiptReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
+    ready: Boolean(bittensorReady && agentReady && gateReady && adapterReady && readonlyAdapterReady && receiptReady && watchAutopilotSchedulerReady && ciSummary.failed.length === 0 && ciSummary.pending.length === 0 && ciSummary.total > 0),
     requireAdapterCanary: args.requireAdapterCanary === true,
     requireReadonlyAdapterCanary: args.requireReadonlyAdapterCanary === true,
     requireReceiptCheck: args.requireReceiptCheck === true,
+    requireWatchAutopilotScheduler: args.requireWatchAutopilotScheduler === true,
     bittensor: {
       ready: bittensorReady,
       detail: bittensor ? customerEvidenceSummaryValue(bittensor, "pass") + " passed, " + customerEvidenceSummaryValue(bittensor, "fail") + " failed, " + customerEvidenceSummaryValue(bittensor, "skip") + " skipped" : "Missing Bittensor evidence",
@@ -1435,6 +1463,7 @@ function matterhornBittensorCustomerEvidenceBundle(args = {}) {
     adapterCanary,
     readonlyAdapterCanary,
     receiptCheck,
+    watchAutopilotScheduler,
   };
   return {
     ok: true,
