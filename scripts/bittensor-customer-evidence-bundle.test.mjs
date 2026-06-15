@@ -19,6 +19,7 @@ try {
   const adapterCanary = path.join(tmp, "adapter-canary.json");
   const readonlyAdapterCanary = path.join(tmp, "readonly-adapter-canary.json");
   const receiptCheck = path.join(tmp, "receipt-check.json");
+  const watchAutopilotScheduler = path.join(tmp, "watch-autopilot-scheduler.json");
   const output = path.join(tmp, "bundle.md");
   const jsonOutput = path.join(tmp, "bundle.json");
 
@@ -75,6 +76,16 @@ try {
     findings: [{ area: "Payload hash", status: "pass" }],
     followUpPrompt: "Compare my public wallet state after this stake receipt.",
   }));
+  await writeFile(watchAutopilotScheduler, JSON.stringify({
+    ok: true,
+    source: "matterhorn_bittensor_watch_autopilot_scheduler",
+    iterations: 6,
+    totalEvaluations: 18,
+    totalAlerts: 2,
+    failedChecks: 0,
+    latest: { checkedAt: "2026-06-15T00:05:00.000Z" },
+    safety: { custody: "none", signsOrBroadcasts: false, submitsTransactions: false, invokesSubnetServices: false },
+  }));
 
   execFileSync("node", [
     script,
@@ -94,9 +105,12 @@ try {
     readonlyAdapterCanary,
     "--receipt-check",
     receiptCheck,
+    "--watch-autopilot-scheduler",
+    watchAutopilotScheduler,
     "--require-adapter-canary",
     "--require-readonly-adapter-canary",
     "--require-receipt-check",
+    "--require-watch-autopilot-scheduler",
     "--output",
     output,
     "--json-output",
@@ -111,6 +125,9 @@ try {
   assert.match(markdown, /adapter-canary\.json/);
   assert.match(markdown, /readonly-adapter-canary\.json/);
   assert.match(markdown, /receipt-check\.json/);
+  assert.match(markdown, /watch-autopilot-scheduler\.json/);
+  assert.match(markdown, /Scheduled watch autopilot/);
+  assert.match(markdown, /6 scheduled checks, 2 alerts, 18 evaluations/);
   assert.match(markdown, /Read-only canary ready/);
   assert.match(markdown, /Receipt check accepted/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -123,6 +140,9 @@ try {
   assert.equal(summary.readonlyAdapterCanary.invoked, true);
   assert.equal(summary.receiptCheck.ready, true);
   assert.equal(summary.receiptCheck.status, "finalized");
+  assert.equal(summary.watchAutopilotScheduler.ready, true);
+  assert.equal(summary.watchAutopilotScheduler.iterations, 6);
+  assert.equal(summary.watchAutopilotScheduler.totalAlerts, 2);
 
   const bad = path.join(tmp, "bad.json");
   await writeFile(bad, JSON.stringify({ ready: true, seedPhrase: "never" }));
