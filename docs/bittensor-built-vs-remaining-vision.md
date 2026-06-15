@@ -55,6 +55,7 @@ The intended user experience:
 - Watch checks, alert keys, notification intents, digest, and safe alert actions.
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
 - Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, and required QA docs.
+- Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet.
 
 ### Agent Control Surface
 
@@ -146,7 +147,7 @@ Build:
 ## Recommended Next Build Order
 
 1. Durable wallet timeline.
-2. Customer readiness UI.
+2. Customer readiness UI and in-app evidence export.
 3. Real adapter canary.
 4. External signer UX polish.
 5. Scheduled Bittensor autopilot.

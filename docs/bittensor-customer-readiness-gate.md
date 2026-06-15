@@ -68,3 +68,20 @@ Use this gate alongside:
 - `docs/bittensor-live-qa.md`
 - `docs/bittensor-operator-playbook.md`
 - `docs/agent-control-coverage-matrix.md`
+
+## Customer Evidence Bundle
+
+After the gate passes, create a customer-safe handoff packet that includes only redacted basenames and public-data summaries:
+
+```bash
+node scripts/bittensor-customer-evidence-bundle.mjs \
+  --bittensor-live-qa /tmp/bittensor-live-qa.json \
+  --agent-control-live-qa /tmp/agent-control-live-qa.json \
+  --ci /tmp/github-ci.json \
+  --readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md \
+  --wallet-timeline /tmp/wallet-timeline-status.json \
+  --output /tmp/matterhorn-bittensor-customer-evidence.md \
+  --strict
+```
+
+The evidence bundle refuses secret-shaped JSON fields such as seed, mnemonic, private key, API key, token, password, keyfile, SURI, or wallet export. It is intended for operator/customer-readiness handoff, not for transaction signing or real subnet service execution.
