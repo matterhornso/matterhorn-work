@@ -50,6 +50,7 @@ The intended user experience:
 
 ### Monitoring And Agent Ops
 
+- Compact Bittensor customer readiness panel in the app overview, backed by the existing readiness API and direct chat handoff.
 - Watch creation from chat and wallet/subnet/validator intelligence.
 - Watch checks, alert keys, notification intents, digest, and safe alert actions.
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
@@ -94,7 +95,7 @@ Goal: make the release gate visible in the app, not only in CLI/docs.
 
 Build:
 
-- A compact Bittensor readiness/customer QA panel in the desktop app.
+- Expand the Bittensor readiness/customer QA panel with latest local readiness-gate evidence, missing artifacts, and copyable commands.
 - Show latest local readiness gate result, missing evidence, and next command to run.
 - Add one-click copy commands for Hermes/Codex live QA.
 - Surface P0/P1 blockers clearly before a test customer session.
