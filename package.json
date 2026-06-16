@@ -77,7 +77,8 @@
     "test:hyperliquid-readiness-gate": "node scripts/hyperliquid-readiness-gate.test.mjs",
     "test:polymarket-read-preview-qa": "node scripts/polymarket-read-preview-qa.mjs --self-test --strict",
     "test:polymarket-cli-fallback": "node scripts/polymarket-cli-fallback.test.mjs",
-    "test:polymarket-readiness-gate": "node scripts/polymarket-readiness-gate.test.mjs"
+    "test:polymarket-readiness-gate": "node scripts/polymarket-readiness-gate.test.mjs",
+    "test:market-live-readonly-smoke": "node scripts/market-live-readonly-smoke.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
