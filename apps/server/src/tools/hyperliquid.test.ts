@@ -348,3 +348,28 @@ describe("Hyperliquid L1 order-action payload", () => {
     expect(handoff.externalSignerOnly).toBe(true);
   });
 });
+
+describe("Hyperliquid customer-ready failure messages", () => {
+  function failingProvider() {
+    const fail = async () => { throw new Error("Hyperliquid info endpoint failed (503): upstream down"); };
+    return { listMarkets: fail, getAccount: fail, getFunding: fail, getOrderbook: fail };
+  }
+
+  test("provider failure yields a plain-English read-only message, not a thrown error", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "list markets" }, { provider: failingProvider() });
+    expect(result.execution).toBe("unsupported");
+    expect(result.responseText).toMatch(/temporarily unavailable/i);
+    expect(result.responseText).toMatch(/Nothing was submitted or signed/i);
+    expect(result.data?.providerUnavailable).toBe(true);
+  });
+
+  test("secret-shaped input is rejected without echoing the value", async () => {
+    const result = await executeHyperliquidChatWorkflow(
+      { message: "preview buy 0.1 BTC", apiSecret: "super-secret-value-123" } as never,
+      { provider: provider() },
+    );
+    expect(result.execution).toBe("unsupported");
+    expect(JSON.stringify(result)).not.toContain("super-secret-value-123");
+    expect(result.warnings.join(" ")).toContain("apiSecret");
+  });
+});

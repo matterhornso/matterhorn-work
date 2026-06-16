@@ -1163,6 +1163,22 @@ export function coerceHyperliquidReceiptInput(value: unknown): HyperliquidReceip
   };
 }
 
+/** Customer-facing read-only provider failure. Never echoes secrets or submits anything. */
+function hyperliquidProviderUnavailable(intent: HyperliquidIntent, err: unknown): HyperliquidChatExecutionResult {
+  const detail = err instanceof Error ? err.message : String(err);
+  return {
+    venue: "hyperliquid",
+    intent,
+    execution: "unsupported",
+    responseText:
+      "Hyperliquid market data is temporarily unavailable, so I could not complete this read-only request. " +
+      "Nothing was submitted or signed. Please try again shortly; if it persists, check the provider or network configuration.",
+    cards: [],
+    data: { providerUnavailable: true },
+    warnings: ["provider_unavailable: " + detail],
+  };
+}
+
 export async function executeHyperliquidChatWorkflow(
   input: HyperliquidChatExecutionInput,
   options: { provider?: HyperliquidProvider } = {},
@@ -1178,6 +1194,7 @@ export async function executeHyperliquidChatWorkflow(
   }
 
   const intent = planHyperliquidChat(input);
+  try {
   if (intent === "learn") {
     return {
       venue: "hyperliquid",
@@ -1341,6 +1358,9 @@ export async function executeHyperliquidChatWorkflow(
     preview,
     warnings: preview.warnings,
   };
+  } catch (err) {
+    return hyperliquidProviderUnavailable(intent, err);
+  }
 }
 
 export function buildHyperliquidMarketListCard(markets: HyperliquidMarketSummary[]): HyperliquidChatCard {
