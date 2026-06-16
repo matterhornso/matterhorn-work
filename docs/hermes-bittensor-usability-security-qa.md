@@ -287,11 +287,12 @@ node scripts/bittensor-customer-readiness-gate.mjs \
   --bittensor-live-qa /tmp/bittensor-live-qa.json \
   --agent-control-live-qa /tmp/agent-control-live-qa.json \
   --ci /tmp/github-ci.json \
+  --watch-autopilot-scheduler /tmp/bittensor-watch-autopilot-scheduler-summary.json \
   --output /tmp/matterhorn-bittensor-customer-readiness.md \
   --strict
 ```
 
-Use `--require-wallet` for a full wallet/stake preview pass and `--require-ci` when the GitHub check evidence must be attached to the report.
+Use `--require-wallet` for a full wallet/stake preview pass, `--require-ci` when GitHub check evidence must be attached to the report, and `--require-watch-autopilot-scheduler` when scheduled monitoring is part of the customer-readiness claim.
 
 ## Agent Control Smoke
 
