@@ -54,16 +54,16 @@ The intended user experience:
 
 ### Monitoring And Agent Ops
 
-- Compact Bittensor customer readiness panel in the app overview, backed by the existing readiness API, direct chat handoff, and copyable live-QA/gate commands.
+- Compact Bittensor customer readiness panel in the app overview, backed by the existing readiness API, direct chat handoff, and copyable live-QA, gate, evidence, signer-handoff, receipt-check, adapter-canary, read-only adapter canary, and scheduled-watch commands.
 - Watch creation from chat and wallet/subnet/validator intelligence.
 - Watch checks, alert keys, notification intents, digest, safe alert actions, and Watch autopilot operator report.
 - Scheduled watch autopilot runner with JSONL audit trail for repeated read-only monitoring sessions.
 - Live QA harness for Bittensor readiness, wallet reads, intelligence, wallet-change baseline, discovery, validator comparison, staking previews, subnet adapter preview, and monitoring watches.
-- Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, and required QA docs.
-- Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet, with optional adapter-canary evidence for real-adapter demos.
+- Customer-readiness gate that aggregates live QA, agent-control QA, CI evidence, scheduled watch-autopilot evidence, and required QA docs, with fail-closed required flags for wallet, CI, and scheduled monitoring claims.
+- Customer evidence bundle that turns readiness outputs into a redacted, copy-pasteable operator/customer handoff packet, with optional adapter-canary, read-only adapter canary, receipt-check, and scheduled-watch evidence for advanced demos.
 - Customer evidence bundle can include accepted receipt-check evidence so external signer returns are tied back to payload hash, action/netuid context, and public wallet-diff follow-up prompts.
 - Customer evidence bundle can include read-only adapter canary evidence to prove the preview-confirm-invoke loop before customer demos using direct subnet services.
-- Hermes QA guide with latest commands for signing handoff checks, watch autopilot, adapter canary gates, and evidence-bundle runs.
+- Hermes QA guide with latest commands for signing handoff checks, receipt checks, watch autopilot, scheduled watch autopilot, adapter canary gates, read-only adapter canaries, readiness-gate runs, and evidence-bundle runs.
 
 ### Agent Control Surface
 
@@ -101,7 +101,7 @@ Safety:
 
 ### Phase B: Customer Readiness UI
 
-Status: partially built. The app has a readiness panel and copy commands for live QA, readiness gate, evidence bundle, and signing handoff checks. Remaining work is richer local evidence state and clearer blocker display.
+Status: partially built. The app has a readiness panel and copy commands for live QA, readiness gate, evidence bundle, signing handoff checks, receipt checks, adapter canaries, read-only adapter canaries, and scheduled watch runs. Remaining work is richer local evidence state and clearer blocker display.
 
 Goal: make the release gate visible in the app, not only in CLI/docs.
 
@@ -140,7 +140,7 @@ Build:
 
 ### Phase E: Bittensor Autopilot
 
-Status: partially built. Watch creation/checks/digests/actions and a read-only watch autopilot report exist. Remaining work is scheduling, notifications, and event-stream integration for Bittensor state changes.
+Status: partially built. Watch creation/checks/digests/actions, a read-only watch autopilot report, a scheduled watch runner, JSONL/summary evidence, readiness-gate integration, and evidence-bundle integration exist. Remaining work is local notifications and event-stream integration for Bittensor state changes.
 
 Goal: make Matterhorn useful after the user leaves chat.
 
@@ -163,11 +163,12 @@ Build:
 
 ## Recommended Next Build Order
 
-1. External signer receipt UX: import/capture externally signed receipts, show status, and offer a post-action public wallet diff prompt.
-2. Real read-only adapter canary: choose one data/search or inference endpoint, pass the canary gate, run preview-confirm-invoke with endpoint allowlist/timeouts/rate limits, and keep it canary-only.
+1. Real read-only adapter canary: choose one data/search or inference endpoint, pass the canary gate, run preview-confirm-invoke with endpoint allowlist/timeouts/rate limits, and keep it canary-only.
+2. External signer receipt UX: import/capture externally signed receipts in the app, show status, and offer a post-action public wallet diff prompt.
 3. Durable wallet timeline polish: timestamped public baselines, export/redaction, clear controls, and "since yesterday/last week" chat phrasing.
-4. Scheduled Bittensor autopilot: local schedule runner, notification summaries, and event-stream integration.
-5. Customer readiness UI: show latest local evidence state, missing artifacts, and P0/P1 blockers directly in the app.
-6. Matterhorn Lite alignment notes and shared copy.
+4. Customer readiness UI: show latest local evidence state, missing artifacts, and P0/P1 blockers directly in the app.
+5. Bittensor event/notification polish: local notification summaries and event-stream integration for scheduled watch findings.
+6. Upstream OpenWork sync dry run: run the intake checker against current upstream, document any safe cherry-pick candidates, and keep Matterhorn-specific safety gates intact.
+7. Matterhorn Lite alignment notes and shared copy.
 
 Do not start Hyperliquid or Polymarket until the Bittensor release gate passes on a clean machine and at least one test customer can complete the read-only Bittensor flow end to end.
