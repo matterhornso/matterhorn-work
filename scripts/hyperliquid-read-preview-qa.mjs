@@ -54,6 +54,9 @@ function printHelp() {
     "  - GET /api/hyperliquid/markets",
     "  - GET /api/hyperliquid/orderbook/:asset",
     "  - optional GET /api/hyperliquid/account/:address",
+    "  - optional GET /api/hyperliquid/account/:address/positions",
+    "  - optional GET /api/hyperliquid/account/:address/open-orders",
+    "  - GET /api/hyperliquid/funding/:asset",
     "  - POST /api/hyperliquid/orders/preview",
     "  - POST /api/hyperliquid/chat/execute",
     "  - credential-shaped preview rejection",
@@ -114,7 +117,32 @@ async function createMockServer(token) {
     if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/" + DEFAULT_ADDRESS) {
       return json(res, 200, {
         success: true,
-        account: { address: DEFAULT_ADDRESS, positionCount: 1, openOrderCount: 0, warnings: [] },
+        account: { address: DEFAULT_ADDRESS, positionCount: 1, openOrderCount: 1, warnings: [] },
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/" + DEFAULT_ADDRESS + "/positions") {
+      return json(res, 200, {
+        success: true,
+        address: DEFAULT_ADDRESS,
+        positions: [{ asset: "BTC", side: "long", size: 0.1, positionValue: 6500 }],
+        notionalExposure: 6500,
+        unrealizedPnl: 100,
+        warnings: [],
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/" + DEFAULT_ADDRESS + "/open-orders") {
+      return json(res, 200, {
+        success: true,
+        address: DEFAULT_ADDRESS,
+        orders: [{ asset: "BTC", side: "buy", size: 0.05, limitPx: 63000 }],
+        warnings: [],
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/api/hyperliquid/funding/BTC") {
+      return json(res, 200, {
+        success: true,
+        funding: { asset: "BTC", fundingRate: 0.0001, openInterest: 1234, markPx: 65000, warnings: [] },
+        cards: [],
       });
     }
     if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/preview") {
@@ -198,9 +226,29 @@ async function runQa(options) {
       if (payload.account?.address !== address) throw new Error("account address mismatch");
       return { address, positionCount: payload.account.positionCount, openOrderCount: payload.account.openOrderCount };
     });
+    await stage("positions", "Read normalized Hyperliquid positions", async () => {
+      const address = options.address || DEFAULT_ADDRESS;
+      const { payload } = await call("positions", "GET", "/api/hyperliquid/account/" + encodeURIComponent(address) + "/positions");
+      if (!Array.isArray(payload.positions)) throw new Error("positions array missing");
+      return { address, count: payload.positions.length, notionalExposure: payload.notionalExposure ?? null };
+    });
+    await stage("open.orders", "Read normalized Hyperliquid open orders", async () => {
+      const address = options.address || DEFAULT_ADDRESS;
+      const { payload } = await call("open.orders", "GET", "/api/hyperliquid/account/" + encodeURIComponent(address) + "/open-orders");
+      if (!Array.isArray(payload.orders)) throw new Error("orders array missing");
+      return { address, count: payload.orders.length };
+    });
   } else {
     stages.push({ id: "account", label: "Read public Hyperliquid account", status: "skip", reason: "No --address provided." });
+    stages.push({ id: "positions", label: "Read normalized Hyperliquid positions", status: "skip", reason: "No --address provided." });
+    stages.push({ id: "open.orders", label: "Read normalized Hyperliquid open orders", status: "skip", reason: "No --address provided." });
   }
+
+  await stage("funding", "Read Hyperliquid funding context", async () => {
+    const { payload } = await call("funding", "GET", "/api/hyperliquid/funding/" + encodeURIComponent(options.asset));
+    if (payload.funding?.asset !== options.asset) throw new Error("funding asset mismatch");
+    return { asset: payload.funding.asset, fundingRate: payload.funding.fundingRate ?? null, openInterest: payload.funding.openInterest ?? null };
+  });
 
   await stage("order.preview", "Prepare non-submittable order preview", async () => {
     const { payload } = await call("order.preview", "POST", "/api/hyperliquid/orders/preview", {
