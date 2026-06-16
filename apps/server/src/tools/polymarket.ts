@@ -26,7 +26,7 @@ const LARGE_GAP_PCT = 10;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
 
-export type PolymarketIntent = "learn" | "discover" | "market" | "odds" | "orderbook" | "compliance" | "order_preview";
+export type PolymarketIntent = "learn" | "discover" | "market" | "odds" | "orderbook" | "compliance" | "monitor" | "order_preview";
 export type PolymarketExecution =
   | "answered"
   | "clarification_required"
@@ -201,11 +201,34 @@ export interface PolymarketChatExecutionResult {
   clarificationQuestion?: string;
 }
 
+/** A read-only watch suggestion for a market outcome. No alerts are scheduled or auto-executed. */
+export interface PolymarketWatchCondition {
+  outcome: string;
+  currentProbability: number | null;
+  upperThreshold: number | null;
+  lowerThreshold: number | null;
+  note: string;
+}
+
+export interface PolymarketWatchDescriptor {
+  version: "matterhorn.polymarket.watch.v1";
+  marketId: string;
+  marketLabel: string;
+  endDate: string | null;
+  resolvesInDays: number | null;
+  conditions: PolymarketWatchCondition[];
+  createdAt: string;
+  source: PolymarketSource;
+  warnings: string[];
+  note: string;
+}
+
 export type PolymarketChatCard =
   | { kind: "polymarket_market_list"; title: string; markets: PolymarketMarketSummary[]; warnings: string[] }
   | { kind: "polymarket_market_detail"; title: string; market: PolymarketMarketSummary; warnings: string[] }
   | { kind: "polymarket_orderbook"; title: string; orderbook: PolymarketOrderbook; warnings: string[] }
   | { kind: "polymarket_compliance"; title: string; compliance: PolymarketComplianceStatus; warnings: string[] }
+  | { kind: "polymarket_watch"; title: string; watch: PolymarketWatchDescriptor; warnings: string[] }
   | { kind: "polymarket_order_preview"; title: string; preview: PolymarketActionPreview; warnings: string[] }
   | { kind: "polymarket_clarification"; title: string; question: string; warnings: string[] };
 
@@ -499,6 +522,7 @@ export const polymarketProvider = new PolymarketInfoProvider();
 export function planPolymarketChat(input: PolymarketChatExecutionInput): PolymarketIntent {
   const message = input.message.toLowerCase();
   if (/\b(prepare|preview|buy|bet|wager|place|order)\b/.test(message) && /\b(yes|no|share|shares|\$|usdc)\b/.test(message)) return "order_preview";
+  if (/\b(watch|monitor|track|alert|notify|keep an eye)\b/.test(message)) return "monitor";
   if (/\bgeoblock/.test(message) || /\b(compliance|restricted|jurisdiction)\b/.test(message)) return "compliance";
   if (/\b(order\s*book|orderbook|book|bid|ask|spread|midpoint|depth)\b/.test(message)) return "orderbook";
   if (/\b(odds|probability|probabilities|chance|liquidity|volume)\b/.test(message)) return "odds";
@@ -733,6 +757,55 @@ function buildPolymarketLiquidity(market: PolymarketMarketSummary, warnings: str
   };
 }
 
+/**
+ * Build a read-only watch descriptor for a market: a current-odds snapshot plus
+ * suggested ±10pp alert thresholds and a resolution reminder. No alerts are
+ * scheduled and nothing is auto-executed.
+ */
+export function buildPolymarketWatchDescriptor(market: PolymarketMarketSummary): PolymarketWatchDescriptor {
+  const warnings: string[] = [];
+  const conditions: PolymarketWatchCondition[] = market.outcomes
+    .filter((outcome) => outcome !== "__proto__" && outcome !== "constructor" && outcome !== "prototype")
+    .map((outcome) => {
+      const current = market.outcomePrices[outcome] ?? null;
+      const upper = current === null ? null : Number(Math.min(0.95, current + 0.1).toFixed(2));
+      const lower = current === null ? null : Number(Math.max(0.05, current - 0.1).toFixed(2));
+      return {
+        outcome,
+        currentProbability: current,
+        upperThreshold: upper,
+        lowerThreshold: lower,
+        note:
+          current === null
+            ? "No current probability; watch for the first quote."
+            : "Alert if it rises above " + formatProbability(upper) + " or falls below " + formatProbability(lower) + ".",
+      };
+    });
+
+  let resolvesInDays: number | null = null;
+  if (market.endDate) {
+    const end = Date.parse(market.endDate);
+    if (Number.isFinite(end)) {
+      resolvesInDays = Number(((end - Date.now()) / (24 * 60 * 60 * 1000)).toFixed(2));
+      if (resolvesInDays < 0) warnings.push("Listed end date is in the past; confirm the market is still open.");
+    }
+  }
+  if (market.closed) warnings.push("This market is marked closed; a watch may not update.");
+
+  return {
+    version: "matterhorn.polymarket.watch.v1",
+    marketId: market.id,
+    marketLabel: market.question,
+    endDate: market.endDate,
+    resolvesInDays,
+    conditions,
+    createdAt: new Date().toISOString(),
+    source: market.source,
+    warnings,
+    note: "Read-only watch. Matterhorn surfaces odds moves and a resolution reminder; it never places or auto-executes orders.",
+  };
+}
+
 /** Walk asks to estimate average fill probability and shares for a USDC buy. */
 export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: number): PolymarketMarketabilityEstimate {
   const sorted = [...asks].sort((a, b) => a.price - b.price);
@@ -874,6 +947,27 @@ export async function executePolymarketChatWorkflow(
       data: { compliance },
       compliance,
       warnings: [],
+    };
+  }
+
+  if (intent === "monitor") {
+    // Watchlist is read-only research and works regardless of compliance.
+    if (!input.marketId) {
+      return clarification("Which Polymarket market should I set up a read-only watch for? Share a market id, or search first.", [], "clarification_required", "monitor");
+    }
+    const market = await provider.getMarket(input.marketId);
+    const watch = buildPolymarketWatchDescriptor(market);
+    return {
+      venue: "polymarket",
+      intent: "monitor",
+      execution: "read_only",
+      responseText:
+        "Read-only watch for \"" + market.question + "\". Suggested alerts:\n" +
+        watch.conditions.map((c) => "- " + c.outcome + " (now " + formatProbability(c.currentProbability) + "): " + c.note).join("\n") + "\n" +
+        "Matterhorn will not place or auto-execute any order from this watch. " + RISK_DISCLAIMER,
+      cards: [{ kind: "polymarket_watch", title: "Watch: " + market.question, watch, warnings: watch.warnings }],
+      data: { market, watch },
+      warnings: watch.warnings,
     };
   }
 

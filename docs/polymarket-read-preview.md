@@ -62,7 +62,12 @@ When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `
 | "what are the odds and liquidity?" | `odds` | `read_only` |
 | "show the orderbook" | `orderbook` | `read_only` |
 | "am I geoblocked?" | `compliance` | `read_only` / `blocked_by_compliance` |
+| "watch this market" | `monitor` | `read_only` |
 | "prepare a $10 Yes order" | `order_preview` | `unsigned_preview` / `blocked_by_compliance` |
+
+## Watchlist / Monitor (read-only)
+
+The `monitor` intent builds a read-only `PolymarketWatchDescriptor` for a market: a current-odds snapshot, suggested ±10pp alert thresholds per outcome, and a resolution reminder. It is research-only and **works even when order previews are geoblocked**. Matterhorn never schedules alerts or auto-executes any order from a watch; the descriptor is a planning artifact for the user/agent to act on.
 
 ## Verification
 

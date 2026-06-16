@@ -97,6 +97,7 @@ describe("Polymarket read/preview safety", () => {
     expect(planPolymarketChat({ message: "what are the odds and liquidity?" })).toBe("odds");
     expect(planPolymarketChat({ message: "show the orderbook" })).toBe("orderbook");
     expect(planPolymarketChat({ message: "am I geoblocked?" })).toBe("compliance");
+    expect(planPolymarketChat({ message: "watch this market" })).toBe("monitor");
     expect(planPolymarketChat({ message: "prepare a $10 Yes order" })).toBe("order_preview");
   });
 
@@ -212,6 +213,29 @@ describe("Polymarket chat workflow", () => {
     );
     expect(result.execution).toBe("unsupported");
     expect(result.warnings.join(" ")).toContain("apiSecret");
+  });
+
+  test("monitor builds a read-only watch with suggested thresholds", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "watch this market", marketId: "0xmarket-ai" }, { provider: provider() });
+    expect(result.intent).toBe("monitor");
+    expect(result.execution).toBe("read_only");
+    expect(result.cards[0]?.kind).toBe("polymarket_watch");
+    const watch = result.data?.watch as { conditions?: Array<{ outcome?: string; upperThreshold?: number; lowerThreshold?: number }>; note?: string };
+    expect(watch.conditions?.[0]?.outcome).toBe("Yes");
+    expect(watch.conditions?.[0]?.upperThreshold).toBeCloseTo(0.72, 2); // 0.62 + 0.1
+    expect(watch.conditions?.[0]?.lowerThreshold).toBeCloseTo(0.52, 2);
+    expect(result.responseText).toMatch(/will not place or auto-execute/);
+  });
+
+  test("monitor works even when the region is geoblocked (research flow)", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "track this market", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
+    expect(result.intent).toBe("monitor");
+    expect(result.execution).toBe("read_only");
+  });
+
+  test("monitor without a market id asks one clarification", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "watch a market for me" }, { provider: provider() });
+    expect(result.requiresClarification).toBe(true);
   });
 });
 
