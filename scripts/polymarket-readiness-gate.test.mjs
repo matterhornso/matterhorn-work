@@ -57,6 +57,10 @@ const tool = mustContain("apps/server/src/tools/polymarket.ts", [
   "buildPolymarketWatchDescriptor",
   "matterhorn.polymarket.watch.v1",
   "polymarket_watch",
+  // Events (grouped-market) discovery.
+  "searchEvents",
+  "mapEventRecord",
+  "polymarket_event_list",
 ]);
 
 // No execution / submission / signing path may exist.

@@ -26,7 +26,7 @@ const LARGE_GAP_PCT = 10;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
 
-export type PolymarketIntent = "learn" | "discover" | "market" | "odds" | "orderbook" | "compliance" | "monitor" | "order_preview";
+export type PolymarketIntent = "learn" | "discover" | "events" | "market" | "odds" | "orderbook" | "compliance" | "monitor" | "order_preview";
 export type PolymarketExecution =
   | "answered"
   | "clarification_required"
@@ -68,6 +68,19 @@ export interface PolymarketMarketSummary {
   endDate: string | null;
   active: boolean;
   closed: boolean;
+  source: PolymarketSource;
+}
+
+/** A Polymarket event groups related markets (e.g. an election with many sub-markets). */
+export interface PolymarketEventSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  endDate: string | null;
+  volume: number | null;
+  liquidity: number | null;
+  marketCount: number;
+  markets: PolymarketMarketSummary[];
   source: PolymarketSource;
 }
 
@@ -225,6 +238,7 @@ export interface PolymarketWatchDescriptor {
 
 export type PolymarketChatCard =
   | { kind: "polymarket_market_list"; title: string; markets: PolymarketMarketSummary[]; warnings: string[] }
+  | { kind: "polymarket_event_list"; title: string; events: PolymarketEventSummary[]; warnings: string[] }
   | { kind: "polymarket_market_detail"; title: string; market: PolymarketMarketSummary; warnings: string[] }
   | { kind: "polymarket_orderbook"; title: string; orderbook: PolymarketOrderbook; warnings: string[] }
   | { kind: "polymarket_compliance"; title: string; compliance: PolymarketComplianceStatus; warnings: string[] }
@@ -234,6 +248,7 @@ export type PolymarketChatCard =
 
 export interface PolymarketProvider {
   searchMarkets(query: string, limit?: number | null): Promise<PolymarketMarketSummary[]>;
+  searchEvents(query: string, limit?: number | null): Promise<PolymarketEventSummary[]>;
   getMarket(marketId: string): Promise<PolymarketMarketSummary>;
   getOrderbook(tokenId: string, context?: { marketId?: string | null; outcome?: string | null }): Promise<PolymarketOrderbook>;
   checkCompliance(): Promise<PolymarketComplianceStatus>;
@@ -340,6 +355,22 @@ function mapMarketRecord(record: Record<string, unknown>, source: PolymarketSour
   };
 }
 
+function mapEventRecord(record: Record<string, unknown>, source: PolymarketSource): PolymarketEventSummary {
+  const rawMarkets = Array.isArray(record.markets) ? record.markets.filter(isRecord) : [];
+  const markets = rawMarkets.map((market) => mapMarketRecord(market, source)).filter((market) => market.id !== "");
+  return {
+    id: stringOrNull(record.id) ?? "",
+    title: stringOrNull(record.title) ?? stringOrNull(record.question) ?? "",
+    description: stringOrNull(record.description),
+    endDate: stringOrNull(record.endDate),
+    volume: numberOrNull(record.volume),
+    liquidity: numberOrNull(record.liquidity),
+    marketCount: markets.length,
+    markets,
+    source,
+  };
+}
+
 function sha256(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
@@ -418,6 +449,22 @@ export class PolymarketInfoProvider implements PolymarketProvider {
       return terms.every((term) => haystack.includes(term));
     });
     return (matched.length > 0 ? matched : markets).slice(0, capped);
+  }
+
+  async searchEvents(query: string, limit: number | null = 8): Promise<PolymarketEventSummary[]> {
+    const capped = Number.isFinite(limit) && limit !== null ? Math.max(1, Math.min(50, Math.trunc(limit))) : 8;
+    const url = `${this.gammaBaseUrl}/events?active=true&closed=false&order=volume&ascending=false&limit=${capped * 3}`;
+    const data = await this.getJsonCached("search-events", url);
+    const list = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.events) ? data.events : [];
+    const source = nowSource(this.gammaBaseUrl + "/events");
+    const events = list.filter(isRecord).map((record) => mapEventRecord(record, source)).filter((event) => event.id !== "");
+    const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 1);
+    const matched = events.filter((event) => {
+      if (terms.length === 0) return true;
+      const haystack = (event.title + " " + (event.description ?? "") + " " + event.markets.map((m) => m.question).join(" ")).toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+    return (matched.length > 0 ? matched : events).slice(0, capped);
   }
 
   async getMarket(marketId: string): Promise<PolymarketMarketSummary> {
@@ -527,6 +574,7 @@ export function planPolymarketChat(input: PolymarketChatExecutionInput): Polymar
   if (/\b(order\s*book|orderbook|book|bid|ask|spread|midpoint|depth)\b/.test(message)) return "orderbook";
   if (/\b(odds|probability|probabilities|chance|liquidity|volume)\b/.test(message)) return "odds";
   if (/\b(explain|detail|details|describe|resolve|resolution|about this market)\b/.test(message)) return "market";
+  if (/\bevents?\b/.test(message)) return "events";
   if (/\b(find|search|discover|markets?|list)\b/.test(message)) return "discover";
   return "learn";
 }
@@ -883,6 +931,24 @@ export async function executePolymarketChatWorkflow(
           : "No active Polymarket markets matched that query.",
       cards: [{ kind: "polymarket_market_list", title: "Polymarket markets", markets, warnings: [] }],
       data: { markets },
+      warnings: [],
+    };
+  }
+
+  if (intent === "events") {
+    const limit = Math.max(1, Math.min(50, Math.trunc(numberOrNull(input.limit) ?? 6)));
+    const events = await provider.searchEvents(input.message, limit);
+    return {
+      venue: "polymarket",
+      intent,
+      execution: "read_only",
+      responseText:
+        events.length > 0
+          ? "Found " + events.length + " active Polymarket event(s), each grouping related markets:\n" +
+            events.map((e) => "- " + e.title + " (" + e.marketCount + " market" + (e.marketCount === 1 ? "" : "s") + ")").join("\n") + "\n" + RISK_DISCLAIMER
+          : "No active Polymarket events matched that query.",
+      cards: [{ kind: "polymarket_event_list", title: "Polymarket events", events, warnings: [] }],
+      data: { events },
       warnings: [],
     };
   }

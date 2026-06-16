@@ -61,6 +61,7 @@ function jsonResponse(payload: unknown, ok = true, status = 200) {
 function mockFetcher(options: { blocked?: boolean } = {}) {
   return async (url: string) => {
     if (url.includes("/api/geoblock")) return jsonResponse({ blocked: options.blocked ?? false, country: "US" });
+    if (url.includes("/events")) return jsonResponse([{ id: "evt-ai", title: "AI milestones", description: "AI prediction markets", volume: 250000, liquidity: 80000, endDate: "2027-12-31T00:00:00Z", markets: [AI_MARKET] }]);
     if (url.includes("/markets/0xmarket-ai")) return jsonResponse(AI_MARKET);
     if (url.includes("/markets/0xmarket-sports")) return jsonResponse(SPORTS_MARKET);
     if (url.includes("/markets")) return jsonResponse([AI_MARKET, SPORTS_MARKET]);
@@ -98,6 +99,7 @@ describe("Polymarket read/preview safety", () => {
     expect(planPolymarketChat({ message: "show the orderbook" })).toBe("orderbook");
     expect(planPolymarketChat({ message: "am I geoblocked?" })).toBe("compliance");
     expect(planPolymarketChat({ message: "watch this market" })).toBe("monitor");
+    expect(planPolymarketChat({ message: "find events about AI" })).toBe("events");
     expect(planPolymarketChat({ message: "prepare a $10 Yes order" })).toBe("order_preview");
   });
 
@@ -125,6 +127,14 @@ describe("Polymarket provider reads", () => {
     expect(market.eventId).toBe("evt-ai");
     expect(market.tokenIds.No).toBe("token-no");
     expect(market.active).toBe(true);
+  });
+
+  test("searches events and groups their markets", async () => {
+    const events = await provider().searchEvents("AI", 5);
+    expect(events).toHaveLength(1);
+    expect(events[0].id).toBe("evt-ai");
+    expect(events[0].marketCount).toBe(1);
+    expect(events[0].markets[0].id).toBe("0xmarket-ai");
   });
 
   test("ignores prototype-mutating outcome labels from a hostile provider", async () => {
@@ -165,6 +175,15 @@ describe("Polymarket chat workflow", () => {
     expect(result.intent).toBe("discover");
     expect(result.execution).toBe("read_only");
     expect(result.cards[0]?.kind).toBe("polymarket_market_list");
+  });
+
+  test("events discovery returns grouped events read-only", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "find events about AI" }, { provider: provider() });
+    expect(result.intent).toBe("events");
+    expect(result.execution).toBe("read_only");
+    expect(result.cards[0]?.kind).toBe("polymarket_event_list");
+    const events = result.data?.events as Array<{ marketCount?: number }>;
+    expect(events[0]?.marketCount).toBe(1);
   });
 
   test("market detail is read-only with a risk disclaimer", async () => {

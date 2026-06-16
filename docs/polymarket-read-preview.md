@@ -7,6 +7,7 @@ Prediction-market prices are treated as risk-bearing information, never as betti
 ## Supported
 
 - Search Polymarket markets via the Gamma API (keyword discovery).
+- Search Polymarket events (grouped related markets) via the Gamma API.
 - Read full market detail (outcomes, implied probabilities, liquidity, volume).
 - Summarize odds/liquidity for a market.
 - Read a CLOB orderbook for an outcome and shape best bid/ask, midpoint, and spread.
@@ -58,6 +59,7 @@ When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `
 | Ask | Intent | Execution |
 | --- | --- | --- |
 | "find markets about AI" | `discover` | `read_only` |
+| "find events about AI" | `events` | `read_only` |
 | "explain this market" | `market` | `read_only` |
 | "what are the odds and liquidity?" | `odds` | `read_only` |
 | "show the orderbook" | `orderbook` | `read_only` |
