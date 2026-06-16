@@ -120,6 +120,20 @@ for (const forbidden of ["apiSecret", "api_secret", "privateKey", "private_key",
   else pass(`Polymarket MCP schema excludes ${forbidden}`);
 }
 
+// CLI command surface (read/preview-only) + secret-flag rejection.
+mustContain("apps/orchestrator/src/cli.ts", [
+  "matterhorn-work polymarket markets",
+  "matterhorn-work polymarket events",
+  "matterhorn-work polymarket preview-order",
+  "assertNoPolymarketSecrets",
+]);
+mustContain("scripts/polymarket-cli-fallback.test.mjs", [
+  "polymarket markets",
+  "polymarket events",
+  "polymarket preview-order",
+  "polymarket secret flag rejection",
+]);
+
 mustContain("docs/polymarket-read-preview.md", [
   "read-only plus preview-only",
   "Compliance Gate",
