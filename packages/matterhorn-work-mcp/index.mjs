@@ -549,6 +549,33 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_polymarket_prepare_handoff",
+    description: "Build a non-custodial external-signer handoff for a Polymarket order. The user signs and submits with their OWN wallet; Matterhorn never signs, submits, or holds keys. A geoblocked region returns a blocked preview and no handoff.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        marketId: { type: "string" },
+        outcome: { type: "string" },
+        side: { type: "string", enum: ["yes", "no"] },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }] },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["marketId", "amountUsdc"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_verify_receipt",
+    description: "Verify a returned PUBLIC Polymarket receipt (order id / tx hash / status) against the handoff that produced it. Public status only; signed material is never accepted.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        handoff: { type: "object", description: "The signing handoff (or its previewSha256/handoffSha256/marketId/outcome/side fields)." },
+        receipt: { type: "object", description: "Public receipt fields only: previewSha256, handoffSha256, orderId, txHash, status, marketId, outcome, side, submittedAt." },
+      },
+      required: ["handoff", "receipt"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_chat",
     description: "Default first Matterhorn Work tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
     inputSchema: {
@@ -2209,6 +2236,10 @@ async function handleTool(name, args = {}) {
       return callServer("/api/polymarket/compliance");
     case "matterhorn_polymarket_preview_order":
       return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
+    case "matterhorn_polymarket_prepare_handoff":
+      return callServer("/api/polymarket/orders/handoff", { method: "POST", body: args });
+    case "matterhorn_polymarket_verify_receipt":
+      return callServer("/api/polymarket/orders/receipt", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":

@@ -133,10 +133,14 @@ import {
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
   buildPolymarketOrderbookCard,
+  buildPolymarketSigningHandoff,
+  coercePolymarketHandoffReference,
+  coercePolymarketReceiptInput,
   executePolymarketChatWorkflow,
   findForbiddenPolymarketCredentialInput,
   polymarketProvider,
   preparePolymarketOrderFromRequest,
+  verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -4122,6 +4126,45 @@ function createRoutes(
       limit: body.limit === undefined ? null : body.limit as never,
     });
     return jsonResponse({ success: true, ...result });
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/orders/handoff", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket handoff input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const preview = await preparePolymarketOrderFromRequest({
+        marketId: typeof body.marketId === "string" ? body.marketId : "",
+        outcome: typeof body.outcome === "string" ? body.outcome : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        amountUsdc: Number(body.amountUsdc),
+        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
+      });
+      // Compliance still gates: a blocked region gets no signing handoff.
+      if (preview.execution === "blocked_by_compliance") {
+        return jsonResponse({ success: true, blocked: true, preview, cards: [buildPolymarketOrderPreviewCard(preview)] });
+      }
+      const handoff = buildPolymarketSigningHandoff(preview);
+      return jsonResponse({ success: true, handoff, preview });
+    } catch (err) {
+      throw new ApiError(400, "invalid_polymarket_handoff", err instanceof Error ? err.message : "Could not prepare Polymarket signing handoff");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/orders/receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket receipt must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const handoff = coercePolymarketHandoffReference(body.handoff);
+    if (!handoff) {
+      throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, marketId, outcome, side) is required to verify a receipt.");
+    }
+    const verification = verifyPolymarketReceipt(handoff, coercePolymarketReceiptInput(body.receipt));
+    return jsonResponse({ success: verification.ok, ...verification });
   });
 
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
