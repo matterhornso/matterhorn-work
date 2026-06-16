@@ -120,13 +120,13 @@ import {
   buildHyperliquidMarketListCard,
   buildHyperliquidOrderPreviewCard,
   buildHyperliquidOrderbookCard,
-  buildHyperliquidSigningHandoff,
   coerceHyperliquidHandoffReference,
   coerceHyperliquidReceiptInput,
   executeHyperliquidChatWorkflow,
   findForbiddenHyperliquidCredentialInput,
   hyperliquidProvider,
   isValidHyperliquidAddress,
+  prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
   verifyHyperliquidReceipt,
 } from "./tools/hyperliquid.js";
@@ -4065,7 +4065,9 @@ function createRoutes(
       throw new ApiError(400, "market_secret_rejected", `Hyperliquid handoff input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     try {
-      const preview = await prepareHyperliquidOrderPreview({
+      // Resolves the asset index, builds the preview, and attaches the L1
+      // order-action payload in one pass.
+      const { preview, handoff } = await prepareHyperliquidHandoffFromRequest({
         asset: typeof body.asset === "string" ? body.asset : null,
         side: typeof body.side === "string" ? body.side as never : null,
         size: body.size === undefined ? null : body.size as never,
@@ -4073,7 +4075,6 @@ function createRoutes(
         reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
         slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
       });
-      const handoff = buildHyperliquidSigningHandoff(preview);
       return jsonResponse({ success: true, handoff, preview });
     } catch (err) {
       throw new ApiError(400, "invalid_hyperliquid_handoff", err instanceof Error ? err.message : "Could not prepare Hyperliquid signing handoff");

@@ -36,6 +36,12 @@ Users can take a preview live **without Matterhorn holding a key, signing, submi
 
 Matterhorn stays non-custodial end to end: no API-wallet key, no signing, no broadcasting, and no acceptance of signing material on the way back in. Matterhorn still never submits — the **user** executes.
 
+### L1 order-action payload (validation-gated)
+
+When the asset index is resolvable, the handoff also carries `signingPayload` — the **canonical Hyperliquid L1 order-action object** (`buildHyperliquidOrderActionPayload`): `{ type: "order", orders: [{ a, b, p, s, r, t:{limit:{tif}} }], grouping: "na" }`, plus the fixed EIP-712 **Agent** signing scaffold (domain `Exchange`/`1`/chainId `1337`, `Agent(source, connectionId)`).
+
+This is a **template, not a signed action.** Matterhorn does **not** compute the `connectionId` (the msgpack action hash over action+nonce+vault), the nonce, or the signature — those are in `clientMustCompute` and are produced by the official Hyperliquid SDK from a key Matterhorn never holds. `requiresClientValidation` is always `true`: **validate the action format, asset index, tif, and agent domain against Hyperliquid's official SDK and on testnet before signing real funds.** A market order (no limit price) needs the SDK's IOC + slippage-price handling; the template uses `tif=Gtc`.
+
 ## Not Supported Yet
 
 - API wallet creation or storage.
