@@ -1094,6 +1094,58 @@ function chooseOutcome(market: PolymarketMarketSummary, requested: string | null
   return market.outcomes.length > 0 ? market.outcomes[0] : null;
 }
 
+// ---------------------------------------------------------------------------
+// HTTP/MCP/CLI helpers (thin, reuse the workflow internals).
+// ---------------------------------------------------------------------------
+
+export function buildPolymarketMarketListCard(markets: PolymarketMarketSummary[]): PolymarketChatCard {
+  return { kind: "polymarket_market_list", title: "Polymarket markets", markets, warnings: [] };
+}
+
+export function buildPolymarketEventListCard(events: PolymarketEventSummary[]): PolymarketChatCard {
+  return { kind: "polymarket_event_list", title: "Polymarket events", events, warnings: [] };
+}
+
+export function buildPolymarketMarketDetailCard(market: PolymarketMarketSummary): PolymarketChatCard {
+  return { kind: "polymarket_market_detail", title: market.question, market, warnings: [] };
+}
+
+export function buildPolymarketOrderbookCard(orderbook: PolymarketOrderbook): PolymarketChatCard {
+  return { kind: "polymarket_orderbook", title: (orderbook.outcome ?? orderbook.tokenId) + " orderbook", orderbook, warnings: orderbook.warnings };
+}
+
+export function buildPolymarketComplianceCard(compliance: PolymarketComplianceStatus): PolymarketChatCard {
+  return { kind: "polymarket_compliance", title: "Polymarket compliance", compliance, warnings: [] };
+}
+
+export function buildPolymarketOrderPreviewCard(preview: PolymarketActionPreview): PolymarketChatCard {
+  return { kind: "polymarket_order_preview", title: "Polymarket order preview", preview, warnings: preview.warnings };
+}
+
+/**
+ * Structured (non-chat) order preview for the HTTP/MCP/CLI surface. Fetches the
+ * market, runs the compliance gate, and returns a blocked or unsigned preview.
+ * Never submits; `canSubmit` is always false.
+ */
+export async function preparePolymarketOrderFromRequest(
+  input: { marketId: string; outcome?: string | null; side?: PolymarketSide | null; amountUsdc: number; slippageTolerance?: number | null },
+  provider: PolymarketProvider = polymarketProvider,
+): Promise<PolymarketActionPreview> {
+  if (!input.marketId) throw new Error("marketId is required for a Polymarket order preview");
+  if (!(input.amountUsdc > 0)) throw new Error("a positive amountUsdc is required for a Polymarket order preview");
+  const market = await provider.getMarket(input.marketId);
+  const side: PolymarketSide = input.side ?? "yes";
+  const outcome = chooseOutcome(market, input.outcome ?? null, side);
+  const compliance = await provider.checkCompliance();
+  if (compliance.status === "blocked") {
+    return buildBlockedPolymarketPreview({ market, outcome, side, compliance });
+  }
+  if (!outcome || !market.tokenIds[outcome]) {
+    throw new Error("outcome is required; options: " + (market.outcomes.join(", ") || "unknown"));
+  }
+  return preparePolymarketOrderPreview({ market, outcome, side, amountUsdc: input.amountUsdc, compliance, slippageTolerance: input.slippageTolerance ?? null }, provider);
+}
+
 function clarification(
   question: string,
   warnings: string[],

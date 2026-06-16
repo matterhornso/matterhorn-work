@@ -126,6 +126,18 @@ import {
   isValidHyperliquidAddress,
   prepareHyperliquidOrderPreview,
 } from "./tools/hyperliquid.js";
+import {
+  buildPolymarketComplianceCard,
+  buildPolymarketEventListCard,
+  buildPolymarketMarketDetailCard,
+  buildPolymarketMarketListCard,
+  buildPolymarketOrderPreviewCard,
+  buildPolymarketOrderbookCard,
+  executePolymarketChatWorkflow,
+  findForbiddenPolymarketCredentialInput,
+  polymarketProvider,
+  preparePolymarketOrderFromRequest,
+} from "./tools/polymarket.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -4034,6 +4046,80 @@ function createRoutes(
       limit: body.limit === undefined ? null : body.limit as never,
       slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
       reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+    });
+    return jsonResponse({ success: true, ...result });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/markets", "client", async (ctx) => {
+    const query = ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? "";
+    const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 10;
+    const markets = await polymarketProvider.searchMarkets(query, limit);
+    return jsonResponse({ success: true, markets, cards: [buildPolymarketMarketListCard(markets)] });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/events", "client", async (ctx) => {
+    const query = ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? "";
+    const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 8;
+    const events = await polymarketProvider.searchEvents(query, limit);
+    return jsonResponse({ success: true, events, cards: [buildPolymarketEventListCard(events)] });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/markets/:id", "client", async (ctx) => {
+    const market = await polymarketProvider.getMarket(ctx.params.id.trim());
+    return jsonResponse({ success: true, market, cards: [buildPolymarketMarketDetailCard(market)] });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/orderbook/:tokenId", "client", async (ctx) => {
+    const tokenId = ctx.params.tokenId.trim();
+    const outcome = ctx.url.searchParams.get("outcome");
+    const marketId = ctx.url.searchParams.get("marketId");
+    const orderbook = await polymarketProvider.getOrderbook(tokenId, { marketId, outcome });
+    return jsonResponse({ success: true, orderbook, cards: [buildPolymarketOrderbookCard(orderbook)] });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/compliance", "client", async () => {
+    const compliance = await polymarketProvider.checkCompliance();
+    return jsonResponse({ success: true, compliance, cards: [buildPolymarketComplianceCard(compliance)] });
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/orders/preview", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket preview input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const preview = await preparePolymarketOrderFromRequest({
+        marketId: typeof body.marketId === "string" ? body.marketId : "",
+        outcome: typeof body.outcome === "string" ? body.outcome : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        amountUsdc: Number(body.amountUsdc),
+        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
+      });
+      return jsonResponse({ success: true, preview, cards: [buildPolymarketOrderPreviewCard(preview)] });
+    } catch (err) {
+      throw new ApiError(400, "invalid_polymarket_preview", err instanceof Error ? err.message : "Could not prepare Polymarket order preview");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/chat/execute", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "";
+    if (!message.trim()) {
+      throw new ApiError(400, "invalid_message", "message is required");
+    }
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket chat input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const result = await executePolymarketChatWorkflow({
+      message,
+      marketId: typeof body.marketId === "string" ? body.marketId : null,
+      outcome: typeof body.outcome === "string" ? body.outcome : null,
+      side: typeof body.side === "string" ? body.side as never : null,
+      amountUsdc: body.amountUsdc === undefined ? null : body.amountUsdc as never,
+      slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
+      limit: body.limit === undefined ? null : body.limit as never,
     });
     return jsonResponse({ success: true, ...result });
   });

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   PolymarketInfoProvider,
+  buildPolymarketMarketListCard,
+  buildPolymarketOrderPreviewCard,
   estimatePolymarketFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
   findForbiddenPolymarketCredentialInput,
   planPolymarketChat,
+  preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
   type PolymarketBookLevel,
   type PolymarketProvider,
@@ -366,6 +369,33 @@ describe("Polymarket security hardening", () => {
     const blockedRes = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
     expect(allowedRes.preview?.canSubmit).toBe(false);
     expect(blockedRes.preview?.canSubmit).toBe(false);
+  });
+
+  test("preparePolymarketOrderFromRequest returns an unsigned preview when allowed", async () => {
+    const preview = await preparePolymarketOrderFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 10 }, provider({ blocked: false }));
+    expect(preview.execution).toBe("unsigned_preview");
+    expect(preview.canSubmit).toBe(false);
+    expect(preview.price).not.toBeNull();
+  });
+
+  test("preparePolymarketOrderFromRequest returns a blocked preview when geoblocked", async () => {
+    const preview = await preparePolymarketOrderFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 10 }, provider({ blocked: true }));
+    expect(preview.execution).toBe("blocked_by_compliance");
+    expect(preview.price).toBeNull();
+    expect(preview.canSubmit).toBe(false);
+  });
+
+  test("preparePolymarketOrderFromRequest rejects a non-positive amount", async () => {
+    await expect(preparePolymarketOrderFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 0 }, provider())).rejects.toThrow();
+  });
+
+  test("card builders wrap data with the expected kinds", async () => {
+    const markets = await provider().searchMarkets("AI", 5);
+    expect(buildPolymarketMarketListCard(markets).kind).toBe("polymarket_market_list");
+    const preview = await preparePolymarketOrderFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 10 }, provider());
+    const card = buildPolymarketOrderPreviewCard(preview);
+    expect(card.kind).toBe("polymarket_order_preview");
+    if (card.kind === "polymarket_order_preview") expect(card.preview.canSubmit).toBe(false);
   });
 
   test("watch descriptor ignores prototype-mutating outcome labels", async () => {
