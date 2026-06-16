@@ -114,6 +114,17 @@ import {
   type BittensorSubnetInvocation,
   type BittensorWatch,
 } from "./tools/bittensor.js";
+import {
+  buildHyperliquidAccountCard,
+  buildHyperliquidMarketListCard,
+  buildHyperliquidOrderPreviewCard,
+  buildHyperliquidOrderbookCard,
+  executeHyperliquidChatWorkflow,
+  findForbiddenHyperliquidCredentialInput,
+  hyperliquidProvider,
+  isValidHyperliquidAddress,
+  prepareHyperliquidOrderPreview,
+} from "./tools/hyperliquid.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -3918,6 +3929,74 @@ function createRoutes(
     }
     const result = await getPortfolio({ chainId, address: address as `0x${string}` });
     return jsonResponse(result);
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/markets", "client", async (ctx) => {
+    const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 20;
+    const markets = await hyperliquidProvider.listMarkets(limit);
+    return jsonResponse({ success: true, markets, cards: [buildHyperliquidMarketListCard(markets)] });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/account/:address", "client", async (ctx) => {
+    const address = ctx.params.address.trim();
+    if (!isValidHyperliquidAddress(address)) {
+      throw new ApiError(400, "invalid_hyperliquid_address", "address must be a 42-character 0x Hyperliquid account address");
+    }
+    const account = await hyperliquidProvider.getAccount(address);
+    return jsonResponse({ success: true, account, cards: [buildHyperliquidAccountCard(account)] });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/orderbook/:asset", "client", async (ctx) => {
+    const asset = ctx.params.asset.trim();
+    const orderbook = await hyperliquidProvider.getOrderbook(asset);
+    return jsonResponse({ success: true, orderbook, cards: [buildHyperliquidOrderbookCard(orderbook)] });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/orders/preview", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid preview input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const preview = await prepareHyperliquidOrderPreview({
+        asset: typeof body.asset === "string" ? body.asset : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        size: body.size === undefined ? null : body.size as never,
+        price: body.price === undefined ? null : body.price as never,
+        reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+        slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
+        address: typeof body.address === "string" ? body.address : null,
+        message: typeof body.message === "string" ? body.message : null,
+      });
+      return jsonResponse({ success: true, preview, cards: [buildHyperliquidOrderPreviewCard(preview)] });
+    } catch (err) {
+      throw new ApiError(400, "invalid_hyperliquid_preview", err instanceof Error ? err.message : "Could not prepare Hyperliquid order preview");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/chat/execute", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "";
+    if (!message.trim()) {
+      throw new ApiError(400, "invalid_message", "message is required");
+    }
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid chat input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const result = await executeHyperliquidChatWorkflow({
+      message,
+      address: typeof body.address === "string" ? body.address : null,
+      asset: typeof body.asset === "string" ? body.asset : null,
+      side: typeof body.side === "string" ? body.side as never : null,
+      size: body.size === undefined ? null : body.size as never,
+      price: body.price === undefined ? null : body.price as never,
+      limit: body.limit === undefined ? null : body.limit as never,
+      slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
+      reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+    });
+    return jsonResponse({ success: true, ...result });
   });
 
   addRoute(routes, "GET", "/api/bittensor/subnets", "client", async () => {
