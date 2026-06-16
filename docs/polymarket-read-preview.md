@@ -71,6 +71,17 @@ When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `
 
 The `monitor` intent builds a read-only `PolymarketWatchDescriptor` for a market: a current-odds snapshot, suggested ±10pp alert thresholds per outcome, and a resolution reminder. It is research-only and **works even when order previews are geoblocked**. Matterhorn never schedules alerts or auto-executes any order from a watch; the descriptor is a planning artifact for the user/agent to act on.
 
+## External-Signer Execution (non-custodial)
+
+Users can take a preview live **without Matterhorn ever holding a key, signing, submitting, or broadcasting**. The flow mirrors the shared `external_signer_required` / `MarketReceipt` contract:
+
+1. **Preview** → an `unsigned_preview` (`canSubmit: false`).
+2. **Signing handoff** — `buildPolymarketSigningHandoff(preview)` produces a `PolymarketSigningHandoff`: the public order terms, the EIP-712 signing scheme (Polymarket CLOB on Polygon, chain 137), a `previewSha256` binding, a `handoffSha256`, and an expiry. `externalSignerOnly: true`, `canSubmit: false`. It refuses a compliance-blocked preview and never fabricates a signature.
+3. **The user signs and submits with their own wallet**, entirely outside Matterhorn (via Polymarket's official CLOB client). Matterhorn produces the economic terms only — never the signature, API key, or submission.
+4. **Receipt verification** — `verifyPolymarketReceipt(handoff, receipt)` validates a returned **public** receipt (order id / tx hash / status) against the handoff hashes, market, outcome, and side, and emits a `MarketReceipt`-shaped result. It **rejects any signing material** in the receipt (raw signatures / signed payloads are never accepted).
+
+Matterhorn stays non-custodial end to end: no key import, no API-secret storage, no signing, no broadcasting, and no acceptance of signing material on the way back in. `liveSubmissionEnabled` for Matterhorn remains `false` — the **user** executes, not Matterhorn.
+
 ## Security Posture
 
 The tool was adversarially audited (12-probe sweep, codified as regression tests). It is read-only + preview-only, so there are no smart contracts, custody, signing, or key handling in this code — the only key material it touches is material it **rejects**.

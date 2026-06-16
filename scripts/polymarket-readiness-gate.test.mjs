@@ -61,7 +61,18 @@ const tool = mustContain("apps/server/src/tools/polymarket.ts", [
   "searchEvents",
   "mapEventRecord",
   "polymarket_event_list",
+  // External-signer handoff + receipt (non-custodial; Matterhorn never signs/submits).
+  "buildPolymarketSigningHandoff",
+  "verifyPolymarketReceipt",
+  "external_signer_required",
+  "externalSignerOnly: true",
+  "matterhorn.market.receipt.v1",
 ]);
+// The handoff/receipt path must not sign, submit, or accept signing material.
+for (const forbidden of ["signOrder", "submitOrder", "broadcast(", "privateKey =", "this.signer"]) {
+  if (tool.includes(forbidden)) fail(`Polymarket tool excludes ${forbidden}`, "present");
+  else pass(`Polymarket tool excludes ${forbidden}`);
+}
 
 // No execution / submission / signing path may exist.
 if (/canSubmit:\s*true/.test(tool)) fail("Polymarket tool never enables canSubmit", "found canSubmit: true");

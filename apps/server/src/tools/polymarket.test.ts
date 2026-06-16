@@ -3,6 +3,7 @@ import {
   PolymarketInfoProvider,
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
+  buildPolymarketSigningHandoff,
   estimatePolymarketFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
@@ -10,6 +11,7 @@ import {
   planPolymarketChat,
   preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
+  verifyPolymarketReceipt,
   type PolymarketBookLevel,
   type PolymarketProvider,
 } from "./polymarket.js";
@@ -415,5 +417,66 @@ describe("Polymarket security hardening", () => {
     expect(probe.polluted).toBeUndefined();
     const watch = result.data?.watch as { conditions?: Array<{ outcome?: string }> };
     expect(watch.conditions?.some((c) => c.outcome === "__proto__")).toBe(false);
+  });
+});
+
+describe("Polymarket external-signer handoff + receipt", () => {
+  const allowed = { status: "allowed" as const, reason: null, jurisdiction: "US", checkedAt: "t", source: "mock" };
+
+  async function allowedPreview() {
+    const market = await provider().getMarket("0xmarket-ai");
+    return preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 10, compliance: allowed }, provider());
+  }
+
+  test("builds a non-custodial handoff from an unsigned preview", async () => {
+    const handoff = buildPolymarketSigningHandoff(await allowedPreview());
+    expect(handoff.signerPolicy).toBe("external_signer_required");
+    expect(handoff.externalSignerOnly).toBe(true);
+    expect(handoff.canSubmit).toBe(false);
+    expect(handoff.handoffSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(handoff.signingScheme.standard).toBe("eip712");
+    expect(handoff.signingScheme.chainId).toBe(137);
+    expect(handoff.warnings.join(" ")).toMatch(/sign and submit this with your OWN wallet/i);
+    // No signing material is fabricated into the handoff.
+    expect(JSON.stringify(handoff)).not.toMatch(/0x[a-f0-9]{130}/i);
+  });
+
+  test("refuses to build a handoff for a blocked preview", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
+    expect(result.preview?.execution).toBe("blocked_by_compliance");
+    expect(() => buildPolymarketSigningHandoff(result.preview!)).toThrow();
+  });
+
+  test("verifies a matching public receipt", async () => {
+    const handoff = buildPolymarketSigningHandoff(await allowedPreview());
+    const verification = verifyPolymarketReceipt(handoff, {
+      previewSha256: handoff.previewSha256,
+      handoffSha256: handoff.handoffSha256,
+      orderId: "0xorder123",
+      txHash: "0xabc",
+      status: "filled",
+      marketId: handoff.marketId,
+      outcome: handoff.outcome,
+      side: "yes",
+    });
+    expect(verification.ok).toBe(true);
+    expect(verification.matchesHandoff).toBe(true);
+    expect(verification.receipt?.status).toBe("filled");
+    expect(verification.receipt?.version).toBe("matterhorn.market.receipt.v1");
+  });
+
+  test("rejects a receipt that does not match the handoff", async () => {
+    const handoff = buildPolymarketSigningHandoff(await allowedPreview());
+    const verification = verifyPolymarketReceipt(handoff, { previewSha256: "deadbeef", side: "no", orderId: "x" });
+    expect(verification.ok).toBe(false);
+    expect(verification.errors.length).toBeGreaterThan(0);
+  });
+
+  test("never accepts signing material in a receipt", async () => {
+    const handoff = buildPolymarketSigningHandoff(await allowedPreview());
+    const verification = verifyPolymarketReceipt(handoff, { orderId: "x", signature: `0x${"a".repeat(130)}` } as never);
+    expect(verification.ok).toBe(false);
+    expect(verification.receipt).toBeNull();
+    expect(verification.errors.join(" ")).toMatch(/signatures and signed payloads are never accepted/i);
   });
 });
