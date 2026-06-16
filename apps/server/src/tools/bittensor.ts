@@ -8430,12 +8430,16 @@ export function createBittensorSigningReceipt(input: {
   handoff?: BittensorSigningHandoff | null;
   result?: BittensorSignedResult | null;
   signature?: string | null;
+  signatureSha256?: string | null;
   signerAddress?: string | null;
 }): BittensorSigningReceipt {
   const payloadJson = input.handoff?.payloadJson ?? stableJson(asRecord(input.preview.unsignedPayload));
   const payloadSha256 = input.handoff?.payloadSha256 ?? createHash("sha256").update(payloadJson).digest("hex");
   const signature = input.signature?.trim() || null;
-  const signatureSha256 = signature ? createHash("sha256").update(signature).digest("hex") : null;
+  const providedSignatureSha256 = typeof input.signatureSha256 === "string" && /^[a-f0-9]{64}$/i.test(input.signatureSha256.trim())
+    ? input.signatureSha256.trim().toLowerCase()
+    : null;
+  const signatureSha256 = providedSignatureSha256 ?? (signature ? createHash("sha256").update(signature).digest("hex") : null);
   const signerAddress = input.signerAddress && isValidSs58Address(input.signerAddress) ? input.signerAddress : null;
   const status: BittensorSigningReceiptStatus = input.result?.status ?? (signatureSha256 ? "signed_payload_received" : "awaiting_signature");
   const createdAt = input.handoff?.createdAt ?? nowIso();
