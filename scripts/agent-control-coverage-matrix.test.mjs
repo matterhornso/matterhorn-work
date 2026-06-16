@@ -31,6 +31,7 @@ const rows = [
   ["POST /approvals/:approvalId", "matterhorn_reply_approval", "matterhorn-work approvals reply"],
   ["POST /api/bittensor/chat/execute", "matterhorn_bittensor_chat", "matterhorn-work bittensor chat"],
   ["GET /api/bittensor/readiness", "matterhorn_bittensor_readiness", "matterhorn-work bittensor readiness"],
+  ["POST /api/bittensor/extrinsics/receipt", "matterhorn_bittensor_import_receipt", "Copy Import"],
 ];
 
 for (const [route, tool, command] of rows) {
@@ -62,6 +63,7 @@ for (const scriptName of [
   "test:bittensor-operator-playbook",
   "test:bittensor-live-qa",
   "test:bittensor-live-report",
+  "test:bittensor-receipt-check",
   "test:agent-control-doctor",
   "test:agent-control-live-qa",
   "test:agent-control-api-docs",
