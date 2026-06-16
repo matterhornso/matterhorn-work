@@ -63,11 +63,16 @@ Each bet preview carries, alongside `canSubmit: false`:
 ```bash
 bun test apps/server/src/tools/polymarket.test.ts
 pnpm --filter matterhorn-work-server typecheck
+pnpm test:polymarket-readiness-gate
+pnpm test:polymarket-read-preview-qa
+node scripts/polymarket-read-preview-qa.mjs --self-test --strict --json
 ```
+
+The QA harness self-test runs offline with mocked Gamma/CLOB/geoblock endpoints; without `--self-test` it makes read-only requests to the public Polymarket endpoints. It checks discovery, market detail, orderbook, geoblock, a preview-only order (`canSubmit: false`; blocked compliance yields no executable price/size), and credential-shaped payload rejection. The readiness gate statically asserts the tool keeps `canSubmit: false`, exposes no submit/sign/exchange route, and rejects the full forbidden-credential vocabulary.
 
 ## Scope Notes
 
-This PR is the read/preview tool foundation only. Server routes (`/api/polymarket/...`), MCP tools, CLI commands, the QA harness, and a readiness gate follow the Hyperliquid sequence and can be added in subsequent PRs.
+This stream is the read/preview tool layer plus QA harness and readiness gate. Server routes (`/api/polymarket/...`), MCP tools, and CLI commands follow the Hyperliquid sequence and can be added in subsequent PRs (a natural Codex pickup point).
 
 References:
 
