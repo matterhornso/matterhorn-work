@@ -67,6 +67,11 @@ const tool = mustContain("apps/server/src/tools/polymarket.ts", [
   "external_signer_required",
   "externalSignerOnly: true",
   "matterhorn.market.receipt.v1",
+  // EIP-712 order typed-data template (opt-in, validation-gated).
+  "buildPolymarketOrderTypedData",
+  "requiresClientValidation: true",
+  "POLYMARKET_EXCHANGE_ADDRESS",
+  "walletMustSet",
 ]);
 // The handoff/receipt path must not sign, submit, or accept signing material.
 for (const forbidden of ["signOrder", "submitOrder", "broadcast(", "privateKey =", "this.signer"]) {

@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { hashTypedData } from "viem";
 import {
   PolymarketInfoProvider,
+  buildPolymarketOrderTypedData,
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
   buildPolymarketSigningHandoff,
   coercePolymarketHandoffReference,
   coercePolymarketReceiptInput,
+  preparePolymarketHandoffFromRequest,
   estimatePolymarketFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
@@ -499,5 +502,53 @@ describe("Polymarket request coercion", () => {
     expect(receipt.side).toBe("yes");
     expect("privateKey" in receipt).toBe(false);
     expect("signature" in receipt).toBe(false);
+  });
+});
+
+describe("Polymarket EIP-712 order typed-data", () => {
+  const exchange = { chainId: 137, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+
+  test("builds a well-formed, validation-flagged template", () => {
+    const td = buildPolymarketOrderTypedData({ tokenId: "12345", amountUsdc: 10, price: 0.5, side: "yes", exchange });
+    expect(td.standard).toBe("eip712");
+    expect(td.requiresClientValidation).toBe(true);
+    expect(td.primaryType).toBe("Order");
+    expect(td.domain.chainId).toBe(137);
+    expect(td.domain.verifyingContract).toBe(exchange.verifyingContract);
+    expect(td.message.tokenId).toBe("12345");
+    expect(td.message.makerAmount).toBe("10000000"); // 10 USDC * 1e6
+    expect(td.message.takerAmount).toBe("20000000"); // 10/0.5 = 20 shares * 1e6
+    expect(td.message.side).toBe(0); // BUY
+    expect(td.walletMustSet).toContain("maker");
+    expect(td.walletMustSet).toContain("salt");
+    // viem accepts the structure (proves the EIP-712 template is internally well-formed).
+    const digest = hashTypedData({
+      domain: { ...td.domain, verifyingContract: td.domain.verifyingContract as `0x${string}` },
+      types: td.types,
+      primaryType: "Order",
+      message: td.message,
+    });
+    expect(digest).toMatch(/^0x[a-f0-9]{64}$/);
+  });
+
+  test("handoff attaches typed-data only when an exchange is configured", async () => {
+    const market = await provider().getMarket("0xmarket-ai");
+    const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 10, compliance: { status: "allowed", reason: null, jurisdiction: null, checkedAt: "t", source: "m" } }, provider());
+    const without = buildPolymarketSigningHandoff(preview, { tokenId: "token-yes" });
+    expect(without.signingPayload).toBeNull();
+    expect(without.warnings.join(" ")).toMatch(/POLYMARKET_EXCHANGE_ADDRESS/);
+    const withTd = buildPolymarketSigningHandoff(preview, { tokenId: "token-yes", exchange });
+    expect(withTd.signingPayload?.requiresClientValidation).toBe(true);
+    expect(withTd.signingPayload?.message.tokenId).toBe("token-yes");
+    expect(withTd.canSubmit).toBe(false);
+  });
+
+  test("preparePolymarketHandoffFromRequest resolves token id and gates on compliance", async () => {
+    const allowed = await preparePolymarketHandoffFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 10 }, provider({ blocked: false }), exchange);
+    expect(allowed.blocked).toBe(false);
+    expect(allowed.handoff?.signingPayload?.message.tokenId).toBe("token-yes");
+    const blocked = await preparePolymarketHandoffFromRequest({ marketId: "0xmarket-ai", side: "yes", amountUsdc: 10 }, provider({ blocked: true }), exchange);
+    expect(blocked.blocked).toBe(true);
+    expect(blocked.handoff).toBeNull();
   });
 });

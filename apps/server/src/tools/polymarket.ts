@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { parseUnits } from "viem";
 
 const GAMMA_BASE_URL = "https://gamma-api.polymarket.com";
 const CLOB_BASE_URL = "https://clob.polymarket.com";
@@ -228,11 +229,51 @@ export interface PolymarketSigningHandoff {
   previewSha256: string;
   /** Hash of the handoff packet itself, for receipt matching. */
   handoffSha256: string;
+  /**
+   * EIP-712 order typed-data template, present only when an exchange address is
+   * configured (POLYMARKET_EXCHANGE_ADDRESS). Always requiresClientValidation.
+   */
+  signingPayload: PolymarketOrderTypedData | null;
   expiresAt: string;
   compliance: PolymarketComplianceStatus;
   warnings: string[];
   canSubmit: false;
   externalSignerOnly: true;
+}
+
+/**
+ * EIP-712 typed-data TEMPLATE for a Polymarket CLOB order. Matterhorn fills only
+ * the economic terms it can know (token, amounts, side). The user's wallet/client
+ * fills `walletMustSet` fields (maker, signer, salt, nonce, expiration) and
+ * produces the signature. No final digest is emitted because Matterhorn does not
+ * know those wallet-supplied values — and it never holds a key.
+ *
+ * `requiresClientValidation` is always true: validate the domain, contract
+ * address, types, and amount rounding against Polymarket's official CLOB client
+ * (and on testnet) before signing with real funds.
+ */
+export interface PolymarketOrderTypedData {
+  standard: "eip712";
+  requiresClientValidation: true;
+  domain: { name: string; version: string; chainId: number; verifyingContract: string };
+  primaryType: "Order";
+  types: Record<string, Array<{ name: string; type: string }>>;
+  message: {
+    salt: string;
+    maker: string;
+    signer: string;
+    taker: string;
+    tokenId: string;
+    makerAmount: string;
+    takerAmount: string;
+    expiration: string;
+    nonce: string;
+    feeRateBps: string;
+    side: number;
+    signatureType: number;
+  };
+  walletMustSet: string[];
+  notes: string[];
 }
 
 /** A returned public receipt to validate. Must contain only public status — no signing material. */
@@ -978,13 +1019,114 @@ export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: 
 
 const POLYGON_CHAIN_ID = 137;
 const HANDOFF_TTL_MS = 10 * 60 * 1000;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** EIP-712 type layout for a Polymarket CTF Exchange order. Validate against the official client. */
+const POLYMARKET_ORDER_EIP712_TYPES: Record<string, Array<{ name: string; type: string }>> = {
+  Order: [
+    { name: "salt", type: "uint256" },
+    { name: "maker", type: "address" },
+    { name: "signer", type: "address" },
+    { name: "taker", type: "address" },
+    { name: "tokenId", type: "uint256" },
+    { name: "makerAmount", type: "uint256" },
+    { name: "takerAmount", type: "uint256" },
+    { name: "expiration", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "feeRateBps", type: "uint256" },
+    { name: "side", type: "uint8" },
+    { name: "signatureType", type: "uint8" },
+  ],
+};
+
+export interface PolymarketExchangeConfig {
+  chainId: number;
+  verifyingContract: string;
+  domainName?: string;
+  domainVersion?: string;
+}
+
+/** Read the exchange config from env. Returns null when unconfigured (typed-data is then omitted). */
+export function readPolymarketExchangeConfig(): PolymarketExchangeConfig | null {
+  const verifyingContract = process.env.POLYMARKET_EXCHANGE_ADDRESS;
+  if (!verifyingContract || !/^0x[a-fA-F0-9]{40}$/.test(verifyingContract)) return null;
+  const chainId = Number(process.env.POLYMARKET_CHAIN_ID ?? POLYGON_CHAIN_ID);
+  return {
+    chainId: Number.isFinite(chainId) ? chainId : POLYGON_CHAIN_ID,
+    verifyingContract,
+    domainName: process.env.POLYMARKET_EXCHANGE_DOMAIN_NAME ?? "Polymarket CTF Exchange",
+    domainVersion: process.env.POLYMARKET_EXCHANGE_DOMAIN_VERSION ?? "1",
+  };
+}
+
+function toBaseUnits6(value: number): string {
+  // Polymarket USDC and outcome shares both use 6 decimals.
+  return parseUnits(value.toFixed(6), 6).toString();
+}
+
+/**
+ * Build the EIP-712 order typed-data TEMPLATE. Matterhorn fills the economic
+ * terms only; the wallet/client fills maker/signer/salt/nonce/expiration and
+ * signs. No final digest is emitted (Matterhorn does not know those values).
+ * Always requiresClientValidation — confirm against Polymarket's CLOB client.
+ */
+export function buildPolymarketOrderTypedData(args: {
+  tokenId: string;
+  amountUsdc: number;
+  price: number | null;
+  side: PolymarketSide;
+  exchange: PolymarketExchangeConfig;
+}): PolymarketOrderTypedData {
+  const { tokenId, amountUsdc, price, exchange } = args;
+  const shares = price !== null && price > 0 ? amountUsdc / price : 0;
+  return {
+    standard: "eip712",
+    requiresClientValidation: true,
+    domain: {
+      name: exchange.domainName ?? "Polymarket CTF Exchange",
+      version: exchange.domainVersion ?? "1",
+      chainId: exchange.chainId,
+      verifyingContract: exchange.verifyingContract,
+    },
+    primaryType: "Order",
+    types: POLYMARKET_ORDER_EIP712_TYPES,
+    message: {
+      salt: "0",
+      maker: ZERO_ADDRESS,
+      signer: ZERO_ADDRESS,
+      taker: ZERO_ADDRESS,
+      tokenId,
+      makerAmount: toBaseUnits6(amountUsdc),
+      takerAmount: toBaseUnits6(shares),
+      expiration: "0",
+      nonce: "0",
+      feeRateBps: "0",
+      // buy_shares previews are always a BUY of the chosen outcome token; side=0=BUY. (yes/no selects the token, not the direction.)
+      side: 0,
+      signatureType: 0, // EOA
+    },
+    walletMustSet: ["maker", "signer", "salt", "nonce", "expiration"],
+    notes: [
+      "TEMPLATE ONLY — validate the domain, verifyingContract, types, and amount rounding against Polymarket's official CLOB client (@polymarket/clob-client) and on testnet before signing real funds.",
+      "Your wallet/client must set maker, signer, salt, nonce, and expiration; Matterhorn cannot and does not know them.",
+      "makerAmount/takerAmount use 6 decimals and are derived from the estimated fill price; the official client applies exact tick/rounding rules.",
+    ],
+  };
+}
 
 /**
  * Build an external-signer handoff from an unsigned order preview. Throws if the
  * preview is blocked by compliance or is not an unsigned preview. The returned
  * packet contains only public order terms — no keys, secrets, or signatures.
+ *
+ * When `options.tokenId` and an exchange config are present, an EIP-712 order
+ * typed-data template is attached (still requiresClientValidation, still
+ * canSubmit:false).
  */
-export function buildPolymarketSigningHandoff(preview: PolymarketActionPreview): PolymarketSigningHandoff {
+export function buildPolymarketSigningHandoff(
+  preview: PolymarketActionPreview,
+  options: { tokenId?: string | null; exchange?: PolymarketExchangeConfig | null } = {},
+): PolymarketSigningHandoff {
   if (preview.execution === "blocked_by_compliance") {
     throw new Error("Cannot build a signing handoff for a compliance-blocked preview.");
   }
@@ -998,14 +1140,22 @@ export function buildPolymarketSigningHandoff(preview: PolymarketActionPreview):
   const forbidden = findForbiddenPolymarketCredentialInput(preview);
   if (forbidden) throw new Error("Preview unexpectedly contained credential-shaped data at " + forbidden);
 
+  const tokenId = options.tokenId ?? null;
   const warnings = [
     "External signer required: sign and submit this with your OWN wallet. Matterhorn does not sign, submit, or hold keys.",
     "Do not send the signature or any signed payload back to Matterhorn; only a public receipt can be imported.",
     RISK_DISCLAIMER,
   ];
+  let signingPayload: PolymarketOrderTypedData | null = null;
+  if (tokenId && options.exchange) {
+    signingPayload = buildPolymarketOrderTypedData({ tokenId, amountUsdc: preview.size, price: preview.price, side: preview.side, exchange: options.exchange });
+    warnings.push("EIP-712 order typed-data is a TEMPLATE requiring validation against Polymarket's official CLOB client before signing real funds.");
+  } else {
+    warnings.push("No EIP-712 typed-data attached; set POLYMARKET_EXCHANGE_ADDRESS (a validated exchange address) to include it.");
+  }
+
   const order = {
-    // The CLOB token id is resolved by the signer's client from marketId+outcome; the preview does not carry it.
-    tokenId: null,
+    tokenId,
     makerAmountUsdc: preview.size,
     expectedShares: preview.estimatedShares,
     side: preview.side,
@@ -1035,7 +1185,7 @@ export function buildPolymarketSigningHandoff(preview: PolymarketActionPreview):
     order,
     signingScheme: {
       standard: "eip712",
-      chainId: POLYGON_CHAIN_ID,
+      chainId: options.exchange?.chainId ?? POLYGON_CHAIN_ID,
       venue: "polymarket-clob",
       instructions:
         "Sign this order with your own wallet via Polymarket's official CLOB client (EIP-712 order on Polygon). " +
@@ -1043,12 +1193,39 @@ export function buildPolymarketSigningHandoff(preview: PolymarketActionPreview):
     },
     previewSha256: preview.previewSha256,
     handoffSha256: sha256(core),
+    signingPayload,
     expiresAt: new Date(Date.now() + HANDOFF_TTL_MS).toISOString(),
     compliance: preview.compliance,
     warnings,
     canSubmit: false,
     externalSignerOnly: true,
   };
+}
+
+/**
+ * Resolve a market, run the compliance gate, build the preview, and (when an
+ * exchange address is configured) attach the EIP-712 typed-data — in one pass.
+ */
+export async function preparePolymarketHandoffFromRequest(
+  input: { marketId: string; outcome?: string | null; side?: PolymarketSide | null; amountUsdc: number; slippageTolerance?: number | null },
+  provider: PolymarketProvider = polymarketProvider,
+  exchange: PolymarketExchangeConfig | null = readPolymarketExchangeConfig(),
+): Promise<{ preview: PolymarketActionPreview; handoff: PolymarketSigningHandoff | null; blocked: boolean }> {
+  if (!input.marketId) throw new Error("marketId is required for a Polymarket signing handoff");
+  if (!(input.amountUsdc > 0)) throw new Error("a positive amountUsdc is required for a Polymarket signing handoff");
+  const market = await provider.getMarket(input.marketId);
+  const side: PolymarketSide = input.side ?? "yes";
+  const outcome = chooseOutcome(market, input.outcome ?? null, side);
+  const compliance = await provider.checkCompliance();
+  if (compliance.status === "blocked") {
+    return { preview: buildBlockedPolymarketPreview({ market, outcome, side, compliance }), handoff: null, blocked: true };
+  }
+  if (!outcome || !market.tokenIds[outcome]) {
+    throw new Error("outcome is required; options: " + (market.outcomes.join(", ") || "unknown"));
+  }
+  const preview = await preparePolymarketOrderPreview({ market, outcome, side, amountUsdc: input.amountUsdc, compliance, slippageTolerance: input.slippageTolerance ?? null }, provider);
+  const handoff = buildPolymarketSigningHandoff(preview, { tokenId: market.tokenIds[outcome] ?? null, exchange });
+  return { preview, handoff, blocked: false };
 }
 
 const PUBLIC_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;
