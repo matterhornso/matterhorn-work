@@ -362,6 +362,75 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_chat",
+    description: "Default first Matterhorn Work tool for ordinary Hyperliquid requests. Read-only plus preview-only; does not submit trades or accept API wallet secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        address: { type: "string", description: "Optional public 0x master or sub-account address for account reads." },
+        asset: { type: "string", description: "Optional Hyperliquid asset such as BTC, ETH, SOL, or HYPE." },
+        side: { type: "string", enum: ["buy", "sell", "long", "short"] },
+        size: { oneOf: [{ type: "number" }, { type: "string" }] },
+        price: { oneOf: [{ type: "number" }, { type: "string" }] },
+        limit: { type: "number" },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+        reduceOnly: { type: "boolean" },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_list_markets",
+    description: "List Hyperliquid markets from the Matterhorn server through read-only market data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Optional market limit. Defaults to 20 and is capped by the server." },
+      },
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_get_account",
+    description: "Read a public Hyperliquid account snapshot for a master or sub-account address. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "Public 42-character 0x account address." },
+      },
+      required: ["address"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_get_orderbook",
+    description: "Read a Hyperliquid L2 orderbook snapshot for an asset. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset: { type: "string", description: "Hyperliquid asset such as BTC, ETH, SOL, or HYPE." },
+      },
+      required: ["asset"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_preview_order",
+    description: "Prepare a non-submittable Hyperliquid order preview. Returns canSubmit=false and never sends the exchange endpoint.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset: { type: "string" },
+        side: { type: "string", enum: ["buy", "sell", "long", "short"] },
+        size: { oneOf: [{ type: "number" }, { type: "string" }] },
+        price: { oneOf: [{ type: "number" }, { type: "string" }] },
+        reduceOnly: { type: "boolean" },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+        address: { type: "string" },
+        message: { type: "string" },
+      },
+      required: ["asset", "side", "size"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_chat",
     description: "Default first Matterhorn Work tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
     inputSchema: {
@@ -1992,6 +2061,16 @@ async function handleTool(name, args = {}) {
         auth: "host",
         body: { reply: args.reply === "allow" ? "allow" : "deny" },
       });
+    case "matterhorn_hyperliquid_chat":
+      return callServer("/api/hyperliquid/chat/execute", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_list_markets":
+      return callServer("/api/hyperliquid/markets", { query: { limit: args.limit } });
+    case "matterhorn_hyperliquid_get_account":
+      return callServer(`/api/hyperliquid/account/${encodeURIComponent(args.address)}`);
+    case "matterhorn_hyperliquid_get_orderbook":
+      return callServer(`/api/hyperliquid/orderbook/${encodeURIComponent(args.asset)}`);
+    case "matterhorn_hyperliquid_preview_order":
+      return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
