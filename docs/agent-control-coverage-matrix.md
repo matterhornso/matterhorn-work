@@ -51,7 +51,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | `matterhorn-work bittensor chat` | `test:agent-control-mcp`, Bittensor server tests, `test:bittensor-cli-fallback` |
 | Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | `matterhorn-work bittensor readiness` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Bittensor capability registry | `GET /api/bittensor/capabilities`, `GET /api/bittensor/capabilities/:netuid` | `matterhorn_bittensor_list_capabilities`, `matterhorn_bittensor_get_subnet_capability` | `matterhorn-work bittensor capabilities`, `matterhorn-work bittensor capability` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
-| Bittensor external signing | `POST /api/bittensor/extrinsics/prepare`, `POST /api/bittensor/extrinsics/handoff`, `POST /api/bittensor/extrinsics/submit` | `matterhorn_bittensor_prepare_extrinsic`, `matterhorn_bittensor_create_signing_handoff`, `matterhorn_bittensor_submit_signed_extrinsic` | `matterhorn-work bittensor extrinsic prepare/handoff/submit` | `test:agent-control-mcp`, `test:bittensor-cli-fallback`, Bittensor server tests |
+| Bittensor external signing | `POST /api/bittensor/extrinsics/prepare`, `POST /api/bittensor/extrinsics/handoff`, `POST /api/bittensor/extrinsics/receipt`, `POST /api/bittensor/extrinsics/submit` | `matterhorn_bittensor_prepare_extrinsic`, `matterhorn_bittensor_create_signing_handoff`, `matterhorn_bittensor_import_receipt`, `matterhorn_bittensor_submit_signed_extrinsic` | `matterhorn-work bittensor extrinsic prepare/handoff/submit` plus panel `Copy Import` | `test:agent-control-mcp`, `test:bittensor-cli-fallback`, Bittensor server tests |
 | Bittensor subnet adapter preview | `POST /api/bittensor/subnets/:netuid/preview`, `POST /api/bittensor/subnets/:netuid/invoke` | `matterhorn_bittensor_preview_subnet_invocation`, `matterhorn_bittensor_invoke_subnet` | `matterhorn-work bittensor subnet-preview`, `matterhorn-work bittensor subnet-invoke` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Bittensor monitoring watches | `GET/POST /api/bittensor/monitoring/watchlist`, `GET /api/bittensor/monitoring/check`, `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_create_watch`, `matterhorn_bittensor_list_watches`, `matterhorn_bittensor_check_watches`, `matterhorn_bittensor_watch_digest`, `matterhorn_bittensor_act_on_watch_alert` | `matterhorn-work bittensor watch create/list/check/digest/act` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Doctor reports bridge availability | `test:agent-browser-control-guide`, `test:agent-browser-live-qa`, `test:agent-browser-live-probe` |
@@ -107,8 +107,10 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_customer_evidence_bundle` accepts optional `adapterCanary` evidence and `requireAdapterCanary` for customer demos involving real subnet adapter canaries.
 - This mirrors the CLI evidence bundle and keeps adapter-canary readiness visible to Codex, Claude Code, Claude Desktop, and Cursor operators.
 
-## Bittensor Receipt Check MCP
+## Bittensor Receipt Import And Check MCP
 
+- `matterhorn_bittensor_import_receipt` imports public external-signer receipt evidence through `POST /api/bittensor/extrinsics/receipt`.
+- Receipt import accepts preview/handoff context plus `signatureSha256`, public signer address, or public result metadata; it rejects raw signatures, signed payloads, seed phrases, private keys, mnemonics, and wallet exports.
 - `matterhorn_bittensor_check_receipt` validates post-signing Bittensor receipts and produces a public wallet diff follow-up prompt.
 - It checks transaction hash/status, payload-hash continuity, expected action/netuid context, and rejects raw signatures or signed payload fields.
 - It does not sign, submit, broadcast, import keys, or store signed payloads.
