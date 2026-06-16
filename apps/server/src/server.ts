@@ -137,12 +137,12 @@ import {
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
   buildPolymarketOrderbookCard,
-  buildPolymarketSigningHandoff,
   coercePolymarketHandoffReference,
   coercePolymarketReceiptInput,
   executePolymarketChatWorkflow,
   findForbiddenPolymarketCredentialInput,
   polymarketProvider,
+  preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
@@ -4175,7 +4175,9 @@ function createRoutes(
       throw new ApiError(400, "market_secret_rejected", `Polymarket handoff input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
     }
     try {
-      const preview = await preparePolymarketOrderFromRequest({
+      // Resolves the market + token id, runs the compliance gate, builds the
+      // preview, and attaches EIP-712 typed-data when an exchange is configured.
+      const { preview, handoff, blocked } = await preparePolymarketHandoffFromRequest({
         marketId: typeof body.marketId === "string" ? body.marketId : "",
         outcome: typeof body.outcome === "string" ? body.outcome : null,
         side: typeof body.side === "string" ? body.side as never : null,
@@ -4183,10 +4185,9 @@ function createRoutes(
         slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
       });
       // Compliance still gates: a blocked region gets no signing handoff.
-      if (preview.execution === "blocked_by_compliance") {
+      if (blocked) {
         return jsonResponse({ success: true, blocked: true, preview, cards: [buildPolymarketOrderPreviewCard(preview)] });
       }
-      const handoff = buildPolymarketSigningHandoff(preview);
       return jsonResponse({ success: true, handoff, preview });
     } catch (err) {
       throw new ApiError(400, "invalid_polymarket_handoff", err instanceof Error ? err.message : "Could not prepare Polymarket signing handoff");

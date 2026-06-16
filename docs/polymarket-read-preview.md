@@ -82,6 +82,16 @@ Users can take a preview live **without Matterhorn ever holding a key, signing, 
 
 Matterhorn stays non-custodial end to end: no key import, no API-secret storage, no signing, no broadcasting, and no acceptance of signing material on the way back in. `liveSubmissionEnabled` for Matterhorn remains `false` — the **user** executes, not Matterhorn.
 
+### EIP-712 order typed-data (opt-in, validation-gated)
+
+When `POLYMARKET_EXCHANGE_ADDRESS` is configured (a validated CTF Exchange address), the handoff also carries `signingPayload` — an EIP-712 **order typed-data template** (`buildPolymarketOrderTypedData`) for the standard Polymarket CTF Exchange `Order` struct, computed with viem-compatible types.
+
+This is a **template, not a final signing digest**. Matterhorn fills only the economic terms it can know (`tokenId`, `makerAmount`, `takerAmount`, `side`); the user's wallet/client fills the `walletMustSet` fields (`maker`, `signer`, `salt`, `nonce`, `expiration`) and produces the signature. No digest is emitted because Matterhorn deliberately does not know those wallet-supplied values, and it never holds a key.
+
+`requiresClientValidation` is always `true`. **Validate the domain, `verifyingContract`, types, and amount rounding against Polymarket's official CLOB client (`@polymarket/clob-client`) and on testnet before signing with real funds.** When the exchange address is not configured, no typed-data is attached and the handoff stays purely descriptive.
+
+Config: `POLYMARKET_EXCHANGE_ADDRESS` (required to emit typed-data), `POLYMARKET_CHAIN_ID` (default 137), `POLYMARKET_EXCHANGE_DOMAIN_NAME`, `POLYMARKET_EXCHANGE_DOMAIN_VERSION`.
+
 ## Security Posture
 
 The tool was adversarially audited (12-probe sweep, codified as regression tests). It is read-only + preview-only, so there are no smart contracts, custody, signing, or key handling in this code — the only key material it touches is material it **rejects**.
