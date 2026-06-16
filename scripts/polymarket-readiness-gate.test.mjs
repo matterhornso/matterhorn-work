@@ -83,6 +83,23 @@ mustContain("apps/server/src/tools/polymarket.test.ts", [
   "canSubmit",
 ]);
 
+// Server routes (read/preview-only; mirror the Hyperliquid pattern).
+mustContain("apps/server/src/server.ts", [
+  "/api/polymarket/markets",
+  "/api/polymarket/events",
+  "/api/polymarket/markets/:id",
+  "/api/polymarket/orderbook/:tokenId",
+  "/api/polymarket/compliance",
+  "/api/polymarket/orders/preview",
+  "/api/polymarket/chat/execute",
+  "findForbiddenPolymarketCredentialInput",
+  "market_secret_rejected",
+]);
+mustNotContain("apps/server/src/server.ts", [
+  "/api/polymarket/orders/submit",
+  "/api/polymarket/exchange",
+]);
+
 mustContain("docs/polymarket-read-preview.md", [
   "read-only plus preview-only",
   "Compliance Gate",
