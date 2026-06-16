@@ -1317,6 +1317,22 @@ export function coercePolymarketReceiptInput(value: unknown): PolymarketReceiptI
 // Chat workflow.
 // ---------------------------------------------------------------------------
 
+/** Customer-facing read-only provider failure. Never echoes secrets or submits anything. */
+function polymarketProviderUnavailable(intent: PolymarketIntent, err: unknown): PolymarketChatExecutionResult {
+  const detail = err instanceof Error ? err.message : String(err);
+  return {
+    venue: "polymarket",
+    intent,
+    execution: "unsupported",
+    responseText:
+      "Polymarket data is temporarily unavailable, so I could not complete this read-only request. " +
+      "Nothing was submitted or signed. Please try again shortly; if it persists, check the provider or network configuration.",
+    cards: [],
+    data: { providerUnavailable: true },
+    warnings: ["provider_unavailable: " + detail],
+  };
+}
+
 export async function executePolymarketChatWorkflow(
   input: PolymarketChatExecutionInput,
   options: { provider?: PolymarketProvider } = {},
@@ -1333,6 +1349,7 @@ export async function executePolymarketChatWorkflow(
   }
 
   const intent = planPolymarketChat(input);
+  try {
 
   if (intent === "learn") {
     return {
@@ -1511,6 +1528,9 @@ export async function executePolymarketChatWorkflow(
     compliance,
     warnings: preview.warnings,
   };
+  } catch (err) {
+    return polymarketProviderUnavailable(intent, err);
+  }
 }
 
 function chooseOutcome(market: PolymarketMarketSummary, requested: string | null | undefined, side: PolymarketSide | null | undefined): string | null {
