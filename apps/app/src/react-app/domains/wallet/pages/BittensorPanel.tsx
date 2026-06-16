@@ -355,7 +355,7 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-canary" | "readonly-canary") => {
+  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-canary" | "readonly-canary" | "watch-scheduler") => {
     const command = kind === "live-qa"
       ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
       : kind === "gate"
@@ -393,7 +393,18 @@ export default function BittensorPanel() {
                   "--json-output /tmp/bittensor-adapter-readonly-canary.json",
                   "--strict",
                 ].join(" ")
-              : [
+              : kind === "watch-scheduler"
+                ? [
+                    "node scripts/bittensor-watch-autopilot-scheduler.mjs",
+                    "--server-url http://127.0.0.1:8787",
+                    "--token <client-token>",
+                    "--iterations 6",
+                    "--interval-ms 60000",
+                    "--jsonl-output /tmp/bittensor-watch-autopilot-scheduler.jsonl",
+                    "--summary-output /tmp/bittensor-watch-autopilot-scheduler-summary.json",
+                    "--strict",
+                  ].join(" ")
+                : [
                   "node scripts/bittensor-customer-evidence-bundle.mjs",
                   "--bittensor-live-qa /tmp/bittensor-live-qa.json",
                   "--agent-control-live-qa /tmp/agent-control-live-qa.json",
@@ -403,6 +414,7 @@ export default function BittensorPanel() {
                   "--adapter-canary /tmp/bittensor-adapter-canary.json",
                   "--readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json",
                   "--receipt-check /tmp/bittensor-receipt-check.json",
+                  "--watch-autopilot-scheduler /tmp/bittensor-watch-autopilot-scheduler-summary.json",
                   "--output /tmp/matterhorn-bittensor-customer-evidence.md",
                   "--strict",
                 ].join(" ");
@@ -564,6 +576,9 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("readonly-canary")}>
                     {copiedReadinessCommand === "readonly-canary" ? "Copied" : "Copy Invoke"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("watch-scheduler")}>
+                    {copiedReadinessCommand === "watch-scheduler" ? "Copied" : "Copy Watch"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("evidence")}>
                     {copiedReadinessCommand === "evidence" ? "Copied" : "Copy Evidence"}
