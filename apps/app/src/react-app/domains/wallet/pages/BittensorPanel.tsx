@@ -430,7 +430,7 @@ export default function BittensorPanel() {
                     ? [
                         "curl -sS -X POST http://127.0.0.1:8787/api/bittensor/extrinsics/receipt",
                         "-H 'Content-Type: application/json'",
-                        "-H 'X-Matterhorn-Host-Token: <client-token>'",
+                        "-H 'Authorization: Bearer <client-token>'",
                         "--data @/tmp/bittensor-receipt-import.json",
                         "> /tmp/bittensor-receipt-import-response.json",
                       ].join(" ")
