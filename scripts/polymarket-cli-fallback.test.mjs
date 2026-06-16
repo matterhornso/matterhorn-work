@@ -70,6 +70,15 @@ async function createMockServer() {
     if (req.method === "POST" && url.pathname === "/api/polymarket/chat/execute") {
       return writeJson(res, 200, { success: true, venue: "polymarket", execution: "read_only", responseText: "Polymarket read ready.", cards: [] });
     }
+    if (req.method === "POST" && url.pathname === "/api/polymarket/orders/handoff") {
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body) return writeJson(res, 400, { error: "market_secret_rejected" });
+      return writeJson(res, 200, { success: true, handoff: { version: "matterhorn.polymarket.signing-handoff.v1", venue: "polymarket", marketId: body.marketId, outcome: "Yes", side: body.side, previewSha256: "p".repeat(64), handoffSha256: "h".repeat(64), externalSignerOnly: true, canSubmit: false } });
+    }
+    if (req.method === "POST" && url.pathname === "/api/polymarket/orders/receipt") {
+      if ("signature" in body || "privateKey" in body) return writeJson(res, 400, { error: "market_secret_rejected" });
+      const matches = body.handoff?.handoffSha256 === body.receipt?.handoffSha256;
+      return writeJson(res, 200, { success: matches, ok: matches, matchesHandoff: matches, receipt: { version: "matterhorn.market.receipt.v1", venue: "polymarket", status: body.receipt?.status ?? "unknown" }, errors: matches ? [] : ["mismatch"] });
+    }
     return writeJson(res, 404, { error: "not_found", path: url.pathname });
   });
   const port = await listen(server);
@@ -138,6 +147,21 @@ async function main() {
     await expectCli("pm chat alias", mock.url, ["pm", "chat", "--message", "find markets about AI"], (payload) => {
       if (payload.venue !== "polymarket") throw new Error("chat venue mismatch");
     });
+
+    const handoffPayload = await expectCli("polymarket handoff", mock.url, ["polymarket", "handoff", "--market-id", marketId, "--side", "yes", "--amount-usdc", "10"], (payload) => {
+      if (payload.handoff?.externalSignerOnly !== true) throw new Error("handoff must be external-signer-only");
+      if (payload.handoff?.canSubmit !== false) throw new Error("handoff must be canSubmit=false");
+    });
+
+    await expectCli(
+      "polymarket receipt",
+      mock.url,
+      ["polymarket", "receipt", "--handoff-json", JSON.stringify(handoffPayload.handoff), "--handoff-sha", "h".repeat(64), "--order-id", "0xorder", "--status", "filled"],
+      (payload) => {
+        if (payload.ok !== true) throw new Error("receipt should verify against the handoff");
+        if (payload.receipt?.version !== "matterhorn.market.receipt.v1") throw new Error("receipt shape mismatch");
+      },
+    );
 
     const secretResult = await runCli(mock.url, ["polymarket", "preview-order", "--market-id", marketId, "--amount-usdc", "10", "--api-secret", "do-not-accept"]);
     if (secretResult.code === 0) throw new Error("credential-shaped polymarket CLI flag was accepted");

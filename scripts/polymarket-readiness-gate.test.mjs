@@ -102,6 +102,8 @@ mustContain("apps/server/src/server.ts", [
   "/api/polymarket/orderbook/:tokenId",
   "/api/polymarket/compliance",
   "/api/polymarket/orders/preview",
+  "/api/polymarket/orders/handoff",
+  "/api/polymarket/orders/receipt",
   "/api/polymarket/chat/execute",
   "findForbiddenPolymarketCredentialInput",
   "market_secret_rejected",
@@ -120,6 +122,8 @@ const mcp = mustContain("packages/matterhorn-work-mcp/index.mjs", [
   "matterhorn_polymarket_get_orderbook",
   "matterhorn_polymarket_check_compliance",
   "matterhorn_polymarket_preview_order",
+  "matterhorn_polymarket_prepare_handoff",
+  "matterhorn_polymarket_verify_receipt",
 ]);
 const polymarketMcpSection = (() => {
   const start = mcp.indexOf("matterhorn_polymarket_chat");
@@ -136,12 +140,16 @@ mustContain("apps/orchestrator/src/cli.ts", [
   "matterhorn-work polymarket markets",
   "matterhorn-work polymarket events",
   "matterhorn-work polymarket preview-order",
+  "matterhorn-work polymarket handoff",
+  "matterhorn-work polymarket receipt",
   "assertNoPolymarketSecrets",
 ]);
 mustContain("scripts/polymarket-cli-fallback.test.mjs", [
   "polymarket markets",
   "polymarket events",
   "polymarket preview-order",
+  "polymarket handoff",
+  "polymarket receipt",
   "polymarket secret flag rejection",
 ]);
 

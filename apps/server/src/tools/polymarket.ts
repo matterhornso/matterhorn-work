@@ -1062,7 +1062,10 @@ function normalizeReceiptStatus(value: string | null | undefined): PolymarketRec
  * Validate a returned PUBLIC receipt against the handoff that produced it.
  * Rejects any signing material in the receipt and never accepts a signature.
  */
-export function verifyPolymarketReceipt(handoff: PolymarketSigningHandoff, input: PolymarketReceiptInput): PolymarketReceiptVerification {
+/** The handoff fields a receipt is matched against. A full handoff satisfies this. */
+export type PolymarketHandoffReference = Pick<PolymarketSigningHandoff, "previewSha256" | "handoffSha256" | "marketId" | "outcome" | "side">;
+
+export function verifyPolymarketReceipt(handoff: PolymarketHandoffReference, input: PolymarketReceiptInput): PolymarketReceiptVerification {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -1101,6 +1104,36 @@ export function verifyPolymarketReceipt(handoff: PolymarketSigningHandoff, input
   };
 
   return { ok: errors.length === 0, receipt, matchesHandoff: errors.length === 0, errors, warnings };
+}
+
+/** Narrow an untrusted request body into a handoff reference. Returns null if malformed. */
+export function coercePolymarketHandoffReference(value: unknown): PolymarketHandoffReference | null {
+  if (!isRecord(value)) return null;
+  const previewSha256 = stringOrNull(value.previewSha256);
+  const handoffSha256 = stringOrNull(value.handoffSha256);
+  const marketId = stringOrNull(value.marketId);
+  const outcome = stringOrNull(value.outcome);
+  const sideRaw = stringOrNull(value.side);
+  const side: PolymarketSide | null = sideRaw === "yes" || sideRaw === "no" ? sideRaw : null;
+  if (!previewSha256 || !handoffSha256 || !marketId || !outcome || side === null) return null;
+  return { previewSha256, handoffSha256, marketId, outcome, side };
+}
+
+/** Narrow an untrusted request body into a receipt input (public fields only). */
+export function coercePolymarketReceiptInput(value: unknown): PolymarketReceiptInput {
+  if (!isRecord(value)) return {};
+  const sideRaw = stringOrNull(value.side);
+  return {
+    previewSha256: stringOrNull(value.previewSha256),
+    handoffSha256: stringOrNull(value.handoffSha256),
+    orderId: stringOrNull(value.orderId),
+    txHash: stringOrNull(value.txHash),
+    status: stringOrNull(value.status),
+    marketId: stringOrNull(value.marketId),
+    outcome: stringOrNull(value.outcome),
+    side: sideRaw === "yes" || sideRaw === "no" ? sideRaw : null,
+    submittedAt: stringOrNull(value.submittedAt),
+  };
 }
 
 // ---------------------------------------------------------------------------

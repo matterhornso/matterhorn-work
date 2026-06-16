@@ -4,6 +4,8 @@ import {
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
   buildPolymarketSigningHandoff,
+  coercePolymarketHandoffReference,
+  coercePolymarketReceiptInput,
   estimatePolymarketFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
@@ -478,5 +480,24 @@ describe("Polymarket external-signer handoff + receipt", () => {
     expect(verification.ok).toBe(false);
     expect(verification.receipt).toBeNull();
     expect(verification.errors.join(" ")).toMatch(/signatures and signed payloads are never accepted/i);
+  });
+});
+
+describe("Polymarket request coercion", () => {
+  test("coercePolymarketHandoffReference accepts a valid handoff and rejects malformed", () => {
+    const valid = coercePolymarketHandoffReference({ previewSha256: "a".repeat(64), handoffSha256: "b".repeat(64), marketId: "0xm", outcome: "Yes", side: "yes" });
+    expect(valid?.marketId).toBe("0xm");
+    expect(coercePolymarketHandoffReference({ marketId: "0xm" })).toBeNull();
+    expect(coercePolymarketHandoffReference({ previewSha256: "a", handoffSha256: "b", marketId: "m", outcome: "Yes", side: "maybe" })).toBeNull();
+    expect(coercePolymarketHandoffReference("nope")).toBeNull();
+  });
+
+  test("coercePolymarketReceiptInput keeps only public fields", () => {
+    const receipt = coercePolymarketReceiptInput({ orderId: "0xo", status: "filled", side: "yes", privateKey: "x", signature: "0xsig" });
+    expect(receipt.orderId).toBe("0xo");
+    expect(receipt.status).toBe("filled");
+    expect(receipt.side).toBe("yes");
+    expect("privateKey" in receipt).toBe(false);
+    expect("signature" in receipt).toBe(false);
   });
 });

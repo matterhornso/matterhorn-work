@@ -3766,6 +3766,8 @@ function printHelp(): void {
     "  matterhorn-work polymarket orderbook --token-id <id> [options]",
     "  matterhorn-work polymarket compliance [options]",
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
+    "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
+    "  matterhorn-work polymarket receipt --handoff-file <path> --order-id <id> --status <status> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -7402,6 +7404,63 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "handoff" || subcommand === "prepare-handoff") {
+      const marketId = readPolymarketMarketId(args, 2);
+      const amountUsdc = readNumber(args.flags, "amount-usdc", undefined) ?? readNumber(args.flags, "amountUsdc", undefined);
+      if (typeof amountUsdc !== "number" || !Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+        throw new Error("amount-usdc is required and must be greater than 0 for polymarket handoff");
+      }
+      const side = (readFlag(args.flags, "side") ?? "yes").trim().toLowerCase();
+      if (side !== "yes" && side !== "no") throw new Error("side must be yes or no for polymarket handoff");
+      const outcome = readFlag(args.flags, "outcome");
+      const slippageTolerance = readNumber(args.flags, "slippage-tolerance", undefined);
+      const result = await fetchJson(`${baseUrl}/api/polymarket/orders/handoff`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          marketId,
+          side,
+          amountUsdc,
+          ...(outcome ? { outcome } : {}),
+          ...(typeof slippageTolerance === "number" ? { slippageTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "receipt" || subcommand === "verify-receipt") {
+      const handoffJson = readFlag(args.flags, "handoff-json");
+      const handoffFile = readFlag(args.flags, "handoff-file");
+      if (!handoffJson && !handoffFile) {
+        throw new Error("handoff-json or handoff-file is required for polymarket receipt verification");
+      }
+      const handoffRaw = handoffJson ?? readFileSync(resolve(String(handoffFile)), "utf8");
+      let handoff;
+      try {
+        const parsed = JSON.parse(handoffRaw);
+        handoff = parsed?.handoff && typeof parsed.handoff === "object" ? parsed.handoff : parsed;
+      } catch (error) {
+        throw new Error(`Could not parse handoff JSON: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const receipt = {
+        ...(readFlag(args.flags, "preview-sha") ? { previewSha256: readFlag(args.flags, "preview-sha") } : {}),
+        ...(readFlag(args.flags, "handoff-sha") ? { handoffSha256: readFlag(args.flags, "handoff-sha") } : {}),
+        ...(readFlag(args.flags, "order-id") ? { orderId: readFlag(args.flags, "order-id") } : {}),
+        ...(readFlag(args.flags, "tx-hash") ? { txHash: readFlag(args.flags, "tx-hash") } : {}),
+        ...(readFlag(args.flags, "status") ? { status: readFlag(args.flags, "status") } : {}),
+        ...(readFlag(args.flags, "outcome") ? { outcome: readFlag(args.flags, "outcome") } : {}),
+        ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+      };
+      const result = await fetchJson(`${baseUrl}/api/polymarket/orders/receipt`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ handoff, receipt }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
       const message =
         readFlag(args.flags, "message") ??
@@ -7426,7 +7485,7 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|preview-order");
+    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|preview-order|handoff|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
