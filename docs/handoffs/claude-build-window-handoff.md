@@ -1,6 +1,6 @@
 # Claude Code Build-Window Handoff (for Codex)
 
-This summarizes the work done during the Claude Code build window while Codex was paused, and what Codex should pick up on return. Everything below is **read-only plus preview-only**: no real trading, signing, custody, key handling, API-secret storage, or exchange/order submission was added.
+This summarizes the work done during the Claude Code build window while Codex was paused, and what Codex should pick up on return. Read/preview is complete for Hyperliquid and Polymarket, and both venues now have a **non-custodial external-signer execution loop** (handoff + public receipt). **Matterhorn itself never signs, submits, broadcasts, holds keys, stores API secrets, or accepts signing material** — the user signs and submits with their own wallet; Matterhorn only builds the unsigned handoff and verifies the returned public receipt.
 
 ## Merged PRs
 
@@ -18,9 +18,18 @@ This summarizes the work done during the Claude Code build window while Codex wa
 | #237 | Polymarket MCP tools | `matterhorn_polymarket_{chat,search_markets,search_events,get_market,get_orderbook,check_compliance,preview_order}`. |
 | #238 | Polymarket CLI commands | `matterhorn-work polymarket` (alias `pm`): chat/markets/events/market/orderbook/compliance/preview-order + `assertNoPolymarketSecrets` + CLI fallback test. |
 
+| #240 | Polymarket external-signer handoff + receipt | `buildPolymarketSigningHandoff` + `verifyPolymarketReceipt` (non-custodial; Matterhorn never signs/submits). |
+| #241 | Polymarket execution routes/MCP/CLI | `/api/polymarket/orders/{handoff,receipt}` + `matterhorn_polymarket_{prepare_handoff,verify_receipt}` + `polymarket {handoff,receipt}`. |
+| #242 | Hyperliquid external-signer handoff + receipt | `buildHyperliquidSigningHandoff` + `verifyHyperliquidReceipt`. |
+| #243 | Hyperliquid execution routes/MCP/CLI | `/api/hyperliquid/orders/{handoff,receipt}` + `matterhorn_hyperliquid_{prepare_handoff,verify_receipt}` + `hyperliquid {handoff,receipt}`. |
+
 PR #221 (earlier Polymarket stream, different shape) was **closed/superseded** by #228 for consistency with the Hyperliquid pattern.
 
 **Ownership update:** the Polymarket server routes, MCP tools, and CLI — originally handed to Codex — were built by Claude Code in #236–238 at the user's request. Codex no longer needs to build these; only the Phase 5 unified integration remains.
+
+## External-Signer Execution (both venues, non-custodial)
+
+Users can now take a preview live without Matterhorn holding keys. Flow: **preview** (`canSubmit:false`) → **`build{Polymarket,Hyperliquid}SigningHandoff`** (`external_signer_required`, `externalSignerOnly:true`, hash-bound to the preview) → **user signs + submits with their own wallet** outside Matterhorn → **`verify{Polymarket,Hyperliquid}Receipt`** validates the returned **public** receipt (`MarketReceipt`-shaped) and **rejects any signing material**. Exposed at `POST /api/{venue}/orders/{handoff,receipt}`, MCP `matterhorn_{venue}_{prepare_handoff,verify_receipt}`, and CLI `{venue} {handoff,receipt}`. Polymarket handoff is compliance-gated (a geoblocked region gets no handoff). Matterhorn's `liveSubmissionEnabled` stays `false`; it never signs, submits, broadcasts, or stores keys/secrets.
 
 ## Current Hyperliquid State
 
