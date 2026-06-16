@@ -91,9 +91,26 @@ Unsupported responses should still be useful. They should offer:
 - monitoring/watch creation;
 - unsigned staking preview guidance after the user chooses required public context.
 
+## Real Adapter Candidate Gate
+
+Before configuring a real endpoint, vet the provider candidate without calling the adapter service:
+
+```bash
+node scripts/bittensor-real-adapter-candidate-gate.mjs \
+  --candidate-json /tmp/bittensor-real-adapter-candidate.json \
+  --allowed-hosts adapter.example.com \
+  --preferred-kind data_search \
+  --preferred-intent data_search \
+  --output /tmp/bittensor-real-adapter-candidate.md \
+  --json-output /tmp/bittensor-real-adapter-candidate.json \
+  --strict
+```
+
+The candidate gate requires the first real read-only canary lane to be `data_search` or `inference`, HTTPS-only, host-allowlisted, non-custodial, wallet-data-free, rate-limited, timeout-bounded, rollback-aware, and backed by a read-only canary task. It emits redacted suggested commands for the existing canary gate and read-only canary harness, but it does not call any adapter service.
+
 ## Read-Only Adapter Canary Harness
 
-After the adapter canary gate says `READY_FOR_CANARY`, run the read-only preview-confirm-invoke harness against a configured adapter. This is the first step that can call an adapter service, so it is opt-in and guarded:
+After the real adapter candidate gate and adapter canary gate say the candidate is ready, run the read-only preview-confirm-invoke harness against a configured adapter. This is the first step that can call an adapter service, so it is opt-in and guarded:
 
 ```bash
 node scripts/bittensor-adapter-readonly-canary.mjs \
