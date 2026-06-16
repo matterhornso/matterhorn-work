@@ -355,7 +355,7 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt") => {
+  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-candidate" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt") => {
     const command = kind === "live-qa"
       ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
       : kind === "gate"
@@ -369,6 +369,17 @@ export default function BittensorPanel() {
               "--json-output /tmp/bittensor-handoff-check.json",
               "--strict",
             ].join(" ")
+          : kind === "adapter-candidate"
+            ? [
+                "node scripts/bittensor-real-adapter-candidate-gate.mjs",
+                "--candidate-json /tmp/bittensor-real-adapter-candidate-input.json",
+                "--allowed-hosts <adapter-host>",
+                "--preferred-kind data_search",
+                "--preferred-intent data_search",
+                "--output /tmp/bittensor-real-adapter-candidate.md",
+                "--json-output /tmp/bittensor-real-adapter-candidate.json",
+                "--strict",
+              ].join(" ")
           : kind === "adapter-canary"
             ? [
                 "node scripts/bittensor-adapter-canary-gate.mjs",
@@ -422,6 +433,7 @@ export default function BittensorPanel() {
                   "--ci /tmp/github-ci.json",
                   "--readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md",
                   "--wallet-timeline /tmp/wallet-timeline-status.json",
+                  "--adapter-candidate /tmp/bittensor-real-adapter-candidate.json",
                   "--adapter-canary /tmp/bittensor-adapter-canary.json",
                   "--readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json",
                   "--receipt-check /tmp/bittensor-receipt-check.json",
@@ -581,6 +593,9 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("gate")}>
                     {copiedReadinessCommand === "gate" ? "Copied" : "Copy Gate"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("adapter-candidate")}>
+                    {copiedReadinessCommand === "adapter-candidate" ? "Copied" : "Copy Candidate"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("adapter-canary")}>
                     {copiedReadinessCommand === "adapter-canary" ? "Copied" : "Copy Canary"}
