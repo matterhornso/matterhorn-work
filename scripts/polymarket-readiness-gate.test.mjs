@@ -100,6 +100,26 @@ mustNotContain("apps/server/src/server.ts", [
   "/api/polymarket/exchange",
 ]);
 
+// MCP tools (read/preview-only; no secret fields in any schema).
+const mcp = mustContain("packages/matterhorn-work-mcp/index.mjs", [
+  "matterhorn_polymarket_chat",
+  "matterhorn_polymarket_search_markets",
+  "matterhorn_polymarket_search_events",
+  "matterhorn_polymarket_get_market",
+  "matterhorn_polymarket_get_orderbook",
+  "matterhorn_polymarket_check_compliance",
+  "matterhorn_polymarket_preview_order",
+]);
+const polymarketMcpSection = (() => {
+  const start = mcp.indexOf("matterhorn_polymarket_chat");
+  const end = mcp.indexOf("matterhorn_bittensor_chat", start);
+  return start < 0 ? "" : mcp.slice(start, end < 0 ? mcp.length : end);
+})();
+for (const forbidden of ["apiSecret", "api_secret", "privateKey", "private_key", "seed", "mnemonic", "signature", "signedPayload", "/orders/submit"]) {
+  if (polymarketMcpSection.includes(forbidden)) fail(`Polymarket MCP schema excludes ${forbidden}`, "present");
+  else pass(`Polymarket MCP schema excludes ${forbidden}`);
+}
+
 mustContain("docs/polymarket-read-preview.md", [
   "read-only plus preview-only",
   "Compliance Gate",
