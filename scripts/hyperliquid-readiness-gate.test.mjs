@@ -146,6 +146,16 @@ mustContain("docs/hyperliquid-read-preview-qa.md", [
   "No exchange submission.",
 ]);
 
+mustContain("docs/hermes-hyperliquid-usability-security-qa.md", [
+  "read-only plus preview-only",
+  "No-Secret Tests",
+  "Preview-Only Tests",
+  "Failure Cases",
+  "What a Tester Should Screenshot",
+  "canSubmit: false",
+  "no `/api/hyperliquid/orders/submit` route",
+]);
+
 if (failures > 0) {
   console.error(`Hyperliquid readiness gate failed with ${failures} issue(s).`);
   process.exit(1);

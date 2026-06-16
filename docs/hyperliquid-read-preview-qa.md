@@ -63,3 +63,7 @@ Use `--require-account` only when a test account address is supplied or when run
 - No signatures or signed payload fields.
 - No exchange submission.
 - No `canSubmit: true`.
+
+## Operator / Security Pass
+
+For a full operator and security usability matrix (live-read commands, CLI, MCP, no-secret tests, preview-only tests, failure cases, and what a tester should screenshot/report), see [Hermes Hyperliquid Usability & Security QA](./hermes-hyperliquid-usability-security-qa.md).
