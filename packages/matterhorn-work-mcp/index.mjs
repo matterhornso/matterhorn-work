@@ -402,6 +402,39 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_get_positions",
+    description: "Read normalized Hyperliquid position summaries for a public master or sub-account address. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "Public 42-character 0x account address." },
+      },
+      required: ["address"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_get_open_orders",
+    description: "Read normalized Hyperliquid open-order summaries for a public master or sub-account address. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string", description: "Public 42-character 0x account address." },
+      },
+      required: ["address"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_get_funding",
+    description: "Read current Hyperliquid funding/open-interest context for an asset. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset: { type: "string", description: "Hyperliquid asset such as BTC, ETH, SOL, or HYPE." },
+      },
+      required: ["asset"],
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_get_orderbook",
     description: "Read a Hyperliquid L2 orderbook snapshot for an asset. Read-only.",
     inputSchema: {
@@ -2067,6 +2100,12 @@ async function handleTool(name, args = {}) {
       return callServer("/api/hyperliquid/markets", { query: { limit: args.limit } });
     case "matterhorn_hyperliquid_get_account":
       return callServer(`/api/hyperliquid/account/${encodeURIComponent(args.address)}`);
+    case "matterhorn_hyperliquid_get_positions":
+      return callServer(`/api/hyperliquid/account/${encodeURIComponent(args.address)}/positions`);
+    case "matterhorn_hyperliquid_get_open_orders":
+      return callServer(`/api/hyperliquid/account/${encodeURIComponent(args.address)}/open-orders`);
+    case "matterhorn_hyperliquid_get_funding":
+      return callServer(`/api/hyperliquid/funding/${encodeURIComponent(args.asset)}`);
     case "matterhorn_hyperliquid_get_orderbook":
       return callServer(`/api/hyperliquid/orderbook/${encodeURIComponent(args.asset)}`);
     case "matterhorn_hyperliquid_preview_order":

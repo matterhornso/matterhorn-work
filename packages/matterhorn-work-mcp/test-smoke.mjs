@@ -187,7 +187,30 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/0x0000000000000000000000000000000000000001") {
     return json(res, 200, {
       success: true,
-      account: { address: "0x0000000000000000000000000000000000000001", positionCount: 1, openOrderCount: 0, warnings: [] },
+      account: { address: "0x0000000000000000000000000000000000000001", positionCount: 1, openOrderCount: 1, warnings: [] },
+      cards: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/0x0000000000000000000000000000000000000001/positions") {
+    return json(res, 200, {
+      success: true,
+      positions: [{ asset: "BTC", side: "long", size: 0.1, positionValue: 6500 }],
+      notionalExposure: 6500,
+      unrealizedPnl: 100,
+      warnings: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/0x0000000000000000000000000000000000000001/open-orders") {
+    return json(res, 200, {
+      success: true,
+      orders: [{ asset: "BTC", side: "buy", size: 0.05, limitPx: 63000 }],
+      warnings: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/funding/BTC") {
+    return json(res, 200, {
+      success: true,
+      funding: { asset: "BTC", fundingRate: 0.0001, openInterest: 1234, markPx: 65000, warnings: [] },
       cards: [],
     });
   }
@@ -464,6 +487,9 @@ try {
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
     "matterhorn_hyperliquid_get_account",
+    "matterhorn_hyperliquid_get_positions",
+    "matterhorn_hyperliquid_get_open_orders",
+    "matterhorn_hyperliquid_get_funding",
     "matterhorn_hyperliquid_get_orderbook",
     "matterhorn_hyperliquid_preview_order",
     "matterhorn_bittensor_chat",
@@ -641,6 +667,26 @@ try {
     arguments: { address: "0x0000000000000000000000000000000000000001" },
   }));
   assert.equal(hyperliquidAccount.account.positionCount, 1);
+
+  const hyperliquidPositions = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_get_positions",
+    arguments: { address: "0x0000000000000000000000000000000000000001" },
+  }));
+  assert.equal(hyperliquidPositions.positions[0].asset, "BTC");
+  assert.equal(hyperliquidPositions.notionalExposure, 6500);
+
+  const hyperliquidOpenOrders = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_get_open_orders",
+    arguments: { address: "0x0000000000000000000000000000000000000001" },
+  }));
+  assert.equal(hyperliquidOpenOrders.orders[0].side, "buy");
+
+  const hyperliquidFunding = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_get_funding",
+    arguments: { asset: "BTC" },
+  }));
+  assert.equal(hyperliquidFunding.funding.asset, "BTC");
+  assert.equal(hyperliquidFunding.funding.fundingRate, 0.0001);
 
   const hyperliquidBook = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_get_orderbook",

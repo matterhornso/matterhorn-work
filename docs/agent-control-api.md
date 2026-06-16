@@ -73,6 +73,9 @@ Common status codes:
 | `matterhorn_hyperliquid_chat` | `POST /api/hyperliquid/chat/execute` |
 | `matterhorn_hyperliquid_list_markets` | `GET /api/hyperliquid/markets` |
 | `matterhorn_hyperliquid_get_account` | `GET /api/hyperliquid/account/:address` |
+| `matterhorn_hyperliquid_get_positions` | `GET /api/hyperliquid/account/:address/positions` |
+| `matterhorn_hyperliquid_get_open_orders` | `GET /api/hyperliquid/account/:address/open-orders` |
+| `matterhorn_hyperliquid_get_funding` | `GET /api/hyperliquid/funding/:asset` |
 | `matterhorn_hyperliquid_get_orderbook` | `GET /api/hyperliquid/orderbook/:asset` |
 | `matterhorn_hyperliquid_preview_order` | `POST /api/hyperliquid/orders/preview` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
