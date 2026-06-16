@@ -200,10 +200,12 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
   --ci /tmp/github-ci.json \
   --readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md \
   --wallet-timeline /tmp/wallet-timeline-status.json \
+  --adapter-candidate /tmp/bittensor-real-adapter-candidate.json \
   --adapter-canary /tmp/bittensor-adapter-canary-gate.json \
   --readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json \
   --receipt-check /tmp/bittensor-receipt-check.json \
   --watch-autopilot-scheduler /tmp/bittensor-watch-autopilot-scheduler-summary.json \
+  --require-adapter-candidate \
   --require-adapter-canary \
   --require-readonly-adapter-canary \
   --require-receipt-check \
@@ -212,7 +214,7 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
   --strict
 ```
 
-Keep the adapter, receipt, and scheduled-watch `--require-*` flags off for normal read-only Bittensor demos that do not include a real subnet adapter canary, externally signed receipt, or overnight monitoring evidence.
+Keep the adapter-candidate, adapter, receipt, and scheduled-watch `--require-*` flags off for normal read-only Bittensor demos that do not include a real subnet adapter candidate/canary, externally signed receipt, or overnight monitoring evidence.
 
 ## Security Audit Checklist
 
