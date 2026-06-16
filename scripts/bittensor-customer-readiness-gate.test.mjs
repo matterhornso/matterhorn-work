@@ -26,6 +26,7 @@ const dir = await mkdtemp(join(tmpdir(), "matterhorn-customer-gate-"));
 const bittensorPath = join(dir, "bittensor.json");
 const agentPath = join(dir, "agent.json");
 const ciPath = join(dir, "ci.json");
+const schedulerPath = join(dir, "watch-scheduler.json");
 const outputPath = join(dir, "readiness.md");
 
 const stages = [
@@ -55,11 +56,28 @@ await writeFile(ciPath, JSON.stringify({
     { name: "Alpha Channel macOS arm64", conclusion: "success" },
   ],
 }), "utf8");
+await writeFile(schedulerPath, JSON.stringify({
+  ok: true,
+  source: "matterhorn_bittensor_watch_autopilot_scheduler",
+  iterations: 6,
+  totalEvaluations: 12,
+  totalAlerts: 1,
+  failedChecks: 0,
+  safety: {
+    custody: "none",
+    acceptsCredentialMaterial: false,
+    signsOrBroadcasts: false,
+    submitsTransactions: false,
+    invokesSubnetServices: false,
+  },
+}), "utf8");
 
 const ok = await run([
   "--bittensor-live-qa", bittensorPath,
   "--agent-control-live-qa", agentPath,
   "--ci", ciPath,
+  "--watch-autopilot-scheduler", schedulerPath,
+  "--require-watch-autopilot-scheduler",
   "--output", outputPath,
   "--skip-doc-check",
   "--strict",
@@ -69,6 +87,8 @@ const markdown = await readFile(outputPath, "utf8");
 assert.ok(markdown.includes("READY_FOR_TEST_CUSTOMERS"));
 assert.ok(markdown.includes("Matterhorn Work Tests passed."));
 assert.ok(markdown.includes("Covered validator comparison."));
+assert.ok(markdown.includes("Scheduled watch autopilot reported ready."));
+assert.ok(markdown.includes("Completed 6 scheduled watch checks."));
 assert.equal(/seed phrase|private key|wallet export/i.test(markdown), false);
 
 const missingWalletPath = join(dir, "bittensor-missing-wallet.json");
@@ -88,6 +108,37 @@ const strictWallet = await run([
 assert.equal(strictWallet.code, 1);
 assert.ok(strictWallet.stdout.includes("NOT_READY"));
 assert.ok(strictWallet.stdout.includes("Bittensor stages were skipped"));
+
+const missingScheduler = await run([
+  "--bittensor-live-qa", bittensorPath,
+  "--agent-control-live-qa", agentPath,
+  "--ci", ciPath,
+  "--skip-doc-check",
+  "--require-watch-autopilot-scheduler",
+  "--strict",
+]);
+assert.equal(missingScheduler.code, 1);
+assert.ok(missingScheduler.stdout.includes("Missing scheduled watch autopilot summary evidence."));
+
+const unsafeSchedulerPath = join(dir, "watch-scheduler-unsafe.json");
+await writeFile(unsafeSchedulerPath, JSON.stringify({
+  ok: true,
+  iterations: 1,
+  totalEvaluations: 1,
+  totalAlerts: 0,
+  failedChecks: 0,
+  safety: { signsOrBroadcasts: true },
+}), "utf8");
+const unsafeScheduler = await run([
+  "--bittensor-live-qa", bittensorPath,
+  "--agent-control-live-qa", agentPath,
+  "--ci", ciPath,
+  "--watch-autopilot-scheduler", unsafeSchedulerPath,
+  "--skip-doc-check",
+  "--strict",
+]);
+assert.equal(unsafeScheduler.code, 1);
+assert.ok(unsafeScheduler.stdout.includes("Scheduled watch evidence is not read-only safe."));
 
 const forbiddenPath = join(dir, "forbidden.json");
 await writeFile(forbiddenPath, JSON.stringify({

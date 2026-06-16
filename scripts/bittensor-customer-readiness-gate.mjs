@@ -33,10 +33,12 @@ const config = {
   bittensorLiveQa: arg("--bittensor-live-qa"),
   agentControlLiveQa: arg("--agent-control-live-qa"),
   ci: arg("--ci"),
+  watchAutopilotScheduler: arg("--watch-autopilot-scheduler"),
   output: arg("--output") || arg("-o"),
   strict: flag("--strict"),
   requireCi: flag("--require-ci"),
   requireWallet: flag("--require-wallet"),
+  requireWatchAutopilotScheduler: flag("--require-watch-autopilot-scheduler"),
   skipDocCheck: flag("--skip-doc-check"),
   title: arg("--title") || "Matterhorn Work Bittensor Customer Readiness Gate",
 };
@@ -50,10 +52,12 @@ function usage() {
     "  --bittensor-live-qa <path>    JSON output from scripts/bittensor-live-qa.mjs.",
     "  --agent-control-live-qa <path> JSON output from scripts/agent-control-live-qa.mjs.",
     "  --ci <path>                   JSON with GitHub check/workflow conclusions.",
+    "  --watch-autopilot-scheduler <path> JSON summary from scripts/bittensor-watch-autopilot-scheduler.mjs.",
     "  --output, -o <path>           Write Markdown report to a file. Defaults to stdout.",
     "  --strict                      Exit nonzero when the readiness gate is not ready.",
     "  --require-ci                  Treat missing CI evidence as a failure.",
     "  --require-wallet              Treat skipped wallet/stake preview coverage as a failure.",
+    "  --require-watch-autopilot-scheduler Treat missing or empty scheduled watch evidence as a failure.",
     "  --skip-doc-check              Skip local required-doc existence checks, useful for isolated tests.",
     "  --title <text>                Report title.",
   ].join("\n");
@@ -170,6 +174,60 @@ function evaluateAgentControl(report, findings) {
   }
 }
 
+
+function evaluateWatchAutopilotScheduler(report, findings) {
+  if (!report) {
+    addFinding(
+      findings,
+      config.requireWatchAutopilotScheduler ? "fail" : "warn",
+      "Scheduled watch autopilot",
+      "Missing scheduled watch autopilot summary evidence.",
+      config.requireWatchAutopilotScheduler ? "P1" : "P3",
+    );
+    return;
+  }
+
+  if (report.ok !== true) {
+    addFinding(findings, "fail", "Scheduled watch autopilot", "Scheduled watch autopilot did not report ready.", "P1");
+  } else {
+    addFinding(findings, "pass", "Scheduled watch autopilot", "Scheduled watch autopilot reported ready.");
+  }
+
+  const iterations = Number(report.iterations || 0);
+  const totalEvaluations = Number(report.totalEvaluations || 0);
+  const totalAlerts = Number(report.totalAlerts || 0);
+  const failedChecks = Number(report.failedChecks || 0);
+  const safety = report.safety || {};
+
+  if (iterations > 0) {
+    addFinding(findings, "pass", "Scheduled watch autopilot", `Completed ${iterations} scheduled watch checks.`);
+  } else {
+    addFinding(findings, "fail", "Scheduled watch autopilot", "Scheduled watch evidence has no completed iterations.", "P2");
+  }
+
+  if (failedChecks > 0) {
+    addFinding(findings, "fail", "Scheduled watch autopilot", `${failedChecks} scheduled watch checks failed.`, "P1");
+  }
+
+  if (totalEvaluations > 0) {
+    addFinding(findings, "pass", "Scheduled watch autopilot", `Reviewed ${totalEvaluations} watch evaluations with ${totalAlerts} alerts.`);
+  } else {
+    addFinding(
+      findings,
+      config.requireWatchAutopilotScheduler ? "fail" : "warn",
+      "Scheduled watch autopilot",
+      "Scheduled watch evidence contains no watch evaluations.",
+      config.requireWatchAutopilotScheduler ? "P2" : "P3",
+    );
+  }
+
+  if (safety.signsOrBroadcasts || safety.submitsTransactions || safety.invokesSubnetServices || safety.acceptsCredentialMaterial) {
+    addFinding(findings, "fail", "Scheduled watch autopilot", "Scheduled watch evidence is not read-only safe.", "P0");
+  } else {
+    addFinding(findings, "pass", "Scheduled watch autopilot", "Scheduled watch evidence is read-only and non-custodial.");
+  }
+}
+
 function checkName(item) {
   return String(item.name || item.workflowName || item.context || item.check || item.title || "");
 }
@@ -241,6 +299,7 @@ function renderReport({ findings, ready, inputs }) {
     `- Bittensor live QA: ${inputs.bittensorLiveQa || "missing"}`,
     `- Agent control live QA: ${inputs.agentControlLiveQa || "missing"}`,
     `- CI: ${inputs.ci || "missing"}`,
+    `- Scheduled watch autopilot: ${inputs.watchAutopilotScheduler || "missing"}`,
     "",
     "## Gate Results",
     "",
@@ -272,18 +331,21 @@ const inputs = {
   bittensorLiveQa: config.bittensorLiveQa ? basename(config.bittensorLiveQa) : "",
   agentControlLiveQa: config.agentControlLiveQa ? basename(config.agentControlLiveQa) : "",
   ci: config.ci ? basename(config.ci) : "",
+  watchAutopilotScheduler: config.watchAutopilotScheduler ? basename(config.watchAutopilotScheduler) : "",
 };
 const findings = [];
 
 const bittensorReport = await readJson(config.bittensorLiveQa, "Bittensor live QA");
 const agentControlReport = await readJson(config.agentControlLiveQa, "Agent control live QA");
 const ciReport = await readJson(config.ci, "CI");
+const watchAutopilotSchedulerReport = await readJson(config.watchAutopilotScheduler, "Scheduled watch autopilot");
 
 if (config.skipDocCheck) addFinding(findings, "warn", "Docs", "Skipped required-doc existence checks.", "P3");
 else evaluateDocs(findings);
 evaluateBittensor(bittensorReport, findings);
 evaluateAgentControl(agentControlReport, findings);
 evaluateCi(ciReport, findings);
+evaluateWatchAutopilotScheduler(watchAutopilotSchedulerReport, findings);
 
 const ready = count(findings, "fail") === 0;
 const markdown = renderReport({ findings, ready, inputs });
