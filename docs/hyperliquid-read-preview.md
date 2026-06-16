@@ -25,6 +25,17 @@ Each order preview now carries structured risk context alongside `canSubmit: fal
 
 If a close/reduce request arrives without an account address, the workflow asks exactly one clarification (for the public address) instead of guessing the position size or side. External signing/execution is not enabled; Matterhorn never holds keys or submits to Hyperliquid.
 
+## External-Signer Execution (non-custodial)
+
+Users can take a preview live **without Matterhorn holding a key, signing, submitting, or broadcasting** — mirroring the shared `external_signer_required` / `MarketReceipt` contract:
+
+1. **Preview** → an `unsigned_preview` (`canSubmit: false`).
+2. **`buildHyperliquidSigningHandoff(preview)`** → a `HyperliquidSigningHandoff`: the public order terms (asset, side, size, price, reduce-only), the signing scheme (Hyperliquid L1 action signing), a `previewSha256` binding, a `handoffSha256`, and an expiry. `externalSignerOnly: true`, `canSubmit: false`. Never fabricates a signature.
+3. **The user signs and submits with their own wallet** via Hyperliquid's official client — Matterhorn provides the economic terms only, never the signature, API wallet, or submission.
+4. **`verifyHyperliquidReceipt(handoff, receipt)`** validates a returned **public** receipt (order id / tx hash / status) against the handoff and emits a `MarketReceipt`-shaped result. It **rejects any signing material** (raw signatures / signed payloads are never accepted).
+
+Matterhorn stays non-custodial end to end: no API-wallet key, no signing, no broadcasting, and no acceptance of signing material on the way back in. Matterhorn still never submits — the **user** executes.
+
 ## Not Supported Yet
 
 - API wallet creation or storage.

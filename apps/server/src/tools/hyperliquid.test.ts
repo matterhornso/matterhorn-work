@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
   HyperliquidInfoProvider,
+  buildHyperliquidSigningHandoff,
+  coerceHyperliquidHandoffReference,
+  coerceHyperliquidReceiptInput,
   executeHyperliquidChatWorkflow,
   extractHyperliquidOrderInput,
   findForbiddenHyperliquidCredentialInput,
   isValidHyperliquidAddress,
   planHyperliquidChat,
   prepareHyperliquidOrderPreview,
+  verifyHyperliquidReceipt,
   type HyperliquidProvider,
 } from "./hyperliquid.js";
 
@@ -250,5 +254,63 @@ describe("Hyperliquid preview risk polish", () => {
   test("planner treats close-position as an order preview but plain positions as account", () => {
     expect(planHyperliquidChat({ message: "close half my ETH position" })).toBe("order_preview");
     expect(planHyperliquidChat({ message: "show my positions" })).toBe("account");
+  });
+});
+
+describe("Hyperliquid external-signer handoff + receipt", () => {
+  async function unsignedPreview() {
+    return prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+  }
+
+  test("builds a non-custodial handoff from an unsigned preview", async () => {
+    const handoff = buildHyperliquidSigningHandoff(await unsignedPreview());
+    expect(handoff.signerPolicy).toBe("external_signer_required");
+    expect(handoff.externalSignerOnly).toBe(true);
+    expect(handoff.canSubmit).toBe(false);
+    expect(handoff.asset).toBe("BTC");
+    expect(handoff.side).toBe("buy");
+    expect(handoff.handoffSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(handoff.signingScheme.standard).toBe("eip712");
+    expect(handoff.warnings.join(" ")).toMatch(/sign and submit this with your OWN wallet/i);
+    expect(JSON.stringify(handoff)).not.toMatch(/0x[a-f0-9]{130}/i);
+  });
+
+  test("verifies a matching public receipt", async () => {
+    const handoff = buildHyperliquidSigningHandoff(await unsignedPreview());
+    const verification = verifyHyperliquidReceipt(handoff, {
+      previewSha256: handoff.previewSha256,
+      handoffSha256: handoff.handoffSha256,
+      orderId: "123",
+      txHash: "0xabc",
+      status: "filled",
+      asset: "BTC",
+      side: "buy",
+    });
+    expect(verification.ok).toBe(true);
+    expect(verification.matchesHandoff).toBe(true);
+    expect(verification.receipt?.status).toBe("filled");
+    expect(verification.receipt?.version).toBe("matterhorn.market.receipt.v1");
+  });
+
+  test("rejects a receipt that does not match the handoff", async () => {
+    const handoff = buildHyperliquidSigningHandoff(await unsignedPreview());
+    const verification = verifyHyperliquidReceipt(handoff, { previewSha256: "deadbeef", side: "sell", orderId: "1" });
+    expect(verification.ok).toBe(false);
+    expect(verification.errors.length).toBeGreaterThan(0);
+  });
+
+  test("never accepts signing material in a receipt", async () => {
+    const handoff = buildHyperliquidSigningHandoff(await unsignedPreview());
+    const verification = verifyHyperliquidReceipt(handoff, { orderId: "1", signature: `0x${"a".repeat(130)}` } as never);
+    expect(verification.ok).toBe(false);
+    expect(verification.receipt).toBeNull();
+  });
+
+  test("coercion narrows handoff and receipt request bodies", () => {
+    expect(coerceHyperliquidHandoffReference({ previewSha256: "a", handoffSha256: "b", asset: "BTC", side: "buy" })?.asset).toBe("BTC");
+    expect(coerceHyperliquidHandoffReference({ asset: "BTC" })).toBeNull();
+    const receipt = coerceHyperliquidReceiptInput({ orderId: "1", status: "filled", side: "buy", privateKey: "x" });
+    expect(receipt.orderId).toBe("1");
+    expect("privateKey" in receipt).toBe(false);
   });
 });

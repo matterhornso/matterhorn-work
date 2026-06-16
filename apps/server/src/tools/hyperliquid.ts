@@ -814,6 +814,230 @@ function buildHyperliquidLeverageContext(
   };
 }
 
+// ---------------------------------------------------------------------------
+// External-signer handoff + receipt verification.
+//
+// Matterhorn never signs, submits, broadcasts, or holds keys. It produces an
+// unsigned handoff for the user to sign with their own wallet, and later
+// validates a PUBLIC receipt. Signing material is rejected on the way in.
+// ---------------------------------------------------------------------------
+
+const HYPERLIQUID_HANDOFF_TTL_MS = 10 * 60 * 1000;
+
+export interface HyperliquidSigningHandoff {
+  version: "matterhorn.hyperliquid.signing-handoff.v1";
+  venue: "hyperliquid";
+  signerPolicy: "external_signer_required";
+  action: "place_order";
+  marketId: string;
+  marketLabel: string;
+  asset: string;
+  side: HyperliquidSide;
+  size: number;
+  sizeAsset: string;
+  price: number | null;
+  reduceOnly: boolean;
+  order: {
+    asset: string;
+    side: HyperliquidSide;
+    size: number;
+    price: number | null;
+    reduceOnly: boolean;
+  };
+  signingScheme: {
+    standard: "eip712";
+    venue: "hyperliquid-exchange";
+    instructions: string;
+  };
+  previewSha256: string;
+  handoffSha256: string;
+  expiresAt: string;
+  warnings: string[];
+  canSubmit: false;
+  externalSignerOnly: true;
+}
+
+export interface HyperliquidReceiptInput {
+  previewSha256?: string | null;
+  handoffSha256?: string | null;
+  orderId?: string | null;
+  txHash?: string | null;
+  status?: string | null;
+  asset?: string | null;
+  side?: HyperliquidSide | null;
+  submittedAt?: string | null;
+}
+
+export interface HyperliquidReceipt {
+  version: "matterhorn.market.receipt.v1";
+  venue: "hyperliquid";
+  status: "received" | "pending" | "filled" | "cancelled" | "rejected" | "failed" | "unknown";
+  action: "place_order";
+  previewSha256: string | null;
+  handoffSha256: string | null;
+  orderId: string | null;
+  txHash: string | null;
+  asset: string | null;
+  side: HyperliquidSide | null;
+  submittedAt: string | null;
+  warnings: string[];
+}
+
+export interface HyperliquidReceiptVerification {
+  ok: boolean;
+  receipt: HyperliquidReceipt | null;
+  matchesHandoff: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export type HyperliquidHandoffReference = Pick<HyperliquidSigningHandoff, "previewSha256" | "handoffSha256" | "asset" | "side">;
+
+/**
+ * Build an external-signer handoff from an unsigned order preview. The user
+ * signs and submits with THEIR OWN wallet. Matterhorn never signs, submits, or
+ * holds keys. The packet contains only public order terms.
+ */
+export function buildHyperliquidSigningHandoff(preview: HyperliquidActionPreview): HyperliquidSigningHandoff {
+  if (preview.execution !== "unsigned_preview" || preview.canSubmit !== false) {
+    throw new Error("A signing handoff requires a non-submittable unsigned preview.");
+  }
+  if (!preview.asset || preview.size === null || preview.size <= 0) {
+    throw new Error("Preview is missing asset or a positive size; cannot build a handoff.");
+  }
+  const forbidden = findForbiddenHyperliquidCredentialInput(preview);
+  if (forbidden) throw new Error("Preview unexpectedly contained credential-shaped data at " + forbidden);
+
+  const order = {
+    asset: preview.asset,
+    side: preview.side,
+    size: preview.size,
+    price: preview.price,
+    reduceOnly: preview.reduceOnly,
+  };
+  const core = {
+    version: "matterhorn.hyperliquid.signing-handoff.v1",
+    venue: "hyperliquid",
+    asset: preview.asset,
+    side: preview.side,
+    size: preview.size,
+    price: preview.price,
+    reduceOnly: preview.reduceOnly,
+    previewSha256: preview.previewSha256,
+  };
+  return {
+    version: "matterhorn.hyperliquid.signing-handoff.v1",
+    venue: "hyperliquid",
+    signerPolicy: "external_signer_required",
+    action: "place_order",
+    marketId: preview.marketId,
+    marketLabel: preview.marketLabel,
+    asset: preview.asset,
+    side: preview.side,
+    size: preview.size,
+    sizeAsset: preview.sizeAsset,
+    price: preview.price,
+    reduceOnly: preview.reduceOnly,
+    order,
+    signingScheme: {
+      standard: "eip712",
+      venue: "hyperliquid-exchange",
+      instructions:
+        "Sign this order with your own wallet via Hyperliquid's official client (L1 action signing). " +
+        "Matterhorn provides the economic terms only and never produces the signature, the API wallet, or the submission.",
+    },
+    previewSha256: preview.previewSha256,
+    handoffSha256: sha256(core),
+    expiresAt: new Date(Date.now() + HYPERLIQUID_HANDOFF_TTL_MS).toISOString(),
+    warnings: [
+      "External signer required: sign and submit this with your OWN wallet. Matterhorn does not sign, submit, or hold keys.",
+      "Do not send the signature or any signed payload back to Matterhorn; only a public receipt can be imported.",
+    ],
+    canSubmit: false,
+    externalSignerOnly: true,
+  };
+}
+
+const HYPERLIQUID_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;
+
+function normalizeHyperliquidReceiptStatus(value: string | null | undefined): HyperliquidReceipt["status"] {
+  const status = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return (HYPERLIQUID_RECEIPT_STATUSES as readonly string[]).includes(status) ? (status as HyperliquidReceipt["status"]) : "unknown";
+}
+
+/**
+ * Validate a returned PUBLIC receipt against the handoff that produced it.
+ * Rejects any signing material and never accepts a signature.
+ */
+export function verifyHyperliquidReceipt(handoff: HyperliquidHandoffReference, input: HyperliquidReceiptInput): HyperliquidReceiptVerification {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const forbidden = findForbiddenHyperliquidCredentialInput(input);
+  if (forbidden) {
+    return {
+      ok: false,
+      receipt: null,
+      matchesHandoff: false,
+      errors: ["Receipt contained credential-shaped data at " + forbidden + "; signatures and signed payloads are never accepted."],
+      warnings: [],
+    };
+  }
+
+  if (input.previewSha256 && input.previewSha256 !== handoff.previewSha256) errors.push("Receipt previewSha256 does not match the handoff.");
+  if (input.handoffSha256 && input.handoffSha256 !== handoff.handoffSha256) errors.push("Receipt handoffSha256 does not match the handoff.");
+  if (input.asset && normalizeAsset(input.asset) !== handoff.asset) errors.push("Receipt asset does not match the handoff.");
+  if (input.side && input.side !== handoff.side) errors.push("Receipt side does not match the handoff.");
+  if (!input.orderId && !input.txHash) warnings.push("Receipt has neither an order id nor a tx hash; status cannot be independently located.");
+
+  const receipt: HyperliquidReceipt = {
+    version: "matterhorn.market.receipt.v1",
+    venue: "hyperliquid",
+    status: normalizeHyperliquidReceiptStatus(input.status),
+    action: "place_order",
+    previewSha256: input.previewSha256 ?? handoff.previewSha256,
+    handoffSha256: input.handoffSha256 ?? handoff.handoffSha256,
+    orderId: input.orderId ?? null,
+    txHash: input.txHash ?? null,
+    asset: input.asset ? normalizeAsset(input.asset) : handoff.asset,
+    side: input.side ?? handoff.side,
+    submittedAt: input.submittedAt ?? null,
+    warnings,
+  };
+
+  return { ok: errors.length === 0, receipt, matchesHandoff: errors.length === 0, errors, warnings };
+}
+
+/** Narrow an untrusted request body into a handoff reference. Returns null if malformed. */
+export function coerceHyperliquidHandoffReference(value: unknown): HyperliquidHandoffReference | null {
+  const record = objectOrNull(value);
+  if (!record) return null;
+  const previewSha256 = stringOrNull(record.previewSha256);
+  const handoffSha256 = stringOrNull(record.handoffSha256);
+  const asset = normalizeAsset(record.asset);
+  const sideRaw = stringOrNull(record.side);
+  const side = sideRaw === "buy" || sideRaw === "sell" || sideRaw === "long" || sideRaw === "short" ? sideRaw : null;
+  if (!previewSha256 || !handoffSha256 || !asset || side === null) return null;
+  return { previewSha256, handoffSha256, asset, side };
+}
+
+/** Narrow an untrusted request body into a receipt input (public fields only). */
+export function coerceHyperliquidReceiptInput(value: unknown): HyperliquidReceiptInput {
+  const record = objectOrNull(value);
+  if (!record) return {};
+  const sideRaw = stringOrNull(record.side);
+  return {
+    previewSha256: stringOrNull(record.previewSha256),
+    handoffSha256: stringOrNull(record.handoffSha256),
+    orderId: stringOrNull(record.orderId),
+    txHash: stringOrNull(record.txHash),
+    status: stringOrNull(record.status),
+    asset: stringOrNull(record.asset),
+    side: sideRaw === "buy" || sideRaw === "sell" || sideRaw === "long" || sideRaw === "short" ? sideRaw : null,
+    submittedAt: stringOrNull(record.submittedAt),
+  };
+}
+
 export async function executeHyperliquidChatWorkflow(
   input: HyperliquidChatExecutionInput,
   options: { provider?: HyperliquidProvider } = {},
