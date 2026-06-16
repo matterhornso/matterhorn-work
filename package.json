@@ -68,7 +68,8 @@
     "test:bittensor-real-adapter-candidate-gate": "node scripts/bittensor-real-adapter-candidate-gate.test.mjs",
     "test:bittensor-adapter-readonly-canary": "node scripts/bittensor-adapter-readonly-canary.test.mjs",
     "test:bittensor-receipt-check": "node scripts/bittensor-receipt-check.test.mjs",
-    "test:market-safety-contract": "node scripts/market-safety-contract.test.mjs"
+    "test:market-safety-contract": "node scripts/market-safety-contract.test.mjs",
+    "test:hyperliquid-read-preview-qa": "node scripts/hyperliquid-read-preview-qa.mjs --self-test --strict"
   },
   "devDependencies": {
     "playwright": "^1.60.0",

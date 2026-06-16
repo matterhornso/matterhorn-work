@@ -25,6 +25,16 @@ This is Matterhorn Work's first Hyperliquid slice. It is intentionally read-only
 - Ask a clarification question if asset, side, or size is missing.
 - Keep Hyperliquid work separate from Polymarket branches while parallel agents are active.
 
+## QA Harness
+
+Run the repeatable read/preview harness with:
+
+```bash
+pnpm test:hyperliquid-read-preview-qa
+```
+
+For live local-server checks, see [Hyperliquid Read/Preview QA](./hyperliquid-read-preview-qa.md).
+
 ## Local API
 
 ```bash
