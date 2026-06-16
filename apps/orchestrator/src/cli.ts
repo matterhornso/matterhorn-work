@@ -3754,6 +3754,9 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid chat --message <text> [options]",
     "  matterhorn-work hyperliquid markets [options]",
     "  matterhorn-work hyperliquid account --address <0x...> [options]",
+    "  matterhorn-work hyperliquid positions --address <0x...> [options]",
+    "  matterhorn-work hyperliquid open-orders --address <0x...> [options]",
+    "  matterhorn-work hyperliquid funding --asset <symbol> [options]",
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work upstream openwork check [options]",
@@ -7162,7 +7165,29 @@ async function runHyperliquid(args: ParsedArgs) {
     if (subcommand === "account" || subcommand === "wallet" || subcommand === "positions") {
       const address = readHyperliquidAddress(args, 2);
       const result = await fetchJson(
-        `${baseUrl}/api/hyperliquid/account/${encodeURIComponent(address)}`,
+        subcommand === "positions"
+          ? `${baseUrl}/api/hyperliquid/account/${encodeURIComponent(address)}/positions`
+          : `${baseUrl}/api/hyperliquid/account/${encodeURIComponent(address)}`,
+        { headers },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "open-orders" || subcommand === "orders") {
+      const address = readHyperliquidAddress(args, 2);
+      const result = await fetchJson(
+        `${baseUrl}/api/hyperliquid/account/${encodeURIComponent(address)}/open-orders`,
+        { headers },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "funding" || subcommand === "funding-rate") {
+      const asset = readHyperliquidAsset(args, 2);
+      const result = await fetchJson(
+        `${baseUrl}/api/hyperliquid/funding/${encodeURIComponent(asset)}`,
         { headers },
       );
       outputResult(result, outputJson);
@@ -7228,7 +7253,7 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("hyperliquid requires chat|markets|account|orderbook|preview-order");
+    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|preview-order");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

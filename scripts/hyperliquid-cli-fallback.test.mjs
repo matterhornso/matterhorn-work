@@ -66,7 +66,34 @@ async function createMockServer() {
     if (req.method === "GET" && url.pathname === `/api/hyperliquid/account/${address}`) {
       return writeJson(res, 200, {
         success: true,
-        account: { address, positionCount: 1, openOrderCount: 0, warnings: [] },
+        account: { address, positionCount: 1, openOrderCount: 1, warnings: [] },
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === `/api/hyperliquid/account/${address}/positions`) {
+      return writeJson(res, 200, {
+        success: true,
+        address,
+        positions: [{ asset: "BTC", side: "long", size: 0.1, positionValue: 6500 }],
+        notionalExposure: 6500,
+        unrealizedPnl: 100,
+        warnings: [],
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === `/api/hyperliquid/account/${address}/open-orders`) {
+      return writeJson(res, 200, {
+        success: true,
+        address,
+        orders: [{ asset: "BTC", side: "buy", size: 0.05, limitPx: 63000 }],
+        warnings: [],
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/hyperliquid/funding/BTC") {
+      return writeJson(res, 200, {
+        success: true,
+        funding: { asset: "BTC", fundingRate: 0.0001, openInterest: 1234, markPx: 65000, warnings: [] },
       });
     }
 
@@ -187,6 +214,20 @@ async function main() {
 
     await expectCli("hyperliquid account", mock.url, ["hyperliquid", "account", "--address", address], (payload) => {
       if (payload.account?.address !== address) throw new Error("account address mismatch");
+    });
+
+    await expectCli("hyperliquid positions", mock.url, ["hyperliquid", "positions", "--address", address], (payload) => {
+      if (payload.positions?.[0]?.asset !== "BTC") throw new Error("positions payload missing BTC");
+      if (payload.notionalExposure !== 6500) throw new Error("positions notional mismatch");
+    });
+
+    await expectCli("hyperliquid open-orders", mock.url, ["hyperliquid", "open-orders", "--address", address], (payload) => {
+      if (payload.orders?.[0]?.side !== "buy") throw new Error("open-orders payload missing buy order");
+    });
+
+    await expectCli("hyperliquid funding", mock.url, ["hyperliquid", "funding", "--asset", "BTC"], (payload) => {
+      if (payload.funding?.asset !== "BTC") throw new Error("funding asset mismatch");
+      if (payload.funding?.fundingRate !== 0.0001) throw new Error("funding rate mismatch");
     });
 
     await expectCli("hyperliquid orderbook", mock.url, ["hyperliquid", "orderbook", "--asset", "BTC"], (payload) => {

@@ -64,6 +64,30 @@ matterhorn-work hyperliquid account \
 ```
 
 ```bash
+matterhorn-work hyperliquid positions \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --address 0x0000000000000000000000000000000000000001 \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid open-orders \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --address 0x0000000000000000000000000000000000000001 \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid funding \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --asset BTC \
+  --json
+```
+
+```bash
 matterhorn-work hyperliquid orderbook \
   --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \

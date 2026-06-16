@@ -84,6 +84,9 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_hyperliquid_chat` — run the read/preview-only Hyperliquid workflow
 - `matterhorn_hyperliquid_list_markets` — list Hyperliquid markets through Matterhorn server reads
 - `matterhorn_hyperliquid_get_account` — read a public Hyperliquid account snapshot
+- `matterhorn_hyperliquid_get_positions` — read normalized public position summaries
+- `matterhorn_hyperliquid_get_open_orders` — read normalized public open-order summaries
+- `matterhorn_hyperliquid_get_funding` — read funding/open-interest context for an asset
 - `matterhorn_hyperliquid_get_orderbook` — read an L2 orderbook snapshot
 - `matterhorn_hyperliquid_preview_order` — prepare a non-submittable order preview
 - `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
