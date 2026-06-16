@@ -190,6 +190,89 @@ export interface PolymarketActionPreview {
   canSubmit: false;
 }
 
+/**
+ * External-signer handoff. Matterhorn turns an unsigned preview into a packet
+ * the user signs and submits with THEIR OWN wallet. Matterhorn never signs,
+ * never submits, never holds keys, and never accepts the resulting signature
+ * back. `canSubmit` stays false and `externalSignerOnly` is true.
+ */
+export interface PolymarketSigningHandoff {
+  version: "matterhorn.polymarket.signing-handoff.v1";
+  venue: "polymarket";
+  signerPolicy: "external_signer_required";
+  action: "buy_shares";
+  marketId: string;
+  marketLabel: string;
+  outcome: string;
+  side: PolymarketSide;
+  /** USDC notional the user intends to spend */
+  sizeUsdc: number;
+  /** expected average fill probability (0..1) */
+  price: number | null;
+  estimatedShares: number | null;
+  /** Public economic terms of the order to be signed externally. No secrets. */
+  order: {
+    tokenId: string | null;
+    makerAmountUsdc: number;
+    expectedShares: number | null;
+    side: PolymarketSide;
+  };
+  /** How the user must sign — Matterhorn does not produce the signature itself. */
+  signingScheme: {
+    standard: "eip712";
+    chainId: number;
+    venue: "polymarket-clob";
+    instructions: string;
+  };
+  /** Binds to the preview this handoff was built from. */
+  previewSha256: string;
+  /** Hash of the handoff packet itself, for receipt matching. */
+  handoffSha256: string;
+  expiresAt: string;
+  compliance: PolymarketComplianceStatus;
+  warnings: string[];
+  canSubmit: false;
+  externalSignerOnly: true;
+}
+
+/** A returned public receipt to validate. Must contain only public status — no signing material. */
+export interface PolymarketReceiptInput {
+  previewSha256?: string | null;
+  handoffSha256?: string | null;
+  orderId?: string | null;
+  txHash?: string | null;
+  status?: string | null;
+  marketId?: string | null;
+  outcome?: string | null;
+  side?: PolymarketSide | null;
+  submittedAt?: string | null;
+}
+
+/** Aligned with the shared MarketReceipt vocabulary (public status only). */
+export interface PolymarketReceipt {
+  version: "matterhorn.market.receipt.v1";
+  venue: "polymarket";
+  status: "received" | "pending" | "filled" | "cancelled" | "rejected" | "failed" | "unknown";
+  action: "buy_shares";
+  previewSha256: string | null;
+  handoffSha256: string | null;
+  orderId: string | null;
+  txHash: string | null;
+  marketId: string | null;
+  outcome: string | null;
+  side: PolymarketSide | null;
+  submittedAt: string | null;
+  warnings: string[];
+}
+
+export interface PolymarketReceiptVerification {
+  ok: boolean;
+  receipt: PolymarketReceipt | null;
+  matchesHandoff: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface PolymarketChatExecutionInput {
   message: string;
   marketId?: string | null;
@@ -883,6 +966,141 @@ export function estimatePolymarketFill(asks: PolymarketBookLevel[], amountUsdc: 
     depthSufficient,
     note: depthSufficient ? "Estimated from visible ask levels; live fills may differ." : "Only partial depth was visible; estimate is a lower bound on slippage.",
   };
+}
+
+// ---------------------------------------------------------------------------
+// External-signer handoff + receipt verification.
+//
+// Matterhorn never signs, submits, broadcasts, or holds keys. It produces an
+// unsigned handoff for the user to sign with their own wallet, and later
+// validates a PUBLIC receipt. Signing material is rejected on the way in.
+// ---------------------------------------------------------------------------
+
+const POLYGON_CHAIN_ID = 137;
+const HANDOFF_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * Build an external-signer handoff from an unsigned order preview. Throws if the
+ * preview is blocked by compliance or is not an unsigned preview. The returned
+ * packet contains only public order terms — no keys, secrets, or signatures.
+ */
+export function buildPolymarketSigningHandoff(preview: PolymarketActionPreview): PolymarketSigningHandoff {
+  if (preview.execution === "blocked_by_compliance") {
+    throw new Error("Cannot build a signing handoff for a compliance-blocked preview.");
+  }
+  if (preview.execution !== "unsigned_preview" || preview.canSubmit !== false) {
+    throw new Error("A signing handoff requires a non-submittable unsigned preview.");
+  }
+  if (!preview.marketId || !preview.outcome || preview.side === null || preview.size === null) {
+    throw new Error("Preview is missing market, outcome, side, or size; cannot build a handoff.");
+  }
+  // Defensive: never echo signing material into a handoff.
+  const forbidden = findForbiddenPolymarketCredentialInput(preview);
+  if (forbidden) throw new Error("Preview unexpectedly contained credential-shaped data at " + forbidden);
+
+  const warnings = [
+    "External signer required: sign and submit this with your OWN wallet. Matterhorn does not sign, submit, or hold keys.",
+    "Do not send the signature or any signed payload back to Matterhorn; only a public receipt can be imported.",
+    RISK_DISCLAIMER,
+  ];
+  const order = {
+    // The CLOB token id is resolved by the signer's client from marketId+outcome; the preview does not carry it.
+    tokenId: null,
+    makerAmountUsdc: preview.size,
+    expectedShares: preview.estimatedShares,
+    side: preview.side,
+  };
+  const core = {
+    version: "matterhorn.polymarket.signing-handoff.v1",
+    venue: "polymarket",
+    marketId: preview.marketId,
+    outcome: preview.outcome,
+    side: preview.side,
+    sizeUsdc: preview.size,
+    price: preview.price,
+    previewSha256: preview.previewSha256,
+  };
+  return {
+    version: "matterhorn.polymarket.signing-handoff.v1",
+    venue: "polymarket",
+    signerPolicy: "external_signer_required",
+    action: "buy_shares",
+    marketId: preview.marketId,
+    marketLabel: preview.marketLabel ?? preview.marketId,
+    outcome: preview.outcome,
+    side: preview.side,
+    sizeUsdc: preview.size,
+    price: preview.price,
+    estimatedShares: preview.estimatedShares,
+    order,
+    signingScheme: {
+      standard: "eip712",
+      chainId: POLYGON_CHAIN_ID,
+      venue: "polymarket-clob",
+      instructions:
+        "Sign this order with your own wallet via Polymarket's official CLOB client (EIP-712 order on Polygon). " +
+        "Matterhorn provides the economic terms only and never produces the signature, the API key, or the submission.",
+    },
+    previewSha256: preview.previewSha256,
+    handoffSha256: sha256(core),
+    expiresAt: new Date(Date.now() + HANDOFF_TTL_MS).toISOString(),
+    compliance: preview.compliance,
+    warnings,
+    canSubmit: false,
+    externalSignerOnly: true,
+  };
+}
+
+const PUBLIC_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;
+
+function normalizeReceiptStatus(value: string | null | undefined): PolymarketReceipt["status"] {
+  const status = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return (PUBLIC_RECEIPT_STATUSES as readonly string[]).includes(status) ? (status as PolymarketReceipt["status"]) : "unknown";
+}
+
+/**
+ * Validate a returned PUBLIC receipt against the handoff that produced it.
+ * Rejects any signing material in the receipt and never accepts a signature.
+ */
+export function verifyPolymarketReceipt(handoff: PolymarketSigningHandoff, input: PolymarketReceiptInput): PolymarketReceiptVerification {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const forbidden = findForbiddenPolymarketCredentialInput(input);
+  if (forbidden) {
+    return {
+      ok: false,
+      receipt: null,
+      matchesHandoff: false,
+      errors: ["Receipt contained credential-shaped data at " + forbidden + "; signatures and signed payloads are never accepted."],
+      warnings: [],
+    };
+  }
+
+  if (input.previewSha256 && input.previewSha256 !== handoff.previewSha256) errors.push("Receipt previewSha256 does not match the handoff.");
+  if (input.handoffSha256 && input.handoffSha256 !== handoff.handoffSha256) errors.push("Receipt handoffSha256 does not match the handoff.");
+  if (input.marketId && input.marketId !== handoff.marketId) errors.push("Receipt market does not match the handoff.");
+  if (input.outcome && input.outcome !== handoff.outcome) errors.push("Receipt outcome does not match the handoff.");
+  if (input.side && input.side !== handoff.side) errors.push("Receipt side does not match the handoff.");
+  if (!input.orderId && !input.txHash) warnings.push("Receipt has neither an order id nor a tx hash; status cannot be independently located.");
+
+  const receipt: PolymarketReceipt = {
+    version: "matterhorn.market.receipt.v1",
+    venue: "polymarket",
+    status: normalizeReceiptStatus(input.status),
+    action: "buy_shares",
+    previewSha256: input.previewSha256 ?? handoff.previewSha256,
+    handoffSha256: input.handoffSha256 ?? handoff.handoffSha256,
+    orderId: input.orderId ?? null,
+    txHash: input.txHash ?? null,
+    marketId: input.marketId ?? handoff.marketId,
+    outcome: input.outcome ?? handoff.outcome,
+    side: input.side ?? handoff.side,
+    submittedAt: input.submittedAt ?? null,
+    warnings,
+  };
+
+  return { ok: errors.length === 0, receipt, matchesHandoff: errors.length === 0, errors, warnings };
 }
 
 // ---------------------------------------------------------------------------
