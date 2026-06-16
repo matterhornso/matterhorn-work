@@ -18,6 +18,8 @@ const GAMMA_BASE_URL = "https://gamma-api.polymarket.com";
 const CLOB_BASE_URL = "https://clob.polymarket.com";
 const GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
 const POLYMARKET_CACHE_MS = 15_000;
+const THIN_LIQUIDITY_USD = 5_000;
+const LARGE_GAP_PCT = 10;
 
 // Mirrors MARKET_FORBIDDEN_CREDENTIAL_KEY_PATTERN in packages/types/src/markets.ts.
 // Kept Polymarket-local so this stream stays independent of shared files.
@@ -98,12 +100,45 @@ export interface PolymarketMarketabilityEstimate {
   note: string;
 }
 
+/** Prediction-market payoff framing for a buy preview. Each share pays $1 if the outcome resolves true. */
+export interface PolymarketRiskContext {
+  costUsdc: number;
+  payoutIfWinUsdc: number | null;
+  maxProfitUsdc: number | null;
+  maxLossUsdc: number;
+  breakevenProbability: number | null;
+  note: string;
+}
+
+export interface PolymarketResolutionContext {
+  endDate: string | null;
+  resolvesInDays: number | null;
+  note: string;
+}
+
+/** Headline (Gamma) implied probability vs the live orderbook. */
+export interface PolymarketPriceContext {
+  impliedProbability: number | null;
+  estimatedFillProbability: number | null;
+  bookMidpoint: number | null;
+  gapVsImpliedPct: number | null;
+  note: string;
+}
+
+export interface PolymarketLiquidityContext {
+  liquidityUsd: number | null;
+  volumeUsd: number | null;
+  note: string;
+}
+
 export interface PolymarketOrderPreviewInput {
   marketId?: string | null;
   outcome?: string | null;
   side?: PolymarketSide | null;
   /** USDC notional the user intends to spend */
   amountUsdc?: number | string | null;
+  /** optional slippage tolerance in percent */
+  slippageTolerance?: number | string | null;
   address?: string | null;
   message?: string | null;
 }
@@ -127,6 +162,10 @@ export interface PolymarketActionPreview {
   priceAsset: "probability";
   estimatedShares: number | null;
   marketability: PolymarketMarketabilityEstimate | null;
+  risk: PolymarketRiskContext | null;
+  resolution: PolymarketResolutionContext | null;
+  priceContext: PolymarketPriceContext | null;
+  liquidity: PolymarketLiquidityContext | null;
   expiresAt: string;
   fees: Array<{ label: string; amount: number | null; asset: string | null }>;
   consequence: string;
@@ -144,6 +183,7 @@ export interface PolymarketChatExecutionInput {
   outcome?: string | null;
   side?: PolymarketSide | null;
   amountUsdc?: number | string | null;
+  slippageTolerance?: number | string | null;
   limit?: number | string | null;
 }
 
@@ -513,6 +553,10 @@ export function buildBlockedPolymarketPreview(args: {
     priceAsset: "probability",
     estimatedShares: null,
     marketability: null,
+    risk: null,
+    resolution: null,
+    priceContext: null,
+    liquidity: null,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     fees: [],
     consequence: (args.compliance.reason ?? "Blocked by compliance.") + " " + PREVIEW_CONSEQUENCE_SUFFIX,
@@ -526,10 +570,18 @@ export function buildBlockedPolymarketPreview(args: {
 }
 
 export async function preparePolymarketOrderPreview(
-  args: { market: PolymarketMarketSummary; outcome: string; side: PolymarketSide; amountUsdc: number; compliance: PolymarketComplianceStatus },
+  args: {
+    market: PolymarketMarketSummary;
+    outcome: string;
+    side: PolymarketSide;
+    amountUsdc: number;
+    compliance: PolymarketComplianceStatus;
+    slippageTolerance?: number | null;
+  },
   provider: PolymarketProvider = polymarketProvider,
 ): Promise<PolymarketActionPreview> {
   const { market, outcome, side, amountUsdc, compliance } = args;
+  const slippageTolerance = numberOrNull(args.slippageTolerance);
   const warnings = [
     "Preview only: Matterhorn does not submit Polymarket orders.",
     "No API wallet secret, private key, or signature is accepted or stored.",
@@ -538,11 +590,16 @@ export async function preparePolymarketOrderPreview(
 
   const tokenId = market.tokenIds[outcome];
   let marketability: PolymarketMarketabilityEstimate | null = null;
+  let bookMidpoint: number | null = null;
   if (tokenId) {
     try {
       const orderbook = await provider.getOrderbook(tokenId, { marketId: market.id, outcome });
+      bookMidpoint = orderbook.midpoint;
       marketability = estimatePolymarketFill(orderbook.asks, amountUsdc);
       if (marketability.depthSufficient === false) warnings.push("Visible orderbook depth is insufficient to fully fill this size; expect a worse fill than estimated.");
+      if (slippageTolerance !== null && marketability.estimatedSlippagePct !== null && marketability.estimatedSlippagePct > slippageTolerance) {
+        warnings.push("Estimated slippage (" + marketability.estimatedSlippagePct.toFixed(3) + "%) exceeds your tolerance (" + slippageTolerance + "%).");
+      }
     } catch (err) {
       warnings.push(err instanceof Error ? "Could not read orderbook for marketability: " + err.message : "Could not read orderbook for marketability.");
     }
@@ -550,8 +607,17 @@ export async function preparePolymarketOrderPreview(
     warnings.push("No CLOB token id is known for outcome " + outcome + "; price could not be estimated.");
   }
 
-  const price = marketability?.estimatedFillPrice ?? market.outcomePrices[outcome] ?? null;
+  const impliedProbability = market.outcomePrices[outcome] ?? null;
+  const price = marketability?.estimatedFillPrice ?? impliedProbability ?? null;
   const estimatedShares = marketability?.estimatedShares ?? (price !== null && price > 0 ? Number((amountUsdc / price).toFixed(4)) : null);
+
+  if (market.outcomes.length > 2) warnings.push("This market has " + market.outcomes.length + " outcomes; make sure '" + outcome + "' is the one you mean.");
+
+  const risk = buildPolymarketRisk(amountUsdc, price, estimatedShares);
+  const resolution = buildPolymarketResolution(market.endDate, warnings);
+  const priceContext = buildPolymarketPriceContext(impliedProbability, marketability?.estimatedFillPrice ?? null, bookMidpoint, warnings);
+  const liquidity = buildPolymarketLiquidity(market, warnings);
+
   const previewSha256 = sha256({
     venue: "polymarket",
     marketId: market.id,
@@ -578,16 +644,92 @@ export async function preparePolymarketOrderPreview(
     priceAsset: "probability",
     estimatedShares,
     marketability,
+    risk,
+    resolution,
+    priceContext,
+    liquidity,
     expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     fees: [{ label: "Polymarket trading fee", amount: null, asset: "USDC" }],
     consequence:
-      "If executed outside Matterhorn, this would attempt to buy ~" + (estimatedShares ?? "?") + " '" + outcome + "' shares for $" + amountUsdc.toFixed(2) + " USDC at about " + formatProbability(price) + " on \"" + market.question + "\". " + PREVIEW_CONSEQUENCE_SUFFIX,
+      "If executed outside Matterhorn, this would attempt to buy ~" + (estimatedShares ?? "?") + " '" + outcome + "' shares for $" + amountUsdc.toFixed(2) + " USDC at about " + formatProbability(price) + " on \"" + market.question + "\". " +
+      (risk.payoutIfWinUsdc !== null ? "If '" + outcome + "' resolves true, ~$" + risk.payoutIfWinUsdc.toFixed(2) + " USDC pays out (max profit ~$" + (risk.maxProfitUsdc ?? 0).toFixed(2) + "); otherwise the $" + amountUsdc.toFixed(2) + " stake is lost. " : "") +
+      PREVIEW_CONSEQUENCE_SUFFIX,
     confirmationText: "I understand this is preview-only in Matterhorn. " + PREVIEW_CONSEQUENCE_SUFFIX,
     previewSha256,
     source: nowSource(GAMMA_BASE_URL),
     compliance,
     warnings,
     canSubmit: false,
+  };
+}
+
+/** Cost/payout/max-profit/max-loss/breakeven framing. Each share pays $1 if the outcome resolves true. */
+function buildPolymarketRisk(amountUsdc: number, price: number | null, estimatedShares: number | null): PolymarketRiskContext {
+  const payoutIfWin = estimatedShares === null ? null : Number(estimatedShares.toFixed(4));
+  const maxProfit = payoutIfWin === null ? null : Number((payoutIfWin - amountUsdc).toFixed(4));
+  return {
+    costUsdc: amountUsdc,
+    payoutIfWinUsdc: payoutIfWin,
+    maxProfitUsdc: maxProfit,
+    maxLossUsdc: amountUsdc,
+    breakevenProbability: price,
+    note:
+      payoutIfWin === null
+        ? "Payout could not be estimated without a price."
+        : "You pay $" + amountUsdc.toFixed(2) + " now. If it resolves true you receive ~$" + payoutIfWin.toFixed(2) + " (each share pays $1); if it resolves false you lose the full $" + amountUsdc.toFixed(2) + " stake. Breakeven probability is " + formatProbability(price) + ".",
+  };
+}
+
+function buildPolymarketResolution(endDate: string | null, warnings: string[]): PolymarketResolutionContext {
+  if (!endDate) return { endDate: null, resolvesInDays: null, note: "Resolution date is unknown." };
+  const end = Date.parse(endDate);
+  if (!Number.isFinite(end)) return { endDate, resolvesInDays: null, note: "Resolution date could not be parsed." };
+  const days = Number(((end - Date.now()) / (24 * 60 * 60 * 1000)).toFixed(2));
+  if (days < 0) warnings.push("This market's listed end date is in the past; confirm it is still open before acting.");
+  else if (days < 1) warnings.push("This market resolves within a day; price can move sharply near resolution.");
+  return {
+    endDate,
+    resolvesInDays: days,
+    note: days < 0 ? "Listed end date has passed." : "Resolves in about " + days + " day(s); funds are locked until resolution if you trade.",
+  };
+}
+
+function buildPolymarketPriceContext(
+  impliedProbability: number | null,
+  estimatedFillProbability: number | null,
+  bookMidpoint: number | null,
+  warnings: string[],
+): PolymarketPriceContext {
+  const gap =
+    impliedProbability !== null && impliedProbability > 0 && estimatedFillProbability !== null
+      ? Math.abs((estimatedFillProbability - impliedProbability) / impliedProbability) * 100
+      : null;
+  if (gap !== null && gap > LARGE_GAP_PCT) {
+    warnings.push("Live orderbook price differs from the headline odds by ~" + gap.toFixed(1) + "%; the displayed probability may be stale.");
+  }
+  return {
+    impliedProbability,
+    estimatedFillProbability,
+    bookMidpoint,
+    gapVsImpliedPct: gap === null ? null : Number(gap.toFixed(2)),
+    note:
+      gap === null
+        ? "Headline odds and live book could not be compared."
+        : "Headline implied probability " + formatProbability(impliedProbability) + " vs estimated fill " + formatProbability(estimatedFillProbability) + " (gap ~" + gap.toFixed(1) + "%).",
+  };
+}
+
+function buildPolymarketLiquidity(market: PolymarketMarketSummary, warnings: string[]): PolymarketLiquidityContext {
+  if (market.liquidity !== null && market.liquidity < THIN_LIQUIDITY_USD) {
+    warnings.push("Thin market liquidity (~$" + market.liquidity + "); fills may be partial or move the price.");
+  }
+  return {
+    liquidityUsd: market.liquidity,
+    volumeUsd: market.volume,
+    note:
+      market.liquidity === null
+        ? "Liquidity is unknown."
+        : "Market liquidity ~$" + market.liquidity + (market.volume === null ? "" : ", volume ~$" + market.volume) + ".",
   };
 }
 
@@ -769,7 +911,7 @@ export async function executePolymarketChatWorkflow(
   if (!outcome || !market.tokenIds[outcome]) {
     return clarification("Which outcome should the order target? Options: " + (market.outcomes.join(", ") || "unknown") + ".", [], "clarification_required", "order_preview");
   }
-  const preview = await preparePolymarketOrderPreview({ market, outcome, side, amountUsdc, compliance }, provider);
+  const preview = await preparePolymarketOrderPreview({ market, outcome, side, amountUsdc, compliance, slippageTolerance: numberOrNull(input.slippageTolerance) }, provider);
   return {
     venue: "polymarket",
     intent: "order_preview",

@@ -47,6 +47,12 @@ const tool = mustContain("apps/server/src/tools/polymarket.ts", [
   "estimatePolymarketFill",
   "PolymarketActionPreview",
   "encodeURIComponent",
+  // Preview risk polish (prediction-market framing).
+  "PolymarketRiskContext",
+  "breakevenProbability",
+  "buildPolymarketResolution",
+  "buildPolymarketPriceContext",
+  "gapVsImpliedPct",
 ]);
 
 // No execution / submission / signing path may exist.

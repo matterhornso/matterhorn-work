@@ -241,3 +241,44 @@ describe("Polymarket preview math", () => {
     expect(preview.warnings.join(" ")).toContain("does not submit");
   });
 });
+
+describe("Polymarket preview risk polish", () => {
+  const allowed = { status: "allowed" as const, reason: null, jurisdiction: "US", checkedAt: "t", source: "mock" };
+
+  test("includes cost/payout/max-loss risk framing", async () => {
+    const market = await provider().getMarket("0xmarket-ai");
+    const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 10, compliance: allowed }, provider());
+    expect(preview.risk?.costUsdc).toBe(10);
+    expect(preview.risk?.maxLossUsdc).toBe(10);
+    // ~15.87 shares at 0.63 -> payout ~15.87, profit ~5.87
+    expect(preview.risk?.payoutIfWinUsdc).toBeGreaterThan(10);
+    expect(preview.risk?.maxProfitUsdc).toBeGreaterThan(0);
+    expect(preview.risk?.breakevenProbability).toBeCloseTo(0.63, 2);
+    expect(preview.consequence).toContain("stake is lost");
+  });
+
+  test("includes resolution, liquidity, and implied-vs-book price context", async () => {
+    const market = await provider().getMarket("0xmarket-ai");
+    const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 10, compliance: allowed }, provider());
+    expect(preview.resolution?.endDate).toBe("2027-12-31T00:00:00Z");
+    expect(preview.liquidity?.liquidityUsd).toBe(42000);
+    expect(preview.priceContext?.impliedProbability).toBeCloseTo(0.62, 2);
+    expect(preview.priceContext?.estimatedFillProbability).toBeCloseTo(0.63, 2);
+    expect(preview.priceContext?.gapVsImpliedPct).not.toBeNull();
+  });
+
+  test("warns when estimated slippage exceeds tolerance", async () => {
+    const market = await provider().getMarket("0xmarket-ai");
+    // amount 200 forces walking into the 0.64 level -> slippage vs 0.63 reference.
+    const preview = await preparePolymarketOrderPreview({ market, outcome: "Yes", side: "yes", amountUsdc: 200, compliance: allowed, slippageTolerance: 0.01 }, provider());
+    expect(preview.warnings.some((w) => /exceeds your tolerance/.test(w))).toBe(true);
+  });
+
+  test("blocked preview carries null risk context", async () => {
+    const result = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
+    expect(result.preview?.execution).toBe("blocked_by_compliance");
+    expect(result.preview?.risk).toBeNull();
+    expect(result.preview?.resolution).toBeNull();
+    expect(result.preview?.canSubmit).toBe(false);
+  });
+});
