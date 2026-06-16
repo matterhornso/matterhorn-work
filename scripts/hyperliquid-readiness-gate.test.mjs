@@ -59,7 +59,17 @@ const serverTool = mustContain("apps/server/src/tools/hyperliquid.ts", [
   "requiresAccountContext",
   "closeContext",
   "estimateHyperliquidMarketability",
+  // External-signer handoff + receipt (non-custodial; Matterhorn never signs/submits).
+  "buildHyperliquidSigningHandoff",
+  "verifyHyperliquidReceipt",
+  "external_signer_required",
+  "externalSignerOnly: true",
+  "matterhorn.market.receipt.v1",
 ]);
+for (const forbidden of ["signOrder", "submitOrder", "broadcast(", "this.signer", "privateKey ="]) {
+  if (serverTool.includes(forbidden)) fail(`Hyperliquid tool excludes ${forbidden}`, "present");
+  else pass(`Hyperliquid tool excludes ${forbidden}`);
+}
 if (/canSubmit:\s*true/.test(serverTool)) fail("Hyperliquid provider never enables canSubmit", "found canSubmit: true");
 else pass("Hyperliquid provider never enables canSubmit");
 for (const forbidden of ["orders/submit", "exchangeRequest", "signOrder", "placeOrder", "submitOrder"]) {
