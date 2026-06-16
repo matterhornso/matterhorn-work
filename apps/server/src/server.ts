@@ -120,11 +120,15 @@ import {
   buildHyperliquidMarketListCard,
   buildHyperliquidOrderPreviewCard,
   buildHyperliquidOrderbookCard,
+  buildHyperliquidSigningHandoff,
+  coerceHyperliquidHandoffReference,
+  coerceHyperliquidReceiptInput,
   executeHyperliquidChatWorkflow,
   findForbiddenHyperliquidCredentialInput,
   hyperliquidProvider,
   isValidHyperliquidAddress,
   prepareHyperliquidOrderPreview,
+  verifyHyperliquidReceipt,
 } from "./tools/hyperliquid.js";
 import {
   buildPolymarketComplianceCard,
@@ -4052,6 +4056,42 @@ function createRoutes(
       reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
     });
     return jsonResponse({ success: true, ...result });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/orders/handoff", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid handoff input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const preview = await prepareHyperliquidOrderPreview({
+        asset: typeof body.asset === "string" ? body.asset : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        size: body.size === undefined ? null : body.size as never,
+        price: body.price === undefined ? null : body.price as never,
+        reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+        slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
+      });
+      const handoff = buildHyperliquidSigningHandoff(preview);
+      return jsonResponse({ success: true, handoff, preview });
+    } catch (err) {
+      throw new ApiError(400, "invalid_hyperliquid_handoff", err instanceof Error ? err.message : "Could not prepare Hyperliquid signing handoff");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/orders/receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid receipt must contain only public status — no API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const handoff = coerceHyperliquidHandoffReference(body.handoff);
+    if (!handoff) {
+      throw new ApiError(400, "invalid_handoff", "A valid signing handoff (previewSha256, handoffSha256, asset, side) is required to verify a receipt.");
+    }
+    const verification = verifyHyperliquidReceipt(handoff, coerceHyperliquidReceiptInput(body.receipt));
+    return jsonResponse({ success: verification.ok, ...verification });
   });
 
   addRoute(routes, "GET", "/api/polymarket/markets", "client", async (ctx) => {

@@ -3759,6 +3759,8 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid funding --asset <symbol> [options]",
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
+    "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
+    "  matterhorn-work hyperliquid receipt --handoff-file <path> --order-id <id> --status <status> [options]",
     "  matterhorn-work polymarket chat --message <text> [options]",
     "  matterhorn-work polymarket markets --query <text> [options]",
     "  matterhorn-work polymarket events --query <text> [options]",
@@ -7237,6 +7239,57 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "handoff" || subcommand === "prepare-handoff") {
+      const asset = readHyperliquidAsset(args, 2);
+      const price = readNumber(args.flags, "price", undefined);
+      const reduceOnly = readBool(args.flags, "reduce-only", false);
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/handoff`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          asset,
+          side: readHyperliquidSide(args),
+          size: readHyperliquidSize(args),
+          ...(typeof price === "number" && Number.isFinite(price) ? { price } : {}),
+          ...(reduceOnly ? { reduceOnly } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "receipt" || subcommand === "verify-receipt") {
+      const handoffJson = readFlag(args.flags, "handoff-json");
+      const handoffFile = readFlag(args.flags, "handoff-file");
+      if (!handoffJson && !handoffFile) {
+        throw new Error("handoff-json or handoff-file is required for hyperliquid receipt verification");
+      }
+      const handoffRaw = handoffJson ?? readFileSync(resolve(String(handoffFile)), "utf8");
+      let handoff;
+      try {
+        const parsed = JSON.parse(handoffRaw);
+        handoff = parsed?.handoff && typeof parsed.handoff === "object" ? parsed.handoff : parsed;
+      } catch (error) {
+        throw new Error(`Could not parse handoff JSON: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const receipt = {
+        ...(readFlag(args.flags, "preview-sha") ? { previewSha256: readFlag(args.flags, "preview-sha") } : {}),
+        ...(readFlag(args.flags, "handoff-sha") ? { handoffSha256: readFlag(args.flags, "handoff-sha") } : {}),
+        ...(readFlag(args.flags, "order-id") ? { orderId: readFlag(args.flags, "order-id") } : {}),
+        ...(readFlag(args.flags, "tx-hash") ? { txHash: readFlag(args.flags, "tx-hash") } : {}),
+        ...(readFlag(args.flags, "status") ? { status: readFlag(args.flags, "status") } : {}),
+        ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
+        ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+      };
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/receipt`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ handoff, receipt }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
       const message =
         readFlag(args.flags, "message") ??
@@ -7263,7 +7316,7 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|preview-order");
+    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|preview-order|handoff|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

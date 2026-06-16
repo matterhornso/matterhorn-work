@@ -93,6 +93,8 @@ mustContain("apps/server/src/server.ts", [
   "/api/hyperliquid/funding/:asset",
   "/api/hyperliquid/orderbook/:asset",
   "/api/hyperliquid/orders/preview",
+  "/api/hyperliquid/orders/handoff",
+  "/api/hyperliquid/orders/receipt",
   "/api/hyperliquid/chat/execute",
   "market_secret_rejected",
 ]);
@@ -110,8 +112,10 @@ const mcp = mustContain("packages/matterhorn-work-mcp/index.mjs", [
   "matterhorn_hyperliquid_get_funding",
   "matterhorn_hyperliquid_get_orderbook",
   "matterhorn_hyperliquid_preview_order",
+  "matterhorn_hyperliquid_prepare_handoff",
+  "matterhorn_hyperliquid_verify_receipt",
 ]);
-const hyperliquidMcpSection = sectionBetween(mcp, "matterhorn_hyperliquid_chat", "matterhorn_bittensor_chat");
+const hyperliquidMcpSection = sectionBetween(mcp, "matterhorn_hyperliquid_chat", "matterhorn_polymarket_chat");
 for (const forbidden of ["apiSecret", "api_secret", "privateKey", "private_key", "seed", "mnemonic", "signature", "signedPayload"]) {
   if (hyperliquidMcpSection.includes(forbidden)) fail(`Hyperliquid MCP schema excludes ${forbidden}`, "present");
   else pass(`Hyperliquid MCP schema excludes ${forbidden}`);
@@ -122,6 +126,8 @@ mustContain("apps/orchestrator/src/cli.ts", [
   "matterhorn-work hyperliquid positions",
   "matterhorn-work hyperliquid open-orders",
   "matterhorn-work hyperliquid funding",
+  "matterhorn-work hyperliquid handoff",
+  "matterhorn-work hyperliquid receipt",
   "assertNoHyperliquidSecrets",
 ]);
 

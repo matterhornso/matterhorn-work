@@ -143,6 +143,24 @@ async function createMockServer() {
       });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/handoff") {
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      return writeJson(res, 200, {
+        success: true,
+        handoff: { version: "matterhorn.hyperliquid.signing-handoff.v1", venue: "hyperliquid", asset: body.asset, side: body.side, previewSha256: "p".repeat(64), handoffSha256: "h".repeat(64), externalSignerOnly: true, canSubmit: false },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/receipt") {
+      if ("signature" in body || "privateKey" in body) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      const matches = body.handoff?.handoffSha256 === body.receipt?.handoffSha256;
+      return writeJson(res, 200, { success: matches, ok: matches, matchesHandoff: matches, receipt: { version: "matterhorn.market.receipt.v1", venue: "hyperliquid", status: body.receipt?.status ?? "unknown" }, errors: matches ? [] : ["mismatch"] });
+    }
+
     return writeJson(res, 404, { error: "not_found", path: url.pathname });
   });
   const port = await listen(server);
@@ -251,6 +269,26 @@ async function main() {
       (payload) => {
         if (payload.venue !== "hyperliquid") throw new Error("chat venue mismatch");
         if (payload.preview?.canSubmit !== false) throw new Error("chat preview must be canSubmit=false");
+      },
+    );
+
+    const hlHandoff = await expectCli(
+      "hyperliquid handoff",
+      mock.url,
+      ["hyperliquid", "handoff", "--asset", "BTC", "--side", "buy", "--size", "0.1", "--price", "65000"],
+      (payload) => {
+        if (payload.handoff?.externalSignerOnly !== true) throw new Error("handoff must be external-signer-only");
+        if (payload.handoff?.canSubmit !== false) throw new Error("handoff must be canSubmit=false");
+      },
+    );
+
+    await expectCli(
+      "hyperliquid receipt",
+      mock.url,
+      ["hyperliquid", "receipt", "--handoff-json", JSON.stringify(hlHandoff.handoff), "--handoff-sha", "h".repeat(64), "--order-id", "1", "--status", "filled"],
+      (payload) => {
+        if (payload.ok !== true) throw new Error("receipt should verify against the handoff");
+        if (payload.receipt?.version !== "matterhorn.market.receipt.v1") throw new Error("receipt shape mismatch");
       },
     );
 

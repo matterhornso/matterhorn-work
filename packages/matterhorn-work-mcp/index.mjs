@@ -464,6 +464,34 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_prepare_handoff",
+    description: "Build a non-custodial external-signer handoff for a Hyperliquid order. The user signs and submits with their OWN wallet; Matterhorn never signs, submits, or holds keys.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        asset: { type: "string" },
+        side: { type: "string", enum: ["buy", "sell", "long", "short"] },
+        size: { oneOf: [{ type: "number" }, { type: "string" }] },
+        price: { oneOf: [{ type: "number" }, { type: "string" }] },
+        reduceOnly: { type: "boolean" },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["asset", "side", "size"],
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_verify_receipt",
+    description: "Verify a returned PUBLIC Hyperliquid receipt (order id / tx hash / status) against the handoff that produced it. Public status only; signed material is never accepted.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        handoff: { type: "object", description: "The signing handoff (or its previewSha256/handoffSha256/asset/side fields)." },
+        receipt: { type: "object", description: "Public receipt fields only: previewSha256, handoffSha256, orderId, txHash, status, asset, side, submittedAt." },
+      },
+      required: ["handoff", "receipt"],
+    },
+  },
+  {
     name: "matterhorn_polymarket_chat",
     description: "Default first Matterhorn Work tool for ordinary Polymarket requests. Read-only plus preview-only; does not submit orders or accept API secrets.",
     inputSchema: {
@@ -2222,6 +2250,10 @@ async function handleTool(name, args = {}) {
       return callServer(`/api/hyperliquid/orderbook/${encodeURIComponent(args.asset)}`);
     case "matterhorn_hyperliquid_preview_order":
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_prepare_handoff":
+      return callServer("/api/hyperliquid/orders/handoff", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_verify_receipt":
+      return callServer("/api/hyperliquid/orders/receipt", { method: "POST", body: args });
     case "matterhorn_polymarket_chat":
       return callServer("/api/polymarket/chat/execute", { method: "POST", body: args });
     case "matterhorn_polymarket_search_markets":
