@@ -76,6 +76,7 @@ Common status codes:
 | `matterhorn_bittensor_get_subnet_capability` | `GET /api/bittensor/capabilities/:netuid` |
 | `matterhorn_bittensor_prepare_extrinsic` | `POST /api/bittensor/extrinsics/prepare` |
 | `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
+| `matterhorn_bittensor_import_receipt` | `POST /api/bittensor/extrinsics/receipt` |
 | `matterhorn_bittensor_submit_signed_extrinsic` | `POST /api/bittensor/extrinsics/submit` |
 | `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
 | `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |

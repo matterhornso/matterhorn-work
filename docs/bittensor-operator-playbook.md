@@ -50,7 +50,33 @@ This check never signs, submits, or broadcasts. It is an operator/customer trust
 
 ## Receipt Evidence Bundle
 
-After an external signer returns a transaction receipt, validate it and include it in the customer evidence bundle:
+After an external signer returns public receipt evidence, import it through Matterhorn, validate it, and include it in the customer evidence bundle. Import accepts public preview/handoff context plus `signatureSha256` or public result metadata. It must not include raw signatures, signed payloads, seed phrases, private keys, mnemonics, keyfiles, or wallet exports.
+
+HTTP import:
+
+```bash
+curl -sS -X POST "$MATTERHORN_WORK_SERVER_URL/api/bittensor/extrinsics/receipt" \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN" \
+  --data @/tmp/bittensor-receipt-import.json \
+  > /tmp/bittensor-receipt-import-response.json
+```
+
+MCP import:
+
+```json
+{
+  "tool": "matterhorn_bittensor_import_receipt",
+  "arguments": {
+    "preview": { "action": "stake", "netuid": 14 },
+    "handoff": { "payloadSha256": "<payload-sha256-from-handoff>" },
+    "signatureSha256": "<64-character-public-signature-hash>",
+    "signerAddress": "<public-ss58-signer-address>"
+  }
+}
+```
+
+Then validate the receipt and bundle evidence:
 
 ```bash
 node scripts/bittensor-receipt-check.mjs \
@@ -72,7 +98,7 @@ node scripts/bittensor-customer-evidence-bundle.mjs \
   --strict
 ```
 
-The bundle treats receipt evidence as optional unless `--require-receipt-check` is set. Required receipt evidence must be accepted, must not contain raw signatures or signed payloads, and should include a public wallet-diff follow-up prompt before an operator calls the customer flow complete.
+The bundle treats receipt evidence as optional unless `--require-receipt-check` is set. Required receipt evidence must be accepted, must not contain raw signatures or signed payloads, and should include a public wallet-diff follow-up prompt before an operator calls the customer flow complete. The panel's `Copy Import` command uses the same Bearer-token receipt import route.
 
 ## Scheduled Watch Autopilot
 
