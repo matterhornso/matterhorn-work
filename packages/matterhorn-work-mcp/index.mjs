@@ -479,6 +479,21 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_bittensor_import_receipt",
+    description: "Import public external-signer receipt evidence through the Matterhorn server. Accepts signatureSha256, preview, handoff, signerAddress, and public result metadata; never accepts raw signatures or signed payloads.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        preview: { type: "object", description: "Unsigned Bittensor extrinsic preview originally reviewed by the user." },
+        handoff: { type: "object", description: "Optional external-signer handoff returned by Matterhorn." },
+        signatureSha256: { type: "string", description: "Optional 64-character SHA-256 hash of the external signature or signed payload." },
+        signerAddress: { type: "string", description: "Optional public SS58 signer address." },
+        result: { type: "object", description: "Optional public submit result metadata such as status, txHash, blockHash, message, and explorerUrl." },
+      },
+      required: ["preview"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_check_receipt",
     description: "Validate a post-signing Bittensor receipt and produce a safe public wallet diff follow-up prompt. Rejects raw signatures and signed payloads.",
     inputSchema: {
@@ -1993,6 +2008,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/bittensor/extrinsics/prepare", { method: "POST", body: args });
     case "matterhorn_bittensor_create_signing_handoff":
       return callServer("/api/bittensor/extrinsics/handoff", { method: "POST", body: args });
+    case "matterhorn_bittensor_import_receipt":
+      return callServer("/api/bittensor/extrinsics/receipt", { method: "POST", body: args });
     case "matterhorn_bittensor_check_receipt":
       return matterhornBittensorCheckReceipt(args);
     case "matterhorn_bittensor_check_signing_handoff":
