@@ -592,6 +592,15 @@ try {
       },
       readinessGate: "READY_FOR_TEST_CUSTOMERS",
       walletTimeline: { enabled: true, snapshotCount: 2 },
+      adapterCandidate: {
+        readyForReadOnlyCanary: true,
+        id: "docs-search-canary-v1",
+        netuid: 14,
+        adapterKind: "data_search",
+        endpointHost: "adapter.example.com",
+        summary: { pass: 11, warn: 0, fail: 0 },
+        findings: [{ area: "Endpoint", status: "pass" }],
+      },
       adapterCanary: {
         readyForCanary: true,
         netuid: 14,
@@ -629,6 +638,7 @@ try {
         latest: { checkedAt: "2026-06-15T00:05:00.000Z" },
         safety: { custody: "none", signsOrBroadcasts: false, submitsTransactions: false, invokesSubnetServices: false },
       },
+      requireAdapterCandidate: true,
       requireAdapterCanary: true,
       requireReadonlyAdapterCanary: true,
       requireReceiptCheck: true,
@@ -636,6 +646,8 @@ try {
     },
   }));
   assert.equal(customerEvidenceBundle.ready, true);
+  assert.equal(customerEvidenceBundle.summary.adapterCandidate.ready, true);
+  assert.equal(customerEvidenceBundle.summary.adapterCandidate.endpointHost, "adapter.example.com");
   assert.equal(customerEvidenceBundle.summary.adapterCanary.ready, true);
   assert.equal(customerEvidenceBundle.summary.readonlyAdapterCanary.ready, true);
   assert.equal(customerEvidenceBundle.summary.readonlyAdapterCanary.invoked, true);
@@ -647,6 +659,7 @@ try {
   assert.equal(customerEvidenceBundle.safety.signsOrBroadcasts, false);
   assert.match(customerEvidenceBundle.markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(customerEvidenceBundle.markdown, /Wallet snapshot/);
+  assert.match(customerEvidenceBundle.markdown, /Adapter candidate gate says ready/);
   assert.match(customerEvidenceBundle.markdown, /Read-only canary ready/);
   assert.match(customerEvidenceBundle.markdown, /Receipt check accepted/);
   assert.match(customerEvidenceBundle.markdown, /Scheduled watch autopilot/);
