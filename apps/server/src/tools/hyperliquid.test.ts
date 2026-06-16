@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   HyperliquidInfoProvider,
+  buildHyperliquidOrderActionPayload,
   buildHyperliquidSigningHandoff,
   coerceHyperliquidHandoffReference,
   coerceHyperliquidReceiptInput,
+  prepareHyperliquidHandoffFromRequest,
   executeHyperliquidChatWorkflow,
   extractHyperliquidOrderInput,
   findForbiddenHyperliquidCredentialInput,
@@ -312,5 +314,37 @@ describe("Hyperliquid external-signer handoff + receipt", () => {
     const receipt = coerceHyperliquidReceiptInput({ orderId: "1", status: "filled", side: "buy", privateKey: "x" });
     expect(receipt.orderId).toBe("1");
     expect("privateKey" in receipt).toBe(false);
+  });
+});
+
+describe("Hyperliquid L1 order-action payload", () => {
+  test("builds the canonical action + agent scaffold, flagged for validation", () => {
+    const payload = buildHyperliquidOrderActionPayload({ assetIndex: 0, side: "buy", size: 0.1, price: 65000, reduceOnly: false });
+    expect(payload.standard).toBe("hyperliquid-l1-action");
+    expect(payload.requiresClientValidation).toBe(true);
+    expect(payload.action.type).toBe("order");
+    expect(payload.action.orders[0]).toMatchObject({ a: 0, b: true, p: "65000", s: "0.1", r: false });
+    expect(payload.action.orders[0].t.limit.tif).toBe("Gtc");
+    expect(payload.agentSigningScheme.domain.chainId).toBe(1337);
+    expect(payload.clientMustCompute.join(" ")).toMatch(/connectionId/);
+  });
+
+  test("sell/short map to b=false", () => {
+    expect(buildHyperliquidOrderActionPayload({ assetIndex: 1, side: "sell", size: 1, price: 100, reduceOnly: true }).action.orders[0].b).toBe(false);
+    expect(buildHyperliquidOrderActionPayload({ assetIndex: 1, side: "short", size: 1, price: 100, reduceOnly: false }).action.orders[0].b).toBe(false);
+  });
+
+  test("handoff attaches the payload only when an asset index is provided", async () => {
+    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+    expect(buildHyperliquidSigningHandoff(preview).signingPayload).toBeNull();
+    const withIndex = buildHyperliquidSigningHandoff(preview, { assetIndex: 0 });
+    expect(withIndex.signingPayload?.requiresClientValidation).toBe(true);
+    expect(withIndex.canSubmit).toBe(false);
+  });
+
+  test("prepareHyperliquidHandoffFromRequest resolves the asset index", async () => {
+    const { handoff } = await prepareHyperliquidHandoffFromRequest({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+    expect(handoff.signingPayload?.action.orders[0].a).toBe(0); // BTC is index 0 in the mock universe
+    expect(handoff.externalSignerOnly).toBe(true);
   });
 });

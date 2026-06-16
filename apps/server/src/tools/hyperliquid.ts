@@ -849,12 +849,40 @@ export interface HyperliquidSigningHandoff {
     venue: "hyperliquid-exchange";
     instructions: string;
   };
+  /** Canonical L1 order-action payload + Agent signing scaffold, when the asset index is resolvable. */
+  signingPayload: HyperliquidOrderActionPayload | null;
   previewSha256: string;
   handoffSha256: string;
   expiresAt: string;
   warnings: string[];
   canSubmit: false;
   externalSignerOnly: true;
+}
+
+/**
+ * Canonical Hyperliquid L1 order-action payload plus the EIP-712 Agent signing
+ * scaffold. Matterhorn produces the order action object and the fixed Agent
+ * domain/types, but does NOT compute the action hash (connectionId) or the
+ * signature — those need msgpack serialization + a key and are produced by the
+ * official Hyperliquid SDK. Always requiresClientValidation.
+ */
+export interface HyperliquidOrderActionPayload {
+  standard: "hyperliquid-l1-action";
+  requiresClientValidation: true;
+  action: {
+    type: "order";
+    orders: Array<{ a: number; b: boolean; p: string; s: string; r: boolean; t: { limit: { tif: string } } }>;
+    grouping: "na";
+  };
+  agentSigningScheme: {
+    standard: "eip712";
+    domain: { name: "Exchange"; version: "1"; chainId: number; verifyingContract: string };
+    primaryType: "Agent";
+    types: Record<string, Array<{ name: string; type: string }>>;
+    sourceByNetwork: { mainnet: string; testnet: string };
+  };
+  clientMustCompute: string[];
+  notes: string[];
 }
 
 export interface HyperliquidReceiptInput {
@@ -893,12 +921,73 @@ export interface HyperliquidReceiptVerification {
 
 export type HyperliquidHandoffReference = Pick<HyperliquidSigningHandoff, "previewSha256" | "handoffSha256" | "asset" | "side">;
 
+// Hyperliquid L1 phantom-agent signing domain (fixed and well-known).
+const HYPERLIQUID_AGENT_CHAIN_ID = 1337;
+const HYPERLIQUID_AGENT_TYPES: Record<string, Array<{ name: string; type: string }>> = {
+  Agent: [
+    { name: "source", type: "string" },
+    { name: "connectionId", type: "bytes32" },
+  ],
+};
+
+/**
+ * Build the canonical Hyperliquid L1 order-action payload plus the Agent signing
+ * scaffold. Matterhorn does NOT compute the action hash (connectionId), the
+ * nonce, or the signature — the official Hyperliquid SDK does, from a key
+ * Matterhorn never holds. Always requiresClientValidation.
+ */
+export function buildHyperliquidOrderActionPayload(args: {
+  assetIndex: number;
+  side: HyperliquidSide;
+  size: number;
+  price: number | null;
+  reduceOnly: boolean;
+}): HyperliquidOrderActionPayload {
+  const isBuy = args.side === "buy" || args.side === "long";
+  return {
+    standard: "hyperliquid-l1-action",
+    requiresClientValidation: true,
+    action: {
+      type: "order",
+      orders: [
+        {
+          a: args.assetIndex,
+          b: isBuy,
+          p: args.price === null ? "0" : String(args.price),
+          s: String(args.size),
+          r: args.reduceOnly,
+          t: { limit: { tif: "Gtc" } },
+        },
+      ],
+      grouping: "na",
+    },
+    agentSigningScheme: {
+      standard: "eip712",
+      domain: { name: "Exchange", version: "1", chainId: HYPERLIQUID_AGENT_CHAIN_ID, verifyingContract: "0x0000000000000000000000000000000000000000" },
+      primaryType: "Agent",
+      types: HYPERLIQUID_AGENT_TYPES,
+      sourceByNetwork: { mainnet: "a", testnet: "b" },
+    },
+    clientMustCompute: ["nonce", "connectionId (msgpack action hash over action+nonce+vault)", "signature"],
+    notes: [
+      "TEMPLATE ONLY — validate the action format, asset index, tif, and agent domain against Hyperliquid's official SDK and on testnet before signing real funds.",
+      "Matterhorn does not compute the connectionId (msgpack action hash) or the signature; the official SDK does, from a key Matterhorn never holds.",
+      "If no limit price is given, the client must apply Hyperliquid's market-order handling (IOC + slippage price); this template uses tif=Gtc.",
+    ],
+  };
+}
+
 /**
  * Build an external-signer handoff from an unsigned order preview. The user
  * signs and submits with THEIR OWN wallet. Matterhorn never signs, submits, or
- * holds keys. The packet contains only public order terms.
+ * holds keys. The packet contains only public order terms. When the asset index
+ * is known, the canonical L1 order-action payload is attached (still
+ * requiresClientValidation, still canSubmit:false).
  */
-export function buildHyperliquidSigningHandoff(preview: HyperliquidActionPreview): HyperliquidSigningHandoff {
+export function buildHyperliquidSigningHandoff(
+  preview: HyperliquidActionPreview,
+  options: { assetIndex?: number | null } = {},
+): HyperliquidSigningHandoff {
   if (preview.execution !== "unsigned_preview" || preview.canSubmit !== false) {
     throw new Error("A signing handoff requires a non-submittable unsigned preview.");
   }
@@ -907,6 +996,24 @@ export function buildHyperliquidSigningHandoff(preview: HyperliquidActionPreview
   }
   const forbidden = findForbiddenHyperliquidCredentialInput(preview);
   if (forbidden) throw new Error("Preview unexpectedly contained credential-shaped data at " + forbidden);
+
+  const warnings = [
+    "External signer required: sign and submit this with your OWN wallet. Matterhorn does not sign, submit, or hold keys.",
+    "Do not send the signature or any signed payload back to Matterhorn; only a public receipt can be imported.",
+  ];
+  let signingPayload: HyperliquidOrderActionPayload | null = null;
+  if (typeof options.assetIndex === "number" && options.assetIndex >= 0) {
+    signingPayload = buildHyperliquidOrderActionPayload({
+      assetIndex: options.assetIndex,
+      side: preview.side,
+      size: preview.size,
+      price: preview.price,
+      reduceOnly: preview.reduceOnly,
+    });
+    warnings.push("L1 order-action payload is a TEMPLATE requiring validation against Hyperliquid's official SDK before signing real funds.");
+  } else {
+    warnings.push("No L1 order-action payload attached; the asset index could not be resolved.");
+  }
 
   const order = {
     asset: preview.asset,
@@ -946,16 +1053,34 @@ export function buildHyperliquidSigningHandoff(preview: HyperliquidActionPreview
         "Sign this order with your own wallet via Hyperliquid's official client (L1 action signing). " +
         "Matterhorn provides the economic terms only and never produces the signature, the API wallet, or the submission.",
     },
+    signingPayload,
     previewSha256: preview.previewSha256,
     handoffSha256: sha256(core),
     expiresAt: new Date(Date.now() + HYPERLIQUID_HANDOFF_TTL_MS).toISOString(),
-    warnings: [
-      "External signer required: sign and submit this with your OWN wallet. Matterhorn does not sign, submit, or hold keys.",
-      "Do not send the signature or any signed payload back to Matterhorn; only a public receipt can be imported.",
-    ],
+    warnings,
     canSubmit: false,
     externalSignerOnly: true,
   };
+}
+
+/**
+ * Resolve the asset index, build the preview, and attach the L1 order-action
+ * payload — in one pass. Matterhorn still never signs, submits, or holds keys.
+ */
+export async function prepareHyperliquidHandoffFromRequest(
+  input: HyperliquidOrderPreviewInput,
+  provider: HyperliquidProvider = hyperliquidProvider,
+): Promise<{ preview: HyperliquidActionPreview; handoff: HyperliquidSigningHandoff }> {
+  const preview = await prepareHyperliquidOrderPreview(input, provider);
+  let assetIndex: number | null = null;
+  try {
+    const markets = await provider.listMarkets(200);
+    assetIndex = markets.find((market) => market.asset === preview.asset)?.index ?? null;
+  } catch {
+    assetIndex = null;
+  }
+  const handoff = buildHyperliquidSigningHandoff(preview, { assetIndex });
+  return { preview, handoff };
 }
 
 const HYPERLIQUID_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;

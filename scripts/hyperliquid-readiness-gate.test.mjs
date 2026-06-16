@@ -65,6 +65,11 @@ const serverTool = mustContain("apps/server/src/tools/hyperliquid.ts", [
   "external_signer_required",
   "externalSignerOnly: true",
   "matterhorn.market.receipt.v1",
+  // L1 order-action payload (validation-gated; SDK computes the action hash + signature).
+  "buildHyperliquidOrderActionPayload",
+  "hyperliquid-l1-action",
+  "requiresClientValidation: true",
+  "clientMustCompute",
 ]);
 for (const forbidden of ["signOrder", "submitOrder", "broadcast(", "this.signer", "privateKey ="]) {
   if (serverTool.includes(forbidden)) fail(`Hyperliquid tool excludes ${forbidden}`, "present");
