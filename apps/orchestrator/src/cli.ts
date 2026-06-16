@@ -3760,7 +3760,7 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
-    "  matterhorn-work hyperliquid receipt --handoff-file <path> --order-id <id> --status <status> [options]",
+    "  matterhorn-work hyperliquid receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work polymarket chat --message <text> [options]",
     "  matterhorn-work polymarket markets --query <text> [options]",
     "  matterhorn-work polymarket events --query <text> [options]",
@@ -3769,7 +3769,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket compliance [options]",
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
-    "  matterhorn-work polymarket receipt --handoff-file <path> --order-id <id> --status <status> [options]",
+    "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -7152,6 +7152,49 @@ function readHyperliquidSize(args: ParsedArgs): number {
   return size;
 }
 
+/** Parse the signing handoff from --handoff-json or --handoff-file (server-wrapped or bare). */
+function readMarketHandoffArg(args: ParsedArgs, handoffJson: string | undefined, handoffFile: string | undefined): unknown {
+  const raw = handoffJson ?? readFileSync(resolve(String(handoffFile)), "utf8");
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.handoff && typeof parsed.handoff === "object" ? parsed.handoff : parsed;
+  } catch (error) {
+    throw new Error(`Could not parse handoff JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
+ * Build the public receipt from --receipt-json / --receipt-file (preferred for
+ * non-trivial receipts) and/or individual flags. Individual flags override the
+ * file. Only public status fields are read; signing material is never accepted.
+ */
+function readMarketReceiptArg(args: ParsedArgs): Record<string, unknown> {
+  const receiptJson = readFlag(args.flags, "receipt-json");
+  const receiptFile = readFlag(args.flags, "receipt-file");
+  let base: Record<string, unknown> = {};
+  if (receiptJson || receiptFile) {
+    const raw = receiptJson ?? readFileSync(resolve(String(receiptFile)), "utf8");
+    try {
+      const parsed = JSON.parse(raw);
+      const unwrapped = parsed && typeof parsed === "object" && parsed.receipt && typeof parsed.receipt === "object" ? parsed.receipt : parsed;
+      if (unwrapped && typeof unwrapped === "object") base = unwrapped as Record<string, unknown>;
+    } catch (error) {
+      throw new Error(`Could not parse receipt JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const overrides: Record<string, unknown> = {
+    ...(readFlag(args.flags, "preview-sha") ? { previewSha256: readFlag(args.flags, "preview-sha") } : {}),
+    ...(readFlag(args.flags, "handoff-sha") ? { handoffSha256: readFlag(args.flags, "handoff-sha") } : {}),
+    ...(readFlag(args.flags, "order-id") ? { orderId: readFlag(args.flags, "order-id") } : {}),
+    ...(readFlag(args.flags, "tx-hash") ? { txHash: readFlag(args.flags, "tx-hash") } : {}),
+    ...(readFlag(args.flags, "status") ? { status: readFlag(args.flags, "status") } : {}),
+    ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
+    ...(readFlag(args.flags, "outcome") ? { outcome: readFlag(args.flags, "outcome") } : {}),
+    ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+  };
+  return { ...base, ...overrides };
+}
+
 async function runHyperliquid(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "chat";
@@ -7264,23 +7307,8 @@ async function runHyperliquid(args: ParsedArgs) {
       if (!handoffJson && !handoffFile) {
         throw new Error("handoff-json or handoff-file is required for hyperliquid receipt verification");
       }
-      const handoffRaw = handoffJson ?? readFileSync(resolve(String(handoffFile)), "utf8");
-      let handoff;
-      try {
-        const parsed = JSON.parse(handoffRaw);
-        handoff = parsed?.handoff && typeof parsed.handoff === "object" ? parsed.handoff : parsed;
-      } catch (error) {
-        throw new Error(`Could not parse handoff JSON: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const receipt = {
-        ...(readFlag(args.flags, "preview-sha") ? { previewSha256: readFlag(args.flags, "preview-sha") } : {}),
-        ...(readFlag(args.flags, "handoff-sha") ? { handoffSha256: readFlag(args.flags, "handoff-sha") } : {}),
-        ...(readFlag(args.flags, "order-id") ? { orderId: readFlag(args.flags, "order-id") } : {}),
-        ...(readFlag(args.flags, "tx-hash") ? { txHash: readFlag(args.flags, "tx-hash") } : {}),
-        ...(readFlag(args.flags, "status") ? { status: readFlag(args.flags, "status") } : {}),
-        ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
-        ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
-      };
+      const handoff = readMarketHandoffArg(args, handoffJson, handoffFile);
+      const receipt = readMarketReceiptArg(args);
       const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/receipt`, {
         method: "POST",
         headers,
@@ -7488,23 +7516,8 @@ async function runPolymarket(args: ParsedArgs) {
       if (!handoffJson && !handoffFile) {
         throw new Error("handoff-json or handoff-file is required for polymarket receipt verification");
       }
-      const handoffRaw = handoffJson ?? readFileSync(resolve(String(handoffFile)), "utf8");
-      let handoff;
-      try {
-        const parsed = JSON.parse(handoffRaw);
-        handoff = parsed?.handoff && typeof parsed.handoff === "object" ? parsed.handoff : parsed;
-      } catch (error) {
-        throw new Error(`Could not parse handoff JSON: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      const receipt = {
-        ...(readFlag(args.flags, "preview-sha") ? { previewSha256: readFlag(args.flags, "preview-sha") } : {}),
-        ...(readFlag(args.flags, "handoff-sha") ? { handoffSha256: readFlag(args.flags, "handoff-sha") } : {}),
-        ...(readFlag(args.flags, "order-id") ? { orderId: readFlag(args.flags, "order-id") } : {}),
-        ...(readFlag(args.flags, "tx-hash") ? { txHash: readFlag(args.flags, "tx-hash") } : {}),
-        ...(readFlag(args.flags, "status") ? { status: readFlag(args.flags, "status") } : {}),
-        ...(readFlag(args.flags, "outcome") ? { outcome: readFlag(args.flags, "outcome") } : {}),
-        ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
-      };
+      const handoff = readMarketHandoffArg(args, handoffJson, handoffFile);
+      const receipt = readMarketReceiptArg(args);
       const result = await fetchJson(`${baseUrl}/api/polymarket/orders/receipt`, {
         method: "POST",
         headers,

@@ -19,6 +19,76 @@ Matterhorn Work supports Hyperliquid and Polymarket execution only through a non
 - Polymarket nested `signedPayload` fields are rejected.
 - A receipt with no order id or tx hash is accepted only as review-needed public evidence, with a warning.
 
+## Public receipt examples
+
+A receipt carries **public status only** — order id / tx hash / status and the
+public fields that identify which handoff it answers. It must **never** contain a
+raw signature, a signed payload, a private key, an API secret, a seed phrase, or
+a wallet export.
+
+Hyperliquid public receipt (`receipt.json`):
+
+```json
+{
+  "previewSha256": "<from the handoff>",
+  "handoffSha256": "<from the handoff>",
+  "orderId": "example-order-123",
+  "status": "filled",
+  "asset": "BTC",
+  "side": "buy"
+}
+```
+
+Polymarket public receipt (`receipt.json`):
+
+```json
+{
+  "previewSha256": "<from the handoff>",
+  "handoffSha256": "<from the handoff>",
+  "txHash": "0xexamplepublictxhash",
+  "status": "received",
+  "outcome": "Yes",
+  "side": "yes"
+}
+```
+
+## Verify a receipt from files (not giant inline strings)
+
+Save the handoff and the public receipt to files and pass paths, rather than
+pasting large JSON on the command line:
+
+```bash
+matterhorn-work hyperliquid receipt \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --handoff-file ./handoff.json \
+  --receipt-file ./receipt.json \
+  --json
+
+matterhorn-work polymarket receipt \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --handoff-file ./handoff.json \
+  --receipt-file ./receipt.json \
+  --json
+```
+
+Individual flags (`--order-id`, `--tx-hash`, `--status`, `--asset`, `--outcome`,
+`--side`, `--preview-sha`, `--handoff-sha`) still work and override matching
+fields from `--receipt-file` / `--receipt-json`.
+
+## Mismatch and missing-evidence behavior
+
+- A receipt whose `previewSha256` / `handoffSha256` / asset / side / outcome does
+  not match the original handoff is **rejected** (`ok: false`, `matchesHandoff:
+  false`). Example: importing a receipt with `"side": "sell"` against a `buy`
+  handoff fails with a side mismatch.
+- A receipt with **no order id and no tx hash** is accepted only as review-needed
+  public evidence and carries a **warning** that the status cannot be
+  independently located.
+- Any `signature`, `signedPayload`, `privateKey`, `apiSecret`, `seed`, or
+  `mnemonic` field fails immediately, before any matching is attempted.
+
 ## Command
 
 ```bash
