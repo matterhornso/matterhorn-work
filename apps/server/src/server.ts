@@ -116,6 +116,7 @@ import {
 } from "./tools/bittensor.js";
 import {
   buildHyperliquidAccountCard,
+  buildHyperliquidFundingCard,
   buildHyperliquidMarketListCard,
   buildHyperliquidOrderPreviewCard,
   buildHyperliquidOrderbookCard,
@@ -3944,6 +3945,44 @@ function createRoutes(
     }
     const account = await hyperliquidProvider.getAccount(address);
     return jsonResponse({ success: true, account, cards: [buildHyperliquidAccountCard(account)] });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/account/:address/positions", "client", async (ctx) => {
+    const address = ctx.params.address.trim();
+    if (!isValidHyperliquidAddress(address)) {
+      throw new ApiError(400, "invalid_hyperliquid_address", "address must be a 42-character 0x Hyperliquid account address");
+    }
+    const account = await hyperliquidProvider.getAccount(address);
+    return jsonResponse({
+      success: true,
+      address,
+      positions: account.positions,
+      notionalExposure: account.notionalExposure,
+      unrealizedPnl: account.unrealizedPnl,
+      source: account.source,
+      warnings: account.warnings,
+    });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/account/:address/open-orders", "client", async (ctx) => {
+    const address = ctx.params.address.trim();
+    if (!isValidHyperliquidAddress(address)) {
+      throw new ApiError(400, "invalid_hyperliquid_address", "address must be a 42-character 0x Hyperliquid account address");
+    }
+    const account = await hyperliquidProvider.getAccount(address);
+    return jsonResponse({
+      success: true,
+      address,
+      orders: account.orders,
+      source: account.source,
+      warnings: account.warnings,
+    });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/funding/:asset", "client", async (ctx) => {
+    const asset = ctx.params.asset.trim();
+    const funding = await hyperliquidProvider.getFunding(asset);
+    return jsonResponse({ success: true, funding, cards: [buildHyperliquidFundingCard(funding)] });
   });
 
   addRoute(routes, "GET", "/api/hyperliquid/orderbook/:asset", "client", async (ctx) => {

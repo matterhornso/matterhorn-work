@@ -6,6 +6,8 @@ This is Matterhorn Work's first Hyperliquid slice. It is intentionally read-only
 
 - List Hyperliquid perpetual markets through the official `info` endpoint.
 - Read a public account snapshot from a master or sub-account address.
+- Normalize public position and open-order summaries from `clearinghouseState` and `openOrders`.
+- Read current funding/open-interest context for a market from `metaAndAssetCtxs`.
 - Read an L2 orderbook snapshot for a requested asset.
 - Prepare a non-submittable order preview with consequence text, source labels, warnings, and `canSubmit: false`.
 
@@ -97,6 +99,21 @@ curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/markets?limit=5" \
 
 ```bash
 curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/account/0x0000000000000000000000000000000000000001" \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN"
+```
+
+```bash
+curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/account/0x0000000000000000000000000000000000000001/positions" \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN"
+```
+
+```bash
+curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/account/0x0000000000000000000000000000000000000001/open-orders" \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN"
+```
+
+```bash
+curl -sS "$MATTERHORN_WORK_SERVER_URL/api/hyperliquid/funding/BTC" \
   -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN"
 ```
 
