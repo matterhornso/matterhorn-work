@@ -97,6 +97,37 @@ call or preview. It rejects:
 `PolymarketSecretRejectedError` names only the field and category. It never
 echoes the offending value — not in errors, logs, reports, or test snapshots.
 
+## Security posture
+
+This stream was adversarially audited. Threat model and mitigations:
+
+| Surface | Risk | Mitigation |
+|---------|------|------------|
+| Secret sanitizer | Deeply-nested payload → stack overflow (DoS) | Iterative, bounded traversal (`MAX_SCAN_NODES`, `MAX_SCAN_DEPTH`); fails **closed** (rejects) rather than crashing |
+| Secret sanitizer | Multi-MB string → ReDoS | Mnemonic detection is a linear token scan, not a backtracking regex; hex/PEM checks are linear |
+| Secret sanitizer | Cyclic object → infinite loop | Bounded by the node budget |
+| Market mapping | Hostile outcome label `__proto__` used as a key | `__proto__` / `constructor` / `prototype` labels are skipped; no prototype pollution |
+| Provider reads | SSRF / path traversal via `marketId` | Path segments are `encodeURIComponent`-escaped; host comes only from fixed config base URLs, never from user input |
+| Order preview | Hostile orderbook (negative / NaN / huge levels) | Non-finite values filtered on parse; division guarded; preview stays `canSubmit: false` |
+| Order submission | A live trade path slipping in | No HTTP `POST`, no signing, no order-submission path in the tool or harness; statically asserted by `polymarket-live-qa.test.mjs` |
+
+**No smart contracts, wallet custody, signing, or private-key handling exist in
+this stream**, so reentrancy / contract / custody attack classes do not apply to
+this code. The only key material the stream ever touches is material it
+**rejects**.
+
+### Accepted limitations (by design)
+
+- Free-text in `message` that is not a recognized secret pattern is echoed back
+  in `responseText` / `data` (reflection, not storage). Callers should not paste
+  secrets into chat; recognized secrets are still rejected.
+- Detection is heuristic: phrases shorter than 12 words, homoglyph/Unicode key
+  names, and secrets carried on `Symbol` keys are not flagged. JSON payloads
+  cannot carry `Symbol` keys, so the HTTP path is unaffected.
+- `responseText` and card payloads contain untrusted third-party strings (Gamma
+  market questions/descriptions). **The eventual renderer must escape them** —
+  this server module returns data only and renders no HTML.
+
 ## Verification
 
 ```bash

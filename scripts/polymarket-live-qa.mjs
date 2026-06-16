@@ -24,34 +24,62 @@ const FORBIDDEN_KEY_RE =
 const HEX_PRIVATE_KEY_RE = /\b0x[0-9a-fA-F]{64}\b/;
 const HEX_RAW_SIGNATURE_RE = /\b0x[0-9a-fA-F]{130}\b/;
 const PEM_PRIVATE_KEY_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i;
-const MNEMONIC_RE = /\b(?:[a-z]{3,8}\s+){11,}[a-z]{3,8}\b/;
+const MNEMONIC_WORD_RE = /^[a-z]{3,8}$/;
+
+const MAX_SCAN_NODES = 100_000;
+const MAX_SCAN_DEPTH = 256;
+
+// Linear token scan (not a regex) to avoid ReDoS on adversarial input.
+function looksLikeMnemonic(value) {
+  let run = 0;
+  for (const token of value.split(/\s+/)) {
+    if (MNEMONIC_WORD_RE.test(token)) {
+      if (++run >= 12) return true;
+    } else {
+      run = 0;
+    }
+  }
+  return false;
+}
 
 function classifyForbiddenValue(value) {
   if (typeof value !== "string") return null;
   if (PEM_PRIVATE_KEY_RE.test(value)) return "a private key";
   if (HEX_RAW_SIGNATURE_RE.test(value)) return "a raw signature";
   if (HEX_PRIVATE_KEY_RE.test(value)) return "a private key";
-  if (MNEMONIC_RE.test(value)) return "a seed phrase / mnemonic";
+  if (looksLikeMnemonic(value)) return "a seed phrase / mnemonic";
   return null;
 }
 
-/** Throws (with no value echo) if a payload carries forbidden signing material. */
-export function assertNoForbiddenSecrets(value, label, path = []) {
-  if (typeof value === "string") {
-    const category = classifyForbiddenValue(value);
-    if (category) throw new Error(`${label} contains ${category} at ${path.join(".") || "<root>"}`);
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-  if (Array.isArray(value)) {
-    value.forEach((child, index) => assertNoForbiddenSecrets(child, label, [...path, String(index)]));
-    return;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    if (FORBIDDEN_KEY_RE.test(key)) {
-      throw new Error(`${label} contains forbidden secret-shaped field: ${[...path, key].join(".")}`);
+/**
+ * Throws (with no value echo) if a payload carries forbidden signing material.
+ * Iterative + bounded so a hostile deep/oversized payload fails closed instead
+ * of overflowing the stack.
+ */
+export function assertNoForbiddenSecrets(value, label, rootPath = []) {
+  const stack = [{ value, path: rootPath, depth: 0 }];
+  let visited = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (++visited > MAX_SCAN_NODES) throw new Error(`${label} payload too large to scan safely`);
+    if (node.depth > MAX_SCAN_DEPTH) throw new Error(`${label} payload too deeply nested to scan safely`);
+    const current = node.value;
+    if (typeof current === "string") {
+      const category = classifyForbiddenValue(current);
+      if (category) throw new Error(`${label} contains ${category} at ${node.path.join(".") || "<root>"}`);
+      continue;
     }
-    assertNoForbiddenSecrets(child, label, [...path, key]);
+    if (!current || typeof current !== "object") continue;
+    if (Array.isArray(current)) {
+      current.forEach((child, index) => stack.push({ value: child, path: [...node.path, String(index)], depth: node.depth + 1 }));
+      continue;
+    }
+    for (const [key, child] of Object.entries(current)) {
+      if (FORBIDDEN_KEY_RE.test(key)) {
+        throw new Error(`${label} contains forbidden secret-shaped field: ${[...node.path, key].join(".")}`);
+      }
+      stack.push({ value: child, path: [...node.path, key], depth: node.depth + 1 });
+    }
   }
 }
 

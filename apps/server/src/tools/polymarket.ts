@@ -185,13 +185,34 @@ export interface PolymarketChatInput {
 
 const FORBIDDEN_KEY_RE = new RegExp(POLYMARKET_FORBIDDEN_CREDENTIAL_KEY_PATTERN, "i");
 
-/** Hex private key (32 bytes) or a 65-byte raw ECDSA signature. */
+/** Hex private key (32 bytes) or a 65-byte raw ECDSA signature. All linear-time. */
 const HEX_PRIVATE_KEY_RE = /\b0x[0-9a-fA-F]{64}\b/;
 const HEX_RAW_SIGNATURE_RE = /\b0x[0-9a-fA-F]{130}\b/;
 const PEM_PRIVATE_KEY_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/i;
 const PGP_PRIVATE_KEY_RE = /-----BEGIN PGP PRIVATE KEY BLOCK-----/i;
-/** A run of >= 12 lowercase alphabetic words: a likely BIP39 mnemonic. */
-const MNEMONIC_RE = /\b(?:[a-z]{3,8}\s+){11,}[a-z]{3,8}\b/;
+const MNEMONIC_WORD_RE = /^[a-z]{3,8}$/;
+
+/**
+ * Detect a run of >= 12 consecutive lowercase alphabetic words (a likely BIP39
+ * mnemonic). Implemented as a linear token scan, NOT a regex, to avoid
+ * catastrophic backtracking (ReDoS) on adversarial multi-megabyte input.
+ */
+function looksLikeMnemonic(value: string): boolean {
+  let run = 0;
+  for (const token of value.split(/\s+/)) {
+    if (MNEMONIC_WORD_RE.test(token)) {
+      if (++run >= 12) return true;
+    } else {
+      run = 0;
+    }
+  }
+  return false;
+}
+
+// Bounds for the payload scan: fail closed on absurdly large or deep payloads
+// instead of recursing into a stack overflow.
+const MAX_SCAN_NODES = 100_000;
+const MAX_SCAN_DEPTH = 256;
 
 /**
  * Thrown when a payload carries forbidden signing material. The message names
@@ -214,31 +235,49 @@ function classifyForbiddenValue(value: string): string | null {
   if (PGP_PRIVATE_KEY_RE.test(value)) return "a private key";
   if (HEX_RAW_SIGNATURE_RE.test(value)) return "a raw signature";
   if (HEX_PRIVATE_KEY_RE.test(value)) return "a private key";
-  if (MNEMONIC_RE.test(value)) return "a seed phrase / mnemonic";
+  if (looksLikeMnemonic(value)) return "a seed phrase / mnemonic";
   return null;
 }
 
 /**
- * Deep-scan an arbitrary payload for forbidden credential keys and for values
- * that look like signing material. Throws PolymarketSecretRejectedError on the
- * first hit. Never returns or logs the offending value.
+ * Scan an arbitrary payload for forbidden credential keys and for values that
+ * look like signing material. Throws PolymarketSecretRejectedError on the first
+ * hit and never returns or logs the offending value.
+ *
+ * Traversal is iterative (explicit stack) and bounded by node count and depth,
+ * so a hostile deeply-nested or oversized payload is rejected (fail closed)
+ * rather than overflowing the call stack. Cycles are bounded by the node limit.
  */
-export function assertNoForbiddenSecrets(payload: unknown, path = "payload"): void {
-  if (typeof payload === "string") {
-    const category = classifyForbiddenValue(payload);
-    if (category) throw new PolymarketSecretRejectedError(path, category);
-    return;
-  }
-  if (Array.isArray(payload)) {
-    payload.forEach((item, index) => assertNoForbiddenSecrets(item, `${path}[${index}]`));
-    return;
-  }
-  if (typeof payload === "object" && payload !== null) {
-    for (const [key, value] of Object.entries(payload)) {
-      if (FORBIDDEN_KEY_RE.test(key)) {
-        throw new PolymarketSecretRejectedError(`${path}.${key}`, "a forbidden credential field");
+export function assertNoForbiddenSecrets(payload: unknown, rootPath = "payload"): void {
+  const stack: Array<{ value: unknown; path: string; depth: number }> = [{ value: payload, path: rootPath, depth: 0 }];
+  let visited = 0;
+
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === undefined) break;
+    const { value, path, depth } = node;
+
+    if (++visited > MAX_SCAN_NODES) throw new PolymarketSecretRejectedError(path, "an oversized payload");
+    if (depth > MAX_SCAN_DEPTH) throw new PolymarketSecretRejectedError(path, "an over-nested payload");
+
+    if (typeof value === "string") {
+      const category = classifyForbiddenValue(value);
+      if (category) throw new PolymarketSecretRejectedError(path, category);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index++) {
+        stack.push({ value: value[index], path: `${path}[${index}]`, depth: depth + 1 });
       }
-      assertNoForbiddenSecrets(value, `${path}.${key}`);
+      continue;
+    }
+    if (typeof value === "object" && value !== null) {
+      for (const [key, child] of Object.entries(value)) {
+        if (FORBIDDEN_KEY_RE.test(key)) {
+          throw new PolymarketSecretRejectedError(`${path}.${key}`, "a forbidden credential field");
+        }
+        stack.push({ value: child, path: `${path}.${key}`, depth: depth + 1 });
+      }
     }
   }
 }
@@ -307,9 +346,12 @@ function mapMarketRecord(record: Record<string, unknown>): PolymarketMarketSumma
   const prices = parseNumberArray(record.outcomePrices);
   const tokenIds = parseStringArray(record.clobTokenIds);
 
+  // Outcome labels come from the (untrusted) provider and are used as object
+  // keys; skip prototype-mutating keys so a hostile label cannot pollute.
   const outcomePrices: Record<string, number> = {};
   const tokens: Record<string, string> = {};
   outcomes.forEach((outcome, index) => {
+    if (outcome === "__proto__" || outcome === "constructor" || outcome === "prototype") return;
     if (index < prices.length) outcomePrices[outcome] = prices[index];
     if (index < tokenIds.length) tokens[outcome] = tokenIds[index];
   });

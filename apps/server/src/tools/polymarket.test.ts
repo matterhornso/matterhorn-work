@@ -373,6 +373,79 @@ describe("assertNoForbiddenSecrets", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Hardening: DoS / ReDoS / prototype-pollution resistance.
+// ---------------------------------------------------------------------------
+
+describe("sanitizer hardening", () => {
+  test("fails closed on a deeply-nested payload (no stack overflow)", () => {
+    let deep: Record<string, unknown> = { v: 1 };
+    for (let i = 0; i < 100_000; i++) deep = { a: deep };
+    let thrown: unknown = null;
+    try {
+      assertNoForbiddenSecrets(deep);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(PolymarketSecretRejectedError);
+    expect(thrown).not.toBeInstanceOf(RangeError);
+  });
+
+  test("scans a multi-megabyte string in linear time (no ReDoS)", () => {
+    // ~1MB; tokens carry a digit so they are not words, forcing a full scan.
+    const hostile = "ab1 ".repeat(250_000);
+    const start = performance.now();
+    expect(() => assertNoForbiddenSecrets({ note: hostile })).not.toThrow();
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  test("a regex-catastrophic input resolves quickly", () => {
+    // Worst case for the old backtracking mnemonic regex: many words + bad tail.
+    const hostile = `${"abc ".repeat(50_000)}!`;
+    const start = performance.now();
+    try {
+      assertNoForbiddenSecrets({ note: hostile });
+    } catch {
+      /* correctly detected as a mnemonic-shaped run */
+    }
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  test("still detects a real mnemonic inside a large string", () => {
+    const phrase = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+    expect(() => assertNoForbiddenSecrets({ note: `padding padding ${phrase} padding` })).toThrow(PolymarketSecretRejectedError);
+  });
+
+  test("does not pollute Object.prototype when scanning a __proto__ payload", () => {
+    const payload: unknown = JSON.parse('{"__proto__":{"polluted":true},"safe":1}');
+    try {
+      assertNoForbiddenSecrets(payload);
+    } catch {
+      /* scanning result irrelevant; pollution is what matters */
+    }
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
+  });
+
+  test("market mapping ignores prototype-mutating outcome labels", async () => {
+    const hostileMarket = {
+      id: "0xmarket-proto",
+      question: "hostile",
+      outcomes: JSON.stringify(["__proto__", "Yes"]),
+      outcomePrices: JSON.stringify(["0.5", "0.5"]),
+      clobTokenIds: JSON.stringify(["t0", "t1"]),
+      active: true,
+      closed: false,
+    };
+    const fetchImpl = (async (_input: RequestInfo | URL) => jsonResponse(hostileMarket)) as typeof fetch;
+    const market = await new PolymarketProvider({ fetchImpl }).getMarket("0xmarket-proto");
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
+    expect(market.tokenIds.Yes).toBe("t1");
+    expect(Object.prototype.hasOwnProperty.call(market.tokenIds, "__proto__")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // No-live-submission proof.
 // ---------------------------------------------------------------------------
 
