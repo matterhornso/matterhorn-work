@@ -53,6 +53,10 @@ const tool = mustContain("apps/server/src/tools/polymarket.ts", [
   "buildPolymarketResolution",
   "buildPolymarketPriceContext",
   "gapVsImpliedPct",
+  // Read-only watchlist/monitor flow.
+  "buildPolymarketWatchDescriptor",
+  "matterhorn.polymarket.watch.v1",
+  "polymarket_watch",
 ]);
 
 // No execution / submission / signing path may exist.
