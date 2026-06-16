@@ -181,3 +181,74 @@ describe("Hyperliquid read/preview safety", () => {
     expect(result.warnings.join(" ")).toContain("apiSecret");
   });
 });
+
+describe("Hyperliquid preview risk polish", () => {
+  test("preview includes notional, marketability, funding, and leverage placeholder", async () => {
+    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+    expect(preview.notionalUsd).toBe(6500);
+    expect(preview.marketability.referencePrice).toBe(65001);
+    expect(preview.marketability.estimatedFillPrice).toBe(65001);
+    expect(preview.marketability.depthSufficient).toBe(true);
+    expect(preview.funding?.fundingRate).toBe(0.0001);
+    expect(preview.funding?.annualizedFundingPct).not.toBeNull();
+    // No account context provided -> leverage/liquidation are explicit placeholders.
+    expect(preview.leverageContext.requiresAccountContext).toBe(true);
+    expect(preview.leverageContext.maxLeverage).toBe(50);
+    expect(preview.leverageContext.estimatedLeverage).toBeNull();
+    expect(preview.leverageContext.liquidationPrice).toBeNull();
+    expect(preview.canSubmit).toBe(false);
+    expect(preview.consequence).toContain("will not sign or submit");
+  });
+
+  test("flags slippage beyond tolerance using the orderbook", async () => {
+    // size 5 BTC vastly exceeds the single visible ask level (0.8) -> partial depth.
+    const preview = await prepareHyperliquidOrderPreview({ asset: "BTC", side: "buy", size: 5, price: 65000, slippageTolerance: 0.01 }, provider());
+    expect(preview.marketability.depthSufficient).toBe(false);
+    expect(preview.warnings.some((w) => /depth is insufficient/i.test(w))).toBe(true);
+  });
+
+  test("close-intent without an address asks exactly one clarification", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "close half my BTC position" }, { provider: provider() });
+    expect(result.intent).toBe("order_preview");
+    expect(result.requiresClarification).toBe(true);
+    expect(result.clarificationQuestion).toContain("address");
+    expect(result.preview).toBeUndefined();
+  });
+
+  test("close-intent with an address builds a reduce-only preview sized from the live position", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "close half my BTC position", address: ADDRESS }, { provider: provider() });
+    expect(result.execution).toBe("unsigned_preview");
+    const preview = result.preview;
+    expect(preview).toBeDefined();
+    expect(preview?.reduceOnly).toBe(true);
+    expect(preview?.side).toBe("sell"); // closing a long
+    expect(preview?.size).toBeCloseTo(0.05); // half of 0.1
+    expect(preview?.closeContext?.isClose).toBe(true);
+    expect(preview?.closeContext?.fraction).toBe(0.5);
+    // Account context present -> real leverage/liquidation, not placeholders.
+    expect(preview?.leverageContext.requiresAccountContext).toBe(false);
+    expect(preview?.leverageContext.liquidationPrice).toBe(50000);
+    expect(preview?.leverageContext.estimatedLeverage).toBe(5);
+    expect(preview?.canSubmit).toBe(false);
+  });
+
+  test("close-intent for an asset with no open position reports nothing to close", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "close all my ETH position", address: ADDRESS }, { provider: provider() });
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("nothing to close");
+    expect(result.preview).toBeUndefined();
+  });
+
+  test("funding-risk prompt returns annualized read-only context", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "what is my funding risk on BTC?" }, { provider: provider() });
+    expect(result.intent).toBe("funding");
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("%/yr");
+    expect(result.data?.annualizedFundingPct).not.toBeNull();
+  });
+
+  test("planner treats close-position as an order preview but plain positions as account", () => {
+    expect(planHyperliquidChat({ message: "close half my ETH position" })).toBe("order_preview");
+    expect(planHyperliquidChat({ message: "show my positions" })).toBe("account");
+  });
+});
