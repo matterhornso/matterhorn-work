@@ -3751,6 +3751,11 @@ function printHelp(): void {
     "  matterhorn-work bittensor watch create|list|check|digest|act [options]",
     "  matterhorn-work bittensor wallet-timeline status|export|clear [options]",
     "  matterhorn-work bittensor readiness [options]",
+    "  matterhorn-work hyperliquid chat --message <text> [options]",
+    "  matterhorn-work hyperliquid markets [options]",
+    "  matterhorn-work hyperliquid account --address <0x...> [options]",
+    "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
+    "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3770,6 +3775,7 @@ function printHelp(): void {
     "  files                   Manage file sessions and batch file sync",
     "  sessions                Manage chat sessions and read progress events",
     "  bittensor               Run Bittensor chat/readiness workflows",
+    "  hyperliquid             Run Hyperliquid read/preview workflows",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -3834,6 +3840,12 @@ function printHelp(): void {
     "  --destination-netuid <n>  Destination subnet netuid for Bittensor move-stake previews",
     "  --strategy <name>         Bittensor validator strategy: balanced | yield | safety",
     "  --rate-tolerance <n>      Bittensor rate/slippage tolerance",
+    "  --address <0x...>         Hyperliquid public wallet address for account reads",
+    "  --asset <symbol>          Hyperliquid market symbol, e.g. BTC or ETH",
+    "  --side <side>             Hyperliquid preview side: buy | sell",
+    "  --size <n>                Hyperliquid preview order size",
+    "  --price <n>               Hyperliquid preview limit price",
+    "  --reduce-only             Mark Hyperliquid preview as reduce-only",
     "  --upstream-url <url>      OpenWork upstream Git remote for upstream check",
     "  --upstream-branch <name>  OpenWork upstream branch for upstream check",
     "  --base-branch <name>      Matterhorn base branch for upstream check",
@@ -7066,6 +7078,163 @@ function parseSessionSseEvents(text: string) {
     });
 }
 
+function assertNoHyperliquidSecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "private-key",
+    "privateKey",
+    "seed",
+    "mnemonic",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Hyperliquid ${key} is not accepted by Matterhorn Work CLI. Use read/preview commands only; signing and API wallet custody are not enabled.`,
+      );
+    }
+  }
+}
+
+function readHyperliquidAsset(args: ParsedArgs, fallbackIndex: number): string {
+  const asset =
+    readFlag(args.flags, "asset") ??
+    args.positionals[fallbackIndex] ??
+    "";
+  const trimmed = asset.trim().toUpperCase();
+  if (!trimmed) {
+    throw new Error("asset is required for hyperliquid orderbook/preview commands");
+  }
+  return trimmed;
+}
+
+function readHyperliquidAddress(args: ParsedArgs, fallbackIndex: number): string {
+  const address =
+    readFlag(args.flags, "address") ??
+    args.positionals[fallbackIndex] ??
+    "";
+  const trimmed = address.trim();
+  if (!trimmed) {
+    throw new Error("address is required for hyperliquid account");
+  }
+  return trimmed;
+}
+
+function readHyperliquidSide(args: ParsedArgs): "buy" | "sell" {
+  const side = (readFlag(args.flags, "side") ?? "").trim().toLowerCase();
+  if (side === "buy" || side === "sell") return side;
+  throw new Error("side is required and must be buy or sell for hyperliquid preview-order");
+}
+
+function readHyperliquidSize(args: ParsedArgs): number {
+  const size = readNumber(args.flags, "size", undefined);
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) {
+    throw new Error("size is required and must be greater than 0 for hyperliquid preview-order");
+  }
+  return size;
+}
+
+async function runHyperliquid(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "chat";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  try {
+    assertNoHyperliquidSecrets(args);
+
+    if (subcommand === "markets" || subcommand === "list-markets" || subcommand === "list") {
+      const limit = readNumber(args.flags, "limit", undefined);
+      const url = new URL(`${baseUrl}/api/hyperliquid/markets`);
+      if (typeof limit === "number") url.searchParams.set("limit", String(limit));
+      const result = await fetchJson(url.toString(), { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "account" || subcommand === "wallet" || subcommand === "positions") {
+      const address = readHyperliquidAddress(args, 2);
+      const result = await fetchJson(
+        `${baseUrl}/api/hyperliquid/account/${encodeURIComponent(address)}`,
+        { headers },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "orderbook" || subcommand === "book" || subcommand === "depth") {
+      const asset = readHyperliquidAsset(args, 2);
+      const result = await fetchJson(
+        `${baseUrl}/api/hyperliquid/orderbook/${encodeURIComponent(asset)}`,
+        { headers },
+      );
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (
+      subcommand === "preview-order" ||
+      subcommand === "order-preview" ||
+      subcommand === "preview"
+    ) {
+      const asset = readHyperliquidAsset(args, 2);
+      const price = readNumber(args.flags, "price", undefined);
+      const reduceOnly = readBool(args.flags, "reduce-only", false);
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/preview`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          asset,
+          side: readHyperliquidSide(args),
+          size: readHyperliquidSize(args),
+          ...(typeof price === "number" && Number.isFinite(price) ? { price } : {}),
+          ...(reduceOnly ? { reduceOnly } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        args.positionals.slice(2).join(" ").trim();
+      if (!message.trim()) {
+        throw new Error("message is required for hyperliquid chat");
+      }
+      const size = readNumber(args.flags, "size", undefined);
+      const price = readNumber(args.flags, "price", undefined);
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/chat/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: message.trim(),
+          ...(readFlag(args.flags, "address") ? { address: readFlag(args.flags, "address") } : {}),
+          ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
+          ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+          ...(typeof size === "number" ? { size } : {}),
+          ...(typeof price === "number" ? { price } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    throw new Error("hyperliquid requires chat|markets|account|orderbook|preview-order");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -10191,6 +10360,10 @@ async function main() {
   }
   if (command === "bittensor" || command === "tao") {
     await runBittensor(args);
+    return;
+  }
+  if (command === "hyperliquid" || command === "hl") {
+    await runHyperliquid(args);
     return;
   }
   if (command === "upstream") {
