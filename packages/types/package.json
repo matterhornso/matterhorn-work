@@ -22,6 +22,11 @@
       "types": "./src/den/inference.ts",
       "development": "./src/den/inference.ts",
       "default": "./src/den/inference.ts"
+    },
+    "./markets": {
+      "types": "./src/markets.ts",
+      "development": "./src/markets.ts",
+      "default": "./src/markets.ts"
     }
   },
   "files": [
