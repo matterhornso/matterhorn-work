@@ -35,9 +35,15 @@ Research, market detail, odds, and orderbook reads work regardless of compliance
 Each bet preview carries, alongside `canSubmit: false`:
 
 - `size` (USDC notional) and `price` (expected average fill as a probability, 0..1).
-- `estimatedShares` and a `marketability` estimate from the CLOB asks (`referencePrice`, `estimatedFillPrice`, `estimatedSlippagePct`, `depthSufficient`).
+- `estimatedShares` and a `marketability` estimate from the CLOB asks (`referencePrice`, `estimatedFillPrice`, `estimatedSlippagePct`, `depthSufficient`). A warning is added when depth is insufficient or estimated slippage exceeds a supplied tolerance.
+- `risk` — prediction-market payoff framing: `costUsdc`, `payoutIfWinUsdc` (each share pays $1 if the outcome resolves true), `maxProfitUsdc`, `maxLossUsdc` (the full stake), and `breakevenProbability`.
+- `resolution` — `endDate` and `resolvesInDays`, with a warning when the market resolves within a day or the end date has already passed.
+- `priceContext` — headline (Gamma) `impliedProbability` vs `estimatedFillProbability` and `bookMidpoint`, with a `gapVsImpliedPct` and a warning when the live book diverges from the headline odds.
+- `liquidity` — market `liquidityUsd` and `volumeUsd`, with a thin-liquidity warning.
 - `signerPolicy: "api_wallet_required"` — actually executing would require an API wallet Matterhorn does not provide.
-- `compliance` status, `source`/freshness, `warnings`, a `consequence` statement, and explicit "external signing/execution not enabled" language.
+- `compliance` status, `source`/freshness, `warnings`, a `consequence` statement (including the cost/payout/loss framing), and explicit "external signing/execution not enabled" language.
+
+When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `price`, `size`, and `estimatedShares` are all `null` — no executable parameters are generated.
 
 ## Safety Rules
 
