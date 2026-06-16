@@ -109,6 +109,8 @@ import {
   type BittensorChatExecutionInput,
   type BittensorExtrinsicAction,
   type BittensorExtrinsicPreview,
+  type BittensorSignedResult,
+  type BittensorSigningHandoff,
   type BittensorSubnetInvocation,
   type BittensorWatch,
 } from "./tools/bittensor.js";
@@ -4651,6 +4653,79 @@ function createRoutes(
     } catch (err) {
       throw new ApiError(400, "invalid_handoff", err instanceof Error ? err.message : "Could not create Bittensor signing handoff");
     }
+  });
+
+  const BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri)/i;
+  const BITTENSOR_RECEIPT_RAW_SIGNATURE_KEY_RE = /^(signature|signedPayload|signedPayloadHex|signedExtrinsic)$/i;
+
+  function findForbiddenBittensorReceiptInput(value: unknown, path: string[] = []): string | null {
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        const nested = findForbiddenBittensorReceiptInput(value[index], [...path, String(index)]);
+        if (nested) return nested;
+      }
+      return null;
+    }
+    if (!value || typeof value !== "object") return null;
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (BITTENSOR_RECEIPT_FORBIDDEN_KEY_RE.test(key) || BITTENSOR_RECEIPT_RAW_SIGNATURE_KEY_RE.test(key)) {
+        return [...path, key].join(".");
+      }
+      const nested = findForbiddenBittensorReceiptInput(child, [...path, key]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+
+  function normalizeBittensorReceiptString(value: unknown): string | null {
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  function normalizeBittensorReceiptHash(value: unknown): string | null {
+    const text = normalizeBittensorReceiptString(value);
+    return text && /^[a-f0-9]{64}$/i.test(text) ? text.toLowerCase() : null;
+  }
+
+  function normalizeBittensorReceiptResult(value: unknown): BittensorSignedResult | null {
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    const status = normalizeBittensorReceiptString(record.status);
+    if (!status || !["submitted", "sidecar_unavailable", "rejected", "invalid_signature"].includes(status)) {
+      return null;
+    }
+    return {
+      status: status as BittensorSignedResult["status"],
+      txHash: normalizeBittensorReceiptString(record.txHash),
+      blockHash: normalizeBittensorReceiptString(record.blockHash),
+      message: normalizeBittensorReceiptString(record.message) ?? "External signer receipt evidence imported by Matterhorn.",
+      explorerUrl: normalizeBittensorReceiptString(record.explorerUrl),
+    };
+  }
+
+  addRoute(routes, "POST", "/api/bittensor/extrinsics/receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenBittensorReceiptInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "signing_material_rejected", `Bittensor receipt input must not contain seed phrases, private keys, raw signatures, or signed payloads (${forbidden}). Submit only public hashes and routing metadata.`);
+    }
+    if (!body.preview || typeof body.preview !== "object") {
+      throw new ApiError(400, "invalid_preview", "preview is required");
+    }
+    const signatureSha256 = normalizeBittensorReceiptHash(body.signatureSha256);
+    if (body.signatureSha256 !== undefined && !signatureSha256) {
+      throw new ApiError(400, "invalid_signature_hash", "signatureSha256 must be a 64-character SHA-256 hex digest");
+    }
+    const preview = body.preview as BittensorExtrinsicPreview;
+    const handoff = body.handoff && typeof body.handoff === "object" ? body.handoff as BittensorSigningHandoff : null;
+    const result = normalizeBittensorReceiptResult(body.result);
+    const receipt = createBittensorSigningReceipt({
+      preview,
+      handoff,
+      result,
+      signatureSha256,
+      signerAddress: typeof body.signerAddress === "string" ? body.signerAddress : null,
+    });
+    return jsonResponse({ success: true, receipt, cards: [buildBittensorSigningReceiptCard(receipt)] });
   });
 
   addRoute(routes, "POST", "/api/bittensor/extrinsics/submit", "client", async (ctx) => {

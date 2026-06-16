@@ -145,6 +145,74 @@ describe("parseAmountTao", () => {
   });
 });
 
+describe("createBittensorSigningReceipt", () => {
+  function testPreview() {
+    return {
+      action: "stake" as const,
+      network: "finney" as const,
+      netuid: 14,
+      amountTao: 1,
+      coldkey: VALID_SS58,
+      hotkey: VALID_SS58,
+      destination: null,
+      feeTao: 0.0001,
+      slippageBps: 25,
+      expectedAlpha: 2,
+      unsignedPayload: {
+        chain: "bittensor",
+        network: "finney",
+        action: "stake",
+        netuid: 14,
+        amountTao: 1,
+        coldkey: VALID_SS58,
+        hotkey: VALID_SS58,
+      },
+      signer: {
+        mode: "desktop_handoff" as const,
+        available: true,
+        canSign: false,
+        canSubmit: false,
+        network: "finney" as const,
+        address: null,
+        message: "External signer required.",
+      },
+      warnings: ["Test preview."],
+      consequenceSummary: "Stake 1 TAO to subnet 14 with an external signer.",
+      requiresExternalSignature: true as const,
+    };
+  }
+
+  test("hashes raw signatures and never returns raw signing material", () => {
+    const rawSignature = "0x" + "a".repeat(128);
+    const receipt = createBittensorSigningReceipt({
+      preview: testPreview(),
+      signature: rawSignature,
+      signerAddress: VALID_SS58,
+    });
+
+    expect(receipt.status).toBe("signed_payload_received");
+    expect(receipt.signatureSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(receipt.signerAddress).toBe(VALID_SS58);
+    const serialized = JSON.stringify(receipt);
+    expect(serialized).not.toContain(rawSignature);
+    expect(serialized).not.toMatch(/seed phrase|privateKey|mnemonic|keyfile|suri/i);
+    expect(buildBittensorSigningReceiptCard(receipt).warnings?.join(" ")).toContain("does not store signing material");
+  });
+
+  test("accepts public signature hash evidence without raw signatures", () => {
+    const signatureSha256 = "b".repeat(64);
+    const receipt = createBittensorSigningReceipt({
+      preview: testPreview(),
+      signatureSha256,
+      signerAddress: VALID_SS58,
+    });
+
+    expect(receipt.status).toBe("signed_payload_received");
+    expect(receipt.signatureSha256).toBe(signatureSha256);
+    expect(JSON.stringify(receipt)).not.toMatch(/signature\"\s*:/i);
+  });
+});
+
 describe("buildBittensorQuote", () => {
   test("builds quote-only staking guidance with external signature requirement", () => {
     const quote = buildBittensorQuote(
