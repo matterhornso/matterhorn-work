@@ -14,7 +14,7 @@ const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)/i;
 
-export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "orderbook" | "order_preview";
+export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "funding" | "orderbook" | "order_preview";
 export type HyperliquidExecution = "answered" | "clarification_required" | "read_only" | "unsigned_preview" | "unsupported";
 export type HyperliquidSide = "buy" | "sell" | "long" | "short";
 
@@ -42,10 +42,55 @@ export interface HyperliquidAccountSnapshot {
   withdrawable: string | null;
   positionCount: number;
   openOrderCount: number;
+  notionalExposure: number | null;
+  unrealizedPnl: number | null;
+  positions: HyperliquidPositionSummary[];
+  orders: HyperliquidOpenOrderSummary[];
   assetPositions: unknown[];
   openOrders: unknown[];
   source: HyperliquidSource;
   warnings: string[];
+}
+
+export interface HyperliquidPositionSummary {
+  asset: string;
+  side: "long" | "short" | "flat" | "unknown";
+  size: number | null;
+  entryPx: number | null;
+  positionValue: number | null;
+  unrealizedPnl: number | null;
+  returnOnEquity: number | null;
+  liquidationPx: number | null;
+  marginUsed: number | null;
+  leverageType: string | null;
+  leverageValue: number | null;
+  raw: unknown;
+}
+
+export interface HyperliquidOpenOrderSummary {
+  asset: string;
+  side: "buy" | "sell" | "unknown";
+  size: number | null;
+  limitPx: number | null;
+  oid: string | number | null;
+  timestamp: number | null;
+  reduceOnly: boolean | null;
+  orderType: string | null;
+  raw: unknown;
+}
+
+export interface HyperliquidFundingSnapshot {
+  asset: string;
+  fundingRate: number | null;
+  premium: number | null;
+  openInterest: number | null;
+  oraclePx: number | null;
+  markPx: number | null;
+  previousDayPx: number | null;
+  dayNotionalVolume: number | null;
+  source: HyperliquidSource;
+  warnings: string[];
+  raw: unknown;
 }
 
 export interface HyperliquidOrderbook {
@@ -134,6 +179,8 @@ export interface HyperliquidChatExecutionResult {
 export type HyperliquidChatCard =
   | { kind: "hyperliquid_market_list"; title: string; markets: HyperliquidMarketSummary[]; warnings: string[] }
   | { kind: "hyperliquid_account_snapshot"; title: string; account: HyperliquidAccountSnapshot; warnings: string[] }
+  | { kind: "hyperliquid_position_risk"; title: string; positions: HyperliquidPositionSummary[]; orders: HyperliquidOpenOrderSummary[]; warnings: string[] }
+  | { kind: "hyperliquid_funding"; title: string; funding: HyperliquidFundingSnapshot; warnings: string[] }
   | { kind: "hyperliquid_orderbook"; title: string; orderbook: HyperliquidOrderbook; warnings: string[] }
   | { kind: "hyperliquid_order_preview"; title: string; preview: HyperliquidActionPreview; warnings: string[] }
   | { kind: "hyperliquid_clarification"; title: string; question: string; warnings: string[] };
@@ -141,6 +188,7 @@ export type HyperliquidChatCard =
 export interface HyperliquidProvider {
   listMarkets(limit?: number | null): Promise<HyperliquidMarketSummary[]>;
   getAccount(address: string): Promise<HyperliquidAccountSnapshot>;
+  getFunding(asset: string): Promise<HyperliquidFundingSnapshot>;
   getOrderbook(asset: string): Promise<HyperliquidOrderbook>;
 }
 
@@ -184,6 +232,63 @@ function normalizeAsset(value: unknown): string | null {
   if (!text) return null;
   const cleaned = text.replace(/[^a-zA-Z0-9/_:-]/g, "").toUpperCase();
   return cleaned.length > 0 && cleaned.length <= 32 ? cleaned : null;
+}
+
+function objectOrNull(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function sideFromSize(size: number | null): HyperliquidPositionSummary["side"] {
+  if (size === null) return "unknown";
+  if (size > 0) return "long";
+  if (size < 0) return "short";
+  return "flat";
+}
+
+function normalizeOrderSide(value: unknown): HyperliquidOpenOrderSummary["side"] {
+  const side = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (side === "b" || side === "buy" || side === "bid") return "buy";
+  if (side === "a" || side === "sell" || side === "ask") return "sell";
+  return "unknown";
+}
+
+function normalizePositionSummary(value: unknown): HyperliquidPositionSummary {
+  const wrapper = objectOrNull(value) ?? {};
+  const position = objectOrNull(wrapper.position) ?? wrapper;
+  const leverage = objectOrNull(position.leverage);
+  const asset = normalizeAsset(position.coin) ?? "UNKNOWN";
+  const size = numberOrNull(position.szi);
+  return {
+    asset,
+    side: sideFromSize(size),
+    size,
+    entryPx: numberOrNull(position.entryPx),
+    positionValue: numberOrNull(position.positionValue),
+    unrealizedPnl: numberOrNull(position.unrealizedPnl),
+    returnOnEquity: numberOrNull(position.returnOnEquity),
+    liquidationPx: numberOrNull(position.liquidationPx),
+    marginUsed: numberOrNull(position.marginUsed),
+    leverageType: stringOrNull(leverage?.type),
+    leverageValue: numberOrNull(leverage?.value),
+    raw: value,
+  };
+}
+
+function normalizeOpenOrderSummary(value: unknown): HyperliquidOpenOrderSummary {
+  const order = objectOrNull(value) ?? {};
+  return {
+    asset: normalizeAsset(order.coin) ?? "UNKNOWN",
+    side: normalizeOrderSide(order.side),
+    size: numberOrNull(order.sz ?? order.origSz),
+    limitPx: numberOrNull(order.limitPx ?? order.px),
+    oid: typeof order.oid === "number" || typeof order.oid === "string" ? order.oid : null,
+    timestamp: numberOrNull(order.timestamp),
+    reduceOnly: typeof order.reduceOnly === "boolean" ? order.reduceOnly : null,
+    orderType: stringOrNull(order.orderType ?? order.type),
+    raw: value,
+  };
 }
 
 function stableJson(value: unknown): string {
@@ -266,6 +371,14 @@ export class HyperliquidInfoProvider implements HyperliquidProvider {
     const stateRecord = state && typeof state === "object" ? state as Record<string, unknown> : {};
     const positions = Array.isArray(stateRecord.assetPositions) ? stateRecord.assetPositions : [];
     const orders = Array.isArray(openOrders) ? openOrders : [];
+    const normalizedPositions = positions.map(normalizePositionSummary);
+    const normalizedOrders = orders.map(normalizeOpenOrderSummary);
+    const notionalExposure = normalizedPositions.reduce((total, position) => {
+      return total + Math.abs(position.positionValue ?? 0);
+    }, 0);
+    const unrealizedPnl = normalizedPositions.reduce((total, position) => {
+      return total + (position.unrealizedPnl ?? 0);
+    }, 0);
     return {
       address,
       marginSummary: stateRecord.marginSummary && typeof stateRecord.marginSummary === "object" ? stateRecord.marginSummary as Record<string, unknown> : null,
@@ -273,10 +386,54 @@ export class HyperliquidInfoProvider implements HyperliquidProvider {
       withdrawable: stringOrNull(stateRecord.withdrawable),
       positionCount: positions.length,
       openOrderCount: orders.length,
+      notionalExposure: normalizedPositions.length ? notionalExposure : null,
+      unrealizedPnl: normalizedPositions.length ? unrealizedPnl : null,
+      positions: normalizedPositions,
+      orders: normalizedOrders,
       assetPositions: positions,
       openOrders: orders,
       source: nowSource(),
       warnings: ["Read-only account snapshot. Use the actual master or sub-account address, not an agent wallet address."],
+    };
+  }
+
+  async getFunding(assetInput: string): Promise<HyperliquidFundingSnapshot> {
+    const asset = normalizeAsset(assetInput);
+    if (!asset) throw new Error("asset is required");
+    const payload = await this.postInfoCached("metaAndAssetCtxs", { type: "metaAndAssetCtxs" });
+    const tuple = Array.isArray(payload) ? payload : [];
+    const meta = objectOrNull(tuple[0]);
+    const universe = Array.isArray(meta?.universe) ? meta.universe : [];
+    const contexts = Array.isArray(tuple[1]) ? tuple[1] : [];
+    const index = universe.findIndex((entry) => normalizeAsset(objectOrNull(entry)?.name) === asset);
+    const context = objectOrNull(contexts[index]) ?? {};
+    if (index < 0) {
+      return {
+        asset,
+        fundingRate: null,
+        premium: null,
+        openInterest: null,
+        oraclePx: null,
+        markPx: null,
+        previousDayPx: null,
+        dayNotionalVolume: null,
+        source: nowSource(["Asset was not found in Hyperliquid metaAndAssetCtxs."]),
+        warnings: ["No funding context found for " + asset + "."],
+        raw: null,
+      };
+    }
+    return {
+      asset,
+      fundingRate: numberOrNull(context.funding),
+      premium: numberOrNull(context.premium),
+      openInterest: numberOrNull(context.openInterest),
+      oraclePx: numberOrNull(context.oraclePx),
+      markPx: numberOrNull(context.markPx),
+      previousDayPx: numberOrNull(context.prevDayPx),
+      dayNotionalVolume: numberOrNull(context.dayNtlVlm),
+      source: nowSource(),
+      warnings: ["Funding is a read-only exchange snapshot and can change quickly."],
+      raw: context,
     };
   }
 
@@ -339,6 +496,7 @@ export const hyperliquidProvider = new HyperliquidInfoProvider();
 
 export function planHyperliquidChat(input: HyperliquidChatExecutionInput): HyperliquidIntent {
   const message = input.message.toLowerCase();
+  if (/\b(funding|funding rate|premium|open interest|oi)\b/.test(message)) return "funding";
   if (/\b(order\s*book|orderbook|book|bid|ask|liquidity)\b/.test(message)) return "orderbook";
   if (/\b(position|positions|account|balance|margin|portfolio|pnl|open orders?)\b/.test(message)) return "account";
   if (/\b(buy|sell|long|short|trade|order|preview)\b/.test(message)) return "order_preview";
@@ -489,10 +647,25 @@ export async function executeHyperliquidChatWorkflow(
       venue: "hyperliquid",
       intent: "account",
       execution: "read_only",
-      responseText: "Hyperliquid account snapshot for " + input.address + ": " + account.positionCount + " positions and " + account.openOrderCount + " open orders. This is read-only public account data.",
-      cards: [buildHyperliquidAccountCard(account)],
+      responseText: "Hyperliquid account snapshot for " + input.address + ": " + account.positionCount + " positions, " + account.openOrderCount + " open orders, and " + (account.notionalExposure === null ? "unknown" : formatNumber(account.notionalExposure) + " USDC") + " notional exposure. This is read-only public account data.",
+      cards: [buildHyperliquidAccountCard(account), buildHyperliquidPositionRiskCard(account)],
       data: { account },
       warnings: account.warnings,
+    };
+  }
+
+  if (intent === "funding") {
+    const asset = normalizeAsset(input.asset) ?? extractAsset(input.message);
+    if (!asset) return clarification("Which Hyperliquid asset should I check funding for? Example: BTC, ETH, SOL, or HYPE.", [], "clarification_required", intent);
+    const funding = await provider.getFunding(asset);
+    return {
+      venue: "hyperliquid",
+      intent,
+      execution: "read_only",
+      responseText: "Hyperliquid " + asset + " funding snapshot: " + (funding.fundingRate === null ? "funding unavailable" : String(funding.fundingRate)) + ". This is read-only and can change quickly.",
+      cards: [buildHyperliquidFundingCard(funding)],
+      data: { funding },
+      warnings: funding.warnings,
     };
   }
 
@@ -541,6 +714,20 @@ export function buildHyperliquidAccountCard(account: HyperliquidAccountSnapshot)
   return { kind: "hyperliquid_account_snapshot", title: "Hyperliquid account", account, warnings: account.warnings };
 }
 
+export function buildHyperliquidPositionRiskCard(account: HyperliquidAccountSnapshot): HyperliquidChatCard {
+  return {
+    kind: "hyperliquid_position_risk",
+    title: "Hyperliquid positions and open orders",
+    positions: account.positions,
+    orders: account.orders,
+    warnings: account.warnings,
+  };
+}
+
+export function buildHyperliquidFundingCard(funding: HyperliquidFundingSnapshot): HyperliquidChatCard {
+  return { kind: "hyperliquid_funding", title: funding.asset + " funding", funding, warnings: funding.warnings };
+}
+
 export function buildHyperliquidOrderbookCard(orderbook: HyperliquidOrderbook): HyperliquidChatCard {
   return { kind: "hyperliquid_orderbook", title: orderbook.asset + " orderbook", orderbook, warnings: orderbook.warnings };
 }
@@ -585,7 +772,7 @@ function extractAsset(message: string): string | null {
 
 function extractNumberAfter(message: string, label: RegExp): number | null {
   const match = message.match(new RegExp(label.source + "\\s*(?:is|=|:)?\\s*([0-9]+(?:\\.[0-9]+)?)", "i"));
-  return numberOrNull(match?.[1]);
+  return numberOrNull(match?.at(-1));
 }
 
 function extractNumberBeforeAsset(message: string, asset: string | null): number | null {

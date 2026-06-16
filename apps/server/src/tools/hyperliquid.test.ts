@@ -30,10 +30,24 @@ function mockFetcher() {
         marginSummary: { accountValue: "1000" },
         crossMarginSummary: { accountValue: "1000" },
         withdrawable: "500",
-        assetPositions: [{ position: { coin: "BTC", szi: "0.1" } }],
+        assetPositions: [
+          {
+            position: {
+              coin: "BTC",
+              szi: "0.1",
+              entryPx: "64000",
+              positionValue: "6500",
+              unrealizedPnl: "100",
+              returnOnEquity: "0.015",
+              liquidationPx: "50000",
+              marginUsed: "1000",
+              leverage: { type: "cross", value: 5 },
+            },
+          },
+        ],
       };
     } else if (body.type === "openOrders") {
-      payload = [{ coin: "BTC", oid: 1 }];
+      payload = [{ coin: "BTC", oid: 1, side: "B", sz: "0.05", limitPx: "63000", reduceOnly: false, timestamp: 1 }];
     } else if (body.type === "l2Book") {
       payload = {
         levels: [
@@ -41,6 +55,19 @@ function mockFetcher() {
           [{ px: "65001", sz: "0.8" }],
         ],
       };
+    } else if (body.type === "metaAndAssetCtxs") {
+      payload = [
+        {
+          universe: [
+            { name: "BTC", szDecimals: 5, maxLeverage: 50 },
+            { name: "ETH", szDecimals: 4, maxLeverage: 50 },
+          ],
+        },
+        [
+          { funding: "0.0001", premium: "0.0002", openInterest: "1234", oraclePx: "65010", markPx: "65000", prevDayPx: "64000", dayNtlVlm: "1000000" },
+          { funding: "0.0002", premium: "0.0003", openInterest: "2345", oraclePx: "3505", markPx: "3500", prevDayPx: "3400", dayNtlVlm: "2000000" },
+        ],
+      ];
     } else {
       payload = {};
     }
@@ -77,6 +104,7 @@ describe("Hyperliquid read/preview safety", () => {
   test("classifies ordinary chat intents", () => {
     expect(planHyperliquidChat({ message: "show my Hyperliquid account" })).toBe("account");
     expect(planHyperliquidChat({ message: "show BTC orderbook" })).toBe("orderbook");
+    expect(planHyperliquidChat({ message: "show BTC funding" })).toBe("funding");
     expect(planHyperliquidChat({ message: "preview buying 0.1 BTC at 65000" })).toBe("order_preview");
     expect(planHyperliquidChat({ message: "list markets" })).toBe("discover");
   });
@@ -101,6 +129,30 @@ describe("Hyperliquid read/preview safety", () => {
     const result = await executeHyperliquidChatWorkflow({ message: "show my positions", address: ADDRESS }, { provider: provider() });
     expect(result.execution).toBe("read_only");
     expect(result.cards[0]?.kind).toBe("hyperliquid_account_snapshot");
+    expect(result.cards[1]?.kind).toBe("hyperliquid_position_risk");
+    expect(result.data?.account).toMatchObject({
+      positionCount: 1,
+      openOrderCount: 1,
+      notionalExposure: 6500,
+      unrealizedPnl: 100,
+    });
+    const account = result.data?.account as { positions?: Array<{ asset?: string; side?: string; leverageValue?: number }>; orders?: Array<{ side?: string; limitPx?: number }> };
+    expect(account.positions?.[0]).toMatchObject({ asset: "BTC", side: "long", leverageValue: 5 });
+    expect(account.orders?.[0]).toMatchObject({ side: "buy", limitPx: 63000 });
+    expect(JSON.stringify(result)).not.toMatch(/private|secret|mnemonic|seed/i);
+  });
+
+  test("reads funding context without signing material", async () => {
+    const result = await executeHyperliquidChatWorkflow({ message: "show BTC funding" }, { provider: provider() });
+    expect(result.intent).toBe("funding");
+    expect(result.execution).toBe("read_only");
+    expect(result.cards[0]?.kind).toBe("hyperliquid_funding");
+    expect(result.data?.funding).toMatchObject({
+      asset: "BTC",
+      fundingRate: 0.0001,
+      openInterest: 1234,
+      markPx: 65000,
+    });
     expect(JSON.stringify(result)).not.toMatch(/private|secret|mnemonic|seed/i);
   });
 
