@@ -3759,6 +3759,13 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid funding --asset <symbol> [options]",
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
+    "  matterhorn-work polymarket chat --message <text> [options]",
+    "  matterhorn-work polymarket markets --query <text> [options]",
+    "  matterhorn-work polymarket events --query <text> [options]",
+    "  matterhorn-work polymarket market --market-id <id> [options]",
+    "  matterhorn-work polymarket orderbook --token-id <id> [options]",
+    "  matterhorn-work polymarket compliance [options]",
+    "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3779,6 +3786,7 @@ function printHelp(): void {
     "  sessions                Manage chat sessions and read progress events",
     "  bittensor               Run Bittensor chat/readiness workflows",
     "  hyperliquid             Run Hyperliquid read/preview workflows",
+    "  polymarket              Run Polymarket read/preview workflows",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7260,6 +7268,171 @@ async function runHyperliquid(args: ParsedArgs) {
   }
 }
 
+function assertNoPolymarketSecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "api-key",
+    "apiKey",
+    "private-key",
+    "privateKey",
+    "seed",
+    "mnemonic",
+    "passphrase",
+    "wallet-export",
+    "walletExport",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Polymarket ${key} is not accepted by Matterhorn Work CLI. Use read/preview commands only; signing and API key custody are not enabled.`,
+      );
+    }
+  }
+}
+
+function readPolymarketQuery(args: ParsedArgs): string {
+  const query =
+    readFlag(args.flags, "query") ??
+    readFlag(args.flags, "q") ??
+    args.positionals.slice(2).join(" ").trim();
+  if (!query.trim()) {
+    throw new Error("query is required for polymarket markets/events search");
+  }
+  return query.trim();
+}
+
+function readPolymarketMarketId(args: ParsedArgs, fallbackIndex: number): string {
+  const marketId =
+    readFlag(args.flags, "market-id") ??
+    readFlag(args.flags, "marketId") ??
+    args.positionals[fallbackIndex] ??
+    "";
+  const trimmed = marketId.trim();
+  if (!trimmed) {
+    throw new Error("market-id is required for this polymarket command");
+  }
+  return trimmed;
+}
+
+async function runPolymarket(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "chat";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  try {
+    assertNoPolymarketSecrets(args);
+
+    if (subcommand === "markets" || subcommand === "search" || subcommand === "search-markets") {
+      const limit = readNumber(args.flags, "limit", undefined);
+      const url = new URL(`${baseUrl}/api/polymarket/markets`);
+      url.searchParams.set("q", readPolymarketQuery(args));
+      if (typeof limit === "number") url.searchParams.set("limit", String(limit));
+      const result = await fetchJson(url.toString(), { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "events" || subcommand === "search-events") {
+      const limit = readNumber(args.flags, "limit", undefined);
+      const url = new URL(`${baseUrl}/api/polymarket/events`);
+      url.searchParams.set("q", readPolymarketQuery(args));
+      if (typeof limit === "number") url.searchParams.set("limit", String(limit));
+      const result = await fetchJson(url.toString(), { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "market" || subcommand === "detail") {
+      const marketId = readPolymarketMarketId(args, 2);
+      const result = await fetchJson(`${baseUrl}/api/polymarket/markets/${encodeURIComponent(marketId)}`, { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "orderbook" || subcommand === "book" || subcommand === "depth") {
+      const tokenId = (readFlag(args.flags, "token-id") ?? readFlag(args.flags, "tokenId") ?? args.positionals[2] ?? "").trim();
+      if (!tokenId) throw new Error("token-id is required for polymarket orderbook");
+      const url = new URL(`${baseUrl}/api/polymarket/orderbook/${encodeURIComponent(tokenId)}`);
+      const outcome = readFlag(args.flags, "outcome");
+      const marketId = readFlag(args.flags, "market-id") ?? readFlag(args.flags, "marketId");
+      if (outcome) url.searchParams.set("outcome", outcome);
+      if (marketId) url.searchParams.set("marketId", marketId);
+      const result = await fetchJson(url.toString(), { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "compliance" || subcommand === "geoblock") {
+      const result = await fetchJson(`${baseUrl}/api/polymarket/compliance`, { headers });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "preview-order" || subcommand === "order-preview" || subcommand === "preview") {
+      const marketId = readPolymarketMarketId(args, 2);
+      const amountUsdc = readNumber(args.flags, "amount-usdc", undefined) ?? readNumber(args.flags, "amountUsdc", undefined);
+      if (typeof amountUsdc !== "number" || !Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+        throw new Error("amount-usdc is required and must be greater than 0 for polymarket preview-order");
+      }
+      const side = (readFlag(args.flags, "side") ?? "yes").trim().toLowerCase();
+      if (side !== "yes" && side !== "no") throw new Error("side must be yes or no for polymarket preview-order");
+      const outcome = readFlag(args.flags, "outcome");
+      const slippageTolerance = readNumber(args.flags, "slippage-tolerance", undefined);
+      const result = await fetchJson(`${baseUrl}/api/polymarket/orders/preview`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          marketId,
+          side,
+          amountUsdc,
+          ...(outcome ? { outcome } : {}),
+          ...(typeof slippageTolerance === "number" ? { slippageTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        args.positionals.slice(2).join(" ").trim();
+      if (!message.trim()) {
+        throw new Error("message is required for polymarket chat");
+      }
+      const amountUsdc = readNumber(args.flags, "amount-usdc", undefined);
+      const result = await fetchJson(`${baseUrl}/api/polymarket/chat/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: message.trim(),
+          ...(readFlag(args.flags, "market-id") ? { marketId: readFlag(args.flags, "market-id") } : {}),
+          ...(readFlag(args.flags, "outcome") ? { outcome: readFlag(args.flags, "outcome") } : {}),
+          ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+          ...(typeof amountUsdc === "number" ? { amountUsdc } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|preview-order");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -10389,6 +10562,10 @@ async function main() {
   }
   if (command === "hyperliquid" || command === "hl") {
     await runHyperliquid(args);
+    return;
+  }
+  if (command === "polymarket" || command === "pm") {
+    await runPolymarket(args);
     return;
   }
   if (command === "upstream") {
