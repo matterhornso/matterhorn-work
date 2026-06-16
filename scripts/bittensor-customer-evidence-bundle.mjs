@@ -25,6 +25,7 @@ const config = {
   ci: arg("--ci"),
   readinessGate: arg("--readiness-gate"),
   walletTimeline: arg("--wallet-timeline"),
+  adapterCandidate: arg("--adapter-candidate"),
   adapterCanary: arg("--adapter-canary"),
   readonlyAdapterCanary: arg("--readonly-adapter-canary"),
   receiptCheck: arg("--receipt-check"),
@@ -32,6 +33,7 @@ const config = {
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
+  requireAdapterCandidate: flag("--require-adapter-candidate"),
   requireAdapterCanary: flag("--require-adapter-canary"),
   requireReadonlyAdapterCanary: flag("--require-readonly-adapter-canary"),
   requireReceiptCheck: flag("--require-receipt-check"),
@@ -50,10 +52,12 @@ function usage() {
     "  --ci <path>                    JSON containing GitHub check/workflow conclusions.",
     "  --readiness-gate <path>        Markdown output from scripts/bittensor-customer-readiness-gate.mjs.",
     "  --wallet-timeline <path>       Optional public-data wallet timeline status/export JSON.",
+    "  --adapter-candidate <path>     Optional JSON from scripts/bittensor-real-adapter-candidate-gate.mjs.",
     "  --adapter-canary <path>        Optional JSON from scripts/bittensor-adapter-canary-gate.mjs.",
     "  --readonly-adapter-canary <path> Optional JSON from scripts/bittensor-adapter-readonly-canary.mjs.",
     "  --receipt-check <path>         Optional JSON from scripts/bittensor-receipt-check.mjs.",
     "  --watch-autopilot-scheduler <path> Optional JSON summary from scripts/bittensor-watch-autopilot-scheduler.mjs.",
+    "  --require-adapter-candidate    Require real adapter candidate-gate evidence to be ready.",
     "  --require-adapter-canary       Require adapter canary evidence to be ready.",
     "  --require-readonly-adapter-canary Require read-only adapter canary evidence to be ready.",
     "  --require-receipt-check        Require post-signer receipt check evidence to be accepted.",
@@ -185,6 +189,28 @@ function readinessGateReady(markdown) {
   return /READY_FOR_TEST_CUSTOMERS|passes this evidence-backed Bittensor customer-readiness gate/i.test(markdown);
 }
 
+
+function adapterCandidateSummary(candidate) {
+  if (!candidate) return null;
+  const findings = asArray(candidate.findings);
+  const failCount = Number(candidate.summary?.fail ?? findings.filter((finding) => /fail/i.test(String(finding.status || ""))).length ?? 0);
+  const warnCount = Number(candidate.summary?.warn ?? findings.filter((finding) => /warn/i.test(String(finding.status || ""))).length ?? 0);
+  const ready = candidate.readyForReadOnlyCanary === true || candidate.ready === true || candidate.status === "ready";
+  const adapterKind = candidate.adapterKind || candidate.serviceAdapter || "";
+  const netuid = candidate.netuid ?? null;
+  const endpointHost = candidate.endpointHost || "";
+  return {
+    ready,
+    netuid,
+    adapterKind,
+    endpointHost,
+    detail: ready
+      ? "Adapter candidate gate says ready for " + (adapterKind || "adapter") + " on netuid " + (netuid ?? "unknown")
+      : failCount + " failed, " + warnCount + " warnings",
+    findings: findings.slice(0, 8).map((finding) => String(finding.area || "Finding") + ": " + String(finding.status || "unknown")),
+  };
+}
+
 function adapterCanarySummary(canary) {
   if (!canary) return null;
   const findings = asArray(canary.findings);
@@ -298,6 +324,13 @@ function renderMarkdown(summary) {
         : "No wallet timeline evidence provided",
     ],
     [
+      "Adapter candidate",
+      summary.adapterCandidate ? (summary.adapterCandidate.ready ? "pass" : "warn") : "warn",
+      summary.adapterCandidate
+        ? summary.adapterCandidate.detail
+        : config.requireAdapterCandidate ? "Adapter candidate evidence required but missing" : "No adapter candidate evidence provided",
+    ],
+    [
       "Adapter canary",
       summary.adapterCanary ? (summary.adapterCanary.ready ? "pass" : "warn") : "warn",
       summary.adapterCanary
@@ -343,6 +376,7 @@ function renderMarkdown(summary) {
     `- CI evidence: ${basenameOrMissing(config.ci)}`,
     `- Customer readiness gate: ${basenameOrMissing(config.readinessGate)}`,
     `- Wallet timeline: ${basenameOrMissing(config.walletTimeline)}`,
+    `- Adapter candidate: ${basenameOrMissing(config.adapterCandidate)}`,
     `- Adapter canary: ${basenameOrMissing(config.adapterCanary)}`,
     `- Read-only adapter canary: ${basenameOrMissing(config.readonlyAdapterCanary)}`,
     `- Receipt check: ${basenameOrMissing(config.receiptCheck)}`,
@@ -371,7 +405,7 @@ function renderMarkdown(summary) {
     "- Attach this bundle to the release notes or customer-readiness handoff.",
     "- Keep real SS58 wallet evidence public-only and redact customer-identifying notes.",
     "- Re-run the full readiness gate with `--require-wallet --require-ci` for any customer session involving wallet/stake preview.",
-    "- Do not enable real subnet service adapters until the adapter canary has an allowlisted endpoint, timeout, hash confirmation, and rollback note.",
+    "- Do not enable real subnet service adapters until the adapter candidate gate and adapter canary have an allowlisted endpoint, timeout, hash confirmation, and rollback note.",
     "- After any external signer return, attach a receipt check and run a public wallet diff follow-up before calling the customer flow complete.",
     "- If monitoring ran while the operator was away, attach the scheduled watch autopilot summary and inspect any safe chat prompts before the demo.",
     "",
@@ -387,6 +421,7 @@ const bittensor = await readJson(config.bittensorLiveQa, "Bittensor live QA");
 const agentControl = await readJson(config.agentControlLiveQa, "Agent control live QA");
 const ci = await readJson(config.ci, "CI");
 const timeline = await readJson(config.walletTimeline, "Wallet timeline");
+const adapterCandidate = await readJson(config.adapterCandidate, "Adapter candidate");
 const adapterCanary = await readJson(config.adapterCanary, "Adapter canary");
 const readonlyAdapterCanary = await readJson(config.readonlyAdapterCanary, "Read-only adapter canary");
 const receiptCheck = await readJson(config.receiptCheck, "Receipt check");
@@ -397,10 +432,12 @@ const ciSummary = summarizeCi(ci);
 const bittensorReady = isReady(bittensor) && summaryValue(bittensor, "fail") === 0;
 const agentReady = !agentControl || (isReady(agentControl) && summaryValue(agentControl, "fail") === 0);
 const gateReady = readinessGateReady(readinessGate);
+const adapterCandidateSummaryValue = adapterCandidateSummary(adapterCandidate);
 const adapterSummary = adapterCanarySummary(adapterCanary);
 const readonlyAdapterSummary = readonlyAdapterCanarySummary(readonlyAdapterCanary);
 const receiptSummary = receiptCheckSummary(receiptCheck);
 const watchAutopilotSchedulerSummaryValue = watchAutopilotSchedulerSummary(watchAutopilotScheduler);
+const adapterCandidateReady = !config.requireAdapterCandidate || adapterCandidateSummaryValue?.ready === true;
 const adapterReady = !config.requireAdapterCanary || adapterSummary?.ready === true;
 const readonlyAdapterReady = !config.requireReadonlyAdapterCanary || readonlyAdapterSummary?.ready === true;
 const receiptReady = !config.requireReceiptCheck || receiptSummary?.ready === true;
@@ -409,6 +446,7 @@ const ready = Boolean(
   bittensorReady &&
     agentReady &&
     gateReady &&
+    adapterCandidateReady &&
     adapterReady &&
     readonlyAdapterReady &&
     receiptReady &&
@@ -441,6 +479,7 @@ const summary = {
     detail: readinessGate ? (gateReady ? "Readiness gate says ready" : "Readiness gate does not say ready") : "No readiness gate Markdown provided",
   },
   walletTimeline: walletTimelineSummary(timeline),
+  adapterCandidate: adapterCandidateSummaryValue,
   adapterCanary: adapterSummary,
   readonlyAdapterCanary: readonlyAdapterSummary,
   receiptCheck: receiptSummary,

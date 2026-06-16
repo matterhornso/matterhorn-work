@@ -16,6 +16,7 @@ try {
   const ci = path.join(tmp, "github-ci.json");
   const gate = path.join(tmp, "readiness.md");
   const timeline = path.join(tmp, "wallet-timeline.json");
+  const adapterCandidate = path.join(tmp, "adapter-candidate.json");
   const adapterCanary = path.join(tmp, "adapter-canary.json");
   const readonlyAdapterCanary = path.join(tmp, "readonly-adapter-canary.json");
   const receiptCheck = path.join(tmp, "receipt-check.json");
@@ -48,6 +49,15 @@ try {
   );
   await writeFile(gate, "# Gate\n\nResult: READY_FOR_TEST_CUSTOMERS\n");
   await writeFile(timeline, JSON.stringify({ enabled: true, snapshotCount: 2, latestSnapshotAt: "2026-06-15T00:00:00.000Z" }));
+  await writeFile(adapterCandidate, JSON.stringify({
+    readyForReadOnlyCanary: true,
+    id: "docs-search-canary-v1",
+    netuid: 14,
+    adapterKind: "data_search",
+    endpointHost: "adapter.example.com",
+    summary: { pass: 11, warn: 0, fail: 0 },
+    findings: [{ area: "Endpoint", status: "pass" }],
+  }));
   await writeFile(adapterCanary, JSON.stringify({
     readyForCanary: true,
     netuid: 14,
@@ -99,6 +109,8 @@ try {
     gate,
     "--wallet-timeline",
     timeline,
+    "--adapter-candidate",
+    adapterCandidate,
     "--adapter-canary",
     adapterCanary,
     "--readonly-adapter-canary",
@@ -107,6 +119,7 @@ try {
     receiptCheck,
     "--watch-autopilot-scheduler",
     watchAutopilotScheduler,
+    "--require-adapter-candidate",
     "--require-adapter-canary",
     "--require-readonly-adapter-canary",
     "--require-receipt-check",
@@ -121,11 +134,14 @@ try {
   const markdown = await readFile(output, "utf8");
   assert.match(markdown, /READY_FOR_TEST_CUSTOMERS/);
   assert.match(markdown, /Wallet snapshot/);
+  assert.match(markdown, /adapter-candidate/);
   assert.match(markdown, /wallet-timeline\.json/);
   assert.match(markdown, /adapter-canary\.json/);
   assert.match(markdown, /readonly-adapter-canary\.json/);
   assert.match(markdown, /receipt-check\.json/);
   assert.match(markdown, /watch-autopilot-scheduler\.json/);
+  assert.match(markdown, /Adapter candidate/);
+  assert.match(markdown, /Adapter candidate gate says ready/);
   assert.match(markdown, /Scheduled watch autopilot/);
   assert.match(markdown, /6 scheduled checks, 2 alerts, 18 evaluations/);
   assert.match(markdown, /Read-only canary ready/);
@@ -134,6 +150,8 @@ try {
 
   const summary = JSON.parse(await readFile(jsonOutput, "utf8"));
   assert.equal(summary.ready, true);
+  assert.equal(summary.adapterCandidate.ready, true);
+  assert.equal(summary.adapterCandidate.endpointHost, "adapter.example.com");
   assert.equal(summary.walletTimeline.snapshots, 2);
   assert.equal(summary.adapterCanary.ready, true);
   assert.equal(summary.readonlyAdapterCanary.ready, true);
