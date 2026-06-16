@@ -7,6 +7,9 @@ It checks:
 - market list reads;
 - orderbook reads;
 - optional public account reads;
+- optional normalized public position reads;
+- optional normalized public open-order reads;
+- funding/open-interest reads;
 - non-submittable order previews;
 - chat execution for a natural-language preview prompt;
 - rejection of credential-shaped input.
@@ -46,6 +49,9 @@ Use `--require-account` only when a test account address is supplied or when run
 - `markets`: returns at least one market.
 - `orderbook`: returns the requested asset.
 - `account`: passes when a public address is supplied, otherwise skips unless `--require-account` is set.
+- `positions`: passes when a public address is supplied, otherwise skips unless `--require-account` is set.
+- `open.orders`: passes when a public address is supplied, otherwise skips unless `--require-account` is set.
+- `funding`: returns the requested asset's funding/open-interest context.
 - `order.preview`: returns `venue: "hyperliquid"` and `canSubmit: false`.
 - `chat.execute`: returns `venue: "hyperliquid"` and any preview card still has `canSubmit: false`.
 - `secret.rejection`: returns a non-2xx response for `apiSecret`.
