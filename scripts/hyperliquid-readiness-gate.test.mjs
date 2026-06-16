@@ -52,9 +52,28 @@ const serverTool = mustContain("apps/server/src/tools/hyperliquid.ts", [
   "HyperliquidPositionSummary",
   "HyperliquidOpenOrderSummary",
   "HyperliquidFundingSnapshot",
+  // Preview risk polish fields (read/preview-only context).
+  "notionalUsd",
+  "HyperliquidMarketabilityEstimate",
+  "HyperliquidLeverageContext",
+  "requiresAccountContext",
+  "closeContext",
+  "estimateHyperliquidMarketability",
 ]);
 if (/canSubmit:\s*true/.test(serverTool)) fail("Hyperliquid provider never enables canSubmit", "found canSubmit: true");
 else pass("Hyperliquid provider never enables canSubmit");
+for (const forbidden of ["orders/submit", "exchangeRequest", "signOrder", "placeOrder", "submitOrder"]) {
+  if (serverTool.includes(forbidden)) fail(`Hyperliquid tool excludes ${forbidden}`, "present");
+  else pass(`Hyperliquid tool excludes ${forbidden}`);
+}
+
+mustContain("docs/hyperliquid-read-preview.md", [
+  "Preview Risk Fields",
+  "requiresAccountContext",
+  "marketability",
+  "annualizedFundingPct",
+  "requires account context",
+]);
 
 mustContain("apps/server/src/server.ts", [
   "/api/hyperliquid/markets",

@@ -116,6 +116,58 @@ export interface HyperliquidOrderPreviewInput {
   slippageTolerance?: number | string | null;
   address?: string | null;
   message?: string | null;
+  /** Close/reduce intent resolved from chat (e.g. "close half my ETH position"). */
+  closeIntent?: HyperliquidCloseIntent | null;
+  /** Live position context, supplied only when a public account address is known. */
+  positionContext?: HyperliquidPositionContext | null;
+  /** Venue max leverage for the asset, used for a leverage placeholder. */
+  maxLeverage?: number | null;
+}
+
+export interface HyperliquidCloseIntent {
+  isClose: boolean;
+  /** Fraction of the position to close: 0.5 for "half", 1 for "all". Null when unspecified. */
+  fraction: number | null;
+}
+
+export interface HyperliquidPositionContext {
+  side: "long" | "short" | "flat" | "unknown";
+  size: number | null;
+  entryPx: number | null;
+  liquidationPx: number | null;
+  leverageValue: number | null;
+  marginUsed: number | null;
+}
+
+/** Best-effort marketability/slippage estimate derived from the public orderbook. */
+export interface HyperliquidMarketabilityEstimate {
+  referencePrice: number | null;
+  estimatedFillPrice: number | null;
+  estimatedSlippagePct: number | null;
+  worstLevelPrice: number | null;
+  depthSufficient: boolean | null;
+  note: string;
+}
+
+export interface HyperliquidPreviewFundingContext {
+  fundingRate: number | null;
+  annualizedFundingPct: number | null;
+  openInterest: number | null;
+  note: string;
+}
+
+export interface HyperliquidLeverageContext {
+  maxLeverage: number | null;
+  estimatedLeverage: number | null;
+  liquidationPrice: number | null;
+  requiresAccountContext: boolean;
+  note: string;
+}
+
+export interface HyperliquidCloseContext {
+  isClose: boolean;
+  fraction: number | null;
+  note: string;
 }
 
 export interface HyperliquidActionPreview {
@@ -135,6 +187,11 @@ export interface HyperliquidActionPreview {
   priceAsset: "USDC";
   slippageTolerance: number | null;
   reduceOnly: boolean;
+  notionalUsd: number | null;
+  marketability: HyperliquidMarketabilityEstimate;
+  funding: HyperliquidPreviewFundingContext | null;
+  leverageContext: HyperliquidLeverageContext;
+  closeContext: HyperliquidCloseContext | null;
   expiresAt: string;
   fees: Array<{ label: string; amount: number | null; asset: string | null }>;
   consequence: string;
@@ -498,14 +555,35 @@ export function planHyperliquidChat(input: HyperliquidChatExecutionInput): Hyper
   const message = input.message.toLowerCase();
   if (/\b(funding|funding rate|premium|open interest|oi)\b/.test(message)) return "funding";
   if (/\b(order\s*book|orderbook|book|bid|ask|liquidity)\b/.test(message)) return "orderbook";
+  // Close/reduce intent is an order preview even though it mentions "position".
+  if (/\b(close|flatten|exit)\b/.test(message) && /\b(position|positions|long|short|all|half|quarter|everything)\b/.test(message)) return "order_preview";
   if (/\b(position|positions|account|balance|margin|portfolio|pnl|open orders?)\b/.test(message)) return "account";
   if (/\b(buy|sell|long|short|trade|order|preview)\b/.test(message)) return "order_preview";
   if (/\b(market|markets|coin|coins|perp|perps|asset|assets|discover|list)\b/.test(message)) return "discover";
   return "learn";
 }
 
+export function extractHyperliquidCloseIntent(message: string): HyperliquidCloseIntent | null {
+  const lower = message.toLowerCase();
+  const isClose = /\b(close|flatten|exit)\b/.test(lower) && /\b(position|positions|long|short|all|half|quarter|everything)\b/.test(lower);
+  if (!isClose) return null;
+  let fraction: number | null = null;
+  if (/\bhalf\b/.test(lower)) fraction = 0.5;
+  else if (/\bquarter\b/.test(lower)) fraction = 0.25;
+  else if (/\b(all|entire|everything|full|whole)\b/.test(lower)) fraction = 1;
+  else {
+    const pct = lower.match(/\b([0-9]{1,3}(?:\.[0-9]+)?)\s*%/);
+    if (pct) {
+      const value = Number(pct[1]);
+      if (Number.isFinite(value) && value > 0 && value <= 100) fraction = value / 100;
+    }
+  }
+  return { isClose: true, fraction };
+}
+
 export function extractHyperliquidOrderInput(input: HyperliquidChatExecutionInput): HyperliquidOrderPreviewInput {
   const message = input.message;
+  const closeIntent = extractHyperliquidCloseIntent(message);
   const asset = normalizeAsset(input.asset) ?? extractAsset(message);
   const side = input.side ?? extractSide(message);
   const size = input.size ?? extractNumberAfter(message, /\b(size|amount|qty|quantity)\b/i) ?? extractNumberBeforeAsset(message, asset);
@@ -515,10 +593,11 @@ export function extractHyperliquidOrderInput(input: HyperliquidChatExecutionInpu
     side,
     size,
     price,
-    reduceOnly: input.reduceOnly ?? /\breduce[\s-]?only\b/i.test(message),
+    reduceOnly: input.reduceOnly ?? (Boolean(closeIntent?.isClose) || /\breduce[\s-]?only\b/i.test(message)),
     slippageTolerance: input.slippageTolerance,
     address: input.address,
     message,
+    closeIntent,
   };
 }
 
@@ -540,16 +619,49 @@ export async function prepareHyperliquidOrderPreview(
   if (!side || !["buy", "sell", "long", "short"].includes(side)) throw new Error("side must be buy, sell, long, or short");
   if (!size || size <= 0) throw new Error("positive size is required for a Hyperliquid order preview");
 
+  const reduceOnly = Boolean(input.reduceOnly) || Boolean(input.closeIntent?.isClose);
+
   let markPx: number | null = null;
+  let maxLeverage: number | null = input.maxLeverage ?? null;
   try {
     const markets = await provider.listMarkets(100);
-    markPx = markets.find((market) => market.asset === asset)?.markPx ?? null;
+    const market = markets.find((entry) => entry.asset === asset);
+    markPx = market?.markPx ?? null;
+    maxLeverage = maxLeverage ?? market?.maxLeverage ?? null;
   } catch (err) {
     warnings.push(err instanceof Error ? "Could not fetch live mark price: " + err.message : "Could not fetch live mark price.");
   }
 
   const price = explicitPrice ?? markPx;
   if (price === null) warnings.push("No explicit price or mark price is available; preview cannot estimate notional.");
+
+  // Best-effort marketability/slippage from the public orderbook.
+  const marketability = await estimateHyperliquidMarketability(provider, asset, side, size, warnings);
+  if (slippageTolerance !== null && marketability.estimatedSlippagePct !== null && marketability.estimatedSlippagePct > slippageTolerance) {
+    warnings.push(
+      "Estimated slippage (" + marketability.estimatedSlippagePct.toFixed(3) + "%) exceeds your tolerance (" + slippageTolerance + "%).",
+    );
+  }
+
+  // Best-effort funding context for the asset.
+  const funding = await buildHyperliquidPreviewFunding(provider, asset, warnings);
+
+  // Notional estimate from explicit/mark price, falling back to estimated fill.
+  const notionalReference = price ?? marketability.estimatedFillPrice;
+  const notionalUsd = notionalReference === null ? null : Number((size * notionalReference).toFixed(2));
+
+  const leverageContext = buildHyperliquidLeverageContext(input.positionContext ?? null, maxLeverage, price ?? marketability.estimatedFillPrice);
+  const closeContext = input.closeIntent?.isClose
+    ? {
+        isClose: true,
+        fraction: input.closeIntent.fraction ?? null,
+        note:
+          input.closeIntent.fraction !== null
+            ? "Reduce-only close of about " + Math.round(input.closeIntent.fraction * 100) + "% of the position; it can only shrink, never flip, your exposure."
+            : "Reduce-only close; it can only shrink, never flip, your exposure.",
+      }
+    : null;
+
   const actionPayload = {
     venue: "hyperliquid",
     action: "place_order",
@@ -557,13 +669,18 @@ export async function prepareHyperliquidOrderPreview(
     side,
     size,
     price,
-    reduceOnly: Boolean(input.reduceOnly),
+    reduceOnly,
     slippageTolerance,
     canSubmit: false,
   };
   const previewSha256 = sha256(actionPayload);
-  const notionalText = price === null ? size + " " + asset : size + " " + asset + " at about " + formatNumber(price) + " USDC";
+  const notionalText = notionalUsd === null
+    ? size + " " + asset
+    : size + " " + asset + " (~" + formatNumber(notionalUsd) + " USDC notional)" + (price === null ? "" : " near " + formatNumber(price) + " USDC");
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const consequence = (reduceOnly ? "Reduce-only preview. " : "")
+    + "If executed outside Matterhorn, this would attempt to " + side + " " + notionalText + " on Hyperliquid. "
+    + "Matterhorn will not sign or submit it.";
   return {
     version: "matterhorn.market.action-preview.v1",
     venue: "hyperliquid",
@@ -580,11 +697,16 @@ export async function prepareHyperliquidOrderPreview(
     price,
     priceAsset: "USDC",
     slippageTolerance,
-    reduceOnly: Boolean(input.reduceOnly),
+    reduceOnly,
+    notionalUsd,
+    marketability,
+    funding,
+    leverageContext,
+    closeContext,
     expiresAt,
     fees: [{ label: "Trading fee estimate", amount: null, asset: "USDC" }],
-    consequence: "If executed outside Matterhorn, this would attempt to " + side + " " + notionalText + " on Hyperliquid.",
-    confirmationText: "I understand this is preview-only in Matterhorn and requires separate Hyperliquid signing/execution outside this milestone.",
+    consequence,
+    confirmationText: "I understand this is preview-only in Matterhorn. External signing/execution is not enabled; Matterhorn never holds keys or submits to Hyperliquid.",
     previewSha256,
     source: nowSource(markPx === null ? ["Live mark price unavailable for preview."] : []),
     compliance: {
@@ -595,6 +717,100 @@ export async function prepareHyperliquidOrderPreview(
     },
     warnings,
     canSubmit: false,
+  };
+}
+
+/** Walk the public book to estimate fill price and slippage for a preview. Best-effort. */
+async function estimateHyperliquidMarketability(
+  provider: HyperliquidProvider,
+  asset: string,
+  side: HyperliquidSide,
+  size: number,
+  warnings: string[],
+): Promise<HyperliquidMarketabilityEstimate> {
+  const isBuy = side === "buy" || side === "long";
+  try {
+    const orderbook = await provider.getOrderbook(asset);
+    const levels = isBuy ? orderbook.asks : orderbook.bids;
+    if (levels.length === 0) {
+      return { referencePrice: null, estimatedFillPrice: null, estimatedSlippagePct: null, worstLevelPrice: null, depthSufficient: null, note: "Orderbook had no " + (isBuy ? "ask" : "bid") + " levels; marketability could not be estimated." };
+    }
+    const reference = levels[0].price;
+    let remaining = size;
+    let cost = 0;
+    let filled = 0;
+    let worst = reference;
+    for (const level of levels) {
+      if (remaining <= 0) break;
+      const take = Math.min(level.size, remaining);
+      cost += take * level.price;
+      filled += take;
+      worst = level.price;
+      remaining -= take;
+    }
+    const fillPrice = filled > 0 ? cost / filled : null;
+    const slippagePct = fillPrice !== null && reference > 0 ? Math.abs((fillPrice - reference) / reference) * 100 : null;
+    const depthSufficient = remaining <= 1e-9;
+    if (!depthSufficient) warnings.push("Visible orderbook depth is insufficient to fully fill this size; expect more slippage than estimated.");
+    return {
+      referencePrice: reference,
+      estimatedFillPrice: fillPrice === null ? null : Number(fillPrice.toFixed(6)),
+      estimatedSlippagePct: slippagePct === null ? null : Number(slippagePct.toFixed(4)),
+      worstLevelPrice: worst,
+      depthSufficient,
+      note: depthSufficient
+        ? "Estimated from visible " + (isBuy ? "ask" : "bid") + " levels; live fills may differ."
+        : "Only partial depth was visible; estimate is a lower bound on slippage.",
+    };
+  } catch (err) {
+    warnings.push(err instanceof Error ? "Could not read orderbook for marketability: " + err.message : "Could not read orderbook for marketability.");
+    return { referencePrice: null, estimatedFillPrice: null, estimatedSlippagePct: null, worstLevelPrice: null, depthSufficient: null, note: "Orderbook unavailable; marketability not estimated." };
+  }
+}
+
+async function buildHyperliquidPreviewFunding(
+  provider: HyperliquidProvider,
+  asset: string,
+  warnings: string[],
+): Promise<HyperliquidPreviewFundingContext | null> {
+  try {
+    const funding = await provider.getFunding(asset);
+    const annualized = funding.fundingRate === null ? null : Number((funding.fundingRate * 24 * 365 * 100).toFixed(4));
+    return {
+      fundingRate: funding.fundingRate,
+      annualizedFundingPct: annualized,
+      openInterest: funding.openInterest,
+      note: funding.fundingRate === null
+        ? "Funding rate unavailable for " + asset + "."
+        : "Hourly funding " + funding.fundingRate + " (~" + (annualized ?? 0) + "%/yr if held); longs pay shorts when positive.",
+    };
+  } catch (err) {
+    warnings.push(err instanceof Error ? "Could not read funding for preview: " + err.message : "Could not read funding for preview.");
+    return null;
+  }
+}
+
+function buildHyperliquidLeverageContext(
+  position: HyperliquidPositionContext | null,
+  maxLeverage: number | null,
+  referencePrice: number | null,
+): HyperliquidLeverageContext {
+  if (position) {
+    return {
+      maxLeverage,
+      estimatedLeverage: position.leverageValue,
+      liquidationPrice: position.liquidationPx,
+      requiresAccountContext: false,
+      note: "Leverage and liquidation are read from your live position. They shift as price, margin, and size change.",
+    };
+  }
+  return {
+    maxLeverage,
+    estimatedLeverage: null,
+    liquidationPrice: null,
+    requiresAccountContext: true,
+    note: "Leverage and liquidation price require account context. Share your public Hyperliquid address to populate them; "
+      + (maxLeverage === null ? "venue max leverage is unknown." : "venue max leverage for this asset is " + maxLeverage + "x."),
   };
 }
 
@@ -658,13 +874,22 @@ export async function executeHyperliquidChatWorkflow(
     const asset = normalizeAsset(input.asset) ?? extractAsset(input.message);
     if (!asset) return clarification("Which Hyperliquid asset should I check funding for? Example: BTC, ETH, SOL, or HYPE.", [], "clarification_required", intent);
     const funding = await provider.getFunding(asset);
+    const annualizedFundingPct = funding.fundingRate === null ? null : Number((funding.fundingRate * 24 * 365 * 100).toFixed(4));
+    const fundingRiskText = funding.fundingRate === null
+      ? "Hyperliquid " + asset + " funding is currently unavailable. This is read-only and can change quickly."
+      : "Hyperliquid " + asset + " funding risk: hourly funding " + funding.fundingRate
+        + " (~" + annualizedFundingPct + "%/yr if held). "
+        + (funding.fundingRate >= 0 ? "Longs pay shorts" : "Shorts pay longs")
+        + " at the current rate, so a held "
+        + (funding.fundingRate >= 0 ? "long" : "short")
+        + " position bleeds funding over time. This is read-only and can change quickly.";
     return {
       venue: "hyperliquid",
       intent,
       execution: "read_only",
-      responseText: "Hyperliquid " + asset + " funding snapshot: " + (funding.fundingRate === null ? "funding unavailable" : String(funding.fundingRate)) + ". This is read-only and can change quickly.",
+      responseText: fundingRiskText,
       cards: [buildHyperliquidFundingCard(funding)],
-      data: { funding },
+      data: { funding, annualizedFundingPct },
       warnings: funding.warnings,
     };
   }
@@ -685,6 +910,69 @@ export async function executeHyperliquidChatWorkflow(
   }
 
   const orderInput = extractHyperliquidOrderInput(input);
+
+  // Close/reduce intent is account-dependent: size and side come from the live
+  // position. Resolve from the account when an address is known; otherwise ask
+  // exactly one clarification rather than guessing.
+  if (orderInput.closeIntent?.isClose) {
+    if (!orderInput.asset) {
+      return clarification("Which Hyperliquid position should I close? Name the asset, for example: close half my ETH position.", [], "clarification_required", "order_preview");
+    }
+    if (!isValidHyperliquidAddress(input.address)) {
+      return clarification(
+        "To preview closing your " + orderInput.asset + " position, share your public Hyperliquid account address so I can size it from your live position. Matterhorn will still not submit anything.",
+        [],
+        "clarification_required",
+        "order_preview",
+      );
+    }
+    const account = await provider.getAccount(input.address);
+    const position = account.positions.find((entry) => entry.asset === orderInput.asset && entry.size !== null && entry.size !== 0);
+    if (!position || position.size === null || position.size === 0) {
+      return clarification(
+        "I do not see an open " + orderInput.asset + " position for that address, so there is nothing to close. This is read-only public account data.",
+        account.warnings,
+        "read_only",
+        "order_preview",
+      );
+    }
+    const fraction = orderInput.closeIntent.fraction ?? 1;
+    const closeSize = Math.abs(position.size) * fraction;
+    const closeSide: HyperliquidSide = position.side === "long" ? "sell" : "buy";
+    const closePreview = await prepareHyperliquidOrderPreview(
+      {
+        asset: orderInput.asset,
+        side: closeSide,
+        size: closeSize,
+        price: orderInput.price,
+        reduceOnly: true,
+        slippageTolerance: orderInput.slippageTolerance,
+        address: input.address,
+        message: input.message,
+        closeIntent: orderInput.closeIntent,
+        positionContext: {
+          side: position.side,
+          size: position.size,
+          entryPx: position.entryPx,
+          liquidationPx: position.liquidationPx,
+          leverageValue: position.leverageValue,
+          marginUsed: position.marginUsed,
+        },
+      },
+      provider,
+    );
+    return {
+      venue: "hyperliquid",
+      intent: "order_preview",
+      execution: "unsigned_preview",
+      responseText: closePreview.consequence,
+      cards: [buildHyperliquidOrderPreviewCard(closePreview)],
+      data: { preview: closePreview, position },
+      preview: closePreview,
+      warnings: closePreview.warnings,
+    };
+  }
+
   if (!orderInput.asset || !orderInput.side || !numberOrNull(orderInput.size)) {
     return clarification(
       "To prepare a Hyperliquid order preview, send asset, side, and size. Example: preview buying 0.1 BTC at 65000 USDC.",
