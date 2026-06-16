@@ -306,3 +306,65 @@ describe("Polymarket preview risk polish", () => {
     expect(result.preview?.canSubmit).toBe(false);
   });
 });
+
+describe("Polymarket security hardening", () => {
+  test("secret scan fails closed on a deeply-nested payload (no stack overflow)", () => {
+    let deep: Record<string, unknown> = { v: 1 };
+    for (let i = 0; i < 100_000; i++) deep = { a: deep };
+    expect(findForbiddenPolymarketCredentialInput(deep)).toContain("too-deep");
+  });
+
+  test("secret scan handles a multi-megabyte string in bounded time", () => {
+    const hostile = "ab1 ".repeat(250_000); // ~1MB, non-secret
+    const start = performance.now();
+    expect(findForbiddenPolymarketCredentialInput({ note: hostile })).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  test("rejects the full forbidden-credential vocabulary", () => {
+    for (const field of ["privateKey", "mnemonic", "seedPhrase", "apiSecret", "passphrase", "walletExport", "rawSignature", "signedPayload"]) {
+      expect(findForbiddenPolymarketCredentialInput({ [field]: "x" })).not.toBeNull();
+    }
+  });
+
+  test("SSRF: market/token ids cannot change the host or traverse paths", async () => {
+    const seen: string[] = [];
+    const fetcher = (async (url: string) => {
+      seen.push(url);
+      return jsonResponse({ id: "m", question: "q", outcomes: "[]", outcomePrices: "[]", clobTokenIds: "[]", bids: [], asks: [] });
+    }) as never;
+    const p = new PolymarketInfoProvider({ gammaBaseUrl: "https://gamma.test/api", clobBaseUrl: "https://clob.test", fetcher });
+    for (const evil of ["http://evil.com", "../../admin", "m/../secret"]) {
+      await p.getMarket(evil);
+      await p.getOrderbook(evil);
+    }
+    expect(seen.every((u) => ["gamma.test", "clob.test"].includes(new URL(u).host))).toBe(true);
+    expect(seen.every((u) => !new URL(u).pathname.includes("/admin") && !new URL(u).pathname.includes("/secret"))).toBe(true);
+  });
+
+  test("no submittable path: preview is canSubmit:false on both allowed and blocked", async () => {
+    const allowedRes = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: false }) });
+    const blockedRes = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
+    expect(allowedRes.preview?.canSubmit).toBe(false);
+    expect(blockedRes.preview?.canSubmit).toBe(false);
+  });
+
+  test("watch descriptor ignores prototype-mutating outcome labels", async () => {
+    const hostile = {
+      id: "0xhostile",
+      question: "hostile",
+      outcomes: JSON.stringify(["__proto__", "Yes"]),
+      outcomePrices: JSON.stringify(["0.5", "0.5"]),
+      clobTokenIds: JSON.stringify(["t0", "t1"]),
+    };
+    const fetcher = (async () => jsonResponse(hostile)) as never;
+    const result = await executePolymarketChatWorkflow(
+      { message: "watch this market", marketId: "0xhostile" },
+      { provider: new PolymarketInfoProvider({ gammaBaseUrl: "https://gamma.test", fetcher }) },
+    );
+    const probe: Record<string, unknown> = {};
+    expect(probe.polluted).toBeUndefined();
+    const watch = result.data?.watch as { conditions?: Array<{ outcome?: string }> };
+    expect(watch.conditions?.some((c) => c.outcome === "__proto__")).toBe(false);
+  });
+});
