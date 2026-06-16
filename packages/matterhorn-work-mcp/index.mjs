@@ -464,6 +464,91 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_polymarket_chat",
+    description: "Default first Matterhorn Work tool for ordinary Polymarket requests. Read-only plus preview-only; does not submit orders or accept API secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        marketId: { type: "string", description: "Optional Polymarket market id for detail/orderbook/preview/monitor." },
+        outcome: { type: "string", description: "Optional outcome label such as Yes or No." },
+        side: { type: "string", enum: ["yes", "no"] },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }], description: "USDC notional for a bet preview." },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+        limit: { type: "number" },
+      },
+      required: ["message"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_search_markets",
+    description: "Search Polymarket prediction markets by keyword. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Keyword to search market questions." },
+        limit: { type: "number", description: "Optional result limit. Defaults to 10 and is capped by the server." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_search_events",
+    description: "Search Polymarket events (grouped related markets) by keyword. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Keyword to search event titles and member markets." },
+        limit: { type: "number", description: "Optional result limit. Defaults to 8 and is capped by the server." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_get_market",
+    description: "Read full Polymarket market detail (outcomes, implied probabilities, liquidity, volume). Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        marketId: { type: "string", description: "Polymarket market id." },
+      },
+      required: ["marketId"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_get_orderbook",
+    description: "Read a Polymarket CLOB orderbook for an outcome token. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tokenId: { type: "string", description: "CLOB token id for the outcome." },
+        outcome: { type: "string", description: "Optional outcome label for labeling." },
+        marketId: { type: "string", description: "Optional market id for labeling." },
+      },
+      required: ["tokenId"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_check_compliance",
+    description: "Check the Polymarket geoblock/compliance status. Read-only.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_polymarket_preview_order",
+    description: "Prepare a non-submittable Polymarket bet preview. Returns canSubmit=false; a geoblocked region returns blocked_by_compliance with no executable price/size.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        marketId: { type: "string" },
+        outcome: { type: "string" },
+        side: { type: "string", enum: ["yes", "no"] },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }] },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["marketId", "amountUsdc"],
+    },
+  },
+  {
     name: "matterhorn_bittensor_chat",
     description: "Default first Matterhorn Work tool for ordinary Bittensor requests. Runs the safe chat workflow against the configured server.",
     inputSchema: {
@@ -2110,6 +2195,20 @@ async function handleTool(name, args = {}) {
       return callServer(`/api/hyperliquid/orderbook/${encodeURIComponent(args.asset)}`);
     case "matterhorn_hyperliquid_preview_order":
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
+    case "matterhorn_polymarket_chat":
+      return callServer("/api/polymarket/chat/execute", { method: "POST", body: args });
+    case "matterhorn_polymarket_search_markets":
+      return callServer("/api/polymarket/markets", { query: { q: args.query, limit: args.limit } });
+    case "matterhorn_polymarket_search_events":
+      return callServer("/api/polymarket/events", { query: { q: args.query, limit: args.limit } });
+    case "matterhorn_polymarket_get_market":
+      return callServer(`/api/polymarket/markets/${encodeURIComponent(args.marketId)}`);
+    case "matterhorn_polymarket_get_orderbook":
+      return callServer(`/api/polymarket/orderbook/${encodeURIComponent(args.tokenId)}`, { query: { outcome: args.outcome, marketId: args.marketId } });
+    case "matterhorn_polymarket_check_compliance":
+      return callServer("/api/polymarket/compliance");
+    case "matterhorn_polymarket_preview_order":
+      return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":
       return callServer("/api/bittensor/chat/execute", { method: "POST", body: args });
     case "matterhorn_bittensor_readiness":
