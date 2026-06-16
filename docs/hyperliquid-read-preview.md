@@ -33,7 +33,60 @@ Run the repeatable read/preview harness with:
 pnpm test:hyperliquid-read-preview-qa
 ```
 
+Run the CLI smoke harness with:
+
+```bash
+pnpm test:hyperliquid-cli-fallback
+```
+
 For live local-server checks, see [Hyperliquid Read/Preview QA](./hyperliquid-read-preview-qa.md).
+
+## CLI Operator Loop
+
+The `matterhorn-work hyperliquid` command is a thin client for the local server routes. It does not accept API secrets, private keys, signatures, or signed payloads, and previews always remain `canSubmit: false`.
+
+```bash
+matterhorn-work hyperliquid markets \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --limit 5 \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid account \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --address 0x0000000000000000000000000000000000000001 \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid orderbook \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --asset BTC \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid preview-order \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --asset BTC \
+  --side buy \
+  --size 0.1 \
+  --price 65000 \
+  --json
+```
+
+```bash
+matterhorn-work hl chat \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --message "preview buying 0.1 BTC at 65000" \
+  --json
+```
 
 ## Local API
 
