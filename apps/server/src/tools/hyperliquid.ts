@@ -569,8 +569,8 @@ function clarification(
 
 function extractSide(message: string): HyperliquidSide | null {
   const lower = message.toLowerCase();
-  if (/\b(buy|bid)\b/.test(lower)) return "buy";
-  if (/\b(sell|ask)\b/.test(lower)) return "sell";
+  if (/\b(buy|buying|bid|bidding)\b/.test(lower)) return "buy";
+  if (/\b(sell|selling|ask|asking)\b/.test(lower)) return "sell";
   if (/\blong\b/.test(lower)) return "long";
   if (/\bshort\b/.test(lower)) return "short";
   return null;
