@@ -355,7 +355,7 @@ export default function BittensorPanel() {
     window.setTimeout(() => setAgentPromptReady(false), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-candidate" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt") => {
+  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-candidate" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt" | "receipt-import") => {
     const command = kind === "live-qa"
       ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
       : kind === "gate"
@@ -426,7 +426,15 @@ export default function BittensorPanel() {
                       "--json-output /tmp/bittensor-receipt-check.json",
                       "--strict",
                     ].join(" ")
-                  : [
+                  : kind === "receipt-import"
+                    ? [
+                        "curl -sS -X POST http://127.0.0.1:8787/api/bittensor/extrinsics/receipt",
+                        "-H 'Content-Type: application/json'",
+                        "-H 'X-Matterhorn-Host-Token: <client-token>'",
+                        "--data @/tmp/bittensor-receipt-import.json",
+                        "> /tmp/bittensor-receipt-import-response.json",
+                      ].join(" ")
+                    : [
                   "node scripts/bittensor-customer-evidence-bundle.mjs",
                   "--bittensor-live-qa /tmp/bittensor-live-qa.json",
                   "--agent-control-live-qa /tmp/agent-control-live-qa.json",
@@ -614,6 +622,9 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("receipt")}>
                     {copiedReadinessCommand === "receipt" ? "Copied" : "Copy Receipt"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("receipt-import")}>
+                    {copiedReadinessCommand === "receipt-import" ? "Copied" : "Copy Import"}
                   </Button>
                 </div>
               </div>
