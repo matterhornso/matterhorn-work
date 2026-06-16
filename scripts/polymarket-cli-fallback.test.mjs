@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -160,6 +161,20 @@ async function main() {
       (payload) => {
         if (payload.ok !== true) throw new Error("receipt should verify against the handoff");
         if (payload.receipt?.version !== "matterhorn.market.receipt.v1") throw new Error("receipt shape mismatch");
+      },
+    );
+
+    const tmp = mkdtempSync(join(tmpdir(), "pm-receipt-"));
+    const handoffPath = join(tmp, "handoff.json");
+    const receiptPath = join(tmp, "receipt.json");
+    writeFileSync(handoffPath, JSON.stringify({ handoff: handoffPayload.handoff }));
+    writeFileSync(receiptPath, JSON.stringify({ handoffSha256: "h".repeat(64), txHash: "0xpublic", status: "received", outcome: "Yes", side: "yes" }));
+    await expectCli(
+      "polymarket receipt from files",
+      mock.url,
+      ["polymarket", "receipt", "--handoff-file", handoffPath, "--receipt-file", receiptPath],
+      (payload) => {
+        if (payload.ok !== true) throw new Error("file-based receipt should verify against the handoff");
       },
     );
 
