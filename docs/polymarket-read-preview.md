@@ -69,6 +69,21 @@ When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `
 
 The `monitor` intent builds a read-only `PolymarketWatchDescriptor` for a market: a current-odds snapshot, suggested ±10pp alert thresholds per outcome, and a resolution reminder. It is research-only and **works even when order previews are geoblocked**. Matterhorn never schedules alerts or auto-executes any order from a watch; the descriptor is a planning artifact for the user/agent to act on.
 
+## Security Posture
+
+The tool was adversarially audited (12-probe sweep, codified as regression tests). It is read-only + preview-only, so there are no smart contracts, custody, signing, or key handling in this code — the only key material it touches is material it **rejects**.
+
+| Surface | Risk | Mitigation |
+| --- | --- | --- |
+| Credential scan | Deeply-nested payload → stack overflow | Iterative + bounded (`MAX_NODES`/`MAX_DEPTH`), fails closed |
+| Credential scan | Multi-MB string → ReDoS | Bounded traversal; ~1MB scans in <1ms |
+| Provider reads | SSRF / path traversal via market/token id | `encodeURIComponent` on ids; host only from fixed config base URLs |
+| Market mapping & watch | Hostile `__proto__` outcome label | `__proto__`/`constructor`/`prototype` labels skipped — no prototype pollution |
+| Preview math | Hostile orderbook / dates (negative, NaN, unparseable) | Non-finite filtered on parse; `Date.parse` guarded; division guarded |
+| Order submission | A live-trade path slipping in | No HTTP `POST`, no signing, no submit route; every preview `canSubmit: false` (allowed and blocked); statically asserted by the readiness gate |
+
+Forbidden values are never echoed in errors, logs, reports, or test snapshots. Known heuristic limits: phrases under 12 words, Unicode-homoglyph keys, and `Symbol`-keyed secrets are not flagged (JSON/HTTP payloads cannot carry `Symbol` keys). `responseText`/cards carry untrusted third-party strings (Gamma questions) — the renderer must escape them; this module returns data only.
+
 ## Verification
 
 ```bash
