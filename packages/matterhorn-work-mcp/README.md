@@ -81,6 +81,11 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_close_file_session` — close a file session
 - `matterhorn_list_approvals` — list pending host approval requests
 - `matterhorn_reply_approval` — allow or deny an approval request
+- `matterhorn_hyperliquid_chat` — run the read/preview-only Hyperliquid workflow
+- `matterhorn_hyperliquid_list_markets` — list Hyperliquid markets through Matterhorn server reads
+- `matterhorn_hyperliquid_get_account` — read a public Hyperliquid account snapshot
+- `matterhorn_hyperliquid_get_orderbook` — read an L2 orderbook snapshot
+- `matterhorn_hyperliquid_preview_order` — prepare a non-submittable order preview
 - `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
 - `matterhorn_bittensor_readiness` — run Bittensor readiness checks
 - `matterhorn_bittensor_list_capabilities` — list Bittensor subnet capability manifests

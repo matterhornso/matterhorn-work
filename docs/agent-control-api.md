@@ -70,6 +70,11 @@ Common status codes:
 | `matterhorn_close_file_session` | `DELETE /files/sessions/:sessionId` |
 | `matterhorn_list_approvals` | `GET /approvals` |
 | `matterhorn_reply_approval` | `POST /approvals/:approvalId` |
+| `matterhorn_hyperliquid_chat` | `POST /api/hyperliquid/chat/execute` |
+| `matterhorn_hyperliquid_list_markets` | `GET /api/hyperliquid/markets` |
+| `matterhorn_hyperliquid_get_account` | `GET /api/hyperliquid/account/:address` |
+| `matterhorn_hyperliquid_get_orderbook` | `GET /api/hyperliquid/orderbook/:asset` |
+| `matterhorn_hyperliquid_preview_order` | `POST /api/hyperliquid/orders/preview` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
 | `matterhorn_bittensor_list_capabilities` | `GET /api/bittensor/capabilities` |

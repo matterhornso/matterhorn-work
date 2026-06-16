@@ -176,6 +176,53 @@ const server = createServer(async (req, res) => {
     assert.equal(body.reply, "allow");
     return json(res, 200, { ok: true, allowed: true });
   }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/markets") {
+    assert.equal(url.searchParams.get("limit"), "2");
+    return json(res, 200, {
+      success: true,
+      markets: [{ asset: "BTC", markPx: 65000, source: { source: "hyperliquid.info", freshness: "live" } }],
+      cards: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/account/0x0000000000000000000000000000000000000001") {
+    return json(res, 200, {
+      success: true,
+      account: { address: "0x0000000000000000000000000000000000000001", positionCount: 1, openOrderCount: 0, warnings: [] },
+      cards: [],
+    });
+  }
+  if (req.method === "GET" && url.pathname === "/api/hyperliquid/orderbook/BTC") {
+    return json(res, 200, {
+      success: true,
+      orderbook: { asset: "BTC", bids: [{ price: 64999, size: 1 }], asks: [{ price: 65001, size: 1 }], warnings: [] },
+      cards: [],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/preview") {
+    assert.equal(body.asset, "BTC");
+    assert.equal(body.side, "buy");
+    assert.equal(body.size, 0.1);
+    assert.equal("apiSecret" in body, false);
+    return json(res, 200, {
+      success: true,
+      preview: { venue: "hyperliquid", asset: "BTC", side: "buy", size: 0.1, canSubmit: false, previewSha256: "a".repeat(64) },
+      cards: [],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/hyperliquid/chat/execute") {
+    assert.equal(body.message, "preview buying 0.1 BTC at 65000");
+    assert.equal("apiSecret" in body, false);
+    return json(res, 200, {
+      success: true,
+      venue: "hyperliquid",
+      execution: "unsigned_preview",
+      responseText: "Hyperliquid preview ready.",
+      preview: { venue: "hyperliquid", canSubmit: false, previewSha256: "b".repeat(64) },
+      cards: [],
+      warnings: [],
+    });
+  }
+
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
     if (body.message === "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.") {
       assert.equal(body.netuid, 14);
@@ -414,6 +461,11 @@ try {
     "matterhorn_write_files",
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
+    "matterhorn_hyperliquid_chat",
+    "matterhorn_hyperliquid_list_markets",
+    "matterhorn_hyperliquid_get_account",
+    "matterhorn_hyperliquid_get_orderbook",
+    "matterhorn_hyperliquid_preview_order",
     "matterhorn_bittensor_chat",
     "matterhorn_bittensor_list_capabilities",
     "matterhorn_bittensor_get_subnet_capability",
@@ -577,6 +629,38 @@ try {
     arguments: { approvalId: "ap_1", reply: "allow" },
   }));
   assert.equal(approvalReply.allowed, true);
+
+  const hyperliquidMarkets = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_list_markets",
+    arguments: { limit: 2 },
+  }));
+  assert.equal(hyperliquidMarkets.markets[0].asset, "BTC");
+
+  const hyperliquidAccount = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_get_account",
+    arguments: { address: "0x0000000000000000000000000000000000000001" },
+  }));
+  assert.equal(hyperliquidAccount.account.positionCount, 1);
+
+  const hyperliquidBook = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_get_orderbook",
+    arguments: { asset: "BTC" },
+  }));
+  assert.equal(hyperliquidBook.orderbook.asset, "BTC");
+
+  const hyperliquidPreview = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_preview_order",
+    arguments: { asset: "BTC", side: "buy", size: 0.1, price: 65000 },
+  }));
+  assert.equal(hyperliquidPreview.preview.canSubmit, false);
+  assert.equal(hyperliquidPreview.preview.previewSha256.length, 64);
+
+  const hyperliquidChat = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_chat",
+    arguments: { message: "preview buying 0.1 BTC at 65000" },
+  }));
+  assert.equal(hyperliquidChat.execution, "unsigned_preview");
+  assert.equal(hyperliquidChat.preview.canSubmit, false);
 
   const bittensor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_chat",
