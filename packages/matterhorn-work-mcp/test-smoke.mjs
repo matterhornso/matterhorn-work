@@ -237,6 +237,24 @@ const server = createServer(async (req, res) => {
       cards: [],
     });
   }
+  if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/receipt") {
+    assert.equal(body.preview.action, "stake");
+    assert.equal(body.signatureSha256, "c".repeat(64));
+    assert.equal("signature" in body, false);
+    assert.equal("signedPayload" in body, false);
+    return json(res, 200, {
+      success: true,
+      receipt: {
+        status: "signed_payload_received",
+        action: "stake",
+        netuid: 14,
+        payloadSha256: body.handoff?.payloadSha256 ?? "e".repeat(64),
+        signatureSha256: body.signatureSha256,
+        signerAddress: body.signerAddress ?? null,
+      },
+      cards: [],
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/bittensor/extrinsics/submit") {
     assert.equal(body.preview.action, "stake");
     assert.equal(body.signature, "0x1234567890abcdef");
@@ -402,6 +420,7 @@ try {
     "matterhorn_bittensor_adapter_canary_gate",
     "matterhorn_bittensor_prepare_extrinsic",
     "matterhorn_bittensor_create_signing_handoff",
+    "matterhorn_bittensor_import_receipt",
     "matterhorn_bittensor_check_receipt",
     "matterhorn_bittensor_check_signing_handoff",
     "matterhorn_bittensor_submit_signed_extrinsic",
@@ -776,6 +795,19 @@ try {
     },
   });
   assert.match(badSigningHandoffCheck.error?.message || "", /forbidden signing or credential field/i);
+
+  const importedReceipt = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_import_receipt",
+    arguments: {
+      preview: extrinsicPreview.preview,
+      handoff: signingHandoff.handoff,
+      signatureSha256: "c".repeat(64),
+      signerAddress: "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF",
+    },
+  }));
+  assert.equal(importedReceipt.receipt.status, "signed_payload_received");
+  assert.equal(importedReceipt.receipt.signatureSha256, "c".repeat(64));
+  assert.equal(JSON.stringify(importedReceipt).includes("0x1234567890abcdef"), false);
 
   const receiptCheck = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_check_receipt",
