@@ -93,6 +93,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "matterhorn.market.official-sdk-validation.v1",
   "matterhorn-work crypto sdk-loop",
   "matterhorn-market-sdk-operator-summary.md",
+  "--operator-summary <operator-summary.md>",
   "node scripts/market-official-sdk-validation-doctor.mjs",
   "node scripts/market-official-sdk-normalize.mjs",
   "node scripts/market-official-sdk-operator-loop.mjs",
@@ -205,6 +206,13 @@ if (operatorLoopSelfTest.status === 0) {
 } else {
   fail("official SDK operator loop test passes", operatorLoopSelfTest.stderr || operatorLoopSelfTest.stdout || "unknown error");
 }
+
+mustContain("scripts/market-customer-evidence-bundle.mjs", [
+  "--operator-summary",
+  "FORBIDDEN_OPERATOR_SUMMARY_RE",
+  "operatorSummary",
+  "SHA-256",
+]);
 
 mustContain("qa-fixtures/market-official-sdk/README.md", [
   "hyperliquid-normalized-action.fixture.json",

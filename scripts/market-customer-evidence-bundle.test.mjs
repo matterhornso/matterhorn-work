@@ -15,6 +15,7 @@ try {
   const smoke = path.join(tmp, "customer-ready-smoke.json");
   const official = path.join(tmp, "official-sdk-evidence.json");
   const officialWrapped = path.join(tmp, "official-sdk-evidence-wrapped.json");
+  const operatorSummary = path.join(tmp, "matterhorn-market-sdk-operator-summary.md");
   const markdownOutput = path.join(tmp, "market-evidence.md");
   const jsonOutput = path.join(tmp, "market-evidence.json");
 
@@ -31,6 +32,18 @@ try {
   const evidence = sampleEvidence();
   await writeFile(official, JSON.stringify(evidence));
   await writeFile(officialWrapped, JSON.stringify({ ...validateEvidenceBundle(evidence), evidence }));
+  await writeFile(operatorSummary, [
+    "# Matterhorn Market Official SDK Operator Summary",
+    "",
+    "Status: READY_FOR_TEST_CUSTOMER_QA",
+    "",
+    "| Invariant | Value |",
+    "| --- | --- |",
+    "| Non-custodial | true |",
+    "| Live submission enabled | false |",
+    "| Signs or submits | false |",
+    "",
+  ].join("\n"));
 
   execFileSync("node", [
     script,
@@ -38,6 +51,8 @@ try {
     smoke,
     "--official-sdk-validation",
     official,
+    "--operator-summary",
+    operatorSummary,
     "--output",
     markdownOutput,
     "--json-output",
@@ -51,6 +66,9 @@ try {
   assert.match(markdown, /hyperliquid-python-sdk/);
   assert.match(markdown, /@polymarket\/clob-client-v2/);
   assert.match(markdown, /pending_official_client_validation/);
+  assert.match(markdown, /Operator Summary/);
+  assert.match(markdown, /matterhorn-market-sdk-operator-summary\.md/);
+  assert.match(markdown, /SHA-256/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const summary = JSON.parse(await readFile(jsonOutput, "utf8"));
@@ -60,6 +78,9 @@ try {
   assert.equal(summary.officialSdkValidation.validation.ok, true);
   assert.equal(summary.officialSdkValidation.allValidated, false);
   assert.equal(summary.customerReadySmoke.pass, 22);
+  assert.equal(summary.operatorSummary.present, true);
+  assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");
+  assert.match(summary.operatorSummary.sha256, /^[a-f0-9]{64}$/);
 
   const wrappedMarkdown = execFileSync("node", [
     script,
@@ -99,6 +120,22 @@ try {
         bad,
       ], { cwd: repoRoot, stdio: "pipe" }),
     /forbidden secret-shaped field/i,
+  );
+
+  const badSummary = path.join(tmp, "bad-summary.md");
+  await writeFile(badSummary, "rawSignature: 0xdeadbeef");
+  assert.throws(
+    () =>
+      execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--operator-summary",
+        badSummary,
+      ], { cwd: repoRoot, stdio: "pipe" }),
+    /forbidden secret-shaped content/i,
   );
 
   console.log("Market customer evidence bundle tests passed.");

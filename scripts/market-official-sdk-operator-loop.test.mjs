@@ -39,6 +39,8 @@ assert.ok(direct.files.customerEvidenceJson);
 assert.ok(direct.files.operatorSummaryMarkdown);
 const markdown = await readFile(direct.files.customerEvidenceMarkdown, "utf8");
 assert.match(markdown, /READY_FOR_TEST_CUSTOMER_QA/);
+assert.match(markdown, /Operator Summary/);
+assert.match(markdown, /matterhorn-market-sdk-operator-summary\.md/);
 const summary = await readFile(direct.files.operatorSummaryMarkdown, "utf8");
 assert.match(summary, /Matterhorn Market Official SDK Operator Summary/);
 assert.match(summary, /READY_FOR_TEST_CUSTOMER_QA/);
