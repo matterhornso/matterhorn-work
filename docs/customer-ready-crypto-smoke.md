@@ -36,8 +36,12 @@ node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json
 The default smoke pass runs these existing gates:
 
 ```bash
+pnpm test:unified-crypto-chat
+pnpm test:agent-crypto-operator-loop
+pnpm test:hermes-crypto-customer-qa
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
+pnpm test:market-official-sdk-validation-track
 pnpm test:market-receipt-qa
 pnpm test:market-receipt-evidence
 pnpm test:hyperliquid-readiness-gate
