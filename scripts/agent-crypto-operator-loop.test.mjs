@@ -39,6 +39,9 @@ for (const phrase of [
   "matterhorn-work crypto evidence-verify",
   "matterhorn-work crypto bittensor-evidence-verify",
   "matterhorn-work crypto customer-packet",
+  "matterhorn_market_customer_evidence_verify",
+  "matterhorn_bittensor_customer_evidence_verify",
+  "matterhorn_crypto_customer_packet",
   "canSubmit: false",
   "pnpm test:crypto-cli-fallback",
   "pnpm test:market-official-sdk-validation-track",
@@ -81,6 +84,9 @@ for (const toolName of [
   "matterhorn_polymarket_prepare_handoff",
   "matterhorn_hyperliquid_verify_receipt",
   "matterhorn_polymarket_verify_receipt",
+  "matterhorn_market_customer_evidence_verify",
+  "matterhorn_bittensor_customer_evidence_verify",
+  "matterhorn_crypto_customer_packet",
 ]) {
   assert.ok(mcp.includes(toolName), `MCP server should expose ${toolName}`);
 }

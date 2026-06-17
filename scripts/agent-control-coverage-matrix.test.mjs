@@ -42,6 +42,15 @@ for (const [route, tool, command] of rows) {
   assert.ok(mcp.includes(tool), `MCP server missing tool listed by coverage matrix: ${tool}`);
 }
 
+for (const tool of [
+  "matterhorn_market_customer_evidence_verify",
+  "matterhorn_bittensor_customer_evidence_verify",
+  "matterhorn_crypto_customer_packet",
+]) {
+  assert.ok(matrix.includes(tool), `coverage matrix missing MCP-only customer evidence tool: ${tool}`);
+  assert.ok(mcp.includes(tool), `MCP server missing MCP-only customer evidence tool: ${tool}`);
+}
+
 for (const command of [
   "sessions create",
   "sessions prompt",
