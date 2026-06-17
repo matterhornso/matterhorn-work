@@ -55,6 +55,7 @@ import {
   buildBittensorSubnetAdapterCanaryOperatorPacket,
   buildBittensorSubnetAdapterCanaryPacketExport,
   buildBittensorSubnetAdapterCanaryOutcomeReport,
+  buildBittensorAdapterOperatorHandoffCard,
   buildBittensorSubnetAdapterConformanceExport,
   buildBittensorSubnetAdapterOperatorHandoff,
   buildBittensorSubnetAdapterPreflightPacket,
@@ -99,6 +100,7 @@ import {
   prepareBittensorExtrinsic,
   parseAmountTao,
   reviewBittensorSubnetAdapterEvidence,
+  renderBittensorSubnetAdapterCanaryPacketMarkdown,
   runBittensorSubnetAdapterDryRun,
   runBittensorSubnetServiceAdapterContractTests,
   scoreBittensorSubnetForGoal,
@@ -117,6 +119,15 @@ delete process.env.BITTENSOR_WALLET_TIMELINE_PATH;
 delete process.env.BITTENSOR_WALLET_TIMELINE_RETENTION_LIMIT;
 
 const VALID_SS58 = "5GrwvaEF5zXb26Fz9rcQpDWSi6q4zN9vX7K5Qm9P7rjY9uQF";
+
+function expectNoBittensorSecretMaterial(value: unknown, extraForbidden: string[] = []) {
+  const serialized = typeof value === "string" ? value : JSON.stringify(value);
+  expect(serialized).not.toMatch(/"(secretSeed|privateKey|mnemonicPhrase|seedPhrase|keyfile|suri|walletExport|rawSignature|signedPayload|apiSecret|api_secret|private_key)"\s*:/i);
+  expect(serialized).not.toMatch(/Bearer [A-Za-z0-9._-]{8,}/i);
+  for (const forbidden of extraForbidden) {
+    expect(serialized).not.toContain(forbidden);
+  }
+}
 
 describe("isValidSs58Address", () => {
   test("accepts watch-only SS58-style public addresses", () => {
@@ -700,8 +711,8 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.execution).toBe("answered");
       expect(change?.baselineAvailable).toBe(false);
       expect(change?.summary).toContain("Created a first public wallet baseline");
-      expect(JSON.stringify(clear)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
-      expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase|wallet export|signature/i);
+      expectNoBittensorSecretMaterial(clear);
+      expectNoBittensorSecretMaterial(result);
     });
   });
 
@@ -1259,7 +1270,7 @@ describe("executeBittensorChatWorkflow", () => {
     expect(result.responseText).toContain("provider registry");
     expect(result.cards[0]?.kind).toBe("adapter_provider_registry");
     expect(result.data.providerRegistry).toBeTruthy();
-    expect(JSON.stringify(result)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+    expectNoBittensorSecretMaterial(result);
   });
 
   test("audits the real adapter canary gate without exposing secrets", () => {
@@ -1379,7 +1390,7 @@ describe("executeBittensorChatWorkflow", () => {
     expect(result.responseText).toContain("read-only audit");
     expect(result.cards[0]?.kind).toBe("adapter_canary_gate");
     expect(result.data.canaryGate).toBeTruthy();
-    expect(JSON.stringify(result)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+    expectNoBittensorSecretMaterial(result);
   });
 
   test("audits real adapter request approvals without exposing full hashes", () => {
@@ -1567,10 +1578,12 @@ describe("executeBittensorChatWorkflow", () => {
       const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
       const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
       const sidecarFetch = globalThis.fetch;
       const task = "Search for subnet service adapter examples.";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = "1";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
         name: "HTTP data search adapter",
@@ -1635,7 +1648,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(output?.warnings?.[0]).toBe("HTTP fixture warning.");
         expect(output?.usage?.units).toBe(2);
         expect(output?.costEstimate?.model).toBe("provider_priced");
-        expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+        expectNoBittensorSecretMaterial({ preview, invocation });
       } finally {
         globalThis.fetch = sidecarFetch;
         if (previousAdapters === undefined) {
@@ -1658,6 +1671,11 @@ describe("executeBittensorChatWorkflow", () => {
         } else {
           process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
         }
+        if (previousAck === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
+        }
       }
     });
   });
@@ -1669,10 +1687,12 @@ describe("executeBittensorChatWorkflow", () => {
       const previousLimit = process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
       const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
       const sidecarFetch = globalThis.fetch;
       const task = "Return an oversized adapter response.";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = "1";
       process.env.BITTENSOR_SUBNET_ADAPTER_MAX_RESPONSE_BYTES = "8192";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
@@ -1750,6 +1770,11 @@ describe("executeBittensorChatWorkflow", () => {
         } else {
           process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
         }
+        if (previousAck === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
+        }
       }
     });
   });
@@ -1811,7 +1836,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(card.items.some((item) => item.label === "Output" && item.value.includes("Mock inference response"))).toBe(true);
         expect(card.items.some((item) => item.label === "Usage" && item.value.includes("mock_tokens"))).toBe(true);
         expect(card.items.some((item) => item.label === "Cost" && item.value.includes("TAO"))).toBe(true);
-        expect(JSON.stringify({ preview, invocation })).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+        expectNoBittensorSecretMaterial({ preview, invocation });
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
@@ -1858,7 +1883,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(tampered.message).toContain("reviewed request SHA-256");
         expect(tampered.result.receivedRequestSha256).toBe(preview.requestSha256);
         expect(tampered.result.expectedRequestSha256).not.toBe(preview.requestSha256);
-        expect(JSON.stringify(tampered)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+        expectNoBittensorSecretMaterial(tampered);
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
@@ -1930,10 +1955,12 @@ describe("executeBittensorChatWorkflow", () => {
       const previousAllowlist = process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST;
       const previousReal = process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS;
       const previousApprovals = process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
+      const previousAck = process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
       const sidecarFetch = globalThis.fetch;
       process.env.BITTENSOR_HTTP_ADAPTER_TOKEN = "adapter-token";
       process.env.BITTENSOR_SUBNET_ADAPTER_ENDPOINT_ALLOWLIST = "adapter.invalid";
       process.env.BITTENSOR_ENABLE_REAL_SUBNET_ADAPTERS = "1";
+      process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = "1";
       process.env.BITTENSOR_SUBNET_ADAPTERS_JSON = JSON.stringify([{
         netuid: 77,
         name: "HTTP inference adapter",
@@ -1985,7 +2012,7 @@ describe("executeBittensorChatWorkflow", () => {
         const serialized = JSON.stringify({ preview, invocation });
         expect(serialized).not.toContain("adapter-token");
         expect(serialized).not.toContain("BITTENSOR_HTTP_ADAPTER_TOKEN");
-        expect(serialized).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export/i);
+        expectNoBittensorSecretMaterial(serialized, ["adapter-token", "BITTENSOR_HTTP_ADAPTER_TOKEN"]);
       } finally {
         globalThis.fetch = sidecarFetch;
         if (previousAdapters === undefined) {
@@ -2012,6 +2039,11 @@ describe("executeBittensorChatWorkflow", () => {
           delete process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON;
         } else {
           process.env.BITTENSOR_SUBNET_ADAPTER_APPROVALS_JSON = previousApprovals;
+        }
+        if (previousAck === undefined) {
+          delete process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK;
+        } else {
+          process.env.BITTENSOR_SUBNET_ADAPTER_CANARY_ACK = previousAck;
         }
       }
     });
@@ -2590,7 +2622,7 @@ describe("executeBittensorChatWorkflow", () => {
         expect(handoff.markdown).toContain("Matching reviewed providers: 1");
         const card = buildBittensorAdapterOperatorHandoffCard(handoff);
         expect(card.items.find((item) => item.label === "Provider evidence")?.value).toBe("1");
-        expect(JSON.stringify(handoff)).not.toMatch(/seed phrase|mnemonic|privateKey|wallet export|Bearer [A-Za-z0-9._-]{8,}/i);
+        expectNoBittensorSecretMaterial(handoff);
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;

@@ -435,6 +435,9 @@ export interface BittensorPlan {
     | "adapter_marketplace"
     | "adapter_roadmap"
     | "adapter_operator_handoff"
+    | "adapter_canary_outcome_report"
+    | "adapter_canary_gate"
+    | "adapter_provider_registry"
   >;
   requiresClarification: boolean;
   clarificationQuestion: string | null;
