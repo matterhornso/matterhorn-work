@@ -39,6 +39,7 @@ The default smoke pass runs these existing gates:
 
 ```bash
 pnpm test:unified-crypto-chat
+pnpm test:unified-crypto-shared-card-contract
 pnpm test:crypto-cli-fallback
 pnpm test:agent-crypto-operator-loop
 pnpm test:hermes-crypto-customer-qa
