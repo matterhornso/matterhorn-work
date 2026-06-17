@@ -4,6 +4,7 @@ import { basename } from "node:path";
 
 const REQUIRED_SMOKE_STAGES = [
   "crypto.unified_chat",
+  "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "market.execution_safety",
   "market.official_sdk_validation",

@@ -68,9 +68,10 @@ assert.equal(evidenceReport.evidence.venues[0].status, "validated");
 
 writeFileSync(smokeOutput, JSON.stringify({
   ready: true,
-  summary: { pass: 24, fail: 0, skip: 0 },
+  summary: { pass: 25, fail: 0, skip: 0 },
   stages: [
     { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
+    { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
     { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
     { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
     { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },

@@ -10,9 +10,10 @@ const tmp = await mkdtemp(join(tmpdir(), "matterhorn-market-sdk-loop-"));
 const smokePath = join(tmp, "customer-ready-smoke.json");
 await writeFile(smokePath, JSON.stringify({
   ready: true,
-  summary: { pass: 27, fail: 0, skip: 0 },
+  summary: { pass: 28, fail: 0, skip: 0 },
   stages: [
     { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
+    { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
     { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
     { id: "market.official_sdk_doctor", label: "Market official SDK validation doctor", status: "pass" },
     { id: "market.official_sdk_normalize", label: "Market official SDK artifact normalizer", status: "pass" },

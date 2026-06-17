@@ -6,6 +6,15 @@ const args = process.argv.slice(2);
 
 const FORBIDDEN_KEY_RE =
   /^(seed|seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|token|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)$/i;
+const REQUIRED_CUSTOMER_SMOKE_STAGES = [
+  "crypto.unified_chat",
+  "crypto.direct_prompt_safety",
+  "crypto.shared_card_contract",
+  "market.execution_safety",
+  "hyperliquid.readiness",
+  "polymarket.readiness",
+  "bittensor.customer_readiness",
+];
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -100,6 +109,13 @@ function summarizeSmoke(path, raw) {
   if (raw.safety?.nonCustodial !== true) errors.push("Customer-ready crypto smoke must keep nonCustodial=true.");
   if (raw.safety?.liveSubmissionEnabled !== false) errors.push("Customer-ready crypto smoke must keep liveSubmissionEnabled=false.");
   if (raw.safety?.asksForSecrets !== false) errors.push("Customer-ready crypto smoke must keep asksForSecrets=false.");
+  const stageById = new Map(stages.map((stage) => [String(stage?.id ?? ""), stage]));
+  const requiredStages = REQUIRED_CUSTOMER_SMOKE_STAGES.map((id) => {
+    const stage = stageById.get(id);
+    const status = typeof stage?.status === "string" ? stage.status : "missing";
+    if (status !== "pass") errors.push(`Customer-ready crypto smoke required stage did not pass: ${id} (${status}).`);
+    return { id, status };
+  });
   if (skip > 0) warnings.push(`Customer-ready crypto smoke has ${skip} skipped stage(s).`);
   return {
     present: true,
@@ -108,6 +124,7 @@ function summarizeSmoke(path, raw) {
     pass,
     fail,
     skip,
+    requiredStages,
     errors,
     warnings,
   };
