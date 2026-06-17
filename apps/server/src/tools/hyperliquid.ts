@@ -13,6 +13,10 @@ const HYPERLIQUID_CACHE_MS = 15_000;
 const ETH_ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)/i;
+const FORBIDDEN_CREDENTIAL_VALUE_RE =
+  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+const FORBIDDEN_CREDENTIAL_COMMAND_RE =
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
 
 export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "funding" | "orderbook" | "order_preview";
 export type HyperliquidExecution = "answered" | "clarification_required" | "read_only" | "unsigned_preview" | "unsupported";
@@ -366,6 +370,13 @@ export function isValidHyperliquidAddress(address: unknown): address is string {
 }
 
 export function findForbiddenHyperliquidCredentialInput(value: unknown, path: string[] = []): string | null {
+  if (typeof value === "string") {
+    const sample = value.length > 4096 ? value.slice(0, 4096) : value;
+    if (FORBIDDEN_CREDENTIAL_VALUE_RE.test(sample) || FORBIDDEN_CREDENTIAL_COMMAND_RE.test(sample)) {
+      return path.length ? path.join(".") : "input";
+    }
+    return null;
+  }
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       const nested = findForbiddenHyperliquidCredentialInput(value[index], [...path, String(index)]);

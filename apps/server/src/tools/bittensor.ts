@@ -14,6 +14,12 @@ import { dirname, join } from "node:path";
 const TAO_APP_BASE_URL = "https://api.tao.app";
 const CACHE_MS = 60_000;
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const FORBIDDEN_CHAT_CREDENTIAL_KEY_RE =
+  /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const FORBIDDEN_CHAT_CREDENTIAL_VALUE_RE =
+  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+const FORBIDDEN_CHAT_CREDENTIAL_COMMAND_RE =
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
 
 export type BittensorProviderStatus = "ok" | "provider_unavailable";
 
@@ -6648,6 +6654,39 @@ function buildBittensorWalletBaselineClearCard(report: BittensorWalletBaselineCl
   };
 }
 
+function findForbiddenBittensorChatCredentialInput(value: unknown, rootPath: string[] = []): string | null {
+  const MAX_NODES = 100_000;
+  const MAX_DEPTH = 256;
+  const stack: Array<{ value: unknown; path: string[]; depth: number }> = [{ value, path: rootPath, depth: 0 }];
+  let visited = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === undefined) break;
+    if (++visited > MAX_NODES) return [...node.path, "<oversized>"].join(".");
+    if (node.depth > MAX_DEPTH) return [...node.path, "<too-deep>"].join(".");
+    const current = node.value;
+    if (typeof current === "string") {
+      const sample = current.length > 4096 ? current.slice(0, 4096) : current;
+      if (FORBIDDEN_CHAT_CREDENTIAL_VALUE_RE.test(sample) || FORBIDDEN_CHAT_CREDENTIAL_COMMAND_RE.test(sample)) {
+        return node.path.length ? node.path.join(".") : "input";
+      }
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (let index = 0; index < current.length; index += 1) {
+        stack.push({ value: current[index], path: [...node.path, String(index)], depth: node.depth + 1 });
+      }
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      if (FORBIDDEN_CHAT_CREDENTIAL_KEY_RE.test(key)) return [...node.path, key].join(".");
+      stack.push({ value: child, path: [...node.path, key], depth: node.depth + 1 });
+    }
+  }
+  return null;
+}
+
 function clarificationResult(
   plan: BittensorPlan,
   question: string,
@@ -6681,6 +6720,39 @@ async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInp
   const plan = planBittensorChat({ message, ss58Address: input.ss58Address ?? input.coldkey ?? null });
   const answeredPlan = { ...plan, requiresClarification: false, clarificationQuestion: null };
   const warnings = [...plan.safetyNotes];
+  const forbidden = findForbiddenBittensorChatCredentialInput(input);
+  if (forbidden) {
+    const rejectedPlan: BittensorPlan = {
+      ...answeredPlan,
+      summary: "Matterhorn rejected credential-shaped Bittensor chat input before execution.",
+      userGoal: "Credential-shaped input rejected before execution.",
+      netuids: [],
+      ss58Address: null,
+      responseCards: ["subnet_result"],
+    };
+    return {
+      plan: rejectedPlan,
+      responseText:
+        "For safety, remove seed phrases, mnemonics, private keys, wallet exports, signatures, signed payloads, or adapter credentials. Matterhorn only accepts public Bittensor addresses and action parameters for read-only analysis and unsigned previews.",
+      cards: [{
+        kind: "subnet_result",
+        title: "Bittensor secret rejected",
+        summary: "Matterhorn rejected credential-shaped chat input before running any Bittensor read or preview workflow.",
+        tone: "warning",
+        items: [
+          cardItem("Rejected field", forbidden, "warning"),
+          cardItem("Allowed input", "Public SS58 addresses, netuids, validator hotkeys, amounts, and watch parameters"),
+          cardItem("Matterhorn will not", "Ask for seeds/private keys, custody wallets, sign, broadcast, or store wallet exports.", "warning"),
+        ],
+        warnings: ["Rejected credential-shaped field: " + forbidden],
+      }],
+      data: {},
+      warnings: uniqueWarnings(warnings, ["Rejected credential-shaped field: " + forbidden]),
+      requiresClarification: false,
+      clarificationQuestion: null,
+      execution: "unsupported",
+    };
+  }
 
   if (!message) {
     return clarificationResult(plan, "What would you like to do with Bittensor?");
