@@ -137,11 +137,11 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 #   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
 #   --output-dir /tmp/matterhorn-market-sdk-loop \
 #   --json
-# node scripts/market-official-sdk-normalize.mjs \
+# matterhorn-work crypto sdk-normalize \
 #   --venue hyperliquid \
 #   --input /tmp/operator-hyperliquid-official-client-public.json \
 #   --output /tmp/hyperliquid-official-normalized-action.json
-# node scripts/market-official-sdk-normalize.mjs \
+# matterhorn-work crypto sdk-normalize \
 #   --venue polymarket \
 #   --input /tmp/operator-polymarket-official-client-public.json \
 #   --output /tmp/polymarket-official-normalized-typed-data.json
