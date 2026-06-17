@@ -79,7 +79,9 @@
     "test:polymarket-cli-fallback": "node scripts/polymarket-cli-fallback.test.mjs",
     "test:polymarket-readiness-gate": "node scripts/polymarket-readiness-gate.test.mjs",
     "test:market-live-readonly-smoke": "node scripts/market-live-readonly-smoke.test.mjs",
-    "test:market-receipt-evidence": "node scripts/market-receipt-evidence.test.mjs"
+    "test:market-receipt-evidence": "node scripts/market-receipt-evidence.test.mjs",
+    "smoke:customer-ready-crypto": "node scripts/customer-ready-crypto-smoke.mjs --offline --strict",
+    "test:customer-ready-crypto-smoke": "node scripts/customer-ready-crypto-smoke.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
