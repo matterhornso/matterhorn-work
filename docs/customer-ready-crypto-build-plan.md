@@ -92,11 +92,13 @@ Build:
 - Hyperliquid testnet validation against the official SDK for L1 order action structure, asset index, nonce, agent domain, and connection id computation.
 - Polymarket testnet or client validation against `@polymarket/clob-client` for EIP-712 order domain, verifying contract, amount rounding, outcome token handling, and expiration.
 - Evidence docs that say what was validated, what remains template-only, and why Matterhorn still does not sign or submit.
+- A local validation-track gate that keeps template payloads marked `requiresClientValidation: true`, keeps all previews/handoffs non-submittable, and documents the exact external official-client evidence required before future execution work.
 
 Done when:
 
 - Signing templates are corrected where official clients differ.
 - No private keys, API secrets, raw signatures, or signed payloads are accepted by Matterhorn.
+- `pnpm test:market-official-sdk-validation-track` passes alongside the market execution safety gate.
 
 ## Phase 6: Agent Control Surface Polish
 

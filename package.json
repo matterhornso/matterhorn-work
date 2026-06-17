@@ -82,7 +82,8 @@
     "test:market-receipt-evidence": "node scripts/market-receipt-evidence.test.mjs",
     "smoke:customer-ready-crypto": "node scripts/customer-ready-crypto-smoke.mjs --offline --strict",
     "test:customer-ready-crypto-smoke": "node scripts/customer-ready-crypto-smoke.test.mjs",
-    "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts"
+    "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts",
+    "test:market-official-sdk-validation-track": "node scripts/market-official-sdk-validation-track.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
