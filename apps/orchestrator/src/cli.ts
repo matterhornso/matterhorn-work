@@ -19,7 +19,7 @@ import {
   writeFile,
   realpath,
 } from "node:fs/promises";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { homedir, hostname, networkInterfaces, platform, tmpdir } from "node:os";
@@ -3771,6 +3771,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
+    "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3793,6 +3794,7 @@ function printHelp(): void {
     "  hyperliquid             Run Hyperliquid read/preview workflows",
     "  polymarket              Run Polymarket read/preview workflows",
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
+    "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7564,13 +7566,23 @@ function assertNoCryptoSecrets(args: ParsedArgs): void {
   const forbiddenFlags = [
     "api-secret",
     "apiSecret",
+    "api-key",
+    "apiKey",
     "private-key",
     "privateKey",
+    "private-key-hex",
+    "privateKeyHex",
     "seed",
+    "seed-phrase",
+    "seedPhrase",
     "mnemonic",
+    "raw-signature",
+    "rawSignature",
     "signature",
     "signed-payload",
     "signedPayload",
+    "signed-order",
+    "signedOrder",
     "wallet-export",
     "walletExport",
   ];
@@ -7593,18 +7605,86 @@ function readCryptoAmount(args: ParsedArgs, key: string): number | string | unde
   return Number.isFinite(parsed) ? parsed : trimmed;
 }
 
+const CRYPTO_SDK_LOOP_SUBCOMMANDS = new Set([
+  "sdk-loop",
+  "official-sdk",
+  "sdk-operator-loop",
+  "operator-loop",
+]);
+
+const CRYPTO_SDK_LOOP_BOOL_FLAGS = [
+  "fixture",
+  "require-official-sdk-validated",
+] as const;
+
+const CRYPTO_SDK_LOOP_VALUE_FLAGS = [
+  "output-dir",
+  "customer-ready-smoke",
+  "hyperliquid-official-public",
+  "polymarket-official-public",
+  "hyperliquid-package-version",
+  "polymarket-package-version",
+  "polymarket-exchange-address",
+  "polymarket-chain-id",
+] as const;
+
+async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const script = resolve(REPO_ROOT_DIR, "scripts", "market-official-sdk-operator-loop.mjs");
+  if (!existsSync(script)) {
+    throw new Error(`Market official SDK operator loop script was not found at ${script}`);
+  }
+
+  const forwarded: string[] = [];
+  for (const key of CRYPTO_SDK_LOOP_BOOL_FLAGS) {
+    if (readBool(args.flags, key, false)) forwarded.push(`--${key}`);
+  }
+  for (const key of CRYPTO_SDK_LOOP_VALUE_FLAGS) {
+    const value = readFlag(args.flags, key);
+    if (value !== undefined && value.trim()) forwarded.push(`--${key}`, value);
+  }
+  if (outputJson) forwarded.push("--json");
+
+  const nodeBin =
+    process.env.MATTERHORN_WORK_NODE_BIN ??
+    process.env.OPENWORK_NODE_BIN ??
+    process.env.NODE_BIN ??
+    "node";
+
+  await new Promise<void>((resolveRun, rejectRun) => {
+    const child = spawn(nodeBin, [script, ...forwarded], {
+      cwd: REPO_ROOT_DIR,
+      stdio: "inherit",
+      env: process.env,
+    });
+    child.once("error", rejectRun);
+    child.once("close", (code) => {
+      if (code === 0) {
+        resolveRun();
+        return;
+      }
+      rejectRun(new Error(`Market official SDK operator loop exited with code ${code ?? "unknown"}`));
+    });
+  });
+}
+
 async function runCrypto(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "chat";
-  const { openworkUrl, token } = readOpenworkClientAuth(args);
-  const baseUrl = openworkUrl.replace(/\/$/, "");
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
 
   try {
     assertNoCryptoSecrets(args);
+
+    if (CRYPTO_SDK_LOOP_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoSdkLoop(args, outputJson);
+      return;
+    }
+
+    const { openworkUrl, token } = readOpenworkClientAuth(args);
+    const baseUrl = openworkUrl.replace(/\/$/, "");
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
 
     if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
       const message =
@@ -7649,7 +7729,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute)");
+    throw new Error("crypto requires chat (aliases: ask, execute) or sdk-loop");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

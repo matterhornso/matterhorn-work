@@ -214,7 +214,7 @@ node scripts/market-official-sdk-validation-capture.mjs \
 For a copy-pasteable offline rehearsal, run the fixture-backed loop:
 
 ```bash
-node scripts/market-official-sdk-operator-loop.mjs \
+matterhorn-work crypto sdk-loop \
   --fixture \
   --output-dir /tmp/matterhorn-market-sdk-loop \
   --json
@@ -223,7 +223,7 @@ node scripts/market-official-sdk-operator-loop.mjs \
 For real operator-owned public artifacts, run:
 
 ```bash
-node scripts/market-official-sdk-operator-loop.mjs \
+matterhorn-work crypto sdk-loop \
   --hyperliquid-official-public /tmp/operator-hyperliquid-official-client-public.json \
   --polymarket-official-public /tmp/operator-polymarket-official-client-public.json \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
@@ -235,6 +235,9 @@ The loop runs the validation doctor, normalizes public artifacts, captures
 official SDK evidence, and optionally writes a customer evidence bundle. It does
 not run official SDK packages, sign, submit, broadcast, call exchanges, or accept
 secret-bearing artifacts.
+
+The lower-level script remains available for debugging:
+`node scripts/market-official-sdk-operator-loop.mjs`.
 
 ## Fixture-Backed Operator Loop
 

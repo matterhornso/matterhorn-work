@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -162,7 +163,32 @@ async function main() {
     if (mock.requests.length !== requestsBefore) throw new Error("secret-flag request reached the server; rejection must happen client-side first");
     console.log("PASS crypto secret flag rejection (no server call)");
 
-    // 4. No request touched a submit/sign/exchange route.
+    // 4. The official SDK operator loop is exposed through the public CLI without
+    // requiring a Matterhorn server or forwarding auth tokens/secrets.
+    const sdkRequestsBefore = mock.requests.length;
+    const sdkOutputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-sdk-loop-cli-"));
+    const sdkLoop = await expectCli(
+      "crypto sdk-loop fixture",
+      mock.url,
+      ["crypto", "sdk-loop", "--fixture", "--output-dir", sdkOutputDir],
+      (payload) => {
+        if (payload.ready !== true) throw new Error(`expected SDK loop ready=true, got ${payload.ready}`);
+        if (payload.safety?.nonCustodial !== true) throw new Error("expected SDK loop safety.nonCustodial=true");
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected SDK loop liveSubmissionEnabled=false");
+        if (payload.safety?.signsOrSubmits !== false) throw new Error("expected SDK loop signsOrSubmits=false");
+        if (!payload.files?.officialSdkEvidence || !existsSync(payload.files.officialSdkEvidence)) {
+          throw new Error("expected official SDK evidence file to be written");
+        }
+      },
+    );
+    if (mock.requests.length !== sdkRequestsBefore) throw new Error("crypto sdk-loop should not call the Matterhorn server");
+    const sdkEvidence = readFileSync(sdkLoop.files.officialSdkEvidence, "utf8");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport/i.test(sdkEvidence)) {
+      throw new Error("SDK loop evidence leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
+
+    // 5. No request touched a submit/sign/exchange route.
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
       if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);
