@@ -37,7 +37,7 @@ Evidence to save:
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
-- Evidence captured with `node scripts/market-official-sdk-validation-capture.mjs --hyperliquid-normalized <redacted-action.json> --hyperliquid-package-version <version>`.
+- Evidence captured with `matterhorn-work crypto sdk-capture --hyperliquid-normalized <redacted-action.json> --hyperliquid-package-version <version>`.
 
 ## Polymarket Validation Checklist
 
@@ -59,7 +59,7 @@ Evidence to save:
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
-- Evidence captured with `node scripts/market-official-sdk-validation-capture.mjs --polymarket-normalized <redacted-typed-data.json> --polymarket-package-version <version>`.
+- Evidence captured with `matterhorn-work crypto sdk-capture --polymarket-normalized <redacted-typed-data.json> --polymarket-package-version <version>`.
 
 ## Evidence JSON Contract
 
@@ -117,7 +117,7 @@ installing official SDKs inside Matterhorn or sharing any credentials with
 Matterhorn:
 
 ```bash
-node scripts/market-official-sdk-validation-capture.mjs \
+matterhorn-work crypto sdk-capture \
   --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
   --hyperliquid-package-version <hyperliquid-python-sdk-version> \
   --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
@@ -199,7 +199,7 @@ call remote endpoints. It only extracts public order/action fields:
 Then capture the normalized artifacts:
 
 ```bash
-node scripts/market-official-sdk-validation-capture.mjs \
+matterhorn-work crypto sdk-capture \
   --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
   --hyperliquid-package-version <hyperliquid-python-sdk-version> \
   --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
@@ -292,7 +292,7 @@ node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fix
 node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
-node scripts/market-official-sdk-validation-capture.mjs --json
+matterhorn-work crypto sdk-capture --self-test --json
 matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --output <bundle.md> --json-output <bundle.json>
 ```
 

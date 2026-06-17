@@ -3774,6 +3774,7 @@ function printHelp(): void {
     "  matterhorn-work crypto customer-smoke [--offline|--include-live-server] [options]",
     "  matterhorn-work crypto sdk-doctor [--strict] [--venue all|hyperliquid|polymarket]",
     "  matterhorn-work crypto sdk-normalize --venue <venue> --input <path> --output <path>",
+    "  matterhorn-work crypto sdk-capture --hyperliquid-normalized <path> --polymarket-normalized <path> --output <path>",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [options]",
     "  matterhorn-work upstream openwork check [options]",
@@ -3801,6 +3802,7 @@ function printHelp(): void {
     "  crypto customer-smoke   Run consolidated customer-ready crypto smoke gates",
     "  crypto sdk-doctor       Check official SDK validation env readiness without signing/submission",
     "  crypto sdk-normalize    Normalize redacted official-client output for SDK validation",
+    "  crypto sdk-capture      Build official SDK evidence from normalized public artifacts",
     "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
@@ -7632,6 +7634,12 @@ const CRYPTO_SDK_NORMALIZE_SUBCOMMANDS = new Set([
   "normalize-sdk",
 ]);
 
+const CRYPTO_SDK_CAPTURE_SUBCOMMANDS = new Set([
+  "sdk-capture",
+  "official-sdk-capture",
+  "capture-sdk",
+]);
+
 const CRYPTO_CUSTOMER_SMOKE_SUBCOMMANDS = new Set([
   "customer-smoke",
   "customer-ready",
@@ -7665,6 +7673,24 @@ const CRYPTO_SDK_NORMALIZE_VALUE_FLAGS = [
   "venue",
   "input",
   "output",
+] as const;
+
+const CRYPTO_SDK_CAPTURE_BOOL_FLAGS = [
+  "self-test",
+] as const;
+
+const CRYPTO_SDK_CAPTURE_VALUE_FLAGS = [
+  "output",
+  "generated-at",
+  "validated-at",
+  "hyperliquid-normalized",
+  "hyperliquid-package-version",
+  "hyperliquid-public-receipt",
+  "polymarket-normalized",
+  "polymarket-package-version",
+  "polymarket-exchange-address",
+  "polymarket-chain-id",
+  "polymarket-public-receipt",
 ] as const;
 
 const CRYPTO_SDK_LOOP_BOOL_FLAGS = [
@@ -7768,6 +7794,14 @@ async function runCryptoSdkNormalize(args: ParsedArgs, outputJson: boolean): Pro
   await runOfflineCryptoScript("market-official-sdk-normalize.mjs", forwarded, "Market official SDK normalizer");
 }
 
+async function runCryptoSdkCapture(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_SDK_CAPTURE_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_SDK_CAPTURE_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-official-sdk-validation-capture.mjs", forwarded, "Market official SDK validation capture");
+}
+
 async function runCryptoCustomerSmoke(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_CUSTOMER_SMOKE_BOOL_FLAGS, forwarded);
@@ -7801,6 +7835,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_SDK_NORMALIZE_SUBCOMMANDS.has(subcommand)) {
       await runCryptoSdkNormalize(args, outputJson);
+      return;
+    }
+
+    if (CRYPTO_SDK_CAPTURE_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoSdkCapture(args, outputJson);
       return;
     }
 
