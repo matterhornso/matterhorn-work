@@ -14,7 +14,7 @@ The smoke pass is non-custodial:
 Dry-run the exact checks:
 
 ```bash
-node scripts/customer-ready-crypto-smoke.mjs --dry-run --json
+matterhorn-work crypto customer-smoke --dry-run --json
 ```
 
 Run the offline/default customer-readiness pass:
@@ -30,7 +30,7 @@ Some agent sandboxes block temporary `127.0.0.1` test servers. If the smoke pass
 Strict JSON output for agents:
 
 ```bash
-node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json
+matterhorn-work crypto customer-smoke --offline --strict --json
 ```
 
 ## Default Offline Checks
@@ -110,7 +110,7 @@ public/redacted only; it does not sign, submit, store secrets, or authorize live
 execution.
 
 ```bash
-node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
+matterhorn-work crypto customer-smoke --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
 
 # Optional when an operator has redacted official-client output:

@@ -29,6 +29,7 @@ for (const phrase of [
   "pnpm test:market-customer-evidence-bundle",
   "pnpm test:bittensor-customer-readiness-gate",
   "Official SDK Evidence Loop",
+  "matterhorn-work crypto customer-smoke",
   "matterhorn-work crypto sdk-loop",
   "matterhorn-work crypto evidence-bundle",
   "matterhorn-market-sdk-operator-summary.md",

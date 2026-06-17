@@ -96,7 +96,7 @@ const doc = readFileSync("docs/customer-ready-crypto-smoke.md", "utf8");
 for (const required of [
   "Customer-Ready Crypto Smoke",
   "pnpm smoke:customer-ready-crypto",
-  "node scripts/customer-ready-crypto-smoke.mjs --dry-run --json",
+  "matterhorn-work crypto customer-smoke --dry-run --json",
   "canSubmit: false",
   "never submits",
   "never signs",
