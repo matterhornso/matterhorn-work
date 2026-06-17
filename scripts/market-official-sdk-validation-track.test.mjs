@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const root = process.cwd();
 let failures = 0;
@@ -43,9 +44,16 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-track"] === "node
 } else {
   fail("package.json exposes test:market-official-sdk-validation-track");
 }
+if (packageJson.scripts?.["test:market-official-sdk-validation-evidence"] === "node scripts/market-official-sdk-validation-evidence.mjs --self-test") {
+  pass("package.json exposes test:market-official-sdk-validation-evidence");
+} else {
+  fail("package.json exposes test:market-official-sdk-validation-evidence");
+}
 
 mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid's official SDK",
+  "hyperliquid-python-sdk",
+  "@polymarket/clob-client-v2",
   "@polymarket/clob-client",
   "requiresClientValidation: true",
   "canSubmit: false",
@@ -55,7 +63,31 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Testnet validation must happen outside Matterhorn's server process",
   "Redacted Matterhorn typed-data template",
   "Official-client normalized typed-data/order",
+  "matterhorn.market.official-sdk-validation.v1",
+  "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
 ]);
+
+mustContain("scripts/market-official-sdk-validation-evidence.mjs", [
+  "matterhorn.market.official-sdk-validation.v1",
+  "hyperliquid-python-sdk",
+  "@polymarket/clob-client-v2",
+  "requiresClientValidation",
+  "canSubmit: false",
+  "externalSignerOnly: true",
+  "clientMustCompute",
+  "walletMustSet",
+  "signatureType",
+  "FORBIDDEN_CREDENTIAL_KEY_RE",
+]);
+const evidenceSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-evidence.mjs", "--self-test"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (evidenceSelfTest.status === 0) {
+  pass("official SDK evidence validator self-test passes");
+} else {
+  fail("official SDK evidence validator self-test passes", evidenceSelfTest.stderr || evidenceSelfTest.stdout || "unknown error");
+}
 
 mustContain("docs/hyperliquid-read-preview.md", [
   "requiresClientValidation",

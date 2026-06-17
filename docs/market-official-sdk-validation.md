@@ -4,8 +4,8 @@ Matterhorn Work currently supports Hyperliquid and Polymarket as read, preview, 
 
 ## Scope
 
-- Hyperliquid: validate the L1 order-action template against Hyperliquid's official SDK on testnet.
-- Polymarket: validate the EIP-712 order typed-data template against `@polymarket/clob-client` on a testnet or official client fixture.
+- Hyperliquid: validate the L1 order-action template against Hyperliquid's official SDK (`hyperliquid-python-sdk`) on testnet. Hyperliquid's docs list TypeScript SDKs as community SDKs, so they can provide supplemental parity evidence but not replace official Python SDK evidence.
+- Polymarket: validate the EIP-712 order typed-data template against `@polymarket/clob-client-v2` / `@polymarket/clob-client` on Polygon Amoy or an official client fixture.
 - Bittensor remains separate: Bittensor uses Subtensor/SDK read and unsigned-preview flows, with signing outside Matterhorn.
 
 ## Non-Negotiable Rules
@@ -36,10 +36,11 @@ Evidence to save:
 - Official-client normalized action.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
+- Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
 
 ## Polymarket Validation Checklist
 
-Validate with `@polymarket/clob-client` or official CLOB client fixtures before any real-funds use:
+Validate with `@polymarket/clob-client-v2`, `@polymarket/clob-client`, or official CLOB client fixtures before any real-funds use:
 
 - EIP-712 domain name, version, chain id, and verifying contract.
 - `Order` type layout and field order.
@@ -50,12 +51,53 @@ Validate with `@polymarket/clob-client` or official CLOB client fixtures before 
 
 Evidence to save:
 
-- `@polymarket/clob-client` version.
+- `@polymarket/clob-client-v2` or `@polymarket/clob-client` version.
 - Exchange address and chain id used for validation.
 - Redacted Matterhorn typed-data template.
 - Official-client normalized typed-data/order.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
+- Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
+
+## Evidence JSON Contract
+
+Matterhorn records only redacted official-client/testnet evidence. The evidence must use:
+
+```json
+{
+  "version": "matterhorn.market.official-sdk-validation.v1",
+  "safety": {
+    "nonCustodial": true,
+    "liveSubmissionEnabled": false,
+    "asksForSecrets": false,
+    "storesSecrets": false
+  },
+  "venues": [
+    {
+      "venue": "hyperliquid",
+      "officialClient": { "name": "hyperliquid-python-sdk" },
+      "matterhornTemplate": {
+        "requiresClientValidation": true,
+        "canSubmit": false,
+        "externalSignerOnly": true,
+        "clientMustCompute": ["nonce", "connectionId", "signature"]
+      }
+    },
+    {
+      "venue": "polymarket",
+      "officialClient": { "name": "@polymarket/clob-client-v2" },
+      "matterhornTemplate": {
+        "requiresClientValidation": true,
+        "canSubmit": false,
+        "externalSignerOnly": true,
+        "walletMustSet": ["maker", "signer", "salt", "nonce", "expiration"]
+      }
+    }
+  ]
+}
+```
+
+The validator rejects credential-shaped fields such as `seed`, `privateKey`, `apiSecret`, `signature`, `rawSignature`, and `signedPayload`. Polymarket's public `signatureType` metadata is allowed because it is not a signature.
 
 ## Local Gate
 
@@ -63,6 +105,11 @@ Run:
 
 ```bash
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-official-sdk-validation-evidence
+node scripts/market-official-sdk-validation-evidence.mjs --sample --json
+node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
 ```
 
-This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas.
+This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn.
+
+Sources: Hyperliquid API docs (`hyperliquid-python-sdk`, testnet URL), Polymarket trading overview (`@polymarket/clob-client-v2`, EIP-712 orders, API credential separation).
