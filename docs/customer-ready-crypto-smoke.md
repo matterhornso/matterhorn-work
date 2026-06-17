@@ -23,6 +23,8 @@ Run the offline/default customer-readiness pass:
 pnpm smoke:customer-ready-crypto
 ```
 
+CI also runs this smoke pass through the `customer-crypto-gates` job in the Matterhorn Work Tests workflow, so crypto regressions are visible on pull requests instead of remaining local-only.
+
 Some agent sandboxes block temporary `127.0.0.1` test servers. If the smoke pass fails with `listen EPERM: operation not permitted 127.0.0.1`, rerun it in a normal local shell or an approved unsandboxed runner. That specific error is an environment bind restriction, not evidence of a product regression.
 
 Strict JSON output for agents:
