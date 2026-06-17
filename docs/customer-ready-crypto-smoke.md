@@ -46,6 +46,7 @@ pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-receipt-qa
 pnpm test:market-receipt-evidence
@@ -116,6 +117,9 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 #   --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
 #   --polymarket-package-version <version> \
 #   --output /tmp/matterhorn-market-sdk-evidence.json
+
+# Fixture-backed strict validation path:
+# pnpm test:market-official-sdk-validation-fixtures
 
 node scripts/market-customer-evidence-bundle.mjs \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \

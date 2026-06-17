@@ -1,0 +1,22 @@
+{
+  "domain": {
+    "name": "Polymarket CTF Exchange",
+    "version": "1",
+    "chainId": 80002,
+    "verifyingContract": "0x0000000000000000000000000000000000000002"
+  },
+  "primaryType": "Order",
+  "types": {
+    "Order": [
+      {
+        "name": "maker",
+        "type": "address"
+      }
+    ]
+  },
+  "message": {
+    "signatureType": 0,
+    "makerAmount": "1000000",
+    "takerAmount": "500000"
+  }
+}

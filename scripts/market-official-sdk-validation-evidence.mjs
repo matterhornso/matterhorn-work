@@ -342,9 +342,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
 
-  const evidence = config.evidenceFile
+  const evidenceInput = config.evidenceFile
     ? JSON.parse(readFileSync(config.evidenceFile, "utf8"))
     : sampleEvidence();
+  const evidence = isRecord(evidenceInput?.evidence) ? evidenceInput.evidence : evidenceInput;
   const result = validateEvidenceBundle(evidence);
   const report = { ...result, evidence };
   if (config.json) {
