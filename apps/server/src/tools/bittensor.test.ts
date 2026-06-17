@@ -828,6 +828,10 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.plan.intent).toBe("discover");
       expect(result.cards[0]?.kind).toBe("subnet_comparison");
       expect(result.cards[0]?.title).toContain("Image");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Subnet discovery next steps");
+      expect(guidance?.actions?.[0]?.payload?.prompt).toContain("subnet candidates");
+      expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("financial advice"))).toBe(true);
     });
   });
 
@@ -837,6 +841,9 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.execution).toBe("answered");
       expect(result.plan.intent).toBe("discover");
       expect(result.cards[0]?.kind).toBe("subnet_comparison");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Subnet discovery next steps");
+      expect(result.data.customerGuidance).toMatchObject({ intent: "discover", execution: "answered" });
     });
   });
 
@@ -889,6 +896,10 @@ describe("executeBittensorChatWorkflow", () => {
         expect(result.cards[0]?.actions?.[0]?.label).toBe("Confirm service call");
         expect((result.cards[0]?.actions?.[0]?.payload as { invokeArgs?: { previewRequestSha256?: string } } | undefined)?.invokeArgs?.previewRequestSha256).toBe(preview?.requestSha256);
         expect(result.cards[0]?.items.some((item) => item.label === "Request SHA-256")).toBe(true);
+        const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+        expect(guidance?.title).toBe("Subnet service next steps");
+        expect(guidance?.items.some((item) => item.label === "First safe step" && item.value.includes("request SHA-256"))).toBe(true);
+        expect(guidance?.actions?.[0]?.payload?.prompt).toContain("subnet");
         expect(adapterCalls).toBe(0);
         expect(JSON.stringify(result)).not.toContain("BITTENSOR_IMAGE_ADAPTER_TOKEN");
         expect(JSON.stringify(result)).not.toContain("adapter-token");
@@ -932,6 +943,10 @@ describe("executeBittensorChatWorkflow", () => {
         expect(nextStep?.type).toBe("unsupported_adapter");
         expect(nextStep?.fallbackIntents).toContain("explain");
         expect(result.cards[0]?.kind).toBe("unsupported_adapter");
+        const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+        expect(guidance?.title).toBe("Subnet service next steps");
+        expect(guidance?.tone).toBe("warning");
+        expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("seed"))).toBe(true);
       } finally {
         if (previousAdapters === undefined) {
           delete process.env.BITTENSOR_SUBNET_ADAPTERS_JSON;
@@ -3543,6 +3558,9 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.plan.intent).toBe("monitor");
       expect(result.cards[0]?.kind).toBe("watchlist");
       expect(result.responseText).toContain("subnet 77");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Watch and alert next steps");
+      expect(guidance?.actions?.[0]?.payload?.prompt).toContain("watch alerts");
     });
   });
 
@@ -3557,6 +3575,8 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.cards.some((card) => card.kind === "watchlist")).toBe(true);
       expect(watches?.length).toBeGreaterThan(0);
       expect(watches?.some((watch) => watch.kind === "validator" && Boolean(watch.validatorHotkey && isValidSs58Address(watch.validatorHotkey)))).toBe(true);
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Watch and alert next steps");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     });
   });
@@ -3593,6 +3613,9 @@ describe("executeBittensorChatWorkflow", () => {
       expect(alertCard?.items.some((item) => item.label === "Intent" && item.value === "review_slippage")).toBe(true);
       expect(alertCard?.actions?.some((action) => String(action.payload?.alertKey ?? "").includes("slippage"))).toBe(true);
       expect(alertCard?.actions?.some((action) => action.payload?.notificationIntent === "review_slippage")).toBe(true);
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Watch and alert next steps");
+      expect(guidance?.items.some((item) => item.label === "First safe step" && item.value.includes("warning watches"))).toBe(true);
     });
   });
 
