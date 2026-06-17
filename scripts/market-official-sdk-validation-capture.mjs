@@ -165,7 +165,7 @@ function runSelfTest() {
     polymarketExchangeAddress: "0x0000000000000000000000000000000000000001",
     polymarketChainId: "80002",
     polymarketNormalized: {
-      domain: { name: "Polymarket CTF Exchange", chainId: 80002 },
+      domain: { name: "Polymarket CTF Exchange", chainId: 80002, verifyingContract: "0x0000000000000000000000000000000000000001" },
       primaryType: "Order",
       types: { Order: [{ name: "maker", type: "address" }] },
       message: { signatureType: 0, makerAmount: "1000000", takerAmount: "500000" },

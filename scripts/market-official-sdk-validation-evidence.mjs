@@ -133,6 +133,65 @@ function assertCondition(errors, condition, message) {
   if (!condition) errors.push(message);
 }
 
+function publicArtifactContent(venue, errors, label) {
+  const artifact = venue.validation?.officialClientNormalized;
+  assertCondition(errors, isRecord(artifact), `${label} validated evidence must include validation.officialClientNormalized.`);
+  if (!isRecord(artifact)) return null;
+  assertCondition(errors, typeof artifact.kind === "string" && artifact.kind.length > 0, `${label} normalized artifact must include kind.`);
+  assertCondition(errors, typeof artifact.sha256 === "string" && /^[a-f0-9]{64}$/i.test(artifact.sha256), `${label} normalized artifact must include a sha256 content hash.`);
+  assertCondition(errors, artifact.source === "operator_redacted_official_client_json", `${label} normalized artifact source must be operator_redacted_official_client_json.`);
+  assertCondition(errors, isRecord(artifact.content), `${label} normalized artifact must include public JSON content.`);
+  return isRecord(artifact.content) ? artifact.content : null;
+}
+
+function validateHyperliquidNormalizedAction(venue, errors) {
+  if (venue.status !== "validated") return;
+  const content = publicArtifactContent(venue, errors, "Hyperliquid");
+  if (!content) return;
+  const action = isRecord(content.action) ? content.action : content;
+  assertCondition(errors, action.type === "order", "Hyperliquid normalized action must be an order action.");
+  assertCondition(errors, action.grouping === "na" || action.grouping === "normalTpsl" || action.grouping === "positionTpsl", "Hyperliquid normalized action must include a supported grouping.");
+  assertCondition(errors, Array.isArray(action.orders) && action.orders.length > 0, "Hyperliquid normalized action must include at least one order.");
+  const order = Array.isArray(action.orders) ? action.orders[0] : null;
+  assertCondition(errors, isRecord(order), "Hyperliquid normalized action order must be an object.");
+  if (!isRecord(order)) return;
+  assertCondition(errors, Number.isInteger(order.a) && order.a >= 0, "Hyperliquid order asset index `a` must be a non-negative integer.");
+  assertCondition(errors, typeof order.b === "boolean", "Hyperliquid order side `b` must be boolean.");
+  assertCondition(errors, typeof order.p === "string" && order.p.length > 0, "Hyperliquid order price `p` must be a string.");
+  assertCondition(errors, typeof order.s === "string" && order.s.length > 0, "Hyperliquid order size `s` must be a string.");
+  assertCondition(errors, typeof order.r === "boolean", "Hyperliquid order reduce-only `r` must be boolean.");
+  assertCondition(errors, isRecord(order.t) && (isRecord(order.t.limit) || isRecord(order.t.trigger)), "Hyperliquid order type `t` must include limit or trigger details.");
+}
+
+function validatePolymarketNormalizedOrder(venue, errors) {
+  if (venue.status !== "validated") return;
+  const content = publicArtifactContent(venue, errors, "Polymarket");
+  if (!content) return;
+  const typedData = isRecord(content.typedData) ? content.typedData : content;
+  const domain = isRecord(typedData.domain) ? typedData.domain : null;
+  const types = isRecord(typedData.types) ? typedData.types : null;
+  const message = isRecord(typedData.message) ? typedData.message : typedData;
+  assertCondition(errors, isRecord(domain), "Polymarket normalized typed data must include a domain object.");
+  assertCondition(errors, isRecord(types), "Polymarket normalized typed data must include a types object.");
+  assertCondition(errors, isRecord(message), "Polymarket normalized typed data/order must include a message object.");
+  if (domain) {
+    if (venue.environment?.chainId !== null && venue.environment?.chainId !== undefined) {
+      assertCondition(errors, Number(domain.chainId) === Number(venue.environment.chainId), "Polymarket normalized domain chainId must match evidence environment.chainId.");
+    }
+    if (venue.environment?.exchangeAddress) {
+      assertCondition(errors, String(domain.verifyingContract ?? "").toLowerCase() === String(venue.environment.exchangeAddress).toLowerCase(), "Polymarket normalized domain verifyingContract must match evidence exchangeAddress.");
+    }
+  }
+  if (types) assertCondition(errors, Array.isArray(types.Order) && types.Order.length > 0, "Polymarket normalized types must include an Order type layout.");
+  if (isRecord(message)) {
+    for (const field of ["makerAmount", "takerAmount"]) {
+      assertCondition(errors, typeof message[field] === "string" && /^\d+$/.test(message[field]), `Polymarket message.${field} must be a base-unit decimal string.`);
+    }
+    assertCondition(errors, "signatureType" in message, "Polymarket message must include public signatureType metadata.");
+  }
+  if ("primaryType" in typedData) assertCondition(errors, typedData.primaryType === "Order", "Polymarket normalized primaryType must be Order.");
+}
+
 function validateHyperliquidVenue(venue, errors) {
   assertCondition(errors, venue.officialClient?.name === "hyperliquid-python-sdk", "Hyperliquid evidence must name hyperliquid-python-sdk as the official client.");
   assertCondition(errors, venue.officialClient?.sourceUrl === HYPERLIQUID_SDK_URL, "Hyperliquid evidence must point at the official SDK repository.");
@@ -146,6 +205,7 @@ function validateHyperliquidVenue(venue, errors) {
   for (const item of ["nonce", "connectionid", "signature"]) {
     assertCondition(errors, clientMustCompute.includes(item), `Hyperliquid clientMustCompute must include ${item}.`);
   }
+  validateHyperliquidNormalizedAction(venue, errors);
 }
 
 function validatePolymarketVenue(venue, errors) {
@@ -162,6 +222,7 @@ function validatePolymarketVenue(venue, errors) {
   for (const item of ["maker", "signer", "salt", "nonce", "expiration"]) {
     assertCondition(errors, walletMustSet.includes(item), `Polymarket walletMustSet must include ${item}.`);
   }
+  validatePolymarketNormalizedOrder(venue, errors);
 }
 
 export function validateEvidenceBundle(bundle) {
@@ -245,6 +306,26 @@ function runSelfTest() {
   if (negativeResult.ok) throw new Error("Negative evidence unexpectedly passed validation.");
   if (!negativeResult.errors.join(" ").includes("canSubmit:false")) throw new Error("Negative self-test did not catch canSubmit:true.");
   if (!negativeResult.errors.join(" ").includes("signature")) throw new Error("Negative self-test did not catch credential-shaped signature field.");
+
+  const malformedValidated = sampleEvidence();
+  malformedValidated.venues[0].status = "validated";
+  malformedValidated.venues[0].officialClient.packageVersion = "0.15.0";
+  malformedValidated.venues[0].validation = {
+    validatedAt: new Date(0).toISOString(),
+    officialClientNormalized: {
+      kind: "hyperliquid-official-normalized-action",
+      source: "operator_redacted_official_client_json",
+      sha256: "0".repeat(64),
+      content: { type: "cancel", cancels: [{ a: 0, o: 1 }] },
+    },
+    differences: [],
+    publicReceipt: null,
+  };
+  const malformedResult = validateEvidenceBundle(malformedValidated);
+  if (malformedResult.ok) throw new Error("Malformed validated evidence unexpectedly passed validation.");
+  if (!malformedResult.errors.join(" ").includes("Hyperliquid normalized action must be an order action")) {
+    throw new Error("Malformed self-test did not catch invalid Hyperliquid normalized action shape.");
+  }
 
   process.stdout.write("Market official SDK validation evidence self-test passed.\n");
 }

@@ -68,6 +68,8 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Testnet validation must happen outside Matterhorn's server process",
   "Redacted Matterhorn typed-data template",
   "Official-client normalized typed-data/order",
+  "Hyperliquid artifacts must be public order",
+  "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
   "node scripts/market-official-sdk-validation-capture.mjs",
@@ -83,6 +85,9 @@ mustContain("scripts/market-official-sdk-validation-evidence.mjs", [
   "clientMustCompute",
   "walletMustSet",
   "signatureType",
+  "validateHyperliquidNormalizedAction",
+  "validatePolymarketNormalizedOrder",
+  "officialClientNormalized",
   "FORBIDDEN_CREDENTIAL_KEY_RE",
 ]);
 const evidenceSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-evidence.mjs", "--self-test"], {

@@ -33,7 +33,7 @@ Evidence to save:
 - SDK/package version.
 - Testnet or fixture environment.
 - Redacted action template.
-- Official-client normalized action.
+- Official-client normalized action with public order-action fields: `type: "order"`, `grouping`, `orders[].a`, `orders[].b`, `orders[].p`, `orders[].s`, `orders[].r`, and `orders[].t`.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
@@ -55,7 +55,7 @@ Evidence to save:
 - `@polymarket/clob-client-v2` or `@polymarket/clob-client` version.
 - Exchange address and chain id used for validation.
 - Redacted Matterhorn typed-data template.
-- Official-client normalized typed-data/order.
+- Official-client normalized typed-data/order with public fields: `domain.chainId`, `domain.verifyingContract`, `primaryType: "Order"`, `types.Order`, `message.makerAmount`, `message.takerAmount`, and `message.signatureType`.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
@@ -100,6 +100,15 @@ Matterhorn records only redacted official-client/testnet evidence. The evidence 
 ```
 
 The validator rejects credential-shaped fields such as `seed`, `privateKey`, `apiSecret`, `signature`, `rawSignature`, and `signedPayload`. Polymarket's public `signatureType` metadata is allowed because it is not a signature.
+
+For `status: "validated"` evidence, the validator also checks the normalized
+official-client artifact itself. Hyperliquid artifacts must be public order
+actions, not cancel/submit envelopes or signature-bearing exchange payloads.
+Polymarket artifacts must expose the public EIP-712 order structure and the
+declared `domain.chainId` / `domain.verifyingContract` must match the evidence
+environment. This is intentionally stricter than the pending sample bundle:
+pending evidence can document the validation plan, but validated evidence must
+prove the SDK-normalized public shape.
 
 ## Redacted Capture Harness
 
