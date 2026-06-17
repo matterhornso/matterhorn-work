@@ -50,6 +50,8 @@ pnpm test:agent-crypto-operator-loop
 pnpm test:unified-crypto-chat
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-official-sdk-validation-capture
+pnpm test:market-customer-evidence-bundle
 pnpm test:bittensor-customer-readiness-gate
 ```
 

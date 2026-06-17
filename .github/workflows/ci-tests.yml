@@ -119,7 +119,7 @@ jobs:
         run: opencode --version
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts --prefer-offline
 
       - name: Run e2e tests
         run: pnpm --filter @matterhorn-work/app test:e2e

@@ -49,6 +49,11 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-evidence"] === "n
 } else {
   fail("package.json exposes test:market-official-sdk-validation-evidence");
 }
+if (packageJson.scripts?.["test:market-official-sdk-validation-capture"] === "node scripts/market-official-sdk-validation-capture.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-validation-capture");
+} else {
+  fail("package.json exposes test:market-official-sdk-validation-capture");
+}
 
 mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid's official SDK",
@@ -65,6 +70,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Official-client normalized typed-data/order",
   "matterhorn.market.official-sdk-validation.v1",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
+  "node scripts/market-official-sdk-validation-capture.mjs",
 ]);
 
 mustContain("scripts/market-official-sdk-validation-evidence.mjs", [
@@ -87,6 +93,25 @@ if (evidenceSelfTest.status === 0) {
   pass("official SDK evidence validator self-test passes");
 } else {
   fail("official SDK evidence validator self-test passes", evidenceSelfTest.stderr || evidenceSelfTest.stdout || "unknown error");
+}
+
+mustContain("scripts/market-official-sdk-validation-capture.mjs", [
+  "operator_redacted_official_client_json",
+  "validateEvidenceBundle",
+  "rawSignature",
+  "canSubmit",
+  "liveSubmissionEnabled",
+  "hyperliquid-python-sdk",
+  "@polymarket/clob-client",
+]);
+const captureSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-capture.mjs", "--self-test"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (captureSelfTest.status === 0) {
+  pass("official SDK evidence capture self-test passes");
+} else {
+  fail("official SDK evidence capture self-test passes", captureSelfTest.stderr || captureSelfTest.stdout || "unknown error");
 }
 
 mustContain("docs/hyperliquid-read-preview.md", [

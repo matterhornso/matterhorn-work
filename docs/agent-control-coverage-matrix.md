@@ -87,6 +87,8 @@ pnpm test:unified-crypto-chat
 pnpm test:agent-crypto-operator-loop
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-official-sdk-validation-capture
+pnpm test:market-customer-evidence-bundle
 ```
 
 The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.

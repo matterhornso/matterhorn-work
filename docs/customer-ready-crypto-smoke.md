@@ -45,6 +45,7 @@ pnpm test:hermes-crypto-customer-qa
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-official-sdk-validation-capture
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-receipt-qa
 pnpm test:market-receipt-evidence
@@ -107,6 +108,14 @@ execution.
 ```bash
 node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
+
+# Optional when an operator has redacted official-client output:
+# node scripts/market-official-sdk-validation-capture.mjs \
+#   --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
+#   --hyperliquid-package-version <version> \
+#   --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
+#   --polymarket-package-version <version> \
+#   --output /tmp/matterhorn-market-sdk-evidence.json
 
 node scripts/market-customer-evidence-bundle.mjs \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \

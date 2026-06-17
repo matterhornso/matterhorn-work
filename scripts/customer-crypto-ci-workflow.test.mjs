@@ -16,7 +16,7 @@ for (const phrase of [
   "name: customer-crypto-gates",
   "runs-on: ubuntu-22.04",
   "oven-sh/setup-bun@v2",
-  "pnpm install --frozen-lockfile",
+  "pnpm install --frozen-lockfile --ignore-scripts --prefer-offline",
   "pnpm test:customer-ready-crypto-smoke",
   "pnpm smoke:customer-ready-crypto",
 ]) {
