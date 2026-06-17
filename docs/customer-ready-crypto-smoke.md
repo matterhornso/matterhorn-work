@@ -146,7 +146,7 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 # Fixture-backed strict validation path:
 # pnpm test:market-official-sdk-validation-fixtures
 
-node scripts/market-customer-evidence-bundle.mjs \
+matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \

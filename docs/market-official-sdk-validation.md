@@ -293,7 +293,7 @@ node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/m
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
 node scripts/market-official-sdk-validation-capture.mjs --json
-node scripts/market-customer-evidence-bundle.mjs --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --output <bundle.md> --json-output <bundle.json>
+matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --output <bundle.md> --json-output <bundle.json>
 ```
 
 This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn.

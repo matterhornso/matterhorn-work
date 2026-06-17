@@ -3772,6 +3772,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
+    "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3795,6 +3796,7 @@ function printHelp(): void {
     "  polymarket              Run Polymarket read/preview workflows",
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
     "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
+    "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7628,21 +7630,31 @@ const CRYPTO_SDK_LOOP_VALUE_FLAGS = [
   "polymarket-chain-id",
 ] as const;
 
-async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<void> {
-  const script = resolve(REPO_ROOT_DIR, "scripts", "market-official-sdk-operator-loop.mjs");
-  if (!existsSync(script)) {
-    throw new Error(`Market official SDK operator loop script was not found at ${script}`);
-  }
+const CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS = new Set([
+  "evidence-bundle",
+  "customer-evidence",
+  "evidence",
+]);
 
-  const forwarded: string[] = [];
-  for (const key of CRYPTO_SDK_LOOP_BOOL_FLAGS) {
-    if (readBool(args.flags, key, false)) forwarded.push(`--${key}`);
+const CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS = [
+  "strict",
+  "require-official-sdk-validated",
+] as const;
+
+const CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS = [
+  "customer-ready-smoke",
+  "official-sdk-validation",
+  "operator-summary",
+  "output",
+  "json-output",
+  "title",
+] as const;
+
+async function runOfflineCryptoScript(scriptName: string, forwarded: string[], label: string): Promise<void> {
+  const script = resolve(REPO_ROOT_DIR, "scripts", scriptName);
+  if (!existsSync(script)) {
+    throw new Error(`${label} script was not found at ${script}`);
   }
-  for (const key of CRYPTO_SDK_LOOP_VALUE_FLAGS) {
-    const value = readFlag(args.flags, key);
-    if (value !== undefined && value.trim()) forwarded.push(`--${key}`, value);
-  }
-  if (outputJson) forwarded.push("--json");
 
   const nodeBin =
     process.env.MATTERHORN_WORK_NODE_BIN ??
@@ -7662,9 +7674,37 @@ async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<
         resolveRun();
         return;
       }
-      rejectRun(new Error(`Market official SDK operator loop exited with code ${code ?? "unknown"}`));
+      rejectRun(new Error(`${label} exited with code ${code ?? "unknown"}`));
     });
   });
+}
+
+function appendBoolFlags(args: ParsedArgs, keys: readonly string[], forwarded: string[]): void {
+  for (const key of keys) {
+    if (readBool(args.flags, key, false)) forwarded.push(`--${key}`);
+  }
+}
+
+function appendValueFlags(args: ParsedArgs, keys: readonly string[], forwarded: string[]): void {
+  for (const key of keys) {
+    const value = readFlag(args.flags, key);
+    if (value !== undefined && value.trim()) forwarded.push(`--${key}`, value);
+  }
+}
+
+async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_SDK_LOOP_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_SDK_LOOP_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-official-sdk-operator-loop.mjs", forwarded, "Market official SDK operator loop");
+}
+
+async function runCryptoEvidenceBundle(args: ParsedArgs): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS, forwarded);
+  await runOfflineCryptoScript("market-customer-evidence-bundle.mjs", forwarded, "Market customer evidence bundle");
 }
 
 async function runCrypto(args: ParsedArgs) {
@@ -7676,6 +7716,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_SDK_LOOP_SUBCOMMANDS.has(subcommand)) {
       await runCryptoSdkLoop(args, outputJson);
+      return;
+    }
+
+    if (CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoEvidenceBundle(args);
       return;
     }
 
@@ -7729,7 +7774,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute) or sdk-loop");
+    throw new Error("crypto requires chat (aliases: ask, execute), sdk-loop, or evidence-bundle");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

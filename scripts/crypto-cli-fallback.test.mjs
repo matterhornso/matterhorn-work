@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sampleEvidence } from "./market-official-sdk-validation-evidence.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..");
@@ -188,7 +189,50 @@ async function main() {
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
-    // 5. No request touched a submit/sign/exchange route.
+    // 5. The customer evidence bundle is also available through the public
+    // crypto CLI and stays offline.
+    const bundleRequestsBefore = mock.requests.length;
+    const smokePath = join(sdkOutputDir, "customer-ready-smoke.json");
+    const bundleMarkdownPath = join(sdkOutputDir, "matterhorn-market-customer-evidence.md");
+    const bundleJsonPath = join(sdkOutputDir, "matterhorn-market-customer-evidence.json");
+    writeFileSync(smokePath, JSON.stringify({
+      ready: true,
+      summary: { pass: 27, fail: 0, skip: 0 },
+      stages: [
+        { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+        { id: "market.official_sdk_validation", label: "Official SDK validation", status: "pass" },
+      ],
+      safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
+    }));
+    writeFileSync(sdkLoop.files.officialSdkEvidence, JSON.stringify(sampleEvidence()));
+    const bundleResult = await runCli(mock.url, [
+      "crypto",
+      "evidence-bundle",
+      "--customer-ready-smoke",
+      smokePath,
+      "--official-sdk-validation",
+      sdkLoop.files.officialSdkEvidence,
+      "--operator-summary",
+      sdkLoop.files.operatorSummaryMarkdown,
+      "--output",
+      bundleMarkdownPath,
+      "--json-output",
+      bundleJsonPath,
+      "--strict",
+    ]);
+    if (bundleResult.code !== 0) throw new Error(`crypto evidence-bundle exited ${bundleResult.code}. stdout=${bundleResult.stdout} stderr=${bundleResult.stderr}`);
+    if (mock.requests.length !== bundleRequestsBefore) throw new Error("crypto evidence-bundle should not call the Matterhorn server");
+    const bundleMarkdown = readFileSync(bundleMarkdownPath, "utf8");
+    const bundleJson = JSON.parse(readFileSync(bundleJsonPath, "utf8"));
+    if (!/READY_FOR_TEST_CUSTOMER_QA/.test(bundleMarkdown)) throw new Error("expected customer bundle markdown to be ready");
+    if (!/Operator Summary/.test(bundleMarkdown) || !/SHA-256/.test(bundleMarkdown)) throw new Error("expected customer bundle to include operator summary hash");
+    if (bundleJson.operatorSummary?.present !== true) throw new Error("expected customer bundle JSON to include operatorSummary.present=true");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(bundleMarkdown)) {
+      throw new Error("customer evidence bundle leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto evidence-bundle CLI is offline and non-custodial");
+
+    // 6. No request touched a submit/sign/exchange route.
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
       if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);
