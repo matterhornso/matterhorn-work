@@ -212,6 +212,34 @@ The CLI path stays offline, public, and non-custodial. It must not receive
 private keys, API secrets, raw signatures, signed payloads, seed phrases,
 mnemonics, keyfiles, or wallet exports. For repository gates, run:
 
+When a Hyperliquid or Polymarket demo includes an external-signer public
+receipt, validate it with `matterhorn-work crypto receipt-check` and add the
+result to the bundle:
+
+```bash
+matterhorn-work crypto receipt-check \
+  --venue hyperliquid \
+  --handoff-file /tmp/hyperliquid-handoff.json \
+  --receipt-file /tmp/hyperliquid-public-receipt.json \
+  --output /tmp/matterhorn-market-receipt-check.json
+
+matterhorn-work crypto evidence-bundle \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-official-sdk-validation.json \
+  --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --receipt-check /tmp/matterhorn-market-receipt-check.json \
+  --require-receipt-check \
+  --output /tmp/matterhorn-crypto-customer-evidence.md \
+  --json-output /tmp/matterhorn-crypto-customer-evidence.json \
+  --strict
+```
+
+Use the receipt-check requirement only for demos that actually include public
+receipt evidence. The evidence file must be public/redacted only and must match
+the original handoff hashes and venue fields.
+
+For repository gates, run:
+
 ```bash
 pnpm smoke:customer-ready-crypto
 pnpm test:unified-crypto-chat

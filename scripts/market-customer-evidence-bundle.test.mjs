@@ -16,6 +16,7 @@ try {
   const official = path.join(tmp, "official-sdk-evidence.json");
   const officialWrapped = path.join(tmp, "official-sdk-evidence-wrapped.json");
   const operatorSummary = path.join(tmp, "matterhorn-market-sdk-operator-summary.md");
+  const receiptCheck = path.join(tmp, "market-receipt-check.json");
   const markdownOutput = path.join(tmp, "market-evidence.md");
   const jsonOutput = path.join(tmp, "market-evidence.json");
 
@@ -50,6 +51,29 @@ try {
     "| Signs or submits | false |",
     "",
   ].join("\n"));
+  await writeFile(receiptCheck, JSON.stringify({
+    ok: true,
+    matchesHandoff: true,
+    receipt: {
+      version: "matterhorn.market.receipt.v1",
+      venue: "hyperliquid",
+      status: "filled",
+      action: "place_order",
+      previewSha256: "h".repeat(64),
+      handoffSha256: "a".repeat(64),
+      orderId: "hl-order-123",
+      txHash: null,
+      warnings: [],
+    },
+    errors: [],
+    warnings: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
 
   execFileSync("node", [
     script,
@@ -59,6 +83,8 @@ try {
     official,
     "--operator-summary",
     operatorSummary,
+    "--receipt-check",
+    receiptCheck,
     "--output",
     markdownOutput,
     "--json-output",
@@ -73,6 +99,10 @@ try {
   assert.match(markdown, /@polymarket\/clob-client-v2/);
   assert.match(markdown, /pending_official_client_validation/);
   assert.match(markdown, /Operator Summary/);
+  assert.match(markdown, /Public Receipt Evidence/);
+  assert.match(markdown, /Accepted by receipt checker: yes/);
+  assert.match(markdown, /Matches original handoff: yes/);
+  assert.match(markdown, /hl-order-123/);
   assert.match(markdown, /Required Smoke Stages/);
   assert.match(markdown, /Unified crypto shared-card contract/);
   assert.match(markdown, /matterhorn-market-sdk-operator-summary\.md/);
@@ -90,6 +120,10 @@ try {
   assert.equal(summary.operatorSummary.present, true);
   assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");
   assert.match(summary.operatorSummary.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(summary.receiptCheck.present, true);
+  assert.equal(summary.receiptCheck.ready, true);
+  assert.equal(summary.receiptCheck.venue, "hyperliquid");
+  assert.equal(summary.receiptCheck.orderId, "hl-order-123");
 
   const wrappedMarkdown = execFileSync("node", [
     script,
@@ -116,6 +150,66 @@ try {
   }
   assert.ok(requireValidatedError, "require-official-sdk-validated should fail for pending sample evidence");
   assert.match(String(requireValidatedError.stdout), /Official SDK evidence is not fully validated/i);
+
+  let missingReceiptError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--require-receipt-check",
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    missingReceiptError = error;
+  }
+  assert.ok(missingReceiptError, "require-receipt-check should fail when receipt evidence is missing");
+  assert.match(String(missingReceiptError.stdout), /Receipt-check evidence is required/i);
+
+  const mismatchedReceipt = path.join(tmp, "mismatched-market-receipt-check.json");
+  await writeFile(mismatchedReceipt, JSON.stringify({
+    ok: false,
+    matchesHandoff: false,
+    receipt: {
+      version: "matterhorn.market.receipt.v1",
+      venue: "polymarket",
+      status: "rejected",
+      action: "buy_shares",
+      previewSha256: "p".repeat(64),
+      handoffSha256: "q".repeat(64),
+      orderId: null,
+      txHash: null,
+      warnings: ["receipt has no order id or tx hash"],
+    },
+    errors: ["marketId mismatch"],
+    warnings: ["receipt has no order id or tx hash"],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
+  let mismatchedReceiptError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--receipt-check",
+        mismatchedReceipt,
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    mismatchedReceiptError = error;
+  }
+  assert.ok(mismatchedReceiptError, "strict bundle should fail rejected receipt-check evidence");
+  assert.match(String(mismatchedReceiptError.stdout), /Receipt-check evidence was not accepted/i);
+  assert.match(String(mismatchedReceiptError.stdout), /marketId mismatch/i);
 
   const bad = path.join(tmp, "bad-official-sdk-evidence.json");
   await writeFile(bad, JSON.stringify({ ...evidence, rawSignature: "0xdeadbeef" }));
@@ -145,6 +239,37 @@ try {
         badSummary,
       ], { cwd: repoRoot, stdio: "pipe" }),
     /forbidden secret-shaped content/i,
+  );
+
+  const badReceipt = path.join(tmp, "bad-market-receipt-check.json");
+  await writeFile(badReceipt, JSON.stringify({
+    ok: true,
+    matchesHandoff: true,
+    receipt: {
+      version: "matterhorn.market.receipt.v1",
+      venue: "hyperliquid",
+      status: "filled",
+      signature: "0xdeadbeef",
+    },
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
+  assert.throws(
+    () =>
+      execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--receipt-check",
+        badReceipt,
+      ], { cwd: repoRoot, stdio: "pipe" }),
+    /forbidden secret-shaped field/i,
   );
 
   const missingSharedCardSmoke = path.join(tmp, "missing-shared-card-smoke.json");
