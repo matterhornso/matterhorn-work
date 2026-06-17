@@ -42,7 +42,12 @@ Done when:
 
 Goal: chat responses should feel like one product instead of three separate tool stacks.
 
-Build reusable card mapping for:
+Build a reusable shared card envelope while preserving the original venue cards. The unified router returns both:
+
+- `cards`: the original Bittensor, Hyperliquid, or Polymarket cards for existing renderers.
+- `sharedCards`: customer-readable cross-venue categories for future shared UI/agent rendering.
+
+Map venue cards into:
 
 - Account snapshot.
 - Market/subnet discovery.
@@ -58,6 +63,7 @@ Done when:
 - Cards share a common customer-readable vocabulary.
 - Compliance-blocked Polymarket previews have no executable price, size, or share fields.
 - Market previews and handoffs always show `canSubmit: false`.
+- `pnpm test:unified-crypto-chat` proves Bittensor, Hyperliquid, and Polymarket cards map into `sharedCards`.
 
 ## Phase 4: Bittensor Customer Polish
 

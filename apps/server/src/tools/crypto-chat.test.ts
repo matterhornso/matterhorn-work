@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildUnifiedCryptoSharedCards,
   executeUnifiedCryptoChatWorkflow,
   findForbiddenUnifiedCryptoCredentialInput,
   planUnifiedCryptoChat,
@@ -208,6 +209,12 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("wallet");
     expect(result.execution).toBe("answered");
     expect(cardKind(result)).toBe("wallet_snapshot");
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "account_snapshot",
+      venue: "bittensor",
+      originalKind: "wallet_snapshot",
+      status: "success",
+    });
   });
 
   test("routes Hyperliquid reads through the Hyperliquid workflow", async () => {
@@ -219,6 +226,13 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("funding");
     expect(result.execution).toBe("read_only");
     expect(cardKind(result)).toBe("hyperliquid_funding");
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "market_context",
+      venue: "hyperliquid",
+      originalKind: "hyperliquid_funding",
+      status: "success",
+    });
+    expect(result.sharedCards[0]?.source).toMatchObject({ source: "mock.hyperliquid" });
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
   });
 
@@ -231,6 +245,12 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("discover");
     expect(result.execution).toBe("read_only");
     expect(cardKind(result)).toBe("polymarket_market_list");
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "discovery",
+      venue: "polymarket",
+      originalKind: "polymarket_market_list",
+      status: "success",
+    });
   });
 
   test("rejects secret-shaped input before venue execution", async () => {
@@ -243,5 +263,21 @@ describe("unified crypto chat router", () => {
     expect(result.intent).toBe("secret_rejected");
     expect(result.warnings.join(" ")).toContain("apiSecret");
     expect(JSON.stringify(result)).not.toContain("supersecret");
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "generic",
+      venue: "auto",
+      status: "warning",
+      originalKind: "crypto_chat_secret_rejected",
+    });
+  });
+
+  test("maps venue card kinds into customer-readable shared card categories", () => {
+    const shared = buildUnifiedCryptoSharedCards("polymarket", "blocked_by_compliance", [
+      { kind: "polymarket_compliance", title: "Compliance", compliance: { status: "blocked" }, warnings: ["blocked"] },
+      { kind: "polymarket_order_preview", title: "Preview", preview: { canSubmit: false }, warnings: [] },
+    ]);
+    expect(shared.map((card) => card.kind)).toEqual(["compliance_block", "action_preview"]);
+    expect(shared[0]?.status).toBe("danger");
+    expect(shared[1]?.summary).toContain("does not sign or submit");
   });
 });
