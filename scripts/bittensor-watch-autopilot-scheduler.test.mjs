@@ -34,6 +34,8 @@ try {
   const first = JSON.parse(lines[0]);
   assert.equal(first.ok, true);
   assert.equal(first.alertCount, 1);
+  assert.equal(first.notificationSummary.totalNotifications, 1);
+  assert.equal(first.notificationSummary.intents.review_wallet, 1);
   assert.equal(first.safety.signsOrBroadcasts, false);
   assert.equal(first.safety.invokesSubnetServices, false);
   assert.match(first.alerts[0].prompt, /Review public Bittensor wallet/);
@@ -41,6 +43,10 @@ try {
   assert.equal(summary.ok, true);
   assert.equal(summary.iterations, 2);
   assert.equal(summary.totalAlerts, 2);
+  assert.equal(summary.notificationSummary.totalNotifications, 2);
+  assert.equal(summary.notificationSummary.intents.review_wallet, 2);
+  assert.equal(summary.notificationSummary.promptSamples.length, 2);
+  assert.equal(summary.notificationSummary.safety, "read_only_chat_prompts");
   assert.equal(summary.safety.submitsTransactions, false);
   const bad = path.join(tmp, "bad.json");
   await writeFile(bad, JSON.stringify({ success: true, evaluations: [{ status: "alert", seedPhrase: "never" }] }));

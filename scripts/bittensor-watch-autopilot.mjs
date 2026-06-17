@@ -108,6 +108,28 @@ function statusOf(evaluation = {}) {
   return String(evaluation.status || evaluation.state || evaluation.result || "unknown").toLowerCase();
 }
 
+function buildNotificationSummary(alerts = []) {
+  const intents = {};
+  const prompts = [];
+  for (const alert of alerts) {
+    const intent = alert.notificationIntent || "unspecified";
+    intents[intent] = (intents[intent] || 0) + 1;
+    if (prompts.length < config.maxAlerts) {
+      prompts.push({
+        intent,
+        label: alert.label,
+        prompt: alert.prompt,
+      });
+    }
+  }
+  return {
+    totalNotifications: alerts.length,
+    intents,
+    promptSamples: prompts,
+    safety: "read_only_chat_prompts",
+  };
+}
+
 function summarize(check) {
   const evaluations = asArray(check.evaluations);
   const alerts = evaluations.filter((evaluation) => /alert|fail|warning|warn/.test(statusOf(evaluation))).slice(0, config.maxAlerts);
@@ -116,6 +138,15 @@ function summarize(check) {
     acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {});
+  const mappedAlerts = alerts.map((evaluation) => ({
+    alertKey: evaluation.alertKey || "",
+    status: statusOf(evaluation),
+    notificationIntent: evaluation.notificationIntent || "",
+    label: watchLabel(evaluation.watch),
+    watch: evaluation.watch || {},
+    prompt: alertPrompt(evaluation),
+    consequence: "This is a read-only operator prompt. Matterhorn does not sign, submit, broadcast, stake, unstake, transfer, or invoke subnet services from this report.",
+  }));
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
@@ -123,15 +154,8 @@ function summarize(check) {
     total: evaluations.length,
     alertCount: alerts.length,
     statusCounts,
-    alerts: alerts.map((evaluation) => ({
-      alertKey: evaluation.alertKey || "",
-      status: statusOf(evaluation),
-      notificationIntent: evaluation.notificationIntent || "",
-      label: watchLabel(evaluation.watch),
-      watch: evaluation.watch || {},
-      prompt: alertPrompt(evaluation),
-      consequence: "This is a read-only operator prompt. Matterhorn does not sign, submit, broadcast, stake, unstake, transfer, or invoke subnet services from this report.",
-    })),
+    alerts: mappedAlerts,
+    notificationSummary: buildNotificationSummary(mappedAlerts),
     safety: {
       custody: "none",
       acceptsCredentialMaterial: false,
@@ -150,6 +174,9 @@ function renderMarkdown(summary) {
   const alertRows = summary.alerts.length
     ? summary.alerts.map((alert) => `| ${escapeCell(alert.status)} | ${escapeCell(alert.label)} | ${escapeCell(alert.notificationIntent || "-")} | ${escapeCell(alert.prompt)} |`).join("\n")
     : "| ok | No active alerts | - | No operator prompt needed. |";
+  const notificationRows = Object.entries(summary.notificationSummary?.intents || {}).length
+    ? Object.entries(summary.notificationSummary.intents).map(([intent, count]) => `| ${escapeCell(intent)} | ${escapeCell(count)} |`).join("\n")
+    : "| none | 0 |";
   return [
     "# Matterhorn Work Bittensor Watch Autopilot",
     "",
@@ -164,6 +191,15 @@ function renderMarkdown(summary) {
     `- Evaluations: ${summary.total}`,
     `- Alerts: ${summary.alertCount}`,
     `- Status counts: ${Object.entries(summary.statusCounts).map(([key, value]) => `${key}=${value}`).join(", ") || "none"}`,
+    "",
+    "## Notification Summary",
+    "",
+    "- Notification intents are local/operator review hints only. They do not sign, submit, broadcast, or trigger wallet actions.",
+    `- Prompt samples: ${summary.notificationSummary?.promptSamples?.length ?? 0}`,
+    "",
+    "| Intent | Count |",
+    "| --- | ---: |",
+    notificationRows,
     "",
     "## Alert Prompts",
     "",

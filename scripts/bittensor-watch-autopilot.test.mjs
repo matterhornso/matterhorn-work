@@ -70,6 +70,7 @@ try {
 
   const markdown = await readFile(output, "utf8");
   assert.match(markdown, /READ_ONLY_ALERT_REPORT/);
+  assert.match(markdown, /Notification Summary/);
   assert.match(markdown, /Validator drift/);
   assert.match(markdown, /Analyze validator/);
 
@@ -77,6 +78,11 @@ try {
   assert.equal(summary.ok, true);
   assert.equal(summary.total, 3);
   assert.equal(summary.alertCount, 2);
+  assert.equal(summary.notificationSummary.totalNotifications, 2);
+  assert.equal(summary.notificationSummary.intents.review_validator, 1);
+  assert.equal(summary.notificationSummary.intents.review_wallet, 1);
+  assert.equal(summary.notificationSummary.promptSamples[0].prompt.includes("Analyze validator"), true);
+  assert.equal(summary.notificationSummary.safety, "read_only_chat_prompts");
   assert.equal(summary.safety.signsOrBroadcasts, false);
   assert.equal(summary.safety.submitsTransactions, false);
   assert.equal(summary.safety.invokesSubnetServices, false);
