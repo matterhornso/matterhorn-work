@@ -20,6 +20,7 @@ try {
 
   await writeFile(smoke, JSON.stringify({
     ready: true,
+    metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "a".repeat(40), gitBranch: "codex/test" },
     summary: { pass: 37, fail: 0, skip: 0 },
     stages: [
       { id: "crypto.unified_chat", status: "pass" },
@@ -81,11 +82,14 @@ try {
   assert.match(markdown, /Market evidence verifier/);
   assert.match(markdown, /Bittensor evidence bundle/);
   assert.match(markdown, /37 passed, 0 failed, 0 skipped/);
+  assert.match(markdown, /Smoke git SHA: a{40}/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const packet = JSON.parse(await readFile(jsonOutput, "utf8"));
   assert.equal(packet.ready, true);
   assert.equal(packet.customerReadySmoke.pass, 37);
+  assert.equal(packet.customerReadySmoke.gitSha, "a".repeat(40));
+  assert.equal(packet.customerReadySmoke.gitBranch, "codex/test");
   assert.equal(packet.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(packet.marketEvidence.ready, true);
   assert.equal(packet.bittensorEvidence.ready, true);

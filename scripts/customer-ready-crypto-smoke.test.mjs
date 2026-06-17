@@ -28,6 +28,9 @@ assert.equal(dryRun.code, 0, dryRun.stderr || dryRun.stdout);
 const report = JSON.parse(dryRun.stdout);
 assert.equal(report.ready, true);
 assert.equal(report.dryRun, true);
+assert.match(report.metadata.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
+assert.match(report.metadata.gitSha, /^[a-f0-9]{40}$/i);
+assert.ok(typeof report.metadata.gitBranch === "string" && report.metadata.gitBranch.length > 0);
 assert.equal(report.safety.nonCustodial, true);
 assert.equal(report.safety.liveSubmissionEnabled, false);
 assert.equal(report.safety.asksForSecrets, false);
@@ -40,6 +43,7 @@ try {
   const outputReport = JSON.parse(readFileSync(jsonOutput, "utf8"));
   assert.equal(outputReport.ready, true);
   assert.equal(outputReport.dryRun, true);
+  assert.match(outputReport.metadata.gitSha, /^[a-f0-9]{40}$/i);
   assert.equal(outputReport.safety.liveSubmissionEnabled, false);
 } finally {
   rmSync(outputDir, { recursive: true, force: true });

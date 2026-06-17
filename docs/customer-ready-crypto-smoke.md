@@ -44,6 +44,10 @@ matterhorn-work crypto customer-smoke --offline --strict \
   --json-output /tmp/matterhorn-crypto-smoke.json
 ```
 
+The JSON report includes `metadata.generatedAt`, `metadata.gitSha`, and
+`metadata.gitBranch` so a reviewer can tie the customer packet back to the exact
+Matterhorn Work checkout that produced the evidence.
+
 ## Default Offline Checks
 
 The default smoke pass runs these existing gates:

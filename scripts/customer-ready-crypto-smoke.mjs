@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -206,6 +206,22 @@ function summarize(results) {
   };
 }
 
+function gitValue(args) {
+  try {
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildMetadata() {
+  return {
+    generatedAt: new Date().toISOString(),
+    gitSha: process.env.GITHUB_SHA || gitValue(["rev-parse", "HEAD"]),
+    gitBranch: process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
+  };
+}
+
 function printHuman(report) {
   process.stdout.write(`Matterhorn Work customer-ready crypto smoke: ${report.ready ? "READY" : "NOT_READY"}\n`);
   for (const stage of report.stages) {
@@ -221,6 +237,7 @@ export async function runCustomerReadyCryptoSmoke(config) {
     return {
       ready: true,
       dryRun: true,
+      metadata: buildMetadata(),
       summary: { pass: 0, fail: 0, skip: 0 },
       stages: stages.map((stage) => ({ ...stage, status: "planned" })),
       safety: {
@@ -240,6 +257,7 @@ export async function runCustomerReadyCryptoSmoke(config) {
   return {
     ...summary,
     dryRun: false,
+    metadata: buildMetadata(),
     stages: results,
     safety: {
       nonCustodial: true,
