@@ -20,6 +20,7 @@ const read = (p) => readFileSync(path.join(repoRoot, p), "utf8");
     "signed payload",
     "Hyperliquid public receipt",
     "Polymarket public receipt",
+    "matterhorn-work crypto receipt-check",
     "--handoff-file",
     "--receipt-file",
     "is **rejected**",

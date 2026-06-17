@@ -387,7 +387,53 @@ async function main() {
     }
     console.log("PASS crypto evidence-bundle CLI is offline and non-custodial");
 
-    // 11. No request touched a submit/sign/exchange route.
+    // 11. The public market receipt checker is available through the crypto CLI
+    // and stays offline.
+    const receiptRequestsBefore = mock.requests.length;
+    const handoffPath = join(sdkOutputDir, "market-handoff.json");
+    const receiptPath = join(sdkOutputDir, "market-receipt.json");
+    writeFileSync(handoffPath, JSON.stringify({
+      previewSha256: "h".repeat(64),
+      handoffSha256: "a".repeat(64),
+      asset: "BTC",
+      side: "buy",
+    }));
+    writeFileSync(receiptPath, JSON.stringify({
+      previewSha256: "h".repeat(64),
+      handoffSha256: "a".repeat(64),
+      orderId: "hl-order-123",
+      status: "filled",
+      asset: "BTC",
+      side: "buy",
+    }));
+    const receiptCheck = await expectCli(
+      "crypto receipt-check",
+      mock.url,
+      [
+        "crypto",
+        "receipt-check",
+        "--venue",
+        "hyperliquid",
+        "--handoff-file",
+        handoffPath,
+        "--receipt-file",
+        receiptPath,
+      ],
+      (payload) => {
+        if (payload.ok !== true) throw new Error(`expected receipt check ok=true, got ${payload.ok}`);
+        if (payload.receipt?.version !== "matterhorn.market.receipt.v1") {
+          throw new Error("expected receipt check to emit shared market receipt version");
+        }
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected receipt check liveSubmissionEnabled=false");
+      },
+    );
+    if (mock.requests.length !== receiptRequestsBefore) throw new Error("crypto receipt-check should not call the Matterhorn server");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(JSON.stringify(receiptCheck))) {
+      throw new Error("receipt check leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto receipt-check CLI is offline and non-custodial");
+
+    // 12. No request touched a submit/sign/exchange route.
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
       if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);

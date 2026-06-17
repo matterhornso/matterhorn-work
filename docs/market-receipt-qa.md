@@ -58,6 +58,12 @@ Save the handoff and the public receipt to files and pass paths, rather than
 pasting large JSON on the command line:
 
 ```bash
+matterhorn-work crypto receipt-check \
+  --venue hyperliquid \
+  --handoff-file ./handoff.json \
+  --receipt-file ./receipt.json \
+  --json
+
 matterhorn-work hyperliquid receipt \
   --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \
@@ -76,6 +82,11 @@ matterhorn-work polymarket receipt \
 Individual flags (`--order-id`, `--tx-hash`, `--status`, `--asset`, `--outcome`,
 `--side`, `--preview-sha`, `--handoff-sha`) still work and override matching
 fields from `--receipt-file` / `--receipt-json`.
+
+Use `matterhorn-work crypto receipt-check` for offline/customer evidence
+validation when you already have handoff and receipt JSON files. Use the
+venue-specific `hyperliquid receipt` / `polymarket receipt` commands when you
+want to verify through the running Matterhorn server route.
 
 ## Mismatch and missing-evidence behavior
 
