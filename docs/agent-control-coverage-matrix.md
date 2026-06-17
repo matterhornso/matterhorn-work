@@ -88,6 +88,7 @@ pnpm test:agent-crypto-operator-loop
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 ```
 

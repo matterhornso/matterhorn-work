@@ -134,6 +134,34 @@ such as raw signatures, private keys, API secrets, signed payloads, and wallet
 exports. It does not execute official SDK code, sign orders, submit orders, or
 authorize live execution.
 
+## Fixture-Backed Operator Loop
+
+Before running real official clients, use the checked-in fixtures to verify the
+entire Matterhorn evidence path:
+
+```bash
+pnpm test:market-official-sdk-validation-fixtures
+```
+
+The fixture gate:
+
+- captures validated evidence from
+  `qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json`
+  and
+  `qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json`;
+- proves the evidence validator accepts the capture output wrapper and the raw
+  evidence object;
+- builds a strict customer evidence bundle with
+  `--require-official-sdk-validated`;
+- proves `hyperliquid-forbidden-raw-signature.fixture.json` is rejected; and
+- proves `polymarket-mismatched-domain.fixture.json` is rejected when the
+  normalized EIP-712 domain does not match the declared chain/exchange evidence.
+
+When replacing fixtures with real operator-owned testnet output, preserve the
+same public JSON shape and keep all wallet-owned signing material outside
+Matterhorn. The files should contain normalized order/action fields only, never
+private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+
 ## Local Gate
 
 Run:
@@ -142,6 +170,7 @@ Run:
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-evidence
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json

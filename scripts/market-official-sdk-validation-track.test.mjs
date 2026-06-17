@@ -54,6 +54,11 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-capture"] === "no
 } else {
   fail("package.json exposes test:market-official-sdk-validation-capture");
 }
+if (packageJson.scripts?.["test:market-official-sdk-validation-fixtures"] === "node scripts/market-official-sdk-validation-fixtures.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-validation-fixtures");
+} else {
+  fail("package.json exposes test:market-official-sdk-validation-fixtures");
+}
 
 mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid's official SDK",
@@ -73,6 +78,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "matterhorn.market.official-sdk-validation.v1",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
   "node scripts/market-official-sdk-validation-capture.mjs",
+  "pnpm test:market-official-sdk-validation-fixtures",
 ]);
 
 mustContain("scripts/market-official-sdk-validation-evidence.mjs", [
@@ -117,6 +123,23 @@ if (captureSelfTest.status === 0) {
   pass("official SDK evidence capture self-test passes");
 } else {
   fail("official SDK evidence capture self-test passes", captureSelfTest.stderr || captureSelfTest.stdout || "unknown error");
+}
+
+mustContain("qa-fixtures/market-official-sdk/README.md", [
+  "hyperliquid-normalized-action.fixture.json",
+  "polymarket-normalized-typed-data.fixture.json",
+  "hyperliquid-forbidden-raw-signature.fixture.json",
+  "polymarket-mismatched-domain.fixture.json",
+  "Do not add private keys",
+]);
+const fixtureSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-fixtures.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (fixtureSelfTest.status === 0) {
+  pass("official SDK fixture validation test passes");
+} else {
+  fail("official SDK fixture validation test passes", fixtureSelfTest.stderr || fixtureSelfTest.stdout || "unknown error");
 }
 
 mustContain("docs/hyperliquid-read-preview.md", [

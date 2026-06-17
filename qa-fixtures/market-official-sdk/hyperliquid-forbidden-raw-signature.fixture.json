@@ -1,0 +1,19 @@
+{
+  "type": "order",
+  "grouping": "na",
+  "orders": [
+    {
+      "a": 0,
+      "b": true,
+      "p": "3000",
+      "s": "0.01",
+      "r": false,
+      "t": {
+        "limit": {
+          "tif": "Gtc"
+        }
+      }
+    }
+  ],
+  "rawSignature": "0xdeadbeef"
+}
