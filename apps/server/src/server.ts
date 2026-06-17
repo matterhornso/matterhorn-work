@@ -146,6 +146,11 @@ import {
   preparePolymarketOrderFromRequest,
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
+import {
+  executeUnifiedCryptoChatWorkflow,
+  findForbiddenUnifiedCryptoCredentialInput,
+  type UnifiedCryptoChatInput,
+} from "./tools/crypto-chat.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -4009,6 +4014,53 @@ function createRoutes(
     const asset = ctx.params.asset.trim();
     const orderbook = await hyperliquidProvider.getOrderbook(asset);
     return jsonResponse({ success: true, orderbook, cards: [buildHyperliquidOrderbookCard(orderbook)] });
+  });
+
+  addRoute(routes, "POST", "/api/crypto/chat/execute", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "";
+    if (!message.trim()) {
+      throw new ApiError(400, "invalid_message", "message is required");
+    }
+    const forbidden = findForbiddenUnifiedCryptoCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Unified crypto chat input must not contain seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports (${forbidden}).`);
+    }
+    const venue = body.venue === "bittensor" || body.venue === "hyperliquid" || body.venue === "polymarket" || body.venue === "auto"
+      ? body.venue
+      : "auto";
+    const strategy = typeof body.strategy === "string" && ["balanced", "yield", "safety"].includes(body.strategy)
+      ? body.strategy
+      : null;
+    const result = await executeUnifiedCryptoChatWorkflow({
+      venue,
+      message,
+      address: typeof body.address === "string" ? body.address : null,
+      ss58Address: typeof body.ss58Address === "string" ? body.ss58Address : null,
+      marketId: typeof body.marketId === "string" ? body.marketId : null,
+      outcome: typeof body.outcome === "string" ? body.outcome : null,
+      asset: typeof body.asset === "string" ? body.asset : null,
+      side: typeof body.side === "string" ? body.side : null,
+      size: body.size === undefined ? null : body.size as UnifiedCryptoChatInput["size"],
+      price: body.price === undefined ? null : body.price as UnifiedCryptoChatInput["price"],
+      amountUsdc: body.amountUsdc === undefined ? null : body.amountUsdc as UnifiedCryptoChatInput["amountUsdc"],
+      amountTao: body.amountTao === undefined ? null : body.amountTao as UnifiedCryptoChatInput["amountTao"],
+      netuid: body.netuid === undefined ? null : body.netuid as UnifiedCryptoChatInput["netuid"],
+      validatorHotkey: typeof body.validatorHotkey === "string" ? body.validatorHotkey : null,
+      coldkey: typeof body.coldkey === "string" ? body.coldkey : null,
+      recipient: typeof body.recipient === "string" ? body.recipient : null,
+      destination: typeof body.destination === "string" ? body.destination : null,
+      contextId: typeof body.contextId === "string" ? body.contextId : null,
+      context: body.context && typeof body.context === "object" && !Array.isArray(body.context)
+        ? body.context as UnifiedCryptoChatInput["context"]
+        : null,
+      limit: body.limit === undefined ? null : body.limit as UnifiedCryptoChatInput["limit"],
+      strategy,
+      slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as UnifiedCryptoChatInput["slippageTolerance"],
+      rateTolerance: body.rateTolerance === undefined ? null : body.rateTolerance as UnifiedCryptoChatInput["rateTolerance"],
+      reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+    });
+    return jsonResponse({ success: true, ...result });
   });
 
   addRoute(routes, "POST", "/api/hyperliquid/orders/preview", "client", async (ctx) => {
