@@ -26,6 +26,10 @@ const LARGE_GAP_PCT = 10;
 // Kept Polymarket-local so this stream stays independent of shared files.
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const FORBIDDEN_CREDENTIAL_VALUE_RE =
+  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+const FORBIDDEN_CREDENTIAL_COMMAND_RE =
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
 
 export type PolymarketIntent = "learn" | "discover" | "events" | "market" | "odds" | "orderbook" | "compliance" | "monitor" | "order_preview";
 export type PolymarketExecution =
@@ -524,6 +528,13 @@ export function findForbiddenPolymarketCredentialInput(value: unknown, rootPath:
     if (++visited > MAX_NODES) return [...node.path, "<oversized>"].join(".");
     if (node.depth > MAX_DEPTH) return [...node.path, "<too-deep>"].join(".");
     const current = node.value;
+    if (typeof current === "string") {
+      const sample = current.length > 4096 ? current.slice(0, 4096) : current;
+      if (FORBIDDEN_CREDENTIAL_VALUE_RE.test(sample) || FORBIDDEN_CREDENTIAL_COMMAND_RE.test(sample)) {
+        return node.path.length ? node.path.join(".") : "input";
+      }
+      continue;
+    }
     if (Array.isArray(current)) {
       for (let index = 0; index < current.length; index += 1) {
         stack.push({ value: current[index], path: [...node.path, String(index)], depth: node.depth + 1 });
