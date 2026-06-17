@@ -70,6 +70,7 @@ for (const scriptName of [
   "test:mcp-config-cli",
   "test:agent-session-progress-smoke",
   "test:market-customer-evidence-verify",
+  "test:crypto-customer-packet",
 ]) {
   assert.ok(packageJson.scripts[scriptName], `package.json missing required check: ${scriptName}`);
   assert.ok(matrix.includes(scriptName), `coverage matrix missing required check: ${scriptName}`);

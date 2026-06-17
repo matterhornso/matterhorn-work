@@ -25,6 +25,7 @@ const offlineStages = [
   ["market.official_sdk_fixtures", "Market official SDK validation fixtures", ["pnpm", "test:market-official-sdk-validation-fixtures"]],
   ["market.customer_evidence_bundle", "Market customer evidence bundle", ["pnpm", "test:market-customer-evidence-bundle"]],
   ["market.customer_evidence_verify", "Market customer evidence verifier", ["pnpm", "test:market-customer-evidence-verify"]],
+  ["crypto.customer_packet", "Crypto customer packet manifest", ["pnpm", "test:crypto-customer-packet"]],
   ["market.receipt_qa", "Market public receipt QA", ["pnpm", "test:market-receipt-qa"]],
   ["market.receipt_evidence", "Market receipt evidence docs/checks", ["pnpm", "test:market-receipt-evidence"]],
   ["hyperliquid.readiness", "Hyperliquid readiness gate", ["pnpm", "test:hyperliquid-readiness-gate"]],

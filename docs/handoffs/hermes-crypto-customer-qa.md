@@ -97,6 +97,14 @@ matterhorn-work crypto evidence-verify \
   --require-sdk-manifest-check \
   --output /tmp/matterhorn-market-customer-evidence-verify.json \
   --strict --json
+
+matterhorn-work crypto customer-packet \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --market-evidence-verify /tmp/matterhorn-market-customer-evidence-verify.json \
+  --require-market-evidence \
+  --output /tmp/matterhorn-crypto-customer-packet.md \
+  --json-output /tmp/matterhorn-crypto-customer-packet.json \
+  --strict
 ```
 
 Pass criteria:
@@ -107,6 +115,7 @@ Pass criteria:
 - `matterhorn-work crypto sdk-manifest-check --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json --strict --json` exits 0;
 - `matterhorn-work crypto evidence-bundle` writes Markdown and JSON customer evidence;
 - `matterhorn-work crypto evidence-verify` accepts the final Markdown/JSON bundle;
+- `matterhorn-work crypto customer-packet` writes a ready top-level customer QA packet;
 - the JSON bundle has `operatorSummary.present: true`;
 - neither command asks for, accepts, prints, signs with, or submits wallet/exchange secrets.
 
