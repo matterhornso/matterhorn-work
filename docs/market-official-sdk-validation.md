@@ -37,6 +37,7 @@ Evidence to save:
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
+- Evidence captured with `node scripts/market-official-sdk-validation-capture.mjs --hyperliquid-normalized <redacted-action.json> --hyperliquid-package-version <version>`.
 
 ## Polymarket Validation Checklist
 
@@ -58,6 +59,7 @@ Evidence to save:
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
 - Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
+- Evidence captured with `node scripts/market-official-sdk-validation-capture.mjs --polymarket-normalized <redacted-typed-data.json> --polymarket-package-version <version>`.
 
 ## Evidence JSON Contract
 
@@ -99,6 +101,30 @@ Matterhorn records only redacted official-client/testnet evidence. The evidence 
 
 The validator rejects credential-shaped fields such as `seed`, `privateKey`, `apiSecret`, `signature`, `rawSignature`, and `signedPayload`. Polymarket's public `signatureType` metadata is allowed because it is not a signature.
 
+## Redacted Capture Harness
+
+Operators can turn official-client output into Matterhorn evidence without
+installing official SDKs inside Matterhorn or sharing any credentials with
+Matterhorn:
+
+```bash
+node scripts/market-official-sdk-validation-capture.mjs \
+  --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
+  --hyperliquid-package-version <hyperliquid-python-sdk-version> \
+  --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
+  --polymarket-package-version <clob-client-version> \
+  --polymarket-exchange-address <public-exchange-address> \
+  --polymarket-chain-id <chain-id> \
+  --output /tmp/matterhorn-market-sdk-evidence.json
+```
+
+The normalized files must be redacted, public JSON from an operator-owned
+testnet/fixture run. The capture harness records public hashes and normalized
+content, validates the evidence contract, and rejects credential-shaped fields
+such as raw signatures, private keys, API secrets, signed payloads, and wallet
+exports. It does not execute official SDK code, sign orders, submit orders, or
+authorize live execution.
+
 ## Local Gate
 
 Run:
@@ -106,9 +132,11 @@ Run:
 ```bash
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-evidence
+pnpm test:market-official-sdk-validation-capture
 pnpm test:market-customer-evidence-bundle
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
+node scripts/market-official-sdk-validation-capture.mjs --json
 node scripts/market-customer-evidence-bundle.mjs --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --output <bundle.md> --json-output <bundle.json>
 ```
 

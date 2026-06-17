@@ -193,7 +193,13 @@ pnpm test:unified-crypto-chat
 pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-official-sdk-validation-capture
+pnpm test:market-customer-evidence-bundle
 pnpm test:bittensor-customer-readiness-gate
 ```
 
-The official SDK validation-track gate is not a live SDK submission. It proves the repository still treats Hyperliquid and Polymarket signing payloads as validation-gated templates until official-client/testnet evidence exists.
+The official SDK validation-track and capture gates are not live SDK
+submissions. They prove the repository still treats Hyperliquid and Polymarket
+signing payloads as validation-gated templates, and they let operators attach
+redacted official-client/testnet output to a customer evidence bundle without
+importing secrets into Matterhorn.

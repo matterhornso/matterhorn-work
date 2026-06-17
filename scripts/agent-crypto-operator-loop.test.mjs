@@ -33,6 +33,8 @@ for (const phrase of [
   "canSubmit: false",
   "pnpm test:crypto-cli-fallback",
   "pnpm test:market-official-sdk-validation-track",
+  "pnpm test:market-official-sdk-validation-capture",
+  "pnpm test:market-customer-evidence-bundle",
   "pnpm test:market-execution-safety-gate",
   "pnpm test:bittensor-customer-readiness-gate",
 ]) {
@@ -47,6 +49,8 @@ for (const phrase of [
   "test:unified-crypto-chat",
   "test:crypto-cli-fallback",
   "test:market-official-sdk-validation-track",
+  "test:market-official-sdk-validation-capture",
+  "test:market-customer-evidence-bundle",
 ]) {
   assert.ok(matrix.includes(phrase), `coverage matrix should include ${phrase}`);
 }
