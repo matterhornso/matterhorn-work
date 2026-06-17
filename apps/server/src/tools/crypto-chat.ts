@@ -63,6 +63,33 @@ export interface UnifiedCryptoRoutePlan {
   clarificationQuestion: string | null;
 }
 
+export type UnifiedCryptoSharedCardKind =
+  | "clarification"
+  | "discovery"
+  | "account_snapshot"
+  | "market_context"
+  | "orderbook_context"
+  | "action_preview"
+  | "compliance_block"
+  | "external_signer_handoff"
+  | "receipt_status"
+  | "watch_alert"
+  | "generic";
+
+export type UnifiedCryptoSharedCardStatus = "info" | "success" | "warning" | "danger";
+
+export interface UnifiedCryptoSharedCard {
+  kind: UnifiedCryptoSharedCardKind;
+  venue: RoutedCryptoVenue | "auto";
+  title: string;
+  summary: string;
+  status: UnifiedCryptoSharedCardStatus;
+  originalKind: string | null;
+  source: unknown | null;
+  warnings: string[];
+  data: unknown;
+}
+
 export interface UnifiedCryptoChatResult {
   venue: RoutedCryptoVenue | "auto";
   requestedVenue: UnifiedCryptoVenue;
@@ -70,6 +97,7 @@ export interface UnifiedCryptoChatResult {
   execution: UnifiedCryptoExecution;
   responseText: string;
   cards: unknown[];
+  sharedCards: UnifiedCryptoSharedCard[];
   data: Record<string, unknown>;
   preview?: unknown;
   compliance?: unknown;
@@ -118,6 +146,145 @@ function normalizeVenue(value: unknown): UnifiedCryptoVenue {
 
 function textIncludes(text: string, pattern: RegExp): boolean {
   return pattern.test(text);
+}
+
+function cardRecord(card: unknown): Record<string, unknown> | null {
+  return isRecord(card) ? card : null;
+}
+
+function cardKind(card: unknown): string | null {
+  const record = cardRecord(card);
+  return typeof record?.kind === "string" ? record.kind : null;
+}
+
+function cardTitle(card: unknown, fallback: string): string {
+  const record = cardRecord(card);
+  return typeof record?.title === "string" && record.title.trim() ? record.title : fallback;
+}
+
+function cardWarnings(card: unknown): string[] {
+  const record = cardRecord(card);
+  return Array.isArray(record?.warnings)
+    ? record.warnings.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function extractSource(card: unknown): unknown | null {
+  const record = cardRecord(card);
+  if (!record) return null;
+  if (isRecord(record.source)) return record.source;
+  for (const value of Object.values(record)) {
+    if (isRecord(value) && isRecord(value.source)) return value.source;
+  }
+  return null;
+}
+
+function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind {
+  switch (originalKind) {
+    case "crypto_chat_clarification":
+    case "hyperliquid_clarification":
+    case "polymarket_clarification":
+      return "clarification";
+    case "subnet_comparison":
+    case "adapter_marketplace":
+    case "adapter_roadmap":
+    case "hyperliquid_market_list":
+    case "polymarket_market_list":
+    case "polymarket_event_list":
+      return "discovery";
+    case "wallet_snapshot":
+    case "hyperliquid_account_snapshot":
+    case "hyperliquid_position_risk":
+      return "account_snapshot";
+    case "validator_selection":
+    case "subnet_result":
+    case "intelligence_report":
+    case "hyperliquid_funding":
+    case "polymarket_market_detail":
+      return "market_context";
+    case "hyperliquid_orderbook":
+    case "polymarket_orderbook":
+      return "orderbook_context";
+    case "staking_quote":
+    case "signed_action_review":
+    case "hyperliquid_order_preview":
+    case "polymarket_order_preview":
+    case "adapter_canary_packet":
+    case "adapter_operator_handoff":
+      return "action_preview";
+    case "polymarket_compliance":
+      return "compliance_block";
+    case "signing_handoff":
+      return "external_signer_handoff";
+    case "signed_result":
+    case "signing_receipt":
+      return "receipt_status";
+    case "watchlist":
+    case "polymarket_watch":
+      return "watch_alert";
+    default:
+      return "generic";
+  }
+}
+
+function sharedStatusFor(kind: UnifiedCryptoSharedCardKind, execution: UnifiedCryptoExecution, warnings: string[]): UnifiedCryptoSharedCardStatus {
+  if (execution === "blocked_by_compliance" || kind === "compliance_block") return "danger";
+  if (execution === "unsupported") return "warning";
+  if (warnings.length > 0 || execution === "clarification_required") return "warning";
+  if (execution === "answered" || execution === "read_only" || execution === "unsigned_preview") return "success";
+  return "info";
+}
+
+function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCryptoVenue | "auto", title: string): string {
+  switch (kind) {
+    case "clarification":
+      return "More context is needed before Matterhorn can continue safely.";
+    case "discovery":
+      return `Discovery result from ${venue}: ${title}.`;
+    case "account_snapshot":
+      return `Read-only account or wallet context from ${venue}.`;
+    case "market_context":
+      return `Read-only market, validator, subnet, or odds context from ${venue}.`;
+    case "orderbook_context":
+      return `Read-only orderbook/depth context from ${venue}.`;
+    case "action_preview":
+      return `Non-custodial preview from ${venue}; Matterhorn does not sign or submit.`;
+    case "compliance_block":
+      return `Compliance status from ${venue}; blocked previews must not contain executable order terms.`;
+    case "external_signer_handoff":
+      return `External signer handoff from ${venue}; signing stays outside Matterhorn.`;
+    case "receipt_status":
+      return `Public receipt/status evidence from ${venue}.`;
+    case "watch_alert":
+      return `Monitoring or alert context from ${venue}.`;
+    default:
+      return `Crypto chat card from ${venue}: ${title}.`;
+  }
+}
+
+export function buildUnifiedCryptoSharedCards(
+  venue: RoutedCryptoVenue | "auto",
+  execution: UnifiedCryptoExecution,
+  cards: unknown[],
+  inheritedWarnings: string[] = [],
+): UnifiedCryptoSharedCard[] {
+  return cards.map((card) => {
+    const originalKind = cardKind(card);
+    const kind = sharedKindFor(originalKind);
+    const warnings = [...inheritedWarnings, ...cardWarnings(card)];
+    const title = cardTitle(card, kind.replace(/_/g, " "));
+    return {
+      kind,
+      venue,
+      title,
+      summary: sharedSummaryFor(kind, venue, title),
+      status: sharedStatusFor(kind, execution, warnings),
+      originalKind,
+      source: extractSource(card),
+      warnings,
+      data: card,
+    };
+  });
 }
 
 function routeScores(input: UnifiedCryptoChatInput): Record<RoutedCryptoVenue, number> {
@@ -192,18 +359,20 @@ export function planUnifiedCryptoChat(input: UnifiedCryptoChatInput): UnifiedCry
 }
 
 function clarificationResult(input: UnifiedCryptoChatInput, route: UnifiedCryptoRoutePlan, question: string, warnings: string[] = []): UnifiedCryptoChatResult {
+  const cards = [{
+    kind: "crypto_chat_clarification",
+    title: "Choose a crypto surface",
+    question,
+    warnings,
+  }];
   return {
     venue: "auto",
     requestedVenue: normalizeVenue(input.venue),
     intent: "clarify_venue",
     execution: "clarification_required",
     responseText: question,
-    cards: [{
-      kind: "crypto_chat_clarification",
-      title: "Choose a crypto surface",
-      question,
-      warnings,
-    }],
+    cards,
+    sharedCards: buildUnifiedCryptoSharedCards("auto", "clarification_required", cards, warnings),
     data: {},
     warnings,
     requiresClarification: true,
@@ -220,6 +389,7 @@ function fromBittensor(input: UnifiedCryptoChatInput, route: UnifiedCryptoRouteP
     execution: result.execution,
     responseText: result.responseText,
     cards: result.cards,
+    sharedCards: buildUnifiedCryptoSharedCards("bittensor", result.execution, result.cards, result.warnings),
     data: { ...result.data, context: result.context ?? null },
     warnings: result.warnings,
     requiresClarification: result.requiresClarification,
@@ -236,6 +406,7 @@ function fromHyperliquid(input: UnifiedCryptoChatInput, route: UnifiedCryptoRout
     execution: result.execution,
     responseText: result.responseText,
     cards: result.cards,
+    sharedCards: buildUnifiedCryptoSharedCards("hyperliquid", result.execution, result.cards, result.warnings),
     data: result.data ?? {},
     preview: result.preview,
     warnings: result.warnings,
@@ -253,6 +424,7 @@ function fromPolymarket(input: UnifiedCryptoChatInput, route: UnifiedCryptoRoute
     execution: result.execution,
     responseText: result.responseText,
     cards: result.cards,
+    sharedCards: buildUnifiedCryptoSharedCards("polymarket", result.execution, result.cards, result.warnings),
     data: result.data ?? {},
     preview: result.preview,
     compliance: result.compliance,
@@ -280,18 +452,20 @@ export async function executeUnifiedCryptoChatWorkflow(
   }
   const forbidden = findForbiddenUnifiedCryptoCredentialInput(input);
   if (forbidden) {
+    const cards = [{
+      kind: "crypto_chat_secret_rejected",
+      title: "Secret-shaped input rejected",
+      summary: "Remove signing or credential material before continuing.",
+      warnings: [`Rejected credential-shaped field: ${forbidden}`],
+    }];
     return {
       venue: "auto",
       requestedVenue: normalizeVenue(input.venue),
       intent: "secret_rejected",
       execution: "unsupported",
       responseText: "For safety, remove private keys, seed phrases, API secrets, raw signatures, signed payloads, or wallet exports. Matterhorn only accepts public addresses, public market ids, and preview parameters.",
-      cards: [{
-        kind: "crypto_chat_secret_rejected",
-        title: "Secret-shaped input rejected",
-        summary: "Remove signing or credential material before continuing.",
-        warnings: [`Rejected credential-shaped field: ${forbidden}`],
-      }],
+      cards,
+      sharedCards: buildUnifiedCryptoSharedCards("auto", "unsupported", cards, [`Rejected credential-shaped field: ${forbidden}`]),
       data: { rejectedField: forbidden },
       warnings: [`Rejected credential-shaped field: ${forbidden}`],
       requiresClarification: false,
