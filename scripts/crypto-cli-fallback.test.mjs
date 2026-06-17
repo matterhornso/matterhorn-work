@@ -329,12 +329,22 @@ async function main() {
         if (!payload.files?.officialSdkEvidence || !existsSync(payload.files.officialSdkEvidence)) {
           throw new Error("expected official SDK evidence file to be written");
         }
+        if (!payload.files?.runManifest || !existsSync(payload.files.runManifest)) {
+          throw new Error("expected official SDK run manifest file to be written");
+        }
       },
     );
     if (mock.requests.length !== sdkRequestsBefore) throw new Error("crypto sdk-loop should not call the Matterhorn server");
     const sdkEvidence = readFileSync(sdkLoop.files.officialSdkEvidence, "utf8");
     if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport/i.test(sdkEvidence)) {
       throw new Error("SDK loop evidence leaked token or secret-shaped fields");
+    }
+    const sdkRunManifest = readFileSync(sdkLoop.files.runManifest, "utf8");
+    if (!/matterhorn\.market\.sdk\.run-manifest\.v1/.test(sdkRunManifest)) {
+      throw new Error("SDK loop run manifest missing expected version");
+    }
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(sdkRunManifest)) {
+      throw new Error("SDK loop run manifest leaked token or secret-shaped fields");
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 

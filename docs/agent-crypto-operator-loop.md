@@ -201,7 +201,7 @@ matterhorn-work crypto sdk-loop \
 
 matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
-  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-official-sdk-validation.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
   --output /tmp/matterhorn-crypto-customer-evidence.json \
   --title "Matterhorn Work Crypto Customer Evidence" \
@@ -225,7 +225,7 @@ matterhorn-work crypto receipt-check \
 
 matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
-  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-official-sdk-validation.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
   --receipt-check /tmp/matterhorn-market-receipt-check.json \
   --require-receipt-check \
@@ -237,6 +237,11 @@ matterhorn-work crypto evidence-bundle \
 Use the receipt-check requirement only for demos that actually include public
 receipt evidence. The evidence file must be public/redacted only and must match
 the original handoff hashes and venue fields.
+
+The SDK loop also writes
+`/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`, which
+is the machine-readable index of public artifacts, hashes, venue validation
+status, and safety flags for the run.
 
 For repository gates, run:
 
