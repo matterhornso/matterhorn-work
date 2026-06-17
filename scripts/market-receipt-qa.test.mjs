@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const marketTypes = readFileSync("packages/types/src/markets.ts", "utf8");
@@ -230,5 +231,12 @@ const warningOnly = verifyPublicReceipt({
 assert.equal(warningOnly.ok, true, "receipt with no order id/hash is still public evidence but needs review");
 assert.ok(warningOnly.warnings.join(" ").includes("no order id or tx hash"), "missing locator warning is surfaced");
 console.log("PASS receipt missing order id/hash warning");
+
+const checkerSelfTest = spawnSync("node", ["scripts/market-receipt-check.mjs", "--self-test"], {
+  cwd: process.cwd(),
+  encoding: "utf8",
+});
+assert.equal(checkerSelfTest.status, 0, `receipt checker self-test passes: ${checkerSelfTest.stderr || checkerSelfTest.stdout}`);
+console.log("PASS public receipt checker self-test");
 
 console.log("Market receipt QA harness passed.");
