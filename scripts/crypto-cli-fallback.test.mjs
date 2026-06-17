@@ -371,6 +371,7 @@ async function main() {
     const bundleReceiptCheckPath = join(sdkOutputDir, "matterhorn-market-receipt-check.json");
     writeFileSync(smokePath, JSON.stringify({
       ready: true,
+      metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "c".repeat(40), gitBranch: "codex/test" },
       summary: { pass: 27, fail: 0, skip: 0 },
       stages: [
         { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },

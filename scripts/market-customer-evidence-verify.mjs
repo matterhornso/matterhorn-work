@@ -13,6 +13,7 @@ const REQUIRED_SMOKE_STAGES = [
   "polymarket.readiness",
   "bittensor.customer_readiness",
 ];
+const GIT_SHA_RE = /^[a-f0-9]{40}$/i;
 
 const FORBIDDEN_KEY_RE =
   /^(seed|seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|token|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)$/i;
@@ -107,6 +108,30 @@ export function verifyMarketCustomerEvidenceBundle({ summary, markdown = null, o
   const requiredStages = Array.isArray(summary?.customerReadySmoke?.requiredStages)
     ? summary.customerReadySmoke.requiredStages
     : [];
+  pushCheck(
+    checks,
+    errors,
+    warnings,
+    "smoke.metadata.git_sha",
+    typeof summary?.customerReadySmoke?.gitSha === "string" && GIT_SHA_RE.test(summary.customerReadySmoke.gitSha),
+    "Customer-ready crypto smoke metadata must include a 40-character git SHA.",
+  );
+  pushCheck(
+    checks,
+    errors,
+    warnings,
+    "smoke.metadata.generated_at",
+    typeof summary?.customerReadySmoke?.generatedAt === "string" && !Number.isNaN(Date.parse(summary.customerReadySmoke.generatedAt)),
+    "Customer-ready crypto smoke metadata must include generatedAt.",
+  );
+  pushCheck(
+    checks,
+    errors,
+    warnings,
+    "smoke.metadata.git_branch",
+    typeof summary?.customerReadySmoke?.gitBranch === "string" && summary.customerReadySmoke.gitBranch.trim().length > 0,
+    "Customer-ready crypto smoke metadata must include gitBranch.",
+  );
   const stageById = new Map(requiredStages.map((stage) => [stage.id, stage]));
   for (const id of REQUIRED_SMOKE_STAGES) {
     const stage = stageById.get(id);
