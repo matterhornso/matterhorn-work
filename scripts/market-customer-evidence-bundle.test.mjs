@@ -23,8 +23,14 @@ try {
     ready: true,
     summary: { pass: 22, fail: 0, skip: 0 },
     stages: [
+      { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
+      { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
       { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
       { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+      { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
+      { id: "hyperliquid.readiness", label: "Hyperliquid readiness gate", status: "pass" },
+      { id: "polymarket.readiness", label: "Polymarket readiness gate", status: "pass" },
+      { id: "bittensor.customer_readiness", label: "Bittensor customer readiness gate", status: "pass" },
     ],
     safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
   }));
@@ -67,6 +73,8 @@ try {
   assert.match(markdown, /@polymarket\/clob-client-v2/);
   assert.match(markdown, /pending_official_client_validation/);
   assert.match(markdown, /Operator Summary/);
+  assert.match(markdown, /Required Smoke Stages/);
+  assert.match(markdown, /Unified crypto shared-card contract/);
   assert.match(markdown, /matterhorn-market-sdk-operator-summary\.md/);
   assert.match(markdown, /SHA-256/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
@@ -78,6 +86,7 @@ try {
   assert.equal(summary.officialSdkValidation.validation.ok, true);
   assert.equal(summary.officialSdkValidation.allValidated, false);
   assert.equal(summary.customerReadySmoke.pass, 22);
+  assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.shared_card_contract")?.status, "pass");
   assert.equal(summary.operatorSummary.present, true);
   assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");
   assert.match(summary.operatorSummary.sha256, /^[a-f0-9]{64}$/);
@@ -137,6 +146,29 @@ try {
       ], { cwd: repoRoot, stdio: "pipe" }),
     /forbidden secret-shaped content/i,
   );
+
+  const missingSharedCardSmoke = path.join(tmp, "missing-shared-card-smoke.json");
+  await writeFile(missingSharedCardSmoke, JSON.stringify({
+    ready: true,
+    summary: { pass: 1, fail: 0, skip: 0 },
+    stages: [{ id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" }],
+    safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
+  }));
+  let missingSharedCardError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        missingSharedCardSmoke,
+        "--official-sdk-validation",
+        official,
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    missingSharedCardError = error;
+  }
+  assert.ok(missingSharedCardError, "strict bundle should fail when the shared-card smoke stage is missing");
+  assert.match(String(missingSharedCardError.stdout), /crypto\.shared_card_contract \(missing\)/i);
 
   console.log("Market customer evidence bundle tests passed.");
 } finally {

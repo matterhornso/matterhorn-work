@@ -70,8 +70,15 @@ writeFileSync(smokeOutput, JSON.stringify({
   ready: true,
   summary: { pass: 24, fail: 0, skip: 0 },
   stages: [
+    { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
+    { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
+    { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
     { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
     { id: "market.official_sdk_fixtures", label: "Market official SDK fixture capture", status: "pass" },
+    { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
+    { id: "hyperliquid.readiness", label: "Hyperliquid readiness gate", status: "pass" },
+    { id: "polymarket.readiness", label: "Polymarket readiness gate", status: "pass" },
+    { id: "bittensor.customer_readiness", label: "Bittensor customer readiness gate", status: "pass" },
   ],
   safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
 }, null, 2));

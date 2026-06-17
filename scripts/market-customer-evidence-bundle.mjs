@@ -10,6 +10,16 @@ const FORBIDDEN_KEY_RE =
   /^(seed|seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|token|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)$/i;
 const FORBIDDEN_OPERATOR_SUMMARY_RE =
   /\b(seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action)\b/i;
+const REQUIRED_CUSTOMER_SMOKE_STAGES = [
+  ["crypto.unified_chat", "Unified crypto chat router"],
+  ["crypto.shared_card_contract", "Unified crypto shared-card contract"],
+  ["market.execution_safety", "Market execution safety gate"],
+  ["market.official_sdk_validation", "Market official SDK validation track"],
+  ["market.customer_evidence_bundle", "Market customer evidence bundle"],
+  ["hyperliquid.readiness", "Hyperliquid readiness gate"],
+  ["polymarket.readiness", "Polymarket readiness gate"],
+  ["bittensor.customer_readiness", "Bittensor customer readiness gate"],
+];
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -106,6 +116,18 @@ function stageCounts(report) {
   };
 }
 
+function summarizeRequiredSmokeStages(report) {
+  const stages = Array.isArray(report?.stages) ? report.stages : [];
+  return REQUIRED_CUSTOMER_SMOKE_STAGES.map(([id, label]) => {
+    const stage = stages.find((item) => item?.id === id);
+    return {
+      id,
+      label,
+      status: typeof stage?.status === "string" ? stage.status : "missing",
+    };
+  });
+}
+
 function extractOfficialEvidence(raw) {
   return isRecord(raw?.evidence) ? raw.evidence : raw;
 }
@@ -192,6 +214,12 @@ function renderMarkdown(summary) {
       : "- Not attached.",
     smoke.path ? markdownBullet(`Evidence file: ${basename(smoke.path)}`) : "",
     "",
+    "### Required Smoke Stages",
+    "",
+    "| Stage | Status |",
+    "| --- | --- |",
+    ...(smoke.requiredStages ?? []).map((stage) => `| ${stage.label} | ${stage.status} |`),
+    "",
     "## Official SDK Validation Evidence",
     "",
     markdownBullet(`Accepted by evidence validator: ${sdk.validation.ok ? "yes" : "no"}`),
@@ -245,6 +273,7 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     pass: smokeCounts.pass,
     fail: smokeCounts.fail,
     skip: smokeCounts.skip,
+    requiredStages: summarizeRequiredSmokeStages(smokeRaw),
     path: config.customerReadySmoke,
   };
   const officialSdkValidation = summarizeOfficialSdk(officialRaw, config.requireOfficialSdkValidated);
@@ -256,6 +285,9 @@ export async function buildMarketCustomerEvidenceBundle(config) {
   ];
   const errors = [
     ...officialSdkValidation.validation.errors,
+    ...customerReadySmoke.requiredStages
+      .filter((stage) => stage.status !== "pass")
+      .map((stage) => `Customer-ready crypto smoke required stage did not pass: ${stage.id} (${stage.status})`),
     ...(config.requireOfficialSdkValidated && !officialSdkValidation.allValidated ? ["Official SDK evidence is not fully validated for every venue."] : []),
   ];
   const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && errors.length === 0;
