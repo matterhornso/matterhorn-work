@@ -15,6 +15,7 @@ const offlineStages = [
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
   ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
+  ["market.customer_evidence_bundle", "Market customer evidence bundle", ["pnpm", "test:market-customer-evidence-bundle"]],
   ["market.receipt_qa", "Market public receipt QA", ["pnpm", "test:market-receipt-qa"]],
   ["market.receipt_evidence", "Market receipt evidence docs/checks", ["pnpm", "test:market-receipt-evidence"]],
   ["hyperliquid.readiness", "Hyperliquid readiness gate", ["pnpm", "test:hyperliquid-readiness-gate"]],

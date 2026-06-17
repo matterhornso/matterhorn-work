@@ -45,6 +45,7 @@ pnpm test:hermes-crypto-customer-qa
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
+pnpm test:market-customer-evidence-bundle
 pnpm test:market-receipt-qa
 pnpm test:market-receipt-evidence
 pnpm test:hyperliquid-readiness-gate
@@ -96,6 +97,30 @@ node scripts/bittensor-live-qa.mjs \
 
 Then feed the generated JSON into `scripts/bittensor-customer-readiness-gate.mjs` and `scripts/bittensor-customer-evidence-bundle.mjs` as described in `docs/bittensor-customer-readiness-gate.md`.
 
+## Optional Market Evidence Bundle
+
+For customer demos involving Hyperliquid or Polymarket previews, attach the
+official-SDK validation evidence to the market evidence bundle. The bundle is
+public/redacted only; it does not sign, submit, store secrets, or authorize live
+execution.
+
+```bash
+node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
+node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
+
+node scripts/market-customer-evidence-bundle.mjs \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
+  --output /tmp/matterhorn-market-customer-evidence.md \
+  --json-output /tmp/matterhorn-market-customer-evidence.json \
+  --strict
+```
+
+Use `--require-official-sdk-validated` only when every venue has real
+operator-owned official-client/testnet evidence. Pending validation evidence is
+acceptable for read/preview-only customer QA, but it is not authorization for
+live Hyperliquid or Polymarket execution.
+
 ## Pass Criteria
 
 Report ready for a test customer only when:
@@ -104,6 +129,7 @@ Report ready for a test customer only when:
 - Market execution safety passes.
 - Hyperliquid and Polymarket remain read/preview/external-signer only.
 - Bittensor readiness, receipt, watch, scheduler, signing-handoff, and evidence-bundle gates pass.
+- Market customer evidence bundle accepts the redacted official-SDK validation evidence.
 - No response or evidence file contains secret-shaped fields.
 - Any local-server smoke failures are explained as provider unavailable, not as signing/submission behavior.
 
