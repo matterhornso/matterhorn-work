@@ -37,6 +37,7 @@ for (const phrase of [
   "matterhorn-work crypto sdk-manifest-check",
   "matterhorn-work crypto evidence-bundle",
   "matterhorn-work crypto evidence-verify",
+  "matterhorn-work crypto bittensor-evidence-verify",
   "matterhorn-work crypto customer-packet",
   "canSubmit: false",
   "pnpm test:crypto-cli-fallback",
@@ -46,6 +47,7 @@ for (const phrase of [
   "pnpm test:market-customer-evidence-bundle",
   "pnpm test:market-customer-evidence-verify",
   "pnpm test:crypto-customer-packet",
+  "pnpm test:bittensor-customer-evidence-verify",
   "pnpm test:market-execution-safety-gate",
   "pnpm test:bittensor-customer-readiness-gate",
 ]) {
@@ -65,6 +67,7 @@ for (const phrase of [
   "test:market-customer-evidence-bundle",
   "test:market-customer-evidence-verify",
   "test:crypto-customer-packet",
+  "test:bittensor-customer-evidence-verify",
 ]) {
   assert.ok(matrix.includes(phrase), `coverage matrix should include ${phrase}`);
 }

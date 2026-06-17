@@ -107,6 +107,17 @@ matterhorn-work crypto customer-packet \
   --strict
 ```
 
+When the run includes a Bittensor evidence bundle, verify it before adding it
+to the packet:
+
+```bash
+matterhorn-work crypto bittensor-evidence-verify \
+  --bundle-json /tmp/matterhorn-bittensor-customer-evidence.json \
+  --bundle-md /tmp/matterhorn-bittensor-customer-evidence.md \
+  --output /tmp/matterhorn-bittensor-customer-evidence-verify.json \
+  --strict --json
+```
+
 Pass criteria:
 
 - `matterhorn-work crypto sdk-loop` reports `ready: true`;
@@ -116,6 +127,7 @@ Pass criteria:
 - `matterhorn-work crypto evidence-bundle` writes Markdown and JSON customer evidence;
 - `matterhorn-work crypto evidence-verify` accepts the final Markdown/JSON bundle;
 - `matterhorn-work crypto customer-packet` writes a ready top-level customer QA packet;
+- `matterhorn-work crypto bittensor-evidence-verify` accepts Bittensor evidence bundles when attached to the top-level packet;
 - the JSON bundle has `operatorSummary.present: true`;
 - neither command asks for, accepts, prints, signs with, or submits wallet/exchange secrets.
 

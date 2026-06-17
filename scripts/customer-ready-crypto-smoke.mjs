@@ -41,6 +41,7 @@ const offlineStages = [
   ["bittensor.watch_scheduler", "Bittensor watch autopilot scheduler", ["pnpm", "test:bittensor-watch-autopilot-scheduler"]],
   ["bittensor.signing_handoff", "Bittensor signing handoff check", ["pnpm", "test:bittensor-signing-handoff-check"]],
   ["bittensor.evidence_bundle", "Bittensor customer evidence bundle", ["pnpm", "test:bittensor-customer-evidence-bundle"]],
+  ["bittensor.evidence_verify", "Bittensor customer evidence verifier", ["pnpm", "test:bittensor-customer-evidence-verify"]],
 ];
 
 function parseArgs(argv) {

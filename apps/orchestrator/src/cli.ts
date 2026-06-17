@@ -3781,6 +3781,7 @@ function printHelp(): void {
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--sdk-manifest-check <path>] [--receipt-check <path>] [options]",
     "  matterhorn-work crypto evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
+    "  matterhorn-work crypto bittensor-evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto customer-packet --customer-ready-smoke <path> [--market-evidence-verify <path>] [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
@@ -3814,6 +3815,7 @@ function printHelp(): void {
     "  crypto receipt-check    Validate public market receipt evidence offline",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  crypto evidence-verify  Verify final market customer evidence bundle offline",
+    "  crypto bittensor-evidence-verify Verify final Bittensor customer evidence bundle offline",
     "  crypto customer-packet  Build top-level crypto customer QA packet from verified artifacts",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
@@ -7781,6 +7783,12 @@ const CRYPTO_EVIDENCE_VERIFY_SUBCOMMANDS = new Set([
   "verify-evidence",
 ]);
 
+const CRYPTO_BITTENSOR_EVIDENCE_VERIFY_SUBCOMMANDS = new Set([
+  "bittensor-evidence-verify",
+  "bittensor-customer-evidence-verify",
+  "verify-bittensor-evidence",
+]);
+
 const CRYPTO_CUSTOMER_PACKET_SUBCOMMANDS = new Set([
   "customer-packet",
   "packet",
@@ -7813,6 +7821,20 @@ const CRYPTO_EVIDENCE_VERIFY_BOOL_FLAGS = [
 ] as const;
 
 const CRYPTO_EVIDENCE_VERIFY_VALUE_FLAGS = [
+  "bundle-json",
+  "bundle-md",
+  "bundle-markdown",
+  "output",
+] as const;
+
+const CRYPTO_BITTENSOR_EVIDENCE_VERIFY_BOOL_FLAGS = [
+  "strict",
+  "require-receipt-check",
+  "require-readonly-adapter-canary",
+  "require-watch-autopilot-scheduler",
+] as const;
+
+const CRYPTO_BITTENSOR_EVIDENCE_VERIFY_VALUE_FLAGS = [
   "bundle-json",
   "bundle-md",
   "bundle-markdown",
@@ -7953,6 +7975,14 @@ async function runCryptoEvidenceVerify(args: ParsedArgs, outputJson: boolean): P
   await runOfflineCryptoScript("market-customer-evidence-verify.mjs", forwarded, "Market customer evidence verifier");
 }
 
+async function runCryptoBittensorEvidenceVerify(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_BITTENSOR_EVIDENCE_VERIFY_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_BITTENSOR_EVIDENCE_VERIFY_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("bittensor-customer-evidence-verify.mjs", forwarded, "Bittensor customer evidence verifier");
+}
+
 async function runCryptoCustomerPacket(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_CUSTOMER_PACKET_BOOL_FLAGS, forwarded);
@@ -8017,6 +8047,11 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
+    if (CRYPTO_BITTENSOR_EVIDENCE_VERIFY_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoBittensorEvidenceVerify(args, outputJson);
+      return;
+    }
+
     if (CRYPTO_CUSTOMER_PACKET_SUBCOMMANDS.has(subcommand)) {
       await runCryptoCustomerPacket(args);
       return;
@@ -8072,7 +8107,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

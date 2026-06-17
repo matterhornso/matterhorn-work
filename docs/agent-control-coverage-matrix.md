@@ -60,6 +60,7 @@ The goal is to keep every stable capability available through at least one safe 
 | Bittensor external signing | `POST /api/bittensor/extrinsics/prepare`, `POST /api/bittensor/extrinsics/handoff`, `POST /api/bittensor/extrinsics/receipt`, `POST /api/bittensor/extrinsics/submit` | `matterhorn_bittensor_prepare_extrinsic`, `matterhorn_bittensor_create_signing_handoff`, `matterhorn_bittensor_import_receipt`, `matterhorn_bittensor_submit_signed_extrinsic` | `matterhorn-work bittensor extrinsic prepare/handoff/submit` plus panel `Copy Import` | `test:agent-control-mcp`, `test:bittensor-cli-fallback`, Bittensor server tests |
 | Bittensor subnet adapter preview | `POST /api/bittensor/subnets/:netuid/preview`, `POST /api/bittensor/subnets/:netuid/invoke` | `matterhorn_bittensor_preview_subnet_invocation`, `matterhorn_bittensor_invoke_subnet` | `matterhorn-work bittensor subnet-preview`, `matterhorn-work bittensor subnet-invoke` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Bittensor monitoring watches | `GET/POST /api/bittensor/monitoring/watchlist`, `GET /api/bittensor/monitoring/check`, `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_create_watch`, `matterhorn_bittensor_list_watches`, `matterhorn_bittensor_check_watches`, `matterhorn_bittensor_watch_digest`, `matterhorn_bittensor_act_on_watch_alert` | `matterhorn-work bittensor watch create/list/check/digest/act` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
+| Bittensor customer evidence verification | No server route; offline/customer handoff artifact only | No MCP tool; agents use the documented operator loop and final QA packet | `matterhorn-work crypto bittensor-evidence-verify` validates Bittensor evidence bundle JSON/Markdown before it is attached to `matterhorn-work crypto customer-packet`; raw helper remains `node scripts/bittensor-customer-evidence-verify.mjs` | `test:bittensor-customer-evidence-verify`, `test:customer-ready-crypto-smoke`, `test:crypto-cli-fallback` |
 | Browser semantic actions | Desktop bridge action model | `matterhorn-work-ui-mcp` browser tools | Doctor reports bridge availability | `test:agent-browser-control-guide`, `test:agent-browser-live-qa`, `test:agent-browser-live-probe` |
 
 ## Current Gaps
@@ -79,6 +80,7 @@ pnpm test:bittensor-live-qa
 pnpm test:bittensor-live-report
 pnpm test:bittensor-customer-readiness-gate
 pnpm test:bittensor-receipt-check
+pnpm test:bittensor-customer-evidence-verify
 pnpm test:agent-control-doctor
 pnpm test:agent-control-live-qa
 pnpm test:agent-control-api-docs
