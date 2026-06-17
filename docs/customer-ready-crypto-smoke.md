@@ -154,6 +154,10 @@ node scripts/market-customer-evidence-bundle.mjs \
   --strict
 ```
 
+Give reviewers `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md`
+first. It is the short human-readable receipt for the SDK validation loop and
+links to the raw JSON evidence files.
+
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
 acceptable for read/preview-only customer QA, but it is not authorization for

@@ -236,6 +236,12 @@ official SDK evidence, and optionally writes a customer evidence bundle. It does
 not run official SDK packages, sign, submit, broadcast, call exchanges, or accept
 secret-bearing artifacts.
 
+Every run writes `matterhorn-market-sdk-operator-summary.md` in the output
+directory. Hand that Markdown file to Hermes or a customer reviewer first; it
+summarizes readiness, safety invariants, doctor checks, venue validation status,
+and generated evidence paths without including signatures, payload secrets, API
+keys, seed phrases, or wallet exports.
+
 The lower-level script remains available for debugging:
 `node scripts/market-official-sdk-operator-loop.mjs`.
 

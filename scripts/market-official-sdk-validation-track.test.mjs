@@ -92,6 +92,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
   "matterhorn-work crypto sdk-loop",
+  "matterhorn-market-sdk-operator-summary.md",
   "node scripts/market-official-sdk-validation-doctor.mjs",
   "node scripts/market-official-sdk-normalize.mjs",
   "node scripts/market-official-sdk-operator-loop.mjs",
@@ -193,6 +194,7 @@ mustContain("scripts/market-official-sdk-operator-loop.mjs", [
   "buildMarketCustomerEvidenceBundle",
   "liveSubmissionEnabled: false",
   "signsOrSubmits: false",
+  "matterhorn-market-sdk-operator-summary.md",
 ]);
 const operatorLoopSelfTest = spawnSync("node", ["scripts/market-official-sdk-operator-loop.test.mjs"], {
   cwd: root,

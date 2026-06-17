@@ -36,8 +36,17 @@ assert.ok(direct.files.polymarketNormalized);
 assert.ok(direct.files.officialSdkEvidence);
 assert.ok(direct.files.customerEvidenceMarkdown);
 assert.ok(direct.files.customerEvidenceJson);
+assert.ok(direct.files.operatorSummaryMarkdown);
 const markdown = await readFile(direct.files.customerEvidenceMarkdown, "utf8");
 assert.match(markdown, /READY_FOR_TEST_CUSTOMER_QA/);
+const summary = await readFile(direct.files.operatorSummaryMarkdown, "utf8");
+assert.match(summary, /Matterhorn Market Official SDK Operator Summary/);
+assert.match(summary, /READY_FOR_TEST_CUSTOMER_QA/);
+assert.match(summary, /Non-custodial \| true/);
+assert.match(summary, /Live submission enabled \| false/);
+assert.match(summary, /hyperliquid/);
+assert.match(summary, /polymarket/);
+assert.equal(/privateKey|mnemonic|signedPayload|walletExport/i.test(summary), false);
 
 const cliOutputDir = join(tmp, "cli");
 const cli = spawnSync("node", [
@@ -54,6 +63,7 @@ assert.equal(cli.status, 0, cli.stderr || cli.stdout);
 const parsed = JSON.parse(cli.stdout);
 assert.equal(parsed.ready, true);
 assert.equal(parsed.files.officialSdkEvidence.endsWith("matterhorn-market-sdk-evidence.json"), true);
+assert.equal(parsed.files.operatorSummaryMarkdown.endsWith("matterhorn-market-sdk-operator-summary.md"), true);
 assert.equal(JSON.stringify(parsed).includes("privateKey"), false);
 
 const unsafe = await runMarketOfficialSdkOperatorLoop({
