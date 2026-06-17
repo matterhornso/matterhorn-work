@@ -25,15 +25,17 @@ Goal: users should not need to know which backend workflow to call. Matterhorn s
 
 Build:
 
-- A server-side `crypto_chat` or `market_chat` router that detects venue and intent.
+- A server-side `/api/crypto/chat/execute` router that detects venue and intent.
 - Deterministic handoff to existing Bittensor, Hyperliquid, and Polymarket chat workflows.
 - One clarification question when venue or required context is ambiguous.
 - A shared result envelope with venue, intent, execution, cards, warnings, and safety status.
+- Secret-shaped field rejection before any venue workflow executes.
 
 Done when:
 
 - Prompts like "show my TAO", "compare validators on subnet 14", "show BTC perp liquidity", and "find AI Polymarket markets" route correctly.
 - Hyperliquid and Polymarket remain read/preview/external-signer only.
+- `pnpm test:unified-crypto-chat` passes.
 - `pnpm test:market-execution-safety-gate` remains green.
 
 ## Phase 3: Shared Cross-Venue Cards
