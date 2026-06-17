@@ -221,6 +221,14 @@ matterhorn-work crypto evidence-verify \
   --require-sdk-manifest-check \
   --output /tmp/matterhorn-crypto-customer-evidence-verify.json \
   --strict --json
+
+matterhorn-work crypto customer-packet \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --market-evidence-verify /tmp/matterhorn-crypto-customer-evidence-verify.json \
+  --require-market-evidence \
+  --output /tmp/matterhorn-crypto-customer-packet.md \
+  --json-output /tmp/matterhorn-crypto-customer-packet.json \
+  --strict
 ```
 
 The CLI path stays offline, public, and non-custodial. It must not receive
@@ -257,12 +265,23 @@ matterhorn-work crypto evidence-verify \
   --require-receipt-check \
   --output /tmp/matterhorn-crypto-customer-evidence-verify.json \
   --strict --json
+
+matterhorn-work crypto customer-packet \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --market-evidence-verify /tmp/matterhorn-crypto-customer-evidence-verify.json \
+  --require-market-evidence \
+  --output /tmp/matterhorn-crypto-customer-packet.md \
+  --json-output /tmp/matterhorn-crypto-customer-packet.json \
+  --strict
 ```
 
 Use the receipt-check requirement only for demos that actually include public
 receipt evidence. The evidence file must be public/redacted only and must match
 the original handoff hashes and venue fields. The final `evidence-verify`
 command re-checks the completed customer bundle without calling the server.
+Use `customer-packet` as the final cross-venue handoff artifact once the smoke
+report and market evidence verifier are ready; attach Bittensor evidence with
+`--bittensor-evidence-bundle` when that JSON bundle is part of the customer QA.
 
 The SDK loop also writes
 `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`, which
@@ -291,6 +310,7 @@ pnpm test:market-official-sdk-validation-capture
 pnpm test:market-sdk-run-manifest-check
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-customer-evidence-verify
+pnpm test:crypto-customer-packet
 pnpm test:bittensor-customer-readiness-gate
 ```
 

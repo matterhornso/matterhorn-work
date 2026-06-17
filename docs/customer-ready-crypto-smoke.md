@@ -189,17 +189,27 @@ matterhorn-work crypto evidence-verify \
   --require-sdk-manifest-check \
   --output /tmp/matterhorn-market-customer-evidence-verify.json \
   --strict --json
+
+matterhorn-work crypto customer-packet \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --market-evidence-verify /tmp/matterhorn-market-customer-evidence-verify.json \
+  --require-market-evidence \
+  --output /tmp/matterhorn-crypto-customer-packet.md \
+  --json-output /tmp/matterhorn-crypto-customer-packet.json \
+  --strict
 ```
 
 Give reviewers `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md`
 first, then `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`,
-then the bundled customer evidence Markdown and verifier JSON. The summary is the short
-human-readable receipt for the SDK validation loop; the manifest is the
-machine-readable index of public output files, SHA-256 hashes, venue validation
-status, and safety flags. The evidence bundle should include the
-`sdk-manifest-check` JSON whenever the SDK run manifest is part of the customer
-claim. The final `evidence-verify` step re-checks the finished bundle so a
-reviewer can confirm the packet is ready without regenerating every artifact.
+then the bundled customer evidence Markdown, verifier JSON, and top-level
+customer packet. The summary is the short human-readable receipt for the SDK
+validation loop; the manifest is the machine-readable index of public output
+files, SHA-256 hashes, venue validation status, and safety flags. The evidence
+bundle should include the `sdk-manifest-check` JSON whenever the SDK run
+manifest is part of the customer claim. The final `evidence-verify` step
+re-checks the finished market bundle, and `customer-packet` indexes the smoke
+report, verified market bundle, and optional Bittensor evidence bundle into one
+top-level QA packet.
 
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
@@ -225,6 +235,7 @@ Report ready for a test customer only when:
 - Bittensor readiness, receipt, watch, scheduler, signing-handoff, and evidence-bundle gates pass.
 - Market customer evidence bundle accepts the redacted official-SDK validation evidence.
 - Market customer evidence verifier accepts the final bundle JSON/Markdown.
+- Crypto customer packet is ready and includes the smoke report plus verified market evidence.
 - If market receipt evidence is claimed, the evidence bundle includes an accepted `crypto receipt-check` output tied back to the original handoff.
 - No response or evidence file contains secret-shaped fields.
 - Any local-server smoke failures are explained as provider unavailable, not as signing/submission behavior.

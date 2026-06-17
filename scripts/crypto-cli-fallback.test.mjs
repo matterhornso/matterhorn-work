@@ -477,6 +477,41 @@ async function main() {
     if (verifyJson.ready !== true) throw new Error("expected customer evidence verifier output ready=true");
     console.log("PASS crypto evidence-verify CLI is offline and non-custodial");
 
+    const packetRequestsBefore = mock.requests.length;
+    const bittensorBundlePath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence.json");
+    const customerPacketMarkdownPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.md");
+    const customerPacketJsonPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.json");
+    writeFileSync(bittensorBundlePath, JSON.stringify({ ready: true, errors: [], warnings: [] }));
+    const packetResult = await runCli(mock.url, [
+      "crypto",
+      "customer-packet",
+      "--customer-ready-smoke",
+      smokePath,
+      "--market-evidence-verify",
+      bundleVerifyPath,
+      "--bittensor-evidence-bundle",
+      bittensorBundlePath,
+      "--require-market-evidence",
+      "--require-bittensor-evidence",
+      "--output",
+      customerPacketMarkdownPath,
+      "--json-output",
+      customerPacketJsonPath,
+      "--strict",
+    ]);
+    if (packetResult.code !== 0) throw new Error(`crypto customer-packet exited ${packetResult.code}. stdout=${packetResult.stdout} stderr=${packetResult.stderr}`);
+    if (mock.requests.length !== packetRequestsBefore) throw new Error("crypto customer-packet should not call the Matterhorn server");
+    const packetMarkdown = readFileSync(customerPacketMarkdownPath, "utf8");
+    const packetJson = JSON.parse(readFileSync(customerPacketJsonPath, "utf8"));
+    if (!/READY_FOR_TEST_CUSTOMER_QA/.test(packetMarkdown)) throw new Error("expected customer packet markdown to be ready");
+    if (packetJson.ready !== true) throw new Error("expected customer packet JSON ready=true");
+    if (packetJson.marketEvidence?.ready !== true) throw new Error("expected customer packet market evidence ready=true");
+    if (packetJson.bittensorEvidence?.ready !== true) throw new Error("expected customer packet Bittensor evidence ready=true");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(packetMarkdown)) {
+      throw new Error("customer packet leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto customer-packet CLI is offline and non-custodial");
+
     // 11. The public market receipt checker is available through the crypto CLI
     // and stays offline.
     const receiptRequestsBefore = mock.requests.length;
