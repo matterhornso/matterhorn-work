@@ -36,11 +36,13 @@ const config = {
   customerReadySmoke: arg("--customer-ready-smoke"),
   officialSdkValidation: arg("--official-sdk-validation"),
   operatorSummary: arg("--operator-summary"),
+  sdkManifestCheck: arg("--sdk-manifest-check"),
   receiptCheck: arg("--receipt-check"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireOfficialSdkValidated: flag("--require-official-sdk-validated"),
+  requireSdkManifestCheck: flag("--require-sdk-manifest-check"),
   requireReceiptCheck: flag("--require-receipt-check"),
   title: arg("--title") || "Matterhorn Work Market Customer Evidence Bundle",
 };
@@ -54,8 +56,10 @@ function usage() {
     "  --customer-ready-smoke <path>       JSON from scripts/customer-ready-crypto-smoke.mjs.",
     "  --official-sdk-validation <path>    JSON from scripts/market-official-sdk-validation-evidence.mjs --sample/--evidence-file --json, or the raw evidence object.",
     "  --operator-summary <path>           Optional Markdown summary from matterhorn-work crypto sdk-loop.",
+    "  --sdk-manifest-check <path>         Optional JSON from matterhorn-work crypto sdk-manifest-check.",
     "  --receipt-check <path>              Optional JSON from matterhorn-work crypto receipt-check.",
     "  --require-official-sdk-validated    Require every venue status to be validated, not pending.",
+    "  --require-sdk-manifest-check        Require SDK run manifest-check evidence to be accepted.",
     "  --require-receipt-check             Require public receipt-check evidence to be accepted and tied to the handoff.",
     "  --output, -o <path>                 Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>                Write machine-readable summary JSON.",
@@ -247,6 +251,53 @@ function summarizeReceiptCheck(path, raw, requireReceiptCheck) {
   };
 }
 
+function summarizeSdkManifestCheck(path, raw, requireSdkManifestCheck) {
+  if (!path || raw === null) {
+    return {
+      present: false,
+      path: null,
+      file: null,
+      ready: !requireSdkManifestCheck,
+      ok: false,
+      status: null,
+      fileCount: 0,
+      venueCount: 0,
+      warnings: requireSdkManifestCheck ? ["SDK run manifest-check evidence is required but not attached."] : [],
+      errors: requireSdkManifestCheck ? ["SDK run manifest-check evidence is required but missing."] : [],
+    };
+  }
+
+  const errors = [];
+  const warnings = [];
+  if (raw.ok !== true) errors.push("SDK run manifest-check evidence was not accepted.");
+  if (raw.safety?.nonCustodial !== true) errors.push("SDK run manifest-check evidence must keep nonCustodial=true.");
+  if (raw.safety?.liveSubmissionEnabled !== false) errors.push("SDK run manifest-check evidence must keep liveSubmissionEnabled=false.");
+  if (raw.safety?.signsOrSubmits !== false) errors.push("SDK run manifest-check evidence must keep signsOrSubmits=false.");
+  if (raw.safety?.acceptsSecrets !== false) errors.push("SDK run manifest-check evidence must keep acceptsSecrets=false.");
+  if (raw.manifest?.version !== "matterhorn.market.sdk.run-manifest.v1") {
+    errors.push("SDK run manifest-check evidence does not use matterhorn.market.sdk.run-manifest.v1.");
+  }
+  const fileCount = Number(raw.manifest?.fileCount ?? (Array.isArray(raw.files) ? raw.files.length : 0));
+  const venueCount = Number(raw.manifest?.venueCount ?? 0);
+  if (!Number.isFinite(fileCount) || fileCount <= 0) errors.push("SDK run manifest-check evidence must include at least one hashed file.");
+  if (!Number.isFinite(venueCount) || venueCount <= 0) warnings.push("SDK run manifest-check evidence does not list venue status.");
+  if (Array.isArray(raw.errors)) errors.push(...raw.errors.map((item) => String(item)));
+  if (Array.isArray(raw.warnings)) warnings.push(...raw.warnings.map((item) => String(item)));
+
+  return {
+    present: true,
+    path,
+    file: basename(path),
+    ready: raw.ok === true && errors.length === 0,
+    ok: raw.ok === true,
+    status: raw.manifest?.status ?? null,
+    fileCount: Number.isFinite(fileCount) ? fileCount : 0,
+    venueCount: Number.isFinite(venueCount) ? venueCount : 0,
+    warnings: [...new Set(warnings)],
+    errors: [...new Set(errors)],
+  };
+}
+
 function markdownBullet(text) {
   return `- ${String(text || "").replace(/\n/g, " ").trim()}`;
 }
@@ -289,6 +340,24 @@ function renderMarkdown(summary) {
     "| --- | --- | --- | --- | --- |",
     ...sdk.statuses.map((item) =>
       `| ${item.venue} | ${item.status} | ${item.officialClient} | ${item.packageVersion ?? "pending"} | ${item.validatedAt ?? "pending"} |`),
+    "",
+    "## SDK Run Manifest Evidence",
+    "",
+    summary.sdkManifestCheck.present
+      ? markdownBullet(`Attached: yes (${summary.sdkManifestCheck.file})`)
+      : "- Not attached.",
+    summary.sdkManifestCheck.present
+      ? markdownBullet(`Accepted by manifest checker: ${summary.sdkManifestCheck.ok ? "yes" : "no"}`)
+      : "",
+    summary.sdkManifestCheck.present && summary.sdkManifestCheck.status
+      ? markdownBullet(`Status: ${summary.sdkManifestCheck.status}`)
+      : "",
+    summary.sdkManifestCheck.present
+      ? markdownBullet(`Hashed files: ${summary.sdkManifestCheck.fileCount}`)
+      : "",
+    summary.sdkManifestCheck.present
+      ? markdownBullet(`Venue statuses: ${summary.sdkManifestCheck.venueCount}`)
+      : "",
     "",
     "## Public Receipt Evidence",
     "",
@@ -350,6 +419,7 @@ function renderMarkdown(summary) {
 export async function buildMarketCustomerEvidenceBundle(config) {
   const smokeRaw = await readJson(config.customerReadySmoke, "customer-ready crypto smoke");
   const officialRaw = await readJson(config.officialSdkValidation, "official SDK validation evidence");
+  const sdkManifestCheckRaw = await readJson(config.sdkManifestCheck, "SDK run manifest-check evidence");
   const receiptCheckRaw = await readJson(config.receiptCheck, "market receipt-check evidence");
   const operatorSummaryRaw = await readPublicText(config.operatorSummary, "operator summary");
   if (!officialRaw) throw new Error("Missing --official-sdk-validation evidence JSON.");
@@ -365,29 +435,34 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     path: config.customerReadySmoke,
   };
   const officialSdkValidation = summarizeOfficialSdk(officialRaw, config.requireOfficialSdkValidated);
+  const sdkManifestCheck = summarizeSdkManifestCheck(config.sdkManifestCheck, sdkManifestCheckRaw, config.requireSdkManifestCheck);
   const receiptCheck = summarizeReceiptCheck(config.receiptCheck, receiptCheckRaw, config.requireReceiptCheck);
   const operatorSummary = summarizeOperatorSummary(config.operatorSummary, operatorSummaryRaw);
   const warnings = [
     ...(customerReadySmoke.present && !customerReadySmoke.ready ? ["Customer-ready crypto smoke is not ready."] : []),
     ...officialSdkValidation.warnings,
+    ...sdkManifestCheck.warnings,
     ...receiptCheck.warnings,
     ...operatorSummary.warnings,
   ];
   const errors = [
     ...officialSdkValidation.validation.errors,
+    ...sdkManifestCheck.errors,
     ...receiptCheck.errors,
     ...customerReadySmoke.requiredStages
       .filter((stage) => stage.status !== "pass")
       .map((stage) => `Customer-ready crypto smoke required stage did not pass: ${stage.id} (${stage.status})`),
     ...(config.requireOfficialSdkValidated && !officialSdkValidation.allValidated ? ["Official SDK evidence is not fully validated for every venue."] : []),
   ];
-  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && receiptCheck.ready && errors.length === 0;
+  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && sdkManifestCheck.ready && receiptCheck.ready && errors.length === 0;
   const summary = {
     title: config.title,
     ready,
     customerReadySmoke,
     officialSdkValidationPath: config.officialSdkValidation,
     officialSdkValidation,
+    sdkManifestCheckPath: config.sdkManifestCheck,
+    sdkManifestCheck,
     receiptCheckPath: config.receiptCheck,
     receiptCheck,
     operatorSummary,

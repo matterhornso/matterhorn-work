@@ -16,6 +16,7 @@ try {
   const official = path.join(tmp, "official-sdk-evidence.json");
   const officialWrapped = path.join(tmp, "official-sdk-evidence-wrapped.json");
   const operatorSummary = path.join(tmp, "matterhorn-market-sdk-operator-summary.md");
+  const sdkManifestCheck = path.join(tmp, "market-sdk-manifest-check.json");
   const receiptCheck = path.join(tmp, "market-receipt-check.json");
   const markdownOutput = path.join(tmp, "market-evidence.md");
   const jsonOutput = path.join(tmp, "market-evidence.json");
@@ -51,6 +52,29 @@ try {
     "| Signs or submits | false |",
     "",
   ].join("\n"));
+  await writeFile(sdkManifestCheck, JSON.stringify({
+    ok: true,
+    ready: true,
+    manifest: {
+      version: "matterhorn.market.sdk.run-manifest.v1",
+      status: "READY_FOR_TEST_CUSTOMER_QA",
+      ready: true,
+      ok: true,
+      venueCount: 2,
+      fileCount: 4,
+    },
+    files: [
+      { label: "officialSdkEvidence", shaMatches: true, bytesMatch: true },
+    ],
+    errors: [],
+    warnings: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
   await writeFile(receiptCheck, JSON.stringify({
     ok: true,
     matchesHandoff: true,
@@ -83,6 +107,8 @@ try {
     official,
     "--operator-summary",
     operatorSummary,
+    "--sdk-manifest-check",
+    sdkManifestCheck,
     "--receipt-check",
     receiptCheck,
     "--output",
@@ -99,6 +125,9 @@ try {
   assert.match(markdown, /@polymarket\/clob-client-v2/);
   assert.match(markdown, /pending_official_client_validation/);
   assert.match(markdown, /Operator Summary/);
+  assert.match(markdown, /SDK Run Manifest Evidence/);
+  assert.match(markdown, /Accepted by manifest checker: yes/);
+  assert.match(markdown, /Hashed files: 4/);
   assert.match(markdown, /Public Receipt Evidence/);
   assert.match(markdown, /Accepted by receipt checker: yes/);
   assert.match(markdown, /Matches original handoff: yes/);
@@ -120,6 +149,10 @@ try {
   assert.equal(summary.operatorSummary.present, true);
   assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");
   assert.match(summary.operatorSummary.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(summary.sdkManifestCheck.present, true);
+  assert.equal(summary.sdkManifestCheck.ready, true);
+  assert.equal(summary.sdkManifestCheck.fileCount, 4);
+  assert.equal(summary.sdkManifestCheck.venueCount, 2);
   assert.equal(summary.receiptCheck.present, true);
   assert.equal(summary.receiptCheck.ready, true);
   assert.equal(summary.receiptCheck.venue, "hyperliquid");
@@ -150,6 +183,61 @@ try {
   }
   assert.ok(requireValidatedError, "require-official-sdk-validated should fail for pending sample evidence");
   assert.match(String(requireValidatedError.stdout), /Official SDK evidence is not fully validated/i);
+
+  let missingManifestError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--require-sdk-manifest-check",
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    missingManifestError = error;
+  }
+  assert.ok(missingManifestError, "require-sdk-manifest-check should fail when manifest-check evidence is missing");
+  assert.match(String(missingManifestError.stdout), /SDK run manifest-check evidence is required/i);
+
+  const failedManifestCheck = path.join(tmp, "failed-market-sdk-manifest-check.json");
+  await writeFile(failedManifestCheck, JSON.stringify({
+    ok: false,
+    ready: false,
+    manifest: {
+      version: "matterhorn.market.sdk.run-manifest.v1",
+      status: "NOT_READY",
+      fileCount: 1,
+      venueCount: 2,
+    },
+    errors: ["Manifest file officialSdkEvidence SHA-256 mismatch."],
+    warnings: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
+  let failedManifestError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--sdk-manifest-check",
+        failedManifestCheck,
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    failedManifestError = error;
+  }
+  assert.ok(failedManifestError, "strict bundle should fail rejected SDK manifest-check evidence");
+  assert.match(String(failedManifestError.stdout), /SDK run manifest-check evidence was not accepted/i);
+  assert.match(String(failedManifestError.stdout), /SHA-256 mismatch/i);
 
   let missingReceiptError = null;
   try {
@@ -239,6 +327,38 @@ try {
         badSummary,
       ], { cwd: repoRoot, stdio: "pipe" }),
     /forbidden secret-shaped content/i,
+  );
+
+  const badManifestCheck = path.join(tmp, "bad-market-sdk-manifest-check.json");
+  await writeFile(badManifestCheck, JSON.stringify({
+    ok: true,
+    ready: true,
+    manifest: {
+      version: "matterhorn.market.sdk.run-manifest.v1",
+      status: "READY_FOR_TEST_CUSTOMER_QA",
+      fileCount: 1,
+      venueCount: 1,
+    },
+    privateKey: "never",
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+  }));
+  assert.throws(
+    () =>
+      execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--sdk-manifest-check",
+        badManifestCheck,
+      ], { cwd: repoRoot, stdio: "pipe" }),
+    /forbidden secret-shaped field/i,
   );
 
   const badReceipt = path.join(tmp, "bad-market-receipt-check.json");

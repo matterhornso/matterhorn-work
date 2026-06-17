@@ -312,7 +312,7 @@ matterhorn-work crypto sdk-manifest-check --manifest /tmp/matterhorn-market-sdk-
 matterhorn-work crypto sdk-evidence --sample --json
 matterhorn-work crypto sdk-evidence --evidence-file <path> --json
 matterhorn-work crypto sdk-capture --self-test --json
-matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --output <bundle.md> --json-output <bundle.json>
+matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --sdk-manifest-check <manifest-check.json> --require-sdk-manifest-check --output <bundle.md> --json-output <bundle.json>
 ```
 
 This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn.

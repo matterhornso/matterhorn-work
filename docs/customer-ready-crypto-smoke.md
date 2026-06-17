@@ -164,10 +164,17 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 # Use --require-receipt-check below only when this receipt evidence is part of
 # the customer claim for the demo.
 
+matterhorn-work crypto sdk-manifest-check \
+  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --output /tmp/matterhorn-market-sdk-manifest-check.json \
+  --strict --json
+
 matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --sdk-manifest-check /tmp/matterhorn-market-sdk-manifest-check.json \
+  --require-sdk-manifest-check \
   --output /tmp/matterhorn-market-customer-evidence.md \
   --json-output /tmp/matterhorn-market-customer-evidence.json \
   --strict
@@ -182,15 +189,9 @@ first, then `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.
 then the bundled customer evidence Markdown. The summary is the short
 human-readable receipt for the SDK validation loop; the manifest is the
 machine-readable index of public output files, SHA-256 hashes, venue validation
-status, and safety flags.
-
-Validate the manifest with:
-
-```bash
-matterhorn-work crypto sdk-manifest-check \
-  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
-  --strict --json
-```
+status, and safety flags. The evidence bundle should include the
+`sdk-manifest-check` JSON whenever the SDK run manifest is part of the customer
+claim.
 
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
