@@ -173,8 +173,10 @@ function extractSource(card: unknown): unknown | null {
   const record = cardRecord(card);
   if (!record) return null;
   if (isRecord(record.source)) return record.source;
+  if (typeof record.source === "string") return { source: record.source };
   for (const value of Object.values(record)) {
     if (isRecord(value) && isRecord(value.source)) return value.source;
+    if (isRecord(value) && typeof value.source === "string") return { source: value.source };
   }
   return null;
 }
@@ -271,7 +273,7 @@ export function buildUnifiedCryptoSharedCards(
   return cards.map((card) => {
     const originalKind = cardKind(card);
     const kind = sharedKindFor(originalKind);
-    const warnings = [...inheritedWarnings, ...cardWarnings(card)];
+    const warnings = Array.from(new Set([...inheritedWarnings, ...cardWarnings(card)]));
     const title = cardTitle(card, kind.replace(/_/g, " "));
     return {
       kind,
@@ -417,6 +419,20 @@ function fromHyperliquid(input: UnifiedCryptoChatInput, route: UnifiedCryptoRout
 }
 
 function fromPolymarket(input: UnifiedCryptoChatInput, route: UnifiedCryptoRoutePlan, result: PolymarketChatExecutionResult): UnifiedCryptoChatResult {
+  const sharedCards = buildUnifiedCryptoSharedCards("polymarket", result.execution, result.cards, result.warnings);
+  if (result.preview && !sharedCards.some((card) => card.kind === "action_preview")) {
+    sharedCards.push(...buildUnifiedCryptoSharedCards(
+      "polymarket",
+      result.execution,
+      [{
+        kind: "polymarket_order_preview",
+        title: result.execution === "blocked_by_compliance" ? "Polymarket blocked preview" : "Polymarket order preview",
+        preview: result.preview,
+        warnings: result.preview.warnings,
+      }],
+      result.warnings,
+    ));
+  }
   return {
     venue: "polymarket",
     requestedVenue: normalizeVenue(input.venue),
@@ -424,7 +440,7 @@ function fromPolymarket(input: UnifiedCryptoChatInput, route: UnifiedCryptoRoute
     execution: result.execution,
     responseText: result.responseText,
     cards: result.cards,
-    sharedCards: buildUnifiedCryptoSharedCards("polymarket", result.execution, result.cards, result.warnings),
+    sharedCards,
     data: result.data ?? {},
     preview: result.preview,
     compliance: result.compliance,
