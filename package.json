@@ -85,7 +85,8 @@
     "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts",
     "test:market-official-sdk-validation-track": "node scripts/market-official-sdk-validation-track.test.mjs",
     "test:agent-crypto-operator-loop": "node scripts/agent-crypto-operator-loop.test.mjs",
-    "test:hermes-crypto-customer-qa": "node scripts/hermes-crypto-customer-qa.test.mjs"
+    "test:hermes-crypto-customer-qa": "node scripts/hermes-crypto-customer-qa.test.mjs",
+    "test:customer-crypto-ci-workflow": "node scripts/customer-crypto-ci-workflow.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
