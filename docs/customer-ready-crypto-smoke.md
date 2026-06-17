@@ -145,7 +145,7 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 #   --venue polymarket \
 #   --input /tmp/operator-polymarket-official-client-public.json \
 #   --output /tmp/polymarket-official-normalized-typed-data.json
-# node scripts/market-official-sdk-validation-capture.mjs \
+# matterhorn-work crypto sdk-capture \
 #   --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
 #   --hyperliquid-package-version <version> \
 #   --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
