@@ -8,8 +8,12 @@ const FORBIDDEN_ROUTE_RE = /\/orders\/(submit|sign)|\/exchange\/submit/i;
 const FORBIDDEN_SECRET_RE = /(seed phrase|private key|api secret|raw signature|signed payload|wallet export)/i;
 
 const offlineStages = [
+  ["crypto.unified_chat", "Unified crypto chat router", ["pnpm", "test:unified-crypto-chat"]],
+  ["crypto.agent_operator_loop", "Crypto agent operator loop", ["pnpm", "test:agent-crypto-operator-loop"]],
+  ["crypto.hermes_customer_qa", "Hermes crypto customer QA handoff", ["pnpm", "test:hermes-crypto-customer-qa"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
+  ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
   ["market.receipt_qa", "Market public receipt QA", ["pnpm", "test:market-receipt-qa"]],
   ["market.receipt_evidence", "Market receipt evidence docs/checks", ["pnpm", "test:market-receipt-evidence"]],
   ["hyperliquid.readiness", "Hyperliquid readiness gate", ["pnpm", "test:hyperliquid-readiness-gate"]],

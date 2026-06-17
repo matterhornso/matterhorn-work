@@ -32,8 +32,12 @@ assert.equal(report.safety.asksForSecrets, false);
 
 const stageIds = report.stages.map((stage) => stage.id);
 for (const id of [
+  "crypto.unified_chat",
+  "crypto.agent_operator_loop",
+  "crypto.hermes_customer_qa",
   "market.safety_contract",
   "market.execution_safety",
+  "market.official_sdk_validation",
   "market.receipt_qa",
   "market.receipt_evidence",
   "hyperliquid.readiness",
@@ -59,7 +63,11 @@ for (const banned of ["/orders/submit", "/orders/sign", "/exchange/submit"]) {
   assert.ok(!commandText.includes(banned), `smoke command must not reference ${banned}`);
 }
 for (const required of [
+  "pnpm test:unified-crypto-chat",
+  "pnpm test:agent-crypto-operator-loop",
+  "pnpm test:hermes-crypto-customer-qa",
   "pnpm test:market-execution-safety-gate",
+  "pnpm test:market-official-sdk-validation-track",
   "pnpm test:hyperliquid-read-preview-qa",
   "pnpm test:polymarket-read-preview-qa",
   "pnpm test:bittensor-customer-readiness-gate",
