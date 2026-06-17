@@ -120,7 +120,7 @@ execution.
 ```bash
 matterhorn-work crypto customer-smoke --offline --strict \
   --json-output /tmp/matterhorn-crypto-smoke.json
-node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
+matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk-evidence.json
 
 # Optional when an operator has redacted official-client output:
 # MARKET_OFFICIAL_SDK_VALIDATION_MODE=operator_owned_testnet \
