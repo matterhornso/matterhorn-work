@@ -67,7 +67,8 @@ Pass criteria:
 Use the public Matterhorn CLI path for the official SDK/customer evidence loop:
 
 ```bash
-matterhorn-work crypto customer-smoke --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
+matterhorn-work crypto customer-smoke --offline --strict \
+  --json-output /tmp/matterhorn-crypto-smoke.json
 
 matterhorn-work crypto sdk-loop \
   --fixture \

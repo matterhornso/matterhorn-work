@@ -164,7 +164,29 @@ async function main() {
     if (mock.requests.length !== requestsBefore) throw new Error("secret-flag request reached the server; rejection must happen client-side first");
     console.log("PASS crypto secret flag rejection (no server call)");
 
-    // 4. The official SDK operator loop is exposed through the public CLI without
+    // 4. The consolidated customer-ready smoke is exposed through the public CLI
+    // and can write JSON evidence without shell redirection.
+    const customerSmokeRequestsBefore = mock.requests.length;
+    const customerSmokeDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-customer-smoke-cli-"));
+    const customerSmokeJson = join(customerSmokeDir, "smoke.json");
+    await expectCli(
+      "crypto customer-smoke dry-run",
+      mock.url,
+      ["crypto", "customer-smoke", "--dry-run", "--json-output", customerSmokeJson],
+      (payload) => {
+        if (payload.ready !== true) throw new Error(`expected customer smoke ready=true, got ${payload.ready}`);
+        if (payload.dryRun !== true) throw new Error("expected customer smoke dryRun=true");
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected customer smoke liveSubmissionEnabled=false");
+      },
+    );
+    if (mock.requests.length !== customerSmokeRequestsBefore) throw new Error("crypto customer-smoke should not call the Matterhorn server");
+    const customerSmokeFile = JSON.parse(readFileSync(customerSmokeJson, "utf8"));
+    if (customerSmokeFile.ready !== true || customerSmokeFile.safety?.nonCustodial !== true) {
+      throw new Error("expected customer-smoke --json-output file to contain a ready non-custodial report");
+    }
+    console.log("PASS crypto customer-smoke CLI writes offline JSON evidence");
+
+    // 5. The official SDK operator loop is exposed through the public CLI without
     // requiring a Matterhorn server or forwarding auth tokens/secrets.
     const sdkRequestsBefore = mock.requests.length;
     const sdkOutputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-sdk-loop-cli-"));
@@ -189,7 +211,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
-    // 5. The customer evidence bundle is also available through the public
+    // 6. The customer evidence bundle is also available through the public
     // crypto CLI and stays offline.
     const bundleRequestsBefore = mock.requests.length;
     const smokePath = join(sdkOutputDir, "customer-ready-smoke.json");
@@ -238,7 +260,7 @@ async function main() {
     }
     console.log("PASS crypto evidence-bundle CLI is offline and non-custodial");
 
-    // 6. No request touched a submit/sign/exchange route.
+    // 7. No request touched a submit/sign/exchange route.
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
       if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);

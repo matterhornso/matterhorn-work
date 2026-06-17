@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { writeFile } from "node:fs/promises";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
@@ -53,6 +54,7 @@ function parseArgs(argv) {
     dryRun: args.includes("--dry-run"),
     strict: args.includes("--strict"),
     json: args.includes("--json"),
+    jsonOutput: arg("--json-output"),
     help: args.includes("--help") || args.includes("-h"),
     serverUrl: arg("--server-url", process.env.MATTERHORN_WORK_SERVER_URL || ""),
     token: arg("--token", process.env.MATTERHORN_WORK_TOKEN || ""),
@@ -66,6 +68,7 @@ function printHelp() {
     "",
     "Usage:",
     "  node scripts/customer-ready-crypto-smoke.mjs --dry-run --json",
+    "  node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json-output /tmp/matterhorn-crypto-smoke.json",
     "  node scripts/customer-ready-crypto-smoke.mjs --offline --strict",
     "  node scripts/customer-ready-crypto-smoke.mjs --offline --include-live-server --server-url <url> --token <token> --strict --json",
     "",
@@ -248,6 +251,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   }
   const report = await runCustomerReadyCryptoSmoke(config);
+  if (config.jsonOutput) await writeFile(config.jsonOutput, `${JSON.stringify(report, null, 2)}\n`);
   if (config.json) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   else printHuman(report);
   process.exit(config.strict && !report.ready ? 1 : 0);
