@@ -17,6 +17,8 @@ For the fastest customer-readiness pass, start with the consolidated smoke runne
 pnpm smoke:customer-ready-crypto
 ```
 
+For a single black-box handoff that Hermes can follow from checkout through final report, use [Hermes Crypto Customer QA Pass](./handoffs/hermes-crypto-customer-qa.md).
+
 Use `docs/customer-ready-crypto-smoke.md` for dry-run, JSON, and local-server options. The rest of this runbook remains the expanded manual checklist when a tester needs per-surface evidence.
 
 Run these first from the repository root:
