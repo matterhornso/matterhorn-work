@@ -1,6 +1,7 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { buildMarketCustomerEvidenceBundle } from "./market-customer-evidence-bundle.mjs";
 import { buildCapturedEvidence } from "./market-official-sdk-validation-capture.mjs";
 import { runOfficialSdkValidationDoctor } from "./market-official-sdk-validation-doctor.mjs";
@@ -132,6 +133,60 @@ function buildOperatorSummary({ outputDir, doctor, captured, customerBundle, fil
   ].join("\n");
 }
 
+function fileManifestEntry(path) {
+  const bytes = readFileSync(path);
+  return {
+    file: basename(path),
+    path,
+    bytes: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
+function buildRunManifest({ outputDir, doctor, captured, customerBundle, files, ready, ok, errors, warnings }) {
+  const venues = Array.isArray(captured?.evidence?.venues) ? captured.evidence.venues : [];
+  const fileEntries = Object.fromEntries(
+    Object.entries(files)
+      .filter(([label]) => label !== "runManifest")
+      .map(([label, file]) => [label, fileManifestEntry(file)]),
+  );
+  return {
+    version: "matterhorn.market.sdk.run-manifest.v1",
+    generatedAt: new Date().toISOString(),
+    status: ready ? "READY_FOR_TEST_CUSTOMER_QA" : ok ? "OK_WITH_WARNINGS" : "NOT_READY",
+    outputDir,
+    ready,
+    ok,
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+    },
+    checks: {
+      doctorReady: doctor?.ready === true,
+      officialSdkEvidenceOk: captured?.ok === true,
+      customerEvidenceReady: customerBundle ? customerBundle.summary.ready === true : null,
+    },
+    venues: venues.map((venue) => ({
+      venue: String(venue.venue || "unknown"),
+      status: String(venue.status || "unknown"),
+      officialClient: String(venue.officialClient?.name || "unknown"),
+      packageVersion: venue.officialClient?.packageVersion ?? null,
+      network: venue.network ?? null,
+      validatedAt: venue.validation?.validatedAt ?? null,
+    })),
+    files: fileEntries,
+    warnings,
+    errors,
+    redLines: [
+      "Do not treat this manifest as authorization for live submission.",
+      "Do not attach seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+      "Do not add Hyperliquid or Polymarket submit/sign/exchange routes.",
+    ],
+  };
+}
+
 export async function runMarketOfficialSdkOperatorLoop(config) {
   const outputDir = resolve(config.outputDir || "/tmp/matterhorn-market-sdk-operator-loop");
   mkdirSync(outputDir, { recursive: true });
@@ -201,7 +256,9 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
   const ok = captured.ok && (!customerBundle || customerBundle.summary.ready);
   const ready = captured.ok && doctor.ready && (!customerBundle || customerBundle.summary.ready);
   const summaryPath = join(outputDir, "matterhorn-market-sdk-operator-summary.md");
+  const runManifestPath = join(outputDir, "matterhorn-market-sdk-run-manifest.json");
   files.operatorSummaryMarkdown = summaryPath;
+  files.runManifest = runManifestPath;
   writeFileSync(summaryPath, buildOperatorSummary({
     outputDir,
     doctor,
@@ -225,6 +282,17 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
     writeFileSync(customerEvidenceMarkdownPath, customerBundle.markdown);
     writeFileSync(customerEvidenceJsonPath, `${JSON.stringify(customerBundle.summary, null, 2)}\n`);
   }
+  writeFileSync(runManifestPath, `${JSON.stringify(buildRunManifest({
+    outputDir,
+    doctor,
+    captured,
+    customerBundle,
+    files,
+    ready,
+    ok,
+    errors,
+    warnings,
+  }), null, 2)}\n`);
 
   return {
     ok,

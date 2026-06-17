@@ -44,6 +44,7 @@ assert.ok(direct.files.officialSdkEvidence);
 assert.ok(direct.files.customerEvidenceMarkdown);
 assert.ok(direct.files.customerEvidenceJson);
 assert.ok(direct.files.operatorSummaryMarkdown);
+assert.ok(direct.files.runManifest);
 const markdown = await readFile(direct.files.customerEvidenceMarkdown, "utf8");
 assert.match(markdown, /READY_FOR_TEST_CUSTOMER_QA/);
 assert.match(markdown, /Operator Summary/);
@@ -56,6 +57,19 @@ assert.match(summary, /Live submission enabled \| false/);
 assert.match(summary, /hyperliquid/);
 assert.match(summary, /polymarket/);
 assert.equal(/privateKey|mnemonic|signedPayload|walletExport/i.test(summary), false);
+const manifest = JSON.parse(await readFile(direct.files.runManifest, "utf8"));
+assert.equal(manifest.version, "matterhorn.market.sdk.run-manifest.v1");
+assert.equal(manifest.ready, true);
+assert.equal(manifest.safety.nonCustodial, true);
+assert.equal(manifest.safety.liveSubmissionEnabled, false);
+assert.equal(manifest.safety.signsOrSubmits, false);
+assert.equal(manifest.safety.acceptsSecrets, false);
+assert.equal(manifest.files.officialSdkEvidence.file, "matterhorn-market-sdk-evidence.json");
+assert.match(manifest.files.officialSdkEvidence.sha256, /^[a-f0-9]{64}$/);
+assert.equal(manifest.files.runManifest, undefined);
+assert.equal(manifest.venues.some((venue) => venue.venue === "hyperliquid"), true);
+assert.equal(manifest.venues.some((venue) => venue.venue === "polymarket"), true);
+assert.equal(JSON.stringify(manifest).includes("privateKey"), false);
 
 const cliOutputDir = join(tmp, "cli");
 const cli = spawnSync("node", [
@@ -73,6 +87,7 @@ const parsed = JSON.parse(cli.stdout);
 assert.equal(parsed.ready, true);
 assert.equal(parsed.files.officialSdkEvidence.endsWith("matterhorn-market-sdk-evidence.json"), true);
 assert.equal(parsed.files.operatorSummaryMarkdown.endsWith("matterhorn-market-sdk-operator-summary.md"), true);
+assert.equal(parsed.files.runManifest.endsWith("matterhorn-market-sdk-run-manifest.json"), true);
 assert.equal(JSON.stringify(parsed).includes("privateKey"), false);
 
 const unsafe = await runMarketOfficialSdkOperatorLoop({

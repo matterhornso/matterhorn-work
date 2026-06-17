@@ -178,9 +178,11 @@ matterhorn-work crypto evidence-bundle \
 ```
 
 Give reviewers `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md`
-first, then the bundled customer evidence Markdown. The summary is the short
-human-readable receipt for the SDK validation loop and links to the raw JSON
-evidence files.
+first, then `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`,
+then the bundled customer evidence Markdown. The summary is the short
+human-readable receipt for the SDK validation loop; the manifest is the
+machine-readable index of public output files, SHA-256 hashes, venue validation
+status, and safety flags.
 
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
