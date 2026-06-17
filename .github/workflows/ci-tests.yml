@@ -158,3 +158,13 @@ jobs:
 
       - name: Run customer crypto smoke
         run: pnpm smoke:customer-ready-crypto
+
+      - name: Write customer crypto smoke evidence
+        run: node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json-output /tmp/matterhorn-crypto-smoke.json
+
+      - name: Upload customer crypto smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: matterhorn-crypto-smoke
+          path: /tmp/matterhorn-crypto-smoke.json
+          if-no-files-found: error
