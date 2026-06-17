@@ -54,6 +54,11 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-capture"] === "no
 } else {
   fail("package.json exposes test:market-official-sdk-validation-capture");
 }
+if (packageJson.scripts?.["test:market-official-sdk-validation-doctor"] === "node scripts/market-official-sdk-validation-doctor.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-validation-doctor");
+} else {
+  fail("package.json exposes test:market-official-sdk-validation-doctor");
+}
 if (packageJson.scripts?.["test:market-official-sdk-normalize"] === "node scripts/market-official-sdk-normalize.test.mjs") {
   pass("package.json exposes test:market-official-sdk-normalize");
 } else {
@@ -81,9 +86,11 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid artifacts must be public order",
   "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
+  "node scripts/market-official-sdk-validation-doctor.mjs",
   "node scripts/market-official-sdk-normalize.mjs",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
   "node scripts/market-official-sdk-validation-capture.mjs",
+  "pnpm test:market-official-sdk-validation-doctor",
   "pnpm test:market-official-sdk-normalize",
   "pnpm test:market-official-sdk-validation-fixtures",
 ]);
@@ -130,6 +137,26 @@ if (captureSelfTest.status === 0) {
   pass("official SDK evidence capture self-test passes");
 } else {
   fail("official SDK evidence capture self-test passes", captureSelfTest.stderr || captureSelfTest.stdout || "unknown error");
+}
+
+mustContain("scripts/market-official-sdk-validation-doctor.mjs", [
+  "runOfficialSdkValidationDoctor",
+  "FORBIDDEN_MARKET_SDK_ENV_KEY_RE",
+  "MARKET_OFFICIAL_SDK_VALIDATION_MODE",
+  "HYPERLIQUID_VALIDATION_NETWORK",
+  "POLYMARKET_EXCHANGE_ADDRESS",
+  "liveSubmissionEnabled: false",
+  "acceptsSecrets: false",
+  "printsSecretValues: false",
+]);
+const doctorSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-doctor.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (doctorSelfTest.status === 0) {
+  pass("official SDK validation doctor test passes");
+} else {
+  fail("official SDK validation doctor test passes", doctorSelfTest.stderr || doctorSelfTest.stdout || "unknown error");
 }
 
 mustContain("scripts/market-official-sdk-normalize.mjs", [

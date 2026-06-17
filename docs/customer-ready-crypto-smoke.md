@@ -46,6 +46,7 @@ pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
@@ -112,6 +113,14 @@ node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/ma
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
 
 # Optional when an operator has redacted official-client output:
+# MARKET_OFFICIAL_SDK_VALIDATION_MODE=operator_owned_testnet \
+# HYPERLIQUID_VALIDATION_NETWORK=hyperliquid-testnet \
+# HYPERLIQUID_OFFICIAL_SDK_PACKAGE_VERSION=<hyperliquid-python-sdk-version> \
+# POLYMARKET_VALIDATION_NETWORK=polygon-amoy \
+# POLYMARKET_CHAIN_ID=80002 \
+# POLYMARKET_EXCHANGE_ADDRESS=<public-amoy-exchange-address> \
+# POLYMARKET_OFFICIAL_SDK_PACKAGE_VERSION=<clob-client-version> \
+# node scripts/market-official-sdk-validation-doctor.mjs --strict --json
 # node scripts/market-official-sdk-normalize.mjs \
 #   --venue hyperliquid \
 #   --input /tmp/operator-hyperliquid-official-client-public.json \

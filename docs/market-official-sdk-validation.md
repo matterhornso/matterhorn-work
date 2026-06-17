@@ -134,6 +134,39 @@ such as raw signatures, private keys, API secrets, signed payloads, and wallet
 exports. It does not execute official SDK code, sign orders, submit orders, or
 authorize live execution.
 
+## Validation Doctor
+
+Before running official SDK clients or importing captured artifacts, run the
+doctor against the operator environment:
+
+```bash
+export MARKET_OFFICIAL_SDK_VALIDATION_MODE=operator_owned_testnet
+export HYPERLIQUID_VALIDATION_NETWORK=hyperliquid-testnet
+export HYPERLIQUID_OFFICIAL_SDK_PACKAGE_VERSION=<hyperliquid-python-sdk-version>
+export POLYMARKET_VALIDATION_NETWORK=polygon-amoy
+export POLYMARKET_CHAIN_ID=80002
+export POLYMARKET_EXCHANGE_ADDRESS=<public-amoy-exchange-address>
+export POLYMARKET_OFFICIAL_SDK_PACKAGE_VERSION=<clob-client-version>
+
+node scripts/market-official-sdk-validation-doctor.mjs --strict --json
+```
+
+The doctor checks public validation metadata and rejects market-scoped
+credential-shaped environment keys such as `HYPERLIQUID_PRIVATE_KEY`,
+`POLYMARKET_API_SECRET`, wallet exports, raw signatures, and signed payloads. It
+does not print secret values, import official SDK packages, sign, submit,
+broadcast, or call remote endpoints. A strict run is considered ready only when:
+
+- validation mode is `operator_owned_testnet`, `operator_owned_fixture`, or
+  `fixture`;
+- Hyperliquid points at testnet or fixture evidence and declares the official
+  SDK package version;
+- Polymarket points at Polygon Amoy or fixture evidence, declares chain id
+  `80002`, declares the public exchange address, and declares the official CLOB
+  package version; and
+- no market-scoped credential-shaped env keys are present in the process
+  environment.
+
 ## Operator-Owned Normalization
 
 Official SDKs should run in an operator-owned throwaway environment, not inside
@@ -212,9 +245,11 @@ Run:
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-evidence
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
+node scripts/market-official-sdk-validation-doctor.mjs --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
