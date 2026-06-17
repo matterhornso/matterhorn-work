@@ -12,6 +12,7 @@ const FORBIDDEN_OPERATOR_SUMMARY_RE =
   /\b(seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action)\b/i;
 const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   ["crypto.unified_chat", "Unified crypto chat router"],
+  ["crypto.direct_prompt_safety", "Direct venue credential prompt safety"],
   ["crypto.shared_card_contract", "Unified crypto shared-card contract"],
   ["market.execution_safety", "Market execution safety gate"],
   ["market.official_sdk_validation", "Market official SDK validation track"],

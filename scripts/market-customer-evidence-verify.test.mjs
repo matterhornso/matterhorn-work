@@ -10,6 +10,7 @@ const tmp = mkdtempSync(join(tmpdir(), "matterhorn-market-evidence-verify-"));
 
 const requiredStages = [
   "crypto.unified_chat",
+  "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "market.execution_safety",
   "market.official_sdk_validation",

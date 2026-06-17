@@ -23,9 +23,10 @@ try {
 
   await writeFile(smoke, JSON.stringify({
     ready: true,
-    summary: { pass: 22, fail: 0, skip: 0 },
+    summary: { pass: 23, fail: 0, skip: 0 },
     stages: [
       { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
+      { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
       { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
       { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
       { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
@@ -144,7 +145,8 @@ try {
   assert.equal(summary.safety.liveSubmissionEnabled, false);
   assert.equal(summary.officialSdkValidation.validation.ok, true);
   assert.equal(summary.officialSdkValidation.allValidated, false);
-  assert.equal(summary.customerReadySmoke.pass, 22);
+  assert.equal(summary.customerReadySmoke.pass, 23);
+  assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.shared_card_contract")?.status, "pass");
   assert.equal(summary.operatorSummary.present, true);
   assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");

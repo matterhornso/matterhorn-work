@@ -20,8 +20,16 @@ try {
 
   await writeFile(smoke, JSON.stringify({
     ready: true,
-    summary: { pass: 31, fail: 0, skip: 0 },
-    stages: [{ id: "crypto.unified_chat", status: "pass" }],
+    summary: { pass: 37, fail: 0, skip: 0 },
+    stages: [
+      { id: "crypto.unified_chat", status: "pass" },
+      { id: "crypto.direct_prompt_safety", status: "pass" },
+      { id: "crypto.shared_card_contract", status: "pass" },
+      { id: "market.execution_safety", status: "pass" },
+      { id: "hyperliquid.readiness", status: "pass" },
+      { id: "polymarket.readiness", status: "pass" },
+      { id: "bittensor.customer_readiness", status: "pass" },
+    ],
     safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
   }));
   await writeFile(marketVerify, JSON.stringify({
@@ -72,14 +80,31 @@ try {
   assert.match(markdown, /Customer-ready crypto smoke/);
   assert.match(markdown, /Market evidence verifier/);
   assert.match(markdown, /Bittensor evidence bundle/);
-  assert.match(markdown, /31 passed, 0 failed, 0 skipped/);
+  assert.match(markdown, /37 passed, 0 failed, 0 skipped/);
   assert.doesNotMatch(markdown, new RegExp(tmp.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 
   const packet = JSON.parse(await readFile(jsonOutput, "utf8"));
   assert.equal(packet.ready, true);
-  assert.equal(packet.customerReadySmoke.pass, 31);
+  assert.equal(packet.customerReadySmoke.pass, 37);
+  assert.equal(packet.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(packet.marketEvidence.ready, true);
   assert.equal(packet.bittensorEvidence.ready, true);
+
+  const staleSmoke = path.join(tmp, "stale-smoke.json");
+  await writeFile(staleSmoke, JSON.stringify({
+    ready: true,
+    summary: { pass: 1, fail: 0, skip: 0 },
+    stages: [{ id: "crypto.unified_chat", status: "pass" }],
+    safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
+  }));
+  const stale = spawnSync("node", [
+    script,
+    "--customer-ready-smoke",
+    staleSmoke,
+    "--strict",
+  ], { encoding: "utf8" });
+  assert.notEqual(stale.status, 0, "strict packet should fail when required smoke stages are missing");
+  assert.match(`${stale.stdout}\n${stale.stderr}`, /crypto\.direct_prompt_safety \(missing\)/);
 
   const missingMarket = spawnSync("node", [
     script,
