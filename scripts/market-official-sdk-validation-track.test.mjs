@@ -91,6 +91,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid artifacts must be public order",
   "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
+  "matterhorn-work crypto sdk-loop",
   "node scripts/market-official-sdk-validation-doctor.mjs",
   "node scripts/market-official-sdk-normalize.mjs",
   "node scripts/market-official-sdk-operator-loop.mjs",
