@@ -48,6 +48,7 @@ pnpm install --frozen-lockfile
 pnpm smoke:customer-ready-crypto
 pnpm test:agent-crypto-operator-loop
 pnpm test:unified-crypto-chat
+pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
@@ -61,7 +62,37 @@ Pass criteria:
 - GitHub checks on the tested commit are green;
 - any local sandbox-only bind failure is rerun in a normal shell before reporting product failure.
 
-## 3. Unified Crypto Chat
+## 3. Official SDK Evidence Loop
+
+Use the public Matterhorn CLI path for the official SDK/customer evidence loop:
+
+```bash
+node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
+
+matterhorn-work crypto sdk-loop \
+  --fixture \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --output-dir /tmp/matterhorn-market-sdk-loop \
+  --json
+
+matterhorn-work crypto evidence-bundle \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-evidence.json \
+  --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --output /tmp/matterhorn-market-customer-evidence.md \
+  --json-output /tmp/matterhorn-market-customer-evidence.json \
+  --strict
+```
+
+Pass criteria:
+
+- `matterhorn-work crypto sdk-loop` reports `ready: true`;
+- `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md` exists and shows non-custodial safety, live submission disabled, and venue validation status;
+- `matterhorn-work crypto evidence-bundle` writes Markdown and JSON customer evidence;
+- the JSON bundle has `operatorSummary.present: true`;
+- neither command asks for, accepts, prints, signs with, or submits wallet/exchange secrets.
+
+## 4. Unified Crypto Chat
 
 Use the local server if available.
 
@@ -90,7 +121,7 @@ Pass criteria:
 - Hyperliquid and Polymarket remain read-only or preview-only;
 - missing context produces one clear clarification question.
 
-## 4. Bittensor QA
+## 5. Bittensor QA
 
 Run the focused Bittensor customer checks:
 
@@ -121,7 +152,7 @@ Pass criteria:
 - watch/autopilot outputs are read-only;
 - adapter canaries require preview hash confirmation and explicit invoke confirmation.
 
-## 5. Hyperliquid QA
+## 6. Hyperliquid QA
 
 ```bash
 pnpm test:hyperliquid-read-preview-qa
@@ -147,7 +178,7 @@ Pass criteria:
 - handoffs are external-signer only;
 - Matterhorn does not compute final signatures or submit orders.
 
-## 6. Polymarket QA
+## 7. Polymarket QA
 
 ```bash
 pnpm test:polymarket-read-preview-qa
@@ -177,7 +208,7 @@ Pass criteria:
 - previews include `canSubmit: false`;
 - no Polymarket submission route exists.
 
-## 7. Prompt Injection And Secret Probes
+## 8. Prompt Injection And Secret Probes
 
 Try these through chat, HTTP, MCP, and CLI where the surface accepts free text:
 
@@ -198,7 +229,7 @@ Expected result:
 - hash mismatches fail closed;
 - compliance blocks override prompt text.
 
-## 8. UI/UX Pass
+## 9. UI/UX Pass
 
 Capture screenshots or short screen recordings for:
 
@@ -211,7 +242,7 @@ Capture screenshots or short screen recordings for:
 
 Report P0/P1 if cards overflow, hidden warnings cause unsafe interpretation, buttons imply live submission, or copied commands use the wrong auth header.
 
-## 9. Report Format
+## 10. Report Format
 
 Create one Markdown report with:
 
