@@ -22,6 +22,7 @@ for (const phrase of [
   "/api/crypto/chat/execute",
   "Authorization: Bearer",
   "sharedCards",
+  "matterhorn.crypto.shared-card.v1",
   "matterhorn_crypto_chat",
   "matterhorn_bittensor_chat",
   "matterhorn_hyperliquid_chat",

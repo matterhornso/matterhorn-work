@@ -68,7 +68,19 @@ async function createMockServer() {
         responseText: `Unified crypto router handled venue=${venue}.`,
         cards: [],
         sharedCards: [
-          { kind: "discovery", venue, status: "ok", source: { source: `mock.${venue}` } },
+          {
+            version: "matterhorn.crypto.shared-card.v1",
+            kind: "discovery",
+            venue,
+            title: `${venue} discovery`,
+            summary: `Read-only discovery context from ${venue}.`,
+            status: "success",
+            originalKind: `${venue}_market_list`,
+            source: { source: `mock.${venue}` },
+            warnings: [],
+            data: { kind: `${venue}_market_list`, title: `${venue} discovery` },
+            safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+          },
         ],
         warnings: [],
       });
@@ -123,6 +135,9 @@ async function main() {
         if (payload.venue !== "hyperliquid") throw new Error(`expected venue hyperliquid, got ${payload.venue}`);
         if (payload.execution !== "read_only") throw new Error(`expected execution read_only, got ${payload.execution}`);
         if (!Array.isArray(payload.sharedCards) || payload.sharedCards.length === 0) throw new Error("expected sharedCards in response");
+        if (payload.sharedCards[0].version !== "matterhorn.crypto.shared-card.v1") throw new Error("expected versioned sharedCards");
+        if (payload.sharedCards[0].kind !== "discovery") throw new Error("expected sharedCards kind discovery");
+        if (payload.sharedCards[0].safety?.canSubmit !== false) throw new Error("expected sharedCards safety.canSubmit=false");
       },
     );
 

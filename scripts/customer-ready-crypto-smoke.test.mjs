@@ -104,6 +104,7 @@ for (const phase of [
   "Phase 1: Customer Readiness Smoke Pass",
   "Phase 2: Unified Market Chat Router",
   "Phase 3: Shared Cross-Venue Cards",
+  "matterhorn.crypto.shared-card.v1",
   "Phase 4: Bittensor Customer Polish",
   "Phase 5: Official SDK Validation Track",
   "Phase 6: Agent Control Surface Polish",

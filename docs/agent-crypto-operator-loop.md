@@ -56,6 +56,7 @@ Expected response shape:
 - `venue`: `bittensor`, `hyperliquid`, `polymarket`, or `auto` when clarification is required.
 - `cards`: the original venue-specific cards for existing renderers.
 - `sharedCards`: cross-venue categories such as `discovery`, `account_snapshot`, `market_context`, `orderbook_context`, `action_preview`, `compliance_block`, `watch_alert`, and `receipt_status`.
+- Every `sharedCards[]` item uses `version: "matterhorn.crypto.shared-card.v1"`, a `kind`, `venue`, `status`, `warnings`, original-card `data`, and `safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false }`.
 - `warnings`: safety/source warnings.
 - `execution`: `read_only`, `answered`, `clarification_required`, `unsigned_preview`, `blocked_by_compliance`, or `unsupported`.
 
