@@ -148,7 +148,7 @@ export POLYMARKET_CHAIN_ID=80002
 export POLYMARKET_EXCHANGE_ADDRESS=<public-amoy-exchange-address>
 export POLYMARKET_OFFICIAL_SDK_PACKAGE_VERSION=<clob-client-version>
 
-node scripts/market-official-sdk-validation-doctor.mjs --strict --json
+matterhorn-work crypto sdk-doctor --strict --json
 ```
 
 The doctor checks public validation metadata and rejects market-scoped
@@ -286,7 +286,7 @@ pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-operator-loop
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
-node scripts/market-official-sdk-validation-doctor.mjs --strict --json
+matterhorn-work crypto sdk-doctor --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
