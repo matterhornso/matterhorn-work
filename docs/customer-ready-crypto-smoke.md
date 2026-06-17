@@ -48,6 +48,7 @@ pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
 pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
+pnpm test:market-official-sdk-operator-loop
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-receipt-qa
@@ -121,6 +122,12 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 # POLYMARKET_EXCHANGE_ADDRESS=<public-amoy-exchange-address> \
 # POLYMARKET_OFFICIAL_SDK_PACKAGE_VERSION=<clob-client-version> \
 # node scripts/market-official-sdk-validation-doctor.mjs --strict --json
+# node scripts/market-official-sdk-operator-loop.mjs \
+#   --hyperliquid-official-public /tmp/operator-hyperliquid-official-client-public.json \
+#   --polymarket-official-public /tmp/operator-polymarket-official-client-public.json \
+#   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+#   --output-dir /tmp/matterhorn-market-sdk-loop \
+#   --json
 # node scripts/market-official-sdk-normalize.mjs \
 #   --venue hyperliquid \
 #   --input /tmp/operator-hyperliquid-official-client-public.json \

@@ -64,6 +64,11 @@ if (packageJson.scripts?.["test:market-official-sdk-normalize"] === "node script
 } else {
   fail("package.json exposes test:market-official-sdk-normalize");
 }
+if (packageJson.scripts?.["test:market-official-sdk-operator-loop"] === "node scripts/market-official-sdk-operator-loop.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-operator-loop");
+} else {
+  fail("package.json exposes test:market-official-sdk-operator-loop");
+}
 if (packageJson.scripts?.["test:market-official-sdk-validation-fixtures"] === "node scripts/market-official-sdk-validation-fixtures.test.mjs") {
   pass("package.json exposes test:market-official-sdk-validation-fixtures");
 } else {
@@ -88,10 +93,12 @@ mustContain("docs/market-official-sdk-validation.md", [
   "matterhorn.market.official-sdk-validation.v1",
   "node scripts/market-official-sdk-validation-doctor.mjs",
   "node scripts/market-official-sdk-normalize.mjs",
+  "node scripts/market-official-sdk-operator-loop.mjs",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
   "node scripts/market-official-sdk-validation-capture.mjs",
   "pnpm test:market-official-sdk-validation-doctor",
   "pnpm test:market-official-sdk-normalize",
+  "pnpm test:market-official-sdk-operator-loop",
   "pnpm test:market-official-sdk-validation-fixtures",
 ]);
 
@@ -175,6 +182,25 @@ if (normalizerSelfTest.status === 0) {
   pass("official SDK normalizer test passes");
 } else {
   fail("official SDK normalizer test passes", normalizerSelfTest.stderr || normalizerSelfTest.stdout || "unknown error");
+}
+
+mustContain("scripts/market-official-sdk-operator-loop.mjs", [
+  "runMarketOfficialSdkOperatorLoop",
+  "runOfficialSdkValidationDoctor",
+  "normalizeOfficialSdkArtifact",
+  "buildCapturedEvidence",
+  "buildMarketCustomerEvidenceBundle",
+  "liveSubmissionEnabled: false",
+  "signsOrSubmits: false",
+]);
+const operatorLoopSelfTest = spawnSync("node", ["scripts/market-official-sdk-operator-loop.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (operatorLoopSelfTest.status === 0) {
+  pass("official SDK operator loop test passes");
+} else {
+  fail("official SDK operator loop test passes", operatorLoopSelfTest.stderr || operatorLoopSelfTest.stdout || "unknown error");
 }
 
 mustContain("qa-fixtures/market-official-sdk/README.md", [
