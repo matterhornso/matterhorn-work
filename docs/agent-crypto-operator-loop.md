@@ -186,7 +186,31 @@ Receipts must not include raw signatures, signed payloads, seed phrases, private
 
 ## 7. Customer-Ready Evidence Gates
 
-Before a test customer session:
+Before a test customer session, use the public CLI path first. This is the
+copy-paste loop for Codex, Claude Code, Hermes, Cursor, or a human operator:
+
+```bash
+matterhorn-work crypto customer-smoke --offline --strict --json \
+  > /tmp/matterhorn-crypto-smoke.json
+
+matterhorn-work crypto sdk-loop \
+  --fixture \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --output-dir /tmp/matterhorn-market-sdk-loop \
+  --json
+
+matterhorn-work crypto evidence-bundle \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-official-sdk-validation.json \
+  --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --output /tmp/matterhorn-crypto-customer-evidence.json \
+  --title "Matterhorn Work Crypto Customer Evidence" \
+  --json
+```
+
+The CLI path stays offline, public, and non-custodial. It must not receive
+private keys, API secrets, raw signatures, signed payloads, seed phrases,
+mnemonics, keyfiles, or wallet exports. For repository gates, run:
 
 ```bash
 pnpm smoke:customer-ready-crypto
