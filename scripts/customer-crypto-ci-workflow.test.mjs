@@ -20,6 +20,11 @@ for (const phrase of [
   "pnpm test:customer-ready-crypto-smoke",
   "pnpm test:agent-control-mcp",
   "pnpm smoke:customer-ready-crypto",
+  "node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json-output /tmp/matterhorn-crypto-smoke.json",
+  "actions/upload-artifact@v4",
+  "name: matterhorn-crypto-smoke",
+  "path: /tmp/matterhorn-crypto-smoke.json",
+  "if-no-files-found: error",
 ]) {
   assert.ok(workflow.includes(phrase), `CI workflow should include ${phrase}`);
 }
