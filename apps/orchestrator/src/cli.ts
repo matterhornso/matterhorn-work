@@ -3772,6 +3772,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto customer-smoke [--offline|--include-live-server] [options]",
+    "  matterhorn-work crypto sdk-doctor [--strict] [--venue all|hyperliquid|polymarket]",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [options]",
     "  matterhorn-work upstream openwork check [options]",
@@ -3797,6 +3798,7 @@ function printHelp(): void {
     "  polymarket              Run Polymarket read/preview workflows",
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
     "  crypto customer-smoke   Run consolidated customer-ready crypto smoke gates",
+    "  crypto sdk-doctor       Check official SDK validation env readiness without signing/submission",
     "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
@@ -7616,6 +7618,12 @@ const CRYPTO_SDK_LOOP_SUBCOMMANDS = new Set([
   "operator-loop",
 ]);
 
+const CRYPTO_SDK_DOCTOR_SUBCOMMANDS = new Set([
+  "sdk-doctor",
+  "official-sdk-doctor",
+  "doctor-sdk",
+]);
+
 const CRYPTO_CUSTOMER_SMOKE_SUBCOMMANDS = new Set([
   "customer-smoke",
   "customer-ready",
@@ -7635,6 +7643,14 @@ const CRYPTO_CUSTOMER_SMOKE_VALUE_FLAGS = [
   "token",
   "timeout-ms",
   "json-output",
+] as const;
+
+const CRYPTO_SDK_DOCTOR_BOOL_FLAGS = [
+  "strict",
+] as const;
+
+const CRYPTO_SDK_DOCTOR_VALUE_FLAGS = [
+  "venue",
 ] as const;
 
 const CRYPTO_SDK_LOOP_BOOL_FLAGS = [
@@ -7723,6 +7739,14 @@ async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<
   await runOfflineCryptoScript("market-official-sdk-operator-loop.mjs", forwarded, "Market official SDK operator loop");
 }
 
+async function runCryptoSdkDoctor(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_SDK_DOCTOR_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_SDK_DOCTOR_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-official-sdk-validation-doctor.mjs", forwarded, "Market official SDK validation doctor");
+}
+
 async function runCryptoCustomerSmoke(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_CUSTOMER_SMOKE_BOOL_FLAGS, forwarded);
@@ -7746,6 +7770,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_SDK_LOOP_SUBCOMMANDS.has(subcommand)) {
       await runCryptoSdkLoop(args, outputJson);
+      return;
+    }
+
+    if (CRYPTO_SDK_DOCTOR_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoSdkDoctor(args, outputJson);
       return;
     }
 
@@ -7809,7 +7838,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-loop, or evidence-bundle");
+    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-loop, or evidence-bundle");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

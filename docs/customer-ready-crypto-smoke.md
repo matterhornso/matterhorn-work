@@ -130,7 +130,7 @@ node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/
 # POLYMARKET_CHAIN_ID=80002 \
 # POLYMARKET_EXCHANGE_ADDRESS=<public-amoy-exchange-address> \
 # POLYMARKET_OFFICIAL_SDK_PACKAGE_VERSION=<clob-client-version> \
-# node scripts/market-official-sdk-validation-doctor.mjs --strict --json
+# matterhorn-work crypto sdk-doctor --strict --json
 # matterhorn-work crypto sdk-loop \
 #   --hyperliquid-official-public /tmp/operator-hyperliquid-official-client-public.json \
 #   --polymarket-official-public /tmp/operator-polymarket-official-client-public.json \
