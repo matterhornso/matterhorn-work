@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { basename } from "node:path";
 
 const args = process.argv.slice(2);
@@ -84,6 +85,16 @@ async function readJson(path, label) {
   const parsed = JSON.parse(trimmed);
   assertNoForbiddenKeys(parsed, label);
   return parsed;
+}
+
+async function evidenceFileHash(path) {
+  if (!path) return { present: false, file: null, sha256: null };
+  const raw = await readFile(path);
+  return {
+    present: true,
+    file: basename(path),
+    sha256: createHash("sha256").update(raw).digest("hex"),
+  };
 }
 
 function summarizeSmoke(path, raw) {
@@ -224,6 +235,14 @@ function renderMarkdown(packet) {
     bullet(`Smoke git SHA: ${packet.customerReadySmoke.gitSha ?? "unavailable"}`),
     bullet(`Smoke generated at: ${packet.customerReadySmoke.generatedAt ?? "unavailable"}`),
     "",
+    "## Evidence Hashes",
+    "",
+    "| Evidence | File | SHA-256 |",
+    "| --- | --- | --- |",
+    `| Customer-ready crypto smoke | ${packet.inputEvidence.customerReadySmoke.file ?? "missing"} | ${packet.inputEvidence.customerReadySmoke.sha256 ?? "missing"} |`,
+    `| Market evidence verifier | ${packet.inputEvidence.marketEvidenceVerify.file ?? "not attached"} | ${packet.inputEvidence.marketEvidenceVerify.sha256 ?? "not attached"} |`,
+    `| Bittensor evidence bundle | ${packet.inputEvidence.bittensorEvidenceBundle.file ?? "not attached"} | ${packet.inputEvidence.bittensorEvidenceBundle.sha256 ?? "not attached"} |`,
+    "",
     "## Warnings",
     "",
     ...(packet.warnings.length ? packet.warnings.map(bullet) : ["- None."]),
@@ -248,6 +267,11 @@ export async function buildCryptoCustomerPacket(config) {
   const customerReadySmoke = summarizeSmoke(config.customerReadySmoke, smokeRaw);
   const marketEvidence = summarizeMarketEvidence(config.marketEvidenceVerify, marketRaw, config.requireMarketEvidence);
   const bittensorEvidence = summarizeBittensorEvidence(config.bittensorEvidenceBundle, bittensorRaw, config.requireBittensorEvidence);
+  const inputEvidence = {
+    customerReadySmoke: await evidenceFileHash(config.customerReadySmoke),
+    marketEvidenceVerify: await evidenceFileHash(config.marketEvidenceVerify),
+    bittensorEvidenceBundle: await evidenceFileHash(config.bittensorEvidenceBundle),
+  };
   const warnings = [
     ...customerReadySmoke.warnings,
     ...marketEvidence.warnings,
@@ -265,6 +289,7 @@ export async function buildCryptoCustomerPacket(config) {
     customerReadySmoke,
     marketEvidence,
     bittensorEvidence,
+    inputEvidence,
     warnings,
     errors,
     safety: {

@@ -243,7 +243,9 @@ bundle should include the `sdk-manifest-check` JSON whenever the SDK run
 manifest is part of the customer claim. The final `evidence-verify` step
 re-checks the finished market bundle, and `customer-packet` indexes the smoke
 report, verified market bundle, and optional Bittensor evidence bundle into one
-top-level QA packet.
+top-level QA packet. The packet's `Evidence Hashes` section records the
+SHA-256 of each attached smoke, market, and Bittensor JSON file, so a reviewer
+can tie the Markdown packet back to the exact evidence files used to produce it.
 
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
