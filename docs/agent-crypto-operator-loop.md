@@ -101,6 +101,26 @@ Use matterhorn_polymarket_chat to find Polymarket markets about AI and explain t
 
 ## 5. Run Venue Chat Through CLI
 
+When the prompt should choose the venue, use the unified crypto CLI. It calls `POST /api/crypto/chat/execute` and stays read/preview only (aliases: `matterhorn-work market chat`, `matterhorn-work markets chat`):
+
+```bash
+matterhorn-work crypto chat \
+  --message "show BTC Hyperliquid funding" \
+  --venue auto \
+  --asset BTC \
+  --json
+
+matterhorn-work market chat \
+  --message "find Polymarket markets about AI" \
+  --venue polymarket \
+  --limit 5 \
+  --json
+```
+
+The unified CLI accepts only public routing/context flags (`--venue`, `--ss58-address`, `--netuid`, `--validator-hotkey`, `--amount-tao`, `--address`, `--asset`, `--market-id`, `--outcome`, `--side`, `--size`, `--price`, `--amount-usdc`, `--limit`, `--slippage-tolerance`, `--rate-tolerance`). Credential-shaped flags such as `--api-secret` or `--private-key` are rejected before any server call.
+
+When the venue is known up front, use the venue CLIs directly:
+
 ```bash
 matterhorn-work bittensor chat \
   --message "Which subnet is useful for image generation?" \
@@ -170,6 +190,7 @@ Before a test customer session:
 ```bash
 pnpm smoke:customer-ready-crypto
 pnpm test:unified-crypto-chat
+pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:bittensor-customer-readiness-gate

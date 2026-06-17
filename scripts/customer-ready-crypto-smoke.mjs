@@ -9,6 +9,7 @@ const FORBIDDEN_SECRET_RE = /(seed phrase|private key|api secret|raw signature|s
 
 const offlineStages = [
   ["crypto.unified_chat", "Unified crypto chat router", ["pnpm", "test:unified-crypto-chat"]],
+  ["crypto.cli", "Unified crypto CLI fallback smoke", ["pnpm", "test:crypto-cli-fallback"]],
   ["crypto.agent_operator_loop", "Crypto agent operator loop", ["pnpm", "test:agent-crypto-operator-loop"]],
   ["crypto.hermes_customer_qa", "Hermes crypto customer QA handoff", ["pnpm", "test:hermes-crypto-customer-qa"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
