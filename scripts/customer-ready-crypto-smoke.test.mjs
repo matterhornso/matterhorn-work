@@ -48,6 +48,7 @@ try {
 const stageIds = report.stages.map((stage) => stage.id);
 for (const id of [
   "crypto.unified_chat",
+  "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "crypto.cli",
   "crypto.agent_operator_loop",
@@ -91,6 +92,7 @@ for (const banned of ["/orders/submit", "/orders/sign", "/exchange/submit"]) {
 }
 for (const required of [
   "pnpm test:unified-crypto-chat",
+  "pnpm test:crypto-direct-prompt-safety",
   "pnpm test:unified-crypto-shared-card-contract",
   "pnpm test:crypto-cli-fallback",
   "pnpm test:agent-crypto-operator-loop",

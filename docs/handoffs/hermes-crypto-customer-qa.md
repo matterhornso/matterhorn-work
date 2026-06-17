@@ -48,6 +48,7 @@ pnpm install --frozen-lockfile
 pnpm smoke:customer-ready-crypto
 pnpm test:agent-crypto-operator-loop
 pnpm test:unified-crypto-chat
+pnpm test:crypto-direct-prompt-safety
 pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
