@@ -92,6 +92,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
   "matterhorn-work crypto sdk-loop",
+  "matterhorn-work crypto evidence-bundle",
   "matterhorn-market-sdk-operator-summary.md",
   "--operator-summary <operator-summary.md>",
   "node scripts/market-official-sdk-validation-doctor.mjs",
