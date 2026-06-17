@@ -190,8 +190,8 @@ Before a test customer session, use the public CLI path first. This is the
 copy-paste loop for Codex, Claude Code, Hermes, Cursor, or a human operator:
 
 ```bash
-matterhorn-work crypto customer-smoke --offline --strict --json \
-  > /tmp/matterhorn-crypto-smoke.json
+matterhorn-work crypto customer-smoke --offline --strict \
+  --json-output /tmp/matterhorn-crypto-smoke.json
 
 matterhorn-work crypto sdk-loop \
   --fixture \
