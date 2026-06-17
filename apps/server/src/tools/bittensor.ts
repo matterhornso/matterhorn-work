@@ -1118,6 +1118,7 @@ export type BittensorChatCardKind =
   | "adapter_provider_registry"
   | "adapter_manifest_validation"
   | "adapter_result_validation"
+  | "customer_guidance"
   | "intelligence_report";
 
 export interface BittensorChatCardItem {
@@ -6670,8 +6671,9 @@ export async function executeBittensorChatWorkflow(input: BittensorChatExecution
   const previousContext = resolveBittensorChatContext(input);
   const hydratedInput = hydrateBittensorChatInput(input, previousContext);
   const result = await executeBittensorChatWorkflowCore(hydratedInput);
-  const context = buildBittensorChatContext(hydratedInput, result, previousContext);
-  return { ...result, context };
+  const guidedResult = withBittensorCustomerGuidance(result);
+  const context = buildBittensorChatContext(hydratedInput, guidedResult, previousContext);
+  return { ...guidedResult, context };
 }
 
 async function executeBittensorChatWorkflowCore(input: BittensorChatExecutionInput): Promise<BittensorChatExecutionResult> {
@@ -11112,6 +11114,87 @@ function titleCase(value: string): string {
 
 function cardItem(label: string, value: string | number | null | undefined, tone?: BittensorChatCardItem["tone"]): BittensorChatCardItem {
   return { label, value: value === null || value === undefined || value === "" ? "Unavailable" : String(value), tone };
+}
+
+function buildBittensorCustomerGuidanceCard(result: BittensorChatExecutionResult): BittensorChatCard | null {
+  if (result.cards.some((card) => card.kind === "customer_guidance")) return null;
+  if (result.execution === "clarification_required") return null;
+  const cardKinds = new Set(result.cards.map((card) => card.kind));
+  const intent = result.plan.intent;
+  let title = "Bittensor next steps";
+  let summary = "Use this as customer-facing guidance for the next safe Bittensor step. It is educational context, not financial advice.";
+  let firstStep = "Review the live/freshness labels before acting.";
+  let followUpPrompt = "Explain the safest next step from this Bittensor result.";
+
+  if (cardKinds.has("wallet_snapshot") || intent === "wallet") {
+    title = "Wallet copilot next steps";
+    summary = "Matterhorn can turn this watch-only wallet read into exposure checks, validator comparisons, watches, and unsigned previews.";
+    firstStep = "Review free TAO, staked TAO, position concentration, and source/freshness before making any staking decision.";
+    followUpPrompt = "Analyze this Bittensor wallet exposure and suggest watch-only alerts.";
+  } else if (cardKinds.has("validator_selection") || intent === "stake_plan") {
+    title = result.execution === "unsigned_preview" ? "Unsigned action review next steps" : "Validator copilot next steps";
+    summary = result.execution === "unsigned_preview"
+      ? "This preview is still non-custodial. Matterhorn prepared information only; an external signer is required before anything can move."
+      : "Matterhorn can compare visible validator candidates, explain tradeoffs, and prepare an unsigned preview only after you choose a validator hotkey.";
+    firstStep = result.execution === "unsigned_preview"
+      ? "Verify coldkey, hotkey, netuid, amount, rate tolerance, fee/slippage notes, and consequence text in your external signer."
+      : "Choose a validator hotkey only after reviewing live/fallback source labels and concentration risk.";
+    followUpPrompt = result.execution === "unsigned_preview"
+      ? "Review this unsigned Bittensor action preview for safety before external signing."
+      : "Explain the validator shortlist tradeoffs and what to monitor next.";
+  } else if (cardKinds.has("watchlist") || intent === "monitor") {
+    title = "Watch and alert next steps";
+    summary = "Matterhorn can keep monitoring public Bittensor data and turn warning states into review prompts without signing or broadcasting.";
+    firstStep = "Inspect warning watches first, then refresh the relevant wallet, subnet, validator, or slippage context before preparing any action.";
+    followUpPrompt = "Review my Bittensor watch alerts and suggest the next read-only checks.";
+  } else if (intent === "discover" || cardKinds.has("subnet_comparison")) {
+    title = "Subnet discovery next steps";
+    summary = "Matterhorn can explain why a subnet matched your goal, check live metagraph context, and compare validator exposure before any staking preview.";
+    firstStep = "Open the strongest subnet candidates and check whether their data is live, recent, stale, or fallback.";
+    followUpPrompt = "Compare the strongest Bittensor subnet candidates and explain the risks in beginner language.";
+  } else if (intent === "subnet_use" || cardKinds.has("subnet_result") || cardKinds.has("unsupported_adapter")) {
+    title = "Subnet service next steps";
+    summary = "Matterhorn separates staking into a subnet from using a subnet service. Direct service calls require a reviewed adapter and exact request-hash confirmation.";
+    firstStep = "If the adapter is unsupported, use explanation, monitoring, and staking guidance only; if supported, confirm the exact request SHA-256 before invocation.";
+    followUpPrompt = "Explain what this subnet can do and whether Matterhorn can call its service safely.";
+  } else {
+    return null;
+  }
+
+  return {
+    kind: "customer_guidance",
+    title,
+    subtitle: titleCase(intent),
+    summary,
+    tone: result.execution === "unsupported" ? "warning" : "default",
+    items: [
+      cardItem("First safe step", firstStep),
+      cardItem("Matterhorn can", "Explain, compare, monitor, prepare unsigned previews, and hand off to external signing."),
+      cardItem("Matterhorn will not", "Ask for seeds/private keys, custody wallets, sign, broadcast, or provide financial advice.", "warning"),
+    ],
+    actions: [{
+      label: "Send follow-up",
+      kind: "send_to_chat",
+      payload: { prompt: followUpPrompt },
+    }],
+    warnings: ["Educational guidance only; verify live data and use your own judgment before any external signing."],
+    data: {
+      intent,
+      execution: result.execution,
+      followUpPrompt,
+    },
+  };
+}
+
+function withBittensorCustomerGuidance(result: BittensorChatExecutionResult): BittensorChatExecutionResult {
+  const guidance = buildBittensorCustomerGuidanceCard(result);
+  if (!guidance) return result;
+  return {
+    ...result,
+    cards: [...result.cards, guidance],
+    data: { ...result.data, customerGuidance: guidance.data ?? null },
+    warnings: uniqueWarnings(result.warnings, guidance.warnings),
+  };
 }
 
 function adapterRunResultFromInvocation(invocation: BittensorSubnetInvocation): BittensorSubnetAdapterRunResult | null {

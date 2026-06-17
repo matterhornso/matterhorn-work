@@ -75,11 +75,13 @@ Build:
 - Watch/autopilot review cards with clear next actions.
 - Read-only adapter canary UX that explains preview, exact request-hash confirmation, invocation, result validation, and rollback.
 - Safer "what should I do next?" guidance that is educational and non-advisory.
+- A `customer_guidance` card appended to core Bittensor chat results so wallet reads, validator comparisons, watches, subnet discovery, subnet-service previews, and unsigned action previews all include one safe follow-up prompt plus explicit non-custodial boundaries.
 
 Done when:
 
 - Bittensor customer readiness, receipt, watch autopilot, scheduler, and adapter canary gates pass.
 - The UI can be demoed to a customer without exposing debug-only concepts first.
+- Focused Bittensor tests prove wallet, validator, and unsigned preview flows include guidance while preserving the original primary card.
 
 ## Phase 5: Official SDK Validation Track
 

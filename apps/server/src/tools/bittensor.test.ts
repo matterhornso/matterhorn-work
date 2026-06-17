@@ -608,6 +608,10 @@ describe("executeBittensorChatWorkflow", () => {
       expect(result.execution).toBe("answered");
       expect(result.plan.intent).toBe("wallet");
       expect(result.cards[0]?.kind).toBe("wallet_snapshot");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Wallet copilot next steps");
+      expect(guidance?.items.some((item) => item.label === "Matterhorn will not" && item.value.includes("seed"))).toBe(true);
+      expect(result.data.customerGuidance).toMatchObject({ intent: "wallet", execution: "answered" });
       expect(result.responseText).toContain("3");
       expect(result.context?.ss58Address).toBe(VALID_SS58);
       expect(result.context?.id).toContain("bt-chat");
@@ -3511,6 +3515,9 @@ describe("executeBittensorChatWorkflow", () => {
       const result = await executeBittensorChatWorkflow({ message: "compare validators on subnet 77", limit: 6 });
       expect(result.execution).toBe("answered");
       expect(result.cards[0]?.kind).toBe("validator_selection");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Validator copilot next steps");
+      expect(guidance?.actions?.[0]?.payload?.prompt).toContain("validator shortlist");
       expect(result.responseText).toContain("subnet 77");
     });
   });
@@ -3623,6 +3630,9 @@ describe("executeBittensorChatWorkflow", () => {
       });
       expect(result.execution).toBe("unsigned_preview");
       expect(result.cards[0]?.kind).toBe("signed_action_review");
+      const guidance = result.cards.find((card) => card.kind === "customer_guidance");
+      expect(guidance?.title).toBe("Unsigned action review next steps");
+      expect(guidance?.items.some((item) => item.value.includes("external signer"))).toBe(true);
       expect(result.responseText).toContain("external signing");
       expect(JSON.stringify(result)).not.toMatch(/secretSeed|privateKey|mnemonicPhrase|seedPhrase/i);
     });
