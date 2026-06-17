@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { validateEvidenceBundle } from "./market-official-sdk-validation-evidence.mjs";
@@ -7,6 +8,8 @@ const args = process.argv.slice(2);
 
 const FORBIDDEN_KEY_RE =
   /^(seed|seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|token|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action)$/i;
+const FORBIDDEN_OPERATOR_SUMMARY_RE =
+  /\b(seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action)\b/i;
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -22,6 +25,7 @@ function flag(name) {
 const config = {
   customerReadySmoke: arg("--customer-ready-smoke"),
   officialSdkValidation: arg("--official-sdk-validation"),
+  operatorSummary: arg("--operator-summary"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
@@ -37,6 +41,7 @@ function usage() {
     "Options:",
     "  --customer-ready-smoke <path>       JSON from scripts/customer-ready-crypto-smoke.mjs.",
     "  --official-sdk-validation <path>    JSON from scripts/market-official-sdk-validation-evidence.mjs --sample/--evidence-file --json, or the raw evidence object.",
+    "  --operator-summary <path>           Optional Markdown summary from matterhorn-work crypto sdk-loop.",
     "  --require-official-sdk-validated    Require every venue status to be validated, not pending.",
     "  --output, -o <path>                 Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>                Write machine-readable summary JSON.",
@@ -82,6 +87,15 @@ async function readJson(path, label) {
   return parsed;
 }
 
+async function readPublicText(path, label) {
+  if (!path) return null;
+  const raw = await readFile(path, "utf8");
+  if (FORBIDDEN_OPERATOR_SUMMARY_RE.test(raw)) {
+    throw new Error(`${label} contains forbidden secret-shaped content.`);
+  }
+  return raw;
+}
+
 function stageCounts(report) {
   const stages = Array.isArray(report?.stages) ? report.stages : [];
   return {
@@ -94,6 +108,37 @@ function stageCounts(report) {
 
 function extractOfficialEvidence(raw) {
   return isRecord(raw?.evidence) ? raw.evidence : raw;
+}
+
+function summarizeOperatorSummary(path, raw) {
+  if (!path || raw === null) {
+    return {
+      present: false,
+      path: null,
+      file: null,
+      sha256: null,
+      bytes: 0,
+      warnings: [],
+    };
+  }
+  const warnings = [];
+  if (!/Matterhorn Market Official SDK Operator Summary/i.test(raw)) {
+    warnings.push("Operator summary is attached, but it does not look like the standard Matterhorn SDK operator summary.");
+  }
+  if (!/Non-custodial\s*\|\s*true/i.test(raw)) {
+    warnings.push("Operator summary does not explicitly show Non-custodial=true.");
+  }
+  if (!/Live submission enabled\s*\|\s*false/i.test(raw)) {
+    warnings.push("Operator summary does not explicitly show Live submission enabled=false.");
+  }
+  return {
+    present: true,
+    path,
+    file: basename(path),
+    sha256: createHash("sha256").update(raw).digest("hex"),
+    bytes: Buffer.byteLength(raw, "utf8"),
+    warnings,
+  };
 }
 
 function summarizeOfficialSdk(raw, requireValidated) {
@@ -158,6 +203,18 @@ function renderMarkdown(summary) {
     ...sdk.statuses.map((item) =>
       `| ${item.venue} | ${item.status} | ${item.officialClient} | ${item.packageVersion ?? "pending"} | ${item.validatedAt ?? "pending"} |`),
     "",
+    "## Operator Summary",
+    "",
+    summary.operatorSummary.present
+      ? markdownBullet(`Summary file: ${summary.operatorSummary.file}`)
+      : "- Not attached.",
+    summary.operatorSummary.present
+      ? markdownBullet(`SHA-256: ${summary.operatorSummary.sha256}`)
+      : "",
+    summary.operatorSummary.present
+      ? markdownBullet(`Bytes: ${summary.operatorSummary.bytes}`)
+      : "",
+    "",
     "## Warnings",
     "",
     ...(summary.warnings.length ? summary.warnings.map(markdownBullet) : ["- None."]),
@@ -178,6 +235,7 @@ function renderMarkdown(summary) {
 export async function buildMarketCustomerEvidenceBundle(config) {
   const smokeRaw = await readJson(config.customerReadySmoke, "customer-ready crypto smoke");
   const officialRaw = await readJson(config.officialSdkValidation, "official SDK validation evidence");
+  const operatorSummaryRaw = await readPublicText(config.operatorSummary, "operator summary");
   if (!officialRaw) throw new Error("Missing --official-sdk-validation evidence JSON.");
 
   const smokeCounts = stageCounts(smokeRaw);
@@ -190,9 +248,11 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     path: config.customerReadySmoke,
   };
   const officialSdkValidation = summarizeOfficialSdk(officialRaw, config.requireOfficialSdkValidated);
+  const operatorSummary = summarizeOperatorSummary(config.operatorSummary, operatorSummaryRaw);
   const warnings = [
     ...(customerReadySmoke.present && !customerReadySmoke.ready ? ["Customer-ready crypto smoke is not ready."] : []),
     ...officialSdkValidation.warnings,
+    ...operatorSummary.warnings,
   ];
   const errors = [
     ...officialSdkValidation.validation.errors,
@@ -205,6 +265,7 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     customerReadySmoke,
     officialSdkValidationPath: config.officialSdkValidation,
     officialSdkValidation,
+    operatorSummary,
     warnings,
     errors,
     safety: {

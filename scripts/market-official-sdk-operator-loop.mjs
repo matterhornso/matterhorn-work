@@ -181,19 +181,19 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
     officialSdkEvidence: evidencePath,
   };
   let customerBundle = null;
+  let customerEvidenceMarkdownPath = null;
+  let customerEvidenceJsonPath = null;
   if (config.customerReadySmoke) {
-    const markdownPath = join(outputDir, "matterhorn-market-customer-evidence.md");
-    const jsonPath = join(outputDir, "matterhorn-market-customer-evidence.json");
+    customerEvidenceMarkdownPath = join(outputDir, "matterhorn-market-customer-evidence.md");
+    customerEvidenceJsonPath = join(outputDir, "matterhorn-market-customer-evidence.json");
     customerBundle = await buildMarketCustomerEvidenceBundle({
       title: "Matterhorn Work Market Customer Evidence Bundle",
       customerReadySmoke: config.customerReadySmoke,
       officialSdkValidation: evidencePath,
       requireOfficialSdkValidated: Boolean(config.requireOfficialSdkValidated),
     });
-    writeFileSync(markdownPath, customerBundle.markdown);
-    writeFileSync(jsonPath, `${JSON.stringify(customerBundle.summary, null, 2)}\n`);
-    files.customerEvidenceMarkdown = markdownPath;
-    files.customerEvidenceJson = jsonPath;
+    files.customerEvidenceMarkdown = customerEvidenceMarkdownPath;
+    files.customerEvidenceJson = customerEvidenceJsonPath;
   }
 
   const errors = [...doctor.errors, ...captured.errors, ...(customerBundle?.summary.errors ?? [])];
@@ -213,6 +213,18 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
     errors,
     warnings,
   }));
+
+  if (config.customerReadySmoke) {
+    customerBundle = await buildMarketCustomerEvidenceBundle({
+      title: "Matterhorn Work Market Customer Evidence Bundle",
+      customerReadySmoke: config.customerReadySmoke,
+      officialSdkValidation: evidencePath,
+      operatorSummary: summaryPath,
+      requireOfficialSdkValidated: Boolean(config.requireOfficialSdkValidated),
+    });
+    writeFileSync(customerEvidenceMarkdownPath, customerBundle.markdown);
+    writeFileSync(customerEvidenceJsonPath, `${JSON.stringify(customerBundle.summary, null, 2)}\n`);
+  }
 
   return {
     ok,
