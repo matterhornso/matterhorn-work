@@ -162,9 +162,14 @@ jobs:
       - name: Write customer crypto smoke evidence
         run: node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json-output /tmp/matterhorn-crypto-smoke.json
 
+      - name: Write customer crypto smoke checksum
+        run: sha256sum /tmp/matterhorn-crypto-smoke.json > /tmp/matterhorn-crypto-smoke.sha256
+
       - name: Upload customer crypto smoke evidence
         uses: actions/upload-artifact@v4
         with:
           name: matterhorn-crypto-smoke
-          path: /tmp/matterhorn-crypto-smoke.json
+          path: |
+            /tmp/matterhorn-crypto-smoke.json
+            /tmp/matterhorn-crypto-smoke.sha256
           if-no-files-found: error
