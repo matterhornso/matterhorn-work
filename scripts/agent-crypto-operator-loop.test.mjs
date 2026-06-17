@@ -32,6 +32,7 @@ for (const phrase of [
   "matterhorn-work hyperliquid chat",
   "matterhorn-work polymarket chat",
   "matterhorn-work crypto customer-smoke",
+  "--json-output /tmp/matterhorn-crypto-smoke.json",
   "matterhorn-work crypto sdk-loop",
   "matterhorn-work crypto evidence-bundle",
   "canSubmit: false",
@@ -88,6 +89,7 @@ for (const command of [
 for (const forbidden of [
   "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
+  "> /tmp/matterhorn-crypto-smoke.json",
   "privateKey =",
   "apiSecret =",
   "seedPhrase =",
