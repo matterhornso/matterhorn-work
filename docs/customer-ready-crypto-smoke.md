@@ -46,6 +46,7 @@ pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-receipt-qa
@@ -111,6 +112,14 @@ node scripts/customer-ready-crypto-smoke.mjs --offline --strict --json > /tmp/ma
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
 
 # Optional when an operator has redacted official-client output:
+# node scripts/market-official-sdk-normalize.mjs \
+#   --venue hyperliquid \
+#   --input /tmp/operator-hyperliquid-official-client-public.json \
+#   --output /tmp/hyperliquid-official-normalized-action.json
+# node scripts/market-official-sdk-normalize.mjs \
+#   --venue polymarket \
+#   --input /tmp/operator-polymarket-official-client-public.json \
+#   --output /tmp/polymarket-official-normalized-typed-data.json
 # node scripts/market-official-sdk-validation-capture.mjs \
 #   --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
 #   --hyperliquid-package-version <version> \

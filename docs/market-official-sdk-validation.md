@@ -134,6 +134,48 @@ such as raw signatures, private keys, API secrets, signed payloads, and wallet
 exports. It does not execute official SDK code, sign orders, submit orders, or
 authorize live execution.
 
+## Operator-Owned Normalization
+
+Official SDKs should run in an operator-owned throwaway environment, not inside
+the Matterhorn server. Export only public official-client JSON, then normalize it
+into the artifact shape accepted by the capture harness:
+
+```bash
+node scripts/market-official-sdk-normalize.mjs \
+  --venue hyperliquid \
+  --input /tmp/operator-hyperliquid-official-client-public.json \
+  --output /tmp/hyperliquid-official-normalized-action.json
+
+node scripts/market-official-sdk-normalize.mjs \
+  --venue polymarket \
+  --input /tmp/operator-polymarket-official-client-public.json \
+  --output /tmp/polymarket-official-normalized-typed-data.json
+```
+
+The normalizer accepts public/redacted JSON only. It rejects credential-shaped
+fields such as `privateKey`, `apiSecret`, `rawSignature`, `signature`, and
+`signedPayload`, except Polymarket's public `signatureType` metadata. It does not
+import official SDK packages, run exchange clients, sign, submit, broadcast, or
+call remote endpoints. It only extracts public order/action fields:
+
+- Hyperliquid: `type`, `grouping`, `orders[].a`, `orders[].b`, `orders[].p`,
+  `orders[].s`, `orders[].r`, and `orders[].t`.
+- Polymarket: `domain`, `primaryType`, `types.Order`, and public `message`
+  fields such as `makerAmount`, `takerAmount`, `side`, and `signatureType`.
+
+Then capture the normalized artifacts:
+
+```bash
+node scripts/market-official-sdk-validation-capture.mjs \
+  --hyperliquid-normalized /tmp/hyperliquid-official-normalized-action.json \
+  --hyperliquid-package-version <hyperliquid-python-sdk-version> \
+  --polymarket-normalized /tmp/polymarket-official-normalized-typed-data.json \
+  --polymarket-package-version <clob-client-version> \
+  --polymarket-exchange-address <public-exchange-address> \
+  --polymarket-chain-id <chain-id> \
+  --output /tmp/matterhorn-market-sdk-evidence.json
+```
+
 ## Fixture-Backed Operator Loop
 
 Before running real official clients, use the checked-in fixtures to verify the
@@ -170,8 +212,11 @@ Run:
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-evidence
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
+node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
+node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
 node scripts/market-official-sdk-validation-capture.mjs --json

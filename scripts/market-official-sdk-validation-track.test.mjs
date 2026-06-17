@@ -54,6 +54,11 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-capture"] === "no
 } else {
   fail("package.json exposes test:market-official-sdk-validation-capture");
 }
+if (packageJson.scripts?.["test:market-official-sdk-normalize"] === "node scripts/market-official-sdk-normalize.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-normalize");
+} else {
+  fail("package.json exposes test:market-official-sdk-normalize");
+}
 if (packageJson.scripts?.["test:market-official-sdk-validation-fixtures"] === "node scripts/market-official-sdk-validation-fixtures.test.mjs") {
   pass("package.json exposes test:market-official-sdk-validation-fixtures");
 } else {
@@ -76,8 +81,10 @@ mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid artifacts must be public order",
   "Polymarket artifacts must expose the public EIP-712 order structure",
   "matterhorn.market.official-sdk-validation.v1",
+  "node scripts/market-official-sdk-normalize.mjs",
   "node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>",
   "node scripts/market-official-sdk-validation-capture.mjs",
+  "pnpm test:market-official-sdk-normalize",
   "pnpm test:market-official-sdk-validation-fixtures",
 ]);
 
@@ -123,6 +130,24 @@ if (captureSelfTest.status === 0) {
   pass("official SDK evidence capture self-test passes");
 } else {
   fail("official SDK evidence capture self-test passes", captureSelfTest.stderr || captureSelfTest.stdout || "unknown error");
+}
+
+mustContain("scripts/market-official-sdk-normalize.mjs", [
+  "normalizeOfficialSdkArtifact",
+  "normalizeHyperliquid",
+  "normalizePolymarket",
+  "FORBIDDEN_CREDENTIAL_KEY_RE",
+  "operatorRedaction",
+  "submissionFieldsRemoved",
+]);
+const normalizerSelfTest = spawnSync("node", ["scripts/market-official-sdk-normalize.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (normalizerSelfTest.status === 0) {
+  pass("official SDK normalizer test passes");
+} else {
+  fail("official SDK normalizer test passes", normalizerSelfTest.stderr || normalizerSelfTest.stdout || "unknown error");
 }
 
 mustContain("qa-fixtures/market-official-sdk/README.md", [
