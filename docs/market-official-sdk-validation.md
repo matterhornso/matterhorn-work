@@ -174,12 +174,12 @@ the Matterhorn server. Export only public official-client JSON, then normalize i
 into the artifact shape accepted by the capture harness:
 
 ```bash
-node scripts/market-official-sdk-normalize.mjs \
+matterhorn-work crypto sdk-normalize \
   --venue hyperliquid \
   --input /tmp/operator-hyperliquid-official-client-public.json \
   --output /tmp/hyperliquid-official-normalized-action.json
 
-node scripts/market-official-sdk-normalize.mjs \
+matterhorn-work crypto sdk-normalize \
   --venue polymarket \
   --input /tmp/operator-polymarket-official-client-public.json \
   --output /tmp/polymarket-official-normalized-typed-data.json
