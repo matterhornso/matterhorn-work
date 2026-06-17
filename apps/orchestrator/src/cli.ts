@@ -3780,6 +3780,7 @@ function printHelp(): void {
     "  matterhorn-work crypto sdk-manifest-check --manifest <path> [--strict]",
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--sdk-manifest-check <path>] [--receipt-check <path>] [options]",
+    "  matterhorn-work crypto evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3811,6 +3812,7 @@ function printHelp(): void {
     "  crypto sdk-manifest-check Validate SDK loop run manifest hashes and safety flags",
     "  crypto receipt-check    Validate public market receipt evidence offline",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
+    "  crypto evidence-verify  Verify final market customer evidence bundle offline",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7771,6 +7773,12 @@ const CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS = new Set([
   "evidence",
 ]);
 
+const CRYPTO_EVIDENCE_VERIFY_SUBCOMMANDS = new Set([
+  "evidence-verify",
+  "customer-evidence-verify",
+  "verify-evidence",
+]);
+
 const CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS = [
   "strict",
   "require-official-sdk-validated",
@@ -7787,6 +7795,20 @@ const CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS = [
   "output",
   "json-output",
   "title",
+] as const;
+
+const CRYPTO_EVIDENCE_VERIFY_BOOL_FLAGS = [
+  "strict",
+  "require-official-sdk-validated",
+  "require-sdk-manifest-check",
+  "require-receipt-check",
+] as const;
+
+const CRYPTO_EVIDENCE_VERIFY_VALUE_FLAGS = [
+  "bundle-json",
+  "bundle-md",
+  "bundle-markdown",
+  "output",
 ] as const;
 
 async function runOfflineCryptoScript(scriptName: string, forwarded: string[], label: string): Promise<void> {
@@ -7900,6 +7922,14 @@ async function runCryptoEvidenceBundle(args: ParsedArgs): Promise<void> {
   await runOfflineCryptoScript("market-customer-evidence-bundle.mjs", forwarded, "Market customer evidence bundle");
 }
 
+async function runCryptoEvidenceVerify(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_EVIDENCE_VERIFY_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_EVIDENCE_VERIFY_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-customer-evidence-verify.mjs", forwarded, "Market customer evidence verifier");
+}
+
 async function runCrypto(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "chat";
@@ -7949,6 +7979,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS.has(subcommand)) {
       await runCryptoEvidenceBundle(args);
+      return;
+    }
+
+    if (CRYPTO_EVIDENCE_VERIFY_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoEvidenceVerify(args, outputJson);
       return;
     }
 
@@ -8002,7 +8037,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, or evidence-bundle");
+    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, or evidence-verify");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
