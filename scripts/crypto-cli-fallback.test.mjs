@@ -344,6 +344,7 @@ async function main() {
     const smokePath = join(sdkOutputDir, "customer-ready-smoke.json");
     const bundleMarkdownPath = join(sdkOutputDir, "matterhorn-market-customer-evidence.md");
     const bundleJsonPath = join(sdkOutputDir, "matterhorn-market-customer-evidence.json");
+    const bundleReceiptCheckPath = join(sdkOutputDir, "matterhorn-market-receipt-check.json");
     writeFileSync(smokePath, JSON.stringify({
       ready: true,
       summary: { pass: 27, fail: 0, skip: 0 },
@@ -360,6 +361,29 @@ async function main() {
       safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
     }));
     writeFileSync(sdkLoop.files.officialSdkEvidence, JSON.stringify(sampleEvidence()));
+    writeFileSync(bundleReceiptCheckPath, JSON.stringify({
+      ok: true,
+      matchesHandoff: true,
+      receipt: {
+        version: "matterhorn.market.receipt.v1",
+        venue: "hyperliquid",
+        status: "filled",
+        action: "place_order",
+        previewSha256: "h".repeat(64),
+        handoffSha256: "a".repeat(64),
+        orderId: "hl-order-123",
+        txHash: null,
+        warnings: [],
+      },
+      errors: [],
+      warnings: [],
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        signsOrSubmits: false,
+        acceptsSecrets: false,
+      },
+    }));
     const bundleResult = await runCli(mock.url, [
       "crypto",
       "evidence-bundle",
@@ -369,6 +393,9 @@ async function main() {
       sdkLoop.files.officialSdkEvidence,
       "--operator-summary",
       sdkLoop.files.operatorSummaryMarkdown,
+      "--receipt-check",
+      bundleReceiptCheckPath,
+      "--require-receipt-check",
       "--output",
       bundleMarkdownPath,
       "--json-output",
@@ -381,7 +408,11 @@ async function main() {
     const bundleJson = JSON.parse(readFileSync(bundleJsonPath, "utf8"));
     if (!/READY_FOR_TEST_CUSTOMER_QA/.test(bundleMarkdown)) throw new Error("expected customer bundle markdown to be ready");
     if (!/Operator Summary/.test(bundleMarkdown) || !/SHA-256/.test(bundleMarkdown)) throw new Error("expected customer bundle to include operator summary hash");
+    if (!/Public Receipt Evidence/.test(bundleMarkdown) || !/hl-order-123/.test(bundleMarkdown)) {
+      throw new Error("expected customer bundle to include public receipt-check evidence");
+    }
     if (bundleJson.operatorSummary?.present !== true) throw new Error("expected customer bundle JSON to include operatorSummary.present=true");
+    if (bundleJson.receiptCheck?.ready !== true) throw new Error("expected customer bundle JSON to include receiptCheck.ready=true");
     if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(bundleMarkdown)) {
       throw new Error("customer evidence bundle leaked token or secret-shaped fields");
     }

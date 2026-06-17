@@ -121,6 +121,29 @@ Expected result:
 - Mismatched asset/side/market/outcome fails.
 - Any `signature`, `privateKey`, `apiSecret`, `signedPayload`, `seed`, or `mnemonic` field fails immediately.
 
+For the final customer evidence packet, also run the offline public receipt
+checker and attach its output to the market evidence bundle:
+
+```bash
+matterhorn-work crypto receipt-check \
+  --venue hyperliquid \
+  --handoff-file ./handoff.json \
+  --receipt-file ./receipt.json \
+  --output /tmp/matterhorn-market-receipt-check.json
+
+matterhorn-work crypto evidence-bundle \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
+  --receipt-check /tmp/matterhorn-market-receipt-check.json \
+  --require-receipt-check \
+  --output /tmp/matterhorn-market-customer-evidence.md \
+  --json-output /tmp/matterhorn-market-customer-evidence.json \
+  --strict
+```
+
+If no external-signer receipt is part of the demo, omit `--receipt-check` and
+`--require-receipt-check`.
+
 ## 6. UI/UX Checks
 
 Use the desktop app or web UI and capture screenshots for:

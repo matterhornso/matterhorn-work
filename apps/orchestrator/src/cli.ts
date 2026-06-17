@@ -3778,7 +3778,7 @@ function printHelp(): void {
     "  matterhorn-work crypto sdk-evidence --evidence-file <path> [--json]",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
-    "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [options]",
+    "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--receipt-check <path>] [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -7755,12 +7755,14 @@ const CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS = new Set([
 const CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS = [
   "strict",
   "require-official-sdk-validated",
+  "require-receipt-check",
 ] as const;
 
 const CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS = [
   "customer-ready-smoke",
   "official-sdk-validation",
   "operator-summary",
+  "receipt-check",
   "output",
   "json-output",
   "title",

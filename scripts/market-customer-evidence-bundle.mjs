@@ -36,10 +36,12 @@ const config = {
   customerReadySmoke: arg("--customer-ready-smoke"),
   officialSdkValidation: arg("--official-sdk-validation"),
   operatorSummary: arg("--operator-summary"),
+  receiptCheck: arg("--receipt-check"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireOfficialSdkValidated: flag("--require-official-sdk-validated"),
+  requireReceiptCheck: flag("--require-receipt-check"),
   title: arg("--title") || "Matterhorn Work Market Customer Evidence Bundle",
 };
 
@@ -52,7 +54,9 @@ function usage() {
     "  --customer-ready-smoke <path>       JSON from scripts/customer-ready-crypto-smoke.mjs.",
     "  --official-sdk-validation <path>    JSON from scripts/market-official-sdk-validation-evidence.mjs --sample/--evidence-file --json, or the raw evidence object.",
     "  --operator-summary <path>           Optional Markdown summary from matterhorn-work crypto sdk-loop.",
+    "  --receipt-check <path>              Optional JSON from matterhorn-work crypto receipt-check.",
     "  --require-official-sdk-validated    Require every venue status to be validated, not pending.",
+    "  --require-receipt-check             Require public receipt-check evidence to be accepted and tied to the handoff.",
     "  --output, -o <path>                 Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>                Write machine-readable summary JSON.",
     "  --strict                            Exit nonzero when not customer-ready.",
@@ -188,6 +192,61 @@ function summarizeOfficialSdk(raw, requireValidated) {
   };
 }
 
+function summarizeReceiptCheck(path, raw, requireReceiptCheck) {
+  if (!path || raw === null) {
+    return {
+      present: false,
+      path: null,
+      file: null,
+      ready: !requireReceiptCheck,
+      ok: false,
+      matchesHandoff: false,
+      venue: null,
+      status: null,
+      action: null,
+      orderId: null,
+      txHash: null,
+      warnings: requireReceiptCheck ? ["Receipt-check evidence is required but not attached."] : [],
+      errors: requireReceiptCheck ? ["Receipt-check evidence is required but missing."] : [],
+    };
+  }
+
+  const receipt = isRecord(raw.receipt) ? raw.receipt : null;
+  const safety = isRecord(raw.safety) ? raw.safety : {};
+  const errors = [];
+  const warnings = [];
+  if (raw.ok !== true) errors.push("Receipt-check evidence was not accepted.");
+  if (raw.matchesHandoff !== true) errors.push("Receipt-check evidence did not match the original handoff.");
+  if (!receipt) errors.push("Receipt-check evidence is missing the public receipt summary.");
+  if (receipt?.version !== "matterhorn.market.receipt.v1") {
+    errors.push("Receipt-check evidence does not use matterhorn.market.receipt.v1.");
+  }
+  if (safety.nonCustodial !== true) errors.push("Receipt-check evidence must keep nonCustodial=true.");
+  if (safety.liveSubmissionEnabled !== false) errors.push("Receipt-check evidence must keep liveSubmissionEnabled=false.");
+  if (safety.signsOrSubmits !== false) errors.push("Receipt-check evidence must keep signsOrSubmits=false.");
+  if (safety.acceptsSecrets !== false) errors.push("Receipt-check evidence must keep acceptsSecrets=false.");
+  if (Array.isArray(raw.errors)) errors.push(...raw.errors.map((item) => String(item)));
+  if (Array.isArray(raw.warnings)) warnings.push(...raw.warnings.map((item) => String(item)));
+  if (Array.isArray(receipt?.warnings)) warnings.push(...receipt.warnings.map((item) => String(item)));
+  if (!receipt?.orderId && !receipt?.txHash) warnings.push("Receipt-check evidence has no public order id or tx hash.");
+
+  return {
+    present: true,
+    path,
+    file: basename(path),
+    ready: raw.ok === true && raw.matchesHandoff === true && errors.length === 0,
+    ok: raw.ok === true,
+    matchesHandoff: raw.matchesHandoff === true,
+    venue: receipt?.venue ?? null,
+    status: receipt?.status ?? null,
+    action: receipt?.action ?? null,
+    orderId: receipt?.orderId ?? null,
+    txHash: receipt?.txHash ?? null,
+    warnings: [...new Set(warnings)],
+    errors: [...new Set(errors)],
+  };
+}
+
 function markdownBullet(text) {
   return `- ${String(text || "").replace(/\n/g, " ").trim()}`;
 }
@@ -231,6 +290,33 @@ function renderMarkdown(summary) {
     ...sdk.statuses.map((item) =>
       `| ${item.venue} | ${item.status} | ${item.officialClient} | ${item.packageVersion ?? "pending"} | ${item.validatedAt ?? "pending"} |`),
     "",
+    "## Public Receipt Evidence",
+    "",
+    summary.receiptCheck.present
+      ? markdownBullet(`Attached: yes (${summary.receiptCheck.file})`)
+      : "- Not attached.",
+    summary.receiptCheck.present
+      ? markdownBullet(`Accepted by receipt checker: ${summary.receiptCheck.ok ? "yes" : "no"}`)
+      : "",
+    summary.receiptCheck.present
+      ? markdownBullet(`Matches original handoff: ${summary.receiptCheck.matchesHandoff ? "yes" : "no"}`)
+      : "",
+    summary.receiptCheck.present && summary.receiptCheck.venue
+      ? markdownBullet(`Venue: ${summary.receiptCheck.venue}`)
+      : "",
+    summary.receiptCheck.present && summary.receiptCheck.status
+      ? markdownBullet(`Status: ${summary.receiptCheck.status}`)
+      : "",
+    summary.receiptCheck.present && summary.receiptCheck.action
+      ? markdownBullet(`Action: ${summary.receiptCheck.action}`)
+      : "",
+    summary.receiptCheck.present && summary.receiptCheck.orderId
+      ? markdownBullet(`Order ID: ${summary.receiptCheck.orderId}`)
+      : "",
+    summary.receiptCheck.present && summary.receiptCheck.txHash
+      ? markdownBullet(`Tx hash: ${summary.receiptCheck.txHash}`)
+      : "",
+    "",
     "## Operator Summary",
     "",
     summary.operatorSummary.present
@@ -255,6 +341,7 @@ function renderMarkdown(summary) {
     "",
     "- Do not treat pending SDK evidence as authorization for live submission.",
     "- Do not paste seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports into Matterhorn.",
+    "- Do not attach raw signatures, signed payloads, API secrets, private keys, or wallet exports as market receipt evidence.",
     "- Do not add `/api/hyperliquid/orders/submit` or `/api/polymarket/orders/submit`.",
   ].filter((line) => line !== "");
   return `${lines.join("\n")}\n`;
@@ -263,6 +350,7 @@ function renderMarkdown(summary) {
 export async function buildMarketCustomerEvidenceBundle(config) {
   const smokeRaw = await readJson(config.customerReadySmoke, "customer-ready crypto smoke");
   const officialRaw = await readJson(config.officialSdkValidation, "official SDK validation evidence");
+  const receiptCheckRaw = await readJson(config.receiptCheck, "market receipt-check evidence");
   const operatorSummaryRaw = await readPublicText(config.operatorSummary, "operator summary");
   if (!officialRaw) throw new Error("Missing --official-sdk-validation evidence JSON.");
 
@@ -277,26 +365,31 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     path: config.customerReadySmoke,
   };
   const officialSdkValidation = summarizeOfficialSdk(officialRaw, config.requireOfficialSdkValidated);
+  const receiptCheck = summarizeReceiptCheck(config.receiptCheck, receiptCheckRaw, config.requireReceiptCheck);
   const operatorSummary = summarizeOperatorSummary(config.operatorSummary, operatorSummaryRaw);
   const warnings = [
     ...(customerReadySmoke.present && !customerReadySmoke.ready ? ["Customer-ready crypto smoke is not ready."] : []),
     ...officialSdkValidation.warnings,
+    ...receiptCheck.warnings,
     ...operatorSummary.warnings,
   ];
   const errors = [
     ...officialSdkValidation.validation.errors,
+    ...receiptCheck.errors,
     ...customerReadySmoke.requiredStages
       .filter((stage) => stage.status !== "pass")
       .map((stage) => `Customer-ready crypto smoke required stage did not pass: ${stage.id} (${stage.status})`),
     ...(config.requireOfficialSdkValidated && !officialSdkValidation.allValidated ? ["Official SDK evidence is not fully validated for every venue."] : []),
   ];
-  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && errors.length === 0;
+  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && receiptCheck.ready && errors.length === 0;
   const summary = {
     title: config.title,
     ready,
     customerReadySmoke,
     officialSdkValidationPath: config.officialSdkValidation,
     officialSdkValidation,
+    receiptCheckPath: config.receiptCheck,
+    receiptCheck,
     operatorSummary,
     warnings,
     errors,

@@ -62,6 +62,7 @@ matterhorn-work crypto receipt-check \
   --venue hyperliquid \
   --handoff-file ./handoff.json \
   --receipt-file ./receipt.json \
+  --output /tmp/matterhorn-market-receipt-check.json \
   --json
 
 matterhorn-work hyperliquid receipt \
@@ -87,6 +88,23 @@ Use `matterhorn-work crypto receipt-check` for offline/customer evidence
 validation when you already have handoff and receipt JSON files. Use the
 venue-specific `hyperliquid receipt` / `polymarket receipt` commands when you
 want to verify through the running Matterhorn server route.
+
+To include receipt evidence in the customer bundle, pass the offline checker
+output into the evidence bundle:
+
+```bash
+matterhorn-work crypto evidence-bundle \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
+  --receipt-check /tmp/matterhorn-market-receipt-check.json \
+  --require-receipt-check \
+  --output /tmp/matterhorn-market-customer-evidence.md \
+  --json-output /tmp/matterhorn-market-customer-evidence.json \
+  --strict
+```
+
+`--require-receipt-check` should only be used when the demo claim includes an
+external-signer receipt. Without it, receipt evidence stays optional.
 
 ## Mismatch and missing-evidence behavior
 

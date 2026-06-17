@@ -155,6 +155,15 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 # Fixture-backed strict validation path:
 # pnpm test:market-official-sdk-validation-fixtures
 
+# Optional after an external signer returns public market receipt evidence:
+# matterhorn-work crypto receipt-check \
+#   --venue hyperliquid \
+#   --handoff-file /tmp/hyperliquid-handoff.json \
+#   --receipt-file /tmp/hyperliquid-public-receipt.json \
+#   --output /tmp/matterhorn-market-receipt-check.json
+# Use --require-receipt-check below only when this receipt evidence is part of
+# the customer claim for the demo.
+
 matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
@@ -162,6 +171,10 @@ matterhorn-work crypto evidence-bundle \
   --output /tmp/matterhorn-market-customer-evidence.md \
   --json-output /tmp/matterhorn-market-customer-evidence.json \
   --strict
+
+# Add this when public market receipt evidence is part of the customer claim:
+#   --receipt-check /tmp/matterhorn-market-receipt-check.json \
+#   --require-receipt-check
 ```
 
 Give reviewers `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md`
@@ -174,6 +187,12 @@ operator-owned official-client/testnet evidence. Pending validation evidence is
 acceptable for read/preview-only customer QA, but it is not authorization for
 live Hyperliquid or Polymarket execution.
 
+Use `--require-receipt-check` only when the demo includes a public
+external-signer receipt. Required receipt evidence must be accepted by
+`matterhorn-work crypto receipt-check`, match the original handoff, and remain
+free of raw signatures, signed payloads, API secrets, private keys, and wallet
+exports.
+
 ## Pass Criteria
 
 Report ready for a test customer only when:
@@ -183,6 +202,7 @@ Report ready for a test customer only when:
 - Hyperliquid and Polymarket remain read/preview/external-signer only.
 - Bittensor readiness, receipt, watch, scheduler, signing-handoff, and evidence-bundle gates pass.
 - Market customer evidence bundle accepts the redacted official-SDK validation evidence.
+- If market receipt evidence is claimed, the evidence bundle includes an accepted `crypto receipt-check` output tied back to the original handoff.
 - No response or evidence file contains secret-shaped fields.
 - Any local-server smoke failures are explained as provider unavailable, not as signing/submission behavior.
 
