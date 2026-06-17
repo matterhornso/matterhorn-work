@@ -198,6 +198,11 @@ function evaluateWatchAutopilotScheduler(report, findings) {
   const totalAlerts = Number(report.totalAlerts || 0);
   const failedChecks = Number(report.failedChecks || 0);
   const safety = report.safety || {};
+  const notificationSummary = report.notificationSummary || {};
+  const totalNotifications = Number(notificationSummary.totalNotifications || 0);
+  const notificationIntents = notificationSummary.intents && typeof notificationSummary.intents === "object"
+    ? Object.keys(notificationSummary.intents)
+    : [];
 
   if (iterations > 0) {
     addFinding(findings, "pass", "Scheduled watch autopilot", `Completed ${iterations} scheduled watch checks.`);
@@ -219,6 +224,12 @@ function evaluateWatchAutopilotScheduler(report, findings) {
       "Scheduled watch evidence contains no watch evaluations.",
       config.requireWatchAutopilotScheduler ? "P2" : "P3",
     );
+  }
+
+  if (totalAlerts > 0 && totalNotifications >= totalAlerts && notificationIntents.length > 0) {
+    addFinding(findings, "pass", "Scheduled watch autopilot", `Prepared ${totalNotifications} read-only notification prompt(s) across ${notificationIntents.length} intent(s).`);
+  } else if (totalAlerts > 0) {
+    addFinding(findings, "warn", "Scheduled watch autopilot", "Scheduled watch alerts did not include notification intent summary evidence.", "P3");
   }
 
   if (safety.signsOrBroadcasts || safety.submitsTransactions || safety.invokesSubnetServices || safety.acceptsCredentialMaterial) {

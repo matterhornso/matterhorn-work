@@ -118,6 +118,7 @@ Pass criteria:
 
 - result is a read-only alert report;
 - active alerts become safe chat prompts;
+- `notificationSummary` includes intent counts and bounded read-only prompt samples when alerts are present;
 - report says it does not sign, submit, broadcast, transfer TAO, move stake, or invoke subnet services;
 - credential-shaped or signed-payload-shaped fields fail closed.
 
@@ -140,6 +141,7 @@ Pass criteria:
 
 - every iteration is read-only;
 - summary reports completed checks, alert counts, and highest severity;
+- `notificationSummary` aggregates alert intent counts such as `review_wallet`, `review_validator`, `review_subnet`, `review_emissions`, or `review_slippage`;
 - each alert routes to a safe chat prompt or operator action;
 - no iteration signs, submits, broadcasts, transfers TAO, moves stake, or invokes subnet services;
 - JSONL output contains no credential-shaped or signed-payload-shaped fields.

@@ -68,6 +68,32 @@ function fallbackPrompt(evaluation = {}) {
   return "Use Bittensor chat mode. Review this Bittensor watch alert and explain safe next steps without taking financial action.";
 }
 function alertPrompt(evaluation = {}) { const action = asArray(evaluation.copilotActions)[0]; return action?.prompt || fallbackPrompt(evaluation); }
+function buildNotificationSummary(alerts = []) {
+  const intents = {};
+  const promptSamples = [];
+  for (const alert of alerts) {
+    const intent = alert.notificationIntent || "unspecified";
+    intents[intent] = (intents[intent] || 0) + 1;
+    if (promptSamples.length < config.maxAlerts) {
+      promptSamples.push({ intent, label: alert.label, prompt: alert.prompt });
+    }
+  }
+  return { totalNotifications: alerts.length, intents, promptSamples, safety: "read_only_chat_prompts" };
+}
+function aggregateNotificationSummaries(runs = []) {
+  const intents = {};
+  const promptSamples = [];
+  let totalNotifications = 0;
+  for (const run of runs) {
+    const summary = run.notificationSummary || {};
+    totalNotifications += Number(summary.totalNotifications || 0);
+    for (const [intent, count] of Object.entries(summary.intents || {})) intents[intent] = (intents[intent] || 0) + Number(count || 0);
+    for (const sample of asArray(summary.promptSamples)) {
+      if (promptSamples.length < config.maxAlerts) promptSamples.push(sample);
+    }
+  }
+  return { totalNotifications, intents, promptSamples, safety: "read_only_chat_prompts" };
+}
 
 async function requestCheck() {
   if (config.checkJson) {
@@ -92,6 +118,7 @@ function summarizeCheck(check, iteration) {
   const evaluations = asArray(check.evaluations);
   const alerts = evaluations.filter((evaluation) => /alert|fail|warning|warn/.test(statusOf(evaluation))).slice(0, config.maxAlerts);
   const statusCounts = evaluations.reduce((acc, evaluation) => { const status = statusOf(evaluation); acc[status] = (acc[status] || 0) + 1; return acc; }, {});
+  const mappedAlerts = alerts.map((evaluation) => ({ alertKey: evaluation.alertKey || "", status: statusOf(evaluation), notificationIntent: evaluation.notificationIntent || "", label: watchLabel(evaluation.watch), prompt: alertPrompt(evaluation) }));
   return {
     ok: true,
     iteration,
@@ -99,7 +126,8 @@ function summarizeCheck(check, iteration) {
     total: evaluations.length,
     alertCount: alerts.length,
     statusCounts,
-    alerts: alerts.map((evaluation) => ({ alertKey: evaluation.alertKey || "", status: statusOf(evaluation), notificationIntent: evaluation.notificationIntent || "", label: watchLabel(evaluation.watch), prompt: alertPrompt(evaluation) })),
+    alerts: mappedAlerts,
+    notificationSummary: buildNotificationSummary(mappedAlerts),
     safety: { custody: "none", signsOrBroadcasts: false, submitsTransactions: false, invokesSubnetServices: false, source: "matterhorn_bittensor_watch_autopilot_scheduler" },
   };
 }
@@ -115,6 +143,7 @@ for (let iteration = 1; iteration <= config.iterations; iteration += 1) {
 const summary = {
   ok: runs.every((run) => run.ok), generatedAt: new Date().toISOString(), source: "matterhorn_bittensor_watch_autopilot_scheduler", iterations: runs.length,
   totalEvaluations: runs.reduce((sum, run) => sum + Number(run.total || 0), 0), totalAlerts: runs.reduce((sum, run) => sum + Number(run.alertCount || 0), 0), failedChecks: runs.filter((run) => !run.ok).length, latest: runs[runs.length - 1] || null,
+  notificationSummary: aggregateNotificationSummaries(runs),
   safety: { custody: "none", acceptsCredentialMaterial: false, signsOrBroadcasts: false, submitsTransactions: false, invokesSubnetServices: false },
 };
 if (config.jsonlOutput) await writeFile(config.jsonlOutput, runs.map((run) => JSON.stringify(run)).join("\n") + "\n", "utf8");
