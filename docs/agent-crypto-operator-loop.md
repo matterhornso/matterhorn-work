@@ -281,7 +281,17 @@ the original handoff hashes and venue fields. The final `evidence-verify`
 command re-checks the completed customer bundle without calling the server.
 Use `customer-packet` as the final cross-venue handoff artifact once the smoke
 report and market evidence verifier are ready; attach Bittensor evidence with
-`--bittensor-evidence-bundle` when that JSON bundle is part of the customer QA.
+`--bittensor-evidence-bundle` pointing at the Bittensor verifier JSON when that
+evidence is part of the customer QA.
+When Bittensor evidence is attached, verify it first:
+
+```bash
+matterhorn-work crypto bittensor-evidence-verify \
+  --bundle-json /tmp/matterhorn-bittensor-customer-evidence.json \
+  --bundle-md /tmp/matterhorn-bittensor-customer-evidence.md \
+  --output /tmp/matterhorn-bittensor-customer-evidence-verify.json \
+  --strict --json
+```
 
 The SDK loop also writes
 `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`, which
@@ -311,6 +321,7 @@ pnpm test:market-sdk-run-manifest-check
 pnpm test:market-customer-evidence-bundle
 pnpm test:market-customer-evidence-verify
 pnpm test:crypto-customer-packet
+pnpm test:bittensor-customer-evidence-verify
 pnpm test:bittensor-customer-readiness-gate
 ```
 

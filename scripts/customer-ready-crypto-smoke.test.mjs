@@ -80,6 +80,7 @@ for (const id of [
   "bittensor.watch_scheduler",
   "bittensor.signing_handoff",
   "bittensor.evidence_bundle",
+  "bittensor.evidence_verify",
 ]) {
   assert.ok(stageIds.includes(id), `dry-run missing stage ${id}`);
 }
@@ -109,6 +110,7 @@ for (const required of [
   "pnpm test:polymarket-read-preview-qa",
   "pnpm test:bittensor-customer-readiness-gate",
   "pnpm test:bittensor-watch-autopilot-scheduler",
+  "pnpm test:bittensor-customer-evidence-verify",
   "node scripts/market-live-readonly-smoke.mjs",
 ]) {
   assert.ok(commandText.includes(required), `smoke command list missing ${required}`);

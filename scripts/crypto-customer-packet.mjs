@@ -38,7 +38,7 @@ function usage() {
     "Options:",
     "  --customer-ready-smoke <path>       JSON from matterhorn-work crypto customer-smoke.",
     "  --market-evidence-verify <path>     JSON from matterhorn-work crypto evidence-verify.",
-    "  --bittensor-evidence-bundle <path>  Optional JSON from scripts/bittensor-customer-evidence-bundle.mjs.",
+    "  --bittensor-evidence-bundle <path>  Optional JSON from scripts/bittensor-customer-evidence-bundle.mjs or bittensor-evidence-verify.",
     "  --require-market-evidence           Require accepted market evidence verification.",
     "  --require-bittensor-evidence        Require ready Bittensor evidence bundle.",
     "  --output, -o <path>                 Write Markdown packet to a file. Defaults to stdout.",

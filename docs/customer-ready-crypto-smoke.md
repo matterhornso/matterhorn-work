@@ -109,6 +109,16 @@ node scripts/bittensor-live-qa.mjs \
 ```
 
 Then feed the generated JSON into `scripts/bittensor-customer-readiness-gate.mjs` and `scripts/bittensor-customer-evidence-bundle.mjs` as described in `docs/bittensor-customer-readiness-gate.md`.
+When a Bittensor customer evidence bundle is attached to the final crypto
+packet, verify it first:
+
+```bash
+matterhorn-work crypto bittensor-evidence-verify \
+  --bundle-json /tmp/matterhorn-bittensor-customer-evidence.json \
+  --bundle-md /tmp/matterhorn-bittensor-customer-evidence.md \
+  --output /tmp/matterhorn-bittensor-customer-evidence-verify.json \
+  --strict --json
+```
 
 ## Optional Market Evidence Bundle
 
@@ -199,6 +209,10 @@ matterhorn-work crypto customer-packet \
   --strict
 ```
 
+When Bittensor evidence is part of the same customer packet, add
+`--bittensor-evidence-bundle /tmp/matterhorn-bittensor-customer-evidence-verify.json`
+and `--require-bittensor-evidence`.
+
 Give reviewers `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md`
 first, then `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json`,
 then the bundled customer evidence Markdown, verifier JSON, and top-level
@@ -233,6 +247,7 @@ Report ready for a test customer only when:
 - Market execution safety passes.
 - Hyperliquid and Polymarket remain read/preview/external-signer only.
 - Bittensor readiness, receipt, watch, scheduler, signing-handoff, and evidence-bundle gates pass.
+- Bittensor customer evidence verifier accepts the Bittensor bundle when attached.
 - Market customer evidence bundle accepts the redacted official-SDK validation evidence.
 - Market customer evidence verifier accepts the final bundle JSON/Markdown.
 - Crypto customer packet is ready and includes the smoke report plus verified market evidence.

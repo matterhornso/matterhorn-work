@@ -479,9 +479,55 @@ async function main() {
 
     const packetRequestsBefore = mock.requests.length;
     const bittensorBundlePath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence.json");
+    const bittensorBundleMarkdownPath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence.md");
+    const bittensorVerifyPath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence-verify.json");
     const customerPacketMarkdownPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.md");
     const customerPacketJsonPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.json");
-    writeFileSync(bittensorBundlePath, JSON.stringify({ ready: true, errors: [], warnings: [] }));
+    writeFileSync(bittensorBundlePath, JSON.stringify({
+      ready: true,
+      bittensor: { ready: true, detail: "7 passed, 0 failed", passedStages: ["Wallet snapshot"], failedStages: [] },
+      agentControl: { ready: true, detail: "4 passed, 0 failed" },
+      ci: { total: 3, passed: ["Matterhorn Work Tests"], failed: [], pending: [] },
+      readinessGate: { ready: true, detail: "Readiness gate says ready" },
+      readonlyAdapterCanary: { ready: true },
+      receiptCheck: { ready: true },
+      watchAutopilotScheduler: { ready: true },
+    }));
+    writeFileSync(bittensorBundleMarkdownPath, [
+      "# Matterhorn Work Bittensor Customer Evidence Bundle",
+      "",
+      "## Decision",
+      "",
+      "- Result: READY_FOR_TEST_CUSTOMERS",
+      "",
+      "## Gate Summary",
+      "",
+      "## Before Customer Demo",
+      "",
+    ].join("\n"));
+    await expectCli(
+      "crypto bittensor-evidence-verify",
+      mock.url,
+      [
+        "crypto",
+        "bittensor-evidence-verify",
+        "--bundle-json",
+        bittensorBundlePath,
+        "--bundle-md",
+        bittensorBundleMarkdownPath,
+        "--require-receipt-check",
+        "--require-readonly-adapter-canary",
+        "--require-watch-autopilot-scheduler",
+        "--output",
+        bittensorVerifyPath,
+        "--strict",
+      ],
+      (payload) => {
+        if (payload.ok !== true) throw new Error(`expected Bittensor evidence verify ok=true, got ${payload.ok}`);
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected Bittensor verifier safety.liveSubmissionEnabled=false");
+      },
+    );
+    if (mock.requests.length !== packetRequestsBefore) throw new Error("crypto bittensor-evidence-verify should not call the Matterhorn server");
     const packetResult = await runCli(mock.url, [
       "crypto",
       "customer-packet",
