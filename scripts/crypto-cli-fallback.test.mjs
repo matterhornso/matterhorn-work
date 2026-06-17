@@ -349,10 +349,11 @@ async function main() {
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
     const sdkManifestRequestsBefore = mock.requests.length;
+    const bundleSdkManifestCheckPath = join(sdkOutputDir, "matterhorn-market-sdk-manifest-check.json");
     await expectCli(
       "crypto sdk-manifest-check",
       mock.url,
-      ["crypto", "sdk-manifest-check", "--manifest", sdkLoop.files.runManifest],
+      ["crypto", "sdk-manifest-check", "--manifest", sdkLoop.files.runManifest, "--output", bundleSdkManifestCheckPath],
       (payload) => {
         if (payload.ok !== true) throw new Error(`expected SDK manifest check ok=true, got ${payload.ok}`);
         if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected SDK manifest safety.liveSubmissionEnabled=false");
@@ -416,6 +417,9 @@ async function main() {
       sdkLoop.files.officialSdkEvidence,
       "--operator-summary",
       sdkLoop.files.operatorSummaryMarkdown,
+      "--sdk-manifest-check",
+      bundleSdkManifestCheckPath,
+      "--require-sdk-manifest-check",
       "--receipt-check",
       bundleReceiptCheckPath,
       "--require-receipt-check",
@@ -434,7 +438,11 @@ async function main() {
     if (!/Public Receipt Evidence/.test(bundleMarkdown) || !/hl-order-123/.test(bundleMarkdown)) {
       throw new Error("expected customer bundle to include public receipt-check evidence");
     }
+    if (!/SDK Run Manifest Evidence/.test(bundleMarkdown)) {
+      throw new Error("expected customer bundle to include SDK run manifest-check evidence");
+    }
     if (bundleJson.operatorSummary?.present !== true) throw new Error("expected customer bundle JSON to include operatorSummary.present=true");
+    if (bundleJson.sdkManifestCheck?.ready !== true) throw new Error("expected customer bundle JSON to include sdkManifestCheck.ready=true");
     if (bundleJson.receiptCheck?.ready !== true) throw new Error("expected customer bundle JSON to include receiptCheck.ready=true");
     if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(bundleMarkdown)) {
       throw new Error("customer evidence bundle leaked token or secret-shaped fields");

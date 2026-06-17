@@ -199,10 +199,17 @@ matterhorn-work crypto sdk-loop \
   --output-dir /tmp/matterhorn-market-sdk-loop \
   --json
 
+matterhorn-work crypto sdk-manifest-check \
+  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --output /tmp/matterhorn-market-sdk-manifest-check.json \
+  --strict --json
+
 matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --sdk-manifest-check /tmp/matterhorn-market-sdk-manifest-check.json \
+  --require-sdk-manifest-check \
   --output /tmp/matterhorn-crypto-customer-evidence.json \
   --title "Matterhorn Work Crypto Customer Evidence" \
   --json
@@ -227,6 +234,8 @@ matterhorn-work crypto evidence-bundle \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --official-sdk-validation /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-evidence.json \
   --operator-summary /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md \
+  --sdk-manifest-check /tmp/matterhorn-market-sdk-manifest-check.json \
+  --require-sdk-manifest-check \
   --receipt-check /tmp/matterhorn-market-receipt-check.json \
   --require-receipt-check \
   --output /tmp/matterhorn-crypto-customer-evidence.md \
@@ -248,6 +257,7 @@ Validate that manifest before handing the packet to another agent:
 ```bash
 matterhorn-work crypto sdk-manifest-check \
   --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --output /tmp/matterhorn-market-sdk-manifest-check.json \
   --strict --json
 ```
 
