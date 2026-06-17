@@ -110,8 +110,10 @@ Build:
 - One CLI happy path: doctor, create session, submit prompt, watch events, read/write files, run Bittensor/market chat, import public receipts.
 - Customer evidence bundle that includes Bittensor and market readiness evidence.
 - A final Hermes usability/security test prompt that points to the exact docs and commands.
+- A crypto-specific operator loop that shows Codex, Claude Code, Hermes, Cursor, and Claude Desktop how to run unified crypto chat, venue MCP tools, venue CLI fallbacks, preview-only handoffs, and public receipt checks without touching secrets.
 
 Done when:
 
 - An external agent can run Matterhorn Work end to end from the command line without reading the codebase.
 - Customer-ready evidence is reproducible and free of secret-shaped fields.
+- `pnpm test:agent-crypto-operator-loop` proves the crypto operator loop stays connected to the HTTP, MCP, CLI, and safety-gate surfaces.

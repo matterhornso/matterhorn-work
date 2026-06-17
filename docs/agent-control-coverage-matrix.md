@@ -48,7 +48,10 @@ The goal is to keep every stable capability available through at least one safe 
 | --- | --- | --- | --- | --- |
 | List approvals | `GET /approvals` | `matterhorn_list_approvals` | `matterhorn-work approvals list` | `test:agent-control-mcp` |
 | Reply to approval | `POST /approvals/:approvalId` | `matterhorn_reply_approval` | `matterhorn-work approvals reply` | `test:agent-control-mcp` |
+| Unified crypto chat router | `POST /api/crypto/chat/execute` | Use venue MCP tools after routing: `matterhorn_bittensor_chat`, `matterhorn_hyperliquid_chat`, `matterhorn_polymarket_chat` | Venue CLI fallbacks: `matterhorn-work bittensor chat`, `matterhorn-work hyperliquid chat`, `matterhorn-work polymarket chat` | `test:unified-crypto-chat`, `test:agent-crypto-operator-loop`, `test:market-execution-safety-gate` |
 | Bittensor chat workflow | `POST /api/bittensor/chat/execute` | `matterhorn_bittensor_chat` | `matterhorn-work bittensor chat` | `test:agent-control-mcp`, Bittensor server tests, `test:bittensor-cli-fallback` |
+| Hyperliquid read/preview chat | `POST /api/hyperliquid/chat/execute`, `POST /api/hyperliquid/orders/preview`, handoff/receipt routes | `matterhorn_hyperliquid_chat`, `matterhorn_hyperliquid_prepare_handoff`, `matterhorn_hyperliquid_verify_receipt` | `matterhorn-work hyperliquid chat/preview-order/handoff/receipt` | `test:hyperliquid-read-preview-qa`, `test:hyperliquid-cli-fallback`, `test:market-execution-safety-gate` |
+| Polymarket read/preview chat | `POST /api/polymarket/chat/execute`, `POST /api/polymarket/orders/preview`, handoff/receipt routes | `matterhorn_polymarket_chat`, `matterhorn_polymarket_prepare_handoff`, `matterhorn_polymarket_verify_receipt` | `matterhorn-work polymarket chat/preview-order/handoff/receipt` | `test:polymarket-read-preview-qa`, `test:polymarket-cli-fallback`, `test:market-execution-safety-gate` |
 | Bittensor readiness | `GET /api/bittensor/readiness` | `matterhorn_bittensor_readiness` | `matterhorn-work bittensor readiness` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Bittensor capability registry | `GET /api/bittensor/capabilities`, `GET /api/bittensor/capabilities/:netuid` | `matterhorn_bittensor_list_capabilities`, `matterhorn_bittensor_get_subnet_capability` | `matterhorn-work bittensor capabilities`, `matterhorn-work bittensor capability` | `test:agent-control-mcp`, `test:bittensor-cli-fallback` |
 | Bittensor external signing | `POST /api/bittensor/extrinsics/prepare`, `POST /api/bittensor/extrinsics/handoff`, `POST /api/bittensor/extrinsics/receipt`, `POST /api/bittensor/extrinsics/submit` | `matterhorn_bittensor_prepare_extrinsic`, `matterhorn_bittensor_create_signing_handoff`, `matterhorn_bittensor_import_receipt`, `matterhorn_bittensor_submit_signed_extrinsic` | `matterhorn-work bittensor extrinsic prepare/handoff/submit` plus panel `Copy Import` | `test:agent-control-mcp`, `test:bittensor-cli-fallback`, Bittensor server tests |
@@ -72,6 +75,7 @@ pnpm test:bittensor-operator-playbook
 pnpm test:bittensor-live-qa
 pnpm test:bittensor-live-report
 pnpm test:bittensor-customer-readiness-gate
+pnpm test:bittensor-receipt-check
 pnpm test:agent-control-doctor
 pnpm test:agent-control-live-qa
 pnpm test:agent-control-api-docs
@@ -79,6 +83,10 @@ pnpm test:mcp-config-cli
 pnpm test:agent-session-progress-smoke
 pnpm test:bittensor-cli-fallback
 pnpm test:upstream-openwork-sync
+pnpm test:unified-crypto-chat
+pnpm test:agent-crypto-operator-loop
+pnpm test:market-execution-safety-gate
+pnpm test:market-official-sdk-validation-track
 ```
 
 The smoke test binds a local mock server, so it may need to run outside restricted sandboxes.

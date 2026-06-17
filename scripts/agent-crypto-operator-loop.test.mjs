@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+function read(path) {
+  return readFileSync(path, "utf8");
+}
+
+const workflow = read("docs/agent-crypto-operator-loop.md");
+const matrix = read("docs/agent-control-coverage-matrix.md");
+const mcp = read("packages/matterhorn-work-mcp/index.mjs");
+const cli = read("apps/orchestrator/src/cli.ts");
+const pkg = JSON.parse(read("package.json"));
+
+assert.equal(
+  pkg.scripts?.["test:agent-crypto-operator-loop"],
+  "node scripts/agent-crypto-operator-loop.test.mjs",
+  "package.json should expose the crypto agent operator loop gate",
+);
+
+for (const phrase of [
+  "/api/crypto/chat/execute",
+  "Authorization: Bearer",
+  "sharedCards",
+  "matterhorn_bittensor_chat",
+  "matterhorn_hyperliquid_chat",
+  "matterhorn_polymarket_chat",
+  "matterhorn-work bittensor chat",
+  "matterhorn-work hyperliquid chat",
+  "matterhorn-work polymarket chat",
+  "canSubmit: false",
+  "pnpm test:market-official-sdk-validation-track",
+  "pnpm test:market-execution-safety-gate",
+  "pnpm test:bittensor-customer-readiness-gate",
+]) {
+  assert.ok(workflow.includes(phrase), `operator loop doc should include ${phrase}`);
+}
+
+for (const phrase of [
+  "Unified crypto chat router",
+  "Hyperliquid read/preview chat",
+  "Polymarket read/preview chat",
+  "test:agent-crypto-operator-loop",
+  "test:unified-crypto-chat",
+  "test:market-official-sdk-validation-track",
+]) {
+  assert.ok(matrix.includes(phrase), `coverage matrix should include ${phrase}`);
+}
+
+for (const toolName of [
+  "matterhorn_bittensor_chat",
+  "matterhorn_hyperliquid_chat",
+  "matterhorn_polymarket_chat",
+  "matterhorn_hyperliquid_prepare_handoff",
+  "matterhorn_polymarket_prepare_handoff",
+  "matterhorn_hyperliquid_verify_receipt",
+  "matterhorn_polymarket_verify_receipt",
+]) {
+  assert.ok(mcp.includes(toolName), `MCP server should expose ${toolName}`);
+}
+
+for (const command of [
+  "bittensor chat",
+  "hyperliquid chat",
+  "polymarket chat",
+  "hyperliquid preview-order",
+  "polymarket preview-order",
+  "hyperliquid receipt",
+  "polymarket receipt",
+]) {
+  assert.ok(cli.includes(command), `CLI should expose ${command}`);
+}
+
+for (const forbidden of [
+  "/api/hyperliquid/orders/submit",
+  "/api/polymarket/orders/submit",
+  "privateKey =",
+  "apiSecret =",
+  "seedPhrase =",
+  "mnemonic =",
+]) {
+  assert.equal(workflow.includes(forbidden), false, `operator loop doc must not include ${forbidden}`);
+}
+
+console.log("Matterhorn crypto agent operator loop static check passed.");
