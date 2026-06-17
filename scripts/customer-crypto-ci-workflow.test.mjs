@@ -18,6 +18,7 @@ for (const phrase of [
   "oven-sh/setup-bun@v2",
   "pnpm install --frozen-lockfile --ignore-scripts --prefer-offline",
   "pnpm test:customer-ready-crypto-smoke",
+  "pnpm test:agent-control-mcp",
   "pnpm smoke:customer-ready-crypto",
 ]) {
   assert.ok(workflow.includes(phrase), `CI workflow should include ${phrase}`);
