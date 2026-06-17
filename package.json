@@ -87,6 +87,7 @@
     "test:market-official-sdk-validation-track": "node scripts/market-official-sdk-validation-track.test.mjs",
     "test:market-official-sdk-validation-evidence": "node scripts/market-official-sdk-validation-evidence.mjs --self-test",
     "test:market-official-sdk-validation-capture": "node scripts/market-official-sdk-validation-capture.test.mjs",
+    "test:market-official-sdk-normalize": "node scripts/market-official-sdk-normalize.test.mjs",
     "test:market-official-sdk-validation-fixtures": "node scripts/market-official-sdk-validation-fixtures.test.mjs",
     "test:market-customer-evidence-bundle": "node scripts/market-customer-evidence-bundle.test.mjs",
     "test:agent-crypto-operator-loop": "node scripts/agent-crypto-operator-loop.test.mjs",
