@@ -59,7 +59,25 @@ Expected response shape:
 - `warnings`: safety/source warnings.
 - `execution`: `read_only`, `answered`, `clarification_required`, `unsigned_preview`, `blocked_by_compliance`, or `unsupported`.
 
-## 3. Run Venue Chat Through MCP
+## 3. Run Crypto Chat Through MCP
+
+Use the unified MCP tool when the user prompt should choose the venue:
+
+- `matterhorn_crypto_chat`
+
+Suggested prompt:
+
+```text
+Use matterhorn_crypto_chat for this request: "show BTC Hyperliquid funding". Keep it read-only unless the server returns a preview-only card.
+```
+
+Expected result:
+
+- Bittensor, Hyperliquid, or Polymarket routing happens server-side.
+- Responses may include both venue `cards` and customer-readable `sharedCards`.
+- Hyperliquid and Polymarket remain read/preview/external-signer only.
+
+## 4. Run Venue Chat Through MCP
 
 Use these MCP tools when the venue is known:
 
@@ -81,7 +99,7 @@ Use matterhorn_hyperliquid_chat to show BTC funding and explain the funding risk
 Use matterhorn_polymarket_chat to find Polymarket markets about AI and explain that this is risk-bearing information, not betting advice.
 ```
 
-## 4. Run Venue Chat Through CLI
+## 5. Run Venue Chat Through CLI
 
 ```bash
 matterhorn-work bittensor chat \
@@ -119,7 +137,7 @@ matterhorn-work polymarket preview-order \
 
 Verify that responses keep `canSubmit: false`. Matterhorn does not sign or submit.
 
-## 5. Receipt Evidence
+## 6. Receipt Evidence
 
 After a user submits externally with their own wallet/client, Matterhorn may verify public receipt evidence only.
 
@@ -145,7 +163,7 @@ node scripts/bittensor-receipt-check.mjs \
 
 Receipts must not include raw signatures, signed payloads, seed phrases, private keys, mnemonics, API secrets, keyfiles, or wallet exports.
 
-## 6. Customer-Ready Evidence Gates
+## 7. Customer-Ready Evidence Gates
 
 Before a test customer session:
 

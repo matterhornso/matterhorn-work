@@ -22,6 +22,7 @@ for (const phrase of [
   "/api/crypto/chat/execute",
   "Authorization: Bearer",
   "sharedCards",
+  "matterhorn_crypto_chat",
   "matterhorn_bittensor_chat",
   "matterhorn_hyperliquid_chat",
   "matterhorn_polymarket_chat",
@@ -48,6 +49,7 @@ for (const phrase of [
 }
 
 for (const toolName of [
+  "matterhorn_crypto_chat",
   "matterhorn_bittensor_chat",
   "matterhorn_hyperliquid_chat",
   "matterhorn_polymarket_chat",

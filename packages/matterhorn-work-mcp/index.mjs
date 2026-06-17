@@ -362,6 +362,33 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_crypto_chat",
+    description: "Default first Matterhorn Work tool for ordinary crypto requests when the user has not clearly chosen Bittensor, Hyperliquid, or Polymarket. Routes to the safe unified crypto chat workflow; read/preview only and never accepts wallet or exchange secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        venue: { type: "string", enum: ["auto", "bittensor", "hyperliquid", "polymarket"] },
+        ss58Address: { type: "string", description: "Optional public Bittensor SS58 address." },
+        netuid: { type: "number", description: "Optional Bittensor subnet id." },
+        validatorHotkey: { type: "string", description: "Optional public Bittensor validator hotkey." },
+        amountTao: { oneOf: [{ type: "number" }, { type: "string" }], description: "Optional TAO amount for Bittensor previews." },
+        address: { type: "string", description: "Optional public 0x address for market account reads." },
+        asset: { type: "string", description: "Optional Hyperliquid asset such as BTC, ETH, SOL, or HYPE." },
+        marketId: { type: "string", description: "Optional Polymarket market id." },
+        outcome: { type: "string", description: "Optional Polymarket outcome label." },
+        side: { type: "string", enum: ["buy", "sell", "long", "short", "yes", "no"] },
+        size: { oneOf: [{ type: "number" }, { type: "string" }] },
+        price: { oneOf: [{ type: "number" }, { type: "string" }] },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }] },
+        limit: { type: "number" },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+        rateTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["message"],
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_chat",
     description: "Default first Matterhorn Work tool for ordinary Hyperliquid requests. Read-only plus preview-only; does not submit trades or accept API wallet secrets.",
     inputSchema: {
@@ -2234,6 +2261,8 @@ async function handleTool(name, args = {}) {
         auth: "host",
         body: { reply: args.reply === "allow" ? "allow" : "deny" },
       });
+    case "matterhorn_crypto_chat":
+      return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
     case "matterhorn_hyperliquid_chat":
       return callServer("/api/hyperliquid/chat/execute", { method: "POST", body: args });
     case "matterhorn_hyperliquid_list_markets":

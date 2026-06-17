@@ -245,6 +245,21 @@ const server = createServer(async (req, res) => {
       warnings: [],
     });
   }
+  if (req.method === "POST" && url.pathname === "/api/crypto/chat/execute") {
+    assert.equal(body.message, "show BTC Hyperliquid funding");
+    assert.equal(body.venue, "auto");
+    assert.equal("apiSecret" in body, false);
+    return json(res, 200, {
+      success: true,
+      venue: "hyperliquid",
+      intent: "market_context",
+      execution: "read_only",
+      responseText: "Hyperliquid funding context ready.",
+      cards: [],
+      sharedCards: [{ category: "market_context", title: "BTC funding", summary: "Read-only funding context." }],
+      warnings: [],
+    });
+  }
 
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
     if (body.message === "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.") {
@@ -484,6 +499,7 @@ try {
     "matterhorn_write_files",
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
+    "matterhorn_crypto_chat",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
     "matterhorn_hyperliquid_get_account",
@@ -516,6 +532,7 @@ try {
   const schemaText = JSON.stringify(listed.result.tools);
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
+  assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
@@ -707,6 +724,14 @@ try {
   }));
   assert.equal(hyperliquidChat.execution, "unsigned_preview");
   assert.equal(hyperliquidChat.preview.canSubmit, false);
+
+  const cryptoChat = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_chat",
+    arguments: { message: "show BTC Hyperliquid funding", venue: "auto" },
+  }));
+  assert.equal(cryptoChat.venue, "hyperliquid");
+  assert.equal(cryptoChat.execution, "read_only");
+  assert.equal(cryptoChat.sharedCards[0].category, "market_context");
 
   const bittensor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_chat",
