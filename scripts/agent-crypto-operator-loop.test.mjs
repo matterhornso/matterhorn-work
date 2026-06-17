@@ -26,10 +26,12 @@ for (const phrase of [
   "matterhorn_bittensor_chat",
   "matterhorn_hyperliquid_chat",
   "matterhorn_polymarket_chat",
+  "matterhorn-work crypto chat",
   "matterhorn-work bittensor chat",
   "matterhorn-work hyperliquid chat",
   "matterhorn-work polymarket chat",
   "canSubmit: false",
+  "pnpm test:crypto-cli-fallback",
   "pnpm test:market-official-sdk-validation-track",
   "pnpm test:market-execution-safety-gate",
   "pnpm test:bittensor-customer-readiness-gate",
@@ -43,6 +45,7 @@ for (const phrase of [
   "Polymarket read/preview chat",
   "test:agent-crypto-operator-loop",
   "test:unified-crypto-chat",
+  "test:crypto-cli-fallback",
   "test:market-official-sdk-validation-track",
 ]) {
   assert.ok(matrix.includes(phrase), `coverage matrix should include ${phrase}`);
@@ -62,6 +65,7 @@ for (const toolName of [
 }
 
 for (const command of [
+  "crypto chat",
   "bittensor chat",
   "hyperliquid chat",
   "polymarket chat",

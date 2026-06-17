@@ -3770,6 +3770,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
+    "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3791,6 +3792,7 @@ function printHelp(): void {
     "  bittensor               Run Bittensor chat/readiness workflows",
     "  hyperliquid             Run Hyperliquid read/preview workflows",
     "  polymarket              Run Polymarket read/preview workflows",
+    "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7558,6 +7560,102 @@ async function runPolymarket(args: ParsedArgs) {
   }
 }
 
+function assertNoCryptoSecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "private-key",
+    "privateKey",
+    "seed",
+    "mnemonic",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+    "wallet-export",
+    "walletExport",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Crypto ${key} is not accepted by Matterhorn Work CLI. The unified crypto chat is read/preview only; signing, submission, and wallet/exchange custody are not enabled.`,
+      );
+    }
+  }
+}
+
+/** Pass amount-style flags through as a number when finite, otherwise the raw string (preserves precision). */
+function readCryptoAmount(args: ParsedArgs, key: string): number | string | undefined {
+  const raw = readFlag(args.flags, key);
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : trimmed;
+}
+
+async function runCrypto(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "chat";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  try {
+    assertNoCryptoSecrets(args);
+
+    if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        args.positionals.slice(2).join(" ").trim();
+      if (!message.trim()) {
+        throw new Error("message is required for crypto chat");
+      }
+      const limit = readNumber(args.flags, "limit", undefined);
+      const netuid = readNumber(args.flags, "netuid", undefined);
+      const size = readCryptoAmount(args, "size");
+      const price = readCryptoAmount(args, "price");
+      const amountUsdc = readCryptoAmount(args, "amount-usdc");
+      const amountTao = readCryptoAmount(args, "amount-tao");
+      const slippageTolerance = readCryptoAmount(args, "slippage-tolerance");
+      const rateTolerance = readCryptoAmount(args, "rate-tolerance");
+      const result = await fetchJson(`${baseUrl}/api/crypto/chat/execute`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: message.trim(),
+          ...(readFlag(args.flags, "venue") ? { venue: readFlag(args.flags, "venue") } : {}),
+          ...(readFlag(args.flags, "ss58-address") ? { ss58Address: readFlag(args.flags, "ss58-address") } : {}),
+          ...(typeof netuid === "number" ? { netuid } : {}),
+          ...(readFlag(args.flags, "validator-hotkey") ? { validatorHotkey: readFlag(args.flags, "validator-hotkey") } : {}),
+          ...(amountTao !== undefined ? { amountTao } : {}),
+          ...(readFlag(args.flags, "address") ? { address: readFlag(args.flags, "address") } : {}),
+          ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
+          ...(readFlag(args.flags, "market-id") ? { marketId: readFlag(args.flags, "market-id") } : {}),
+          ...(readFlag(args.flags, "outcome") ? { outcome: readFlag(args.flags, "outcome") } : {}),
+          ...(readFlag(args.flags, "side") ? { side: readFlag(args.flags, "side") } : {}),
+          ...(size !== undefined ? { size } : {}),
+          ...(price !== undefined ? { price } : {}),
+          ...(amountUsdc !== undefined ? { amountUsdc } : {}),
+          ...(typeof limit === "number" ? { limit } : {}),
+          ...(slippageTolerance !== undefined ? { slippageTolerance } : {}),
+          ...(rateTolerance !== undefined ? { rateTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
+    throw new Error("crypto requires chat (aliases: ask, execute)");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -10691,6 +10789,10 @@ async function main() {
   }
   if (command === "polymarket" || command === "pm") {
     await runPolymarket(args);
+    return;
+  }
+  if (command === "crypto" || command === "market" || command === "markets") {
+    await runCrypto(args);
     return;
   }
   if (command === "upstream") {

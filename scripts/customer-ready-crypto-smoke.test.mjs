@@ -33,6 +33,7 @@ assert.equal(report.safety.asksForSecrets, false);
 const stageIds = report.stages.map((stage) => stage.id);
 for (const id of [
   "crypto.unified_chat",
+  "crypto.cli",
   "crypto.agent_operator_loop",
   "crypto.hermes_customer_qa",
   "market.safety_contract",
@@ -64,6 +65,7 @@ for (const banned of ["/orders/submit", "/orders/sign", "/exchange/submit"]) {
 }
 for (const required of [
   "pnpm test:unified-crypto-chat",
+  "pnpm test:crypto-cli-fallback",
   "pnpm test:agent-crypto-operator-loop",
   "pnpm test:hermes-crypto-customer-qa",
   "pnpm test:market-execution-safety-gate",
