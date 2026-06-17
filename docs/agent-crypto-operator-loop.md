@@ -243,6 +243,14 @@ The SDK loop also writes
 is the machine-readable index of public artifacts, hashes, venue validation
 status, and safety flags for the run.
 
+Validate that manifest before handing the packet to another agent:
+
+```bash
+matterhorn-work crypto sdk-manifest-check \
+  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --strict --json
+```
+
 For repository gates, run:
 
 ```bash
@@ -253,6 +261,7 @@ pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
+pnpm test:market-sdk-run-manifest-check
 pnpm test:market-customer-evidence-bundle
 pnpm test:bittensor-customer-readiness-gate
 ```

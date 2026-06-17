@@ -184,6 +184,14 @@ human-readable receipt for the SDK validation loop; the manifest is the
 machine-readable index of public output files, SHA-256 hashes, venue validation
 status, and safety flags.
 
+Validate the manifest with:
+
+```bash
+matterhorn-work crypto sdk-manifest-check \
+  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --strict --json
+```
+
 Use `--require-official-sdk-validated` only when every venue has real
 operator-owned official-client/testnet evidence. Pending validation evidence is
 acceptable for read/preview-only customer QA, but it is not authorization for

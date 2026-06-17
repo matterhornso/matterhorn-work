@@ -21,6 +21,7 @@ const offlineStages = [
     ["market.official_sdk_doctor", "Market official SDK validation doctor", ["pnpm", "test:market-official-sdk-validation-doctor"]],
     ["market.official_sdk_normalize", "Market official SDK artifact normalizer", ["pnpm", "test:market-official-sdk-normalize"]],
     ["market.official_sdk_operator_loop", "Market official SDK operator loop", ["pnpm", "test:market-official-sdk-operator-loop"]],
+    ["market.official_sdk_manifest_check", "Market official SDK run manifest checker", ["pnpm", "test:market-sdk-run-manifest-check"]],
     ["market.official_sdk_fixtures", "Market official SDK validation fixtures", ["pnpm", "test:market-official-sdk-validation-fixtures"]],
   ["market.customer_evidence_bundle", "Market customer evidence bundle", ["pnpm", "test:market-customer-evidence-bundle"]],
   ["market.receipt_qa", "Market public receipt QA", ["pnpm", "test:market-receipt-qa"]],
