@@ -144,6 +144,10 @@ export interface UnifiedCryptoChatOptions {
 
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const FORBIDDEN_CREDENTIAL_VALUE_RE =
+  /\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b\s*(?:is|=|:|=>|to sign|for signing)?\s*["'`<]?[A-Za-z0-9_+=/@:.-]{8,}/i;
+const FORBIDDEN_CREDENTIAL_COMMAND_RE =
+  /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -151,6 +155,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function findForbiddenUnifiedCryptoCredentialInput(value: unknown, path: string[] = [], depth = 0): string | null {
   if (depth > 50) return [...path, "too-deep"].join(".");
+  if (typeof value === "string") {
+    const sample = value.length > 4096 ? value.slice(0, 4096) : value;
+    if (FORBIDDEN_CREDENTIAL_VALUE_RE.test(sample) || FORBIDDEN_CREDENTIAL_COMMAND_RE.test(sample)) {
+      return path.length ? path.join(".") : "input";
+    }
+    return null;
+  }
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
       const found = findForbiddenUnifiedCryptoCredentialInput(value[index], [...path, String(index)], depth + 1);
