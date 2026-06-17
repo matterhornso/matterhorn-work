@@ -2,7 +2,9 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 function run(args) {
   return new Promise((resolve) => {
@@ -29,6 +31,19 @@ assert.equal(report.dryRun, true);
 assert.equal(report.safety.nonCustodial, true);
 assert.equal(report.safety.liveSubmissionEnabled, false);
 assert.equal(report.safety.asksForSecrets, false);
+
+const outputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-smoke-json-output-"));
+try {
+  const jsonOutput = join(outputDir, "smoke.json");
+  const outputRun = await run(["--dry-run", "--json-output", jsonOutput]);
+  assert.equal(outputRun.code, 0, outputRun.stderr || outputRun.stdout);
+  const outputReport = JSON.parse(readFileSync(jsonOutput, "utf8"));
+  assert.equal(outputReport.ready, true);
+  assert.equal(outputReport.dryRun, true);
+  assert.equal(outputReport.safety.liveSubmissionEnabled, false);
+} finally {
+  rmSync(outputDir, { recursive: true, force: true });
+}
 
 const stageIds = report.stages.map((stage) => stage.id);
 for (const id of [
@@ -99,6 +114,7 @@ for (const required of [
   "Customer-Ready Crypto Smoke",
   "pnpm smoke:customer-ready-crypto",
   "matterhorn-work crypto customer-smoke --dry-run --json",
+  "--json-output /tmp/matterhorn-crypto-smoke.json",
   "canSubmit: false",
   "never submits",
   "never signs",

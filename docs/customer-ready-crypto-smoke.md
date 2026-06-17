@@ -33,6 +33,13 @@ Strict JSON output for agents:
 matterhorn-work crypto customer-smoke --offline --strict --json
 ```
 
+Write the same report directly to a file without relying on shell redirection:
+
+```bash
+matterhorn-work crypto customer-smoke --offline --strict \
+  --json-output /tmp/matterhorn-crypto-smoke.json
+```
+
 ## Default Offline Checks
 
 The default smoke pass runs these existing gates:
@@ -111,7 +118,8 @@ public/redacted only; it does not sign, submit, store secrets, or authorize live
 execution.
 
 ```bash
-matterhorn-work crypto customer-smoke --offline --strict --json > /tmp/matterhorn-crypto-smoke.json
+matterhorn-work crypto customer-smoke --offline --strict \
+  --json-output /tmp/matterhorn-crypto-smoke.json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json > /tmp/matterhorn-market-sdk-evidence.json
 
 # Optional when an operator has redacted official-client output:

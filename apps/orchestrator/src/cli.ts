@@ -7634,6 +7634,7 @@ const CRYPTO_CUSTOMER_SMOKE_VALUE_FLAGS = [
   "server-url",
   "token",
   "timeout-ms",
+  "json-output",
 ] as const;
 
 const CRYPTO_SDK_LOOP_BOOL_FLAGS = [
