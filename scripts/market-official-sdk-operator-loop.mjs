@@ -77,6 +77,61 @@ function operatorEnv(config) {
   };
 }
 
+function formatCheck(check) {
+  return `| ${check.id} | ${check.status} | ${check.summary ?? ""} |`;
+}
+
+function buildOperatorSummary({ outputDir, doctor, captured, customerBundle, files, ready, ok, errors, warnings }) {
+  const status = ready ? "READY_FOR_TEST_CUSTOMER_QA" : ok ? "OK_WITH_WARNINGS" : "NOT_READY";
+  const venues = Array.isArray(captured?.evidence?.venues) ? captured.evidence.venues : [];
+  return [
+    "# Matterhorn Market Official SDK Operator Summary",
+    "",
+    `Status: ${status}`,
+    `Output directory: ${outputDir}`,
+    "",
+    "## Safety",
+    "",
+    "| Invariant | Value |",
+    "| --- | --- |",
+    "| Non-custodial | true |",
+    "| Live submission enabled | false |",
+    "| Signs or submits | false |",
+    "| Accepts secrets | false |",
+    "",
+    "## Doctor Checks",
+    "",
+    "| Check | Status | Summary |",
+    "| --- | --- | --- |",
+    ...(doctor?.checks ?? []).map(formatCheck),
+    "",
+    "## Venue Validation",
+    "",
+    "| Venue | Status | Official client | Package/version |",
+    "| --- | --- | --- | --- |",
+    ...venues.map((venue) => `| ${venue.venue} | ${venue.status} | ${venue.officialClient?.name ?? ""} | ${venue.officialClient?.packageVersion ?? ""} |`),
+    "",
+    "## Generated Files",
+    "",
+    ...Object.entries(files).map(([label, file]) => `- ${label}: ${file}`),
+    "",
+    "## Customer Evidence",
+    "",
+    customerBundle
+      ? `Customer evidence status: ${customerBundle.summary.ready ? "READY_FOR_TEST_CUSTOMER_QA" : "NOT_READY"}`
+      : "Customer evidence bundle: not requested",
+    "",
+    "## Warnings",
+    "",
+    ...(warnings.length ? warnings.map((warning) => `- ${warning}`) : ["- none"]),
+    "",
+    "## Errors",
+    "",
+    ...(errors.length ? errors.map((error) => `- ${error}`) : ["- none"]),
+    "",
+  ].join("\n");
+}
+
 export async function runMarketOfficialSdkOperatorLoop(config) {
   const outputDir = resolve(config.outputDir || "/tmp/matterhorn-market-sdk-operator-loop");
   mkdirSync(outputDir, { recursive: true });
@@ -141,9 +196,27 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
     files.customerEvidenceJson = jsonPath;
   }
 
+  const errors = [...doctor.errors, ...captured.errors, ...(customerBundle?.summary.errors ?? [])];
+  const warnings = [...doctor.warnings, ...captured.warnings, ...(customerBundle?.summary.warnings ?? [])];
+  const ok = captured.ok && (!customerBundle || customerBundle.summary.ready);
+  const ready = captured.ok && doctor.ready && (!customerBundle || customerBundle.summary.ready);
+  const summaryPath = join(outputDir, "matterhorn-market-sdk-operator-summary.md");
+  files.operatorSummaryMarkdown = summaryPath;
+  writeFileSync(summaryPath, buildOperatorSummary({
+    outputDir,
+    doctor,
+    captured,
+    customerBundle,
+    files,
+    ready,
+    ok,
+    errors,
+    warnings,
+  }));
+
   return {
-    ok: captured.ok && (!customerBundle || customerBundle.summary.ready),
-    ready: captured.ok && doctor.ready && (!customerBundle || customerBundle.summary.ready),
+    ok,
+    ready,
     outputDir,
     doctor,
     officialSdkValidation: {
@@ -153,8 +226,8 @@ export async function runMarketOfficialSdkOperatorLoop(config) {
       allValidated: captured.evidence.venues.every((venue) => venue.status === "validated"),
     },
     customerEvidence: customerBundle?.summary ?? null,
-    errors: [...doctor.errors, ...captured.errors, ...(customerBundle?.summary.errors ?? [])],
-    warnings: [...doctor.warnings, ...captured.warnings, ...(customerBundle?.summary.warnings ?? [])],
+    errors,
+    warnings,
     files,
     safety: {
       nonCustodial: true,
