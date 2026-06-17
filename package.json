@@ -83,6 +83,7 @@
     "smoke:customer-ready-crypto": "node scripts/customer-ready-crypto-smoke.mjs --offline --strict",
     "test:customer-ready-crypto-smoke": "node scripts/customer-ready-crypto-smoke.test.mjs",
     "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts",
+    "test:unified-crypto-shared-card-contract": "node scripts/unified-crypto-shared-card-contract.test.mjs",
     "test:crypto-cli-fallback": "node scripts/crypto-cli-fallback.test.mjs",
     "test:market-official-sdk-validation-track": "node scripts/market-official-sdk-validation-track.test.mjs",
     "test:market-official-sdk-validation-evidence": "node scripts/market-official-sdk-validation-evidence.mjs --self-test",
