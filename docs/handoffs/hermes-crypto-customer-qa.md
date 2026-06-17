@@ -57,6 +57,10 @@ pnpm test:market-customer-evidence-bundle
 pnpm test:bittensor-customer-readiness-gate
 ```
 
+When reviewing `matterhorn-work crypto customer-smoke --json-output`, confirm
+the report includes `metadata.gitSha` and `metadata.generatedAt`. The customer
+packet should preserve that SHA in its Smoke Summary.
+
 Pass criteria:
 
 - all commands exit 0;
