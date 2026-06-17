@@ -106,8 +106,10 @@ Run:
 ```bash
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-evidence
+pnpm test:market-customer-evidence-bundle
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
+node scripts/market-customer-evidence-bundle.mjs --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --output <bundle.md> --json-output <bundle.json>
 ```
 
 This gate does not perform live SDK submission. It verifies that the source code and docs still require official SDK validation, preserve `requiresClientValidation: true`, preserve `canSubmit: false`, and do not introduce submit routes or secret-bearing schemas. The evidence validator lets an operator attach public, redacted official-client/testnet evidence later without importing keys or secrets into Matterhorn.

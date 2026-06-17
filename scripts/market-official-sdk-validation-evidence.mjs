@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 
-const VERSION = "matterhorn.market.official-sdk-validation.v1";
+export const VERSION = "matterhorn.market.official-sdk-validation.v1";
 
 const FORBIDDEN_CREDENTIAL_KEY_RE =
   /^(seed|seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|secret|password|passphrase|keyfile|walletExport|wallet_export|rawSignature|raw_signature|signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)$/i;
@@ -43,7 +43,7 @@ function findForbiddenCredentialKey(value, path = [], depth = 0) {
   return null;
 }
 
-function sampleEvidence() {
+export function sampleEvidence() {
   const generatedAt = new Date(0).toISOString();
   return {
     version: VERSION,
@@ -164,7 +164,7 @@ function validatePolymarketVenue(venue, errors) {
   }
 }
 
-function validateEvidenceBundle(bundle) {
+export function validateEvidenceBundle(bundle) {
   const errors = [];
   const warnings = [];
   assertCondition(errors, isRecord(bundle), "Evidence must be a JSON object.");
@@ -249,29 +249,31 @@ function runSelfTest() {
   process.stdout.write("Market official SDK validation evidence self-test passed.\n");
 }
 
-const config = parseArgs(process.argv);
-if (config.help) {
-  printHelp();
-  process.exit(0);
-}
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const config = parseArgs(process.argv);
+  if (config.help) {
+    printHelp();
+    process.exit(0);
+  }
 
-if (config.selfTest) {
-  runSelfTest();
-  process.exit(0);
-}
+  if (config.selfTest) {
+    runSelfTest();
+    process.exit(0);
+  }
 
-const evidence = config.evidenceFile
-  ? JSON.parse(readFileSync(config.evidenceFile, "utf8"))
-  : sampleEvidence();
-const result = validateEvidenceBundle(evidence);
-const report = { ...result, evidence };
-if (config.json) {
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-} else if (result.ok) {
-  process.stdout.write(`Market official SDK validation evidence accepted with ${result.warnings.length} warning(s).\n`);
-  for (const warning of result.warnings) process.stdout.write(`- ${warning}\n`);
-} else {
-  process.stderr.write(`Market official SDK validation evidence rejected with ${result.errors.length} error(s).\n`);
-  for (const error of result.errors) process.stderr.write(`- ${error}\n`);
+  const evidence = config.evidenceFile
+    ? JSON.parse(readFileSync(config.evidenceFile, "utf8"))
+    : sampleEvidence();
+  const result = validateEvidenceBundle(evidence);
+  const report = { ...result, evidence };
+  if (config.json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } else if (result.ok) {
+    process.stdout.write(`Market official SDK validation evidence accepted with ${result.warnings.length} warning(s).\n`);
+    for (const warning of result.warnings) process.stdout.write(`- ${warning}\n`);
+  } else {
+    process.stderr.write(`Market official SDK validation evidence rejected with ${result.errors.length} error(s).\n`);
+    for (const error of result.errors) process.stderr.write(`- ${error}\n`);
+  }
+  process.exit(result.ok ? 0 : 1);
 }
-process.exit(result.ok ? 0 : 1);
