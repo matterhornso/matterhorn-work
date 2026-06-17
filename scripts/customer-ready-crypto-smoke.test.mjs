@@ -121,6 +121,7 @@ const doc = readFileSync("docs/customer-ready-crypto-smoke.md", "utf8");
 for (const required of [
   "Customer-Ready Crypto Smoke",
   "pnpm smoke:customer-ready-crypto",
+  "pnpm test:agent-control-mcp",
   "matterhorn-work crypto customer-smoke --dry-run --json",
   "--json-output /tmp/matterhorn-crypto-smoke.json",
   "canSubmit: false",

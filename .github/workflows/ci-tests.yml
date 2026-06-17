@@ -153,5 +153,8 @@ jobs:
       - name: Validate customer crypto smoke wiring
         run: pnpm test:customer-ready-crypto-smoke
 
+      - name: Validate agent MCP crypto evidence tools
+        run: pnpm test:agent-control-mcp
+
       - name: Run customer crypto smoke
         run: pnpm smoke:customer-ready-crypto
