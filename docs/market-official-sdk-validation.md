@@ -209,6 +209,33 @@ node scripts/market-official-sdk-validation-capture.mjs \
   --output /tmp/matterhorn-market-sdk-evidence.json
 ```
 
+## One-Command Operator Loop
+
+For a copy-pasteable offline rehearsal, run the fixture-backed loop:
+
+```bash
+node scripts/market-official-sdk-operator-loop.mjs \
+  --fixture \
+  --output-dir /tmp/matterhorn-market-sdk-loop \
+  --json
+```
+
+For real operator-owned public artifacts, run:
+
+```bash
+node scripts/market-official-sdk-operator-loop.mjs \
+  --hyperliquid-official-public /tmp/operator-hyperliquid-official-client-public.json \
+  --polymarket-official-public /tmp/operator-polymarket-official-client-public.json \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --output-dir /tmp/matterhorn-market-sdk-loop \
+  --json
+```
+
+The loop runs the validation doctor, normalizes public artifacts, captures
+official SDK evidence, and optionally writes a customer evidence bundle. It does
+not run official SDK packages, sign, submit, broadcast, call exchanges, or accept
+secret-bearing artifacts.
+
 ## Fixture-Backed Operator Loop
 
 Before running real official clients, use the checked-in fixtures to verify the
@@ -247,11 +274,13 @@ pnpm test:market-official-sdk-validation-evidence
 pnpm test:market-official-sdk-validation-capture
 pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
+pnpm test:market-official-sdk-operator-loop
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 node scripts/market-official-sdk-validation-doctor.mjs --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
+node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
 node scripts/market-official-sdk-validation-evidence.mjs --sample --json
 node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
 node scripts/market-official-sdk-validation-capture.mjs --json
