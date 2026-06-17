@@ -118,6 +118,17 @@ matterhorn-work crypto bittensor-evidence-verify \
   --strict --json
 ```
 
+If Hermes is running through an MCP client instead of the CLI, use the same
+public/redacted evidence objects with:
+
+- `matterhorn_market_customer_evidence_verify`
+- `matterhorn_bittensor_customer_evidence_verify`
+- `matterhorn_crypto_customer_packet`
+
+Those MCP tools must reject raw signatures, signed payloads, seed phrases,
+private keys, mnemonics, API secrets, keyfiles, and wallet exports. They do not
+read local files, sign, or submit orders/transactions.
+
 Pass criteria:
 
 - `matterhorn-work crypto sdk-loop` reports `ready: true`;

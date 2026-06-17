@@ -235,6 +235,21 @@ The CLI path stays offline, public, and non-custodial. It must not receive
 private keys, API secrets, raw signatures, signed payloads, seed phrases,
 mnemonics, keyfiles, or wallet exports. For repository gates, run:
 
+MCP-capable agents can also validate already-loaded public evidence without
+shelling out or giving the MCP server filesystem access:
+
+- `matterhorn_market_customer_evidence_verify` accepts the public JSON object
+  from `matterhorn-work crypto evidence-bundle` plus optional Markdown text.
+- `matterhorn_bittensor_customer_evidence_verify` accepts the public Bittensor
+  evidence bundle JSON object plus optional Markdown text.
+- `matterhorn_crypto_customer_packet` builds the top-level customer packet from
+  already-loaded customer smoke, market verification, and optional Bittensor
+  verification objects.
+
+These MCP tools are offline-only. They reject credential-shaped fields such as
+seed phrases, private keys, API secrets, raw signatures, signed payloads, and
+wallet exports.
+
 When a Hyperliquid or Polymarket demo includes an external-signer public
 receipt, validate it with `matterhorn-work crypto receipt-check` and add the
 result to the bundle:

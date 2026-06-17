@@ -747,6 +747,75 @@ try {
   assert.equal(cryptoChat.sharedCards[0].kind, "market_context");
   assert.equal(cryptoChat.sharedCards[0].safety.canSubmit, false);
 
+  const marketCustomerEvidenceSummary = {
+    ready: true,
+    customerReadySmoke: {
+      ready: true,
+      requiredStages: [
+        "crypto.unified_chat",
+        "crypto.shared_card_contract",
+        "market.execution_safety",
+        "market.official_sdk_validation",
+        "market.customer_evidence_bundle",
+        "hyperliquid.readiness",
+        "polymarket.readiness",
+        "bittensor.customer_readiness",
+      ].map((id) => ({ id, label: id, status: "pass" })),
+    },
+    officialSdkValidation: {
+      ready: true,
+      allValidated: false,
+      validation: { ok: true, errors: [], warnings: [] },
+    },
+    sdkManifestCheck: { present: true, ready: true, ok: true, fileCount: 4, venueCount: 2 },
+    receiptCheck: { present: true, ready: true, ok: true, matchesHandoff: true },
+    warnings: [],
+    errors: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      asksForSecrets: false,
+      storesSecrets: false,
+    },
+  };
+  const marketCustomerEvidenceMarkdown = [
+    "# Matterhorn Work Market Customer Evidence Bundle",
+    "",
+    "Result: READY_FOR_TEST_CUSTOMER_QA",
+    "",
+    "## Safety Posture",
+    "",
+    "## Official SDK Validation Evidence",
+    "",
+    "## SDK Run Manifest Evidence",
+    "",
+    "## Public Receipt Evidence",
+    "",
+    "## Red Lines",
+    "",
+  ].join("\n");
+  const marketEvidenceVerify = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_market_customer_evidence_verify",
+    arguments: {
+      bundle: marketCustomerEvidenceSummary,
+      markdown: marketCustomerEvidenceMarkdown,
+      requireSdkManifestCheck: true,
+      requireReceiptCheck: true,
+    },
+  }));
+  assert.equal(marketEvidenceVerify.ready, true);
+  assert.equal(marketEvidenceVerify.safety.liveSubmissionEnabled, false);
+  assert.ok(marketEvidenceVerify.checks.some((check) => check.id === "sdk_manifest.accepted"));
+  assert.ok(marketEvidenceVerify.checks.some((check) => check.id === "receipt.accepted"));
+
+  const badMarketEvidenceVerify = await mcp.ask("tools/call", {
+    name: "matterhorn_market_customer_evidence_verify",
+    arguments: {
+      bundle: { ...marketCustomerEvidenceSummary, rawSignature: "0xdeadbeef" },
+    },
+  });
+  assert.match(badMarketEvidenceVerify.error?.message || "", /credential-shaped field/i);
+
   const bittensor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_chat",
     arguments: { message: "show my TAO" },
@@ -852,6 +921,68 @@ try {
   assert.match(customerEvidenceBundle.markdown, /Receipt check accepted/);
   assert.match(customerEvidenceBundle.markdown, /Scheduled watch autopilot/);
   assert.match(customerEvidenceBundle.markdown, /6 scheduled checks, 2 alerts, 18 evaluations/);
+
+  const bittensorEvidenceVerify = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_bittensor_customer_evidence_verify",
+    arguments: {
+      bundle: customerEvidenceBundle.summary,
+      markdown: [
+        "# Matterhorn Work Bittensor Customer Evidence Bundle",
+        "",
+        "## Decision",
+        "",
+        "- Result: READY_FOR_TEST_CUSTOMERS",
+        "",
+        "## Gate Summary",
+        "",
+        "## Before Customer Demo",
+        "",
+      ].join("\n"),
+      requireReceiptCheck: true,
+      requireReadonlyAdapterCanary: true,
+      requireWatchAutopilotScheduler: true,
+    },
+  }));
+  assert.equal(bittensorEvidenceVerify.ready, true);
+  assert.equal(bittensorEvidenceVerify.safety.signsOrBroadcasts, false);
+  assert.ok(bittensorEvidenceVerify.checks.some((check) => check.id === "ci.no_failures"));
+
+  const cryptoCustomerPacket = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_customer_packet",
+    arguments: {
+      customerReadySmoke: {
+        ready: true,
+        summary: { pass: 18, fail: 0, skip: 0 },
+        stages: [{ id: "crypto.unified_chat", status: "pass" }],
+        safety: {
+          nonCustodial: true,
+          liveSubmissionEnabled: false,
+          asksForSecrets: false,
+        },
+      },
+      marketEvidenceVerify,
+      bittensorEvidence: bittensorEvidenceVerify,
+      requireMarketEvidence: true,
+      requireBittensorEvidence: true,
+    },
+  }));
+  assert.equal(cryptoCustomerPacket.ready, true);
+  assert.equal(cryptoCustomerPacket.packet.marketEvidence.ready, true);
+  assert.equal(cryptoCustomerPacket.packet.bittensorEvidence.ready, true);
+  assert.equal(cryptoCustomerPacket.safety.liveSubmissionEnabled, false);
+  assert.match(cryptoCustomerPacket.markdown, /READY_FOR_TEST_CUSTOMER_QA/);
+
+  const badCryptoCustomerPacket = await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_customer_packet",
+    arguments: {
+      customerReadySmoke: {
+        ready: true,
+        rawSignature: "0xdeadbeef",
+        safety: { nonCustodial: true, liveSubmissionEnabled: false, asksForSecrets: false },
+      },
+    },
+  });
+  assert.match(badCryptoCustomerPacket.error?.message || "", /credential-shaped field/i);
 
   const badCustomerEvidenceBundle = await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_customer_evidence_bundle",

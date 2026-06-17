@@ -389,6 +389,52 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_market_customer_evidence_verify",
+    description: "Verify a public/redacted Hyperliquid + Polymarket customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle: { type: "object", description: "JSON object produced by matterhorn-work crypto evidence-bundle." },
+        markdown: { type: "string", description: "Optional Markdown bundle text produced by matterhorn-work crypto evidence-bundle." },
+        requireOfficialSdkValidated: { type: "boolean" },
+        requireSdkManifestCheck: { type: "boolean" },
+        requireReceiptCheck: { type: "boolean" },
+      },
+      required: ["bundle"],
+    },
+  },
+  {
+    name: "matterhorn_bittensor_customer_evidence_verify",
+    description: "Verify a public/redacted Bittensor customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle: { type: "object", description: "JSON object produced by the Bittensor customer evidence bundle tool or CLI." },
+        markdown: { type: "string", description: "Optional Markdown bundle text produced by the Bittensor evidence bundle." },
+        requireReceiptCheck: { type: "boolean" },
+        requireReadonlyAdapterCanary: { type: "boolean" },
+        requireWatchAutopilotScheduler: { type: "boolean" },
+      },
+      required: ["bundle"],
+    },
+  },
+  {
+    name: "matterhorn_crypto_customer_packet",
+    description: "Build a top-level public/redacted customer QA packet from customer-ready smoke, market evidence verification, and optional Bittensor evidence. Offline only and non-custodial.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerReadySmoke: { type: "object", description: "JSON output from matterhorn-work crypto customer-smoke." },
+        marketEvidenceVerify: { type: "object", description: "Optional JSON output from market customer evidence verification." },
+        bittensorEvidence: { type: "object", description: "Optional JSON output from Bittensor evidence bundle or verification." },
+        requireMarketEvidence: { type: "boolean" },
+        requireBittensorEvidence: { type: "boolean" },
+        title: { type: "string" },
+      },
+      required: ["customerReadySmoke"],
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_chat",
     description: "Default first Matterhorn Work tool for ordinary Hyperliquid requests. Read-only plus preview-only; does not submit trades or accept API wallet secrets.",
     inputSchema: {
@@ -1495,8 +1541,21 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
   };
 }
 
-const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|signedPayload|signed_payload|signedExtrinsic|signed_extrinsic)/i;
+const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)/i;
 const CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE = /^(signature)$/i;
+const CUSTOMER_EVIDENCE_ALLOWED_SAFETY_KEY_RE = /^(asksForSecrets|storesSecrets|acceptsSecrets|nonCustodial|liveSubmissionEnabled|signsOrSubmits|signsOrBroadcasts|submitsTransactions|externalSignerOnly)$/i;
+const MARKET_CUSTOMER_EVIDENCE_REQUIRED_STAGES = [
+  "crypto.unified_chat",
+  "crypto.shared_card_contract",
+  "market.execution_safety",
+  "market.official_sdk_validation",
+  "market.customer_evidence_bundle",
+  "hyperliquid.readiness",
+  "polymarket.readiness",
+  "bittensor.customer_readiness",
+];
+const CUSTOMER_EVIDENCE_MARKDOWN_FORBIDDEN_ASSIGNMENT_RE =
+  /\b(seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)\b\s*[:=]\s*\S+/i;
 
 function customerEvidenceArray(value) {
   return Array.isArray(value) ? value : [];
@@ -1509,11 +1568,355 @@ function assertCustomerEvidenceHasNoCredentials(value, label, path = []) {
     return;
   }
   for (const [key, child] of Object.entries(value)) {
-    if (CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE.test(key) || CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE.test(key)) {
+    if (
+      !CUSTOMER_EVIDENCE_ALLOWED_SAFETY_KEY_RE.test(key) &&
+      (CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE.test(key) || CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE.test(key))
+    ) {
       throw new Error(label + " contains forbidden credential-shaped field: " + [...path, key].join("."));
     }
     assertCustomerEvidenceHasNoCredentials(child, label, [...path, key]);
   }
+}
+
+function assertCustomerEvidenceMarkdownHasNoCredentials(markdown, label) {
+  if (typeof markdown !== "string") return;
+  if (CUSTOMER_EVIDENCE_MARKDOWN_FORBIDDEN_ASSIGNMENT_RE.test(markdown)) {
+    throw new Error(label + " contains forbidden credential-shaped assignment text.");
+  }
+}
+
+function customerEvidencePushCheck(checks, errors, warnings, id, ok, message, severity = "error") {
+  checks.push({ id, status: ok ? "pass" : severity, message });
+  if (ok) return;
+  if (severity === "warning") warnings.push(message);
+  else errors.push(message);
+}
+
+function matterhornMarketCustomerEvidenceVerify(args = {}) {
+  const summary = args.bundle || args.summary || null;
+  assertCustomerEvidenceHasNoCredentials(summary, "Market customer evidence verifier");
+  assertCustomerEvidenceMarkdownHasNoCredentials(args.markdown, "Market customer evidence Markdown");
+
+  const checks = [];
+  const errors = [];
+  const warnings = [];
+  customerEvidencePushCheck(checks, errors, warnings, "bundle.ready", summary?.ready === true, "Evidence bundle summary must be ready.");
+  customerEvidencePushCheck(checks, errors, warnings, "safety.non_custodial", summary?.safety?.nonCustodial === true, "Evidence bundle must keep nonCustodial=true.");
+  customerEvidencePushCheck(checks, errors, warnings, "safety.live_submission_disabled", summary?.safety?.liveSubmissionEnabled === false, "Evidence bundle must keep liveSubmissionEnabled=false.");
+  customerEvidencePushCheck(checks, errors, warnings, "safety.no_secret_request", summary?.safety?.asksForSecrets === false, "Evidence bundle must keep asksForSecrets=false.");
+  customerEvidencePushCheck(checks, errors, warnings, "safety.no_secret_storage", summary?.safety?.storesSecrets === false, "Evidence bundle must keep storesSecrets=false.");
+
+  const requiredStages = customerEvidenceArray(summary?.customerReadySmoke?.requiredStages);
+  const stageById = new Map(requiredStages.map((stage) => [stage?.id, stage]));
+  for (const id of MARKET_CUSTOMER_EVIDENCE_REQUIRED_STAGES) {
+    const stage = stageById.get(id);
+    customerEvidencePushCheck(checks, errors, warnings, "smoke." + id, stage?.status === "pass", "Required smoke stage must pass: " + id + ".");
+  }
+
+  customerEvidencePushCheck(
+    checks,
+    errors,
+    warnings,
+    "official_sdk.accepted",
+    summary?.officialSdkValidation?.validation?.ok === true && summary?.officialSdkValidation?.ready === true,
+    "Official SDK evidence must be accepted by the validator.",
+  );
+  if (args.requireOfficialSdkValidated === true) {
+    customerEvidencePushCheck(
+      checks,
+      errors,
+      warnings,
+      "official_sdk.all_validated",
+      summary?.officialSdkValidation?.allValidated === true,
+      "Every venue must be status=validated when requireOfficialSdkValidated is set.",
+    );
+  }
+
+  const sdkManifest = summary?.sdkManifestCheck;
+  if (sdkManifest?.present) {
+    customerEvidencePushCheck(
+      checks,
+      errors,
+      warnings,
+      "sdk_manifest.accepted",
+      sdkManifest.ready === true && sdkManifest.ok === true && Number(sdkManifest.fileCount) > 0,
+      "Attached SDK run manifest-check evidence must be accepted and include hashed files.",
+    );
+  } else if (args.requireSdkManifestCheck === true) {
+    customerEvidencePushCheck(checks, errors, warnings, "sdk_manifest.required", false, "SDK run manifest-check evidence is required but absent.");
+  }
+
+  const receipt = summary?.receiptCheck;
+  if (receipt?.present) {
+    customerEvidencePushCheck(
+      checks,
+      errors,
+      warnings,
+      "receipt.accepted",
+      receipt.ready === true && receipt.ok === true && receipt.matchesHandoff === true,
+      "Attached receipt-check evidence must be accepted and match the original handoff.",
+    );
+  } else if (args.requireReceiptCheck === true) {
+    customerEvidencePushCheck(checks, errors, warnings, "receipt.required", false, "Receipt-check evidence is required but absent.");
+  }
+
+  if (Array.isArray(summary?.errors) && summary.errors.length > 0) {
+    for (const error of summary.errors) errors.push("Bundle summary error: " + String(error));
+    checks.push({ id: "bundle.errors", status: "error", message: "Evidence bundle summary includes validation errors." });
+  }
+  if (Array.isArray(summary?.warnings)) {
+    warnings.push(...summary.warnings.map((item) => "Bundle summary warning: " + String(item)));
+  }
+
+  if (typeof args.markdown === "string" && args.markdown.length > 0) {
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.ready_result", /Result:\s*READY_FOR_TEST_CUSTOMER_QA/i.test(args.markdown), "Markdown bundle must show READY_FOR_TEST_CUSTOMER_QA.");
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.safety_posture", args.markdown.includes("## Safety Posture"), "Markdown bundle must include Safety Posture.");
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.red_lines", args.markdown.includes("## Red Lines"), "Markdown bundle must include Red Lines.");
+    if (sdkManifest?.present) {
+      customerEvidencePushCheck(checks, errors, warnings, "markdown.sdk_manifest", args.markdown.includes("## SDK Run Manifest Evidence"), "Markdown bundle must include SDK Run Manifest Evidence.");
+    }
+    if (receipt?.present) {
+      customerEvidencePushCheck(checks, errors, warnings, "markdown.receipt", args.markdown.includes("## Public Receipt Evidence"), "Markdown bundle must include Public Receipt Evidence.");
+    }
+  }
+
+  const ok = errors.length === 0;
+  return {
+    ok,
+    ready: ok && summary?.ready === true,
+    status: ok ? "READY_FOR_TEST_CUSTOMER_QA" : "NOT_READY",
+    checks,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      source: "matterhorn_market_customer_evidence_verify",
+    },
+  };
+}
+
+function customerEvidenceOptionalEvidence(checks, errors, warnings, summary, key, label, required) {
+  const value = summary?.[key];
+  if (value) {
+    customerEvidencePushCheck(checks, errors, warnings, "optional." + key, value.ready === true, label + " evidence must be ready when attached.");
+    return;
+  }
+  if (required === true) {
+    customerEvidencePushCheck(checks, errors, warnings, "optional." + key + ".required", false, label + " evidence is required but absent.");
+  }
+}
+
+function matterhornBittensorCustomerEvidenceVerify(args = {}) {
+  const summary = args.bundle || args.summary || null;
+  assertCustomerEvidenceHasNoCredentials(summary, "Bittensor customer evidence verifier");
+  assertCustomerEvidenceMarkdownHasNoCredentials(args.markdown, "Bittensor customer evidence Markdown");
+
+  const checks = [];
+  const errors = [];
+  const warnings = [];
+  customerEvidencePushCheck(checks, errors, warnings, "bundle.ready", summary?.ready === true, "Bittensor evidence bundle must be ready.");
+  customerEvidencePushCheck(checks, errors, warnings, "bittensor.live_qa", summary?.bittensor?.ready === true, "Bittensor live QA summary must be ready.");
+  customerEvidencePushCheck(checks, errors, warnings, "agent_control.ready", summary?.agentControl?.ready === true, "Agent control live QA summary must be ready.");
+  customerEvidencePushCheck(checks, errors, warnings, "readiness_gate.ready", summary?.readinessGate?.ready === true, "Customer readiness gate must be ready.");
+  customerEvidencePushCheck(checks, errors, warnings, "ci.present", Number(summary?.ci?.total ?? 0) > 0, "CI evidence must include at least one check.");
+  customerEvidencePushCheck(checks, errors, warnings, "ci.no_failures", Array.isArray(summary?.ci?.failed) && summary.ci.failed.length === 0, "CI evidence must have no failed checks.");
+  customerEvidencePushCheck(checks, errors, warnings, "ci.no_pending", Array.isArray(summary?.ci?.pending) && summary.ci.pending.length === 0, "CI evidence must have no pending checks.");
+
+  customerEvidenceOptionalEvidence(checks, errors, warnings, summary, "receiptCheck", "Receipt check", args.requireReceiptCheck);
+  customerEvidenceOptionalEvidence(checks, errors, warnings, summary, "readonlyAdapterCanary", "Read-only adapter canary", args.requireReadonlyAdapterCanary);
+  customerEvidenceOptionalEvidence(checks, errors, warnings, summary, "watchAutopilotScheduler", "Scheduled watch autopilot", args.requireWatchAutopilotScheduler);
+
+  if (Array.isArray(summary?.bittensor?.failedStages) && summary.bittensor.failedStages.length > 0) {
+    errors.push("Bittensor failed stages remain: " + summary.bittensor.failedStages.join(", "));
+  }
+
+  if (typeof args.markdown === "string" && args.markdown.length > 0) {
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.ready_result", /READY_FOR_TEST_CUSTOMERS/i.test(args.markdown), "Markdown bundle must show READY_FOR_TEST_CUSTOMERS.");
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.gate_summary", args.markdown.includes("## Gate Summary"), "Markdown bundle must include Gate Summary.");
+    customerEvidencePushCheck(checks, errors, warnings, "markdown.customer_demo", args.markdown.includes("## Before Customer Demo"), "Markdown bundle must include Before Customer Demo.");
+  }
+
+  const ok = errors.length === 0;
+  return {
+    ok,
+    ready: ok && summary?.ready === true,
+    status: ok ? "READY_FOR_TEST_CUSTOMERS" : "NOT_READY",
+    checks,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrBroadcasts: false,
+      acceptsSecrets: false,
+      source: "matterhorn_bittensor_customer_evidence_verify",
+    },
+  };
+}
+
+function summarizeMcpCustomerSmoke(raw) {
+  const stages = customerEvidenceArray(raw?.stages);
+  const pass = Number(raw?.summary?.pass ?? stages.filter((stage) => stage.status === "pass").length);
+  const fail = Number(raw?.summary?.fail ?? stages.filter((stage) => stage.status === "fail").length);
+  const skip = Number(raw?.summary?.skip ?? stages.filter((stage) => stage.status === "skip").length);
+  const errors = [];
+  const warnings = [];
+  if (raw?.ready !== true) errors.push("Customer-ready crypto smoke is not ready.");
+  if (fail > 0) errors.push("Customer-ready crypto smoke has " + fail + " failing stage(s).");
+  if (raw?.safety?.nonCustodial !== true) errors.push("Customer-ready crypto smoke must keep nonCustodial=true.");
+  if (raw?.safety?.liveSubmissionEnabled !== false) errors.push("Customer-ready crypto smoke must keep liveSubmissionEnabled=false.");
+  if (raw?.safety?.asksForSecrets !== false) errors.push("Customer-ready crypto smoke must keep asksForSecrets=false.");
+  if (skip > 0) warnings.push("Customer-ready crypto smoke has " + skip + " skipped stage(s).");
+  return {
+    present: Boolean(raw),
+    ready: raw?.ready === true && fail === 0 && errors.length === 0,
+    pass,
+    fail,
+    skip,
+    errors,
+    warnings,
+  };
+}
+
+function summarizeMcpMarketEvidence(raw, required) {
+  if (!raw) {
+    return {
+      present: false,
+      ready: required !== true,
+      errors: required === true ? ["Market evidence verification is required but missing."] : [],
+      warnings: required === true ? [] : ["Market evidence verification is not attached."],
+    };
+  }
+  const errors = [];
+  const warnings = [];
+  if (raw.ok !== true || raw.ready !== true) errors.push("Market evidence verification is not ready.");
+  if (raw.safety?.nonCustodial !== true) errors.push("Market evidence verification must keep nonCustodial=true.");
+  if (raw.safety?.liveSubmissionEnabled !== false) errors.push("Market evidence verification must keep liveSubmissionEnabled=false.");
+  if (raw.safety?.signsOrSubmits !== false) errors.push("Market evidence verification must keep signsOrSubmits=false.");
+  if (raw.safety?.acceptsSecrets !== false) errors.push("Market evidence verification must keep acceptsSecrets=false.");
+  if (Array.isArray(raw.errors)) errors.push(...raw.errors.map((item) => String(item)));
+  if (Array.isArray(raw.warnings)) warnings.push(...raw.warnings.map((item) => String(item)));
+  return {
+    present: true,
+    ready: raw.ok === true && raw.ready === true && errors.length === 0,
+    status: raw.status ?? null,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+  };
+}
+
+function summarizeMcpBittensorEvidence(raw, required) {
+  if (!raw) {
+    return {
+      present: false,
+      ready: required !== true,
+      errors: required === true ? ["Bittensor evidence bundle is required but missing."] : [],
+      warnings: required === true ? [] : ["Bittensor evidence bundle is not attached."],
+    };
+  }
+  const errors = [];
+  const warnings = [];
+  if (raw.ready !== true) errors.push("Bittensor evidence bundle is not ready.");
+  if (Array.isArray(raw.errors)) errors.push(...raw.errors.map((item) => String(item)));
+  if (Array.isArray(raw.warnings)) warnings.push(...raw.warnings.map((item) => String(item)));
+  return {
+    present: true,
+    ready: raw.ready === true && errors.length === 0,
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+  };
+}
+
+function renderMcpCryptoCustomerPacketMarkdown(packet) {
+  const warnings = packet.warnings.length ? packet.warnings.map((item) => "- " + item) : ["- None."];
+  const errors = packet.errors.length ? packet.errors.map((item) => "- " + item) : ["- None."];
+  return [
+    "# " + packet.title,
+    "",
+    "Result: " + (packet.ready ? "READY_FOR_TEST_CUSTOMER_QA" : "NOT_READY"),
+    "",
+    "## Safety Posture",
+    "",
+    "- Non-custodial: yes",
+    "- Live Hyperliquid/Polymarket submission: disabled",
+    "- Secrets accepted: no",
+    "- Evidence type: public/redacted only",
+    "",
+    "## Components",
+    "",
+    "| Component | Ready |",
+    "| --- | --- |",
+    "| Customer-ready crypto smoke | " + (packet.customerReadySmoke.ready ? "yes" : "no") + " |",
+    "| Market evidence verifier | " + (packet.marketEvidence.ready ? "yes" : "no") + " |",
+    "| Bittensor evidence bundle | " + (packet.bittensorEvidence.ready ? "yes" : "no") + " |",
+    "",
+    "## Smoke Summary",
+    "",
+    "- " + packet.customerReadySmoke.pass + " passed, " + packet.customerReadySmoke.fail + " failed, " + packet.customerReadySmoke.skip + " skipped",
+    "",
+    "## Warnings",
+    "",
+    ...warnings,
+    "",
+    "## Validation Errors",
+    "",
+    ...errors,
+    "",
+    "## Red Lines",
+    "",
+    "- Do not treat this packet as authorization for live market submission.",
+    "- Do not paste seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports into Matterhorn.",
+    "- Do not add live market order submission routes.",
+    "",
+  ].join("\n");
+}
+
+function matterhornCryptoCustomerPacket(args = {}) {
+  assertCustomerEvidenceHasNoCredentials(args.customerReadySmoke, "Crypto customer packet smoke evidence");
+  assertCustomerEvidenceHasNoCredentials(args.marketEvidenceVerify, "Crypto customer packet market evidence");
+  assertCustomerEvidenceHasNoCredentials(args.bittensorEvidence, "Crypto customer packet Bittensor evidence");
+  const customerReadySmoke = summarizeMcpCustomerSmoke(args.customerReadySmoke);
+  const marketEvidence = summarizeMcpMarketEvidence(args.marketEvidenceVerify, args.requireMarketEvidence === true);
+  const bittensorEvidence = summarizeMcpBittensorEvidence(args.bittensorEvidence, args.requireBittensorEvidence === true);
+  const errors = [
+    ...customerReadySmoke.errors,
+    ...marketEvidence.errors,
+    ...bittensorEvidence.errors,
+  ];
+  const warnings = [
+    ...customerReadySmoke.warnings,
+    ...marketEvidence.warnings,
+    ...bittensorEvidence.warnings,
+  ];
+  const packet = {
+    title: args.title || "Matterhorn Work Crypto Customer Packet",
+    generatedAt: new Date().toISOString(),
+    ready: customerReadySmoke.ready && marketEvidence.ready && bittensorEvidence.ready && errors.length === 0,
+    customerReadySmoke,
+    marketEvidence,
+    bittensorEvidence,
+    warnings: [...new Set(warnings)],
+    errors: [...new Set(errors)],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      asksForSecrets: false,
+      storesSecrets: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      source: "matterhorn_crypto_customer_packet",
+    },
+  };
+  return {
+    ok: true,
+    ready: packet.ready,
+    packet,
+    markdown: renderMcpCryptoCustomerPacketMarkdown(packet),
+    safety: packet.safety,
+  };
 }
 
 function customerEvidenceSummaryValue(report, key) {
@@ -2263,6 +2666,12 @@ async function handleTool(name, args = {}) {
       });
     case "matterhorn_crypto_chat":
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
+    case "matterhorn_market_customer_evidence_verify":
+      return matterhornMarketCustomerEvidenceVerify(args);
+    case "matterhorn_bittensor_customer_evidence_verify":
+      return matterhornBittensorCustomerEvidenceVerify(args);
+    case "matterhorn_crypto_customer_packet":
+      return matterhornCryptoCustomerPacket(args);
     case "matterhorn_hyperliquid_chat":
       return callServer("/api/hyperliquid/chat/execute", { method: "POST", body: args });
     case "matterhorn_hyperliquid_list_markets":
