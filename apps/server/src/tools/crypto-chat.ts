@@ -78,7 +78,31 @@ export type UnifiedCryptoSharedCardKind =
 
 export type UnifiedCryptoSharedCardStatus = "info" | "success" | "warning" | "danger";
 
+export const UNIFIED_CRYPTO_SHARED_CARD_VERSION = "matterhorn.crypto.shared-card.v1" as const;
+
+export const UNIFIED_CRYPTO_SHARED_CARD_KINDS = [
+  "clarification",
+  "discovery",
+  "account_snapshot",
+  "market_context",
+  "orderbook_context",
+  "action_preview",
+  "compliance_block",
+  "external_signer_handoff",
+  "receipt_status",
+  "watch_alert",
+  "generic",
+] as const satisfies readonly UnifiedCryptoSharedCardKind[];
+
+export const UNIFIED_CRYPTO_SHARED_CARD_STATUSES = [
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const satisfies readonly UnifiedCryptoSharedCardStatus[];
+
 export interface UnifiedCryptoSharedCard {
+  version: typeof UNIFIED_CRYPTO_SHARED_CARD_VERSION;
   kind: UnifiedCryptoSharedCardKind;
   venue: RoutedCryptoVenue | "auto";
   title: string;
@@ -88,6 +112,11 @@ export interface UnifiedCryptoSharedCard {
   source: unknown | null;
   warnings: string[];
   data: unknown;
+  safety: {
+    nonCustodial: true;
+    liveSubmissionEnabled: false;
+    canSubmit: false;
+  };
 }
 
 export interface UnifiedCryptoChatResult {
@@ -276,6 +305,7 @@ export function buildUnifiedCryptoSharedCards(
     const warnings = Array.from(new Set([...inheritedWarnings, ...cardWarnings(card)]));
     const title = cardTitle(card, kind.replace(/_/g, " "));
     return {
+      version: UNIFIED_CRYPTO_SHARED_CARD_VERSION,
       kind,
       venue,
       title,
@@ -285,8 +315,36 @@ export function buildUnifiedCryptoSharedCards(
       source: extractSource(card),
       warnings,
       data: card,
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
     };
   });
+}
+
+export function validateUnifiedCryptoSharedCardContract(card: unknown): string[] {
+  const errors: string[] = [];
+  if (!isRecord(card)) return ["shared card must be an object"];
+  if (card.version !== UNIFIED_CRYPTO_SHARED_CARD_VERSION) errors.push(`version must be ${UNIFIED_CRYPTO_SHARED_CARD_VERSION}`);
+  if (!UNIFIED_CRYPTO_SHARED_CARD_KINDS.includes(card.kind as UnifiedCryptoSharedCardKind)) errors.push("kind must be a known shared-card kind");
+  if (!["auto", "bittensor", "hyperliquid", "polymarket"].includes(String(card.venue))) errors.push("venue must be auto, bittensor, hyperliquid, or polymarket");
+  if (typeof card.title !== "string" || !card.title.trim()) errors.push("title must be a non-empty string");
+  if (typeof card.summary !== "string" || !card.summary.trim()) errors.push("summary must be a non-empty string");
+  if (!UNIFIED_CRYPTO_SHARED_CARD_STATUSES.includes(card.status as UnifiedCryptoSharedCardStatus)) errors.push("status must be info, success, warning, or danger");
+  if (card.originalKind !== null && typeof card.originalKind !== "string") errors.push("originalKind must be a string or null");
+  if (!Array.isArray(card.warnings) || !card.warnings.every((warning) => typeof warning === "string")) errors.push("warnings must be an array of strings");
+  if (!("data" in card)) errors.push("data is required");
+  const safety = isRecord(card.safety) ? card.safety : null;
+  if (!safety) {
+    errors.push("safety must be present");
+  } else {
+    if (safety.nonCustodial !== true) errors.push("safety.nonCustodial must be true");
+    if (safety.liveSubmissionEnabled !== false) errors.push("safety.liveSubmissionEnabled must be false");
+    if (safety.canSubmit !== false) errors.push("safety.canSubmit must be false");
+  }
+  return errors;
 }
 
 function routeScores(input: UnifiedCryptoChatInput): Record<RoutedCryptoVenue, number> {

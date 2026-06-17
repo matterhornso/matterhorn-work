@@ -4,6 +4,10 @@ import {
   executeUnifiedCryptoChatWorkflow,
   findForbiddenUnifiedCryptoCredentialInput,
   planUnifiedCryptoChat,
+  UNIFIED_CRYPTO_SHARED_CARD_KINDS,
+  UNIFIED_CRYPTO_SHARED_CARD_STATUSES,
+  UNIFIED_CRYPTO_SHARED_CARD_VERSION,
+  validateUnifiedCryptoSharedCardContract,
   type UnifiedCryptoSharedCard,
   type UnifiedCryptoChatResult,
 } from "./crypto-chat.js";
@@ -176,16 +180,23 @@ function cardKind(result: UnifiedCryptoChatResult): string | null {
 }
 
 function expectSharedCardContract(card: UnifiedCryptoSharedCard, venue: UnifiedCryptoSharedCard["venue"]) {
+  expect(validateUnifiedCryptoSharedCardContract(card)).toEqual([]);
+  expect(card.version).toBe(UNIFIED_CRYPTO_SHARED_CARD_VERSION);
   expect(card.venue).toBe(venue);
-  expect(typeof card.kind).toBe("string");
+  expect(UNIFIED_CRYPTO_SHARED_CARD_KINDS).toContain(card.kind);
   expect(typeof card.title).toBe("string");
   expect(card.title.length).toBeGreaterThan(0);
   expect(typeof card.summary).toBe("string");
   expect(card.summary.length).toBeGreaterThan(0);
-  expect(["info", "success", "warning", "danger"]).toContain(card.status);
+  expect(UNIFIED_CRYPTO_SHARED_CARD_STATUSES).toContain(card.status);
   expect(Array.isArray(card.warnings)).toBe(true);
   expect(card.originalKind === null || typeof card.originalKind === "string").toBe(true);
   expect(card.data).toBeTruthy();
+  expect(card.safety).toEqual({
+    nonCustodial: true,
+    liveSubmissionEnabled: false,
+    canSubmit: false,
+  });
 }
 
 function sharedKinds(result: UnifiedCryptoChatResult): string[] {
@@ -233,6 +244,7 @@ describe("unified crypto chat router", () => {
       originalKind: "wallet_snapshot",
       status: "success",
     });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "bittensor"));
   });
 
   test("routes Hyperliquid reads through the Hyperliquid workflow", async () => {
@@ -250,6 +262,7 @@ describe("unified crypto chat router", () => {
       originalKind: "hyperliquid_funding",
       status: "success",
     });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
     expect(result.sharedCards[0]?.source).toMatchObject({ source: "mock.hyperliquid" });
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
   });
@@ -269,6 +282,7 @@ describe("unified crypto chat router", () => {
       originalKind: "polymarket_market_list",
       status: "success",
     });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "polymarket"));
   });
 
   test("rejects secret-shaped input before venue execution", async () => {
@@ -287,6 +301,25 @@ describe("unified crypto chat router", () => {
       status: "warning",
       originalKind: "crypto_chat_secret_rejected",
     });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
+  });
+
+  test("rejects malformed shared card contract objects", () => {
+    const errors = validateUnifiedCryptoSharedCardContract({
+      version: "wrong",
+      kind: "action_preview",
+      venue: "hyperliquid",
+      title: "",
+      summary: "Missing safety and title.",
+      status: "ok",
+      originalKind: null,
+      warnings: ["bad"],
+      data: {},
+    });
+    expect(errors).toContain(`version must be ${UNIFIED_CRYPTO_SHARED_CARD_VERSION}`);
+    expect(errors).toContain("title must be a non-empty string");
+    expect(errors).toContain("status must be info, success, warning, or danger");
+    expect(errors).toContain("safety must be present");
   });
 
   test("maps venue card kinds into customer-readable shared card categories", () => {

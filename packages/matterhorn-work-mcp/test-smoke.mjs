@@ -256,7 +256,19 @@ const server = createServer(async (req, res) => {
       execution: "read_only",
       responseText: "Hyperliquid funding context ready.",
       cards: [],
-      sharedCards: [{ category: "market_context", title: "BTC funding", summary: "Read-only funding context." }],
+      sharedCards: [{
+        version: "matterhorn.crypto.shared-card.v1",
+        kind: "market_context",
+        venue: "hyperliquid",
+        title: "BTC funding",
+        summary: "Read-only funding context.",
+        status: "success",
+        originalKind: "hyperliquid_funding",
+        source: { source: "mock.hyperliquid" },
+        warnings: [],
+        data: { kind: "hyperliquid_funding", title: "BTC funding" },
+        safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+      }],
       warnings: [],
     });
   }
@@ -731,7 +743,9 @@ try {
   }));
   assert.equal(cryptoChat.venue, "hyperliquid");
   assert.equal(cryptoChat.execution, "read_only");
-  assert.equal(cryptoChat.sharedCards[0].category, "market_context");
+  assert.equal(cryptoChat.sharedCards[0].version, "matterhorn.crypto.shared-card.v1");
+  assert.equal(cryptoChat.sharedCards[0].kind, "market_context");
+  assert.equal(cryptoChat.sharedCards[0].safety.canSubmit, false);
 
   const bittensor = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_bittensor_chat",
