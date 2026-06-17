@@ -327,6 +327,7 @@ For repository gates, run:
 ```bash
 pnpm smoke:customer-ready-crypto
 pnpm test:unified-crypto-chat
+pnpm test:crypto-direct-prompt-safety
 pnpm test:unified-crypto-shared-card-contract
 pnpm test:crypto-cli-fallback
 pnpm test:market-execution-safety-gate
