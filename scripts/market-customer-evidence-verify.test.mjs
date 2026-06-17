@@ -37,6 +37,9 @@ const goodSummary = {
   ready: true,
   customerReadySmoke: {
     ready: true,
+    generatedAt: "2026-06-17T00:00:00.000Z",
+    gitSha: "b".repeat(40),
+    gitBranch: "codex/test",
     requiredStages,
   },
   officialSdkValidation: {

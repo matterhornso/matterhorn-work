@@ -21,6 +21,7 @@ const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   ["polymarket.readiness", "Polymarket readiness gate"],
   ["bittensor.customer_readiness", "Bittensor customer readiness gate"],
 ];
+const GIT_SHA_RE = /^[a-f0-9]{40}$/i;
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -426,9 +427,15 @@ export async function buildMarketCustomerEvidenceBundle(config) {
   if (!officialRaw) throw new Error("Missing --official-sdk-validation evidence JSON.");
 
   const smokeCounts = stageCounts(smokeRaw);
+  const smokeGeneratedAt = typeof smokeRaw?.metadata?.generatedAt === "string" ? smokeRaw.metadata.generatedAt : null;
+  const smokeGitSha = typeof smokeRaw?.metadata?.gitSha === "string" ? smokeRaw.metadata.gitSha : null;
+  const smokeGitBranch = typeof smokeRaw?.metadata?.gitBranch === "string" ? smokeRaw.metadata.gitBranch : null;
   const customerReadySmoke = {
     present: Boolean(smokeRaw),
     ready: smokeRaw?.ready === true,
+    generatedAt: smokeGeneratedAt,
+    gitSha: smokeGitSha,
+    gitBranch: smokeGitBranch,
     pass: smokeCounts.pass,
     fail: smokeCounts.fail,
     skip: smokeCounts.skip,
@@ -453,6 +460,9 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     ...customerReadySmoke.requiredStages
       .filter((stage) => stage.status !== "pass")
       .map((stage) => `Customer-ready crypto smoke required stage did not pass: ${stage.id} (${stage.status})`),
+    ...(!smokeGeneratedAt || Number.isNaN(Date.parse(smokeGeneratedAt)) ? ["Customer-ready crypto smoke must include metadata.generatedAt."] : []),
+    ...(!smokeGitSha || !GIT_SHA_RE.test(smokeGitSha) ? ["Customer-ready crypto smoke must include metadata.gitSha."] : []),
+    ...(!smokeGitBranch ? ["Customer-ready crypto smoke must include metadata.gitBranch."] : []),
     ...(config.requireOfficialSdkValidated && !officialSdkValidation.allValidated ? ["Official SDK evidence is not fully validated for every venue."] : []),
   ];
   const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && sdkManifestCheck.ready && receiptCheck.ready && errors.length === 0;

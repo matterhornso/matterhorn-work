@@ -23,6 +23,7 @@ try {
 
   await writeFile(smoke, JSON.stringify({
     ready: true,
+    metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "b".repeat(40), gitBranch: "codex/test" },
     summary: { pass: 23, fail: 0, skip: 0 },
     stages: [
       { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
@@ -145,6 +146,7 @@ try {
   assert.equal(summary.safety.liveSubmissionEnabled, false);
   assert.equal(summary.officialSdkValidation.validation.ok, true);
   assert.equal(summary.officialSdkValidation.allValidated, false);
+  assert.equal(summary.customerReadySmoke.gitSha, "b".repeat(40));
   assert.equal(summary.customerReadySmoke.pass, 23);
   assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.shared_card_contract")?.status, "pass");

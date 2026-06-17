@@ -15,6 +15,7 @@ const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   "polymarket.readiness",
   "bittensor.customer_readiness",
 ];
+const GIT_SHA_RE = /^[a-f0-9]{40}$/i;
 
 function arg(name, fallback = "") {
   const index = args.indexOf(name);
@@ -109,6 +110,12 @@ function summarizeSmoke(path, raw) {
   if (raw.safety?.nonCustodial !== true) errors.push("Customer-ready crypto smoke must keep nonCustodial=true.");
   if (raw.safety?.liveSubmissionEnabled !== false) errors.push("Customer-ready crypto smoke must keep liveSubmissionEnabled=false.");
   if (raw.safety?.asksForSecrets !== false) errors.push("Customer-ready crypto smoke must keep asksForSecrets=false.");
+  const generatedAt = typeof raw.metadata?.generatedAt === "string" ? raw.metadata.generatedAt : null;
+  const gitSha = typeof raw.metadata?.gitSha === "string" ? raw.metadata.gitSha : null;
+  const gitBranch = typeof raw.metadata?.gitBranch === "string" ? raw.metadata.gitBranch : null;
+  if (!generatedAt || Number.isNaN(Date.parse(generatedAt))) errors.push("Customer-ready crypto smoke must include metadata.generatedAt.");
+  if (!gitSha || !GIT_SHA_RE.test(gitSha)) errors.push("Customer-ready crypto smoke must include metadata.gitSha.");
+  if (!gitBranch) errors.push("Customer-ready crypto smoke must include metadata.gitBranch.");
   const stageById = new Map(stages.map((stage) => [String(stage?.id ?? ""), stage]));
   const requiredStages = REQUIRED_CUSTOMER_SMOKE_STAGES.map((id) => {
     const stage = stageById.get(id);
@@ -121,9 +128,9 @@ function summarizeSmoke(path, raw) {
     present: true,
     ready: raw.ready === true && fail === 0 && errors.length === 0,
     file: basename(path),
-    generatedAt: typeof raw.metadata?.generatedAt === "string" ? raw.metadata.generatedAt : null,
-    gitSha: typeof raw.metadata?.gitSha === "string" ? raw.metadata.gitSha : null,
-    gitBranch: typeof raw.metadata?.gitBranch === "string" ? raw.metadata.gitBranch : null,
+    generatedAt,
+    gitSha,
+    gitBranch,
     pass,
     fail,
     skip,
