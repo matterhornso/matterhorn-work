@@ -11,6 +11,14 @@ Scope:
 
 ## 1. Static Safety Gates
 
+For the fastest customer-readiness pass, start with the consolidated smoke runner:
+
+```bash
+pnpm smoke:customer-ready-crypto
+```
+
+Use `docs/customer-ready-crypto-smoke.md` for dry-run, JSON, and local-server options. The rest of this runbook remains the expanded manual checklist when a tester needs per-surface evidence.
+
 Run these first from the repository root:
 
 ```bash
