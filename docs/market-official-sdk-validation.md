@@ -248,6 +248,17 @@ Every run writes two top-level review artifacts in the output directory:
   validation statuses, safety flags, warnings, and errors. It intentionally
   omits the manifest's own hash to avoid self-referential evidence.
 
+Reviewers can validate the manifest offline:
+
+```bash
+matterhorn-work crypto sdk-manifest-check \
+  --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
+  --strict --json
+```
+
+The raw helper is also available for debugging:
+`node scripts/market-sdk-run-manifest-check.mjs`.
+
 The lower-level script remains available for debugging:
 `node scripts/market-official-sdk-operator-loop.mjs`.
 
@@ -290,12 +301,14 @@ pnpm test:market-official-sdk-validation-capture
 pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-operator-loop
+pnpm test:market-sdk-run-manifest-check
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
 matterhorn-work crypto sdk-doctor --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
+matterhorn-work crypto sdk-manifest-check --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json --strict --json
 matterhorn-work crypto sdk-evidence --sample --json
 matterhorn-work crypto sdk-evidence --evidence-file <path> --json
 matterhorn-work crypto sdk-capture --self-test --json

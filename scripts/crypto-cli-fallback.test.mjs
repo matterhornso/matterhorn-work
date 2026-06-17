@@ -348,6 +348,19 @@ async function main() {
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
+    const sdkManifestRequestsBefore = mock.requests.length;
+    await expectCli(
+      "crypto sdk-manifest-check",
+      mock.url,
+      ["crypto", "sdk-manifest-check", "--manifest", sdkLoop.files.runManifest],
+      (payload) => {
+        if (payload.ok !== true) throw new Error(`expected SDK manifest check ok=true, got ${payload.ok}`);
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected SDK manifest safety.liveSubmissionEnabled=false");
+      },
+    );
+    if (mock.requests.length !== sdkManifestRequestsBefore) throw new Error("crypto sdk-manifest-check should not call the Matterhorn server");
+    console.log("PASS crypto sdk-manifest-check CLI is offline and non-custodial");
+
     // 10. The customer evidence bundle is also available through the public
     // crypto CLI and stays offline.
     const bundleRequestsBefore = mock.requests.length;

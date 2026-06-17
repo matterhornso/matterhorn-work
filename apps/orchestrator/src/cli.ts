@@ -3777,6 +3777,7 @@ function printHelp(): void {
     "  matterhorn-work crypto sdk-capture --hyperliquid-normalized <path> --polymarket-normalized <path> --output <path>",
     "  matterhorn-work crypto sdk-evidence --evidence-file <path> [--json]",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
+    "  matterhorn-work crypto sdk-manifest-check --manifest <path> [--strict]",
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--receipt-check <path>] [options]",
     "  matterhorn-work upstream openwork check [options]",
@@ -3807,6 +3808,7 @@ function printHelp(): void {
     "  crypto sdk-capture      Build official SDK evidence from normalized public artifacts",
     "  crypto sdk-evidence     Validate or emit official SDK evidence JSON offline",
     "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
+    "  crypto sdk-manifest-check Validate SDK loop run manifest hashes and safety flags",
     "  crypto receipt-check    Validate public market receipt evidence offline",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
@@ -7651,6 +7653,12 @@ const CRYPTO_SDK_EVIDENCE_SUBCOMMANDS = new Set([
   "sdk-check",
 ]);
 
+const CRYPTO_SDK_MANIFEST_CHECK_SUBCOMMANDS = new Set([
+  "sdk-manifest-check",
+  "sdk-manifest",
+  "manifest-check",
+]);
+
 const CRYPTO_RECEIPT_CHECK_SUBCOMMANDS = new Set([
   "receipt-check",
   "receipt-evidence",
@@ -7746,6 +7754,17 @@ const CRYPTO_SDK_LOOP_VALUE_FLAGS = [
   "polymarket-chain-id",
 ] as const;
 
+const CRYPTO_SDK_MANIFEST_CHECK_BOOL_FLAGS = [
+  "self-test",
+  "strict",
+] as const;
+
+const CRYPTO_SDK_MANIFEST_CHECK_VALUE_FLAGS = [
+  "manifest",
+  "base-dir",
+  "output",
+] as const;
+
 const CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS = new Set([
   "evidence-bundle",
   "customer-evidence",
@@ -7816,6 +7835,14 @@ async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<
   appendValueFlags(args, CRYPTO_SDK_LOOP_VALUE_FLAGS, forwarded);
   if (outputJson) forwarded.push("--json");
   await runOfflineCryptoScript("market-official-sdk-operator-loop.mjs", forwarded, "Market official SDK operator loop");
+}
+
+async function runCryptoSdkManifestCheck(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_SDK_MANIFEST_CHECK_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_SDK_MANIFEST_CHECK_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-sdk-run-manifest-check.mjs", forwarded, "Market SDK run manifest checker");
 }
 
 async function runCryptoSdkDoctor(args: ParsedArgs, outputJson: boolean): Promise<void> {
@@ -7903,6 +7930,11 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
+    if (CRYPTO_SDK_MANIFEST_CHECK_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoSdkManifestCheck(args, outputJson);
+      return;
+    }
+
     if (CRYPTO_RECEIPT_CHECK_SUBCOMMANDS.has(subcommand)) {
       await runCryptoReceiptCheck(args, outputJson);
       return;
@@ -7968,7 +8000,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, or evidence-bundle");
+    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, or evidence-bundle");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

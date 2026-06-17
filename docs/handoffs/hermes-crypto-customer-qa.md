@@ -90,6 +90,7 @@ Pass criteria:
 - `matterhorn-work crypto sdk-loop` reports `ready: true`;
 - `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-operator-summary.md` exists and shows non-custodial safety, live submission disabled, and venue validation status;
 - `/tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json` exists and lists public output files, SHA-256 hashes, venue status, and `liveSubmissionEnabled: false`;
+- `matterhorn-work crypto sdk-manifest-check --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json --strict --json` exits 0;
 - `matterhorn-work crypto evidence-bundle` writes Markdown and JSON customer evidence;
 - the JSON bundle has `operatorSummary.present: true`;
 - neither command asks for, accepts, prints, signs with, or submits wallet/exchange secrets.
