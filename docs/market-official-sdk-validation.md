@@ -36,7 +36,7 @@ Evidence to save:
 - Official-client normalized action with public order-action fields: `type: "order"`, `grouping`, `orders[].a`, `orders[].b`, `orders[].p`, `orders[].s`, `orders[].r`, and `orders[].t`.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
-- Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
+- Evidence file accepted by `matterhorn-work crypto sdk-evidence --evidence-file <path> --json`.
 - Evidence captured with `matterhorn-work crypto sdk-capture --hyperliquid-normalized <redacted-action.json> --hyperliquid-package-version <version>`.
 
 ## Polymarket Validation Checklist
@@ -58,7 +58,7 @@ Evidence to save:
 - Official-client normalized typed-data/order with public fields: `domain.chainId`, `domain.verifyingContract`, `primaryType: "Order"`, `types.Order`, `message.makerAmount`, `message.takerAmount`, and `message.signatureType`.
 - Public receipt/status if an operator submits externally on testnet.
 - Differences found and whether Matterhorn's template was corrected.
-- Evidence file accepted by `node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path>`.
+- Evidence file accepted by `matterhorn-work crypto sdk-evidence --evidence-file <path> --json`.
 - Evidence captured with `matterhorn-work crypto sdk-capture --polymarket-normalized <redacted-typed-data.json> --polymarket-package-version <version>`.
 
 ## Evidence JSON Contract
@@ -290,8 +290,8 @@ matterhorn-work crypto sdk-doctor --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
-node scripts/market-official-sdk-validation-evidence.mjs --sample --json
-node scripts/market-official-sdk-validation-evidence.mjs --evidence-file <path> --json
+matterhorn-work crypto sdk-evidence --sample --json
+matterhorn-work crypto sdk-evidence --evidence-file <path> --json
 matterhorn-work crypto sdk-capture --self-test --json
 matterhorn-work crypto evidence-bundle --customer-ready-smoke <smoke.json> --official-sdk-validation <sdk-evidence.json> --operator-summary <operator-summary.md> --output <bundle.md> --json-output <bundle.json>
 ```

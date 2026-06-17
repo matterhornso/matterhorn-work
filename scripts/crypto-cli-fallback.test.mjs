@@ -285,7 +285,35 @@ async function main() {
     }
     console.log("PASS crypto sdk-capture CLI is offline and non-custodial");
 
-    // 8. The official SDK operator loop is exposed through the public CLI without
+    // 8. The official SDK evidence validator is exposed through the public CLI
+    // for captured public artifacts and remains offline.
+    const sdkEvidenceRequestsBefore = mock.requests.length;
+    const sdkEvidenceValidation = await expectCli(
+      "crypto sdk-evidence",
+      mock.url,
+      [
+        "crypto",
+        "sdk-evidence",
+        "--evidence-file",
+        captureOutput,
+      ],
+      (payload) => {
+        if (payload.ok !== true) throw new Error(`expected SDK evidence ok=true, got ${payload.ok}`);
+        if (payload.evidence?.safety?.liveSubmissionEnabled !== false) {
+          throw new Error("expected SDK evidence liveSubmissionEnabled=false");
+        }
+        if (!payload.evidence?.venues?.every((venue) => venue.matterhornTemplate?.canSubmit === false)) {
+          throw new Error("expected SDK evidence matterhorn templates to remain canSubmit=false");
+        }
+      },
+    );
+    if (mock.requests.length !== sdkEvidenceRequestsBefore) throw new Error("crypto sdk-evidence should not call the Matterhorn server");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(JSON.stringify(sdkEvidenceValidation))) {
+      throw new Error("SDK evidence validation leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto sdk-evidence CLI is offline and non-custodial");
+
+    // 9. The official SDK operator loop is exposed through the public CLI without
     // requiring a Matterhorn server or forwarding auth tokens/secrets.
     const sdkRequestsBefore = mock.requests.length;
     const sdkOutputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-sdk-loop-cli-"));
@@ -310,7 +338,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
-    // 9. The customer evidence bundle is also available through the public
+    // 10. The customer evidence bundle is also available through the public
     // crypto CLI and stays offline.
     const bundleRequestsBefore = mock.requests.length;
     const smokePath = join(sdkOutputDir, "customer-ready-smoke.json");
@@ -359,7 +387,7 @@ async function main() {
     }
     console.log("PASS crypto evidence-bundle CLI is offline and non-custodial");
 
-    // 10. No request touched a submit/sign/exchange route.
+    // 11. No request touched a submit/sign/exchange route.
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
       if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);
