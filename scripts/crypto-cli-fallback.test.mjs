@@ -449,6 +449,34 @@ async function main() {
     }
     console.log("PASS crypto evidence-bundle CLI is offline and non-custodial");
 
+    const verifyRequestsBefore = mock.requests.length;
+    const bundleVerifyPath = join(sdkOutputDir, "matterhorn-market-customer-evidence-verify.json");
+    await expectCli(
+      "crypto evidence-verify",
+      mock.url,
+      [
+        "crypto",
+        "evidence-verify",
+        "--bundle-json",
+        bundleJsonPath,
+        "--bundle-md",
+        bundleMarkdownPath,
+        "--require-sdk-manifest-check",
+        "--require-receipt-check",
+        "--output",
+        bundleVerifyPath,
+        "--strict",
+      ],
+      (payload) => {
+        if (payload.ok !== true) throw new Error(`expected customer evidence verify ok=true, got ${payload.ok}`);
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected verifier safety.liveSubmissionEnabled=false");
+      },
+    );
+    if (mock.requests.length !== verifyRequestsBefore) throw new Error("crypto evidence-verify should not call the Matterhorn server");
+    const verifyJson = JSON.parse(readFileSync(bundleVerifyPath, "utf8"));
+    if (verifyJson.ready !== true) throw new Error("expected customer evidence verifier output ready=true");
+    console.log("PASS crypto evidence-verify CLI is offline and non-custodial");
+
     // 11. The public market receipt checker is available through the crypto CLI
     // and stays offline.
     const receiptRequestsBefore = mock.requests.length;
