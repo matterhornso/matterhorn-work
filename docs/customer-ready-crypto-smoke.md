@@ -23,6 +23,18 @@ Run the offline/default customer-readiness pass:
 pnpm smoke:customer-ready-crypto
 ```
 
+## Bittensor Beta Gate
+
+For the first customer beta, run the Bittensor-specific launch gate before the
+broader crypto smoke:
+
+```bash
+pnpm smoke:bittensor-beta
+```
+
+This gate treats Bittensor as the customer-facing launch surface. Hyperliquid and Polymarket remain preview/R&D-only and must not be described as live trading or custody features in the Bittensor beta. See
+[`docs/bittensor-beta-launch.md`](./bittensor-beta-launch.md).
+
 CI also runs this smoke pass through the `customer-crypto-gates` job in the
 Matterhorn Work Tests workflow. That job now runs `pnpm test:agent-control-mcp`
 before `pnpm smoke:customer-ready-crypto`, so the MCP customer evidence tools
@@ -72,6 +84,7 @@ pnpm test:agent-crypto-operator-loop
 pnpm test:hermes-crypto-customer-qa
 pnpm test:crypto-readiness-api
 pnpm test:customer-readiness-ui
+pnpm test:bittensor-beta-release-gate
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track

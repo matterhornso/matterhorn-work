@@ -53,29 +53,40 @@ const CUSTOMER_DEMO_PROMPTS = [
   {
     id: "bittensor-image-subnets",
     label: "Bittensor discovery",
+    betaVisible: true,
     prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
     id: "bittensor-tao-wallet",
     label: "TAO wallet",
+    betaVisible: true,
     prompt: "Use unified crypto chat. Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
   },
   {
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
+    betaVisible: false,
     prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "polymarket-compliance",
     label: "Polymarket compliance",
+    betaVisible: false,
     prompt: "Use unified crypto chat. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
   },
   {
     id: "external-signer-preview",
     label: "Signer preview",
+    betaVisible: true,
     prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
   },
 ] as const;
+const BITTENSOR_BETA_MODE = (() => {
+  const flag = typeof import.meta.env?.VITE_MATTERHORN_BITTENSOR_BETA === "string"
+    ? import.meta.env.VITE_MATTERHORN_BITTENSOR_BETA.trim().toLowerCase()
+    : "";
+  return flag === "1" || flag === "true";
+})();
 
 type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
 type ActionType = BittensorActionQuote["action"];
@@ -380,6 +391,10 @@ export default function BittensorPanel() {
       .slice(0, 4),
     [subnets],
   );
+  const customerDemoPrompts = useMemo(
+    () => CUSTOMER_DEMO_PROMPTS.filter((item) => !BITTENSOR_BETA_MODE || item.betaVisible),
+    [],
+  );
 
   const toggleFavorite = (netuid: number) => {
     setFavorites((current) => {
@@ -659,11 +674,16 @@ export default function BittensorPanel() {
             <Section title="Readiness" icon={<Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <Metric label="Bittensor" value={readinessState} compact />
+                  <Metric label={BITTENSOR_BETA_MODE ? "Bittensor Beta" : "Bittensor"} value={readinessState} compact />
                   <Metric label="Hyperliquid" value={hyperliquidReadinessState} compact />
                   <Metric label="Polymarket" value={polymarketReadinessState} compact />
                   <Metric label="Unified smoke" value={cryptoReadinessState} compact />
                 </div>
+                {BITTENSOR_BETA_MODE ? (
+                  <p className="text-xs leading-5 text-sky-200">
+                    Bittensor beta boundary: Bittensor is the customer-facing launch surface. Market previews are hidden in Bittensor beta mode and remain preview/R&amp;D only.
+                  </p>
+                ) : null}
                 {cryptoReadinessBlocker ? (
                   <p className="text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
                 ) : cryptoReadinessFailures[0] ? (
@@ -697,7 +717,7 @@ export default function BittensorPanel() {
 
             <Section title="Try prompts" icon={<BrainCircuit className="size-4" />}>
               <div className="grid gap-2">
-                {CUSTOMER_DEMO_PROMPTS.map((item) => (
+                {customerDemoPrompts.map((item) => (
                   <button
                     key={item.id}
                     type="button"
@@ -763,6 +783,11 @@ export default function BittensorPanel() {
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
                 Matterhorn prepares safe previews; your wallet/client decides whether anything is signed externally.
               </p>
+              {BITTENSOR_BETA_MODE ? (
+                <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                  In Bittensor beta, Hyperliquid and Polymarket are preview/R&amp;D only and are not part of the customer launch promise.
+                </p>
+              ) : null}
             </Section>
           </div>
         )}
