@@ -404,6 +404,11 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_market_sdk_validation",
+    description: "Print the local Hyperliquid and Polymarket official SDK validation guide. Public/redacted fixture or operator-owned testnet evidence only; no server call, no signing, no submission, and no credential intake.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "matterhorn_market_customer_evidence_verify",
     description: "Verify a public/redacted Hyperliquid + Polymarket customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
     inputSchema: {
@@ -1814,6 +1819,54 @@ function matterhornMarketExecutionChain() {
   };
 }
 
+function matterhornMarketSdkValidation() {
+  return {
+    success: true,
+    version: "matterhorn.market.sdk-validation-guide.v1",
+    title: "Official SDK validation",
+    summary: "Public/redacted fixture or operator-owned testnet validation for Hyperliquid and Polymarket signing templates.",
+    modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+    networks: {
+      hyperliquid: ["fixture", "hyperliquid-testnet"],
+      polymarket: ["fixture", "polygon-amoy"],
+    },
+    commands: {
+      doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+      fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --input-dir qa-fixtures/market-official-sdk --output-dir /tmp/matterhorn-market-sdk-public-validation --strict --json",
+      operatorOwnedTestnetValidation: "matterhorn-work crypto sdk-validate-public --mode operator_owned_testnet --input-dir /tmp/operator-public-artifacts --output-dir /tmp/matterhorn-market-sdk-public-validation --hyperliquid-network hyperliquid-testnet --hyperliquid-package-version <hyperliquid-python-sdk-version> --polymarket-network polygon-amoy --polymarket-chain-id 80002 --polymarket-exchange-address <public-amoy-exchange-address> --polymarket-package-version <clob-client-version> --strict --json",
+      operatorLoop: "matterhorn-work crypto sdk-loop --mode fixture --output-dir /tmp/matterhorn-market-sdk-loop --strict --json",
+    },
+    outputs: [
+      "matterhorn-market-sdk-evidence.json",
+      "matterhorn-market-sdk-public-validation.json",
+      "matterhorn-market-sdk-public-validation.md",
+      "matterhorn-market-sdk-public-validation.sha256",
+      "matterhorn-market-sdk-run-manifest.json",
+    ],
+    safety: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+      runsPrivateSdkSigning: false,
+      computesFinalSignatures: false,
+      callsExchanges: false,
+    },
+    forbidden: [
+      "seed phrase",
+      "private key",
+      "API secret",
+      "raw signature",
+      "signed payload",
+      "wallet export",
+      "mainnet validation",
+      "live submit route",
+    ],
+  };
+}
+
 function marketReconciliationRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
@@ -3063,6 +3116,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/market-execution-readiness");
     case "matterhorn_market_execution_chain":
       return matterhornMarketExecutionChain();
+    case "matterhorn_market_sdk_validation":
+      return matterhornMarketSdkValidation();
     case "matterhorn_market_customer_evidence_verify":
       return matterhornMarketCustomerEvidenceVerify(args);
     case "matterhorn_market_artifact_reconcile":
