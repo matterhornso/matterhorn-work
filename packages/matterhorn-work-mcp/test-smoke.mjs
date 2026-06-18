@@ -711,6 +711,7 @@ try {
     "matterhorn_crypto_readiness",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
+    "matterhorn_market_sdk_validation",
     "matterhorn_market_artifact_reconcile",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
@@ -752,6 +753,7 @@ try {
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
+  assert.match(descriptionFor("matterhorn_market_sdk_validation"), /official SDK validation guide/i);
   assert.match(descriptionFor("matterhorn_market_artifact_reconcile"), /public\/redacted/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
@@ -1101,6 +1103,21 @@ try {
   assert.equal(marketExecutionChain.safety.acceptsSecrets, false);
   assert.ok(marketExecutionChain.stages.some((stage) => stage.id === "external_sign_request"));
   assert.ok(JSON.stringify(marketExecutionChain.stages).includes("matterhorn-work crypto artifact-reconcile"));
+
+  const marketSdkValidation = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_market_sdk_validation",
+    arguments: {},
+  }));
+  assert.equal(marketSdkValidation.success, true);
+  assert.equal(marketSdkValidation.version, "matterhorn.market.sdk-validation-guide.v1");
+  assert.equal(marketSdkValidation.safety.canSubmit, false);
+  assert.equal(marketSdkValidation.safety.liveSubmissionEnabled, false);
+  assert.equal(marketSdkValidation.safety.acceptsSecrets, false);
+  assert.equal(marketSdkValidation.safety.runsPrivateSdkSigning, false);
+  assert.ok(marketSdkValidation.modes.includes("operator_owned_testnet"));
+  assert.ok(marketSdkValidation.networks.hyperliquid.includes("hyperliquid-testnet"));
+  assert.ok(marketSdkValidation.networks.polymarket.includes("polygon-amoy"));
+  assert.ok(marketSdkValidation.commands.fixtureValidation.includes("matterhorn-work crypto sdk-validate-public"));
 
   const marketCustomerEvidenceSummary = {
     ready: true,
