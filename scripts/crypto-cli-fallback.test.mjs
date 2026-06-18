@@ -431,6 +431,45 @@ async function main() {
     }
     console.log("PASS crypto sdk-loop CLI is offline and non-custodial");
 
+    const sdkPublicRequestsBefore = mock.requests.length;
+    const sdkPublicOutputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-sdk-public-cli-"));
+    await expectCli(
+      "crypto sdk-validate-public fixture",
+      mock.url,
+      [
+        "crypto",
+        "sdk-validate-public",
+        "--mode",
+        "fixture",
+        "--input-dir",
+        join(repoRoot, "qa-fixtures/market-official-sdk"),
+        "--output-dir",
+        sdkPublicOutputDir,
+        "--strict",
+      ],
+      (payload) => {
+        if (payload.version !== "matterhorn.market.official-sdk-public-validation.v1") {
+          throw new Error(`expected SDK public validation version, got ${payload.version}`);
+        }
+        if (payload.ready !== true) throw new Error(`expected SDK public validation ready=true, got ${payload.ready}`);
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected SDK public validation liveSubmissionEnabled=false");
+        if (payload.safety?.signsOrSubmits !== false) throw new Error("expected SDK public validation signsOrSubmits=false");
+        if (payload.safety?.acceptsSecrets !== false) throw new Error("expected SDK public validation acceptsSecrets=false");
+        if (!payload.files?.publicValidationJson || !existsSync(payload.files.publicValidationJson)) {
+          throw new Error("expected SDK public validation JSON evidence file");
+        }
+        if (!payload.files?.publicValidationSha256 || !existsSync(payload.files.publicValidationSha256)) {
+          throw new Error("expected SDK public validation SHA-256 file");
+        }
+      },
+    );
+    if (mock.requests.length !== sdkPublicRequestsBefore) throw new Error("crypto sdk-validate-public should not call the Matterhorn server");
+    const sdkPublicReport = readFileSync(join(sdkPublicOutputDir, "matterhorn-market-sdk-public-validation.json"), "utf8");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(sdkPublicReport)) {
+      throw new Error("SDK public validation report leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto sdk-validate-public CLI is offline and non-custodial");
+
     const sdkManifestRequestsBefore = mock.requests.length;
     const bundleSdkManifestCheckPath = join(sdkOutputDir, "matterhorn-market-sdk-manifest-check.json");
     await expectCli(
