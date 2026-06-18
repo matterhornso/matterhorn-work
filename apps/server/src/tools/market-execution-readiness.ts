@@ -162,11 +162,19 @@ export function buildMarketExecutionChainGuide() {
   } as const;
 }
 
-export function buildMarketExecutionChainCard(guide = buildMarketExecutionChainGuide()) {
+export function buildMarketExecutionChainCard(
+  guide = buildMarketExecutionChainGuide(),
+  highlightedStepId: string | null = null,
+) {
+  const highlightedStep = highlightedStepId
+    ? guide.stages.find((stage) => stage.id === highlightedStepId) ?? null
+    : null;
   return {
     kind: "market_execution_chain",
-    title: "Market execution chain",
-    summary: "Safe chain for Hyperliquid and Polymarket: preview, external sign request, redacted artifact validation, artifact reconciliation, then public receipt import.",
+    title: highlightedStep ? `Market execution chain: ${highlightedStep.label}` : "Market execution chain",
+    summary: highlightedStep
+      ? `${highlightedStep.label}: ${highlightedStep.purpose} ${highlightedStep.output}`
+      : "Safe chain for Hyperliquid and Polymarket: preview, external sign request, redacted artifact validation, artifact reconciliation, then public receipt import.",
     tone: "info",
     source: { source: "matterhorn.execution-chain", freshness: "live" },
     items: [
@@ -175,12 +183,13 @@ export function buildMarketExecutionChainCard(guide = buildMarketExecutionChainG
       { label: "External signer", value: "Required", tone: "warning" },
       { label: "Secret intake", value: "Never", tone: "good" },
       { label: "Stages", value: String(guide.stages.length), tone: "info" },
+      ...(highlightedStep ? [{ label: "Focus", value: highlightedStep.label, tone: "info" }] : []),
     ],
     warnings: [
       "This explains the safe operator path only; it does not create a live submit route.",
       "Signed artifacts must be public/redacted metadata, never raw signatures or signed payloads.",
     ],
-    data: { guide },
+    data: { guide, highlightedStep },
   } as const;
 }
 

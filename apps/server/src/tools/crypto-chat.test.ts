@@ -328,6 +328,40 @@ describe("unified crypto chat router", () => {
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
   });
 
+  test("answers specific market execution-step prompts with focused guidance", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow({
+      message: "Create a Hyperliquid external sign request for testnet. What public context is needed?",
+    });
+
+    expect(result.venue).toBe("auto");
+    expect(result.intent).toBe("market_execution_step_guidance");
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("External sign request");
+    expect(result.responseText).toContain("Use only public/redacted inputs");
+    expect(result.responseText).toContain("Can submit: No");
+    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.cards[0]).toMatchObject({
+      kind: "market_execution_chain",
+      title: "Market execution chain: External sign request",
+    });
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "readiness_report",
+      originalKind: "market_execution_chain",
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    const highlightedStep = result.data.highlightedStep as { id?: string; commands?: string[] } | null;
+    expect(highlightedStep?.id).toBe("external_sign_request");
+    expect(highlightedStep?.commands?.join("\n")).toContain("matterhorn-work hyperliquid sign-request");
+    expect(highlightedStep?.commands?.join("\n")).toContain("testnet_external_signer");
+    expect(JSON.stringify(result)).not.toContain("/orders/submit");
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
+  });
+
   test("routes Bittensor chat through the Bittensor executor", async () => {
     const result = await executeUnifiedCryptoChatWorkflow(
       { message: "show my TAO", ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX" },

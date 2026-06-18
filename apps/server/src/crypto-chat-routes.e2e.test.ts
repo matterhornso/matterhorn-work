@@ -175,6 +175,34 @@ describe("unified crypto chat execute route", () => {
     expect(forbiddenFieldPath(payload)).toBeNull();
   });
 
+  test("answers execution-step prompts through the unified chat route", async () => {
+    const { base } = await boot();
+    const { res, payload } = await postCryptoChat(base, {
+      message: "Create a Hyperliquid external sign request for testnet. What public context is needed?",
+      venue: "auto",
+    });
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.intent).toBe("market_execution_step_guidance");
+    expect(payload.execution).toBe("read_only");
+    expect(payload.responseText).toContain("External sign request");
+    expect(payload.responseText).toContain("Can submit: No");
+    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.data.highlightedStep.id).toBe("external_sign_request");
+    expect(payload.sharedCards[0]).toMatchObject({
+      version: "matterhorn.crypto.shared-card.v1",
+      kind: "readiness_report",
+      originalKind: "market_execution_chain",
+      safety: {
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
   test("serves the read-only market execution-chain API contract", async () => {
     const { base } = await boot();
     const { res, payload } = await getJson(base, "/api/crypto/market-execution-chain");
