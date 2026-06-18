@@ -147,3 +147,29 @@ export const MARKET_SAFETY_DEFAULTS = {
   requiresComplianceBeforePreview: true,
   rejectsRawSigningMaterial: true,
 } as const;
+
+export const MARKET_EXECUTION_READINESS_CONTROLS = [
+  "preview_hash_binding",
+  "stale_preview_rejection",
+  "operator_confirmation",
+  "external_signer_handoff",
+  "public_receipt_import",
+  "audit_logging",
+  "prompt_injection_rejection",
+  "secret_injection_rejection",
+  "compliance_bypass_rejection",
+] as const;
+export type MarketExecutionReadinessControl = (typeof MARKET_EXECUTION_READINESS_CONTROLS)[number];
+
+export interface MarketExecutionReadinessChecklist {
+  version: "matterhorn.market.execution-readiness.v1";
+  venues: Array<Extract<MarketVenue, "hyperliquid" | "polymarket">>;
+  controls: MarketExecutionReadinessControl[];
+  futureArchitecture: "external_signer_only";
+  liveSubmissionEnabled: false;
+  acceptsPrivateKeys: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  requiresSecurityReviewBeforeSubmit: true;
+}

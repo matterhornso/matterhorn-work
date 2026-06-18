@@ -19,6 +19,7 @@ const offlineStages = [
   ["crypto.customer_readiness_ui", "Customer readiness UI contract", ["pnpm", "test:customer-readiness-ui"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
+  ["market.execution_readiness", "Market execution-readiness security gate", ["pnpm", "test:market-execution-readiness-gate"]],
   ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
   ["market.official_sdk_capture", "Market official SDK validation capture", ["pnpm", "test:market-official-sdk-validation-capture"]],
   ["market.official_sdk_doctor", "Market official SDK validation doctor", ["pnpm", "test:market-official-sdk-validation-doctor"]],
