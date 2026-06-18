@@ -384,7 +384,41 @@ async function main() {
     if (!executionReadinessRequest) throw new Error("crypto execution-readiness did not call /api/crypto/market-execution-readiness");
     if (Object.keys(executionReadinessRequest.body || {}).length !== 0) throw new Error("crypto execution-readiness should not send a request body");
 
-    // 5. market alias + ask subcommand routes an explicit Polymarket venue.
+    // 5. The safe market execution chain helper is local-only and does not
+    // require the server, signing material, or a live submit route.
+    const requestsBeforeExecutionChain = mock.requests.length;
+    await expectCli(
+      "crypto execution-chain guide",
+      mock.url,
+      ["crypto", "execution-chain"],
+      (payload) => {
+        if (payload.version !== "matterhorn.market.execution-chain-guide.v1") throw new Error("expected execution-chain guide version");
+        if (payload.safety?.canSubmit !== false) throw new Error("expected execution-chain canSubmit=false");
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected execution-chain liveSubmissionEnabled=false");
+        if (payload.safety?.acceptsSecrets !== false) throw new Error("expected execution-chain acceptsSecrets=false");
+        if (!Array.isArray(payload.stages) || payload.stages.length < 5) throw new Error("expected all execution-chain stages");
+        const commandText = payload.stages.flatMap((stage) => stage.commands ?? []).join("\n");
+        for (const required of [
+          "matterhorn-work hyperliquid sign-request",
+          "matterhorn-work polymarket sign-request",
+          "matterhorn-work hyperliquid validate-artifact",
+          "matterhorn-work polymarket validate-artifact",
+          "matterhorn-work crypto artifact-reconcile",
+          "matterhorn-work hyperliquid receipt",
+          "matterhorn-work polymarket receipt",
+        ]) {
+          if (!commandText.includes(required)) throw new Error(`execution-chain guide missing ${required}`);
+        }
+        for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "privateKey", "apiSecret", "rawSignature", "signedPayload"]) {
+          if (commandText.includes(forbidden)) throw new Error(`execution-chain guide includes forbidden string ${forbidden}`);
+        }
+      },
+    );
+    if (mock.requests.length !== requestsBeforeExecutionChain) {
+      throw new Error("crypto execution-chain should not call the server");
+    }
+
+    // 6. market alias + ask subcommand routes an explicit Polymarket venue.
     await expectCli(
       "market ask -> polymarket",
       mock.url,
