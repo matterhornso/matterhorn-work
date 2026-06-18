@@ -111,6 +111,7 @@ describe("Hyperliquid read/preview safety", () => {
 
   test("classifies ordinary chat intents", () => {
     expect(planHyperliquidChat({ message: "show my Hyperliquid account" })).toBe("account");
+    expect(planHyperliquidChat({ message: "show my Hyperliquid exposure" })).toBe("account");
     expect(planHyperliquidChat({ message: "show BTC orderbook" })).toBe("orderbook");
     expect(planHyperliquidChat({ message: "show BTC funding" })).toBe("funding");
     expect(planHyperliquidChat({ message: "preview buying 0.1 BTC at 65000" })).toBe("order_preview");
@@ -139,11 +140,16 @@ describe("Hyperliquid read/preview safety", () => {
     expect(result.cards[0]?.kind).toBe("hyperliquid_account_snapshot");
     expect(result.cards[1]?.kind).toBe("hyperliquid_position_risk");
     expect(result.data?.account).toMatchObject({
+      accountValue: 1000,
+      withdrawableUsd: 500,
+      marginUsed: 1000,
       positionCount: 1,
       openOrderCount: 1,
       notionalExposure: 6500,
       unrealizedPnl: 100,
     });
+    expect(String((result.data?.account as { fundingExposure?: string })?.fundingExposure)).toContain("Funding exposure follows");
+    expect(((result.data?.account as { liquidationRiskNotes?: string[] })?.liquidationRiskNotes ?? [])[0]).toContain("BTC long");
     const account = result.data?.account as { positions?: Array<{ asset?: string; side?: string; leverageValue?: number }>; orders?: Array<{ side?: string; limitPx?: number }> };
     expect(account.positions?.[0]).toMatchObject({ asset: "BTC", side: "long", leverageValue: 5 });
     expect(account.orders?.[0]).toMatchObject({ side: "buy", limitPx: 63000 });

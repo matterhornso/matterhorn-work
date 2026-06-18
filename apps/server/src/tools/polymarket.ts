@@ -149,6 +149,22 @@ export interface PolymarketLiquidityContext {
   note: string;
 }
 
+export interface PolymarketMarketContextSnapshot {
+  version: "matterhorn.polymarket.market-context.v1";
+  marketId: string;
+  marketLabel: string;
+  active: boolean;
+  closed: boolean;
+  outcomes: Array<{ outcome: string; probability: number | null; tokenId: string | null }>;
+  liquidityUsd: number | null;
+  volumeUsd: number | null;
+  compliance: PolymarketComplianceStatus;
+  previewAvailability: "available" | "blocked_by_compliance" | "market_closed";
+  publicReceiptHistory: "not_configured";
+  source: PolymarketSource;
+  warnings: string[];
+}
+
 export interface PolymarketOrderPreviewInput {
   marketId?: string | null;
   outcome?: string | null;
@@ -368,6 +384,7 @@ export type PolymarketChatCard =
   | { kind: "polymarket_market_list"; title: string; markets: PolymarketMarketSummary[]; warnings: string[] }
   | { kind: "polymarket_event_list"; title: string; events: PolymarketEventSummary[]; warnings: string[] }
   | { kind: "polymarket_market_detail"; title: string; market: PolymarketMarketSummary; warnings: string[] }
+  | { kind: "polymarket_market_context"; title: string; context: PolymarketMarketContextSnapshot; warnings: string[] }
   | { kind: "polymarket_orderbook"; title: string; orderbook: PolymarketOrderbook; warnings: string[] }
   | { kind: "polymarket_compliance"; title: string; compliance: PolymarketComplianceStatus; warnings: string[] }
   | { kind: "polymarket_watch"; title: string; watch: PolymarketWatchDescriptor; warnings: string[] }
@@ -708,7 +725,7 @@ export function planPolymarketChat(input: PolymarketChatExecutionInput): Polymar
   if (/\bgeoblock/.test(message) || /\b(compliance|restricted|jurisdiction)\b/.test(message)) return "compliance";
   if (/\b(order\s*book|orderbook|book|bid|ask|spread|midpoint|depth)\b/.test(message)) return "orderbook";
   if (/\b(odds|probability|probabilities|chance|liquidity|volume)\b/.test(message)) return "odds";
-  if (/\b(explain|detail|details|describe|resolve|resolution|about this market)\b/.test(message)) return "market";
+  if (/\b(explain|detail|details|describe|summarize|summary|resolve|resolution|about this market)\b/.test(message)) return "market";
   if (/\bevents?\b/.test(message)) return "events";
   if (/\b(find|search|discover|markets?|list)\b/.test(message)) return "discover";
   return "learn";
@@ -986,6 +1003,40 @@ export function buildPolymarketWatchDescriptor(market: PolymarketMarketSummary):
     source: market.source,
     warnings,
     note: "Read-only watch. Matterhorn surfaces odds moves and a resolution reminder; it never places or auto-executes orders.",
+  };
+}
+
+export function buildPolymarketMarketContextSnapshot(
+  market: PolymarketMarketSummary,
+  compliance: PolymarketComplianceStatus,
+): PolymarketMarketContextSnapshot {
+  const warnings: string[] = [];
+  if (!market.active || market.closed) warnings.push("Market is inactive or closed; preview is unavailable.");
+  if (compliance.status === "blocked") warnings.push("Compliance blocks order preview terms for this region.");
+  if (market.liquidity !== null && market.liquidity < THIN_LIQUIDITY_USD) warnings.push("Thin liquidity may make preview fills unreliable.");
+  const previewAvailability = !market.active || market.closed
+    ? "market_closed"
+    : compliance.status === "blocked"
+      ? "blocked_by_compliance"
+      : "available";
+  return {
+    version: "matterhorn.polymarket.market-context.v1",
+    marketId: market.id,
+    marketLabel: market.question,
+    active: market.active,
+    closed: market.closed,
+    outcomes: market.outcomes.map((outcome) => ({
+      outcome,
+      probability: market.outcomePrices[outcome] ?? null,
+      tokenId: market.tokenIds[outcome] ?? null,
+    })),
+    liquidityUsd: market.liquidity,
+    volumeUsd: market.volume,
+    compliance,
+    previewAvailability,
+    publicReceiptHistory: "not_configured",
+    source: market.source,
+    warnings,
   };
 }
 
@@ -1414,6 +1465,8 @@ export async function executePolymarketChatWorkflow(
       return clarification("Which Polymarket market should I explain? Share a market id, or search first.", [], "clarification_required", intent);
     }
     const market = await provider.getMarket(input.marketId);
+    const compliance = await provider.checkCompliance();
+    const context = buildPolymarketMarketContextSnapshot(market, compliance);
     const lines = market.outcomes.map((outcome) => "- " + outcome + ": " + formatProbability(market.outcomePrices[outcome] ?? null));
     return {
       venue: "polymarket",
@@ -1423,10 +1476,14 @@ export async function executePolymarketChatWorkflow(
         "\"" + market.question + "\"\n" +
         (market.description ? market.description + "\n" : "") +
         "Implied probabilities:\n" + lines.join("\n") + "\n" +
-        "Liquidity: " + (market.liquidity === null ? "unknown" : market.liquidity) + ", volume: " + (market.volume === null ? "unknown" : market.volume) + ". " + RISK_DISCLAIMER,
-      cards: [{ kind: "polymarket_market_detail", title: market.question, market, warnings: [] }],
-      data: { market },
-      warnings: [],
+        "Liquidity: " + (market.liquidity === null ? "unknown" : market.liquidity)
+        + ", volume: " + (market.volume === null ? "unknown" : market.volume)
+        + ", compliance: " + compliance.status
+        + ", preview availability: " + context.previewAvailability + ". " + RISK_DISCLAIMER,
+      cards: [buildPolymarketMarketDetailCard(market), buildPolymarketMarketContextCard(context)],
+      data: { market, context, compliance },
+      compliance,
+      warnings: context.warnings,
     };
   }
 
@@ -1567,6 +1624,10 @@ export function buildPolymarketEventListCard(events: PolymarketEventSummary[]): 
 
 export function buildPolymarketMarketDetailCard(market: PolymarketMarketSummary): PolymarketChatCard {
   return { kind: "polymarket_market_detail", title: market.question, market, warnings: [] };
+}
+
+export function buildPolymarketMarketContextCard(context: PolymarketMarketContextSnapshot): PolymarketChatCard {
+  return { kind: "polymarket_market_context", title: "Polymarket market context", context, warnings: context.warnings };
 }
 
 export function buildPolymarketOrderbookCard(orderbook: PolymarketOrderbook): PolymarketChatCard {
