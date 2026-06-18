@@ -772,8 +772,21 @@ function sharedCardMissingContext(data: Record<string, unknown> | null, venue: s
   return null;
 }
 
+function sharedCardHighlightedStep(data: Record<string, unknown> | null): { label: string; command: string | null } | null {
+  const nested = isRecordValue(data?.data) ? data.data : null;
+  const step = isRecordValue(nested?.highlightedStep) ? nested.highlightedStep : null;
+  if (!step) return null;
+  const label = typeof step.label === "string" && step.label.trim() ? step.label.trim() : null;
+  if (!label) return null;
+  const command = Array.isArray(step.commands)
+    ? step.commands.find((item): item is string => typeof item === "string" && item.trim().length > 0)?.trim() ?? null
+    : null;
+  return { label, command };
+}
+
 function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null): boolean {
   if (kind === "external_signer_handoff" || kind === "action_preview") return true;
+  if (originalKind === "market_execution_chain") return true;
   return Boolean(originalKind && /(handoff|signing|signed_action|staking_quote|order_preview)/i.test(originalKind));
 }
 
@@ -797,6 +810,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   const block = sourceField(source, ["block", "blockNumber", "blockHash"]);
   const data = isRecordValue(card.data) ? card.data : {};
   const missingContext = sharedCardMissingContext(data, venue, kind);
+  const highlightedStep = originalKind === "market_execution_chain" ? sharedCardHighlightedStep(data) : null;
   const items: NonNullable<BittensorChatCard["items"]> = [
     { label: "Venue", value: venueLabel, tone: venue === "auto" ? "muted" : "default" },
     { label: "Status", value: statusLabel, tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "muted" },
@@ -805,6 +819,10 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   ];
   if (sharedCardNeedsExternalSigner(kind, originalKind)) {
     items.push({ label: "External signer", value: "Required", tone: "warning" });
+  }
+  if (highlightedStep) {
+    items.push({ label: "Focused step", value: highlightedStep.label, tone: "default" });
+    if (highlightedStep.command) items.push({ label: "Step command", value: highlightedStep.command, tone: "muted" });
   }
   if (missingContext) items.push({ label: "Missing context", value: missingContext, tone: "warning" });
   if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
