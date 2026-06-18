@@ -33,6 +33,18 @@ const CUSTOMER_DEMO_COMMANDS = {
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionReadiness: "matterhorn-work crypto execution-readiness --json",
   executionReadinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
+  executionChainSignRequest: [
+    "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
+    "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
+  ].join("\n"),
+  executionChainArtifact: [
+    "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+    "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+  ].join("\n"),
+  executionChainReceipt: [
+    "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+    "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+  ].join("\n"),
   smoke: "pnpm smoke:customer-ready-crypto",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
   evidenceVerify: [
@@ -88,6 +100,12 @@ const CUSTOMER_DEMO_PROMPTS = [
     label: "Execution readiness",
     betaVisible: false,
     prompt: "Use unified crypto chat. Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
+  },
+  {
+    id: "market-execution-chain",
+    label: "Safe execution chain",
+    betaVisible: false,
+    prompt: "Use unified crypto chat. Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
   },
 ] as const;
 const BITTENSOR_BETA_MODE = (() => {
@@ -810,6 +828,38 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyCustomerDemoCommand("executionReadiness")}>
                     {copiedCustomerCommand === "executionReadiness" ? "Copied" : "Execution CLI"}
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Execution chain" icon={<ExternalLink className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Testnet-only path: preview -&gt; external sign request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {[
+                    ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
+                    ["External sign request", "Create public metadata for an operator-owned testnet signer only."],
+                    ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
+                    ["Receipt import", "Attach public status or transaction evidence without private execution material."],
+                  ].map(([label, description]) => (
+                    <div key={label} className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                      <p className="text-xs font-semibold text-dls-text">{label}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{description}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
+                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Sign request"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainArtifact")}>
+                    {copiedCustomerCommand === "executionChainArtifact" ? "Copied" : "Validate artifact"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainReceipt")}>
+                    {copiedCustomerCommand === "executionChainReceipt" ? "Copied" : "Receipt import"}
                   </Button>
                 </div>
               </div>
