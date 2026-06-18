@@ -178,6 +178,9 @@ credential-shaped environment keys, and secret-shaped JSON fields. It writes:
 These outputs are public/redacted evidence only. Matterhorn does not run private
 SDK signing, compute final signatures, or submit orders.
 
+For operator-owned testnet artifact export instructions and a checked example,
+see [Market Official SDK Operator Artifacts](./market-official-sdk-operator-artifacts.md).
+
 ## Validation Doctor
 
 Before running official SDK clients or importing captured artifacts, run the
@@ -346,6 +349,7 @@ pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-operator-loop
 pnpm test:market-official-sdk-validate-public
+pnpm test:market-official-sdk-operator-artifacts
 pnpm test:market-sdk-run-manifest-check
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle

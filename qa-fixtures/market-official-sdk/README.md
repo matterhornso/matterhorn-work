@@ -26,5 +26,12 @@ The negative fixtures are intentionally invalid:
 - `polymarket-mismatched-domain.fixture.json` proves the declared chain/exchange
   evidence must match the normalized EIP-712 domain.
 
+The `operator-owned-testnet-example` directory contains public/redacted example
+artifacts named `hyperliquid-official-public.json` and
+`polymarket-official-public.json`. Use it with
+`pnpm test:market-official-sdk-operator-artifacts` to prove the
+`operator_owned_testnet` import path without running official clients, signing,
+or submitting orders.
+
 Do not add private keys, seed phrases, API secrets, raw signatures, signed
 payloads, or wallet exports to this directory.
