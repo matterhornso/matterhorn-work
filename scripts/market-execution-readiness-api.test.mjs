@@ -11,6 +11,8 @@ const server = read("apps/server/src/server.ts");
 const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const cli = read("apps/orchestrator/src/cli.ts");
 const matrix = read("docs/agent-control-coverage-matrix.md");
+const marketsTypes = read("packages/types/src/markets.ts");
+const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx");
 
 assert.equal(
   packageJson.scripts?.["test:market-execution-readiness-api"],
@@ -66,5 +68,22 @@ assert.ok(cli.includes("/api/crypto/market-execution-readiness"), "CLI should ca
 assert.ok(matrix.includes("/api/crypto/market-execution-readiness"), "coverage matrix should list the execution-readiness API");
 assert.ok(matrix.includes("matterhorn_market_execution_readiness"), "coverage matrix should list the execution-readiness MCP tool");
 assert.ok(matrix.includes("matterhorn-work crypto execution-readiness"), "coverage matrix should list the execution-readiness CLI command");
+
+for (const phrase of [
+  "export interface MarketExecutionReadinessReport",
+  "readyForLiveSubmission: false",
+  "export interface MarketExecutionReadinessResponse",
+  "export interface MarketExecutionReadinessCard",
+  "liveSubmissionEnabled: false",
+  "acceptsRawSignatures: false",
+  "acceptsSignedPayloads: false",
+]) {
+  assert.ok(marketsTypes.includes(phrase), `shared market types should expose ${phrase}`);
+}
+
+assert.ok(
+  panel.includes("MarketExecutionReadinessReport"),
+  "customer demo UI should consume the shared execution-readiness report contract",
+);
 
 console.log("Market execution-readiness API static check passed.");
