@@ -3785,6 +3785,7 @@ function printHelp(): void {
     "  matterhorn-work crypto evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto bittensor-evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto customer-packet --customer-ready-smoke <path> [--market-evidence-verify <path>] [options]",
+    "  matterhorn-work crypto hermes-customer-qa --dry-run [options]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3821,6 +3822,7 @@ function printHelp(): void {
     "  crypto evidence-verify  Verify final market customer evidence bundle offline",
     "  crypto bittensor-evidence-verify Verify final Bittensor customer evidence bundle offline",
     "  crypto customer-packet  Build top-level crypto customer QA packet from verified artifacts",
+    "  crypto hermes-customer-qa Print a public/redacted Hermes customer QA command plan",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -7732,6 +7734,16 @@ const CRYPTO_LIVE_PUBLIC_QA_VALUE_FLAGS = [
   "customer-packet",
 ] as const;
 
+const CRYPTO_HERMES_CUSTOMER_QA_SUBCOMMANDS = new Set([
+  "hermes-customer-qa",
+  "hermes-qa",
+  "customer-qa",
+]);
+
+const CRYPTO_HERMES_CUSTOMER_QA_BOOL_FLAGS = [
+  "dry-run",
+] as const;
+
 const CRYPTO_SDK_DOCTOR_BOOL_FLAGS = [
   "strict",
 ] as const;
@@ -8008,6 +8020,13 @@ async function runCryptoLivePublicQa(args: ParsedArgs, outputJson: boolean): Pro
   await runOfflineCryptoScript("crypto-live-public-qa.mjs", forwarded, "Live public crypto QA pack");
 }
 
+async function runCryptoHermesCustomerQa(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_HERMES_CUSTOMER_QA_BOOL_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("hermes-crypto-customer-qa.mjs", forwarded, "Hermes crypto customer QA helper");
+}
+
 async function runCryptoEvidenceBundle(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS, forwarded);
@@ -8090,6 +8109,11 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
+    if (CRYPTO_HERMES_CUSTOMER_QA_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoHermesCustomerQa(args, outputJson);
+      return;
+    }
+
     if (CRYPTO_EVIDENCE_BUNDLE_SUBCOMMANDS.has(subcommand)) {
       await runCryptoEvidenceBundle(args);
       return;
@@ -8169,7 +8193,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
