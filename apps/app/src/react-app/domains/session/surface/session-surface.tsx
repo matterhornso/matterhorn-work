@@ -953,11 +953,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
   }, [props.sessionId, props.workspaceId, setBittensorContext]);
 
   useEffect(() => {
-    const handleBittensorChatHandoff = (event: Event) => {
+    const handleCryptoChatHandoff = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
       const detail: unknown = event.detail;
       if (!detail || typeof detail !== "object" || Array.isArray(detail)) return;
       const record = detail as { prompt?: unknown; text?: unknown; message?: unknown };
+      const isGenericCryptoHandoff = event.type === "matterhorn:crypto-chat-handoff";
       const incomingContext = readBittensorContextFromEventDetail(detail);
       const mergedContext = mergeBittensorSessionContexts(bittensorContext, incomingContext);
       const text =
@@ -969,22 +970,28 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (incomingContext) {
         setBittensorContext(props.sessionId, incomingContext);
       }
-      const resolvedText = addBittensorContextToResolvedText(text, mergedContext);
+      const resolvedText = isGenericCryptoHandoff ? text : addBittensorContextToResolvedText(text, mergedContext);
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
-      setNotice({ title: "Bittensor prompt ready", description: "Review or send it from the chat composer.", tone: "info" });
-      recordInspectorEvent("bittensor.chat_handoff.applied", {
+      setNotice({
+        title: isGenericCryptoHandoff ? "Crypto prompt ready" : "Bittensor prompt ready",
+        description: "Review or send it from the chat composer.",
+        tone: "info",
+      });
+      recordInspectorEvent(isGenericCryptoHandoff ? "crypto.chat_handoff.applied" : "bittensor.chat_handoff.applied", {
         workspaceId: props.workspaceId,
         sessionId: props.sessionId,
         length: text.length,
         contextId: mergedContext?.id,
       });
     };
-    window.addEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
-    window.addEventListener("matterhorn:bittensor-agent-prompt", handleBittensorChatHandoff);
+    window.addEventListener("matterhorn:crypto-chat-handoff", handleCryptoChatHandoff);
+    window.addEventListener("matterhorn:bittensor-chat-handoff", handleCryptoChatHandoff);
+    window.addEventListener("matterhorn:bittensor-agent-prompt", handleCryptoChatHandoff);
     return () => {
-      window.removeEventListener("matterhorn:bittensor-chat-handoff", handleBittensorChatHandoff);
-      window.removeEventListener("matterhorn:bittensor-agent-prompt", handleBittensorChatHandoff);
+      window.removeEventListener("matterhorn:crypto-chat-handoff", handleCryptoChatHandoff);
+      window.removeEventListener("matterhorn:bittensor-chat-handoff", handleCryptoChatHandoff);
+      window.removeEventListener("matterhorn:bittensor-agent-prompt", handleCryptoChatHandoff);
     };
   }, [attachments, bittensorContext, buildDraft, props.onDraftChange, props.sessionId, props.workspaceId, setBittensorContext, typeComposerText]);
 

@@ -27,6 +27,36 @@ import type {
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const CUSTOMER_DEMO_COMMANDS = {
+  smoke: "pnpm smoke:customer-ready-crypto",
+  smokeJson: "matterhorn-work crypto customer-smoke --dry-run --json",
+  packet: [
+    "matterhorn-work crypto customer-packet",
+    "--customer-ready-smoke /tmp/matterhorn-crypto-smoke.json",
+    "--market-evidence-verify /tmp/matterhorn-market-evidence-verify.json",
+    "--bittensor-evidence-verify /tmp/bittensor-evidence-verify.json",
+    "--output /tmp/matterhorn-crypto-customer-packet.md",
+    "--json-output /tmp/matterhorn-crypto-customer-packet.json",
+    "--strict",
+  ].join(" "),
+} as const;
+const CUSTOMER_DEMO_PROMPTS = [
+  {
+    id: "bittensor-image-subnets",
+    label: "Bittensor discovery",
+    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
+  },
+  {
+    id: "hyperliquid-orderbook",
+    label: "Hyperliquid read",
+    prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn cannot submit or sign orders.",
+  },
+  {
+    id: "polymarket-compliance",
+    label: "Polymarket compliance",
+    prompt: "Use unified crypto chat. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
+  },
+] as const;
 
 type Tab = "overview" | "subnets" | "wallet" | "actions";
 type ActionType = BittensorActionQuote["action"];
@@ -155,6 +185,7 @@ export default function BittensorPanel() {
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [copiedReadinessCommand, setCopiedReadinessCommand] = useState<string | null>(null);
+  const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
 
@@ -342,17 +373,24 @@ export default function BittensorPanel() {
     void loadReadiness();
   };
 
-  const sendToChat = async (prompt: string, context: Record<string, unknown>) => {
-    const expandedPrompt = buildBittensorChatPrompt(prompt, context);
-    window.dispatchEvent(new CustomEvent("matterhorn:bittensor-chat-handoff", {
+  const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
+    const mode = options.mode ?? "bittensor";
+    const expandedPrompt = mode === "bittensor" ? buildBittensorChatPrompt(prompt, context) : prompt;
+    window.dispatchEvent(new CustomEvent(mode === "crypto" ? "matterhorn:crypto-chat-handoff" : "matterhorn:bittensor-chat-handoff", {
       detail: {
         prompt: expandedPrompt,
         context,
-        source: "bittensor-panel",
+        source: options.source ?? "bittensor-panel",
       },
     }));
     setAgentPromptReady(true);
     window.setTimeout(() => setAgentPromptReady(false), 2000);
+  };
+
+  const copyCustomerDemoCommand = async (kind: keyof typeof CUSTOMER_DEMO_COMMANDS) => {
+    await navigator.clipboard?.writeText(CUSTOMER_DEMO_COMMANDS[kind]);
+    setCopiedCustomerCommand(kind);
+    window.setTimeout(() => setCopiedCustomerCommand(null), 2000);
   };
 
   const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-candidate" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt" | "receipt-import") => {
@@ -470,6 +508,10 @@ export default function BittensorPanel() {
   const askAgentAboutReadiness = async () => {
     const prompt = "Use Bittensor chat mode. Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, what is safe to demo, and the next command or fix to run before a test customer session.";
     await sendToChat(prompt, { readiness });
+  };
+
+  const askAgentForCustomerDemo = async (prompt: string) => {
+    await sendToChat(prompt, {}, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
 
   const askAgentAboutQuote = async () => {
@@ -626,6 +668,43 @@ export default function BittensorPanel() {
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("receipt-import")}>
                     {copiedReadinessCommand === "receipt-import" ? "Copied" : "Copy Import"}
                   </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Customer Demo Checklist" icon={<BrainCircuit className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Use this before a test customer call: run the offline crypto gate, prepare a redacted packet, then demo read/preview-only chat cards.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
+                    {copiedCustomerCommand === "smoke" ? "Copied" : "Copy Smoke"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smokeJson")}>
+                    {copiedCustomerCommand === "smokeJson" ? "Copied" : "Copy JSON"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("packet")}>
+                    {copiedCustomerCommand === "packet" ? "Copied" : "Copy Packet"}
+                  </Button>
+                </div>
+                <div className="grid gap-2">
+                  {CUSTOMER_DEMO_PROMPTS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-sky-500/35 hover:bg-dls-hover"
+                      onClick={() => void askAgentForCustomerDemo(item.prompt)}
+                    >
+                      <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
+                      <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">
+                        {item.prompt}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-200">
+                  Demo boundary: no seed phrases, private keys, API secrets, signatures, signed payloads, wallet exports, or live Hyperliquid/Polymarket submission.
                 </div>
               </div>
             </Section>
