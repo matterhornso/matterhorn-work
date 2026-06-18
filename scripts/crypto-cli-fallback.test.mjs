@@ -88,6 +88,23 @@ async function createMockServer() {
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/api/crypto/readiness") {
+      return writeJson(res, 200, {
+        success: true,
+        ready: true,
+        status: "ready",
+        report: {
+          ready: true,
+          checks: [
+            { id: "bittensor.readiness", label: "Bittensor readiness", status: "pass" },
+            { id: "hyperliquid.read_preview", label: "Hyperliquid read/preview", status: "pass" },
+            { id: "polymarket.read_preview", label: "Polymarket read/preview", status: "pass" },
+          ],
+          safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+        },
+      });
+    }
+
     return writeJson(res, 404, { error: "not_found", path: url.pathname });
   });
   const port = await listen(server);
@@ -142,6 +159,22 @@ async function main() {
         if (payload.sharedCards[0].safety?.canSubmit !== false) throw new Error("expected sharedCards safety.canSubmit=false");
       },
     );
+
+    // 2. The runtime customer-readiness route is exposed through the public
+    // crypto CLI and uses the client Bearer token with no request body.
+    await expectCli(
+      "crypto readiness",
+      mock.url,
+      ["crypto", "readiness"],
+      (payload) => {
+        if (payload.ready !== true) throw new Error(`expected readiness ready=true, got ${payload.ready}`);
+        if (payload.report?.safety?.liveSubmissionEnabled !== false) throw new Error("expected readiness liveSubmissionEnabled=false");
+        if (payload.report?.safety?.canSubmit !== false) throw new Error("expected readiness canSubmit=false");
+      },
+    );
+    const readinessRequest = mock.requests.find((request) => request.method === "GET" && request.path === "/api/crypto/readiness");
+    if (!readinessRequest) throw new Error("crypto readiness did not call /api/crypto/readiness");
+    if (Object.keys(readinessRequest.body || {}).length !== 0) throw new Error("crypto readiness should not send a request body");
 
     // 2. market alias + ask subcommand routes an explicit Polymarket venue.
     await expectCli(
@@ -607,9 +640,13 @@ async function main() {
     console.log("PASS crypto receipt-check CLI is offline and non-custodial");
 
     // 12. No request touched a submit/sign/exchange route.
+    const expectedServerRoutes = new Set([
+      "/api/crypto/chat/execute",
+      "/api/crypto/readiness",
+    ]);
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);
-      if (entry.path !== "/api/crypto/chat/execute") throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);
+      if (!expectedServerRoutes.has(entry.path)) throw new Error(`crypto CLI reached an unexpected route: ${entry.path}`);
     }
     console.log("PASS crypto CLI never touched submit/sign/exchange routes");
   } finally {

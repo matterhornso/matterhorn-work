@@ -29,6 +29,7 @@ const rows = [
   ["DELETE /files/sessions/:sessionId", "matterhorn_close_file_session", "matterhorn-work files session close"],
   ["GET /approvals", "matterhorn_list_approvals", "matterhorn-work approvals list"],
   ["POST /approvals/:approvalId", "matterhorn_reply_approval", "matterhorn-work approvals reply"],
+  ["GET /api/crypto/readiness", "matterhorn_crypto_readiness", "matterhorn-work crypto readiness"],
   ["POST /api/bittensor/chat/execute", "matterhorn_bittensor_chat", "matterhorn-work bittensor chat"],
   ["GET /api/bittensor/readiness", "matterhorn_bittensor_readiness", "matterhorn-work bittensor readiness"],
   ["POST /api/bittensor/extrinsics/receipt", "matterhorn_bittensor_import_receipt", "Copy Import"],

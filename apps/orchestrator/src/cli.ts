@@ -3771,6 +3771,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
+    "  matterhorn-work crypto readiness [options]",
     "  matterhorn-work crypto customer-smoke [--offline|--include-live-server] [options]",
     "  matterhorn-work crypto sdk-doctor [--strict] [--venue all|hyperliquid|polymarket]",
     "  matterhorn-work crypto sdk-normalize --venue <venue> --input <path> --output <path>",
@@ -3805,6 +3806,7 @@ function printHelp(): void {
     "  hyperliquid             Run Hyperliquid read/preview workflows",
     "  polymarket              Run Polymarket read/preview workflows",
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
+    "  crypto readiness        Read the unified crypto customer-readiness report from the local server",
     "  crypto customer-smoke   Run consolidated customer-ready crypto smoke gates",
     "  crypto sdk-doctor       Check official SDK validation env readiness without signing/submission",
     "  crypto sdk-normalize    Normalize redacted official-client output for SDK validation",
@@ -7671,6 +7673,12 @@ const CRYPTO_RECEIPT_CHECK_SUBCOMMANDS = new Set([
   "check-receipt",
 ]);
 
+const CRYPTO_READINESS_SUBCOMMANDS = new Set([
+  "readiness",
+  "customer-readiness",
+  "ready",
+]);
+
 const CRYPTO_CUSTOMER_SMOKE_SUBCOMMANDS = new Set([
   "customer-smoke",
   "customer-ready",
@@ -8064,6 +8072,15 @@ async function runCrypto(args: ParsedArgs) {
       Authorization: `Bearer ${token}`,
     };
 
+    if (CRYPTO_READINESS_SUBCOMMANDS.has(subcommand)) {
+      const result = await fetchJson(`${baseUrl}/api/crypto/readiness`, {
+        method: "GET",
+        headers,
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "chat" || subcommand === "ask" || subcommand === "execute") {
       const message =
         readFlag(args.flags, "message") ??
@@ -8107,7 +8124,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

@@ -72,6 +72,8 @@ Suggested prompt:
 Use matterhorn_crypto_chat for this request: "show BTC Hyperliquid funding". Keep it read-only unless the server returns a preview-only card.
 ```
 
+For the customer-demo readiness summary, call `matterhorn_crypto_readiness`. It reads `GET /api/crypto/readiness` and reports Bittensor readiness plus Hyperliquid/Polymarket read-preview safety without asking for secrets or submitting anything.
+
 Expected result:
 
 - Bittensor, Hyperliquid, or Polymarket routing happens server-side.
@@ -105,6 +107,8 @@ Use matterhorn_polymarket_chat to find Polymarket markets about AI and explain t
 When the prompt should choose the venue, use the unified crypto CLI. It calls `POST /api/crypto/chat/execute` and stays read/preview only (aliases: `matterhorn-work market chat`, `matterhorn-work markets chat`):
 
 ```bash
+matterhorn-work crypto readiness --json
+
 matterhorn-work crypto chat \
   --message "show BTC Hyperliquid funding" \
   --venue auto \

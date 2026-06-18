@@ -19,11 +19,13 @@ assert.equal(
 );
 
 for (const phrase of [
+  "/api/crypto/readiness",
   "/api/crypto/chat/execute",
   "Authorization: Bearer",
   "sharedCards",
   "matterhorn.crypto.shared-card.v1",
   "matterhorn_crypto_chat",
+  "matterhorn_crypto_readiness",
   "matterhorn_bittensor_chat",
   "matterhorn_hyperliquid_chat",
   "matterhorn_polymarket_chat",
@@ -31,6 +33,7 @@ for (const phrase of [
   "matterhorn-work bittensor chat",
   "matterhorn-work hyperliquid chat",
   "matterhorn-work polymarket chat",
+  "matterhorn-work crypto readiness",
   "matterhorn-work crypto customer-smoke",
   "--json-output /tmp/matterhorn-crypto-smoke.json",
   "matterhorn-work crypto sdk-loop",

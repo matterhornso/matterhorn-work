@@ -389,6 +389,11 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_crypto_readiness",
+    description: "Read the unified Matterhorn Work crypto customer-readiness report for Bittensor, Hyperliquid, and Polymarket. Server-side read-only summary; no signing, submission, or secrets.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "matterhorn_market_customer_evidence_verify",
     description: "Verify a public/redacted Hyperliquid + Polymarket customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
     inputSchema: {
@@ -2666,6 +2671,8 @@ async function handleTool(name, args = {}) {
       });
     case "matterhorn_crypto_chat":
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
+    case "matterhorn_crypto_readiness":
+      return callServer("/api/crypto/readiness");
     case "matterhorn_market_customer_evidence_verify":
       return matterhornMarketCustomerEvidenceVerify(args);
     case "matterhorn_bittensor_customer_evidence_verify":

@@ -272,6 +272,22 @@ const server = createServer(async (req, res) => {
       warnings: [],
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/crypto/readiness") {
+    return json(res, 200, {
+      success: true,
+      ready: true,
+      status: "ready",
+      report: {
+        ready: true,
+        checks: [
+          { id: "bittensor.readiness", label: "Bittensor readiness", status: "pass" },
+          { id: "hyperliquid.read_preview", label: "Hyperliquid read/preview", status: "pass" },
+          { id: "polymarket.read_preview", label: "Polymarket read/preview", status: "pass" },
+        ],
+        safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+      },
+    });
+  }
 
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
     if (body.message === "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.") {
@@ -512,6 +528,7 @@ try {
     "matterhorn_watch_file_events",
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
+    "matterhorn_crypto_readiness",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
     "matterhorn_hyperliquid_get_account",
@@ -545,6 +562,7 @@ try {
   assert.equal(/seed|mnemonic|privateKey|private_key|wallet export/i.test(schemaText), false);
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
+  assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
@@ -746,6 +764,14 @@ try {
   assert.equal(cryptoChat.sharedCards[0].version, "matterhorn.crypto.shared-card.v1");
   assert.equal(cryptoChat.sharedCards[0].kind, "market_context");
   assert.equal(cryptoChat.sharedCards[0].safety.canSubmit, false);
+
+  const cryptoReadiness = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_readiness",
+    arguments: {},
+  }));
+  assert.equal(cryptoReadiness.ready, true);
+  assert.equal(cryptoReadiness.report.safety.liveSubmissionEnabled, false);
+  assert.equal(cryptoReadiness.report.safety.canSubmit, false);
 
   const marketCustomerEvidenceSummary = {
     ready: true,
