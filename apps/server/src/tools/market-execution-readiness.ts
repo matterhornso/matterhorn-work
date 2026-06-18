@@ -271,3 +271,12 @@ export function buildMarketSdkValidationCard(guide = buildMarketSdkValidationGui
     data: { guide },
   } as const;
 }
+
+export function buildMarketSdkValidationResponse() {
+  const guide = buildMarketSdkValidationGuide();
+  return {
+    success: true,
+    guide,
+    cards: [buildMarketSdkValidationCard(guide)],
+  } as const;
+}

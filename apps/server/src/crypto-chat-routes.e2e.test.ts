@@ -257,6 +257,35 @@ describe("unified crypto chat execute route", () => {
     expect(forbiddenFieldPath(payload)).toBeNull();
   });
 
+  test("serves the read-only market SDK validation API contract", async () => {
+    const { base } = await boot();
+    const { res, payload } = await getJson(base, "/api/crypto/market-sdk-validation");
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.guide.version).toBe("matterhorn.market.sdk-validation-guide.v1");
+    expect(payload.guide.modes).toContain("fixture");
+    expect(payload.guide.modes).toContain("operator_owned_testnet");
+    expect(payload.guide.networks.hyperliquid).toContain("hyperliquid-testnet");
+    expect(payload.guide.networks.polymarket).toContain("polygon-amoy");
+    expect(payload.guide.safety).toMatchObject({
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+      runsPrivateSdkSigning: false,
+      callsExchanges: false,
+    });
+    expect(payload.cards[0]).toMatchObject({
+      kind: "market_sdk_validation",
+      title: "Official SDK validation",
+    });
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
   test("rejects missing messages and secret-shaped crypto chat inputs", async () => {
     const { base } = await boot();
 
