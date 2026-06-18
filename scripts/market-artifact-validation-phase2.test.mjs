@@ -87,6 +87,28 @@ for (const required of [
   assert.ok(server.includes(required), `server missing ${required}`);
 }
 
+const hyperliquidRouteStart = server.indexOf('"/api/hyperliquid/orders/external-artifact/validate"');
+const hyperliquidRouteEnd = server.indexOf('"/api/hyperliquid/orders/receipt"', hyperliquidRouteStart);
+const hyperliquidRoute = hyperliquidRouteStart >= 0 ? server.slice(hyperliquidRouteStart, hyperliquidRouteEnd > hyperliquidRouteStart ? hyperliquidRouteEnd : server.length) : "";
+const polymarketRouteStart = server.indexOf('"/api/polymarket/orders/external-artifact/validate"');
+const polymarketRouteEnd = server.indexOf('"/api/polymarket/orders/receipt"', polymarketRouteStart);
+const polymarketRoute = polymarketRouteStart >= 0 ? server.slice(polymarketRouteStart, polymarketRouteEnd > polymarketRouteStart ? polymarketRouteEnd : server.length) : "";
+
+for (const [label, route, validator, invalidError] of [
+  ["Hyperliquid", hyperliquidRoute, "validateHyperliquidRedactedArtifactEnvelope", "invalid_hyperliquid_artifact_validation"],
+  ["Polymarket", polymarketRoute, "validatePolymarketRedactedArtifactEnvelope", "invalid_polymarket_artifact_validation"],
+]) {
+  assert.ok(route.includes("sanitizeMarketArtifactValidationInputForSecretScan(body)"), `${label} artifact route should sanitize hash metadata before secret scanning`);
+  assert.ok(route.includes("market_secret_rejected"), `${label} artifact route should reject secret-shaped artifact validation input`);
+  assert.ok(route.includes("only public/redacted metadata"), `${label} artifact route should explain public/redacted-only input`);
+  assert.ok(route.includes(validator), `${label} artifact route should use the venue artifact validator`);
+  assert.ok(route.includes("receiptCandidate: validation.publicAuditReceiptCandidate"), `${label} artifact route should return only a public receipt candidate`);
+  assert.ok(route.includes(invalidError), `${label} artifact route should use the venue-specific invalid artifact validation error`);
+  for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "rawSignature", "signedPayload", "submitSigned"]) {
+    assert.ok(!route.includes(forbidden), `${label} artifact route must not include ${forbidden}`);
+  }
+}
+
 for (const required of [
   "matterhorn_hyperliquid_validate_external_artifact",
   "matterhorn_polymarket_validate_external_artifact",
