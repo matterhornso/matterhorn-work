@@ -173,3 +173,108 @@ export interface MarketExecutionReadinessChecklist {
   acceptsSignedPayloads: false;
   requiresSecurityReviewBeforeSubmit: true;
 }
+
+export const MARKET_EXECUTION_MODES = [
+  "disabled",
+  "testnet_external_signer",
+  "mainnet_external_signer",
+] as const;
+export type MarketExecutionMode = (typeof MARKET_EXECUTION_MODES)[number];
+
+export const MARKET_SIGNED_SUBMISSION_ACTIONS = [
+  "place_order",
+  "cancel_order",
+  "cancel_all",
+] as const;
+export type MarketSignedSubmissionAction = (typeof MARKET_SIGNED_SUBMISSION_ACTIONS)[number];
+
+export const MARKET_SUBMIT_SIGN_PHASE0_CONTROLS = [
+  "explicit_execution_mode",
+  "route_level_kill_switch",
+  "network_allowlist",
+  "preview_hash_binding",
+  "handoff_hash_binding",
+  "signed_artifact_hash_binding",
+  "stale_preview_rejection",
+  "operator_confirmation",
+  "external_signer_only",
+  "no_custody",
+  "no_secret_storage",
+  "compliance_recheck",
+  "audit_log_redaction",
+  "public_receipt_only",
+] as const;
+export type MarketSubmitSignPhase0Control = (typeof MARKET_SUBMIT_SIGN_PHASE0_CONTROLS)[number];
+
+export const MARKET_ALWAYS_FORBIDDEN_EXECUTION_FIELDS = [
+  "seed",
+  "seedPhrase",
+  "mnemonic",
+  "privateKey",
+  "suri",
+  "keyfile",
+  "walletExport",
+  "apiSecret",
+  "apiKeySecret",
+  "passphrase",
+  "password",
+] as const;
+export type MarketAlwaysForbiddenExecutionField = (typeof MARKET_ALWAYS_FORBIDDEN_EXECUTION_FIELDS)[number];
+
+export const MARKET_SIGNED_ARTIFACT_FIELDS_REQUIRE_ENVELOPE = [
+  "signature",
+  "signedOrder",
+  "signedAction",
+  "exchangePayload",
+] as const;
+export type MarketSignedArtifactField = (typeof MARKET_SIGNED_ARTIFACT_FIELDS_REQUIRE_ENVELOPE)[number];
+
+export const MARKET_FUTURE_EXECUTION_ROUTE_NAMES = [
+  "hyperliquid.orders.sign_request",
+  "hyperliquid.orders.submit_signed",
+  "hyperliquid.orders.cancel_sign_request",
+  "hyperliquid.orders.cancel_submit_signed",
+  "polymarket.orders.sign_request",
+  "polymarket.orders.submit_signed",
+  "polymarket.orders.cancel_sign_request",
+  "polymarket.orders.cancel_submit_signed",
+] as const;
+export type MarketFutureExecutionRouteName = (typeof MARKET_FUTURE_EXECUTION_ROUTE_NAMES)[number];
+
+export interface MarketSignedSubmissionEnvelope {
+  version: "matterhorn.market.signed-submission-envelope.v1";
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  executionMode: Extract<MarketExecutionMode, "testnet_external_signer" | "mainnet_external_signer">;
+  network: string;
+  action: MarketSignedSubmissionAction;
+  routeName: MarketFutureExecutionRouteName;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signedArtifactPublicHash: string;
+  signedArtifactRedacted: true;
+  signerAddress: string;
+  operatorConfirmation: string;
+  createdAt: string;
+  expiresAt: string;
+  compliance: MarketComplianceStatus;
+  source: MarketSourceFreshness;
+  submitSignedAllowedByContract: boolean;
+  warnings: string[];
+}
+
+export interface MarketExecutionAuditRecord {
+  version: "matterhorn.market.execution-audit.v1";
+  envelopeVersion: MarketSignedSubmissionEnvelope["version"];
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  routeName: MarketFutureExecutionRouteName;
+  status: "accepted" | "rejected" | "submitted" | "failed" | "blocked";
+  previewSha256: string;
+  handoffSha256: string;
+  signedArtifactPublicHash?: string | null;
+  receiptHash?: string | null;
+  rejectionReason?: string | null;
+  redacted: true;
+  recordedAt: string;
+  warnings: string[];
+}
