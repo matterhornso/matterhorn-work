@@ -48,6 +48,36 @@ const CUSTOMER_DEMO_COMMANDS = {
     "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
     "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
   ].join("\n"),
+  sdkDoctor: "matterhorn-work crypto sdk-doctor --strict --json",
+  sdkValidateFixture: [
+    "matterhorn-work crypto sdk-validate-public",
+    "--mode fixture",
+    "--input-dir qa-fixtures/market-official-sdk",
+    "--output-dir /tmp/matterhorn-market-sdk-public-validation",
+    "--strict",
+    "--json",
+  ].join(" "),
+  sdkValidateTestnet: [
+    "matterhorn-work crypto sdk-validate-public",
+    "--mode operator_owned_testnet",
+    "--input-dir /tmp/operator-public-artifacts",
+    "--output-dir /tmp/matterhorn-market-sdk-public-validation",
+    "--hyperliquid-network hyperliquid-testnet",
+    "--hyperliquid-package-version <hyperliquid-python-sdk-version>",
+    "--polymarket-network polygon-amoy",
+    "--polymarket-chain-id 80002",
+    "--polymarket-exchange-address <public-amoy-exchange-address>",
+    "--polymarket-package-version <clob-client-version>",
+    "--strict",
+    "--json",
+  ].join(" "),
+  sdkLoop: [
+    "matterhorn-work crypto sdk-loop",
+    "--mode fixture",
+    "--output-dir /tmp/matterhorn-market-sdk-loop",
+    "--strict",
+    "--json",
+  ].join(" "),
   smoke: "pnpm smoke:customer-ready-crypto",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
   evidenceVerify: [
@@ -907,6 +937,34 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainReceipt")}>
                     {copiedCustomerCommand === "executionChainReceipt" ? "Copied" : "Receipt import"}
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="SDK validation" icon={<Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Hyperliquid" value="Testnet evidence" compact />
+                  <Metric label="Polymarket" value="Amoy evidence" compact />
+                  <Metric label="Mode" value="Explicit" compact />
+                  <Metric label="Custody" value="None" compact />
+                </div>
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Official SDK validation is public/redacted evidence only. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkDoctor")}>
+                    {copiedCustomerCommand === "sdkDoctor" ? "Copied" : "SDK doctor"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkValidateFixture")}>
+                    {copiedCustomerCommand === "sdkValidateFixture" ? "Copied" : "Fixture validate"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkValidateTestnet")}>
+                    {copiedCustomerCommand === "sdkValidateTestnet" ? "Copied" : "Testnet validate"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkLoop")}>
+                    {copiedCustomerCommand === "sdkLoop" ? "Copied" : "SDK loop"}
                   </Button>
                 </div>
               </div>
