@@ -36,6 +36,8 @@
     "test:bittensor-live-report": "node scripts/bittensor-live-report.test.mjs",
     "smoke:bittensor-beta": "node scripts/bittensor-beta-release-gate.mjs --offline --strict",
     "test:bittensor-beta-release-gate": "node scripts/bittensor-beta-release-gate.test.mjs",
+    "beta:bittensor:packet": "node scripts/bittensor-beta-customer-packet.mjs --output-dir /tmp/matterhorn-bittensor-beta-rc --fixture --json",
+    "test:bittensor-beta-customer-packet": "node scripts/bittensor-beta-customer-packet.test.mjs",
     "test:bittensor-customer-readiness-gate": "node scripts/bittensor-customer-readiness-gate.test.mjs",
     "test:agent-control-coverage-matrix": "node scripts/agent-control-coverage-matrix.test.mjs",
     "test:mcp-config-cli": "node scripts/mcp-config-cli.test.mjs",

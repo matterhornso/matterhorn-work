@@ -85,6 +85,7 @@ pnpm test:hermes-crypto-customer-qa
 pnpm test:crypto-readiness-api
 pnpm test:customer-readiness-ui
 pnpm test:bittensor-beta-release-gate
+pnpm test:bittensor-beta-customer-packet
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track

@@ -60,6 +60,26 @@ node scripts/bittensor-beta-release-gate.mjs \
   --json-output /tmp/matterhorn-bittensor-beta.json
 ```
 
+After the gate, browser QA, and optional live public-data QA are complete,
+generate the release-candidate packet:
+
+```bash
+node scripts/bittensor-beta-customer-packet.mjs \
+  --output-dir /tmp/matterhorn-bittensor-beta-rc \
+  --beta-gate /tmp/matterhorn-bittensor-beta.json \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --bittensor-evidence-verify /tmp/matterhorn-bittensor-evidence-verify.json \
+  --live-public-qa /tmp/matterhorn-live-public-qa/matterhorn-live-public-qa.json \
+  --browser-qa /tmp/matterhorn-bittensor-browser-qa.md \
+  --strict --json
+```
+
+For packet shape validation without real customer evidence, run:
+
+```bash
+pnpm beta:bittensor:packet
+```
+
 The gate checks Bittensor customer readiness, receipts, watches, scheduler,
 external signing handoff, evidence bundle verification, read-only adapter
 canaries, customer readiness UI, prompt-safety tests, and the market
