@@ -404,8 +404,22 @@ const tools = [
         requireOfficialSdkValidated: { type: "boolean" },
         requireSdkManifestCheck: { type: "boolean" },
         requireReceiptCheck: { type: "boolean" },
+        requireArtifactReconciliation: { type: "boolean" },
       },
       required: ["bundle"],
+    },
+  },
+  {
+    name: "matterhorn_market_artifact_reconcile",
+    description: "Reconcile public/redacted Hyperliquid and Polymarket Phase 2 artifact-validation outputs through MCP. Offline only: no file reads, no signing, no submission, and no raw signed artifacts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hyperliquidArtifactValidation: { type: "object", description: "JSON object returned by Hyperliquid validate-artifact or its validation field." },
+        polymarketArtifactValidation: { type: "object", description: "JSON object returned by Polymarket validate-artifact or its validation field." },
+        requireHyperliquid: { type: "boolean" },
+        requirePolymarket: { type: "boolean" },
+      },
     },
   },
   {
@@ -1665,6 +1679,7 @@ const MARKET_CUSTOMER_EVIDENCE_REQUIRED_STAGES = [
   "crypto.shared_card_contract",
   "market.execution_safety",
   "market.official_sdk_validation",
+  "market.artifact_reconciliation",
   "market.customer_evidence_bundle",
   "hyperliquid.readiness",
   "polymarket.readiness",
@@ -1706,6 +1721,129 @@ function customerEvidencePushCheck(checks, errors, warnings, id, ok, message, se
   if (ok) return;
   if (severity === "warning") warnings.push(message);
   else errors.push(message);
+}
+
+const MARKET_ARTIFACT_RECONCILIATION_VERSION = "matterhorn.market.artifact-reconciliation.v1";
+const MARKET_ARTIFACT_VALIDATION_VERSION = "matterhorn.market.artifact-validation.v1";
+const MARKET_RECEIPT_VERSION = "matterhorn.market.receipt.v1";
+const MARKET_SHA256_RE = /^[a-f0-9]{64}$/i;
+
+function marketReconciliationRecord(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function marketReconciliationValidation(raw) {
+  const root = marketReconciliationRecord(raw) || {};
+  return marketReconciliationRecord(root.validation) || marketReconciliationRecord(root.result?.validation) || root;
+}
+
+function marketReconciliationReceipt(raw, validation) {
+  const root = marketReconciliationRecord(raw) || {};
+  return marketReconciliationRecord(validation?.publicAuditReceiptCandidate) ||
+    marketReconciliationRecord(root.receiptCandidate) ||
+    marketReconciliationRecord(root.publicAuditReceiptCandidate) ||
+    null;
+}
+
+function marketReconciliationSha(value) {
+  return typeof value === "string" && MARKET_SHA256_RE.test(value) ? value : null;
+}
+
+function matterhornMarketArtifactReconcile(args = {}) {
+  const venueInputs = [
+    ["hyperliquid", args.hyperliquidArtifactValidation, args.requireHyperliquid === true],
+    ["polymarket", args.polymarketArtifactValidation, args.requirePolymarket === true],
+  ];
+  const venues = venueInputs.map(([venue, raw, required]) => {
+    if (!raw) {
+      return {
+        venue,
+        present: false,
+        ready: !required,
+        status: "missing",
+        receiptCandidate: null,
+        hashes: {},
+        warnings: required ? [venue + " artifact-validation evidence is required but not attached."] : [],
+        errors: required ? ["Missing " + venue + " artifact-validation evidence."] : [],
+      };
+    }
+    assertCustomerEvidenceHasNoCredentials(raw, "Market artifact reconciliation");
+    const validation = marketReconciliationValidation(raw);
+    const receipt = marketReconciliationReceipt(raw, validation);
+    const errors = [];
+    const warnings = [];
+    if (validation?.version !== MARKET_ARTIFACT_VALIDATION_VERSION) errors.push("Invalid validation version for " + venue + ".");
+    if (validation?.venue !== venue) errors.push("Artifact-validation venue must be " + venue + ".");
+    if (validation?.status !== "accepted_public_metadata") errors.push(venue + " artifact validation was not accepted.");
+    if (validation?.validationMode !== "public_redacted_metadata") errors.push(venue + " validationMode must be public_redacted_metadata.");
+    if (validation?.matchesSignRequest !== true) errors.push(venue + " artifact did not match the sign request.");
+    if (validation?.signedArtifactRedacted !== true) errors.push(venue + " artifact must be marked signedArtifactRedacted=true.");
+    if (validation?.redactedMetadataAccepted !== true) errors.push(venue + " redacted metadata was not accepted.");
+    if (validation?.signedArtifactAccepted !== false) errors.push(venue + " must keep signedArtifactAccepted=false.");
+    if (validation?.submitSignedAllowedByContract !== false) errors.push(venue + " must keep submitSignedAllowedByContract=false.");
+    if (validation?.canSubmit !== false) errors.push(venue + " must keep canSubmit=false.");
+    if (validation?.liveSubmissionEnabled !== false) errors.push(venue + " must keep liveSubmissionEnabled=false.");
+    if (!marketReconciliationSha(validation?.signRequestSha256)) errors.push(venue + " validation must include signRequestSha256.");
+    if (!marketReconciliationSha(validation?.signedArtifactPublicHash)) errors.push(venue + " validation must include signedArtifactPublicHash.");
+    if (Array.isArray(validation?.errors)) errors.push(...validation.errors.map((item) => venue + " validation error: " + String(item)));
+    if (Array.isArray(validation?.warnings)) warnings.push(...validation.warnings.map((item) => String(item)));
+    if (!receipt) {
+      errors.push(venue + " validation must include a public audit receipt candidate.");
+    } else {
+      if (receipt.version !== MARKET_RECEIPT_VERSION) errors.push(venue + " receipt candidate must use " + MARKET_RECEIPT_VERSION + ".");
+      if (receipt.venue !== venue) errors.push(venue + " receipt candidate venue mismatch.");
+      if (receipt.status !== "received") errors.push(venue + " receipt candidate status must be received.");
+      const receiptWarnings = Array.isArray(receipt.warnings) ? receipt.warnings.map((item) => String(item)) : [];
+      warnings.push(...receiptWarnings);
+      if (!receiptWarnings.some((item) => /not exchange submission evidence/i.test(item))) warnings.push(venue + " receipt candidate should explicitly say it is not exchange submission evidence.");
+    }
+    const hashes = {
+      signRequestSha256: marketReconciliationSha(validation?.signRequestSha256),
+      previewSha256: marketReconciliationSha(receipt?.previewSha256),
+      handoffSha256: marketReconciliationSha(receipt?.handoffSha256),
+      signedArtifactPublicHash: marketReconciliationSha(validation?.signedArtifactPublicHash),
+    };
+    return {
+      venue,
+      present: true,
+      ready: errors.length === 0,
+      status: validation?.status || "unknown",
+      receiptCandidate: receipt ? {
+        version: receipt.version || null,
+        venue: receipt.venue || null,
+        status: receipt.status || null,
+        action: receipt.action || null,
+        previewSha256: hashes.previewSha256,
+        handoffSha256: hashes.handoffSha256,
+        orderId: receipt.orderId || null,
+        txHash: receipt.txHash || null,
+        warnings: Array.isArray(receipt.warnings) ? receipt.warnings.map((item) => String(item)) : [],
+      } : null,
+      hashes,
+      warnings: [...new Set(warnings)],
+      errors: [...new Set(errors)],
+    };
+  });
+  const attached = venues.filter((venue) => venue.present);
+  const errors = [
+    ...(attached.length === 0 ? ["Attach at least one venue artifact-validation result."] : []),
+    ...venues.flatMap((venue) => venue.errors),
+  ];
+  return {
+    version: MARKET_ARTIFACT_RECONCILIATION_VERSION,
+    ready: attached.length > 0 && errors.length === 0,
+    venues,
+    warnings: [...new Set(venues.flatMap((venue) => venue.warnings))],
+    errors: [...new Set(errors)],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      publicMetadataOnly: true,
+      source: "matterhorn_market_artifact_reconcile",
+    },
+  };
 }
 
 function matterhornMarketCustomerEvidenceVerify(args = {}) {
@@ -1776,6 +1914,20 @@ function matterhornMarketCustomerEvidenceVerify(args = {}) {
     customerEvidencePushCheck(checks, errors, warnings, "receipt.required", false, "Receipt-check evidence is required but absent.");
   }
 
+  const artifactReconciliation = summary?.artifactReconciliation;
+  if (artifactReconciliation?.present) {
+    customerEvidencePushCheck(
+      checks,
+      errors,
+      warnings,
+      "artifact_reconciliation.accepted",
+      artifactReconciliation.ready === true && Number(artifactReconciliation.venueCount) > 0,
+      "Attached artifact reconciliation evidence must be ready and include at least one venue.",
+    );
+  } else if (args.requireArtifactReconciliation === true) {
+    customerEvidencePushCheck(checks, errors, warnings, "artifact_reconciliation.required", false, "Artifact reconciliation evidence is required but absent.");
+  }
+
   if (Array.isArray(summary?.errors) && summary.errors.length > 0) {
     for (const error of summary.errors) errors.push("Bundle summary error: " + String(error));
     checks.push({ id: "bundle.errors", status: "error", message: "Evidence bundle summary includes validation errors." });
@@ -1793,6 +1945,9 @@ function matterhornMarketCustomerEvidenceVerify(args = {}) {
     }
     if (receipt?.present) {
       customerEvidencePushCheck(checks, errors, warnings, "markdown.receipt", args.markdown.includes("## Public Receipt Evidence"), "Markdown bundle must include Public Receipt Evidence.");
+    }
+    if (artifactReconciliation?.present) {
+      customerEvidencePushCheck(checks, errors, warnings, "markdown.artifact_reconciliation", args.markdown.includes("## Artifact Reconciliation Evidence"), "Markdown bundle must include Artifact Reconciliation Evidence.");
     }
   }
 
@@ -2786,6 +2941,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/readiness");
     case "matterhorn_market_customer_evidence_verify":
       return matterhornMarketCustomerEvidenceVerify(args);
+    case "matterhorn_market_artifact_reconcile":
+      return matterhornMarketArtifactReconcile(args);
     case "matterhorn_bittensor_customer_evidence_verify":
       return matterhornBittensorCustomerEvidenceVerify(args);
     case "matterhorn_crypto_customer_packet":
