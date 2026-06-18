@@ -790,6 +790,44 @@ function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null
   return Boolean(originalKind && /(handoff|signing|signed_action|staking_quote|order_preview)/i.test(originalKind));
 }
 
+function sharedCardSdkValidationItems(
+  data: Record<string, unknown> | null,
+  originalKind: string | null,
+): NonNullable<BittensorChatCard["items"]> {
+  if (originalKind !== "market_sdk_validation" || !data) return [];
+  const nestedData = isRecordValue(data.data) ? data.data : null;
+  const guide = isRecordValue(data.guide) ? data.guide : isRecordValue(nestedData?.guide) ? nestedData.guide : null;
+  if (!guide) return [];
+  const modes = Array.isArray(guide.modes)
+    ? guide.modes.filter((mode): mode is string => typeof mode === "string" && mode.trim().length > 0)
+    : [];
+  const networks = isRecordValue(guide.networks) ? guide.networks : null;
+  const hyperliquidNetworks = Array.isArray(networks?.hyperliquid)
+    ? networks.hyperliquid.filter((network): network is string => typeof network === "string" && network.trim().length > 0)
+    : [];
+  const polymarketNetworks = Array.isArray(networks?.polymarket)
+    ? networks.polymarket.filter((network): network is string => typeof network === "string" && network.trim().length > 0)
+    : [];
+  const commands = isRecordValue(guide.commands) ? guide.commands : {};
+  const doctor = typeof commands.doctor === "string" ? commands.doctor : null;
+  const fixtureValidation = typeof commands.fixtureValidation === "string" ? commands.fixtureValidation : null;
+  const items: NonNullable<BittensorChatCard["items"]> = [];
+  if (modes.length) items.push({ label: "Validation modes", value: modes.join(", "), tone: "muted" });
+  if (hyperliquidNetworks.length || polymarketNetworks.length) {
+    items.push({
+      label: "Testnet networks",
+      value: [
+        hyperliquidNetworks.length ? `Hyperliquid: ${hyperliquidNetworks.join(", ")}` : null,
+        polymarketNetworks.length ? `Polymarket: ${polymarketNetworks.join(", ")}` : null,
+      ].filter(Boolean).join("; "),
+      tone: "muted",
+    });
+  }
+  if (doctor) items.push({ label: "SDK doctor", value: doctor, tone: "muted" });
+  if (fixtureValidation) items.push({ label: "Fixture validation", value: fixtureValidation, tone: "muted" });
+  return items;
+}
+
 function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): BittensorChatCard | null {
   if (card.version !== "matterhorn.crypto.shared-card.v1") return null;
   const title = typeof card.title === "string" && card.title.trim() ? card.title.trim() : "Crypto chat";
@@ -825,6 +863,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
     if (highlightedStep.command) items.push({ label: "Step command", value: highlightedStep.command, tone: "muted" });
   }
   if (missingContext) items.push({ label: "Missing context", value: missingContext, tone: "warning" });
+  items.push(...sharedCardSdkValidationItems(data, originalKind));
   if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
   if (freshness) items.push({ label: "Freshness", value: freshness, tone: "muted" });
   if (block) items.push({ label: "Block", value: block, tone: "muted" });

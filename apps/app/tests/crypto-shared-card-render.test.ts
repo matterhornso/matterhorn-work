@@ -118,6 +118,53 @@ describe("crypto shared-card transcript rendering", () => {
               },
             },
           } as never,
+          {
+            type: "tool-matterhorn_crypto_chat",
+            toolCallId: "tool-sdk-validation-chat",
+            state: "output-available",
+            input: { message: "how do I validate Hyperliquid and Polymarket SDK templates?" },
+            output: {
+              sharedCards: [
+                {
+                  version: "matterhorn.crypto.shared-card.v1",
+                  kind: "readiness_report",
+                  venue: "auto",
+                  title: "Official SDK validation",
+                  summary: "Public/redacted fixture or operator-owned testnet validation only.",
+                  status: "info",
+                  originalKind: "market_sdk_validation",
+                  source: { source: "matterhorn.sdk-validation", freshness: "live" },
+                  warnings: ["Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders."],
+                  data: {
+                    kind: "market_sdk_validation",
+                    data: {
+                      guide: {
+                        modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+                        networks: {
+                          hyperliquid: ["fixture", "hyperliquid-testnet"],
+                          polymarket: ["fixture", "polygon-amoy"],
+                        },
+                        commands: {
+                          doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+                          fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --strict --json",
+                        },
+                      },
+                    },
+                  },
+                  safety: {
+                    nonCustodial: true,
+                    liveSubmissionEnabled: false,
+                    canSubmit: false,
+                  },
+                },
+              ],
+            },
+            providerMetadata: {
+              opencode: {
+                partId: "tool-sdk-validation-chat",
+              },
+            },
+          } as never,
         ],
       },
     ];
@@ -145,6 +192,16 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).toContain("live");
     expect(html).toContain("Compliance blocked");
     expect(html).toContain("User location is not eligible for this action.");
+    expect(html).toContain("Official SDK validation");
+    expect(html).toContain("Validation modes");
+    expect(html).toContain("operator_owned_testnet");
+    expect(html).toContain("Testnet networks");
+    expect(html).toContain("hyperliquid-testnet");
+    expect(html).toContain("polygon-amoy");
+    expect(html).toContain("SDK doctor");
+    expect(html).toContain("matterhorn-work crypto sdk-doctor");
+    expect(html).toContain("Fixture validation");
+    expect(html).toContain("matterhorn-work crypto sdk-validate-public");
     expect(html).not.toContain("External signer");
   });
 });
