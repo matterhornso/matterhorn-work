@@ -46,6 +46,48 @@ describe("crypto shared-card transcript rendering", () => {
           } as never,
           {
             type: "tool-matterhorn_crypto_chat",
+            toolCallId: "tool-readiness-chat",
+            state: "output-available",
+            input: { message: "can Matterhorn submit Hyperliquid and Polymarket orders yet?" },
+            output: {
+              sharedCards: [
+                {
+                  version: "matterhorn.crypto.shared-card.v1",
+                  kind: "readiness_report",
+                  venue: "auto",
+                  title: "Market execution readiness",
+                  summary: "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.",
+                  status: "warning",
+                  originalKind: "market_execution_readiness",
+                  source: { source: "matterhorn.execution-readiness", freshness: "live" },
+                  warnings: ["This is a readiness contract, not execution permission."],
+                  data: {
+                    kind: "market_execution_readiness",
+                    report: {
+                      readyForLiveSubmission: false,
+                      safety: {
+                        canSubmit: false,
+                        liveSubmissionEnabled: false,
+                        signsOrSubmits: false,
+                      },
+                    },
+                  },
+                  safety: {
+                    nonCustodial: true,
+                    liveSubmissionEnabled: false,
+                    canSubmit: false,
+                  },
+                },
+              ],
+            },
+            providerMetadata: {
+              opencode: {
+                partId: "tool-readiness-chat",
+              },
+            },
+          } as never,
+          {
+            type: "tool-matterhorn_crypto_chat",
             toolCallId: "tool-polymarket-chat",
             state: "output-available",
             input: { message: "preview Polymarket order" },
@@ -96,7 +138,13 @@ describe("crypto shared-card transcript rendering", () => {
     expect(html).toContain("Live submission");
     expect(html).toContain("Off");
     expect(html).toContain("mock.hyperliquid");
+    expect(html).toContain("Market execution readiness");
+    expect(html).toContain("readiness contract, not execution permission");
+    expect(html).toContain("matterhorn.execution-readiness");
+    expect(html).toContain("Freshness");
+    expect(html).toContain("live");
     expect(html).toContain("Compliance blocked");
     expect(html).toContain("User location is not eligible for this action.");
+    expect(html).not.toContain("External signer");
   });
 });
