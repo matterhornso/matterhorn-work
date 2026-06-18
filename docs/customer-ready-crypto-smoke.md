@@ -116,6 +116,36 @@ This delegates to `scripts/market-live-readonly-smoke.mjs` and checks:
 - Polymarket market reads, compliance reads, chat reads, and external-signer handoff when a market is available.
 - No submit route, no signing route, no funds movement, and no `canSubmit: true`.
 
+## Optional Live Public-Data QA Pack
+
+For a customer-safe public-data demo bundle, use the consolidated live public QA pack:
+
+```bash
+matterhorn-work crypto live-public-qa \
+  --output-dir /tmp/matterhorn-live-public-qa \
+  --fixture \
+  --strict \
+  --json
+```
+
+When public live inputs are available, remove `--fixture` and pass only public/read-only inputs:
+
+```bash
+matterhorn-work crypto live-public-qa \
+  --output-dir /tmp/matterhorn-live-public-qa \
+  --server-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --ss58-address "$MATTERHORN_WORK_BITTENSOR_SS58" \
+  --validator-hotkey "$MATTERHORN_WORK_BITTENSOR_VALIDATOR_HOTKEY" \
+  --netuid 14 --amount-tao 1 --rate-tolerance 0.01 \
+  --strict --json
+```
+
+This writes `matterhorn-live-public-qa.json`, `matterhorn-live-public-qa.md`, and `matterhorn-live-public-qa.sha256`. Missing public live inputs are marked `SKIPPED_WITH_FIXTURE_FALLBACK`, not failed. See [Live Public-Data QA](./crypto-live-public-qa.md).
+Existing smoke/evidence outputs can be attached with `--customer-ready-smoke`,
+`--market-evidence-verify`, `--bittensor-evidence-verify`, and
+`--customer-packet`.
+
 ## Optional Bittensor Live QA
 
 For a full Bittensor demo, run the live QA harness separately with a public SS58 address and, when available, a validator hotkey:
