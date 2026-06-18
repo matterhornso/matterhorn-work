@@ -30,6 +30,8 @@ const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const CUSTOMER_DEMO_COMMANDS = {
   readiness: "matterhorn-work crypto readiness --json",
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
+  executionReadiness: "matterhorn-work crypto execution-readiness --json",
+  executionReadinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   smoke: "pnpm smoke:customer-ready-crypto",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
   evidenceVerify: [
@@ -103,6 +105,35 @@ type ReadinessReport = {
   blockers?: string[];
   nextActions?: string[];
   checkedAt?: string;
+};
+type MarketExecutionReadinessVenue = {
+  venue?: string;
+  supportedNow?: string[];
+  blockedNow?: string[];
+  missingBeforeLiveSubmit?: string[];
+};
+type MarketExecutionReadinessControl = {
+  id?: string;
+  status?: "pass" | "warning" | "fail" | "blocked" | "skip" | string;
+  summary?: string;
+};
+type MarketExecutionReadinessReport = {
+  version?: string;
+  checkedAt?: string;
+  readyForLiveSubmission?: boolean;
+  status?: string;
+  venues?: MarketExecutionReadinessVenue[];
+  controls?: MarketExecutionReadinessControl[];
+  nextActions?: string[];
+  safety?: {
+    nonCustodial?: boolean;
+    liveSubmissionEnabled?: boolean;
+    canSubmit?: boolean;
+    signsOrSubmits?: boolean;
+    acceptsSecrets?: boolean;
+    acceptsRawSignatures?: boolean;
+    acceptsSignedPayloads?: boolean;
+  };
 };
 
 function readinessStateForVenue(checks: ReadinessCheck[], venue: string): string {
@@ -228,8 +259,10 @@ export default function BittensorPanel() {
   const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [cryptoReadiness, setCryptoReadiness] = useState<ReadinessReport | null>(null);
+  const [marketExecutionReadiness, setMarketExecutionReadiness] = useState<MarketExecutionReadinessReport | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [cryptoReadinessLoading, setCryptoReadinessLoading] = useState(false);
+  const [marketExecutionReadinessLoading, setMarketExecutionReadinessLoading] = useState(false);
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
@@ -308,6 +341,35 @@ export default function BittensorPanel() {
     }
   }, []);
 
+  const loadMarketExecutionReadiness = useCallback(async () => {
+    setMarketExecutionReadinessLoading(true);
+    try {
+      const res = await fetch("/api/crypto/market-execution-readiness");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market execution readiness");
+      setMarketExecutionReadiness((json.report ?? json) as MarketExecutionReadinessReport);
+    } catch (err) {
+      setMarketExecutionReadiness({
+        readyForLiveSubmission: false,
+        status: "unavailable",
+        controls: [{
+          id: "market_execution_readiness_api",
+          status: "fail",
+          summary: err instanceof Error ? err.message : "Failed to load market execution readiness.",
+        }],
+        nextActions: ["Refresh market execution readiness before previewing market execution flows."],
+        safety: {
+          liveSubmissionEnabled: false,
+          canSubmit: false,
+          signsOrSubmits: false,
+          acceptsSecrets: false,
+        },
+      });
+    } finally {
+      setMarketExecutionReadinessLoading(false);
+    }
+  }, []);
+
   const loadDetail = useCallback(async (netuid: number) => {
     setDetailLoading(true);
     try {
@@ -358,7 +420,8 @@ export default function BittensorPanel() {
     void loadSidecarStatus();
     void loadReadiness();
     void loadCryptoReadiness();
-  }, [loadCryptoReadiness, loadReadiness, loadSidecarStatus]);
+    void loadMarketExecutionReadiness();
+  }, [loadCryptoReadiness, loadMarketExecutionReadiness, loadReadiness, loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -445,6 +508,7 @@ export default function BittensorPanel() {
     void loadSidecarStatus();
     void loadReadiness();
     void loadCryptoReadiness();
+    void loadMarketExecutionReadiness();
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
@@ -490,12 +554,18 @@ export default function BittensorPanel() {
     await sendToChat(prompt, { cryptoReadiness }, { mode: "crypto", source: "crypto-readiness-panel" });
   };
 
+  const askAgentAboutMarketExecutionReadiness = async () => {
+    const prompt = "Use unified crypto chat. Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
+  };
+
   const askAgentForCustomerDemo = async (item: (typeof CUSTOMER_DEMO_PROMPTS)[number]) => {
     await sendToChat(item.prompt, {
       ss58Address: watchAddress.trim() || undefined,
       wallet,
       readiness,
       cryptoReadiness,
+      marketExecutionReadiness,
       sourcePrompt: item.id,
     }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
@@ -538,6 +608,20 @@ export default function BittensorPanel() {
     : "Unknown";
   const hyperliquidReadinessState = readinessStateForVenue(cryptoReadinessChecks, "hyperliquid");
   const polymarketReadinessState = readinessStateForVenue(cryptoReadinessChecks, "polymarket");
+  const marketExecutionControls = marketExecutionReadiness?.controls ?? [];
+  const marketExecutionPassedControls = marketExecutionControls.filter((control) => control.status === "pass").length;
+  const marketExecutionBlockedControls = marketExecutionControls.filter((control) => control.status === "blocked" || control.status === "fail").length;
+  const marketExecutionNextAction = marketExecutionReadiness?.nextActions?.find(Boolean) ?? null;
+  const marketVenueState = (venueName: string): string => {
+    const venue = marketExecutionReadiness?.venues?.find((item) => item.venue?.toLowerCase() === venueName);
+    if (!venue) return "Unknown";
+    return venue.blockedNow?.includes("live_submit") ? "Disabled" : "Review";
+  };
+  const marketExecutionSubmissionState = marketExecutionReadiness
+    ? marketExecutionReadiness.readyForLiveSubmission === true
+      ? "Yes"
+      : "No"
+    : "Unknown";
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -559,9 +643,9 @@ export default function BittensorPanel() {
             size="sm"
             className="gap-1.5 text-xs text-dls-secondary"
             onClick={refreshBittensor}
-            disabled={loading}
+            disabled={loading || marketExecutionReadinessLoading}
           >
-            <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading) && "animate-spin")} />
             Refresh
           </Button>
         </div>
@@ -699,8 +783,8 @@ export default function BittensorPanel() {
                   <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
                 ) : null}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading}>
-                    {readinessLoading || cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading}>
+                    {readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
@@ -710,6 +794,41 @@ export default function BittensorPanel() {
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
                     <BrainCircuit className="size-3.5" />
                     Crypto Chat
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Execution readiness" icon={<Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Ready for live submission" value={marketExecutionSubmissionState} compact />
+                  <Metric label="Hyperliquid submit" value={marketVenueState("hyperliquid")} compact />
+                  <Metric label="Polymarket submit" value={marketVenueState("polymarket")} compact />
+                  <Metric label="Controls" value={marketExecutionControls.length ? `${marketExecutionPassedControls}/${marketExecutionControls.length}` : "Unknown"} compact />
+                </div>
+                <p className="text-xs leading-5 text-dls-secondary">
+                  This is a readiness contract, not execution permission. Hyperliquid and Polymarket remain read/preview/external-signer only: Can submit: No, Live submission: Off.
+                </p>
+                {marketExecutionBlockedControls > 0 ? (
+                  <p className="text-xs leading-5 text-amber-300">
+                    {marketExecutionBlockedControls} execution control{marketExecutionBlockedControls === 1 ? "" : "s"} intentionally block live submit routes until a separate security review.
+                  </p>
+                ) : null}
+                {marketExecutionNextAction ? (
+                  <p className="text-xs leading-5 text-sky-200">Next: {marketExecutionNextAction}</p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionReadiness} disabled={marketExecutionReadinessLoading}>
+                    {marketExecutionReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutMarketExecutionReadiness} disabled={!marketExecutionReadiness}>
+                    <BrainCircuit className="size-3.5" />
+                    Crypto Chat
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyCustomerDemoCommand("executionReadiness")}>
+                    {copiedCustomerCommand === "executionReadiness" ? "Copied" : "Execution CLI"}
                   </Button>
                 </div>
               </div>
@@ -758,6 +877,12 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("readinessApi")}>
                     {copiedCustomerCommand === "readinessApi" ? "Copied" : "Readiness API"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("executionReadiness")}>
+                    {copiedCustomerCommand === "executionReadiness" ? "Copied" : "Execution CLI"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("executionReadinessApi")}>
+                    {copiedCustomerCommand === "executionReadinessApi" ? "Copied" : "Execution API"}
                   </Button>
                 </div>
               </div>
