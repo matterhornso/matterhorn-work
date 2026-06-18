@@ -1,0 +1,155 @@
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { startServer } from "./server.js";
+import type { ServerConfig } from "./types.js";
+
+type Served = {
+  port: number;
+  stop: (closeActiveConnections?: boolean) => void | Promise<void>;
+};
+
+const TOKEN = "owt_crypto_chat_route_test_token";
+const stops: Array<() => void | Promise<void>> = [];
+const dirs: string[] = [];
+const priorEnvStore = process.env.OPENWORK_ENV_STORE;
+const priorTokenStore = process.env.OPENWORK_TOKEN_STORE;
+
+function baseConfig(port: number): ServerConfig {
+  return {
+    host: "127.0.0.1",
+    port,
+    token: TOKEN,
+    hostToken: "owt_crypto_chat_route_host_token",
+    approval: { mode: "auto", timeoutMs: 1000 },
+    corsOrigins: ["*"],
+    workspaces: [],
+    authorizedRoots: [],
+    readOnly: false,
+    startedAt: Date.now(),
+    tokenSource: "cli",
+    hostTokenSource: "cli",
+    logFormat: "pretty",
+    logRequests: false,
+  } as ServerConfig;
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      const port = address.port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function boot() {
+  const dir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-chat-routes-"));
+  dirs.push(dir);
+  process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
+  process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
+  const server = await startServer(baseConfig(await getFreePort())) as Served;
+  stops.push(() => server.stop(true));
+  return { base: `http://127.0.0.1:${server.port}` };
+}
+
+async function postCryptoChat(base: string, body: Record<string, unknown>) {
+  const res = await fetch(`${base}/api/crypto/chat/execute`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({}));
+  return { res, payload };
+}
+
+function forbiddenFieldPath(value: unknown, path: string[] = []): string | null {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = forbiddenFieldPath(value[index], [...path, String(index)]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/(seed|mnemonic|privateKey|apiSecret|walletExport|rawSignature|signedPayload)/i.test(key)) {
+      if (child !== false && child !== null && child !== undefined) return [...path, key].join(".");
+    }
+    const nested = forbiddenFieldPath(child, [...path, key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+afterEach(async () => {
+  while (stops.length) {
+    await stops.pop()?.();
+  }
+  while (dirs.length) {
+    rmSync(dirs.pop()!, { recursive: true, force: true });
+  }
+  if (priorEnvStore === undefined) {
+    delete process.env.OPENWORK_ENV_STORE;
+  } else {
+    process.env.OPENWORK_ENV_STORE = priorEnvStore;
+  }
+  if (priorTokenStore === undefined) {
+    delete process.env.OPENWORK_TOKEN_STORE;
+  } else {
+    process.env.OPENWORK_TOKEN_STORE = priorTokenStore;
+  }
+});
+
+describe("unified crypto chat execute route", () => {
+  test("answers execution-readiness prompts with the no-submit shared-card contract", async () => {
+    const { base } = await boot();
+    const { res, payload } = await postCryptoChat(base, {
+      message: "Can Matterhorn submit Hyperliquid and Polymarket orders yet?",
+      venue: "auto",
+    });
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.venue).toBe("auto");
+    expect(payload.intent).toBe("market_execution_readiness");
+    expect(payload.execution).toBe("read_only");
+    expect(payload.responseText).toContain("Can submit: No");
+    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.sharedCards[0]).toMatchObject({
+      version: "matterhorn.crypto.shared-card.v1",
+      kind: "readiness_report",
+      venue: "auto",
+      safety: {
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    expect(payload.data.report.readyForLiveSubmission).toBe(false);
+    expect(payload.data.report.safety.signsOrSubmits).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
+  test("rejects missing messages and secret-shaped crypto chat inputs", async () => {
+    const { base } = await boot();
+
+    const missing = await postCryptoChat(base, { venue: "auto" });
+    expect(missing.res.status).toBe(400);
+    expect(JSON.stringify(missing.payload)).toContain("invalid_message");
+
+    const secret = await postCryptoChat(base, {
+      message: "show my Hyperliquid account",
+      venue: "hyperliquid",
+      apiSecret: "do-not-accept",
+    });
+    expect(secret.res.status).toBe(400);
+    expect(JSON.stringify(secret.payload)).toContain("market_secret_rejected");
+  });
+});

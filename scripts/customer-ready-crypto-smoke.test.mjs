@@ -109,6 +109,7 @@ for (const banned of ["/orders/submit", "/orders/sign", "/exchange/submit"]) {
 }
 for (const required of [
   "pnpm test:unified-crypto-chat",
+  "pnpm test:unified-crypto-chat-routes",
   "pnpm test:crypto-direct-prompt-safety",
   "pnpm test:unified-crypto-shared-card-contract",
   "pnpm test:crypto-cli-fallback",

@@ -410,7 +410,7 @@ function isMarketExecutionReadinessRequest(input: UnifiedCryptoChatInput, messag
   const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
   const mentionsMarketVenue = selectedMarketVenue
     || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
-  const mentionsExecutionReadiness = textIncludes(text, /\b(execution readiness|submit readiness|execution ready|live submission|live submit|can submit|submit route|submit routes|sign route|sign routes|sign request|sign-request|signed artifact|signed-artifact|order submission|orders submit)\b/i);
+  const mentionsExecutionReadiness = textIncludes(text, /\b(execution readiness|submit readiness|execution ready|live submission|live submit|can submit|can .* submit|can .* place .* order|can .* execute|place live order|place orders|submit route|submit routes|sign route|sign routes|sign request|sign-request|signed artifact|signed-artifact|order submission|orders submit)\b/i);
   return mentionsMarketVenue && mentionsExecutionReadiness;
 }
 

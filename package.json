@@ -98,6 +98,7 @@
     "test:customer-readiness-ui": "node scripts/customer-readiness-ui.test.mjs",
     "test:crypto-readiness-api": "node scripts/crypto-readiness-api.test.mjs",
     "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts",
+    "test:unified-crypto-chat-routes": "bun test apps/server/src/crypto-chat-routes.e2e.test.ts",
     "test:crypto-direct-prompt-safety": "bun test apps/server/src/tools/bittensor.test.ts apps/server/src/tools/hyperliquid.test.ts apps/server/src/tools/polymarket.test.ts",
     "test:unified-crypto-shared-card-contract": "node scripts/unified-crypto-shared-card-contract.test.mjs",
     "test:crypto-cli-fallback": "node scripts/crypto-cli-fallback.test.mjs",
