@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const doc = readFileSync("docs/handoffs/hermes-crypto-customer-qa.md", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const runbook = readFileSync("docs/market-customer-qa-runbook.md", "utf8");
+const helper = readFileSync("scripts/hermes-crypto-customer-qa.mjs", "utf8");
+const cli = readFileSync("apps/orchestrator/src/cli.ts", "utf8");
 
 assert.equal(
   pkg.scripts?.["test:hermes-crypto-customer-qa"],
@@ -29,7 +32,10 @@ for (const phrase of [
   "pnpm test:market-customer-evidence-bundle",
   "pnpm test:bittensor-customer-readiness-gate",
   "Customer Readiness Quick Check",
+  "matterhorn-work crypto hermes-customer-qa --dry-run --json",
   "matterhorn-work crypto readiness --json",
+  "matterhorn-work crypto live-public-qa",
+  "SKIPPED_WITH_FIXTURE_FALLBACK",
   "$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness",
   "matterhorn_crypto_readiness",
   "safety.liveSubmissionEnabled",
@@ -60,6 +66,15 @@ for (const phrase of [
   "matterhorn-work polymarket chat",
   "canSubmit: false",
   "Matterhorn Work Crypto Customer QA Report",
+  "Readiness",
+  "Try prompts",
+  "Evidence",
+  "Safety",
+  "Issue Ledger",
+  "P0",
+  "P1",
+  "P2",
+  "P3",
   "Crypto Gate",
   "Venue Checks",
   "Refresh Crypto Gate",
@@ -83,6 +98,8 @@ for (const redLine of [
 for (const forbidden of [
   "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
+  "Use this private key to sign",
+  "Here is my seed phrase",
   "privateKey =",
   "apiSecret =",
   "seedPhrase =",
@@ -95,5 +112,73 @@ assert.ok(
   runbook.includes("docs/customer-ready-crypto-smoke.md"),
   "market customer QA runbook should continue to point at the consolidated smoke guide",
 );
+
+for (const phrase of [
+  "matterhorn.crypto.hermes-customer-qa.v1",
+  "acceptsSecrets: false",
+  "signsOrSubmits: false",
+  "canSubmit: false",
+  "liveSubmissionEnabled: false",
+  "SKIPPED_WITH_FIXTURE_FALLBACK",
+]) {
+  assert.ok(helper.includes(phrase), `Hermes helper should include ${phrase}`);
+}
+
+for (const phrase of [
+  "hermes-customer-qa",
+  "runCryptoHermesCustomerQa",
+  "hermes-crypto-customer-qa.mjs",
+  "Print a public/redacted Hermes customer QA command plan",
+]) {
+  assert.ok(cli.includes(phrase), `Matterhorn CLI should expose Hermes helper phrase: ${phrase}`);
+}
+
+const helperResult = spawnSync(process.execPath, ["scripts/hermes-crypto-customer-qa.mjs", "--dry-run", "--json"], {
+  encoding: "utf8",
+  maxBuffer: 5 * 1024 * 1024,
+});
+assert.equal(helperResult.status, 0, `Hermes helper should exit 0. stderr=${helperResult.stderr}`);
+const helperJson = JSON.parse(helperResult.stdout);
+assert.equal(helperJson.version, "matterhorn.crypto.hermes-customer-qa.v1");
+assert.equal(helperJson.ok, true);
+assert.equal(helperJson.dryRun, true);
+assert.equal(helperJson.safety.nonCustodial, true);
+assert.equal(helperJson.safety.acceptsSecrets, false);
+assert.equal(helperJson.safety.signsOrSubmits, false);
+assert.equal(helperJson.safety.canSubmit, false);
+assert.equal(helperJson.safety.liveSubmissionEnabled, false);
+
+const commandText = helperJson.commands.map((item) => item.command).join("\n");
+for (const phrase of [
+  "pnpm smoke:customer-ready-crypto",
+  "pnpm test:market-execution-safety-gate",
+  "pnpm test:unified-crypto-shared-card-contract",
+  "matterhorn-work crypto readiness --json",
+  "matterhorn-work crypto live-public-qa",
+  "matterhorn-work crypto sdk-loop",
+  "matterhorn-work crypto customer-packet",
+]) {
+  assert.ok(commandText.includes(phrase), `Hermes helper commands should include ${phrase}`);
+}
+
+const sectionTitles = helperJson.sections.map((section) => section.title);
+for (const title of [
+  "Setup",
+  "Browser UI checklist",
+  "Bittensor live public QA",
+  "Hyperliquid and Polymarket read/preview QA",
+  "Negative security prompts",
+  "Screenshots and evidence expectations",
+  "Issue ledger",
+]) {
+  assert.ok(sectionTitles.includes(title), `Hermes helper sections should include ${title}`);
+}
+
+const helperReject = spawnSync(process.execPath, ["scripts/hermes-crypto-customer-qa.mjs", "--dry-run", "--json", "--private-key", "redacted"], {
+  encoding: "utf8",
+  maxBuffer: 1024 * 1024,
+});
+assert.notEqual(helperReject.status, 0, "Hermes helper should reject credential-shaped flags");
+assert.ok(helperReject.stdout.includes("Forbidden credential-shaped flag"), "Hermes helper should explain forbidden credential flags");
 
 console.log("Hermes crypto customer QA handoff check passed.");

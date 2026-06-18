@@ -246,6 +246,29 @@ async function main() {
     }
     console.log("PASS crypto live-public-qa CLI writes offline fixture evidence");
 
+    // 6. The Hermes customer QA helper is exposed through the public CLI and
+    // prints a public/redacted command plan without calling the server.
+    const hermesQaRequestsBefore = mock.requests.length;
+    await expectCli(
+      "crypto hermes-customer-qa dry-run",
+      mock.url,
+      ["crypto", "hermes-customer-qa", "--dry-run"],
+      (payload) => {
+        if (payload.version !== "matterhorn.crypto.hermes-customer-qa.v1") {
+          throw new Error(`expected Hermes QA helper version, got ${payload.version}`);
+        }
+        if (payload.safety?.acceptsSecrets !== false) throw new Error("expected Hermes QA acceptsSecrets=false");
+        if (payload.safety?.canSubmit !== false) throw new Error("expected Hermes QA canSubmit=false");
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected Hermes QA liveSubmissionEnabled=false");
+        if (!Array.isArray(payload.commands) || payload.commands.length < 8) throw new Error("expected Hermes QA commands");
+        const commandText = payload.commands.map((command) => command.command).join("\n");
+        if (!commandText.includes("matterhorn-work crypto live-public-qa")) throw new Error("expected Hermes QA live-public-qa command");
+        if (!commandText.includes("matterhorn-work crypto customer-packet")) throw new Error("expected Hermes QA customer-packet command");
+      },
+    );
+    if (mock.requests.length !== hermesQaRequestsBefore) throw new Error("crypto hermes-customer-qa should not call the Matterhorn server");
+    console.log("PASS crypto hermes-customer-qa CLI prints offline command plan");
+
     // 6. The official SDK doctor is exposed through the public CLI without
     // requiring a Matterhorn server or accepting signing material.
     const sdkDoctorRequestsBefore = mock.requests.length;
