@@ -28,6 +28,8 @@ const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const CUSTOMER_DEMO_COMMANDS = {
+  readiness: "matterhorn-work crypto readiness --json",
+  readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   smoke: "pnpm smoke:customer-ready-crypto",
   smokeJson: "matterhorn-work crypto customer-smoke --dry-run --json",
   packet: [
@@ -677,7 +679,13 @@ export default function BittensorPanel() {
                 <p className="text-xs leading-5 text-dls-secondary">
                   Use this before a test customer call: run the offline crypto gate, prepare a redacted packet, then demo read/preview-only chat cards.
                 </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readiness")}>
+                    {copiedCustomerCommand === "readiness" ? "Copied" : "Copy Ready"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readinessApi")}>
+                    {copiedCustomerCommand === "readinessApi" ? "Copied" : "Copy API"}
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
                     {copiedCustomerCommand === "smoke" ? "Copied" : "Copy Smoke"}
                   </Button>
