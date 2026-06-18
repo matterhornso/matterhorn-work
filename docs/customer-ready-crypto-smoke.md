@@ -70,6 +70,8 @@ pnpm test:unified-crypto-shared-card-contract
 pnpm test:crypto-cli-fallback
 pnpm test:agent-crypto-operator-loop
 pnpm test:hermes-crypto-customer-qa
+pnpm test:crypto-readiness-api
+pnpm test:customer-readiness-ui
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
 pnpm test:market-official-sdk-validation-track
