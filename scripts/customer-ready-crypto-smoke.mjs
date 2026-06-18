@@ -18,6 +18,7 @@ const offlineStages = [
   ["crypto.readiness_api", "Unified crypto readiness API contract", ["pnpm", "test:crypto-readiness-api"]],
   ["crypto.customer_readiness_ui", "Customer readiness UI contract", ["pnpm", "test:customer-readiness-ui"]],
   ["bittensor.beta_release_gate", "Bittensor beta release gate contract", ["pnpm", "test:bittensor-beta-release-gate"]],
+  ["bittensor.beta_customer_packet", "Bittensor beta release candidate packet", ["pnpm", "test:bittensor-beta-customer-packet"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
   ["market.execution_readiness", "Market execution-readiness security gate", ["pnpm", "test:market-execution-readiness-gate"]],
