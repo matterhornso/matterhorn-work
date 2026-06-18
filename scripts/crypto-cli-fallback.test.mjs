@@ -782,6 +782,9 @@ async function main() {
     const bundleJsonPath = join(sdkOutputDir, "matterhorn-market-customer-evidence.json");
     const bundleReceiptCheckPath = join(sdkOutputDir, "matterhorn-market-receipt-check.json");
     const bundleArtifactReconciliationPath = join(sdkOutputDir, "matterhorn-market-artifact-reconciliation.json");
+    const bundleArtifactReconciliationMarkdownPath = join(sdkOutputDir, "matterhorn-market-artifact-reconciliation.md");
+    const hyperliquidArtifactValidationPath = join(sdkOutputDir, "hyperliquid-artifact-validation.json");
+    const polymarketArtifactValidationPath = join(sdkOutputDir, "polymarket-artifact-validation.json");
     writeFileSync(smokePath, JSON.stringify({
       ready: true,
       metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "c".repeat(40), gitBranch: "codex/test" },
@@ -824,28 +827,98 @@ async function main() {
         acceptsSecrets: false,
       },
     }));
-    writeFileSync(bundleArtifactReconciliationPath, JSON.stringify({
-      version: "matterhorn.market.artifact-reconciliation.v1",
-      ready: true,
-      venues: [
-        {
-          venue: "hyperliquid",
-          present: true,
-          ready: true,
-          status: "accepted_public_metadata",
-          receiptCandidate: { version: "matterhorn.market.receipt.v1", venue: "hyperliquid", status: "received", action: "place_order" },
-        },
-      ],
-      errors: [],
-      warnings: [],
-      safety: {
-        nonCustodial: true,
+    writeFileSync(hyperliquidArtifactValidationPath, JSON.stringify({
+      success: true,
+      validation: {
+        version: "matterhorn.market.artifact-validation.v1",
+        venue: "hyperliquid",
+        status: "accepted_public_metadata",
+        validationMode: "public_redacted_metadata",
+        matchesSignRequest: true,
+        signRequestSha256: "a".repeat(64),
+        signedArtifactPublicHash: "b".repeat(64),
+        signedArtifactRedacted: true,
+        redactedMetadataAccepted: true,
+        signedArtifactAccepted: false,
+        submitSignedAllowedByContract: false,
+        canSubmit: false,
         liveSubmissionEnabled: false,
-        signsOrSubmits: false,
-        acceptsSecrets: false,
-        publicMetadataOnly: true,
+        publicAuditReceiptCandidate: {
+          version: "matterhorn.market.receipt.v1",
+          venue: "hyperliquid",
+          status: "received",
+          action: "place_order",
+          previewSha256: "c".repeat(64),
+          handoffSha256: "d".repeat(64),
+          warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+        },
+        errors: [],
+        warnings: [],
       },
     }));
+    writeFileSync(polymarketArtifactValidationPath, JSON.stringify({
+      success: true,
+      validation: {
+        version: "matterhorn.market.artifact-validation.v1",
+        venue: "polymarket",
+        status: "accepted_public_metadata",
+        validationMode: "public_redacted_metadata",
+        matchesSignRequest: true,
+        signRequestSha256: "e".repeat(64),
+        signedArtifactPublicHash: "f".repeat(64),
+        signedArtifactRedacted: true,
+        redactedMetadataAccepted: true,
+        signedArtifactAccepted: false,
+        submitSignedAllowedByContract: false,
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        publicAuditReceiptCandidate: {
+          version: "matterhorn.market.receipt.v1",
+          venue: "polymarket",
+          status: "received",
+          action: "buy_shares",
+          previewSha256: "1".repeat(64),
+          handoffSha256: "2".repeat(64),
+          warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+        },
+        errors: [],
+        warnings: [],
+      },
+    }));
+    const artifactReconciliationRequestsBefore = mock.requests.length;
+    await expectCli(
+      "crypto artifact-reconcile",
+      mock.url,
+      [
+        "crypto",
+        "artifact-reconcile",
+        "--hyperliquid-artifact-validation",
+        hyperliquidArtifactValidationPath,
+        "--polymarket-artifact-validation",
+        polymarketArtifactValidationPath,
+        "--require-hyperliquid",
+        "--require-polymarket",
+        "--output",
+        bundleArtifactReconciliationMarkdownPath,
+        "--json-output",
+        bundleArtifactReconciliationPath,
+        "--strict",
+      ],
+      (payload) => {
+        if (payload.version !== "matterhorn.market.artifact-reconciliation.v1") {
+          throw new Error(`expected artifact reconciliation version, got ${payload.version}`);
+        }
+        if (payload.ready !== true) throw new Error(`expected artifact reconciliation ready=true, got ${payload.ready}`);
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected artifact reconciliation liveSubmissionEnabled=false");
+        if (payload.safety?.signsOrSubmits !== false) throw new Error("expected artifact reconciliation signsOrSubmits=false");
+        if (payload.safety?.acceptsSecrets !== false) throw new Error("expected artifact reconciliation acceptsSecrets=false");
+        if (!existsSync(bundleArtifactReconciliationMarkdownPath) || !existsSync(bundleArtifactReconciliationPath)) {
+          throw new Error("expected artifact reconciliation evidence files");
+        }
+      },
+    );
+    if (mock.requests.length !== artifactReconciliationRequestsBefore) throw new Error("crypto artifact-reconcile should not call the Matterhorn server");
+    console.log("PASS crypto artifact-reconcile CLI is offline and non-custodial");
     const bundleResult = await runCli(mock.url, [
       "crypto",
       "evidence-bundle",
@@ -888,6 +961,7 @@ async function main() {
     if (bundleJson.operatorSummary?.present !== true) throw new Error("expected customer bundle JSON to include operatorSummary.present=true");
     if (bundleJson.sdkManifestCheck?.ready !== true) throw new Error("expected customer bundle JSON to include sdkManifestCheck.ready=true");
     if (bundleJson.receiptCheck?.ready !== true) throw new Error("expected customer bundle JSON to include receiptCheck.ready=true");
+    if (bundleJson.artifactReconciliation?.present !== true) throw new Error("expected customer bundle JSON to include artifactReconciliation.present=true");
     if (bundleJson.artifactReconciliation?.ready !== true) throw new Error("expected customer bundle JSON to include artifactReconciliation.ready=true");
     if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(bundleMarkdown)) {
       throw new Error("customer evidence bundle leaked token or secret-shaped fields");
