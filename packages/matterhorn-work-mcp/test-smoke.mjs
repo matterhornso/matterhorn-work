@@ -1244,9 +1244,14 @@ try {
   }));
   assert.equal(cryptoCustomerPacket.ready, true);
   assert.equal(cryptoCustomerPacket.packet.marketEvidence.ready, true);
+  assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.officialSdkAccepted, true);
+  assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.sdkManifestAccepted, true);
+  assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.receiptAccepted, true);
+  assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.artifactReconciliationAccepted, true);
   assert.equal(cryptoCustomerPacket.packet.bittensorEvidence.ready, true);
   assert.equal(cryptoCustomerPacket.safety.liveSubmissionEnabled, false);
   assert.match(cryptoCustomerPacket.markdown, /READY_FOR_TEST_CUSTOMER_QA/);
+  assert.match(cryptoCustomerPacket.markdown, /Artifact reconciliation \| yes/);
 
   const badCryptoCustomerPacket = await mcp.ask("tools/call", {
     name: "matterhorn_crypto_customer_packet",
