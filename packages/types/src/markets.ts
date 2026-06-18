@@ -174,6 +174,67 @@ export interface MarketExecutionReadinessChecklist {
   requiresSecurityReviewBeforeSubmit: true;
 }
 
+export type MarketExecutionReadinessReportStatus = "disabled" | "unavailable" | "review" | "ready";
+export type MarketExecutionReadinessControlStatus = "pass" | "warning" | "fail" | "blocked" | "skip";
+export type MarketExecutionReadinessCardTone = "good" | "warning" | "danger" | "info";
+
+export interface MarketExecutionReadinessVenueReport {
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  routeFamily: string;
+  supportedNow: string[];
+  blockedNow: string[];
+  missingBeforeLiveSubmit: string[];
+}
+
+export interface MarketExecutionReadinessControlReport {
+  id: string;
+  status: MarketExecutionReadinessControlStatus;
+  summary: string;
+}
+
+export interface MarketExecutionReadinessSafety {
+  nonCustodial: true;
+  liveSubmissionEnabled: false;
+  canSubmit: false;
+  signsOrSubmits: false;
+  acceptsSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+}
+
+export interface MarketExecutionReadinessReport {
+  version: "matterhorn.market.execution-readiness.v1";
+  checkedAt: string;
+  readyForLiveSubmission: false;
+  status: MarketExecutionReadinessReportStatus;
+  venues: MarketExecutionReadinessVenueReport[];
+  controls: MarketExecutionReadinessControlReport[];
+  nextActions: string[];
+  safety: MarketExecutionReadinessSafety;
+}
+
+export interface MarketExecutionReadinessCardItem {
+  label: string;
+  value: string;
+  tone: MarketExecutionReadinessCardTone;
+}
+
+export interface MarketExecutionReadinessCard {
+  kind: "readiness_report";
+  title: "Market execution readiness";
+  summary: string;
+  tone: Extract<MarketExecutionReadinessCardTone, "warning" | "danger" | "info">;
+  items: MarketExecutionReadinessCardItem[];
+  warnings: string[];
+  data: { report: MarketExecutionReadinessReport };
+}
+
+export interface MarketExecutionReadinessResponse {
+  success: true;
+  report: MarketExecutionReadinessReport;
+  cards: MarketExecutionReadinessCard[];
+}
+
 export const MARKET_EXECUTION_MODES = [
   "disabled",
   "testnet_external_signer",

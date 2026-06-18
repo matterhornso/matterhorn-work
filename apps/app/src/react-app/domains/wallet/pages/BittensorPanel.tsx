@@ -22,6 +22,7 @@ import type {
   BittensorSubnetSummary,
   BittensorSubtensorSidecarHealth,
   BittensorWalletSnapshot,
+  MarketExecutionReadinessReport,
 } from "@matterhorn-work/types";
 
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
@@ -106,36 +107,6 @@ type ReadinessReport = {
   nextActions?: string[];
   checkedAt?: string;
 };
-type MarketExecutionReadinessVenue = {
-  venue?: string;
-  supportedNow?: string[];
-  blockedNow?: string[];
-  missingBeforeLiveSubmit?: string[];
-};
-type MarketExecutionReadinessControl = {
-  id?: string;
-  status?: "pass" | "warning" | "fail" | "blocked" | "skip" | string;
-  summary?: string;
-};
-type MarketExecutionReadinessReport = {
-  version?: string;
-  checkedAt?: string;
-  readyForLiveSubmission?: boolean;
-  status?: string;
-  venues?: MarketExecutionReadinessVenue[];
-  controls?: MarketExecutionReadinessControl[];
-  nextActions?: string[];
-  safety?: {
-    nonCustodial?: boolean;
-    liveSubmissionEnabled?: boolean;
-    canSubmit?: boolean;
-    signsOrSubmits?: boolean;
-    acceptsSecrets?: boolean;
-    acceptsRawSignatures?: boolean;
-    acceptsSignedPayloads?: boolean;
-  };
-};
-
 function readinessStateForVenue(checks: ReadinessCheck[], venue: string): string {
   const needle = venue.toLowerCase();
   const matches = checks.filter((check) => {
@@ -350,8 +321,11 @@ export default function BittensorPanel() {
       setMarketExecutionReadiness((json.report ?? json) as MarketExecutionReadinessReport);
     } catch (err) {
       setMarketExecutionReadiness({
+        version: "matterhorn.market.execution-readiness.v1",
+        checkedAt: new Date().toISOString(),
         readyForLiveSubmission: false,
         status: "unavailable",
+        venues: [],
         controls: [{
           id: "market_execution_readiness_api",
           status: "fail",
@@ -359,10 +333,13 @@ export default function BittensorPanel() {
         }],
         nextActions: ["Refresh market execution readiness before previewing market execution flows."],
         safety: {
+          nonCustodial: true,
           liveSubmissionEnabled: false,
           canSubmit: false,
           signsOrSubmits: false,
           acceptsSecrets: false,
+          acceptsRawSignatures: false,
+          acceptsSignedPayloads: false,
         },
       });
     } finally {
@@ -618,9 +595,7 @@ export default function BittensorPanel() {
     return venue.blockedNow?.includes("live_submit") ? "Disabled" : "Review";
   };
   const marketExecutionSubmissionState = marketExecutionReadiness
-    ? marketExecutionReadiness.readyForLiveSubmission === true
-      ? "Yes"
-      : "No"
+    ? "No"
     : "Unknown";
 
   return (
