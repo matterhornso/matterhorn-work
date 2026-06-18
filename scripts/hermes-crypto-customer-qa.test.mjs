@@ -28,6 +28,12 @@ for (const phrase of [
   "pnpm test:market-official-sdk-validation-capture",
   "pnpm test:market-customer-evidence-bundle",
   "pnpm test:bittensor-customer-readiness-gate",
+  "Customer Readiness Quick Check",
+  "matterhorn-work crypto readiness --json",
+  "$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness",
+  "matterhorn_crypto_readiness",
+  "safety.liveSubmissionEnabled",
+  "safety.canSubmit",
   "Official SDK Evidence Loop",
   "matterhorn-work crypto customer-smoke",
   "--json-output /tmp/matterhorn-crypto-smoke.json",
@@ -54,6 +60,11 @@ for (const phrase of [
   "matterhorn-work polymarket chat",
   "canSubmit: false",
   "Matterhorn Work Crypto Customer QA Report",
+  "Crypto Gate",
+  "Venue Checks",
+  "Refresh Crypto Gate",
+  "Ask Crypto Chat",
+  "readiness blockers are hidden",
 ]) {
   assert.ok(doc.includes(phrase), `Hermes crypto QA handoff should include ${phrase}`);
 }

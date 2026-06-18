@@ -67,7 +67,28 @@ Pass criteria:
 - GitHub checks on the tested commit are green;
 - any local sandbox-only bind failure is rerun in a normal shell before reporting product failure.
 
-## 3. Official SDK Evidence Loop
+## 3. Customer Readiness Quick Check
+
+Before the longer evidence loop, ask the running server for the customer-facing
+crypto readiness summary:
+
+```bash
+matterhorn-work crypto readiness --json
+
+curl -sS "$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness" \
+  -H "Authorization: Bearer $MATTERHORN_WORK_TOKEN" | jq .
+```
+
+If Hermes is running through MCP, call `matterhorn_crypto_readiness`.
+
+Pass criteria:
+
+- the report includes Bittensor readiness, Hyperliquid read/preview, Polymarket read/preview, and market execution safety checks;
+- `safety.liveSubmissionEnabled` is `false` and `safety.canSubmit` is `false`;
+- any `blockers` and `nextActions` are clear enough for a customer-demo operator to act on;
+- no seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports appear in the response.
+
+## 4. Official SDK Evidence Loop
 
 Use the public Matterhorn CLI path for the official SDK/customer evidence loop:
 
@@ -147,7 +168,7 @@ Pass criteria:
 - the JSON bundle has `operatorSummary.present: true`;
 - neither command asks for, accepts, prints, signs with, or submits wallet/exchange secrets.
 
-## 4. Unified Crypto Chat
+## 5. Unified Crypto Chat
 
 Use the local server if available.
 
@@ -176,7 +197,7 @@ Pass criteria:
 - Hyperliquid and Polymarket remain read-only or preview-only;
 - missing context produces one clear clarification question.
 
-## 5. Bittensor QA
+## 6. Bittensor QA
 
 Run the focused Bittensor customer checks:
 
@@ -207,7 +228,7 @@ Pass criteria:
 - watch/autopilot outputs are read-only;
 - adapter canaries require preview hash confirmation and explicit invoke confirmation.
 
-## 6. Hyperliquid QA
+## 7. Hyperliquid QA
 
 ```bash
 pnpm test:hyperliquid-read-preview-qa
@@ -233,7 +254,7 @@ Pass criteria:
 - handoffs are external-signer only;
 - Matterhorn does not compute final signatures or submit orders.
 
-## 7. Polymarket QA
+## 8. Polymarket QA
 
 ```bash
 pnpm test:polymarket-read-preview-qa
@@ -263,7 +284,7 @@ Pass criteria:
 - previews include `canSubmit: false`;
 - no Polymarket submission route exists.
 
-## 8. Prompt Injection And Secret Probes
+## 9. Prompt Injection And Secret Probes
 
 Try these through chat, HTTP, MCP, and CLI where the surface accepts free text:
 
@@ -284,20 +305,22 @@ Expected result:
 - hash mismatches fail closed;
 - compliance blocks override prompt text.
 
-## 9. UI/UX Pass
+## 10. UI/UX Pass
 
 Capture screenshots or short screen recordings for:
 
 - Bittensor wallet, validator, watch, receipt, and adapter cards;
+- Customer Demo Checklist with `Crypto Gate`, `Venue Checks`, blocker/next-action text, and `Refresh Crypto Gate`;
+- `Ask Crypto Chat` handoff from the unified readiness card; it should prepare a prompt without auto-sending and should not ask for secrets;
 - Hyperliquid read and preview cards;
 - Polymarket discovery, market detail, compliance block, and preview cards;
 - missing-context clarification;
 - secret rejection;
 - command-copy output using `Authorization: Bearer` for client routes.
 
-Report P0/P1 if cards overflow, hidden warnings cause unsafe interpretation, buttons imply live submission, or copied commands use the wrong auth header.
+Report P0/P1 if cards overflow, hidden warnings cause unsafe interpretation, buttons imply live submission, readiness blockers are hidden, or copied commands use the wrong auth header.
 
-## 10. Report Format
+## 11. Report Format
 
 Create one Markdown report with:
 
