@@ -43,6 +43,9 @@ assert(payload.safety?.acceptsSecrets === false, "expected acceptsSecrets=false"
 assert(payload.inputs?.tokenConfigured === false, "expected tokenConfigured=false in fixture mode");
 assert(payload.summary?.skippedWithFixtureFallback >= 2, "expected skipped fixture fallback stages");
 assert(Array.isArray(payload.stages) && payload.stages.length >= 3, "expected stage ledger");
+const chainStage = payload.stages.find((stage) => stage.id === "market_execution_chain_api");
+assert(chainStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected execution-chain API stage to fixture-skip without server inputs");
+assert(/Authorization: Bearer <client-token>/.test(chainStage?.command || ""), "expected execution-chain API command to use bearer auth");
 
 const jsonPath = join(outputDir, "matterhorn-live-public-qa.json");
 const mdPath = join(outputDir, "matterhorn-live-public-qa.md");
@@ -56,6 +59,7 @@ const markdown = readFileSync(mdPath, "utf8");
 const shaFile = readFileSync(shaPath, "utf8").trim();
 assert(shaFile === `${sha256(json)}  matterhorn-live-public-qa.json`, "expected SHA-256 file to match JSON report");
 assert(/Do not use seed phrases, private keys, API secrets/.test(markdown), "expected Markdown safety warning");
+assert(/Market execution-chain API/.test(markdown), "expected Markdown to include execution-chain API stage");
 assert(!forbidden.test(json), "JSON report leaked secret-shaped fields");
 assert(!forbidden.test(markdown), "Markdown report leaked secret-shaped fields");
 
