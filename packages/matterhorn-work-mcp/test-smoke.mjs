@@ -378,9 +378,39 @@ const server = createServer(async (req, res) => {
     });
   }
   if (req.method === "POST" && url.pathname === "/api/crypto/chat/execute") {
-    assert.equal(body.message, "show BTC Hyperliquid funding");
-    assert.equal(body.venue, "auto");
     assert.equal("apiSecret" in body, false);
+    assert.equal(body.venue, "auto");
+    if (body.message === "Can Matterhorn submit Hyperliquid and Polymarket orders yet?") {
+      return json(res, 200, {
+        success: true,
+        venue: "auto",
+        intent: "market_execution_readiness",
+        execution: "read_only",
+        responseText: "Can submit: No. Live submission: Off.",
+        cards: [{ kind: "market_execution_readiness", title: "Market execution readiness" }],
+        sharedCards: [{
+          version: "matterhorn.crypto.shared-card.v1",
+          kind: "readiness_report",
+          venue: "auto",
+          title: "Market execution readiness",
+          summary: "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.",
+          status: "warning",
+          originalKind: "market_execution_readiness",
+          source: { source: "matterhorn.execution-readiness", freshness: "live" },
+          warnings: ["Live submission is disabled."],
+          data: {
+            kind: "market_execution_readiness",
+            report: {
+              readyForLiveSubmission: false,
+              safety: { canSubmit: false, liveSubmissionEnabled: false, signsOrSubmits: false },
+            },
+          },
+          safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+        }],
+        warnings: ["Live submission is disabled."],
+      });
+    }
+    assert.equal(body.message, "show BTC Hyperliquid funding");
     return json(res, 200, {
       success: true,
       venue: "hyperliquid",
@@ -1028,6 +1058,18 @@ try {
   assert.equal(cryptoChat.sharedCards[0].version, "matterhorn.crypto.shared-card.v1");
   assert.equal(cryptoChat.sharedCards[0].kind, "market_context");
   assert.equal(cryptoChat.sharedCards[0].safety.canSubmit, false);
+
+  const cryptoExecutionReadinessChat = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_chat",
+    arguments: { message: "Can Matterhorn submit Hyperliquid and Polymarket orders yet?", venue: "auto" },
+  }));
+  assert.equal(cryptoExecutionReadinessChat.venue, "auto");
+  assert.equal(cryptoExecutionReadinessChat.intent, "market_execution_readiness");
+  assert.equal(cryptoExecutionReadinessChat.execution, "read_only");
+  assert.equal(cryptoExecutionReadinessChat.sharedCards[0].version, "matterhorn.crypto.shared-card.v1");
+  assert.equal(cryptoExecutionReadinessChat.sharedCards[0].kind, "readiness_report");
+  assert.equal(cryptoExecutionReadinessChat.sharedCards[0].safety.liveSubmissionEnabled, false);
+  assert.equal(cryptoExecutionReadinessChat.sharedCards[0].safety.canSubmit, false);
 
   const cryptoReadiness = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_crypto_readiness",
