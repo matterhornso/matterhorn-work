@@ -31,7 +31,14 @@ const CUSTOMER_DEMO_COMMANDS = {
   readiness: "matterhorn-work crypto readiness --json",
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   smoke: "pnpm smoke:customer-ready-crypto",
-  smokeJson: "matterhorn-work crypto customer-smoke --dry-run --json",
+  livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
+  evidenceVerify: [
+    "matterhorn-work crypto evidence-verify",
+    "--bundle-json /tmp/matterhorn-market-customer-evidence.json",
+    "--bundle-md /tmp/matterhorn-market-customer-evidence.md",
+    "--strict",
+    "--json",
+  ].join(" "),
   packet: [
     "matterhorn-work crypto customer-packet",
     "--customer-ready-smoke /tmp/matterhorn-crypto-smoke.json",
@@ -49,6 +56,11 @@ const CUSTOMER_DEMO_PROMPTS = [
     prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
+    id: "bittensor-tao-wallet",
+    label: "TAO wallet",
+    prompt: "Use unified crypto chat. Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
+  },
+  {
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
     prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn cannot submit or sign orders.",
@@ -58,9 +70,14 @@ const CUSTOMER_DEMO_PROMPTS = [
     label: "Polymarket compliance",
     prompt: "Use unified crypto chat. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
   },
+  {
+    id: "external-signer-preview",
+    label: "Signer preview",
+    prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn can prepare safe previews and public receipts, but cannot sign, submit, custody, or broadcast.",
+  },
 ] as const;
 
-type Tab = "overview" | "subnets" | "wallet" | "actions";
+type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
 type ActionType = BittensorActionQuote["action"];
 type ReadinessCheck = {
   id?: string;
@@ -76,6 +93,19 @@ type ReadinessReport = {
   nextActions?: string[];
   checkedAt?: string;
 };
+
+function readinessStateForVenue(checks: ReadinessCheck[], venue: string): string {
+  const needle = venue.toLowerCase();
+  const matches = checks.filter((check) => {
+    const id = check.id?.toLowerCase() ?? "";
+    const label = check.label?.toLowerCase() ?? "";
+    return id.includes(needle) || label.includes(needle);
+  });
+  if (!matches.length) return "Unknown";
+  if (matches.some((check) => check.status === "fail")) return "Blocked";
+  if (matches.some((check) => check.status === "warning" || check.status === "skip")) return "Review";
+  return "Ready";
+}
 
 function isValidSs58Address(address: string): boolean {
   const trimmed = address.trim();
@@ -189,7 +219,6 @@ export default function BittensorPanel() {
   const [cryptoReadiness, setCryptoReadiness] = useState<ReadinessReport | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [cryptoReadinessLoading, setCryptoReadinessLoading] = useState(false);
-  const [copiedReadinessCommand, setCopiedReadinessCommand] = useState<string | null>(null);
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
@@ -423,105 +452,6 @@ export default function BittensorPanel() {
     window.setTimeout(() => setCopiedCustomerCommand(null), 2000);
   };
 
-  const copyReadinessCommand = async (kind: "live-qa" | "gate" | "evidence" | "handoff" | "adapter-candidate" | "adapter-canary" | "readonly-canary" | "watch-scheduler" | "receipt" | "receipt-import") => {
-    const command = kind === "live-qa"
-      ? "node scripts/bittensor-live-qa.mjs --server-url http://127.0.0.1:8787 --token <client-token> --strict --json"
-      : kind === "gate"
-        ? "pnpm test:bittensor-customer-readiness-gate"
-        : kind === "handoff"
-          ? [
-              "node scripts/bittensor-signing-handoff-check.mjs",
-              "--handoff /tmp/bittensor-handoff.json",
-              "--expected-sha <payload-sha256-from-preview>",
-              "--output /tmp/bittensor-handoff-check.md",
-              "--json-output /tmp/bittensor-handoff-check.json",
-              "--strict",
-            ].join(" ")
-          : kind === "adapter-candidate"
-            ? [
-                "node scripts/bittensor-real-adapter-candidate-gate.mjs",
-                "--candidate-json /tmp/bittensor-real-adapter-candidate-input.json",
-                "--allowed-hosts <adapter-host>",
-                "--preferred-kind data_search",
-                "--preferred-intent data_search",
-                "--output /tmp/bittensor-real-adapter-candidate.md",
-                "--json-output /tmp/bittensor-real-adapter-candidate.json",
-                "--strict",
-              ].join(" ")
-          : kind === "adapter-canary"
-            ? [
-                "node scripts/bittensor-adapter-canary-gate.mjs",
-                "--server-url http://127.0.0.1:8787",
-                "--token <client-token>",
-                "--netuid 14",
-                "--allowed-hosts <adapter-host>",
-                "--require-configured",
-                "--json-output /tmp/bittensor-adapter-canary.json",
-                "--strict",
-              ].join(" ")
-            : kind === "readonly-canary"
-              ? [
-                  "node scripts/bittensor-adapter-readonly-canary.mjs",
-                  "--server-url http://127.0.0.1:8787",
-                  "--token <client-token>",
-                  "--netuid 14",
-                  "--task \"Find public Bittensor docs about subnet 14.\"",
-                  "--allowed-hosts <adapter-host>",
-                  "--confirm-invoke",
-                  "--allow-real-adapter-call",
-                  "--json-output /tmp/bittensor-adapter-readonly-canary.json",
-                  "--strict",
-                ].join(" ")
-              : kind === "watch-scheduler"
-                ? [
-                    "node scripts/bittensor-watch-autopilot-scheduler.mjs",
-                    "--server-url http://127.0.0.1:8787",
-                    "--token <client-token>",
-                    "--iterations 6",
-                    "--interval-ms 60000",
-                    "--jsonl-output /tmp/bittensor-watch-autopilot-scheduler.jsonl",
-                    "--summary-output /tmp/bittensor-watch-autopilot-scheduler-summary.json",
-                    "--strict",
-                  ].join(" ")
-                : kind === "receipt"
-                  ? [
-                      "node scripts/bittensor-receipt-check.mjs",
-                      "--receipt /tmp/bittensor-receipt.json",
-                      "--expected-payload-sha <payload-sha256-from-handoff>",
-                      "--expected-action stake",
-                      "--expected-netuid 14",
-                      "--output /tmp/bittensor-receipt-check.md",
-                      "--json-output /tmp/bittensor-receipt-check.json",
-                      "--strict",
-                    ].join(" ")
-                  : kind === "receipt-import"
-                    ? [
-                        "curl -sS -X POST http://127.0.0.1:8787/api/bittensor/extrinsics/receipt",
-                        "-H 'Content-Type: application/json'",
-                        "-H 'Authorization: Bearer <client-token>'",
-                        "--data @/tmp/bittensor-receipt-import.json",
-                        "> /tmp/bittensor-receipt-import-response.json",
-                      ].join(" ")
-                    : [
-                  "node scripts/bittensor-customer-evidence-bundle.mjs",
-                  "--bittensor-live-qa /tmp/bittensor-live-qa.json",
-                  "--agent-control-live-qa /tmp/agent-control-live-qa.json",
-                  "--ci /tmp/github-ci.json",
-                  "--readiness-gate /tmp/matterhorn-bittensor-customer-readiness.md",
-                  "--wallet-timeline /tmp/wallet-timeline-status.json",
-                  "--adapter-candidate /tmp/bittensor-real-adapter-candidate.json",
-                  "--adapter-canary /tmp/bittensor-adapter-canary.json",
-                  "--readonly-adapter-canary /tmp/bittensor-adapter-readonly-canary.json",
-                  "--receipt-check /tmp/bittensor-receipt-check.json",
-                  "--watch-autopilot-scheduler /tmp/bittensor-watch-autopilot-scheduler-summary.json",
-                  "--output /tmp/matterhorn-bittensor-customer-evidence.md",
-                  "--strict",
-                ].join(" ");
-    await navigator.clipboard?.writeText(command);
-    setCopiedReadinessCommand(kind);
-    window.setTimeout(() => setCopiedReadinessCommand(null), 2000);
-  };
-
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
     const prompt = `Use Bittensor chat mode. Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
     await sendToChat(prompt, { netuid: subnet.netuid, subnet });
@@ -545,8 +475,14 @@ export default function BittensorPanel() {
     await sendToChat(prompt, { cryptoReadiness }, { mode: "crypto", source: "crypto-readiness-panel" });
   };
 
-  const askAgentForCustomerDemo = async (prompt: string) => {
-    await sendToChat(prompt, {}, { mode: "crypto", source: "crypto-customer-demo-checklist" });
+  const askAgentForCustomerDemo = async (item: (typeof CUSTOMER_DEMO_PROMPTS)[number]) => {
+    await sendToChat(item.prompt, {
+      ss58Address: watchAddress.trim() || undefined,
+      wallet,
+      readiness,
+      cryptoReadiness,
+      sourcePrompt: item.id,
+    }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
 
   const askAgentAboutQuote = async () => {
@@ -565,9 +501,6 @@ export default function BittensorPanel() {
 
   const readinessChecks = readiness?.checks ?? [];
   const readinessFailures = readinessChecks.filter((check) => check.status === "fail");
-  const readinessWarnings = readinessChecks.filter((check) => check.status === "warning");
-  const readinessSkips = readinessChecks.filter((check) => check.status === "skip");
-  const readinessBlocker = readiness?.blockers?.find(Boolean) ?? null;
   const readinessNextAction = readiness?.nextActions?.find(Boolean) ?? null;
   const readinessState = readiness
     ? readiness.ready === true && readinessFailures.length === 0
@@ -588,6 +521,8 @@ export default function BittensorPanel() {
         ? "Blocked"
         : "Review"
     : "Unknown";
+  const hyperliquidReadinessState = readinessStateForVenue(cryptoReadinessChecks, "hyperliquid");
+  const polymarketReadinessState = readinessStateForVenue(cryptoReadinessChecks, "polymarket");
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -615,9 +550,10 @@ export default function BittensorPanel() {
             Refresh
           </Button>
         </div>
-        <div className="grid grid-cols-4 gap-1 rounded-lg bg-dls-surface p-1">
+        <div className="grid grid-cols-5 gap-1 rounded-lg bg-dls-surface p-1">
           {[
             { key: "overview" as const, label: "Overview" },
+            { key: "demo" as const, label: "Demo" },
             { key: "subnets" as const, label: "Subnets" },
             { key: "wallet" as const, label: "Wallet" },
             { key: "actions" as const, label: "Actions" },
@@ -658,146 +594,6 @@ export default function BittensorPanel() {
             {sidecarStatus?.status === "unreachable" ? (
               <p className="text-xs leading-5 text-amber-300">{sidecarStatus.message}</p>
             ) : null}
-
-            <Section title="Customer Readiness" icon={<Shield className="size-4" />}>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <Metric label="Gate" value={readinessState} compact />
-                  <Metric label="Checks" value={readinessChecks.length ? String(readinessChecks.length) : "—"} compact />
-                  <Metric label="Failures" value={String(readinessFailures.length)} compact />
-                  <Metric label="Warnings" value={String(readinessWarnings.length + readinessSkips.length)} compact />
-                </div>
-                {readinessBlocker ? (
-                  <p className="text-xs leading-5 text-red-300">Blocker: {readinessBlocker}</p>
-                ) : readinessFailures[0] ? (
-                  <p className="text-xs leading-5 text-red-300">{readinessFailures[0].label ?? "Readiness"}: {readinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
-                ) : readinessWarnings[0] ? (
-                  <p className="text-xs leading-5 text-amber-300">{readinessWarnings[0].label ?? "Readiness"}: {readinessWarnings[0].summary ?? "Review before customer demo."}</p>
-                ) : readiness?.ready ? (
-                  <p className="text-xs leading-5 text-emerald-300">Bittensor readiness checks are currently green for a customer demo.</p>
-                ) : (
-                  <p className="text-xs leading-5 text-dls-secondary">Run readiness before a test customer session.</p>
-                )}
-                {readinessNextAction ? (
-                  <p className="text-xs leading-5 text-sky-200">Next: {readinessNextAction}</p>
-                ) : null}
-                <div className="grid grid-cols-2 gap-2">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadReadiness} disabled={readinessLoading}>
-                    {readinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Run Check
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
-                    <BrainCircuit className="size-3.5" />
-                    Ask Chat
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("live-qa")}>
-                    {copiedReadinessCommand === "live-qa" ? "Copied" : "Copy Live QA"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("gate")}>
-                    {copiedReadinessCommand === "gate" ? "Copied" : "Copy Gate"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("adapter-candidate")}>
-                    {copiedReadinessCommand === "adapter-candidate" ? "Copied" : "Copy Candidate"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("adapter-canary")}>
-                    {copiedReadinessCommand === "adapter-canary" ? "Copied" : "Copy Canary"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("readonly-canary")}>
-                    {copiedReadinessCommand === "readonly-canary" ? "Copied" : "Copy Invoke"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("watch-scheduler")}>
-                    {copiedReadinessCommand === "watch-scheduler" ? "Copied" : "Copy Watch"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("evidence")}>
-                    {copiedReadinessCommand === "evidence" ? "Copied" : "Copy Evidence"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("handoff")}>
-                    {copiedReadinessCommand === "handoff" ? "Copied" : "Copy Handoff"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("receipt")}>
-                    {copiedReadinessCommand === "receipt" ? "Copied" : "Copy Receipt"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyReadinessCommand("receipt-import")}>
-                    {copiedReadinessCommand === "receipt-import" ? "Copied" : "Copy Import"}
-                  </Button>
-                </div>
-              </div>
-            </Section>
-
-            <Section title="Customer Demo Checklist" icon={<BrainCircuit className="size-4" />}>
-              <div className="space-y-3">
-                <p className="text-xs leading-5 text-dls-secondary">
-                  Use this before a test customer call: run the offline crypto gate, prepare a redacted packet, then demo read/preview-only chat cards.
-                </p>
-                <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Metric label="Crypto Gate" value={cryptoReadinessState} compact />
-                    <Metric label="Venue Checks" value={cryptoReadinessChecks.length ? String(cryptoReadinessChecks.length) : "—"} compact />
-                  </div>
-                  {cryptoReadinessBlocker ? (
-                    <p className="mt-2 text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
-                  ) : cryptoReadinessFailures[0] ? (
-                    <p className="mt-2 text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Crypto readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
-                  ) : cryptoReadinessWarnings[0] ? (
-                    <p className="mt-2 text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Crypto readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
-                  ) : cryptoReadiness?.ready ? (
-                    <p className="mt-2 text-xs leading-5 text-emerald-300">Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
-                  ) : (
-                    <p className="mt-2 text-xs leading-5 text-dls-secondary">Run unified crypto readiness before a customer demo.</p>
-                  )}
-                  {cryptoReadinessNextAction ? (
-                    <p className="mt-2 text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction}</p>
-                  ) : null}
-                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={loadCryptoReadiness} disabled={cryptoReadinessLoading}>
-                      {cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                      Refresh Crypto Gate
-                    </Button>
-                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
-                      <BrainCircuit className="size-3.5" />
-                      Ask Crypto Chat
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readiness")}>
-                    {copiedCustomerCommand === "readiness" ? "Copied" : "Copy Ready"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readinessApi")}>
-                    {copiedCustomerCommand === "readinessApi" ? "Copied" : "Copy API"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
-                    {copiedCustomerCommand === "smoke" ? "Copied" : "Copy Smoke"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smokeJson")}>
-                    {copiedCustomerCommand === "smokeJson" ? "Copied" : "Copy JSON"}
-                  </Button>
-                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("packet")}>
-                    {copiedCustomerCommand === "packet" ? "Copied" : "Copy Packet"}
-                  </Button>
-                </div>
-                <div className="grid gap-2">
-                  {CUSTOMER_DEMO_PROMPTS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-sky-500/35 hover:bg-dls-hover"
-                      onClick={() => void askAgentForCustomerDemo(item.prompt)}
-                    >
-                      <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
-                      <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">
-                        {item.prompt}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs leading-5 text-emerald-200">
-                  Demo boundary: no seed phrases, private keys, API secrets, signatures, signed payloads, wallet exports, or live Hyperliquid/Polymarket submission.
-                </div>
-              </div>
-            </Section>
 
             <Section title="Watched Wallet" icon={<Wallet className="size-4" />}>
               {watchAddress.trim() ? (
@@ -854,6 +650,115 @@ export default function BittensorPanel() {
                   />
                 ))}
               </div>
+            </Section>
+          </div>
+        )}
+
+        {tab === "demo" && (
+          <div className="space-y-4">
+            <Section title="Readiness" icon={<Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Bittensor" value={readinessState} compact />
+                  <Metric label="Hyperliquid" value={hyperliquidReadinessState} compact />
+                  <Metric label="Polymarket" value={polymarketReadinessState} compact />
+                  <Metric label="Unified smoke" value={cryptoReadinessState} compact />
+                </div>
+                {cryptoReadinessBlocker ? (
+                  <p className="text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
+                ) : cryptoReadinessFailures[0] ? (
+                  <p className="text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Crypto readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
+                ) : cryptoReadinessWarnings[0] ? (
+                  <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Crypto readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
+                ) : cryptoReadiness?.ready && readiness?.ready ? (
+                  <p className="text-xs leading-5 text-emerald-300">Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
+                ) : (
+                  <p className="text-xs leading-5 text-dls-secondary">Refresh readiness before a test customer session.</p>
+                )}
+                {cryptoReadinessNextAction || readinessNextAction ? (
+                  <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading}>
+                    {readinessLoading || cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
+                    <BrainCircuit className="size-3.5" />
+                    Bittensor Chat
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
+                    <BrainCircuit className="size-3.5" />
+                    Crypto Chat
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Try prompts" icon={<BrainCircuit className="size-4" />}>
+              <div className="grid gap-2">
+                {CUSTOMER_DEMO_PROMPTS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-sky-500/35 hover:bg-dls-hover"
+                    onClick={() => void askAgentForCustomerDemo(item)}
+                  >
+                    <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
+                    <span className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">
+                      {item.prompt}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            <Section title="Evidence" icon={<Database className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Copy customer-safe commands for smoke, live public QA, customer packet, and evidence verification.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
+                    {copiedCustomerCommand === "smoke" ? "Copied" : "Smoke"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("livePublicQa")}>
+                    {copiedCustomerCommand === "livePublicQa" ? "Copied" : "Live public QA"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("packet")}>
+                    {copiedCustomerCommand === "packet" ? "Copied" : "Customer packet"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("evidenceVerify")}>
+                    {copiedCustomerCommand === "evidenceVerify" ? "Copied" : "Evidence verify"}
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("readiness")}>
+                    {copiedCustomerCommand === "readiness" ? "Copied" : "Readiness CLI"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("readinessApi")}>
+                    {copiedCustomerCommand === "readinessApi" ? "Copied" : "Readiness API"}
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Safety" icon={<Shield className="size-4" />}>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  "Non-custodial",
+                  "Read/preview-only",
+                  "External signer required",
+                  "No market submit",
+                ].map((item) => (
+                  <div key={item} className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200">
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-dls-secondary">
+                Demo boundary: no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission.
+              </p>
             </Section>
           </div>
         )}
