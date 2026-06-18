@@ -16,6 +16,8 @@ import {
   type PolymarketProvider,
 } from "./polymarket.js";
 import {
+  buildMarketExecutionChainCard,
+  buildMarketExecutionChainGuide,
   buildMarketExecutionReadinessCard,
   buildMarketExecutionReadinessReport,
 } from "./market-execution-readiness.js";
@@ -234,6 +236,7 @@ function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind
     case "polymarket_clarification":
       return "clarification";
     case "market_execution_readiness":
+    case "market_execution_chain":
     case "readiness_report":
       return "readiness_report";
     case "subnet_comparison":
@@ -304,6 +307,9 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
     case "clarification":
       return "More context is needed before Matterhorn can continue safely.";
     case "readiness_report":
+      if (originalKind === "market_execution_chain") {
+        return "Safe Hyperliquid and Polymarket execution-chain guide: preview, external sign request, redacted artifact validation, artifact reconciliation, and public receipt import. This is not execution permission.";
+      }
       return "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.";
     case "discovery":
       return `Discovery result from ${venue}: ${title}.`;
@@ -414,6 +420,15 @@ function isMarketExecutionReadinessRequest(input: UnifiedCryptoChatInput, messag
   return mentionsMarketVenue && mentionsExecutionReadiness;
 }
 
+function isMarketExecutionChainRequest(input: UnifiedCryptoChatInput, message: string): boolean {
+  const text = message.toLowerCase();
+  const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
+  const mentionsMarketVenue = selectedMarketVenue
+    || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
+  const mentionsChain = textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request|artifact validation|artifact reconciliation|redacted artifact|external sign request|operator path|safe operator path)\b/i);
+  return mentionsMarketVenue && mentionsChain;
+}
+
 export function planUnifiedCryptoChat(input: UnifiedCryptoChatInput): UnifiedCryptoRoutePlan {
   const requestedVenue = normalizeVenue(input.venue);
   if (requestedVenue !== "auto") {
@@ -510,6 +525,38 @@ function marketExecutionReadinessResult(input: UnifiedCryptoChatInput, message: 
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { report },
+    warnings,
+    requiresClarification: false,
+    clarificationQuestion: null,
+    route,
+  };
+}
+
+function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: string): UnifiedCryptoChatResult {
+  const guide = buildMarketExecutionChainGuide();
+  const cards = [buildMarketExecutionChainCard(guide)];
+  const warnings = [
+    "This is a safe execution-chain guide, not execution permission.",
+    "Matterhorn accepts only public/redacted artifact metadata and public receipt evidence.",
+  ];
+  const route: UnifiedCryptoRoutePlan = {
+    requestedVenue: normalizeVenue(input.venue),
+    routedVenue: null,
+    confidence: 1,
+    reason: "The prompt asks about the cross-venue market execution chain.",
+    candidates: routeScores({ ...input, message }),
+    requiresClarification: false,
+    clarificationQuestion: null,
+  };
+  return {
+    venue: "auto",
+    requestedVenue: normalizeVenue(input.venue),
+    intent: "market_execution_chain",
+    execution: "read_only",
+    responseText: "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    cards,
+    sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
+    data: { guide },
     warnings,
     requiresClarification: false,
     clarificationQuestion: null,
@@ -622,6 +669,10 @@ export async function executeUnifiedCryptoChatWorkflow(
       clarificationQuestion: null,
       route: initialRoute,
     };
+  }
+
+  if (isMarketExecutionChainRequest(input, message)) {
+    return marketExecutionChainResult(input, message);
   }
 
   if (isMarketExecutionReadinessRequest(input, message)) {

@@ -137,6 +137,36 @@ describe("unified crypto chat execute route", () => {
     expect(forbiddenFieldPath(payload)).toBeNull();
   });
 
+  test("answers execution-chain prompts through the unified chat route", async () => {
+    const { base } = await boot();
+    const { res, payload } = await postCryptoChat(base, {
+      message: "Show the Hyperliquid and Polymarket safe execution chain from preview to receipt.",
+      venue: "auto",
+    });
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.venue).toBe("auto");
+    expect(payload.intent).toBe("market_execution_chain");
+    expect(payload.execution).toBe("read_only");
+    expect(payload.responseText).toContain("Can submit: No");
+    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.sharedCards[0]).toMatchObject({
+      version: "matterhorn.crypto.shared-card.v1",
+      kind: "readiness_report",
+      venue: "auto",
+      originalKind: "market_execution_chain",
+      safety: {
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    expect(payload.data.guide.version).toBe("matterhorn.market.execution-chain-guide.v1");
+    expect(payload.data.guide.safety.acceptsSecrets).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
   test("rejects missing messages and secret-shaped crypto chat inputs", async () => {
     const { base } = await boot();
 
