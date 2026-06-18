@@ -149,6 +149,7 @@ If no external-signer receipt is part of the demo, omit `--receipt-check` and
 Use the desktop app or web UI and capture screenshots for:
 
 - Bittensor chat: wallet/subnet/validator/readiness cards still render without overflow.
+- Customer readiness panel: `Crypto Gate`, `Venue Checks`, blockers, next actions, `Refresh Crypto Gate`, and `Ask Crypto Chat` are visible and do not imply live submission.
 - Hyperliquid chat: a read-only market/account request and a preview-only order response.
 - Polymarket chat: search/events/market detail and geoblock/compliance response.
 - Handoff cards: show external-signer language, hashes, expiry, and `canSubmit: false`.
