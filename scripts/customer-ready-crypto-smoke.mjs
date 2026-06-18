@@ -15,6 +15,8 @@ const offlineStages = [
   ["crypto.cli", "Unified crypto CLI fallback smoke", ["pnpm", "test:crypto-cli-fallback"]],
   ["crypto.agent_operator_loop", "Crypto agent operator loop", ["pnpm", "test:agent-crypto-operator-loop"]],
   ["crypto.hermes_customer_qa", "Hermes crypto customer QA handoff", ["pnpm", "test:hermes-crypto-customer-qa"]],
+  ["crypto.readiness_api", "Unified crypto readiness API contract", ["pnpm", "test:crypto-readiness-api"]],
+  ["crypto.customer_readiness_ui", "Customer readiness UI contract", ["pnpm", "test:customer-readiness-ui"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
     ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
