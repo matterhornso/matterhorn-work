@@ -49,6 +49,10 @@ function inferVenue(message, venue) {
   return "auto";
 }
 
+function isExecutionReadinessPrompt(message) {
+  return /(submit|submission|execute|execution readiness|live order|place order)/i.test(String(message || ""));
+}
+
 async function createMockServer() {
   const requests = [];
   const server = createServer(async (req, res) => {
@@ -63,6 +67,42 @@ async function createMockServer() {
         return writeJson(res, 400, { error: "market_secret_rejected" });
       }
       const venue = inferVenue(body.message, body.venue);
+      if (isExecutionReadinessPrompt(body.message)) {
+        return writeJson(res, 200, {
+          success: true,
+          venue: "auto",
+          intent: "market_execution_readiness",
+          execution: "read_only",
+          responseText: "Can submit: No. Live submission: Off. A separate security review is required before this changes.",
+          cards: [{ kind: "market_execution_readiness", title: "Market execution readiness" }],
+          sharedCards: [
+            {
+              version: "matterhorn.crypto.shared-card.v1",
+              kind: "readiness_report",
+              venue: "auto",
+              title: "Market execution readiness",
+              summary: "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.",
+              status: "warning",
+              originalKind: "market_execution_readiness",
+              source: { source: "matterhorn.execution-readiness", freshness: "live" },
+              warnings: ["This is a readiness contract, not execution permission."],
+              data: {
+                kind: "market_execution_readiness",
+                report: {
+                  readyForLiveSubmission: false,
+                  safety: {
+                    canSubmit: false,
+                    liveSubmissionEnabled: false,
+                    signsOrSubmits: false,
+                  },
+                },
+              },
+              safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+            },
+          ],
+          warnings: ["Live submission is disabled."],
+        });
+      }
       return writeJson(res, 200, {
         success: true,
         venue,
@@ -294,7 +334,25 @@ async function main() {
       },
     );
 
-    // 2. The runtime customer-readiness route is exposed through the public
+    // 2. crypto chat answers execution-readiness prompts as a cross-venue
+    // no-submit contract instead of routing to a venue execution flow.
+    await expectCli(
+      "crypto chat execution-readiness prompt",
+      mock.url,
+      ["crypto", "chat", "--message", "Can Matterhorn submit Hyperliquid and Polymarket orders yet?", "--venue", "auto"],
+      (payload) => {
+        if (payload.venue !== "auto") throw new Error(`expected venue auto, got ${payload.venue}`);
+        if (payload.intent !== "market_execution_readiness") throw new Error(`expected market_execution_readiness intent, got ${payload.intent}`);
+        if (payload.execution !== "read_only") throw new Error(`expected execution read_only, got ${payload.execution}`);
+        if (!String(payload.responseText || "").includes("Can submit: No")) throw new Error("expected no-submit response text");
+        if (!Array.isArray(payload.sharedCards) || payload.sharedCards.length === 0) throw new Error("expected sharedCards in response");
+        if (payload.sharedCards[0].kind !== "readiness_report") throw new Error("expected sharedCards kind readiness_report");
+        if (payload.sharedCards[0].safety?.liveSubmissionEnabled !== false) throw new Error("expected liveSubmissionEnabled=false");
+        if (payload.sharedCards[0].safety?.canSubmit !== false) throw new Error("expected canSubmit=false");
+      },
+    );
+
+    // 3. The runtime customer-readiness route is exposed through the public
     // crypto CLI and uses the client Bearer token with no request body.
     await expectCli(
       "crypto readiness",
@@ -310,7 +368,7 @@ async function main() {
     if (!readinessRequest) throw new Error("crypto readiness did not call /api/crypto/readiness");
     if (Object.keys(readinessRequest.body || {}).length !== 0) throw new Error("crypto readiness should not send a request body");
 
-    // 3. Execution-readiness exposes the no-submit contract through the
+    // 4. Execution-readiness exposes the no-submit contract through the
     // crypto CLI without accepting any body or secrets.
     await expectCli(
       "crypto execution-readiness",
@@ -326,7 +384,7 @@ async function main() {
     if (!executionReadinessRequest) throw new Error("crypto execution-readiness did not call /api/crypto/market-execution-readiness");
     if (Object.keys(executionReadinessRequest.body || {}).length !== 0) throw new Error("crypto execution-readiness should not send a request body");
 
-    // 4. market alias + ask subcommand routes an explicit Polymarket venue.
+    // 5. market alias + ask subcommand routes an explicit Polymarket venue.
     await expectCli(
       "market ask -> polymarket",
       mock.url,
