@@ -219,7 +219,34 @@ async function main() {
     }
     console.log("PASS crypto customer-smoke CLI writes offline JSON evidence");
 
-    // 5. The official SDK doctor is exposed through the public CLI without
+    // 5. The live public-data QA pack is exposed through the public CLI and can
+    // create fixture-fallback evidence without calling the server.
+    const livePublicRequestsBefore = mock.requests.length;
+    const livePublicDir = mkdtempSync(join(tmpdir(), "matterhorn-live-public-qa-cli-"));
+    await expectCli(
+      "crypto live-public-qa fixture",
+      mock.url,
+      ["crypto", "live-public-qa", "--fixture", "--output-dir", livePublicDir],
+      (payload) => {
+        if (payload.status !== "SKIPPED_WITH_FIXTURE_FALLBACK") {
+          throw new Error(`expected live public QA fixture fallback, got ${payload.status}`);
+        }
+        if (payload.safety?.nonCustodial !== true) throw new Error("expected live public QA nonCustodial=true");
+        if (payload.safety?.liveSubmissionEnabled !== false) throw new Error("expected live public QA liveSubmissionEnabled=false");
+        if (payload.safety?.signsOrSubmits !== false) throw new Error("expected live public QA signsOrSubmits=false");
+        if (!payload.files?.json || !existsSync(payload.files.json)) throw new Error("expected live public QA JSON evidence file");
+        if (!payload.files?.markdown || !existsSync(payload.files.markdown)) throw new Error("expected live public QA Markdown evidence file");
+        if (!payload.files?.sha256 || !existsSync(payload.files.sha256)) throw new Error("expected live public QA SHA-256 evidence file");
+      },
+    );
+    if (mock.requests.length !== livePublicRequestsBefore) throw new Error("crypto live-public-qa --fixture should not call the Matterhorn server");
+    const livePublicJson = readFileSync(join(livePublicDir, "matterhorn-live-public-qa.json"), "utf8");
+    if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(livePublicJson)) {
+      throw new Error("live public QA evidence leaked token or secret-shaped fields");
+    }
+    console.log("PASS crypto live-public-qa CLI writes offline fixture evidence");
+
+    // 6. The official SDK doctor is exposed through the public CLI without
     // requiring a Matterhorn server or accepting signing material.
     const sdkDoctorRequestsBefore = mock.requests.length;
     const sdkDoctor = await expectCli(

@@ -139,6 +139,20 @@ const server = createServer(async (req, res) => {
       });
     }
 
+    if (body.message === "what changed in my Bittensor wallet since last time?") {
+      assert.equal(body.contextId, "bt-chat-1");
+      assert.equal(body.ss58Address, VALID_SS58);
+      return json(res, 200, {
+        success: true,
+        execution: "answered",
+        plan: { intent: "wallet" },
+        responseText: "Wallet change baseline ready.",
+        cards: [card("intelligence_report", "Wallet change baseline")],
+        context: { id: "bt-chat-1", ss58Address: VALID_SS58, lastIntent: "wallet", lastExecution: "answered" },
+        data: { walletChange: { kind: "wallet_change", baselineAvailable: true, changedPositions: [] } },
+      });
+    }
+
     if (body.message === "which Bittensor subnet is useful for image generation?") {
       assert.equal(body.limit, 5);
       return json(res, 200, {
@@ -367,6 +381,7 @@ try {
     "bittensor.wallet.snapshot",
     "bittensor.wallet.stake_positions",
     "bittensor.wallet.intelligence",
+    "bittensor.wallet.change_baseline",
     "bittensor.discover.image",
     "bittensor.subnet.intelligence",
     "bittensor.validators.compare",
@@ -393,7 +408,7 @@ try {
   assert.equal(report.artifacts.watchCount, 1);
   assert.equal(report.artifacts.watchEvaluationCount, 1);
   assert.equal(report.artifacts.watchAlertCount, 1);
-  assert.equal(report.requestCount, 20);
+  assert.equal(report.requestCount, 21);
 
   assert.deepEqual(
     requests.map((request) => `${request.method} ${request.path}`),
@@ -401,6 +416,7 @@ try {
       "GET /api/bittensor/readiness",
       "GET /api/bittensor/capabilities",
       "GET /api/bittensor/capabilities/14",
+      "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",
       "POST /api/bittensor/chat/execute",

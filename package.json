@@ -83,6 +83,7 @@
     "test:market-receipt-evidence": "node scripts/market-receipt-evidence.test.mjs",
     "smoke:customer-ready-crypto": "node scripts/customer-ready-crypto-smoke.mjs --offline --strict",
     "test:customer-ready-crypto-smoke": "node scripts/customer-ready-crypto-smoke.test.mjs",
+    "test:crypto-live-public-qa": "node scripts/crypto-live-public-qa.test.mjs",
     "test:customer-readiness-ui": "node scripts/customer-readiness-ui.test.mjs",
     "test:crypto-readiness-api": "node scripts/crypto-readiness-api.test.mjs",
     "test:unified-crypto-chat": "bun test apps/server/src/tools/crypto-chat.test.ts",

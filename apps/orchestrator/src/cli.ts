@@ -3773,6 +3773,7 @@ function printHelp(): void {
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto readiness [options]",
     "  matterhorn-work crypto customer-smoke [--offline|--include-live-server] [options]",
+    "  matterhorn-work crypto live-public-qa --output-dir <path> [--strict] [options]",
     "  matterhorn-work crypto sdk-doctor [--strict] [--venue all|hyperliquid|polymarket]",
     "  matterhorn-work crypto sdk-normalize --venue <venue> --input <path> --output <path>",
     "  matterhorn-work crypto sdk-capture --hyperliquid-normalized <path> --polymarket-normalized <path> --output <path>",
@@ -3808,6 +3809,7 @@ function printHelp(): void {
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
     "  crypto readiness        Read the unified crypto customer-readiness report from the local server",
     "  crypto customer-smoke   Run consolidated customer-ready crypto smoke gates",
+    "  crypto live-public-qa   Build customer-safe live public-data QA evidence bundle",
     "  crypto sdk-doctor       Check official SDK validation env readiness without signing/submission",
     "  crypto sdk-normalize    Normalize redacted official-client output for SDK validation",
     "  crypto sdk-capture      Build official SDK evidence from normalized public artifacts",
@@ -7700,6 +7702,36 @@ const CRYPTO_CUSTOMER_SMOKE_VALUE_FLAGS = [
   "json-output",
 ] as const;
 
+const CRYPTO_LIVE_PUBLIC_QA_SUBCOMMANDS = new Set([
+  "live-public-qa",
+  "public-live-qa",
+  "customer-live-qa",
+]);
+
+const CRYPTO_LIVE_PUBLIC_QA_BOOL_FLAGS = [
+  "fixture",
+  "fixture-fallback",
+  "strict",
+] as const;
+
+const CRYPTO_LIVE_PUBLIC_QA_VALUE_FLAGS = [
+  "output-dir",
+  "server-url",
+  "openwork-url",
+  "token",
+  "openwork-token",
+  "ss58-address",
+  "coldkey",
+  "validator-hotkey",
+  "netuid",
+  "amount-tao",
+  "rate-tolerance",
+  "customer-ready-smoke",
+  "market-evidence-verify",
+  "bittensor-evidence-verify",
+  "customer-packet",
+] as const;
+
 const CRYPTO_SDK_DOCTOR_BOOL_FLAGS = [
   "strict",
 ] as const;
@@ -7968,6 +8000,14 @@ async function runCryptoCustomerSmoke(args: ParsedArgs): Promise<void> {
   await runOfflineCryptoScript("customer-ready-crypto-smoke.mjs", forwarded, "Customer-ready crypto smoke");
 }
 
+async function runCryptoLivePublicQa(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_LIVE_PUBLIC_QA_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_LIVE_PUBLIC_QA_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("crypto-live-public-qa.mjs", forwarded, "Live public crypto QA pack");
+}
+
 async function runCryptoEvidenceBundle(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS, forwarded);
@@ -8042,6 +8082,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_CUSTOMER_SMOKE_SUBCOMMANDS.has(subcommand)) {
       await runCryptoCustomerSmoke(args);
+      return;
+    }
+
+    if (CRYPTO_LIVE_PUBLIC_QA_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoLivePublicQa(args, outputJson);
       return;
     }
 
@@ -8124,7 +8169,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
