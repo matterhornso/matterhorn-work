@@ -293,6 +293,72 @@ export interface MarketExecutionChainResponse {
   cards: MarketExecutionChainCard[];
 }
 
+export const MARKET_SDK_VALIDATION_MODES = [
+  "fixture",
+  "operator_owned_fixture",
+  "operator_owned_testnet",
+] as const;
+export type MarketSdkValidationMode = (typeof MARKET_SDK_VALIDATION_MODES)[number];
+
+export const MARKET_SDK_VALIDATION_NETWORKS = {
+  hyperliquid: ["fixture", "hyperliquid-testnet"],
+  polymarket: ["fixture", "polygon-amoy"],
+} as const;
+export type MarketSdkValidationHyperliquidNetwork = (typeof MARKET_SDK_VALIDATION_NETWORKS.hyperliquid)[number];
+export type MarketSdkValidationPolymarketNetwork = (typeof MARKET_SDK_VALIDATION_NETWORKS.polymarket)[number];
+
+export interface MarketSdkValidationSafety {
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  nonCustodial: true;
+  acceptsSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  runsPrivateSdkSigning: false;
+  computesFinalSignatures: false;
+  callsExchanges: false;
+}
+
+export interface MarketSdkValidationCommands {
+  doctor: string;
+  fixtureValidation: string;
+  operatorOwnedTestnetValidation: string;
+  operatorLoop: string;
+}
+
+export interface MarketSdkValidationGuide {
+  success: true;
+  version: "matterhorn.market.sdk-validation-guide.v1";
+  title: "Official SDK validation";
+  summary: string;
+  modes: MarketSdkValidationMode[];
+  networks: {
+    hyperliquid: MarketSdkValidationHyperliquidNetwork[];
+    polymarket: MarketSdkValidationPolymarketNetwork[];
+  };
+  commands: MarketSdkValidationCommands;
+  outputs: string[];
+  safety: MarketSdkValidationSafety;
+  forbidden: string[];
+}
+
+export interface MarketSdkValidationCard {
+  kind: "market_sdk_validation";
+  title: "Official SDK validation";
+  summary: string;
+  tone: Extract<MarketExecutionReadinessCardTone, "info">;
+  source: MarketSourceFreshness;
+  items: MarketExecutionReadinessCardItem[];
+  warnings: string[];
+  data: { guide: MarketSdkValidationGuide };
+}
+
+export interface MarketSdkValidationResponse {
+  success: true;
+  guide: MarketSdkValidationGuide;
+  cards: MarketSdkValidationCard[];
+}
+
 export const MARKET_EXECUTION_MODES = [
   "disabled",
   "testnet_external_signer",
