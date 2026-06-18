@@ -9,6 +9,7 @@ This is Matterhorn Work's first Hyperliquid slice. It is intentionally read-only
 - Normalize public position and open-order summaries from `clearinghouseState` and `openOrders`.
 - Read current funding/open-interest context for a market from `metaAndAssetCtxs`.
 - Read an L2 orderbook snapshot for a requested asset.
+- Create/check/digest read-only watches for funding, price/orderbook movement, position margin, open-order state, and market availability.
 - Prepare a non-submittable order preview with consequence text, source labels, warnings, and `canSubmit: false`.
 - Resolve close/reduce intent ("close half my ETH position") against the live public position when an address is supplied.
 
@@ -123,6 +124,24 @@ matterhorn-work hyperliquid orderbook \
   --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \
   --asset BTC \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid watch create \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --kind funding_rate \
+  --asset BTC \
+  --threshold 0.0001 \
+  --direction above \
+  --json
+```
+
+```bash
+matterhorn-work hyperliquid watch check \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
   --json
 ```
 

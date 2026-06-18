@@ -119,7 +119,11 @@ import {
   buildHyperliquidFundingCard,
   buildHyperliquidMarketListCard,
   buildHyperliquidOrderPreviewCard,
+  buildHyperliquidWatchCard,
+  buildHyperliquidWatchDescriptor,
+  buildHyperliquidWatchDigest,
   buildHyperliquidOrderbookCard,
+  checkHyperliquidWatchDescriptor,
   coerceHyperliquidHandoffReference,
   coerceHyperliquidReceiptInput,
   executeHyperliquidChatWorkflow,
@@ -128,6 +132,7 @@ import {
   isValidHyperliquidAddress,
   prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
+  type HyperliquidWatchDescriptor,
   verifyHyperliquidReceipt,
 } from "./tools/hyperliquid.js";
 import {
@@ -136,14 +141,19 @@ import {
   buildPolymarketMarketDetailCard,
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
+  buildPolymarketWatchCard,
+  buildPolymarketWatchDigest,
   buildPolymarketOrderbookCard,
+  checkPolymarketWatchDescriptor,
   coercePolymarketHandoffReference,
   coercePolymarketReceiptInput,
   executePolymarketChatWorkflow,
   findForbiddenPolymarketCredentialInput,
+  buildPolymarketWatchDescriptor,
   polymarketProvider,
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
+  type PolymarketWatchDescriptor,
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
 import {
@@ -3957,6 +3967,64 @@ function createRoutes(
     return jsonResponse(result);
   });
 
+  const hyperliquidWatchStore = new Map<string, HyperliquidWatchDescriptor>();
+  const polymarketWatchStore = new Map<string, PolymarketWatchDescriptor>();
+
+  const coerceHyperliquidWatch = (value: unknown): HyperliquidWatchDescriptor | null => {
+    if (!isRecord(value) || value.version !== "matterhorn.hyperliquid.watch.v1") return null;
+    const kind = readStringField(value, "kind");
+    if (!["funding_rate", "price_or_orderbook", "position_margin", "open_order_state", "market_availability"].includes(kind)) return null;
+    const id = readStringField(value, "id");
+    if (!id) return null;
+    const direction = readStringField(value, "direction");
+    const fallbackSource: HyperliquidWatchDescriptor["source"] = { source: "client", fetchedAt: new Date().toISOString(), freshness: "unknown", warnings: [] };
+    const source = isRecord(value.source) ? value.source as unknown as HyperliquidWatchDescriptor["source"] : fallbackSource;
+    return {
+      version: "matterhorn.hyperliquid.watch.v1",
+      id,
+      kind: kind as HyperliquidWatchDescriptor["kind"],
+      asset: readStringField(value, "asset") || null,
+      address: readStringField(value, "address") || null,
+      threshold: typeof value.threshold === "number" && Number.isFinite(value.threshold) ? value.threshold : null,
+      direction: ["above", "below", "change", "any"].includes(direction) ? direction as HyperliquidWatchDescriptor["direction"] : "any",
+      createdAt: readStringField(value, "createdAt") || new Date().toISOString(),
+      source,
+      warnings: Array.isArray(value.warnings) ? value.warnings.filter((entry): entry is string => typeof entry === "string") : [],
+      note: readStringField(value, "note") || "Read-only Hyperliquid watch.",
+    };
+  };
+
+  const coercePolymarketWatch = (value: unknown): PolymarketWatchDescriptor | null => {
+    if (!isRecord(value) || value.version !== "matterhorn.polymarket.watch.v1") return null;
+    const id = readStringField(value, "id");
+    const marketId = readStringField(value, "marketId");
+    if (!id || !marketId) return null;
+    const fallbackSource: PolymarketWatchDescriptor["source"] = { source: "client", fetchedAt: new Date().toISOString(), freshness: "unknown", warnings: [] };
+    const source = isRecord(value.source) ? value.source as unknown as PolymarketWatchDescriptor["source"] : fallbackSource;
+    const conditions = Array.isArray(value.conditions)
+      ? value.conditions.filter(isRecord).map((condition) => ({
+          outcome: readStringField(condition, "outcome"),
+          currentProbability: typeof condition.currentProbability === "number" ? condition.currentProbability : null,
+          upperThreshold: typeof condition.upperThreshold === "number" ? condition.upperThreshold : null,
+          lowerThreshold: typeof condition.lowerThreshold === "number" ? condition.lowerThreshold : null,
+          note: readStringField(condition, "note"),
+        })).filter((condition) => condition.outcome)
+      : [];
+    return {
+      version: "matterhorn.polymarket.watch.v1",
+      id,
+      marketId,
+      marketLabel: readStringField(value, "marketLabel") || marketId,
+      endDate: readStringField(value, "endDate") || null,
+      resolvesInDays: typeof value.resolvesInDays === "number" ? value.resolvesInDays : null,
+      conditions,
+      createdAt: readStringField(value, "createdAt") || new Date().toISOString(),
+      source,
+      warnings: Array.isArray(value.warnings) ? value.warnings.filter((entry): entry is string => typeof entry === "string") : [],
+      note: readStringField(value, "note") || "Read-only Polymarket watch.",
+    };
+  };
+
   addRoute(routes, "GET", "/api/hyperliquid/markets", "client", async (ctx) => {
     const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 20;
     const markets = await hyperliquidProvider.listMarkets(limit);
@@ -4014,6 +4082,57 @@ function createRoutes(
     const asset = ctx.params.asset.trim();
     const orderbook = await hyperliquidProvider.getOrderbook(asset);
     return jsonResponse({ success: true, orderbook, cards: [buildHyperliquidOrderbookCard(orderbook)] });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/watches", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid watch input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const watch = buildHyperliquidWatchDescriptor({
+      message: typeof body.message === "string" ? body.message : null,
+      asset: typeof body.asset === "string" ? body.asset : null,
+      address: typeof body.address === "string" ? body.address : null,
+      watchKind: typeof body.kind === "string" ? body.kind : typeof body.watchKind === "string" ? body.watchKind : null,
+      threshold: body.threshold === undefined ? null : body.threshold as never,
+      direction: typeof body.direction === "string" ? body.direction : null,
+    });
+    hyperliquidWatchStore.set(watch.id, watch);
+    const check = await checkHyperliquidWatchDescriptor(watch, hyperliquidProvider);
+    return jsonResponse({ success: true, watch, check, cards: [buildHyperliquidWatchCard(watch, check)] });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/watches", "client", async () => {
+    const watches = Array.from(hyperliquidWatchStore.values());
+    return jsonResponse({ success: true, watches, count: watches.length });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/watches/check", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid watch check input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const explicit = coerceHyperliquidWatch(body.watch);
+    const watches = explicit
+      ? [explicit]
+      : Array.isArray(body.watches)
+        ? body.watches.map(coerceHyperliquidWatch).filter((watch): watch is HyperliquidWatchDescriptor => Boolean(watch))
+        : Array.from(hyperliquidWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
+    return jsonResponse({
+      success: true,
+      checks,
+      cards: watches.map((watch, index) => buildHyperliquidWatchCard(watch, checks[index])),
+      digest: buildHyperliquidWatchDigest(checks),
+    });
+  });
+
+  addRoute(routes, "GET", "/api/hyperliquid/watches/digest", "client", async () => {
+    const watches = Array.from(hyperliquidWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
+    return jsonResponse({ success: true, digest: buildHyperliquidWatchDigest(checks), checks });
   });
 
   addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {
@@ -4257,6 +4376,55 @@ function createRoutes(
   addRoute(routes, "GET", "/api/polymarket/compliance", "client", async () => {
     const compliance = await polymarketProvider.checkCompliance();
     return jsonResponse({ success: true, compliance, cards: [buildPolymarketComplianceCard(compliance)] });
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/watches", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket watch input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const marketId = typeof body.marketId === "string" ? body.marketId.trim() : "";
+    if (!marketId) {
+      throw new ApiError(400, "invalid_polymarket_watch", "marketId is required to create a Polymarket watch");
+    }
+    const market = await polymarketProvider.getMarket(marketId);
+    const watch = buildPolymarketWatchDescriptor(market);
+    polymarketWatchStore.set(watch.id, watch);
+    const check = await checkPolymarketWatchDescriptor(watch, polymarketProvider);
+    return jsonResponse({ success: true, market, watch, check, cards: [buildPolymarketWatchCard(watch, check)] });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/watches", "client", async () => {
+    const watches = Array.from(polymarketWatchStore.values());
+    return jsonResponse({ success: true, watches, count: watches.length });
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/watches/check", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket watch check input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const explicit = coercePolymarketWatch(body.watch);
+    const watches = explicit
+      ? [explicit]
+      : Array.isArray(body.watches)
+        ? body.watches.map(coercePolymarketWatch).filter((watch): watch is PolymarketWatchDescriptor => Boolean(watch))
+        : Array.from(polymarketWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
+    return jsonResponse({
+      success: true,
+      checks,
+      cards: watches.map((watch, index) => buildPolymarketWatchCard(watch, checks[index])),
+      digest: buildPolymarketWatchDigest(checks),
+    });
+  });
+
+  addRoute(routes, "GET", "/api/polymarket/watches/digest", "client", async () => {
+    const watches = Array.from(polymarketWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
+    return jsonResponse({ success: true, digest: buildPolymarketWatchDigest(checks), checks });
   });
 
   addRoute(routes, "POST", "/api/polymarket/orders/preview", "client", async (ctx) => {

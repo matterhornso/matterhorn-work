@@ -39,6 +39,7 @@ const offlineStages = [
   ["polymarket.read_preview", "Polymarket read-preview self-test", ["pnpm", "test:polymarket-read-preview-qa"]],
   ["hyperliquid.cli", "Hyperliquid CLI fallback smoke", ["pnpm", "test:hyperliquid-cli-fallback"]],
   ["polymarket.cli", "Polymarket CLI fallback smoke", ["pnpm", "test:polymarket-cli-fallback"]],
+  ["market.watch_workflows", "Market watch and alert workflows", ["pnpm", "test:market-watch-workflows"]],
   ["market.live_readonly_self_test", "Market live read-only smoke self-test", ["pnpm", "test:market-live-readonly-smoke"]],
   ["bittensor.customer_readiness", "Bittensor customer readiness gate", ["pnpm", "test:bittensor-customer-readiness-gate"]],
   ["bittensor.receipt", "Bittensor receipt check", ["pnpm", "test:bittensor-receipt-check"]],

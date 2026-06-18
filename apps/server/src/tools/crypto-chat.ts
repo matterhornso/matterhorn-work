@@ -263,6 +263,7 @@ function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind
     case "signing_receipt":
       return "receipt_status";
     case "watchlist":
+    case "hyperliquid_watch":
     case "polymarket_watch":
       return "watch_alert";
     default:
