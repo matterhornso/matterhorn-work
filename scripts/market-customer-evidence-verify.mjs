@@ -7,6 +7,7 @@ const REQUIRED_SMOKE_STAGES = [
   "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "market.execution_safety",
+  "market.execution_readiness_api",
   "market.official_sdk_validation",
   "market.customer_evidence_bundle",
   "hyperliquid.readiness",

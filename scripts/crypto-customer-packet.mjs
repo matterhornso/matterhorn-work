@@ -12,6 +12,7 @@ const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "market.execution_safety",
+  "market.execution_readiness_api",
   "market.sign_request_phase1",
   "market.artifact_validation_phase2",
   "market.artifact_reconciliation",

@@ -75,6 +75,7 @@ writeFileSync(smokeOutput, JSON.stringify({
     { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
     { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
     { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+    { id: "market.execution_readiness_api", label: "Market execution-readiness API and chat contract", status: "pass" },
     { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
     { id: "market.artifact_reconciliation", label: "Market artifact reconciliation evidence", status: "pass" },
     { id: "market.official_sdk_fixtures", label: "Market official SDK fixture capture", status: "pass" },

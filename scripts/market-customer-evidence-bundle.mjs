@@ -15,6 +15,7 @@ const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   ["crypto.direct_prompt_safety", "Direct venue credential prompt safety"],
   ["crypto.shared_card_contract", "Unified crypto shared-card contract"],
   ["market.execution_safety", "Market execution safety gate"],
+  ["market.execution_readiness_api", "Market execution-readiness API and chat contract"],
   ["market.official_sdk_validation", "Market official SDK validation track"],
   ["market.artifact_reconciliation", "Market artifact reconciliation evidence"],
   ["market.customer_evidence_bundle", "Market customer evidence bundle"],

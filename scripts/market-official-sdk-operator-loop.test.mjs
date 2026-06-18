@@ -19,6 +19,7 @@ await writeFile(smokePath, JSON.stringify({
     { id: "market.official_sdk_doctor", label: "Market official SDK validation doctor", status: "pass" },
     { id: "market.official_sdk_normalize", label: "Market official SDK artifact normalizer", status: "pass" },
     { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+    { id: "market.execution_readiness_api", label: "Market execution-readiness API and chat contract", status: "pass" },
     { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
     { id: "market.artifact_reconciliation", label: "Market artifact reconciliation evidence", status: "pass" },
     { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
