@@ -16,6 +16,7 @@ const REQUIRED_CUSTOMER_SMOKE_STAGES = [
   ["crypto.shared_card_contract", "Unified crypto shared-card contract"],
   ["market.execution_safety", "Market execution safety gate"],
   ["market.official_sdk_validation", "Market official SDK validation track"],
+  ["market.artifact_reconciliation", "Market artifact reconciliation evidence"],
   ["market.customer_evidence_bundle", "Market customer evidence bundle"],
   ["hyperliquid.readiness", "Hyperliquid readiness gate"],
   ["polymarket.readiness", "Polymarket readiness gate"],
@@ -40,12 +41,14 @@ const config = {
   operatorSummary: arg("--operator-summary"),
   sdkManifestCheck: arg("--sdk-manifest-check"),
   receiptCheck: arg("--receipt-check"),
+  artifactReconciliation: arg("--artifact-reconciliation"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
   strict: flag("--strict"),
   requireOfficialSdkValidated: flag("--require-official-sdk-validated"),
   requireSdkManifestCheck: flag("--require-sdk-manifest-check"),
   requireReceiptCheck: flag("--require-receipt-check"),
+  requireArtifactReconciliation: flag("--require-artifact-reconciliation"),
   title: arg("--title") || "Matterhorn Work Market Customer Evidence Bundle",
 };
 
@@ -60,9 +63,11 @@ function usage() {
     "  --operator-summary <path>           Optional Markdown summary from matterhorn-work crypto sdk-loop.",
     "  --sdk-manifest-check <path>         Optional JSON from matterhorn-work crypto sdk-manifest-check.",
     "  --receipt-check <path>              Optional JSON from matterhorn-work crypto receipt-check.",
+    "  --artifact-reconciliation <path>    Optional JSON from scripts/market-artifact-reconciliation.mjs.",
     "  --require-official-sdk-validated    Require every venue status to be validated, not pending.",
     "  --require-sdk-manifest-check        Require SDK run manifest-check evidence to be accepted.",
     "  --require-receipt-check             Require public receipt-check evidence to be accepted and tied to the handoff.",
+    "  --require-artifact-reconciliation   Require artifact reconciliation evidence to be ready.",
     "  --output, -o <path>                 Write Markdown bundle to a file. Defaults to stdout.",
     "  --json-output <path>                Write machine-readable summary JSON.",
     "  --strict                            Exit nonzero when not customer-ready.",
@@ -253,6 +258,53 @@ function summarizeReceiptCheck(path, raw, requireReceiptCheck) {
   };
 }
 
+function summarizeArtifactReconciliation(path, raw, requireArtifactReconciliation) {
+  if (!path || raw === null) {
+    return {
+      present: false,
+      path: null,
+      file: null,
+      ready: !requireArtifactReconciliation,
+      version: null,
+      venueCount: 0,
+      readyVenues: [],
+      warnings: requireArtifactReconciliation ? ["Artifact reconciliation evidence is required but not attached."] : [],
+      errors: requireArtifactReconciliation ? ["Artifact reconciliation evidence is required but missing."] : [],
+    };
+  }
+
+  const errors = [];
+  const warnings = [];
+  if (raw.version !== "matterhorn.market.artifact-reconciliation.v1") {
+    errors.push("Artifact reconciliation evidence does not use matterhorn.market.artifact-reconciliation.v1.");
+  }
+  if (raw.ready !== true) errors.push("Artifact reconciliation evidence is not ready.");
+  if (raw.safety?.nonCustodial !== true) errors.push("Artifact reconciliation evidence must keep nonCustodial=true.");
+  if (raw.safety?.liveSubmissionEnabled !== false) errors.push("Artifact reconciliation evidence must keep liveSubmissionEnabled=false.");
+  if (raw.safety?.signsOrSubmits !== false) errors.push("Artifact reconciliation evidence must keep signsOrSubmits=false.");
+  if (raw.safety?.acceptsSecrets !== false) errors.push("Artifact reconciliation evidence must keep acceptsSecrets=false.");
+  if (raw.safety?.publicMetadataOnly !== true) errors.push("Artifact reconciliation evidence must keep publicMetadataOnly=true.");
+  const venues = Array.isArray(raw.venues) ? raw.venues : [];
+  if (venues.length === 0) errors.push("Artifact reconciliation evidence must include at least one venue.");
+  for (const venue of venues) {
+    if (venue?.present && venue.ready !== true) errors.push(`Artifact reconciliation venue is not ready: ${venue.venue ?? "unknown"}.`);
+  }
+  if (Array.isArray(raw.errors)) errors.push(...raw.errors.map((item) => String(item)));
+  if (Array.isArray(raw.warnings)) warnings.push(...raw.warnings.map((item) => String(item)));
+
+  return {
+    present: true,
+    path,
+    file: basename(path),
+    ready: raw.ready === true && errors.length === 0,
+    version: raw.version ?? null,
+    venueCount: venues.filter((venue) => venue?.present).length,
+    readyVenues: venues.filter((venue) => venue?.present && venue?.ready === true).map((venue) => String(venue.venue ?? "unknown")),
+    warnings: [...new Set(warnings)],
+    errors: [...new Set(errors)],
+  };
+}
+
 function summarizeSdkManifestCheck(path, raw, requireSdkManifestCheck) {
   if (!path || raw === null) {
     return {
@@ -361,6 +413,21 @@ function renderMarkdown(summary) {
       ? markdownBullet(`Venue statuses: ${summary.sdkManifestCheck.venueCount}`)
       : "",
     "",
+    "## Artifact Reconciliation Evidence",
+    "",
+    summary.artifactReconciliation.present
+      ? markdownBullet(`Attached: yes (${summary.artifactReconciliation.file})`)
+      : "- Not attached.",
+    summary.artifactReconciliation.present
+      ? markdownBullet(`Ready: ${summary.artifactReconciliation.ready ? "yes" : "no"}`)
+      : "",
+    summary.artifactReconciliation.present
+      ? markdownBullet(`Ready venues: ${summary.artifactReconciliation.readyVenues.length ? summary.artifactReconciliation.readyVenues.join(", ") : "none"}`)
+      : "",
+    summary.artifactReconciliation.present
+      ? markdownBullet(`Venue count: ${summary.artifactReconciliation.venueCount}`)
+      : "",
+    "",
     "## Public Receipt Evidence",
     "",
     summary.receiptCheck.present
@@ -423,6 +490,7 @@ export async function buildMarketCustomerEvidenceBundle(config) {
   const officialRaw = await readJson(config.officialSdkValidation, "official SDK validation evidence");
   const sdkManifestCheckRaw = await readJson(config.sdkManifestCheck, "SDK run manifest-check evidence");
   const receiptCheckRaw = await readJson(config.receiptCheck, "market receipt-check evidence");
+  const artifactReconciliationRaw = await readJson(config.artifactReconciliation, "market artifact reconciliation evidence");
   const operatorSummaryRaw = await readPublicText(config.operatorSummary, "operator summary");
   if (!officialRaw) throw new Error("Missing --official-sdk-validation evidence JSON.");
 
@@ -445,18 +513,25 @@ export async function buildMarketCustomerEvidenceBundle(config) {
   const officialSdkValidation = summarizeOfficialSdk(officialRaw, config.requireOfficialSdkValidated);
   const sdkManifestCheck = summarizeSdkManifestCheck(config.sdkManifestCheck, sdkManifestCheckRaw, config.requireSdkManifestCheck);
   const receiptCheck = summarizeReceiptCheck(config.receiptCheck, receiptCheckRaw, config.requireReceiptCheck);
+  const artifactReconciliation = summarizeArtifactReconciliation(
+    config.artifactReconciliation,
+    artifactReconciliationRaw,
+    config.requireArtifactReconciliation,
+  );
   const operatorSummary = summarizeOperatorSummary(config.operatorSummary, operatorSummaryRaw);
   const warnings = [
     ...(customerReadySmoke.present && !customerReadySmoke.ready ? ["Customer-ready crypto smoke is not ready."] : []),
     ...officialSdkValidation.warnings,
     ...sdkManifestCheck.warnings,
     ...receiptCheck.warnings,
+    ...artifactReconciliation.warnings,
     ...operatorSummary.warnings,
   ];
   const errors = [
     ...officialSdkValidation.validation.errors,
     ...sdkManifestCheck.errors,
     ...receiptCheck.errors,
+    ...artifactReconciliation.errors,
     ...customerReadySmoke.requiredStages
       .filter((stage) => stage.status !== "pass")
       .map((stage) => `Customer-ready crypto smoke required stage did not pass: ${stage.id} (${stage.status})`),
@@ -465,7 +540,12 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     ...(!smokeGitBranch ? ["Customer-ready crypto smoke must include metadata.gitBranch."] : []),
     ...(config.requireOfficialSdkValidated && !officialSdkValidation.allValidated ? ["Official SDK evidence is not fully validated for every venue."] : []),
   ];
-  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) && officialSdkValidation.ready && sdkManifestCheck.ready && receiptCheck.ready && errors.length === 0;
+  const ready = (customerReadySmoke.present ? customerReadySmoke.ready : true) &&
+    officialSdkValidation.ready &&
+    sdkManifestCheck.ready &&
+    receiptCheck.ready &&
+    artifactReconciliation.ready &&
+    errors.length === 0;
   const summary = {
     title: config.title,
     ready,
@@ -476,6 +556,8 @@ export async function buildMarketCustomerEvidenceBundle(config) {
     sdkManifestCheck,
     receiptCheckPath: config.receiptCheck,
     receiptCheck,
+    artifactReconciliationPath: config.artifactReconciliation,
+    artifactReconciliation,
     operatorSummary,
     warnings,
     errors,

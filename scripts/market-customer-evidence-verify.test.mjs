@@ -14,6 +14,7 @@ const requiredStages = [
   "crypto.shared_card_contract",
   "market.execution_safety",
   "market.official_sdk_validation",
+  "market.artifact_reconciliation",
   "market.customer_evidence_bundle",
   "hyperliquid.readiness",
   "polymarket.readiness",
@@ -60,6 +61,12 @@ const goodSummary = {
     ok: true,
     matchesHandoff: true,
   },
+  artifactReconciliation: {
+    present: true,
+    ready: true,
+    venueCount: 2,
+    readyVenues: ["hyperliquid", "polymarket"],
+  },
   warnings: [],
   errors: [],
   safety: {
@@ -83,6 +90,8 @@ const goodMarkdown = [
   "",
   "## Public Receipt Evidence",
   "",
+  "## Artifact Reconciliation Evidence",
+  "",
   "## Red Lines",
   "",
 ].join("\n");
@@ -91,7 +100,7 @@ try {
   const direct = verifyMarketCustomerEvidenceBundle({
     summary: goodSummary,
     markdown: goodMarkdown,
-    options: { requireSdkManifestCheck: true, requireReceiptCheck: true },
+    options: { requireSdkManifestCheck: true, requireReceiptCheck: true, requireArtifactReconciliation: true },
   });
   assert.equal(direct.ok, true);
   assert.equal(direct.ready, true);
@@ -108,6 +117,7 @@ try {
     markdownPath,
     "--require-sdk-manifest-check",
     "--require-receipt-check",
+    "--require-artifact-reconciliation",
     "--output",
     outputPath,
     "--strict",
@@ -119,29 +129,52 @@ try {
   assert.equal(happyJson.ready, true);
   assert.ok(happyJson.checks.some((check) => check.id === "sdk_manifest.accepted"));
   assert.ok(happyJson.checks.some((check) => check.id === "receipt.accepted"));
+  assert.ok(happyJson.checks.some((check) => check.id === "artifact_reconciliation.accepted"));
 
   const missingStrict = writeJson("missing-strict.json", {
     ...goodSummary,
     sdkManifestCheck: { present: false },
     receiptCheck: { present: false },
+    artifactReconciliation: { present: false },
   });
   const missing = run([
     "--bundle-json",
     missingStrict,
     "--require-sdk-manifest-check",
     "--require-receipt-check",
+    "--require-artifact-reconciliation",
     "--strict",
     "--json",
   ]);
   assert.notEqual(missing.status, 0, "strict verifier should fail when required evidence is absent");
   assert.match(missing.stdout, /sdk_manifest\.required/);
   assert.match(missing.stdout, /receipt\.required/);
+  assert.match(missing.stdout, /artifact_reconciliation\.required/);
 
   const badMarkdownPath = join(tmp, "bad-bundle.md");
   writeFileSync(badMarkdownPath, goodMarkdown.replace("READY_FOR_TEST_CUSTOMER_QA", "NOT_READY"));
   const badMarkdown = run(["--bundle-json", summaryPath, "--bundle-md", badMarkdownPath, "--strict", "--json"]);
   assert.notEqual(badMarkdown.status, 0, "strict verifier should fail NOT_READY Markdown");
   assert.match(badMarkdown.stdout, /markdown\.ready_result/);
+
+  const badArtifactReconciliationPath = writeJson("bad-artifact-reconciliation.json", {
+    ...goodSummary,
+    artifactReconciliation: {
+      present: true,
+      ready: false,
+      venueCount: 1,
+      readyVenues: [],
+    },
+  });
+  const badArtifactReconciliation = run([
+    "--bundle-json",
+    badArtifactReconciliationPath,
+    "--require-artifact-reconciliation",
+    "--strict",
+    "--json",
+  ]);
+  assert.notEqual(badArtifactReconciliation.status, 0, "strict verifier should fail not-ready artifact reconciliation");
+  assert.match(badArtifactReconciliation.stdout, /artifact_reconciliation\.accepted/);
 
   const badSecretPath = writeJson("bad-secret.json", {
     ...goodSummary,

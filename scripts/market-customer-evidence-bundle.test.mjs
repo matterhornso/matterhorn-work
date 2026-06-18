@@ -18,6 +18,7 @@ try {
   const operatorSummary = path.join(tmp, "matterhorn-market-sdk-operator-summary.md");
   const sdkManifestCheck = path.join(tmp, "market-sdk-manifest-check.json");
   const receiptCheck = path.join(tmp, "market-receipt-check.json");
+  const artifactReconciliation = path.join(tmp, "market-artifact-reconciliation.json");
   const markdownOutput = path.join(tmp, "market-evidence.md");
   const jsonOutput = path.join(tmp, "market-evidence.json");
 
@@ -30,6 +31,7 @@ try {
       { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
       { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
       { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
+      { id: "market.artifact_reconciliation", label: "Market artifact reconciliation evidence", status: "pass" },
       { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
       { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
       { id: "hyperliquid.readiness", label: "Hyperliquid readiness gate", status: "pass" },
@@ -100,6 +102,35 @@ try {
       acceptsSecrets: false,
     },
   }));
+  await writeFile(artifactReconciliation, JSON.stringify({
+    version: "matterhorn.market.artifact-reconciliation.v1",
+    ready: true,
+    venues: [
+      {
+        venue: "hyperliquid",
+        present: true,
+        ready: true,
+        status: "accepted_public_metadata",
+        receiptCandidate: { version: "matterhorn.market.receipt.v1", venue: "hyperliquid", status: "received", action: "place_order" },
+      },
+      {
+        venue: "polymarket",
+        present: true,
+        ready: true,
+        status: "accepted_public_metadata",
+        receiptCandidate: { version: "matterhorn.market.receipt.v1", venue: "polymarket", status: "received", action: "buy_shares" },
+      },
+    ],
+    errors: [],
+    warnings: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      publicMetadataOnly: true,
+    },
+  }));
 
   execFileSync("node", [
     script,
@@ -113,6 +144,8 @@ try {
     sdkManifestCheck,
     "--receipt-check",
     receiptCheck,
+    "--artifact-reconciliation",
+    artifactReconciliation,
     "--output",
     markdownOutput,
     "--json-output",
@@ -134,6 +167,8 @@ try {
   assert.match(markdown, /Accepted by receipt checker: yes/);
   assert.match(markdown, /Matches original handoff: yes/);
   assert.match(markdown, /hl-order-123/);
+  assert.match(markdown, /Artifact Reconciliation Evidence/);
+  assert.match(markdown, /Ready venues: hyperliquid, polymarket/);
   assert.match(markdown, /Required Smoke Stages/);
   assert.match(markdown, /Unified crypto shared-card contract/);
   assert.match(markdown, /matterhorn-market-sdk-operator-summary\.md/);
@@ -161,6 +196,10 @@ try {
   assert.equal(summary.receiptCheck.ready, true);
   assert.equal(summary.receiptCheck.venue, "hyperliquid");
   assert.equal(summary.receiptCheck.orderId, "hl-order-123");
+  assert.equal(summary.artifactReconciliation.present, true);
+  assert.equal(summary.artifactReconciliation.ready, true);
+  assert.equal(summary.artifactReconciliation.venueCount, 2);
+  assert.deepEqual(summary.artifactReconciliation.readyVenues, ["hyperliquid", "polymarket"]);
 
   const wrappedMarkdown = execFileSync("node", [
     script,
@@ -260,6 +299,23 @@ try {
   assert.ok(missingReceiptError, "require-receipt-check should fail when receipt evidence is missing");
   assert.match(String(missingReceiptError.stdout), /Receipt-check evidence is required/i);
 
+  let missingArtifactReconciliationError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--require-artifact-reconciliation",
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    missingArtifactReconciliationError = error;
+  }
+  assert.ok(missingArtifactReconciliationError, "require-artifact-reconciliation should fail when evidence is missing");
+  assert.match(String(missingArtifactReconciliationError.stdout), /Artifact reconciliation evidence is required/i);
+
   const mismatchedReceipt = path.join(tmp, "mismatched-market-receipt-check.json");
   await writeFile(mismatchedReceipt, JSON.stringify({
     ok: false,
@@ -302,6 +358,40 @@ try {
   assert.ok(mismatchedReceiptError, "strict bundle should fail rejected receipt-check evidence");
   assert.match(String(mismatchedReceiptError.stdout), /Receipt-check evidence was not accepted/i);
   assert.match(String(mismatchedReceiptError.stdout), /marketId mismatch/i);
+
+  const badArtifactReconciliation = path.join(tmp, "bad-market-artifact-reconciliation.json");
+  await writeFile(badArtifactReconciliation, JSON.stringify({
+    version: "matterhorn.market.artifact-reconciliation.v1",
+    ready: false,
+    venues: [{ venue: "hyperliquid", present: true, ready: false, status: "rejected" }],
+    errors: ["hyperliquid artifact validation was not accepted."],
+    warnings: [],
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      publicMetadataOnly: true,
+    },
+  }));
+  let badArtifactReconciliationError = null;
+  try {
+    execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--artifact-reconciliation",
+        badArtifactReconciliation,
+        "--strict",
+      ], { cwd: repoRoot, stdio: "pipe" });
+  } catch (error) {
+    badArtifactReconciliationError = error;
+  }
+  assert.ok(badArtifactReconciliationError, "strict bundle should fail rejected artifact reconciliation evidence");
+  assert.match(String(badArtifactReconciliationError.stdout), /Artifact reconciliation evidence is not ready/i);
+  assert.match(String(badArtifactReconciliationError.stdout), /not accepted/i);
 
   const bad = path.join(tmp, "bad-official-sdk-evidence.json");
   await writeFile(bad, JSON.stringify({ ...evidence, rawSignature: "0xdeadbeef" }));
@@ -361,6 +451,33 @@ try {
         official,
         "--sdk-manifest-check",
         badManifestCheck,
+      ], { cwd: repoRoot, stdio: "pipe" }),
+    /forbidden secret-shaped field/i,
+  );
+
+  const badArtifactSecret = path.join(tmp, "bad-market-artifact-reconciliation-secret.json");
+  await writeFile(badArtifactSecret, JSON.stringify({
+    version: "matterhorn.market.artifact-reconciliation.v1",
+    ready: true,
+    rawSignature: "0xdeadbeef",
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      signsOrSubmits: false,
+      acceptsSecrets: false,
+      publicMetadataOnly: true,
+    },
+  }));
+  assert.throws(
+    () =>
+      execFileSync("node", [
+        script,
+        "--customer-ready-smoke",
+        smoke,
+        "--official-sdk-validation",
+        official,
+        "--artifact-reconciliation",
+        badArtifactSecret,
       ], { cwd: repoRoot, stdio: "pipe" }),
     /forbidden secret-shaped field/i,
   );

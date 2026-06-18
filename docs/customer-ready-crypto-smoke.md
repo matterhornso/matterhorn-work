@@ -88,13 +88,23 @@ pnpm test:bittensor-beta-release-gate
 pnpm test:bittensor-beta-customer-packet
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
+pnpm test:market-execution-readiness-gate
+pnpm test:market-submit-sign-contract-phase0
+pnpm test:market-sign-request-phase1
+pnpm test:market-artifact-validation-phase2
+pnpm test:market-artifact-reconciliation
 pnpm test:market-official-sdk-validation-track
 pnpm test:market-official-sdk-validation-capture
 pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-operator-loop
+pnpm test:market-official-sdk-validate-public
+pnpm test:market-official-sdk-operator-artifacts
+pnpm test:market-sdk-run-manifest-check
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
+pnpm test:market-customer-evidence-verify
+pnpm test:crypto-customer-packet
 pnpm test:market-receipt-qa
 pnpm test:market-receipt-evidence
 pnpm test:hyperliquid-readiness-gate
@@ -240,6 +250,17 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 # Use --require-receipt-check below only when this receipt evidence is part of
 # the customer claim for the demo.
 
+# Optional after Phase 2 external artifact validation returns public/redacted
+# metadata for one or both venues:
+# node scripts/market-artifact-reconciliation.mjs \
+#   --hyperliquid-artifact-validation /tmp/hyperliquid-artifact-validation.json \
+#   --polymarket-artifact-validation /tmp/polymarket-artifact-validation.json \
+#   --output /tmp/matterhorn-market-artifact-reconciliation.md \
+#   --json-output /tmp/matterhorn-market-artifact-reconciliation.json \
+#   --strict
+# Use --require-artifact-reconciliation below only when this reconciliation
+# evidence is part of the customer claim for the demo.
+
 matterhorn-work crypto sdk-manifest-check \
   --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json \
   --output /tmp/matterhorn-market-sdk-manifest-check.json \
@@ -259,12 +280,19 @@ matterhorn-work crypto evidence-bundle \
 #   --receipt-check /tmp/matterhorn-market-receipt-check.json \
 #   --require-receipt-check
 
+# Add this when public artifact-validation reconciliation is part of the claim:
+#   --artifact-reconciliation /tmp/matterhorn-market-artifact-reconciliation.json \
+#   --require-artifact-reconciliation
+
 matterhorn-work crypto evidence-verify \
   --bundle-json /tmp/matterhorn-market-customer-evidence.json \
   --bundle-md /tmp/matterhorn-market-customer-evidence.md \
   --require-sdk-manifest-check \
   --output /tmp/matterhorn-market-customer-evidence-verify.json \
   --strict --json
+
+# Add --require-artifact-reconciliation here when the bundle includes
+# artifact reconciliation evidence that the customer packet should enforce.
 
 matterhorn-work crypto customer-packet \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \

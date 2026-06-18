@@ -35,6 +35,7 @@ function parseArgs(argv) {
     requireOfficialSdkValidated: args.includes("--require-official-sdk-validated"),
     requireSdkManifestCheck: args.includes("--require-sdk-manifest-check"),
     requireReceiptCheck: args.includes("--require-receipt-check"),
+    requireArtifactReconciliation: args.includes("--require-artifact-reconciliation"),
     bundleJson: value("--bundle-json"),
     bundleMarkdown: value("--bundle-md") || value("--bundle-markdown"),
     output: value("--output") || value("-o"),
@@ -48,7 +49,7 @@ function usage() {
     "Usage:",
     "  node scripts/market-customer-evidence-verify.mjs --bundle-json /tmp/market-evidence.json --bundle-md /tmp/market-evidence.md --strict --json",
     "",
-    "The verifier is offline and public-data only. It validates the final evidence bundle summary, optional Markdown, safety flags, required smoke stages, and attached SDK manifest/receipt claims.",
+    "The verifier is offline and public-data only. It validates the final evidence bundle summary, optional Markdown, safety flags, required smoke stages, and attached SDK manifest/receipt/artifact-reconciliation claims.",
   ].join("\n");
 }
 
@@ -185,6 +186,27 @@ export function verifyMarketCustomerEvidenceBundle({ summary, markdown = null, o
     pushCheck(checks, errors, warnings, "receipt.required", false, "Receipt-check evidence is required but absent.");
   }
 
+  const artifactReconciliation = summary?.artifactReconciliation;
+  if (artifactReconciliation?.present) {
+    pushCheck(
+      checks,
+      errors,
+      warnings,
+      "artifact_reconciliation.accepted",
+      artifactReconciliation.ready === true && Number(artifactReconciliation.venueCount) > 0,
+      "Attached artifact reconciliation evidence must be ready and include at least one venue.",
+    );
+  } else if (options.requireArtifactReconciliation) {
+    pushCheck(
+      checks,
+      errors,
+      warnings,
+      "artifact_reconciliation.required",
+      false,
+      "Artifact reconciliation evidence is required but absent.",
+    );
+  }
+
   if (Array.isArray(summary?.errors) && summary.errors.length > 0) {
     for (const error of summary.errors) errors.push(`Bundle summary error: ${String(error)}`);
     checks.push({ id: "bundle.errors", status: "error", message: "Evidence bundle summary includes validation errors." });
@@ -202,6 +224,9 @@ export function verifyMarketCustomerEvidenceBundle({ summary, markdown = null, o
     }
     if (receipt?.present) {
       pushCheck(checks, errors, warnings, "markdown.receipt", markdown.includes("## Public Receipt Evidence"), "Markdown bundle must include Public Receipt Evidence.");
+    }
+    if (artifactReconciliation?.present) {
+      pushCheck(checks, errors, warnings, "markdown.artifact_reconciliation", markdown.includes("## Artifact Reconciliation Evidence"), "Markdown bundle must include Artifact Reconciliation Evidence.");
     }
   }
 
@@ -239,6 +264,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         requireOfficialSdkValidated: config.requireOfficialSdkValidated,
         requireSdkManifestCheck: config.requireSdkManifestCheck,
         requireReceiptCheck: config.requireReceiptCheck,
+        requireArtifactReconciliation: config.requireArtifactReconciliation,
       },
     });
     if (config.output) writeFileSync(config.output, `${JSON.stringify(result, null, 2)}\n`);

@@ -25,6 +25,7 @@ const offlineStages = [
   ["market.submit_sign_phase0_contract", "Market submit/sign Phase 0 contract", ["pnpm", "test:market-submit-sign-contract-phase0"]],
   ["market.sign_request_phase1", "Market sign-request Phase 1 gate", ["pnpm", "test:market-sign-request-phase1"]],
   ["market.artifact_validation_phase2", "Market artifact validation Phase 2 gate", ["pnpm", "test:market-artifact-validation-phase2"]],
+  ["market.artifact_reconciliation", "Market artifact reconciliation evidence", ["pnpm", "test:market-artifact-reconciliation"]],
   ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
   ["market.official_sdk_capture", "Market official SDK validation capture", ["pnpm", "test:market-official-sdk-validation-capture"]],
   ["market.official_sdk_doctor", "Market official SDK validation doctor", ["pnpm", "test:market-official-sdk-validation-doctor"]],
