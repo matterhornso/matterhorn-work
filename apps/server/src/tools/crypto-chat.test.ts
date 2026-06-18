@@ -372,7 +372,8 @@ describe("unified crypto chat router", () => {
     ]);
     shared.forEach((card) => expectSharedCardContract(card, "polymarket"));
     expect(shared[4]?.status).toBe("danger");
-    expect(shared[5]?.summary).toContain("does not sign or submit");
+    expect(shared[5]?.title).toContain("Preview Only");
+    expect(shared[5]?.summary).toContain("wallet/client decides whether anything is signed externally");
     expect(shared[7]?.summary).toContain("receipt/status");
   });
 
@@ -432,6 +433,8 @@ describe("unified crypto chat router", () => {
     expect(preview.sharedCards[0]).toMatchObject({ kind: "action_preview", originalKind: "hyperliquid_order_preview", status: "warning" });
     orderbook.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
     preview.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
+    expect(preview.sharedCards[0]?.title).toContain("Preview Only");
+    expect(preview.sharedCards[0]?.summary).toContain("wallet/client decides whether anything is signed externally");
     expect((preview.sharedCards[0]?.data as { preview?: { canSubmit?: boolean } }).preview?.canSubmit).toBe(false);
     expect(JSON.stringify(preview)).not.toContain("/orders/submit");
   });
@@ -470,6 +473,8 @@ describe("unified crypto chat router", () => {
     const blockedPreview = (blockedAction?.data as { preview?: { canSubmit?: boolean; size?: number | null; price?: number | null; estimatedShares?: number | null } }).preview;
     expect(blocked.execution).toBe("blocked_by_compliance");
     expect(blockedAction?.status).toBe("danger");
+    expect(blockedAction?.title).toContain("Preview Only");
+    expect(blockedAction?.summary).toContain("wallet/client decides whether anything is signed externally");
     expect(blockedPreview?.canSubmit).toBe(false);
     expect(blockedPreview?.size).toBeNull();
     expect(blockedPreview?.price).toBeNull();

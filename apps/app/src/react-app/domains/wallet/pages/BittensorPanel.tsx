@@ -63,7 +63,7 @@ const CUSTOMER_DEMO_PROMPTS = [
   {
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
-    prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn cannot submit or sign orders.",
+    prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "polymarket-compliance",
@@ -73,7 +73,7 @@ const CUSTOMER_DEMO_PROMPTS = [
   {
     id: "external-signer-preview",
     label: "Signer preview",
-    prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn can prepare safe previews and public receipts, but cannot sign, submit, custody, or broadcast.",
+    prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
   },
 ] as const;
 
@@ -748,6 +748,7 @@ export default function BittensorPanel() {
                 {[
                   "Non-custodial",
                   "Read/preview-only",
+                  "Preview Only",
                   "External signer required",
                   "No market submit",
                 ].map((item) => (
@@ -758,6 +759,9 @@ export default function BittensorPanel() {
               </div>
               <p className="mt-3 text-xs leading-5 text-dls-secondary">
                 Demo boundary: no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission.
+              </p>
+              <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                Matterhorn prepares safe previews; your wallet/client decides whether anything is signed externally.
               </p>
             </Section>
           </div>

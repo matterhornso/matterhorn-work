@@ -757,6 +757,21 @@ function sourceField(source: Record<string, unknown> | null, keys: string[]): st
   return null;
 }
 
+function sharedCardMissingContext(data: Record<string, unknown> | null, venue: string, kind: string): string | null {
+  if (!data || kind !== "action_preview") return null;
+  const preview = isRecordValue(data.preview) ? data.preview : null;
+  if (!preview) return null;
+  const leverageContext = isRecordValue(preview.leverageContext) ? preview.leverageContext : null;
+  if (venue === "hyperliquid" && leverageContext?.requiresAccountContext === true) {
+    return typeof leverageContext.note === "string" && leverageContext.note.trim()
+      ? leverageContext.note.trim()
+      : "Public Hyperliquid address is needed for leverage and liquidation context.";
+  }
+  if (venue === "polymarket" && preview.marketId === null) return "Polymarket market id is needed before executable preview terms can be prepared.";
+  if (venue === "polymarket" && preview.outcome === null) return "Polymarket outcome is needed before executable preview terms can be prepared.";
+  return null;
+}
+
 function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null): boolean {
   if (kind === "external_signer_handoff" || kind === "action_preview") return true;
   return Boolean(originalKind && /(handoff|signing|signed_action|staking_quote|order_preview)/i.test(originalKind));
@@ -780,6 +795,8 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   const sourceLabel = source && typeof source.source === "string" ? source.source : null;
   const freshness = sourceField(source, ["freshness", "freshnessLabel", "dataFreshness"]);
   const block = sourceField(source, ["block", "blockNumber", "blockHash"]);
+  const data = isRecordValue(card.data) ? card.data : {};
+  const missingContext = sharedCardMissingContext(data, venue, kind);
   const items: NonNullable<BittensorChatCard["items"]> = [
     { label: "Venue", value: venueLabel, tone: venue === "auto" ? "muted" : "default" },
     { label: "Status", value: statusLabel, tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "muted" },
@@ -789,6 +806,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   if (sharedCardNeedsExternalSigner(kind, originalKind)) {
     items.push({ label: "External signer", value: "Required", tone: "warning" });
   }
+  if (missingContext) items.push({ label: "Missing context", value: missingContext, tone: "warning" });
   if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
   if (freshness) items.push({ label: "Freshness", value: freshness, tone: "muted" });
   if (block) items.push({ label: "Block", value: block, tone: "muted" });
@@ -805,7 +823,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
     tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "default",
     items,
     warnings: Array.isArray(card.warnings) ? card.warnings.filter((item): item is string => typeof item === "string") : [],
-    data: isRecordValue(card.data) ? card.data : {},
+    data,
     safety: {
       nonCustodial: safety.nonCustodial === true,
       liveSubmissionEnabled: safety.liveSubmissionEnabled === true,

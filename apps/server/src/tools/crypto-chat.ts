@@ -277,7 +277,18 @@ function sharedStatusFor(kind: UnifiedCryptoSharedCardKind, execution: UnifiedCr
   return "info";
 }
 
-function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCryptoVenue | "auto", title: string): string {
+function isMarketActionPreview(venue: RoutedCryptoVenue | "auto", kind: UnifiedCryptoSharedCardKind, originalKind: string | null): boolean {
+  return kind === "action_preview"
+    && (venue === "hyperliquid" || venue === "polymarket")
+    && Boolean(originalKind && /order_preview/i.test(originalKind));
+}
+
+function previewOnlyTitle(venue: RoutedCryptoVenue | "auto", kind: UnifiedCryptoSharedCardKind, originalKind: string | null, title: string): string {
+  if (!isMarketActionPreview(venue, kind, originalKind)) return title;
+  return /preview only/i.test(title) ? title : `Preview Only: ${title}`;
+}
+
+function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCryptoVenue | "auto", title: string, originalKind: string | null = null): string {
   switch (kind) {
     case "clarification":
       return "More context is needed before Matterhorn can continue safely.";
@@ -290,6 +301,9 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
     case "orderbook_context":
       return `Read-only orderbook/depth context from ${venue}.`;
     case "action_preview":
+      if (isMarketActionPreview(venue, kind, originalKind)) {
+        return `Preview only from ${venue}; Matterhorn prepares safe previews, while your wallet/client decides whether anything is signed externally.`;
+      }
       return `Non-custodial preview from ${venue}; Matterhorn does not sign or submit.`;
     case "compliance_block":
       return `Compliance status from ${venue}; blocked previews must not contain executable order terms.`;
@@ -314,13 +328,13 @@ export function buildUnifiedCryptoSharedCards(
     const originalKind = cardKind(card);
     const kind = sharedKindFor(originalKind);
     const warnings = Array.from(new Set([...inheritedWarnings, ...cardWarnings(card)]));
-    const title = cardTitle(card, kind.replace(/_/g, " "));
+    const title = previewOnlyTitle(venue, kind, originalKind, cardTitle(card, kind.replace(/_/g, " ")));
     return {
       version: UNIFIED_CRYPTO_SHARED_CARD_VERSION,
       kind,
       venue,
       title,
-      summary: sharedSummaryFor(kind, venue, title),
+      summary: sharedSummaryFor(kind, venue, title, originalKind),
       status: sharedStatusFor(kind, execution, warnings),
       originalKind,
       source: extractSource(card),

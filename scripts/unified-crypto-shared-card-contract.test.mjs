@@ -88,14 +88,24 @@ assert.ok(customerSmoke.includes("test:unified-crypto-shared-card-contract"), "c
 
 for (const rendererPhrase of [
   "sharedCardDisplayTitle",
+  "sharedCardMissingContext",
   "External signer",
   "Freshness",
   "Block",
   "Can submit",
   "Live submission",
+  "Missing context",
   "slice(0, 8)",
 ]) {
   assert.ok(sharedCardRenderer.includes(rendererPhrase), `transcript renderer should include card polish: ${rendererPhrase}`);
+}
+
+for (const previewPhrase of [
+  "Preview Only",
+  "wallet/client decides whether anything is signed externally",
+]) {
+  assert.ok(cryptoChat.includes(previewPhrase), `shared-card implementation should include preview-only copy: ${previewPhrase}`);
+  assert.ok(cryptoChatTest.includes(previewPhrase), `shared-card tests should lock preview-only copy: ${previewPhrase}`);
 }
 
 assert.equal(fixturePack.version, "matterhorn.crypto.shared-card.fixtures.v1", "fixture pack should be versioned");
@@ -134,6 +144,14 @@ assert.equal(blockedPolymarketPreview?.canSubmit, false, "blocked Polymarket pre
 assert.equal(blockedPolymarketPreview?.price, null, "blocked Polymarket preview must not expose executable price");
 assert.equal(blockedPolymarketPreview?.size, null, "blocked Polymarket preview must not expose executable size");
 assert.equal(blockedPolymarketPreview?.estimatedShares, null, "blocked Polymarket preview must not expose executable shares");
+for (const venue of ["hyperliquid", "polymarket"]) {
+  const previewCard = fixturePack.cards.find((card) => card.venue === venue && card.kind === "action_preview");
+  assert.ok(previewCard?.title.includes("Preview Only"), `${venue} preview fixture should show Preview Only`);
+  assert.ok(
+    previewCard?.summary.includes("wallet/client decides whether anything is signed externally"),
+    `${venue} preview fixture should explain wallet/client external signing`,
+  );
+}
 
 for (const forbidden of [
   "/api/hyperliquid/orders/submit",
