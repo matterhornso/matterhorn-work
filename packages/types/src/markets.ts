@@ -220,10 +220,11 @@ export interface MarketExecutionReadinessCardItem {
 }
 
 export interface MarketExecutionReadinessCard {
-  kind: "readiness_report";
+  kind: "market_execution_readiness";
   title: "Market execution readiness";
   summary: string;
   tone: Extract<MarketExecutionReadinessCardTone, "warning" | "danger" | "info">;
+  source: MarketSourceFreshness;
   items: MarketExecutionReadinessCardItem[];
   warnings: string[];
   data: { report: MarketExecutionReadinessReport };
