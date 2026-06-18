@@ -311,6 +311,30 @@ mustContain("qa-fixtures/market-official-sdk/README.md", [
   "hyperliquid-official-public.json",
   "polymarket-official-public.json",
 ]);
+
+mustContain("packages/types/src/markets.ts", [
+  "MARKET_SDK_VALIDATION_MODES",
+  "MarketSdkValidationMode",
+  "MARKET_SDK_VALIDATION_NETWORKS",
+  "MarketSdkValidationSafety",
+  "MarketSdkValidationCommands",
+  "MarketSdkValidationGuide",
+  "MarketSdkValidationCard",
+  "MarketSdkValidationResponse",
+  "matterhorn.market.sdk-validation-guide.v1",
+  "hyperliquid-testnet",
+  "polygon-amoy",
+  "canSubmit: false",
+  "liveSubmissionEnabled: false",
+  "nonCustodial: true",
+  "acceptsSecrets: false",
+  "acceptsRawSignatures: false",
+  "acceptsSignedPayloads: false",
+  "runsPrivateSdkSigning: false",
+  "computesFinalSignatures: false",
+  "callsExchanges: false",
+]);
+
 const fixtureSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-fixtures.test.mjs"], {
   cwd: root,
   encoding: "utf8",
