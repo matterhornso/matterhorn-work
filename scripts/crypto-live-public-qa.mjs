@@ -121,6 +121,14 @@ function childCommandDisplay(script, options) {
   ].join(" ");
 }
 
+function marketExecutionChainApiCommand() {
+  return [
+    "curl -sS",
+    "\"<server-url>/api/crypto/market-execution-chain\"",
+    "-H \"Authorization: Bearer <client-token>\"",
+  ].join(" ");
+}
+
 function runNodeJson(script, commandArgs, label) {
   const result = spawnSync(process.execPath, [join(repoRoot, "scripts", script), ...commandArgs], {
     cwd: repoRoot,
@@ -143,6 +151,70 @@ function runNodeJson(script, commandArgs, label) {
       error: `${label} did not emit JSON: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+}
+
+async function fetchJson(url, token, label) {
+  let response;
+  let raw;
+  try {
+    response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    raw = await response.text();
+  } catch (error) {
+    return {
+      status: "fail",
+      error: `${label} request failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  assertNoForbiddenPayload(raw, label);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return {
+      status: "fail",
+      error: `${label} did not return JSON: ${error instanceof Error ? error.message : String(error)}`,
+      stderr: raw.slice(0, 1000),
+    };
+  }
+  if (!response.ok) {
+    return {
+      status: "fail",
+      error: `${label} returned HTTP ${response.status}`,
+      report: parsed,
+    };
+  }
+  return { status: "pass", report: parsed };
+}
+
+function validateMarketExecutionChainReport(report) {
+  const errors = [];
+  if (!report || typeof report !== "object") {
+    return ["Execution-chain response was not an object."];
+  }
+  if (report.success !== true) errors.push("Execution-chain response did not set success:true.");
+  const guide = report.guide;
+  if (!guide || typeof guide !== "object") {
+    return [...errors, "Execution-chain response did not include guide."];
+  }
+  if (guide.version !== "matterhorn.market.execution-chain-guide.v1") {
+    errors.push(`Unexpected execution-chain version ${String(guide.version || "")}.`);
+  }
+  const safety = guide.safety || {};
+  const expectedFalse = ["canSubmit", "liveSubmissionEnabled", "acceptsSecrets", "acceptsRawSignatures", "acceptsSignedPayloads"];
+  for (const key of expectedFalse) {
+    if (safety[key] !== false) errors.push(`Execution-chain safety.${key} must be false.`);
+  }
+  if (safety.nonCustodial !== true) errors.push("Execution-chain safety.nonCustodial must be true.");
+  if (safety.externalSignerRequired !== true) errors.push("Execution-chain safety.externalSignerRequired must be true.");
+  const stages = Array.isArray(guide.stages) ? guide.stages : [];
+  if (stages.length < 5) errors.push("Execution-chain guide must include at least five stages.");
+  const stageIds = new Set(stages.map((stage) => stage?.id));
+  for (const id of ["preview_handoff", "external_sign_request", "redacted_artifact_validation", "artifact_reconciliation", "public_receipt_import"]) {
+    if (!stageIds.has(id)) errors.push(`Execution-chain guide is missing stage ${id}.`);
+  }
+  return errors;
 }
 
 function stageSkip(id, label, reason, command) {
@@ -340,6 +412,37 @@ async function main() {
         ? "Fixture mode was requested, so live market route checks were skipped."
         : "No server URL and client token were provided, so live market route checks were skipped in fixture fallback mode.",
       childCommandDisplay("market-live-readonly-smoke.mjs", ["--strict", "--json"]),
+    ));
+  }
+
+  if (!fixtureMode && serverUrl && token) {
+    const chain = await fetchJson(`${serverUrl}/api/crypto/market-execution-chain`, token, "Market execution-chain API");
+    const artifact = join(outputDir, "matterhorn-market-execution-chain.json");
+    if (chain.report) writeFileSync(artifact, JSON.stringify(chain.report, null, 2) + "\n");
+    const validationErrors = chain.report ? validateMarketExecutionChainReport(chain.report) : [];
+    const chainStatus = chain.status === "pass" && validationErrors.length === 0 ? "pass" : "fail";
+    stages.push({
+      id: "market_execution_chain_api",
+      label: "Market execution-chain API",
+      status: chainStatus,
+      ...(chain.report ? {
+        artifact,
+        summary: chainStatus === "pass"
+          ? `${chain.report.guide?.version || "execution-chain"} with ${chain.report.guide?.stages?.length || 0} safe stages.`
+          : "Execution-chain API returned an invalid safety contract.",
+      } : {}),
+      ...(chain.error ? { error: chain.error, stderr: chain.stderr } : {}),
+      ...(validationErrors.length ? { errors: validationErrors } : {}),
+      command: marketExecutionChainApiCommand(),
+    });
+  } else {
+    stages.push(stageSkip(
+      "market_execution_chain_api",
+      "Market execution-chain API",
+      fixtureMode
+        ? "Fixture mode was requested, so the live execution-chain route check was skipped."
+        : "No server URL and client token were provided, so the live execution-chain route check was skipped in fixture fallback mode.",
+      marketExecutionChainApiCommand(),
     ));
   }
 
