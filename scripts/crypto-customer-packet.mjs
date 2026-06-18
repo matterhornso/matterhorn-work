@@ -157,6 +157,7 @@ function summarizeMarketEvidence(path, raw, required) {
       present: false,
       ready: !required,
       file: null,
+      details: marketEvidenceDetails(null),
       errors: required ? ["Market evidence verification is required but missing."] : [],
       warnings: required ? [] : ["Market evidence verification is not attached."],
     };
@@ -175,8 +176,23 @@ function summarizeMarketEvidence(path, raw, required) {
     ready: raw.ok === true && raw.ready === true && errors.length === 0,
     file: basename(path),
     status: raw.status ?? null,
+    details: marketEvidenceDetails(raw),
     errors: [...new Set(errors)],
     warnings: [...new Set(warnings)],
+  };
+}
+
+function marketEvidenceCheckPassed(raw, id) {
+  return Array.isArray(raw?.checks) && raw.checks.some((check) => check?.id === id && check?.status === "pass");
+}
+
+function marketEvidenceDetails(raw) {
+  return {
+    officialSdkAccepted: marketEvidenceCheckPassed(raw, "official_sdk.accepted"),
+    officialSdkAllValidated: marketEvidenceCheckPassed(raw, "official_sdk.all_validated"),
+    sdkManifestAccepted: marketEvidenceCheckPassed(raw, "sdk_manifest.accepted"),
+    receiptAccepted: marketEvidenceCheckPassed(raw, "receipt.accepted"),
+    artifactReconciliationAccepted: marketEvidenceCheckPassed(raw, "artifact_reconciliation.accepted"),
   };
 }
 
@@ -228,6 +244,16 @@ function renderMarkdown(packet) {
     `| Customer-ready crypto smoke | ${packet.customerReadySmoke.ready ? "yes" : "no"} | ${packet.customerReadySmoke.file ?? "missing"} |`,
     `| Market evidence verifier | ${packet.marketEvidence.ready ? "yes" : "no"} | ${packet.marketEvidence.file ?? "not attached"} |`,
     `| Bittensor evidence bundle | ${packet.bittensorEvidence.ready ? "yes" : "no"} | ${packet.bittensorEvidence.file ?? "not attached"} |`,
+    "",
+    "## Market Evidence Details",
+    "",
+    "| Check | Accepted |",
+    "| --- | --- |",
+    `| Official SDK evidence | ${packet.marketEvidence.details.officialSdkAccepted ? "yes" : "no"} |`,
+    `| All official SDK venues validated | ${packet.marketEvidence.details.officialSdkAllValidated ? "yes" : "no"} |`,
+    `| SDK manifest | ${packet.marketEvidence.details.sdkManifestAccepted ? "yes" : "no"} |`,
+    `| Public receipt evidence | ${packet.marketEvidence.details.receiptAccepted ? "yes" : "no"} |`,
+    `| Artifact reconciliation | ${packet.marketEvidence.details.artifactReconciliationAccepted ? "yes" : "no"} |`,
     "",
     "## Smoke Summary",
     "",

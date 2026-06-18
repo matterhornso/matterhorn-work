@@ -2057,6 +2057,7 @@ function summarizeMcpMarketEvidence(raw, required) {
     return {
       present: false,
       ready: required !== true,
+      details: mcpMarketEvidenceDetails(null),
       errors: required === true ? ["Market evidence verification is required but missing."] : [],
       warnings: required === true ? [] : ["Market evidence verification is not attached."],
     };
@@ -2074,8 +2075,23 @@ function summarizeMcpMarketEvidence(raw, required) {
     present: true,
     ready: raw.ok === true && raw.ready === true && errors.length === 0,
     status: raw.status ?? null,
+    details: mcpMarketEvidenceDetails(raw),
     errors: [...new Set(errors)],
     warnings: [...new Set(warnings)],
+  };
+}
+
+function mcpMarketEvidenceCheckPassed(raw, id) {
+  return Array.isArray(raw?.checks) && raw.checks.some((check) => check?.id === id && check?.status === "pass");
+}
+
+function mcpMarketEvidenceDetails(raw) {
+  return {
+    officialSdkAccepted: mcpMarketEvidenceCheckPassed(raw, "official_sdk.accepted"),
+    officialSdkAllValidated: mcpMarketEvidenceCheckPassed(raw, "official_sdk.all_validated"),
+    sdkManifestAccepted: mcpMarketEvidenceCheckPassed(raw, "sdk_manifest.accepted"),
+    receiptAccepted: mcpMarketEvidenceCheckPassed(raw, "receipt.accepted"),
+    artifactReconciliationAccepted: mcpMarketEvidenceCheckPassed(raw, "artifact_reconciliation.accepted"),
   };
 }
 
@@ -2123,6 +2139,16 @@ function renderMcpCryptoCustomerPacketMarkdown(packet) {
     "| Customer-ready crypto smoke | " + (packet.customerReadySmoke.ready ? "yes" : "no") + " |",
     "| Market evidence verifier | " + (packet.marketEvidence.ready ? "yes" : "no") + " |",
     "| Bittensor evidence bundle | " + (packet.bittensorEvidence.ready ? "yes" : "no") + " |",
+    "",
+    "## Market Evidence Details",
+    "",
+    "| Check | Accepted |",
+    "| --- | --- |",
+    "| Official SDK evidence | " + (packet.marketEvidence.details.officialSdkAccepted ? "yes" : "no") + " |",
+    "| All official SDK venues validated | " + (packet.marketEvidence.details.officialSdkAllValidated ? "yes" : "no") + " |",
+    "| SDK manifest | " + (packet.marketEvidence.details.sdkManifestAccepted ? "yes" : "no") + " |",
+    "| Public receipt evidence | " + (packet.marketEvidence.details.receiptAccepted ? "yes" : "no") + " |",
+    "| Artifact reconciliation | " + (packet.marketEvidence.details.artifactReconciliationAccepted ? "yes" : "no") + " |",
     "",
     "## Smoke Summary",
     "",

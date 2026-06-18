@@ -37,6 +37,13 @@ try {
     ok: true,
     ready: true,
     status: "READY_FOR_TEST_CUSTOMER_QA",
+    checks: [
+      { id: "official_sdk.accepted", status: "pass" },
+      { id: "official_sdk.all_validated", status: "pass" },
+      { id: "sdk_manifest.accepted", status: "pass" },
+      { id: "receipt.accepted", status: "pass" },
+      { id: "artifact_reconciliation.accepted", status: "pass" },
+    ],
     errors: [],
     warnings: [],
     safety: { nonCustodial: true, liveSubmissionEnabled: false, signsOrSubmits: false, acceptsSecrets: false },
@@ -60,6 +67,7 @@ try {
   assert.match(direct.packet.inputEvidence.customerReadySmoke.sha256, /^[a-f0-9]{64}$/);
   assert.match(direct.markdown, /READY_FOR_TEST_CUSTOMER_QA/);
   assert.match(direct.markdown, /Evidence Hashes/);
+  assert.equal(direct.packet.marketEvidence.details.artifactReconciliationAccepted, true);
 
   execFileSync("node", [
     script,
@@ -83,6 +91,8 @@ try {
   assert.match(markdown, /Customer-ready crypto smoke/);
   assert.match(markdown, /Market evidence verifier/);
   assert.match(markdown, /Bittensor evidence bundle/);
+  assert.match(markdown, /Market Evidence Details/);
+  assert.match(markdown, /Artifact reconciliation \| yes/);
   assert.match(markdown, /37 passed, 0 failed, 0 skipped/);
   assert.match(markdown, /Smoke git SHA: a{40}/);
   assert.match(markdown, /Evidence Hashes/);
@@ -96,6 +106,11 @@ try {
   assert.equal(packet.customerReadySmoke.gitBranch, "codex/test");
   assert.equal(packet.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(packet.marketEvidence.ready, true);
+  assert.equal(packet.marketEvidence.details.officialSdkAccepted, true);
+  assert.equal(packet.marketEvidence.details.officialSdkAllValidated, true);
+  assert.equal(packet.marketEvidence.details.sdkManifestAccepted, true);
+  assert.equal(packet.marketEvidence.details.receiptAccepted, true);
+  assert.equal(packet.marketEvidence.details.artifactReconciliationAccepted, true);
   assert.equal(packet.bittensorEvidence.ready, true);
   assert.match(packet.inputEvidence.customerReadySmoke.sha256, /^[a-f0-9]{64}$/);
   assert.match(packet.inputEvidence.marketEvidenceVerify.sha256, /^[a-f0-9]{64}$/);
