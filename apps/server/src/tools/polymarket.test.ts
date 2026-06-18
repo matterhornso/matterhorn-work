@@ -107,6 +107,7 @@ describe("Polymarket read/preview safety", () => {
   test("classifies ordinary chat intents", () => {
     expect(planPolymarketChat({ message: "find markets about AI" })).toBe("discover");
     expect(planPolymarketChat({ message: "explain this market" })).toBe("market");
+    expect(planPolymarketChat({ message: "summarize this Polymarket market" })).toBe("market");
     expect(planPolymarketChat({ message: "what are the odds and liquidity?" })).toBe("odds");
     expect(planPolymarketChat({ message: "show the orderbook" })).toBe("orderbook");
     expect(planPolymarketChat({ message: "am I geoblocked?" })).toBe("compliance");
@@ -202,6 +203,14 @@ describe("Polymarket chat workflow", () => {
     const result = await executePolymarketChatWorkflow({ message: "explain this market", marketId: "0xmarket-ai" }, { provider: provider() });
     expect(result.intent).toBe("market");
     expect(result.responseText).toMatch(/risk-bearing/);
+    expect(result.responseText).toContain("preview availability: available");
+    expect(result.cards[0]?.kind).toBe("polymarket_market_detail");
+    expect(result.cards[1]?.kind).toBe("polymarket_market_context");
+    const context = result.data?.context as { previewAvailability?: string; compliance?: { status?: string }; liquidityUsd?: number; outcomes?: unknown[] };
+    expect(context.previewAvailability).toBe("available");
+    expect(context.compliance?.status).toBe("allowed");
+    expect(context.liquidityUsd).toBe(42000);
+    expect(Array.isArray(context.outcomes)).toBe(true);
   });
 
   test("orderbook read returns a shaped book", async () => {

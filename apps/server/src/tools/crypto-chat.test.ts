@@ -74,11 +74,16 @@ const hyperliquidAccount: HyperliquidAccountSnapshot = {
   address: "0x0000000000000000000000000000000000000001",
   marginSummary: null,
   crossMarginSummary: null,
+  accountValue: 100,
   withdrawable: "10",
+  withdrawableUsd: 10,
+  marginUsed: 0,
   positionCount: 0,
   openOrderCount: 0,
   notionalExposure: 0,
   unrealizedPnl: 0,
+  fundingExposure: "No open perp positions found, so funding exposure is currently minimal.",
+  liquidationRiskNotes: [],
   positions: [],
   orders: [],
   assetPositions: [],
@@ -267,6 +272,28 @@ describe("unified crypto chat router", () => {
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
   });
 
+  test("returns Hyperliquid exposure as a read-only account snapshot", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow(
+      { venue: "hyperliquid", message: "show my Hyperliquid exposure", address: hyperliquidAccount.address },
+      { hyperliquidProvider },
+    );
+    expect(result.venue).toBe("hyperliquid");
+    expect(result.intent).toBe("account");
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("portfolio snapshot");
+    expect(result.responseText).toContain("account value");
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "account_snapshot",
+      title: "Hyperliquid portfolio snapshot",
+      originalKind: "hyperliquid_account_snapshot",
+    });
+    const account = result.data.account as HyperliquidAccountSnapshot;
+    expect(account.accountValue).toBe(100);
+    expect(account.withdrawableUsd).toBe(10);
+    expect(account.fundingExposure).toContain("No open perp positions");
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "hyperliquid"));
+  });
+
   test("routes Polymarket discovery through the Polymarket workflow", async () => {
     const result = await executeUnifiedCryptoChatWorkflow(
       { message: "find Polymarket markets about AI", limit: 5 },
@@ -282,6 +309,23 @@ describe("unified crypto chat router", () => {
       originalKind: "polymarket_market_list",
       status: "success",
     });
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "polymarket"));
+  });
+
+  test("returns Polymarket market context with compliance and preview availability", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow(
+      { venue: "polymarket", message: "summarize this Polymarket market", marketId: polymarketMarket.id },
+      { polymarketProvider },
+    );
+    expect(result.venue).toBe("polymarket");
+    expect(result.intent).toBe("market");
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("preview availability: available");
+    expect(result.sharedCards.some((card) => card.originalKind === "polymarket_market_context")).toBe(true);
+    const context = (result.data.context ?? {}) as { previewAvailability?: string; compliance?: { status?: string }; outcomes?: unknown[] };
+    expect(context.previewAvailability).toBe("available");
+    expect(context.compliance?.status).toBe("allowed");
+    expect(Array.isArray(context.outcomes)).toBe(true);
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "polymarket"));
   });
 
@@ -352,6 +396,7 @@ describe("unified crypto chat router", () => {
       { kind: "polymarket_market_list", title: "Markets", markets: [], warnings: [] },
       { kind: "wallet_snapshot", title: "Wallet", wallet: {}, warnings: [] },
       { kind: "polymarket_market_detail", title: "Market", market: {}, warnings: [] },
+      { kind: "polymarket_market_context", title: "Market context", context: {}, warnings: [] },
       { kind: "polymarket_orderbook", title: "Orderbook", orderbook: {}, warnings: [] },
       { kind: "polymarket_compliance", title: "Compliance", compliance: { status: "blocked" }, warnings: ["blocked"] },
       { kind: "polymarket_order_preview", title: "Preview", preview: { canSubmit: false }, warnings: [] },
@@ -363,6 +408,7 @@ describe("unified crypto chat router", () => {
       "discovery",
       "account_snapshot",
       "market_context",
+      "market_context",
       "orderbook_context",
       "compliance_block",
       "action_preview",
@@ -371,10 +417,11 @@ describe("unified crypto chat router", () => {
       "watch_alert",
     ]);
     shared.forEach((card) => expectSharedCardContract(card, "polymarket"));
-    expect(shared[4]?.status).toBe("danger");
-    expect(shared[5]?.title).toContain("Preview Only");
-    expect(shared[5]?.summary).toContain("wallet/client decides whether anything is signed externally");
-    expect(shared[7]?.summary).toContain("receipt/status");
+    expect(shared.find((card) => card.kind === "compliance_block")?.status).toBe("danger");
+    const actionPreview = shared.find((card) => card.kind === "action_preview");
+    expect(actionPreview?.title).toContain("Preview Only");
+    expect(actionPreview?.summary).toContain("wallet/client decides whether anything is signed externally");
+    expect(shared.find((card) => card.kind === "receipt_status")?.summary).toContain("receipt/status");
   });
 
   test("locks shared-card contract for representative Bittensor workflows", async () => {

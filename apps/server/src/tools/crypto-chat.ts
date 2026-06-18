@@ -243,6 +243,7 @@ function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind
     case "intelligence_report":
     case "hyperliquid_funding":
     case "polymarket_market_detail":
+    case "polymarket_market_context":
       return "market_context";
     case "hyperliquid_orderbook":
     case "polymarket_orderbook":

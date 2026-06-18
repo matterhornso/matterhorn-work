@@ -43,11 +43,16 @@ export interface HyperliquidAccountSnapshot {
   address: string;
   marginSummary: Record<string, unknown> | null;
   crossMarginSummary: Record<string, unknown> | null;
+  accountValue: number | null;
   withdrawable: string | null;
+  withdrawableUsd: number | null;
+  marginUsed: number | null;
   positionCount: number;
   openOrderCount: number;
   notionalExposure: number | null;
   unrealizedPnl: number | null;
+  fundingExposure: string;
+  liquidationRiskNotes: string[];
   positions: HyperliquidPositionSummary[];
   orders: HyperliquidOpenOrderSummary[];
   assetPositions: unknown[];
@@ -301,6 +306,15 @@ function objectOrNull(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function firstNumericField(record: Record<string, unknown> | null, keys: string[]): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = numberOrNull(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 function sideFromSize(size: number | null): HyperliquidPositionSummary["side"] {
   if (size === null) return "unknown";
   if (size > 0) return "long";
@@ -441,21 +455,43 @@ export class HyperliquidInfoProvider implements HyperliquidProvider {
     const orders = Array.isArray(openOrders) ? openOrders : [];
     const normalizedPositions = positions.map(normalizePositionSummary);
     const normalizedOrders = orders.map(normalizeOpenOrderSummary);
+    const marginSummary = stateRecord.marginSummary && typeof stateRecord.marginSummary === "object" ? stateRecord.marginSummary as Record<string, unknown> : null;
+    const crossMarginSummary = stateRecord.crossMarginSummary && typeof stateRecord.crossMarginSummary === "object" ? stateRecord.crossMarginSummary as Record<string, unknown> : null;
+    const withdrawable = stringOrNull(stateRecord.withdrawable);
+    const accountValue = firstNumericField(crossMarginSummary, ["accountValue", "totalRawUsd"])
+      ?? firstNumericField(marginSummary, ["accountValue", "totalRawUsd"]);
+    const marginUsed = firstNumericField(crossMarginSummary, ["totalMarginUsed", "marginUsed"])
+      ?? firstNumericField(marginSummary, ["totalMarginUsed", "marginUsed"])
+      ?? normalizedPositions.reduce((total, position) => total + (position.marginUsed ?? 0), 0);
     const notionalExposure = normalizedPositions.reduce((total, position) => {
       return total + Math.abs(position.positionValue ?? 0);
     }, 0);
     const unrealizedPnl = normalizedPositions.reduce((total, position) => {
       return total + (position.unrealizedPnl ?? 0);
     }, 0);
+    const liquidationRiskNotes = normalizedPositions
+      .filter((position) => position.liquidationPx !== null || position.leverageValue !== null)
+      .map((position) => {
+        const liquidation = position.liquidationPx === null ? "liquidation unknown" : "liquidation near " + position.liquidationPx;
+        const leverage = position.leverageValue === null ? "leverage unknown" : position.leverageValue + "x leverage";
+        return position.asset + " " + position.side + ": " + leverage + ", " + liquidation + ".";
+      });
     return {
       address,
-      marginSummary: stateRecord.marginSummary && typeof stateRecord.marginSummary === "object" ? stateRecord.marginSummary as Record<string, unknown> : null,
-      crossMarginSummary: stateRecord.crossMarginSummary && typeof stateRecord.crossMarginSummary === "object" ? stateRecord.crossMarginSummary as Record<string, unknown> : null,
-      withdrawable: stringOrNull(stateRecord.withdrawable),
+      marginSummary,
+      crossMarginSummary,
+      accountValue,
+      withdrawable,
+      withdrawableUsd: numberOrNull(withdrawable),
+      marginUsed: marginUsed === 0 && normalizedPositions.length === 0 ? null : marginUsed,
       positionCount: positions.length,
       openOrderCount: orders.length,
       notionalExposure: normalizedPositions.length ? notionalExposure : null,
       unrealizedPnl: normalizedPositions.length ? unrealizedPnl : null,
+      fundingExposure: normalizedPositions.length
+        ? "Funding exposure follows each open perp position and changes at every funding interval; inspect asset funding before holding."
+        : "No open perp positions found, so funding exposure is currently minimal.",
+      liquidationRiskNotes,
       positions: normalizedPositions,
       orders: normalizedOrders,
       assetPositions: positions,
@@ -568,7 +604,7 @@ export function planHyperliquidChat(input: HyperliquidChatExecutionInput): Hyper
   if (/\b(order\s*book|orderbook|book|bid|ask|liquidity)\b/.test(message)) return "orderbook";
   // Close/reduce intent is an order preview even though it mentions "position".
   if (/\b(close|flatten|exit)\b/.test(message) && /\b(position|positions|long|short|all|half|quarter|everything)\b/.test(message)) return "order_preview";
-  if (/\b(position|positions|account|balance|margin|portfolio|pnl|open orders?)\b/.test(message)) return "account";
+  if (/\b(position|positions|account|balance|margin|portfolio|exposure|pnl|open orders?)\b/.test(message)) return "account";
   if (/\b(buy|sell|long|short|trade|order|preview)\b/.test(message)) return "order_preview";
   if (/\b(market|markets|coin|coins|perp|perps|asset|assets|discover|list)\b/.test(message)) return "discover";
   return "learn";
@@ -1240,7 +1276,13 @@ export async function executeHyperliquidChatWorkflow(
       venue: "hyperliquid",
       intent: "account",
       execution: "read_only",
-      responseText: "Hyperliquid account snapshot for " + input.address + ": " + account.positionCount + " positions, " + account.openOrderCount + " open orders, and " + (account.notionalExposure === null ? "unknown" : formatNumber(account.notionalExposure) + " USDC") + " notional exposure. This is read-only public account data.",
+      responseText: "Hyperliquid portfolio snapshot for " + input.address + ": account value "
+        + (account.accountValue === null ? "unknown" : formatNumber(account.accountValue) + " USDC")
+        + ", withdrawable " + (account.withdrawableUsd === null ? "unknown" : formatNumber(account.withdrawableUsd) + " USDC")
+        + ", margin used " + (account.marginUsed === null ? "unknown" : formatNumber(account.marginUsed) + " USDC")
+        + ", " + account.positionCount + " positions, " + account.openOrderCount + " open orders, and "
+        + (account.notionalExposure === null ? "unknown" : formatNumber(account.notionalExposure) + " USDC")
+        + " notional exposure. This is read-only public account data; Matterhorn does not trade from it.",
       cards: [buildHyperliquidAccountCard(account), buildHyperliquidPositionRiskCard(account)],
       data: { account },
       warnings: account.warnings,
@@ -1379,7 +1421,7 @@ export function buildHyperliquidMarketListCard(markets: HyperliquidMarketSummary
 }
 
 export function buildHyperliquidAccountCard(account: HyperliquidAccountSnapshot): HyperliquidChatCard {
-  return { kind: "hyperliquid_account_snapshot", title: "Hyperliquid account", account, warnings: account.warnings };
+  return { kind: "hyperliquid_account_snapshot", title: "Hyperliquid portfolio snapshot", account, warnings: account.warnings };
 }
 
 export function buildHyperliquidPositionRiskCard(account: HyperliquidAccountSnapshot): HyperliquidChatCard {

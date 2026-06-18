@@ -126,8 +126,10 @@ for (const card of fixturePack.cards) {
 for (const required of [
   ["bittensor", "account_snapshot"],
   ["bittensor", "action_preview"],
+  ["hyperliquid", "account_snapshot"],
   ["hyperliquid", "orderbook_context"],
   ["hyperliquid", "action_preview"],
+  ["polymarket", "market_context"],
   ["polymarket", "compliance_block"],
   ["polymarket", "action_preview"],
   ["hyperliquid", "receipt_status"],
@@ -138,6 +140,15 @@ for (const required of [
     `fixture pack should include ${required[0]} ${required[1]}`,
   );
 }
+
+const hyperliquidAccount = fixturePack.cards.find((card) => card.venue === "hyperliquid" && card.kind === "account_snapshot")?.data?.account;
+assert.equal(hyperliquidAccount?.accountValue, 1000, "Hyperliquid account fixture should expose account value");
+assert.equal(hyperliquidAccount?.withdrawableUsd, 500, "Hyperliquid account fixture should expose withdrawable");
+assert.ok(hyperliquidAccount?.fundingExposure, "Hyperliquid account fixture should expose funding exposure");
+
+const polymarketContext = fixturePack.cards.find((card) => card.venue === "polymarket" && card.originalKind === "polymarket_market_context")?.data?.context;
+assert.equal(polymarketContext?.previewAvailability, "available", "Polymarket context fixture should expose preview availability");
+assert.equal(polymarketContext?.compliance?.status, "allowed", "Polymarket context fixture should expose compliance status");
 
 const blockedPolymarketPreview = fixturePack.cards.find((card) => card.venue === "polymarket" && card.kind === "action_preview")?.data?.preview;
 assert.equal(blockedPolymarketPreview?.canSubmit, false, "blocked Polymarket preview must keep canSubmit=false");

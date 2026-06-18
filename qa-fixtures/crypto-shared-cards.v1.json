@@ -42,6 +42,30 @@
     },
     {
       "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "account_snapshot",
+      "venue": "hyperliquid",
+      "title": "Hyperliquid portfolio snapshot",
+      "summary": "Read-only Hyperliquid portfolio context.",
+      "status": "success",
+      "originalKind": "hyperliquid_account_snapshot",
+      "source": { "source": "hyperliquid.info", "freshness": "live" },
+      "warnings": [],
+      "data": {
+        "kind": "hyperliquid_account_snapshot",
+        "account": {
+          "accountValue": 1000,
+          "withdrawableUsd": 500,
+          "marginUsed": 100,
+          "positionCount": 1,
+          "openOrderCount": 1,
+          "fundingExposure": "Funding exposure follows each open perp position and changes at every funding interval.",
+          "liquidationRiskNotes": ["BTC long: 5x leverage, liquidation near 50000."]
+        }
+      },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
       "kind": "action_preview",
       "venue": "hyperliquid",
       "title": "Preview Only: BTC order preview",
@@ -64,6 +88,28 @@
       "source": { "source": "polymarket.clob", "freshness": "live" },
       "warnings": ["Blocked region; no executable order terms are exposed."],
       "data": { "kind": "polymarket_compliance", "compliance": { "status": "blocked", "reason": "geoblocked" } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "market_context",
+      "venue": "polymarket",
+      "title": "Polymarket market context",
+      "summary": "Read-only Polymarket market status, outcomes, liquidity, compliance, and preview availability.",
+      "status": "success",
+      "originalKind": "polymarket_market_context",
+      "source": { "source": "polymarket.gamma", "freshness": "live" },
+      "warnings": [],
+      "data": {
+        "kind": "polymarket_market_context",
+        "context": {
+          "previewAvailability": "available",
+          "compliance": { "status": "allowed" },
+          "liquidityUsd": 42000,
+          "volumeUsd": 125000,
+          "outcomes": [{ "outcome": "Yes", "probability": 0.62, "tokenId": "token-yes" }]
+        }
+      },
       "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
     },
     {
