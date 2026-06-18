@@ -129,6 +129,14 @@ function marketExecutionChainApiCommand() {
   ].join(" ");
 }
 
+function marketSdkValidationApiCommand() {
+  return [
+    "curl -sS",
+    "\"<server-url>/api/crypto/market-sdk-validation\"",
+    "-H \"Authorization: Bearer <client-token>\"",
+  ].join(" ");
+}
+
 function runNodeJson(script, commandArgs, label) {
   const result = spawnSync(process.execPath, [join(repoRoot, "scripts", script), ...commandArgs], {
     cwd: repoRoot,
@@ -213,6 +221,55 @@ function validateMarketExecutionChainReport(report) {
   const stageIds = new Set(stages.map((stage) => stage?.id));
   for (const id of ["preview_handoff", "external_sign_request", "redacted_artifact_validation", "artifact_reconciliation", "public_receipt_import"]) {
     if (!stageIds.has(id)) errors.push(`Execution-chain guide is missing stage ${id}.`);
+  }
+  return errors;
+}
+
+function validateMarketSdkValidationReport(report) {
+  const errors = [];
+  if (!report || typeof report !== "object") {
+    return ["SDK-validation response was not an object."];
+  }
+  if (report.success !== true) errors.push("SDK-validation response did not set success:true.");
+  const guide = report.guide;
+  if (!guide || typeof guide !== "object") {
+    return [...errors, "SDK-validation response did not include guide."];
+  }
+  if (guide.version !== "matterhorn.market.sdk-validation-guide.v1") {
+    errors.push(`Unexpected SDK-validation version ${String(guide.version || "")}.`);
+  }
+  const modes = Array.isArray(guide.modes) ? guide.modes : [];
+  for (const mode of ["fixture", "operator_owned_fixture", "operator_owned_testnet"]) {
+    if (!modes.includes(mode)) errors.push(`SDK-validation guide is missing mode ${mode}.`);
+  }
+  const hyperliquidNetworks = Array.isArray(guide.networks?.hyperliquid) ? guide.networks.hyperliquid : [];
+  const polymarketNetworks = Array.isArray(guide.networks?.polymarket) ? guide.networks.polymarket : [];
+  if (!hyperliquidNetworks.includes("hyperliquid-testnet")) {
+    errors.push("SDK-validation guide is missing Hyperliquid testnet network.");
+  }
+  if (!polymarketNetworks.includes("polygon-amoy")) {
+    errors.push("SDK-validation guide is missing Polygon Amoy network.");
+  }
+  const safety = guide.safety || {};
+  const expectedFalse = [
+    "canSubmit",
+    "liveSubmissionEnabled",
+    "acceptsSecrets",
+    "acceptsRawSignatures",
+    "acceptsSignedPayloads",
+    "runsPrivateSdkSigning",
+    "computesFinalSignatures",
+    "callsExchanges",
+  ];
+  for (const key of expectedFalse) {
+    if (safety[key] !== false) errors.push(`SDK-validation safety.${key} must be false.`);
+  }
+  if (safety.nonCustodial !== true) errors.push("SDK-validation safety.nonCustodial must be true.");
+  const commands = guide.commands || {};
+  for (const key of ["doctor", "fixtureValidation", "operatorOwnedTestnetValidation", "operatorLoop"]) {
+    if (typeof commands[key] !== "string" || commands[key].length === 0) {
+      errors.push(`SDK-validation guide is missing command ${key}.`);
+    }
   }
   return errors;
 }
@@ -443,6 +500,37 @@ async function main() {
         ? "Fixture mode was requested, so the live execution-chain route check was skipped."
         : "No server URL and client token were provided, so the live execution-chain route check was skipped in fixture fallback mode.",
       marketExecutionChainApiCommand(),
+    ));
+  }
+
+  if (!fixtureMode && serverUrl && token) {
+    const sdkValidation = await fetchJson(`${serverUrl}/api/crypto/market-sdk-validation`, token, "Market SDK-validation API");
+    const artifact = join(outputDir, "matterhorn-market-sdk-validation.json");
+    if (sdkValidation.report) writeFileSync(artifact, JSON.stringify(sdkValidation.report, null, 2) + "\n");
+    const validationErrors = sdkValidation.report ? validateMarketSdkValidationReport(sdkValidation.report) : [];
+    const sdkStatus = sdkValidation.status === "pass" && validationErrors.length === 0 ? "pass" : "fail";
+    stages.push({
+      id: "market_sdk_validation_api",
+      label: "Market SDK-validation API",
+      status: sdkStatus,
+      ...(sdkValidation.report ? {
+        artifact,
+        summary: sdkStatus === "pass"
+          ? `${sdkValidation.report.guide?.version || "sdk-validation"} with ${(sdkValidation.report.guide?.modes || []).length} public validation modes.`
+          : "SDK-validation API returned an invalid safety contract.",
+      } : {}),
+      ...(sdkValidation.error ? { error: sdkValidation.error, stderr: sdkValidation.stderr } : {}),
+      ...(validationErrors.length ? { errors: validationErrors } : {}),
+      command: marketSdkValidationApiCommand(),
+    });
+  } else {
+    stages.push(stageSkip(
+      "market_sdk_validation_api",
+      "Market SDK-validation API",
+      fixtureMode
+        ? "Fixture mode was requested, so the live SDK-validation route check was skipped."
+        : "No server URL and client token were provided, so the live SDK-validation route check was skipped in fixture fallback mode.",
+      marketSdkValidationApiCommand(),
     ));
   }
 
