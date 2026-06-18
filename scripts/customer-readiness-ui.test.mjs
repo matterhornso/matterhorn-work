@@ -48,6 +48,7 @@ for (const phrase of [
   "Hyperliquid read",
   "Polymarket compliance",
   "Signer preview",
+  "Can Matterhorn submit Hyperliquid and Polymarket orders yet?",
   "Preview Only",
   "Can submit: No",
   "Live submission: Off",

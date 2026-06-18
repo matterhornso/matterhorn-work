@@ -83,6 +83,12 @@ const CUSTOMER_DEMO_PROMPTS = [
     betaVisible: true,
     prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
   },
+  {
+    id: "market-execution-readiness",
+    label: "Execution readiness",
+    betaVisible: false,
+    prompt: "Use unified crypto chat. Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
+  },
 ] as const;
 const BITTENSOR_BETA_MODE = (() => {
   const flag = typeof import.meta.env?.VITE_MATTERHORN_BITTENSOR_BETA === "string"
