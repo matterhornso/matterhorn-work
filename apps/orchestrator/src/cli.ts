@@ -3762,6 +3762,7 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid sign-request --execution-mode testnet_external_signer --asset <symbol> --side buy|sell --size <n> [options]",
+    "  matterhorn-work hyperliquid validate-artifact --sign-request-file <path> --artifact-file <path> [options]",
     "  matterhorn-work hyperliquid receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work polymarket chat --message <text> [options]",
     "  matterhorn-work polymarket markets --query <text> [options]",
@@ -3773,6 +3774,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket sign-request --execution-mode testnet_external_signer --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
+    "  matterhorn-work polymarket validate-artifact --sign-request-file <path> --artifact-file <path> [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto readiness [options]",
@@ -7201,6 +7203,21 @@ function readMarketHandoffArg(args: ParsedArgs, handoffJson: string | undefined,
   }
 }
 
+function readMarketWrappedJsonArg(args: ParsedArgs, fileFlag: string, jsonFlag: string, unwrapKey: string): unknown {
+  const inlineJson = readFlag(args.flags, jsonFlag);
+  const filePath = readFlag(args.flags, fileFlag);
+  if (!inlineJson && !filePath) {
+    throw new Error(`${fileFlag} or ${jsonFlag} is required`);
+  }
+  const raw = inlineJson ?? readFileSync(resolve(String(filePath)), "utf8");
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.[unwrapKey] && typeof parsed[unwrapKey] === "object" ? parsed[unwrapKey] : parsed;
+  } catch (error) {
+    throw new Error(`Could not parse ${unwrapKey} JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 /**
  * Build the public receipt from --receipt-json / --receipt-file (preferred for
  * non-trivial receipts) and/or individual flags. Individual flags override the
@@ -7416,6 +7433,18 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "validate-artifact" || subcommand === "artifact-validate" || subcommand === "external-artifact") {
+      const signRequest = readMarketWrappedJsonArg(args, "sign-request-file", "sign-request-json", "signRequest");
+      const artifact = readMarketWrappedJsonArg(args, "artifact-file", "artifact-json", "artifact");
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/external-artifact/validate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ signRequest, artifact }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "receipt" || subcommand === "verify-receipt") {
       const handoffJson = readFlag(args.flags, "handoff-json");
       const handoffFile = readFlag(args.flags, "handoff-file");
@@ -7459,7 +7488,7 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|watch|preview-order|handoff|sign-request|receipt");
+    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|watch|preview-order|handoff|sign-request|validate-artifact|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -7690,6 +7719,18 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "validate-artifact" || subcommand === "artifact-validate" || subcommand === "external-artifact") {
+      const signRequest = readMarketWrappedJsonArg(args, "sign-request-file", "sign-request-json", "signRequest");
+      const artifact = readMarketWrappedJsonArg(args, "artifact-file", "artifact-json", "artifact");
+      const result = await fetchJson(`${baseUrl}/api/polymarket/orders/external-artifact/validate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ signRequest, artifact }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "receipt" || subcommand === "verify-receipt") {
       const handoffJson = readFlag(args.flags, "handoff-json");
       const handoffFile = readFlag(args.flags, "handoff-file");
@@ -7731,7 +7772,7 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|watch|preview-order|handoff|sign-request|receipt");
+    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|watch|preview-order|handoff|sign-request|validate-artifact|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

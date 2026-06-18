@@ -121,6 +121,10 @@ async function createMockServer() {
           executionMode: "testnet_external_signer",
           network: "testnet",
           action: "place_order",
+          signRequestSha256: "1".repeat(64),
+          previewSha256: "2".repeat(64),
+          handoffSha256: "3".repeat(64),
+          unsignedPayloadSha256: "4".repeat(64),
           readyToSign: true,
           signedArtifactAccepted: false,
           submitSignedAllowedByContract: false,
@@ -150,6 +154,10 @@ async function createMockServer() {
           executionMode: "testnet_external_signer",
           network: "amoy",
           action: "place_order",
+          signRequestSha256: "5".repeat(64),
+          previewSha256: "6".repeat(64),
+          handoffSha256: "7".repeat(64),
+          unsignedPayloadSha256: "8".repeat(64),
           readyToSign: true,
           signedArtifactAccepted: false,
           submitSignedAllowedByContract: false,
@@ -160,6 +168,56 @@ async function createMockServer() {
         },
         handoff: { canSubmit: false, liveSubmissionEnabled: false },
         preview: { canSubmit: false, liveSubmissionEnabled: false },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/external-artifact/validate") {
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body || "signature" in body.artifact) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      return writeJson(res, 200, {
+        success: true,
+        validation: {
+          version: "matterhorn.market.artifact-validation.v1",
+          venue: "hyperliquid",
+          status: "accepted_public_metadata",
+          matchesSignRequest: true,
+          signedArtifactAccepted: false,
+          submitSignedAllowedByContract: false,
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          publicAuditReceiptCandidate: {
+            version: "matterhorn.market.receipt.v1",
+            venue: "hyperliquid",
+            status: "received",
+            action: "place_order",
+          },
+        },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/polymarket/orders/external-artifact/validate") {
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body || "signature" in body.artifact) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      return writeJson(res, 200, {
+        success: true,
+        validation: {
+          version: "matterhorn.market.artifact-validation.v1",
+          venue: "polymarket",
+          status: "accepted_public_metadata",
+          matchesSignRequest: true,
+          signedArtifactAccepted: false,
+          submitSignedAllowedByContract: false,
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          publicAuditReceiptCandidate: {
+            version: "matterhorn.market.receipt.v1",
+            venue: "polymarket",
+            status: "received",
+            action: "buy_shares",
+          },
+        },
       });
     }
 
@@ -246,7 +304,7 @@ async function main() {
 
     // 3. Venue sign-request commands call only the external sign-request route
     // and keep every execution flag disabled.
-    await expectCli(
+    const hyperliquidSignPayload = await expectCli(
       "hyperliquid sign-request external signer only",
       mock.url,
       [
@@ -278,7 +336,7 @@ async function main() {
       },
     );
 
-    await expectCli(
+    const polymarketSignPayload = await expectCli(
       "polymarket sign-request external signer only",
       mock.url,
       [
@@ -319,6 +377,104 @@ async function main() {
       throw new Error("missing execution-mode sign-request reached the server");
     }
     console.log("PASS hyperliquid sign-request requires explicit testnet external signer mode");
+
+    const artifactDir = mkdtempSync(join(tmpdir(), "matterhorn-market-artifact-cli-"));
+    const hyperliquidSignRequestPath = join(artifactDir, "hyperliquid-sign-request.json");
+    const hyperliquidArtifactPath = join(artifactDir, "hyperliquid-artifact.json");
+    const polymarketSignRequestPath = join(artifactDir, "polymarket-sign-request.json");
+    const polymarketArtifactPath = join(artifactDir, "polymarket-artifact.json");
+    writeFileSync(hyperliquidSignRequestPath, JSON.stringify({ signRequest: hyperliquidSignPayload.signRequest }));
+    writeFileSync(hyperliquidArtifactPath, JSON.stringify({
+      artifact: {
+        version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+        venue: "hyperliquid",
+        routeName: "hyperliquid.orders.sign_request",
+        validationMode: "public_redacted_metadata",
+        executionMode: "testnet_external_signer",
+        network: hyperliquidSignPayload.signRequest.network,
+        action: hyperliquidSignPayload.signRequest.action,
+        signRequestSha256: hyperliquidSignPayload.signRequest.signRequestSha256,
+        previewSha256: hyperliquidSignPayload.signRequest.previewSha256,
+        handoffSha256: hyperliquidSignPayload.signRequest.handoffSha256,
+        unsignedPayloadSha256: hyperliquidSignPayload.signRequest.unsignedPayloadSha256,
+        signedArtifactPublicHash: "a".repeat(64),
+        signedArtifactRedacted: true,
+        signerAddress: "0x0000000000000000000000000000000000000001",
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+      },
+    }));
+    writeFileSync(polymarketSignRequestPath, JSON.stringify({ signRequest: polymarketSignPayload.signRequest }));
+    writeFileSync(polymarketArtifactPath, JSON.stringify({
+      artifact: {
+        version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+        venue: "polymarket",
+        routeName: "polymarket.orders.sign_request",
+        validationMode: "public_redacted_metadata",
+        executionMode: "testnet_external_signer",
+        network: polymarketSignPayload.signRequest.network,
+        action: polymarketSignPayload.signRequest.action,
+        signRequestSha256: polymarketSignPayload.signRequest.signRequestSha256,
+        previewSha256: polymarketSignPayload.signRequest.previewSha256,
+        handoffSha256: polymarketSignPayload.signRequest.handoffSha256,
+        unsignedPayloadSha256: polymarketSignPayload.signRequest.unsignedPayloadSha256,
+        signedArtifactPublicHash: "b".repeat(64),
+        signedArtifactRedacted: true,
+        signerAddress: "0x0000000000000000000000000000000000000001",
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+      },
+    }));
+
+    await expectCli(
+      "hyperliquid validate-artifact external metadata only",
+      mock.url,
+      [
+        "hyperliquid",
+        "validate-artifact",
+        "--sign-request-file",
+        hyperliquidSignRequestPath,
+        "--artifact-file",
+        hyperliquidArtifactPath,
+      ],
+      (payload) => {
+        if (payload.validation?.version !== "matterhorn.market.artifact-validation.v1") {
+          throw new Error("expected Hyperliquid artifact validation version");
+        }
+        if (payload.validation?.status !== "accepted_public_metadata") throw new Error("expected Hyperliquid accepted_public_metadata");
+        if (payload.validation?.canSubmit !== false) throw new Error("expected Hyperliquid validation canSubmit=false");
+        if (payload.validation?.liveSubmissionEnabled !== false) throw new Error("expected Hyperliquid validation liveSubmissionEnabled=false");
+        if (payload.validation?.signedArtifactAccepted !== false) throw new Error("expected Hyperliquid signedArtifactAccepted=false");
+        if (payload.validation?.publicAuditReceiptCandidate?.version !== "matterhorn.market.receipt.v1") {
+          throw new Error("expected Hyperliquid public audit receipt candidate");
+        }
+      },
+    );
+
+    await expectCli(
+      "polymarket validate-artifact external metadata only",
+      mock.url,
+      [
+        "polymarket",
+        "validate-artifact",
+        "--sign-request-file",
+        polymarketSignRequestPath,
+        "--artifact-file",
+        polymarketArtifactPath,
+      ],
+      (payload) => {
+        if (payload.validation?.version !== "matterhorn.market.artifact-validation.v1") {
+          throw new Error("expected Polymarket artifact validation version");
+        }
+        if (payload.validation?.status !== "accepted_public_metadata") throw new Error("expected Polymarket accepted_public_metadata");
+        if (payload.validation?.canSubmit !== false) throw new Error("expected Polymarket validation canSubmit=false");
+        if (payload.validation?.liveSubmissionEnabled !== false) throw new Error("expected Polymarket validation liveSubmissionEnabled=false");
+        if (payload.validation?.signedArtifactAccepted !== false) throw new Error("expected Polymarket signedArtifactAccepted=false");
+        if (payload.validation?.publicAuditReceiptCandidate?.version !== "matterhorn.market.receipt.v1") {
+          throw new Error("expected Polymarket public audit receipt candidate");
+        }
+      },
+    );
 
     // 4. Credential-shaped flags are rejected before the CLI ever calls the server.
     const requestsBefore = mock.requests.length;
@@ -867,7 +1023,9 @@ async function main() {
       "/api/crypto/chat/execute",
       "/api/crypto/readiness",
       "/api/hyperliquid/orders/external-sign-request",
+      "/api/hyperliquid/orders/external-artifact/validate",
       "/api/polymarket/orders/external-sign-request",
+      "/api/polymarket/orders/external-artifact/validate",
     ]);
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);

@@ -20,6 +20,7 @@ import {
   planPolymarketChat,
   preparePolymarketOrderFromRequest,
   preparePolymarketOrderPreview,
+  validatePolymarketRedactedArtifactEnvelope,
   verifyPolymarketReceipt,
   type PolymarketBookLevel,
   type PolymarketProvider,
@@ -512,6 +513,87 @@ describe("Polymarket external-signer handoff + receipt", () => {
   test("Phase 1 sign request fails closed when mode is omitted", async () => {
     const handoff = buildPolymarketSigningHandoff(await allowedPreview());
     expect(() => buildPolymarketExternalSignRequest(handoff)).toThrow(/executionMode=testnet_external_signer/);
+  });
+
+  test("Phase 2 validates redacted artifact metadata and emits a public receipt candidate", async () => {
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const { signRequest } = await preparePolymarketExternalSignRequestFromRequest(
+      { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
+      provider({ blocked: false }),
+      exchange,
+    );
+    expect(signRequest).not.toBeNull();
+    const artifact = {
+      version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+      venue: "polymarket",
+      routeName: "polymarket.orders.sign_request",
+      validationMode: "public_redacted_metadata",
+      executionMode: "testnet_external_signer",
+      network: signRequest!.network,
+      action: signRequest!.action,
+      signRequestSha256: signRequest!.signRequestSha256,
+      previewSha256: signRequest!.previewSha256,
+      handoffSha256: signRequest!.handoffSha256,
+      unsignedPayloadSha256: signRequest!.unsignedPayloadSha256,
+      signedArtifactPublicHash: "c".repeat(64),
+      signedArtifactRedacted: true,
+      signerAddress: "0x0000000000000000000000000000000000000001",
+      artifactKind: "clob_order",
+      producedAt: new Date().toISOString(),
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      warnings: [] as string[],
+    } as const;
+    const result = validatePolymarketRedactedArtifactEnvelope(signRequest!, artifact);
+    expect(result.status).toBe("accepted_public_metadata");
+    expect(result.matchesSignRequest).toBe(true);
+    expect(result.signedArtifactAccepted).toBe(false);
+    expect(result.submitSignedAllowedByContract).toBe(false);
+    expect(result.canSubmit).toBe(false);
+    expect(result.publicAuditReceiptCandidate?.version).toBe("matterhorn.market.receipt.v1");
+    expect(result.publicAuditReceiptCandidate?.status).toBe("received");
+    expect(result.publicAuditReceiptCandidate?.marketId).toBe("0xmarket-ai");
+    expect(result.publicAuditReceiptCandidate?.warnings.join(" ")).toContain("not exchange submission evidence");
+  });
+
+  test("Phase 2 rejects hash mismatch and raw artifact material", async () => {
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const { signRequest } = await preparePolymarketExternalSignRequestFromRequest(
+      { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
+      provider({ blocked: false }),
+      exchange,
+    );
+    expect(signRequest).not.toBeNull();
+    const baseArtifact = {
+      version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+      venue: "polymarket",
+      routeName: "polymarket.orders.sign_request",
+      validationMode: "public_redacted_metadata",
+      executionMode: "testnet_external_signer",
+      network: signRequest!.network,
+      action: signRequest!.action,
+      signRequestSha256: signRequest!.signRequestSha256,
+      previewSha256: signRequest!.previewSha256,
+      handoffSha256: signRequest!.handoffSha256,
+      unsignedPayloadSha256: signRequest!.unsignedPayloadSha256,
+      signedArtifactPublicHash: "d".repeat(64),
+      signedArtifactRedacted: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      warnings: [] as string[],
+    } as const;
+    const mismatch = validatePolymarketRedactedArtifactEnvelope(signRequest!, { ...baseArtifact, handoffSha256: "e".repeat(64) } as never);
+    expect(mismatch.status).toBe("rejected");
+    expect(mismatch.publicAuditReceiptCandidate).toBeNull();
+    expect(mismatch.errors.join(" ")).toContain("handoffSha256");
+
+    const raw = validatePolymarketRedactedArtifactEnvelope(signRequest!, {
+      ...baseArtifact,
+      publicButInvalid: { signedPayload: "0x" + "a".repeat(130) },
+    } as never);
+    expect(raw.status).toBe("rejected");
+    expect(raw.errors.join(" ")).toMatch(/Credential-shaped|Raw signed artifact/);
+    expect(JSON.stringify(raw)).not.toContain("0x" + "a".repeat(130));
   });
 
   test("verifies a matching public receipt", async () => {

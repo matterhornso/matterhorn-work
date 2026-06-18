@@ -290,6 +290,48 @@ export interface PolymarketExternalSignRequest {
   warnings: string[];
 }
 
+export interface PolymarketRedactedSignedArtifactEnvelope {
+  version: "matterhorn.market.redacted-signed-artifact-envelope.v1";
+  venue: "polymarket";
+  routeName: "polymarket.orders.sign_request";
+  validationMode: "public_redacted_metadata";
+  executionMode: "testnet_external_signer";
+  network: string;
+  action: "place_order";
+  signRequestSha256: string;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signedArtifactPublicHash: string;
+  signedArtifactRedacted: true;
+  signerAddress?: string | null;
+  artifactKind?: "clob_order" | "exchange_order" | "unknown";
+  producedAt?: string | null;
+  source?: PolymarketSource | null;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  warnings?: string[];
+}
+
+export interface PolymarketArtifactValidationResult {
+  version: "matterhorn.market.artifact-validation.v1";
+  venue: "polymarket";
+  status: "accepted_public_metadata" | "rejected";
+  validationMode: "public_redacted_metadata";
+  matchesSignRequest: boolean;
+  signRequestSha256: string;
+  signedArtifactPublicHash: string | null;
+  signedArtifactRedacted: boolean;
+  redactedMetadataAccepted: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  publicAuditReceiptCandidate: PolymarketReceipt | null;
+  errors: string[];
+  warnings: string[];
+}
+
 /**
  * EIP-712 typed-data TEMPLATE for a Polymarket CLOB order. Matterhorn fills only
  * the economic terms it can know (token, amounts, side). The user's wallet/client
@@ -1472,6 +1514,142 @@ export function buildPolymarketExternalSignRequest(
     operatorConfirmation: "I understand this is an external testnet sign request only. Matterhorn will not sign, accept the signature, store CLOB credentials, or submit.",
     signRequestSha256: sha256(core),
     compliance: handoff.compliance,
+    warnings,
+  };
+}
+
+function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function findRawPolymarketArtifactMaterial(value: unknown, rootPath: string[] = []): string | null {
+  const MAX_NODES = 100_000;
+  const MAX_DEPTH = 256;
+  const stack: Array<{ value: unknown; path: string[]; depth: number }> = [{ value, path: rootPath, depth: 0 }];
+  let visited = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === undefined) break;
+    if (++visited > MAX_NODES) return [...node.path, "<oversized>"].join(".");
+    if (node.depth > MAX_DEPTH) return [...node.path, "<too-deep>"].join(".");
+    const current = node.value;
+    if (typeof current === "string") {
+      const trimmed = current.trim();
+      if (/^0x[a-fA-F0-9]{128,}$/.test(trimmed)) return node.path.length ? node.path.join(".") : "input";
+      if (/"(?:signature|signedPayload|signedOrder|exchangePayload)"\s*:/i.test(trimmed)) {
+        return node.path.length ? node.path.join(".") : "input";
+      }
+      continue;
+    }
+    if (Array.isArray(current)) {
+      current.forEach((child, index) => stack.push({ value: child, path: [...node.path, String(index)], depth: node.depth + 1 }));
+      continue;
+    }
+    if (!current || typeof current !== "object") continue;
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      if (/^(signature|rawSignature|signedPayload|signedOrder|signedAction|exchangePayload)$/i.test(key)) {
+        return [...node.path, key].join(".");
+      }
+      stack.push({ value: child, path: [...node.path, key], depth: node.depth + 1 });
+    }
+  }
+  return null;
+}
+
+export function validatePolymarketRedactedArtifactEnvelope(
+  signRequest: PolymarketExternalSignRequest,
+  artifact: PolymarketRedactedSignedArtifactEnvelope,
+): PolymarketArtifactValidationResult {
+  const errors: string[] = [];
+  const warnings = [
+    "Validation-only Phase 2: Matterhorn accepts public/redacted metadata only and does not submit.",
+    ...signRequest.warnings,
+    ...(artifact.warnings ?? []),
+  ];
+
+  const { unsignedPayloadSha256: artifactUnsignedPayloadSha256, ...artifactForSecretScan } = artifact;
+  const forbiddenCredentialPath = findForbiddenPolymarketCredentialInput({
+    artifact: { ...artifactForSecretScan, payloadHash: artifactUnsignedPayloadSha256 },
+    signRequest: {
+      venue: signRequest.venue,
+      routeName: signRequest.routeName,
+      executionMode: signRequest.executionMode,
+      network: signRequest.network,
+      action: signRequest.action,
+      signRequestSha256: signRequest.signRequestSha256,
+      previewSha256: signRequest.previewSha256,
+      handoffSha256: signRequest.handoffSha256,
+      payloadHash: signRequest.unsignedPayloadSha256,
+    },
+  });
+  if (forbiddenCredentialPath) errors.push(`Credential-shaped field rejected at ${forbiddenCredentialPath}.`);
+  const rawArtifactPath = findRawPolymarketArtifactMaterial(artifact);
+  if (rawArtifactPath) errors.push(`Raw signed artifact material rejected at ${rawArtifactPath}.`);
+
+  if (signRequest.version !== "matterhorn.market.external-sign-request.v1") errors.push("Invalid sign-request version.");
+  if (artifact.version !== "matterhorn.market.redacted-signed-artifact-envelope.v1") errors.push("Invalid artifact envelope version.");
+  if (signRequest.venue !== "polymarket" || artifact.venue !== "polymarket") errors.push("Venue must be polymarket.");
+  if (artifact.validationMode !== "public_redacted_metadata") errors.push("Artifact validationMode must be public_redacted_metadata.");
+  if (signRequest.executionMode !== "testnet_external_signer" || artifact.executionMode !== "testnet_external_signer") {
+    errors.push("Only executionMode=testnet_external_signer is accepted in Phase 2.");
+  }
+  if (artifact.signedArtifactRedacted !== true) errors.push("signedArtifactRedacted must be true.");
+  if (artifact.canSubmit !== false || artifact.liveSubmissionEnabled !== false) {
+    errors.push("Artifact metadata must keep canSubmit=false and liveSubmissionEnabled=false.");
+  }
+  if (!isSha256Hex(artifact.signedArtifactPublicHash)) errors.push("signedArtifactPublicHash must be a 64-character SHA-256 hash.");
+
+  for (const field of ["signRequestSha256", "previewSha256", "handoffSha256", "unsignedPayloadSha256", "network", "action", "routeName"] as const) {
+    if (artifact[field] !== signRequest[field]) errors.push(`Artifact ${field} does not match the sign request.`);
+  }
+
+  const expiresAtMs = Date.parse(signRequest.expiresAt);
+  if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) errors.push("Sign request is expired.");
+  if (artifact.producedAt) {
+    const producedAtMs = Date.parse(artifact.producedAt);
+    if (!Number.isFinite(producedAtMs)) errors.push("producedAt must be an ISO timestamp when provided.");
+    else if (Number.isFinite(expiresAtMs) && producedAtMs > expiresAtMs) errors.push("Artifact was produced after the sign request expired.");
+  }
+
+  const ok = errors.length === 0;
+  const receipt: PolymarketReceipt | null = ok
+    ? {
+        version: "matterhorn.market.receipt.v1",
+        venue: "polymarket",
+        status: "received",
+        action: "buy_shares",
+        previewSha256: signRequest.previewSha256,
+        handoffSha256: signRequest.handoffSha256,
+        orderId: null,
+        txHash: null,
+        marketId: signRequest.marketId,
+        outcome: signRequest.outcome,
+        side: null,
+        submittedAt: null,
+        warnings: [
+          "Public audit receipt candidate only. It proves redacted metadata matched the sign request; it is not exchange submission evidence.",
+          `signedArtifactPublicHash=${artifact.signedArtifactPublicHash}`,
+          ...(artifact.signerAddress ? [`signerAddress=${artifact.signerAddress}`] : []),
+        ],
+      }
+    : null;
+
+  return {
+    version: "matterhorn.market.artifact-validation.v1",
+    venue: "polymarket",
+    status: ok ? "accepted_public_metadata" : "rejected",
+    validationMode: "public_redacted_metadata",
+    matchesSignRequest: ok,
+    signRequestSha256: signRequest.signRequestSha256,
+    signedArtifactPublicHash: typeof artifact.signedArtifactPublicHash === "string" ? artifact.signedArtifactPublicHash : null,
+    signedArtifactRedacted: artifact.signedArtifactRedacted === true,
+    redactedMetadataAccepted: ok,
+    signedArtifactAccepted: false,
+    submitSignedAllowedByContract: false,
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    publicAuditReceiptCandidate: receipt,
+    errors,
     warnings,
   };
 }
