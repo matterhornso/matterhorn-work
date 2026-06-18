@@ -11,7 +11,7 @@ const smokePath = join(tmp, "customer-ready-smoke.json");
 await writeFile(smokePath, JSON.stringify({
   ready: true,
   metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "d".repeat(40), gitBranch: "codex/test" },
-  summary: { pass: 28, fail: 0, skip: 0 },
+  summary: { pass: 29, fail: 0, skip: 0 },
   stages: [
     { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
     { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
@@ -20,6 +20,7 @@ await writeFile(smokePath, JSON.stringify({
     { id: "market.official_sdk_normalize", label: "Market official SDK artifact normalizer", status: "pass" },
     { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
     { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
+    { id: "market.artifact_reconciliation", label: "Market artifact reconciliation evidence", status: "pass" },
     { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
     { id: "hyperliquid.readiness", label: "Hyperliquid readiness gate", status: "pass" },
     { id: "polymarket.readiness", label: "Polymarket readiness gate", status: "pass" },

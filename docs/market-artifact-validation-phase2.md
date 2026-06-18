@@ -61,6 +61,34 @@ On success, Matterhorn returns:
 
 The receipt candidate is not proof of exchange submission. It only proves that redacted public metadata matched the sign request.
 
+## Market Artifact Reconciliation
+
+After collecting Hyperliquid and/or Polymarket artifact-validation JSON, operators can reconcile the public receipt candidates into one customer-safe evidence report:
+
+```bash
+node scripts/market-artifact-reconciliation.mjs \
+  --hyperliquid-artifact-validation /tmp/hyperliquid-artifact-validation.json \
+  --polymarket-artifact-validation /tmp/polymarket-artifact-validation.json \
+  --output /tmp/matterhorn-market-artifact-reconciliation.md \
+  --json-output /tmp/matterhorn-market-artifact-reconciliation.json \
+  --strict
+```
+
+The reconciliation report accepts only `matterhorn.market.artifact-validation.v1` public metadata and writes `matterhorn.market.artifact-reconciliation.v1`. It verifies accepted public metadata, `matchesSignRequest: true`, `canSubmit: false`, `liveSubmissionEnabled: false`, `signedArtifactAccepted: false`, `submitSignedAllowedByContract: false`, and the public audit receipt candidate. It is still not exchange submission evidence and is not proof of live trading.
+
+Attach the reconciliation output to the customer evidence bundle when a demo includes Phase 2 artifact-validation evidence:
+
+```bash
+node scripts/market-customer-evidence-bundle.mjs \
+  --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
+  --official-sdk-validation /tmp/matterhorn-market-sdk-evidence.json \
+  --artifact-reconciliation /tmp/matterhorn-market-artifact-reconciliation.json \
+  --require-artifact-reconciliation \
+  --output /tmp/matterhorn-market-customer-evidence.md \
+  --json-output /tmp/matterhorn-market-customer-evidence.json \
+  --strict
+```
+
 ## Still Forbidden
 
 - `/api/hyperliquid/orders/submit`
@@ -75,6 +103,7 @@ The receipt candidate is not proof of exchange submission. It only proves that r
 
 ```bash
 pnpm test:market-artifact-validation-phase2
+pnpm test:market-artifact-reconciliation
 pnpm test:market-sign-request-phase1
 pnpm test:market-submit-sign-contract-phase0
 pnpm test:market-execution-readiness-gate
