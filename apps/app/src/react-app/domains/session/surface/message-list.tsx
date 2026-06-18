@@ -680,7 +680,10 @@ function FileCard(props: {
 }
 
 type BittensorChatCard = {
+  version?: string;
   kind?: string;
+  venue?: "auto" | "bittensor" | "hyperliquid" | "polymarket" | string;
+  status?: "info" | "success" | "warning" | "danger" | string;
   title?: string;
   subtitle?: string | null;
   summary?: string | null;
@@ -698,6 +701,12 @@ type BittensorChatCard = {
   }>;
   warnings?: string[];
   data?: Record<string, unknown>;
+  safety?: {
+    nonCustodial?: boolean;
+    liveSubmissionEnabled?: boolean;
+    canSubmit?: boolean;
+  };
+  source?: unknown;
 };
 
 type BittensorChatCardItem = NonNullable<BittensorChatCard["items"]>[number];
@@ -708,6 +717,14 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
 
 function readBittensorCards(output: unknown): BittensorChatCard[] {
   if (!isRecordValue(output)) return [];
+  const sharedCards = output.sharedCards;
+  if (Array.isArray(sharedCards)) {
+    const cards = sharedCards
+      .filter(isRecordValue)
+      .map(normalizeUnifiedCryptoSharedCard)
+      .filter((card): card is BittensorChatCard => Boolean(card));
+    if (cards.length) return cards.slice(0, 6);
+  }
   const cards = output.cards;
   if (!Array.isArray(cards)) return [];
   return cards
@@ -715,6 +732,59 @@ function readBittensorCards(output: unknown): BittensorChatCard[] {
     .map((card) => card as BittensorChatCard)
     .filter((card) => typeof card.title === "string" && card.title.trim().length > 0)
     .slice(0, 6);
+}
+
+function titleCaseCryptoLabel(value: string): string {
+  return value
+    .split(/[_\s-]+/g)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
+function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): BittensorChatCard | null {
+  if (card.version !== "matterhorn.crypto.shared-card.v1") return null;
+  const title = typeof card.title === "string" && card.title.trim() ? card.title.trim() : "Crypto chat";
+  const status = typeof card.status === "string" ? card.status : "info";
+  const venue = typeof card.venue === "string" ? card.venue : "auto";
+  const venueLabel = titleCaseCryptoLabel(venue);
+  const statusLabel = titleCaseCryptoLabel(status);
+  const safety = isRecordValue(card.safety) ? card.safety : {};
+  const originalKind = typeof card.originalKind === "string" ? card.originalKind : null;
+  const source = isRecordValue(card.source)
+    ? card.source
+    : typeof card.source === "string"
+      ? { source: card.source }
+      : null;
+  const sourceLabel = source && typeof source.source === "string" ? source.source : null;
+  const items: NonNullable<BittensorChatCard["items"]> = [
+    { label: "Venue", value: venueLabel, tone: venue === "auto" ? "muted" : "default" },
+    { label: "Status", value: statusLabel, tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "muted" },
+    { label: "Can submit", value: safety.canSubmit === false ? "No" : "Unavailable", tone: safety.canSubmit === false ? "good" : "warning" },
+    { label: "Live submission", value: safety.liveSubmissionEnabled === false ? "Off" : "Unavailable", tone: safety.liveSubmissionEnabled === false ? "good" : "warning" },
+  ];
+  if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
+  if (originalKind) items.push({ label: "Original card", value: originalKind, tone: "muted" });
+
+  return {
+    version: "matterhorn.crypto.shared-card.v1",
+    kind: typeof card.kind === "string" ? card.kind : "generic",
+    venue,
+    status,
+    title,
+    subtitle: venue === "auto" ? "Crypto" : venueLabel,
+    summary: typeof card.summary === "string" ? card.summary : null,
+    tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "default",
+    items,
+    warnings: Array.isArray(card.warnings) ? card.warnings.filter((item): item is string => typeof item === "string") : [],
+    data: isRecordValue(card.data) ? card.data : {},
+    safety: {
+      nonCustodial: safety.nonCustodial === true,
+      liveSubmissionEnabled: safety.liveSubmissionEnabled === true,
+      canSubmit: safety.canSubmit === true,
+    },
+    source,
+  };
 }
 
 function bittensorCardToneClass(tone?: BittensorChatCard["tone"]) {
@@ -755,10 +825,13 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
   );
   switch (props.kind) {
     case "wallet_snapshot":
+    case "account_snapshot":
       return <Wallet className={className} strokeWidth={1.9} />;
     case "staking_quote":
     case "signed_action_review":
     case "signing_handoff":
+    case "action_preview":
+    case "external_signer_handoff":
       return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "signer_status":
     case "readiness_report":
@@ -769,10 +842,14 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
     case "adapter_onboarding":
     case "adapter_evidence_bundle":
     case "adapter_approval_audit":
+    case "receipt_status":
       return <BadgeCheck className={className} strokeWidth={1.9} />;
     case "watchlist":
+    case "watch_alert":
       return <Activity className={className} strokeWidth={1.9} />;
     case "unsupported_adapter":
+    case "compliance_block":
+    case "clarification":
       return <CircleAlert className={className} strokeWidth={1.9} />;
     case "adapter_launch_gate":
     case "adapter_evidence_review":
@@ -781,7 +858,11 @@ function BittensorCardIcon(props: { kind?: string; tone?: BittensorChatCard["ton
     case "adapter_canary_packet":
       return <ShieldAlert className={className} strokeWidth={1.9} />;
     case "subnet_result":
+    case "market_context":
+    case "orderbook_context":
       return <Zap className={className} strokeWidth={1.9} />;
+    case "discovery":
+      return <Search className={className} strokeWidth={1.9} />;
     default:
       return <BrainCircuit className={className} strokeWidth={1.9} />;
   }
