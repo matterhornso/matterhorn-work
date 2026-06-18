@@ -33,6 +33,8 @@ const CUSTOMER_DEMO_COMMANDS = {
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionReadiness: "matterhorn-work crypto execution-readiness --json",
   executionReadinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
+  executionChain: "matterhorn-work crypto execution-chain --json",
+  executionChainApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-chain\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionChainSignRequest: [
     "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
     "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
@@ -851,7 +853,13 @@ export default function BittensorPanel() {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChain")}>
+                    {copiedCustomerCommand === "executionChain" ? "Copied" : "Chain CLI"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainApi")}>
+                    {copiedCustomerCommand === "executionChainApi" ? "Copied" : "Chain API"}
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
                     {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Sign request"}
                   </Button>
@@ -914,6 +922,9 @@ export default function BittensorPanel() {
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("executionReadinessApi")}>
                     {copiedCustomerCommand === "executionReadinessApi" ? "Copied" : "Execution API"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("executionChainApi")}>
+                    {copiedCustomerCommand === "executionChainApi" ? "Copied" : "Chain API"}
                   </Button>
                 </div>
               </div>

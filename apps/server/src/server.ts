@@ -165,7 +165,10 @@ import {
   findForbiddenUnifiedCryptoCredentialInput,
   type UnifiedCryptoChatInput,
 } from "./tools/crypto-chat.js";
-import { buildMarketExecutionReadinessResponse } from "./tools/market-execution-readiness.js";
+import {
+  buildMarketExecutionChainResponse,
+  buildMarketExecutionReadinessResponse,
+} from "./tools/market-execution-readiness.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -4157,6 +4160,10 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/crypto/market-execution-readiness", "client", async () => {
     return jsonResponse(buildMarketExecutionReadinessResponse());
+  });
+
+  addRoute(routes, "GET", "/api/crypto/market-execution-chain", "client", async () => {
+    return jsonResponse(buildMarketExecutionChainResponse());
   });
 
   addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {

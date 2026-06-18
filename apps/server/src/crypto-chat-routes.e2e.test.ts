@@ -69,6 +69,14 @@ async function postCryptoChat(base: string, body: Record<string, unknown>) {
   return { res, payload };
 }
 
+async function getJson(base: string, path: string) {
+  const res = await fetch(`${base}${path}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  const payload = await res.json().catch(() => ({}));
+  return { res, payload };
+}
+
 function forbiddenFieldPath(value: unknown, path: string[] = []): string | null {
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index += 1) {
@@ -163,6 +171,29 @@ describe("unified crypto chat execute route", () => {
     });
     expect(payload.data.guide.version).toBe("matterhorn.market.execution-chain-guide.v1");
     expect(payload.data.guide.safety.acceptsSecrets).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
+  test("serves the read-only market execution-chain API contract", async () => {
+    const { base } = await boot();
+    const { res, payload } = await getJson(base, "/api/crypto/market-execution-chain");
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.guide.version).toBe("matterhorn.market.execution-chain-guide.v1");
+    expect(payload.guide.safety).toMatchObject({
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+    });
+    expect(payload.cards[0]).toMatchObject({
+      kind: "market_execution_chain",
+      title: "Market execution chain",
+    });
     expect(JSON.stringify(payload)).not.toContain("/orders/submit");
     expect(forbiddenFieldPath(payload)).toBeNull();
   });

@@ -15,6 +15,7 @@ const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const cli = read("apps/orchestrator/src/cli.ts");
 const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx");
 const matrix = read("docs/agent-control-coverage-matrix.md");
+const apiDoc = read("docs/agent-control-api.md");
 const readinessDoc = read("docs/market-execution-readiness-security-gate.md");
 const smoke = read("scripts/customer-ready-crypto-smoke.mjs");
 const smokeTest = read("scripts/customer-ready-crypto-smoke.test.mjs");
@@ -39,6 +40,8 @@ for (const [id, command] of [
 }
 
 for (const required of [
+  "/api/crypto/market-execution-chain",
+  "buildMarketExecutionChainResponse",
   "/api/hyperliquid/orders/handoff",
   "/api/hyperliquid/orders/external-sign-request",
   "/api/hyperliquid/orders/external-artifact/validate",
@@ -83,6 +86,7 @@ for (const required of [
 
 for (const required of [
   "matterhorn-work crypto execution-chain",
+  "/api/crypto/market-execution-chain",
   "matterhorn-work hyperliquid sign-request",
   "matterhorn-work polymarket sign-request",
   "matterhorn-work hyperliquid validate-artifact",
@@ -102,6 +106,7 @@ for (const required of [
   "artifact reconciliation",
   "public receipt import",
   "test:market-execution-chain-gate",
+  "GET /api/crypto/market-execution-chain",
   "test:agent-control-mcp",
   "test:crypto-cli-fallback",
 ]) {
@@ -111,6 +116,7 @@ for (const required of [
 for (const required of [
   "Current Safe Execution Chain",
   "matterhorn.market.external-sign-request.v1",
+  "matterhorn.market.execution-chain-guide.v1",
   "matterhorn.market.redacted-signed-artifact-envelope.v1",
   "matterhorn.market.artifact-validation.v1",
   "This chain is deliberately incomplete for live execution",
@@ -121,9 +127,19 @@ for (const required of [
 const smokeDoc = read("docs/customer-ready-crypto-smoke.md");
 for (const required of [
   "matterhorn-work crypto execution-chain --json",
-  "It is local-only and does not contact the server",
+  "GET /api/crypto/market-execution-chain",
+  "matterhorn.market.execution-chain-guide.v1",
 ]) {
   assert.ok(smokeDoc.includes(required), `customer-ready smoke doc should describe execution-chain helper: ${required}`);
+}
+
+for (const required of [
+  "GET /api/crypto/market-execution-chain",
+  "matterhorn.market.execution-chain-guide.v1",
+  "canSubmit: false",
+  "liveSubmissionEnabled: false",
+]) {
+  assert.ok(apiDoc.includes(required), `agent-control API doc should describe execution-chain route: ${required}`);
 }
 
 for (const required of [
@@ -135,6 +151,7 @@ for (const required of [
   "hash-bound",
   "Can submit: No",
   "Live submission: Off",
+  "Chain API",
 ]) {
   assert.ok(panel.includes(required), `Demo tab should explain safe execution chain: ${required}`);
 }
