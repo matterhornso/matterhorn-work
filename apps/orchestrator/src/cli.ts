@@ -3788,7 +3788,8 @@ function printHelp(): void {
     "  matterhorn-work crypto sdk-validate-public --mode fixture|operator_owned_fixture|operator_owned_testnet --input-dir <path> --output-dir <path> [options]",
     "  matterhorn-work crypto sdk-manifest-check --manifest <path> [--strict]",
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
-    "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--sdk-manifest-check <path>] [--receipt-check <path>] [options]",
+    "  matterhorn-work crypto artifact-reconcile --hyperliquid-artifact-validation <path> --polymarket-artifact-validation <path> [options]",
+    "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--sdk-manifest-check <path>] [--receipt-check <path>] [--artifact-reconciliation <path>] [options]",
     "  matterhorn-work crypto evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto bittensor-evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto customer-packet --customer-ready-smoke <path> [--market-evidence-verify <path>] [options]",
@@ -3826,6 +3827,7 @@ function printHelp(): void {
     "  crypto sdk-validate-public Validate public/redacted official-client artifacts into customer-safe evidence",
     "  crypto sdk-manifest-check Validate SDK loop run manifest hashes and safety flags",
     "  crypto receipt-check    Validate public market receipt evidence offline",
+    "  crypto artifact-reconcile Reconcile public artifact-validation outputs into customer-safe evidence",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
     "  crypto evidence-verify  Verify final market customer evidence bundle offline",
     "  crypto bittensor-evidence-verify Verify final Bittensor customer evidence bundle offline",
@@ -7872,6 +7874,13 @@ const CRYPTO_RECEIPT_CHECK_SUBCOMMANDS = new Set([
   "check-receipt",
 ]);
 
+const CRYPTO_ARTIFACT_RECONCILIATION_SUBCOMMANDS = new Set([
+  "artifact-reconcile",
+  "artifact-reconciliation",
+  "reconcile-artifacts",
+  "artifact-evidence",
+]);
+
 const CRYPTO_READINESS_SUBCOMMANDS = new Set([
   "readiness",
   "customer-readiness",
@@ -7991,6 +8000,19 @@ const CRYPTO_RECEIPT_CHECK_VALUE_FLAGS = [
   "output",
 ] as const;
 
+const CRYPTO_ARTIFACT_RECONCILIATION_BOOL_FLAGS = [
+  "strict",
+  "require-hyperliquid",
+  "require-polymarket",
+] as const;
+
+const CRYPTO_ARTIFACT_RECONCILIATION_VALUE_FLAGS = [
+  "hyperliquid-artifact-validation",
+  "polymarket-artifact-validation",
+  "output",
+  "json-output",
+] as const;
+
 const CRYPTO_SDK_LOOP_BOOL_FLAGS = [
   "fixture",
   "require-official-sdk-validated",
@@ -8063,6 +8085,7 @@ const CRYPTO_EVIDENCE_BUNDLE_BOOL_FLAGS = [
   "require-official-sdk-validated",
   "require-sdk-manifest-check",
   "require-receipt-check",
+  "require-artifact-reconciliation",
 ] as const;
 
 const CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS = [
@@ -8071,6 +8094,7 @@ const CRYPTO_EVIDENCE_BUNDLE_VALUE_FLAGS = [
   "operator-summary",
   "sdk-manifest-check",
   "receipt-check",
+  "artifact-reconciliation",
   "output",
   "json-output",
   "title",
@@ -8081,6 +8105,7 @@ const CRYPTO_EVIDENCE_VERIFY_BOOL_FLAGS = [
   "require-official-sdk-validated",
   "require-sdk-manifest-check",
   "require-receipt-check",
+  "require-artifact-reconciliation",
 ] as const;
 
 const CRYPTO_EVIDENCE_VERIFY_VALUE_FLAGS = [
@@ -8224,6 +8249,14 @@ async function runCryptoReceiptCheck(args: ParsedArgs, outputJson: boolean): Pro
   await runOfflineCryptoScript("market-receipt-check.mjs", forwarded, "Market public receipt checker");
 }
 
+async function runCryptoArtifactReconciliation(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_ARTIFACT_RECONCILIATION_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_ARTIFACT_RECONCILIATION_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-artifact-reconciliation.mjs", forwarded, "Market artifact reconciliation");
+}
+
 async function runCryptoCustomerSmoke(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_CUSTOMER_SMOKE_BOOL_FLAGS, forwarded);
@@ -8323,6 +8356,11 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
+    if (CRYPTO_ARTIFACT_RECONCILIATION_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoArtifactReconciliation(args, outputJson);
+      return;
+    }
+
     if (CRYPTO_CUSTOMER_SMOKE_SUBCOMMANDS.has(subcommand)) {
       await runCryptoCustomerSmoke(args);
       return;
@@ -8417,7 +8455,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-validate-public, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-validate-public, sdk-manifest-check, receipt-check, artifact-reconcile, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

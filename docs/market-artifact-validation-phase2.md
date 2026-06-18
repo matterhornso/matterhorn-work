@@ -66,7 +66,7 @@ The receipt candidate is not proof of exchange submission. It only proves that r
 After collecting Hyperliquid and/or Polymarket artifact-validation JSON, operators can reconcile the public receipt candidates into one customer-safe evidence report:
 
 ```bash
-node scripts/market-artifact-reconciliation.mjs \
+matterhorn-work crypto artifact-reconcile \
   --hyperliquid-artifact-validation /tmp/hyperliquid-artifact-validation.json \
   --polymarket-artifact-validation /tmp/polymarket-artifact-validation.json \
   --output /tmp/matterhorn-market-artifact-reconciliation.md \

@@ -252,7 +252,7 @@ matterhorn-work crypto sdk-evidence --sample --json > /tmp/matterhorn-market-sdk
 
 # Optional after Phase 2 external artifact validation returns public/redacted
 # metadata for one or both venues:
-# node scripts/market-artifact-reconciliation.mjs \
+# matterhorn-work crypto artifact-reconcile \
 #   --hyperliquid-artifact-validation /tmp/hyperliquid-artifact-validation.json \
 #   --polymarket-artifact-validation /tmp/polymarket-artifact-validation.json \
 #   --output /tmp/matterhorn-market-artifact-reconciliation.md \
