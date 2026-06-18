@@ -394,6 +394,11 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_market_execution_readiness",
+    description: "Read the Hyperliquid and Polymarket execution-readiness contract. Reports why live submission is disabled and which gates remain before any future submit/sign work; no signing, submission, or secrets.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "matterhorn_market_customer_evidence_verify",
     description: "Verify a public/redacted Hyperliquid + Polymarket customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
     inputSchema: {
@@ -2988,6 +2993,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
     case "matterhorn_crypto_readiness":
       return callServer("/api/crypto/readiness");
+    case "matterhorn_market_execution_readiness":
+      return callServer("/api/crypto/market-execution-readiness");
     case "matterhorn_market_customer_evidence_verify":
       return matterhornMarketCustomerEvidenceVerify(args);
     case "matterhorn_market_artifact_reconcile":

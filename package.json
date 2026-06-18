@@ -75,6 +75,7 @@
     "test:bittensor-receipt-check": "node scripts/bittensor-receipt-check.test.mjs",
     "test:market-safety-contract": "node scripts/market-safety-contract.test.mjs",
     "test:market-execution-safety-gate": "node scripts/market-execution-safety-gate.test.mjs",
+    "test:market-execution-readiness-api": "node scripts/market-execution-readiness-api.test.mjs",
     "test:market-execution-readiness-gate": "node scripts/market-execution-readiness-gate.test.mjs",
     "test:market-submit-sign-contract-phase0": "node scripts/market-submit-sign-contract-phase0.test.mjs",
     "test:market-sign-request-phase1": "node scripts/market-sign-request-phase1.test.mjs",
