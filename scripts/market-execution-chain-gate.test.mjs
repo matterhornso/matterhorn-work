@@ -9,6 +9,8 @@ function read(path) {
 
 const packageJson = JSON.parse(read("package.json"));
 const server = read("apps/server/src/server.ts");
+const cryptoChat = read("apps/server/src/tools/crypto-chat.ts");
+const cryptoChatTest = read("apps/server/src/tools/crypto-chat.test.ts");
 const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const cli = read("apps/orchestrator/src/cli.ts");
 const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx");
@@ -52,6 +54,18 @@ for (const required of [
   "verifyPolymarketReceipt",
 ]) {
   assert.ok(server.includes(required), `server should expose/protect chain surface: ${required}`);
+}
+
+for (const required of [
+  "market_execution_chain",
+  "matterhorn.market.execution-chain-guide.v1",
+  "preview or handoff",
+  "artifact reconciliation",
+  "public receipt import",
+  "Can submit: No",
+  "Live submission: Off",
+]) {
+  assert.ok(cryptoChat.includes(required) || cryptoChatTest.includes(required), `unified crypto chat should expose safe execution-chain context: ${required}`);
 }
 
 for (const required of [

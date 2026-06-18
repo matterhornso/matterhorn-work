@@ -271,6 +271,63 @@ describe("unified crypto chat router", () => {
     });
   });
 
+  test("answers market execution-chain prompts with a no-submit chat card", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow({
+      message: "Show me the safe Hyperliquid and Polymarket execution chain from preview to receipt.",
+    });
+
+    expect(result.venue).toBe("auto");
+    expect(result.intent).toBe("market_execution_chain");
+    expect(result.execution).toBe("read_only");
+    expect(result.requiresClarification).toBe(false);
+    expect(result.responseText).toContain("preview or handoff");
+    expect(result.responseText).toContain("Can submit: No");
+    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("never takes private keys");
+    expect(result.cards[0]).toMatchObject({
+      kind: "market_execution_chain",
+      title: "Market execution chain",
+    });
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "readiness_report",
+      venue: "auto",
+      originalKind: "market_execution_chain",
+      status: "warning",
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    const guide = (result.data.guide ?? {}) as {
+      version?: string;
+      stages?: Array<{ id?: string; commands?: string[] }>;
+      safety?: {
+        canSubmit?: boolean;
+        liveSubmissionEnabled?: boolean;
+        acceptsSecrets?: boolean;
+        acceptsRawSignatures?: boolean;
+        acceptsSignedPayloads?: boolean;
+      };
+    };
+    expect(guide.version).toBe("matterhorn.market.execution-chain-guide.v1");
+    expect(guide.stages?.map((stage) => stage.id)).toEqual([
+      "preview_handoff",
+      "external_sign_request",
+      "redacted_artifact_validation",
+      "artifact_reconciliation",
+      "public_receipt_import",
+    ]);
+    expect(guide.safety?.canSubmit).toBe(false);
+    expect(guide.safety?.liveSubmissionEnabled).toBe(false);
+    expect(guide.safety?.acceptsSecrets).toBe(false);
+    expect(guide.safety?.acceptsRawSignatures).toBe(false);
+    expect(guide.safety?.acceptsSignedPayloads).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("/orders/submit");
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
+  });
+
   test("routes Bittensor chat through the Bittensor executor", async () => {
     const result = await executeUnifiedCryptoChatWorkflow(
       { message: "show my TAO", ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX" },
