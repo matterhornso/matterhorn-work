@@ -236,6 +236,63 @@ export interface MarketExecutionReadinessResponse {
   cards: MarketExecutionReadinessCard[];
 }
 
+export const MARKET_EXECUTION_CHAIN_STEP_IDS = [
+  "preview_handoff",
+  "external_sign_request",
+  "redacted_artifact_validation",
+  "artifact_reconciliation",
+  "public_receipt_import",
+] as const;
+export type MarketExecutionChainStepId = (typeof MARKET_EXECUTION_CHAIN_STEP_IDS)[number];
+
+export interface MarketExecutionChainSafety {
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  nonCustodial: true;
+  externalSignerRequired: true;
+  acceptsSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+}
+
+export interface MarketExecutionChainStep {
+  id: MarketExecutionChainStepId;
+  label: string;
+  purpose: string;
+  commands: string[];
+  output: string;
+}
+
+export interface MarketExecutionChainGuide {
+  success: true;
+  version: "matterhorn.market.execution-chain-guide.v1";
+  title: "Matterhorn market execution chain";
+  summary: string;
+  safety: MarketExecutionChainSafety;
+  stages: MarketExecutionChainStep[];
+  forbidden: string[];
+}
+
+export interface MarketExecutionChainCard {
+  kind: "market_execution_chain";
+  title: string;
+  summary: string;
+  tone: Extract<MarketExecutionReadinessCardTone, "warning" | "info">;
+  source: MarketSourceFreshness;
+  items: MarketExecutionReadinessCardItem[];
+  warnings: string[];
+  data: {
+    guide: MarketExecutionChainGuide;
+    highlightedStep: MarketExecutionChainStep | null;
+  };
+}
+
+export interface MarketExecutionChainResponse {
+  success: true;
+  guide: MarketExecutionChainGuide;
+  cards: MarketExecutionChainCard[];
+}
+
 export const MARKET_EXECUTION_MODES = [
   "disabled",
   "testnet_external_signer",

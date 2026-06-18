@@ -19,6 +19,7 @@ const apiDoc = read("docs/agent-control-api.md");
 const readinessDoc = read("docs/market-execution-readiness-security-gate.md");
 const smoke = read("scripts/customer-ready-crypto-smoke.mjs");
 const smokeTest = read("scripts/customer-ready-crypto-smoke.test.mjs");
+const marketsTypes = read("packages/types/src/markets.ts");
 
 assert.equal(
   packageJson.scripts?.["test:market-execution-chain-gate"],
@@ -69,6 +70,24 @@ for (const required of [
   "Live submission: Off",
 ]) {
   assert.ok(cryptoChat.includes(required) || cryptoChatTest.includes(required), `unified crypto chat should expose safe execution-chain context: ${required}`);
+}
+
+for (const required of [
+  "MARKET_EXECUTION_CHAIN_STEP_IDS",
+  "export type MarketExecutionChainStepId",
+  "export interface MarketExecutionChainSafety",
+  "export interface MarketExecutionChainStep",
+  "export interface MarketExecutionChainGuide",
+  "matterhorn.market.execution-chain-guide.v1",
+  "export interface MarketExecutionChainCard",
+  "kind: \"market_execution_chain\"",
+  "export interface MarketExecutionChainResponse",
+  "canSubmit: false",
+  "liveSubmissionEnabled: false",
+  "acceptsRawSignatures: false",
+  "acceptsSignedPayloads: false",
+]) {
+  assert.ok(marketsTypes.includes(required), `shared market types should expose execution-chain contract: ${required}`);
 }
 
 for (const required of [
