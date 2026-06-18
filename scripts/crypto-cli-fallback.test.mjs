@@ -104,6 +104,24 @@ async function createMockServer() {
         },
       });
     }
+    if (req.method === "GET" && url.pathname === "/api/crypto/market-execution-readiness") {
+      return writeJson(res, 200, {
+        success: true,
+        report: {
+          version: "matterhorn.market.execution-readiness.v1",
+          readyForLiveSubmission: false,
+          status: "disabled",
+          venues: [{ venue: "hyperliquid" }, { venue: "polymarket" }],
+          safety: {
+            nonCustodial: true,
+            liveSubmissionEnabled: false,
+            canSubmit: false,
+            signsOrSubmits: false,
+            acceptsSecrets: false,
+          },
+        },
+      });
+    }
 
     if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/external-sign-request") {
       if (body.executionMode !== "testnet_external_signer") {
@@ -292,7 +310,23 @@ async function main() {
     if (!readinessRequest) throw new Error("crypto readiness did not call /api/crypto/readiness");
     if (Object.keys(readinessRequest.body || {}).length !== 0) throw new Error("crypto readiness should not send a request body");
 
-    // 2. market alias + ask subcommand routes an explicit Polymarket venue.
+    // 3. Execution-readiness exposes the no-submit contract through the
+    // crypto CLI without accepting any body or secrets.
+    await expectCli(
+      "crypto execution-readiness",
+      mock.url,
+      ["crypto", "execution-readiness"],
+      (payload) => {
+        if (payload.report?.version !== "matterhorn.market.execution-readiness.v1") throw new Error("expected execution-readiness report version");
+        if (payload.report?.readyForLiveSubmission !== false) throw new Error("expected readyForLiveSubmission=false");
+        if (payload.report?.safety?.canSubmit !== false) throw new Error("expected execution-readiness canSubmit=false");
+      },
+    );
+    const executionReadinessRequest = mock.requests.find((request) => request.method === "GET" && request.path === "/api/crypto/market-execution-readiness");
+    if (!executionReadinessRequest) throw new Error("crypto execution-readiness did not call /api/crypto/market-execution-readiness");
+    if (Object.keys(executionReadinessRequest.body || {}).length !== 0) throw new Error("crypto execution-readiness should not send a request body");
+
+    // 4. market alias + ask subcommand routes an explicit Polymarket venue.
     await expectCli(
       "market ask -> polymarket",
       mock.url,
@@ -1131,6 +1165,7 @@ async function main() {
     const expectedServerRoutes = new Set([
       "/api/crypto/chat/execute",
       "/api/crypto/readiness",
+      "/api/crypto/market-execution-readiness",
       "/api/hyperliquid/orders/external-sign-request",
       "/api/hyperliquid/orders/external-artifact/validate",
       "/api/polymarket/orders/external-sign-request",

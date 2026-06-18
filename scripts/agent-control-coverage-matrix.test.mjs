@@ -30,6 +30,7 @@ const rows = [
   ["GET /approvals", "matterhorn_list_approvals", "matterhorn-work approvals list"],
   ["POST /approvals/:approvalId", "matterhorn_reply_approval", "matterhorn-work approvals reply"],
   ["GET /api/crypto/readiness", "matterhorn_crypto_readiness", "matterhorn-work crypto readiness"],
+  ["GET /api/crypto/market-execution-readiness", "matterhorn_market_execution_readiness", "matterhorn-work crypto execution-readiness"],
   ["POST /api/bittensor/chat/execute", "matterhorn_bittensor_chat", "matterhorn-work bittensor chat"],
   ["GET /api/bittensor/readiness", "matterhorn_bittensor_readiness", "matterhorn-work bittensor readiness"],
   ["POST /api/bittensor/extrinsics/receipt", "matterhorn_bittensor_import_receipt", "Copy Import"],
@@ -83,6 +84,7 @@ for (const scriptName of [
   "test:agent-session-progress-smoke",
   "test:market-customer-evidence-verify",
   "test:market-artifact-reconciliation",
+  "test:market-execution-readiness-api",
   "test:crypto-customer-packet",
 ]) {
   assert.ok(packageJson.scripts[scriptName], `package.json missing required check: ${scriptName}`);

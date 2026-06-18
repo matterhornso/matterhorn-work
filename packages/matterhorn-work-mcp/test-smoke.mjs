@@ -420,6 +420,24 @@ const server = createServer(async (req, res) => {
       },
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/crypto/market-execution-readiness") {
+    return json(res, 200, {
+      success: true,
+      report: {
+        version: "matterhorn.market.execution-readiness.v1",
+        readyForLiveSubmission: false,
+        status: "disabled",
+        venues: [{ venue: "hyperliquid" }, { venue: "polymarket" }],
+        safety: {
+          nonCustodial: true,
+          liveSubmissionEnabled: false,
+          canSubmit: false,
+          signsOrSubmits: false,
+          acceptsSecrets: false,
+        },
+      },
+    });
+  }
 
   if (req.method === "POST" && url.pathname === "/api/bittensor/chat/execute") {
     if (body.message === "Analyze validator 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX on subnet 14.") {
@@ -661,6 +679,7 @@ try {
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
+    "matterhorn_market_execution_readiness",
     "matterhorn_market_artifact_reconcile",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
@@ -700,6 +719,7 @@ try {
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
+  assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_artifact_reconcile"), /public\/redacted/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
@@ -1016,6 +1036,15 @@ try {
   assert.equal(cryptoReadiness.ready, true);
   assert.equal(cryptoReadiness.report.safety.liveSubmissionEnabled, false);
   assert.equal(cryptoReadiness.report.safety.canSubmit, false);
+
+  const marketExecutionReadiness = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_market_execution_readiness",
+    arguments: {},
+  }));
+  assert.equal(marketExecutionReadiness.success, true);
+  assert.equal(marketExecutionReadiness.report.version, "matterhorn.market.execution-readiness.v1");
+  assert.equal(marketExecutionReadiness.report.readyForLiveSubmission, false);
+  assert.equal(marketExecutionReadiness.report.safety.canSubmit, false);
 
   const marketCustomerEvidenceSummary = {
     ready: true,
