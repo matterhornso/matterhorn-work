@@ -73,6 +73,7 @@ type ReadinessReport = {
   checks?: ReadinessCheck[];
   warnings?: string[];
   blockers?: string[];
+  nextActions?: string[];
   checkedAt?: string;
 };
 
@@ -561,6 +562,8 @@ export default function BittensorPanel() {
   const readinessFailures = readinessChecks.filter((check) => check.status === "fail");
   const readinessWarnings = readinessChecks.filter((check) => check.status === "warning");
   const readinessSkips = readinessChecks.filter((check) => check.status === "skip");
+  const readinessBlocker = readiness?.blockers?.find(Boolean) ?? null;
+  const readinessNextAction = readiness?.nextActions?.find(Boolean) ?? null;
   const readinessState = readiness
     ? readiness.ready === true && readinessFailures.length === 0
       ? "Ready"
@@ -571,6 +574,8 @@ export default function BittensorPanel() {
   const cryptoReadinessChecks = cryptoReadiness?.checks ?? [];
   const cryptoReadinessFailures = cryptoReadinessChecks.filter((check) => check.status === "fail");
   const cryptoReadinessWarnings = cryptoReadinessChecks.filter((check) => check.status === "warning" || check.status === "skip");
+  const cryptoReadinessBlocker = cryptoReadiness?.blockers?.find(Boolean) ?? null;
+  const cryptoReadinessNextAction = cryptoReadiness?.nextActions?.find(Boolean) ?? null;
   const cryptoReadinessState = cryptoReadiness
     ? cryptoReadiness.ready === true && cryptoReadinessFailures.length === 0
       ? "Ready"
@@ -657,7 +662,9 @@ export default function BittensorPanel() {
                   <Metric label="Failures" value={String(readinessFailures.length)} compact />
                   <Metric label="Warnings" value={String(readinessWarnings.length + readinessSkips.length)} compact />
                 </div>
-                {readinessFailures[0] ? (
+                {readinessBlocker ? (
+                  <p className="text-xs leading-5 text-red-300">Blocker: {readinessBlocker}</p>
+                ) : readinessFailures[0] ? (
                   <p className="text-xs leading-5 text-red-300">{readinessFailures[0].label ?? "Readiness"}: {readinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
                 ) : readinessWarnings[0] ? (
                   <p className="text-xs leading-5 text-amber-300">{readinessWarnings[0].label ?? "Readiness"}: {readinessWarnings[0].summary ?? "Review before customer demo."}</p>
@@ -666,6 +673,9 @@ export default function BittensorPanel() {
                 ) : (
                   <p className="text-xs leading-5 text-dls-secondary">Run readiness before a test customer session.</p>
                 )}
+                {readinessNextAction ? (
+                  <p className="text-xs leading-5 text-sky-200">Next: {readinessNextAction}</p>
+                ) : null}
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadReadiness} disabled={readinessLoading}>
                     {readinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
@@ -721,7 +731,9 @@ export default function BittensorPanel() {
                     <Metric label="Crypto Gate" value={cryptoReadinessState} compact />
                     <Metric label="Venue Checks" value={cryptoReadinessChecks.length ? String(cryptoReadinessChecks.length) : "—"} compact />
                   </div>
-                  {cryptoReadinessFailures[0] ? (
+                  {cryptoReadinessBlocker ? (
+                    <p className="mt-2 text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
+                  ) : cryptoReadinessFailures[0] ? (
                     <p className="mt-2 text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Crypto readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
                   ) : cryptoReadinessWarnings[0] ? (
                     <p className="mt-2 text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Crypto readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
@@ -730,6 +742,9 @@ export default function BittensorPanel() {
                   ) : (
                     <p className="mt-2 text-xs leading-5 text-dls-secondary">Run unified crypto readiness before a customer demo.</p>
                   )}
+                  {cryptoReadinessNextAction ? (
+                    <p className="mt-2 text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction}</p>
+                  ) : null}
                   <Button variant="ghost" size="sm" className="mt-2 gap-1.5 text-xs text-dls-secondary" onClick={loadCryptoReadiness} disabled={cryptoReadinessLoading}>
                     {cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh Crypto Gate

@@ -22,6 +22,8 @@ for (const phrase of [
   "/api/crypto/readiness",
   "Crypto Gate",
   "Venue Checks",
+  "Blocker:",
+  "Next:",
   "Refresh Crypto Gate",
   "Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.",
   "matterhorn-work crypto readiness --json",
