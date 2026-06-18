@@ -252,6 +252,8 @@ function describeTaskCreateError(error: unknown) {
   const message = describeRouteError(error);
   const lower = message.toLowerCase();
   if (
+    lower.includes("opencode_unconfigured") ||
+    lower.includes("opencode base url is missing") ||
     lower.includes("failed to fetch") ||
     lower.includes("connection") ||
     lower.includes("fetch failed") ||

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 const files = {
   english: "apps/app/src/i18n/locales/en.ts",
   sessionRoute: "apps/app/src/react-app/shell/session-route.tsx",
+  sessionPage: "apps/app/src/react-app/domains/session/chat/session-page.tsx",
   extensionsView: "apps/app/src/react-app/domains/settings/pages/extensions-view.tsx",
   orchestratorCli: "apps/orchestrator/src/cli.ts",
   runtimeDoc: "docs/opencode-runtime-abstraction.md",
@@ -36,10 +37,20 @@ const checks = [
     mustContain: [
       "The Matterhorn Work engine is unavailable for this workspace.",
       'title: "Matterhorn Work engine unavailable"',
+      'lower.includes("opencode_unconfigured")',
     ],
     mustNotContain: [
       "OpenCode is unavailable for this workspace.",
       'title: "OpenCode unavailable"',
+    ],
+  },
+  {
+    path: files.sessionPage,
+    mustContain: [
+      '"Matterhorn Work engine unavailable"',
+    ],
+    mustNotContain: [
+      '"OpenCode unavailable"',
     ],
   },
   {
