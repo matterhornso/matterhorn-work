@@ -399,6 +399,11 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_market_execution_chain",
+    description: "Print the local Hyperliquid and Polymarket safe execution-chain command plan. No server call, no signing, no submission, and no credential intake.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "matterhorn_market_customer_evidence_verify",
     description: "Verify a public/redacted Hyperliquid + Polymarket customer evidence bundle through MCP. Offline only: no signing, no submission, no secrets, and no file reads.",
     inputSchema: {
@@ -1750,6 +1755,65 @@ const MARKET_ARTIFACT_VALIDATION_VERSION = "matterhorn.market.artifact-validatio
 const MARKET_RECEIPT_VERSION = "matterhorn.market.receipt.v1";
 const MARKET_SHA256_RE = /^[a-f0-9]{64}$/i;
 
+function matterhornMarketExecutionChain() {
+  return {
+    success: true,
+    version: "matterhorn.market.execution-chain-guide.v1",
+    title: "Matterhorn market execution chain",
+    summary: "Preview-only, testnet-external-signer, public/redacted evidence path for Hyperliquid and Polymarket.",
+    safety: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      externalSignerRequired: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+    },
+    stages: [
+      {
+        id: "preview_handoff",
+        label: "Preview / handoff",
+        commands: [
+          "matterhorn-work hyperliquid handoff --asset BTC --side buy --size 0.001 --price <testnet-price> --json",
+          "matterhorn-work polymarket handoff --market-id <testnet-market-id> --side yes --amount-usdc 1 --json",
+        ],
+      },
+      {
+        id: "external_sign_request",
+        label: "External sign request",
+        commands: [
+          "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
+          "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
+        ],
+      },
+      {
+        id: "redacted_artifact_validation",
+        label: "Redacted artifact validation",
+        commands: [
+          "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+          "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+        ],
+      },
+      {
+        id: "artifact_reconciliation",
+        label: "Artifact reconciliation",
+        commands: [
+          "matterhorn-work crypto artifact-reconcile --hyperliquid-artifact-validation <hyperliquid-artifact-validation.json> --polymarket-artifact-validation <polymarket-artifact-validation.json> --strict --json",
+        ],
+      },
+      {
+        id: "public_receipt_import",
+        label: "Public receipt import",
+        commands: [
+          "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+          "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+        ],
+      },
+    ],
+  };
+}
+
 function marketReconciliationRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
@@ -2997,6 +3061,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/readiness");
     case "matterhorn_market_execution_readiness":
       return callServer("/api/crypto/market-execution-readiness");
+    case "matterhorn_market_execution_chain":
+      return matterhornMarketExecutionChain();
     case "matterhorn_market_customer_evidence_verify":
       return matterhornMarketCustomerEvidenceVerify(args);
     case "matterhorn_market_artifact_reconcile":
