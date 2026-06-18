@@ -15,6 +15,8 @@ This document defines the security gate that must pass before Matterhorn Work ca
 
 The only customer-demo execution chain currently allowed is:
 
+`matterhorn.market.execution-chain-guide.v1` is available as a read-only guide through the local API at `GET /api/crypto/market-execution-chain`, plus the local CLI/MCP helpers. It is not a submit or signing permission.
+
 1. Preview or handoff produces a no-submit plan with `canSubmit: false`.
 2. External sign request produces `matterhorn.market.external-sign-request.v1` only with `executionMode=testnet_external_signer`.
 3. Redacted artifact validation accepts only public/redacted `matterhorn.market.redacted-signed-artifact-envelope.v1` metadata and returns `matterhorn.market.artifact-validation.v1`.

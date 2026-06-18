@@ -88,6 +88,12 @@ Common status codes:
 | `matterhorn_bittensor_create_signing_handoff` | `POST /api/bittensor/extrinsics/handoff` |
 | `matterhorn_bittensor_import_receipt` | `POST /api/bittensor/extrinsics/receipt` |
 | `matterhorn_bittensor_submit_signed_extrinsic` | `POST /api/bittensor/extrinsics/submit` |
+
+## Additional Crypto Read Routes
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/crypto/market-execution-chain` | Returns `matterhorn.market.execution-chain-guide.v1`, the no-submit Hyperliquid/Polymarket preview, external sign request, public/redacted artifact validation, artifact reconciliation, and public receipt import guide. This route is read-only and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
 | `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
 | `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |
 | `matterhorn_bittensor_create_watch` | `POST /api/bittensor/monitoring/watchlist` |

@@ -131,7 +131,7 @@ For a copy-pasteable no-submit market execution chain, run:
 matterhorn-work crypto execution-chain --json
 ```
 
-This prints the current preview/handoff, testnet external sign-request, public/redacted artifact validation, artifact reconciliation, and public receipt import commands. It is local-only and does not contact the server.
+This prints the current preview/handoff, testnet external sign-request, public/redacted artifact validation, artifact reconciliation, and public receipt import commands. It is local-only and does not contact the server. When a local server is running, the same read-only contract is also available at `GET /api/crypto/market-execution-chain`; it returns `matterhorn.market.execution-chain-guide.v1` and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`.
 
 ## Optional Local Server Smoke
 
