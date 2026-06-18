@@ -362,6 +362,66 @@ describe("unified crypto chat router", () => {
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
   });
 
+  test("answers official SDK validation prompts with public testnet guidance", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow({
+      message: "How do I run official SDK validation for Hyperliquid and Polymarket with operator-owned testnet artifacts?",
+    });
+
+    expect(result.venue).toBe("auto");
+    expect(result.intent).toBe("market_sdk_validation");
+    expect(result.execution).toBe("read_only");
+    expect(result.responseText).toContain("operator-owned testnet");
+    expect(result.responseText).toContain("Can submit: No");
+    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("never takes private keys");
+    expect(result.cards[0]).toMatchObject({
+      kind: "market_sdk_validation",
+      title: "Official SDK validation",
+    });
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "readiness_report",
+      venue: "auto",
+      originalKind: "market_sdk_validation",
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    const guide = (result.data.guide ?? {}) as {
+      version?: string;
+      modes?: string[];
+      networks?: { hyperliquid?: string[]; polymarket?: string[] };
+      commands?: { fixtureValidation?: string; operatorOwnedTestnetValidation?: string };
+      safety?: {
+        canSubmit?: boolean;
+        liveSubmissionEnabled?: boolean;
+        acceptsSecrets?: boolean;
+        acceptsRawSignatures?: boolean;
+        acceptsSignedPayloads?: boolean;
+        runsPrivateSdkSigning?: boolean;
+        callsExchanges?: boolean;
+      };
+    };
+    expect(guide.version).toBe("matterhorn.market.sdk-validation-guide.v1");
+    expect(guide.modes).toContain("fixture");
+    expect(guide.modes).toContain("operator_owned_testnet");
+    expect(guide.networks?.hyperliquid).toContain("hyperliquid-testnet");
+    expect(guide.networks?.polymarket).toContain("polygon-amoy");
+    expect(guide.commands?.fixtureValidation).toContain("matterhorn-work crypto sdk-validate-public");
+    expect(guide.commands?.operatorOwnedTestnetValidation).toContain("--mode operator_owned_testnet");
+    expect(guide.safety?.canSubmit).toBe(false);
+    expect(guide.safety?.liveSubmissionEnabled).toBe(false);
+    expect(guide.safety?.acceptsSecrets).toBe(false);
+    expect(guide.safety?.acceptsRawSignatures).toBe(false);
+    expect(guide.safety?.acceptsSignedPayloads).toBe(false);
+    expect(guide.safety?.runsPrivateSdkSigning).toBe(false);
+    expect(guide.safety?.callsExchanges).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("/orders/submit");
+    expect(JSON.stringify(result)).not.toContain("privateKey");
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
+  });
+
   test("routes Bittensor chat through the Bittensor executor", async () => {
     const result = await executeUnifiedCryptoChatWorkflow(
       { message: "show my TAO", ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX" },

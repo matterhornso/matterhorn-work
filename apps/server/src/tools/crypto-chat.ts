@@ -20,6 +20,8 @@ import {
   buildMarketExecutionChainGuide,
   buildMarketExecutionReadinessCard,
   buildMarketExecutionReadinessReport,
+  buildMarketSdkValidationCard,
+  buildMarketSdkValidationGuide,
 } from "./market-execution-readiness.js";
 
 export type UnifiedCryptoVenue = "auto" | "bittensor" | "hyperliquid" | "polymarket";
@@ -237,6 +239,7 @@ function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind
       return "clarification";
     case "market_execution_readiness":
     case "market_execution_chain":
+    case "market_sdk_validation":
     case "readiness_report":
       return "readiness_report";
     case "subnet_comparison":
@@ -429,6 +432,15 @@ function isMarketExecutionChainRequest(input: UnifiedCryptoChatInput, message: s
   return mentionsMarketVenue && mentionsChain;
 }
 
+function isMarketSdkValidationRequest(input: UnifiedCryptoChatInput, message: string): boolean {
+  const text = message.toLowerCase();
+  const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
+  const mentionsMarketVenue = selectedMarketVenue
+    || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
+  const mentionsSdkValidation = textIncludes(text, /\b(official sdk|sdk validation|sdk validate|sdk-validate|sdk doctor|sdk loop|operator[- ]owned testnet|operator owned testnet|public validation|fixture validation|polygon amoy|amoy|hyperliquid testnet|clob client|clob-client|hyperliquid-python-sdk)\b/i);
+  return mentionsMarketVenue && mentionsSdkValidation;
+}
+
 function marketExecutionChainStepId(message: string): string | null {
   const text = message.toLowerCase();
   if (textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request)\b/i)) return null;
@@ -581,6 +593,38 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
   };
 }
 
+function marketSdkValidationResult(input: UnifiedCryptoChatInput, message: string): UnifiedCryptoChatResult {
+  const guide = buildMarketSdkValidationGuide();
+  const cards = [buildMarketSdkValidationCard(guide)];
+  const warnings = [
+    "Official SDK validation is public/redacted evidence only.",
+    "Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders.",
+  ];
+  const route: UnifiedCryptoRoutePlan = {
+    requestedVenue: normalizeVenue(input.venue),
+    routedVenue: null,
+    confidence: 1,
+    reason: "The prompt asks about cross-venue official SDK validation.",
+    candidates: routeScores({ ...input, message }),
+    requiresClarification: false,
+    clarificationQuestion: null,
+  };
+  return {
+    venue: "auto",
+    requestedVenue: normalizeVenue(input.venue),
+    intent: "market_sdk_validation",
+    execution: "read_only",
+    responseText: "Use fixture or operator-owned testnet SDK validation only. Hyperliquid uses testnet evidence; Polymarket uses Polygon Amoy evidence. Matterhorn accepts public/redacted artifacts only. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    cards,
+    sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
+    data: { guide },
+    warnings,
+    requiresClarification: false,
+    clarificationQuestion: null,
+    route,
+  };
+}
+
 function fromBittensor(input: UnifiedCryptoChatInput, route: UnifiedCryptoRoutePlan, result: BittensorChatExecutionResult): UnifiedCryptoChatResult {
   return {
     venue: "bittensor",
@@ -690,6 +734,10 @@ export async function executeUnifiedCryptoChatWorkflow(
 
   if (isMarketExecutionChainRequest(input, message)) {
     return marketExecutionChainResult(input, message);
+  }
+
+  if (isMarketSdkValidationRequest(input, message)) {
+    return marketSdkValidationResult(input, message);
   }
 
   if (isMarketExecutionReadinessRequest(input, message)) {

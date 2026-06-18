@@ -203,6 +203,37 @@ describe("unified crypto chat execute route", () => {
     expect(forbiddenFieldPath(payload)).toBeNull();
   });
 
+  test("answers official SDK validation prompts through the unified chat route", async () => {
+    const { base } = await boot();
+    const { res, payload } = await postCryptoChat(base, {
+      message: "How should I validate Hyperliquid and Polymarket official SDK artifacts on testnet?",
+      venue: "auto",
+    });
+
+    expect(res.status).toBe(200);
+    expect(payload.success).toBe(true);
+    expect(payload.venue).toBe("auto");
+    expect(payload.intent).toBe("market_sdk_validation");
+    expect(payload.execution).toBe("read_only");
+    expect(payload.responseText).toContain("Can submit: No");
+    expect(payload.responseText).toContain("Live submission: Off");
+    expect(payload.sharedCards[0]).toMatchObject({
+      version: "matterhorn.crypto.shared-card.v1",
+      kind: "readiness_report",
+      venue: "auto",
+      originalKind: "market_sdk_validation",
+      safety: {
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
+    expect(payload.data.guide.version).toBe("matterhorn.market.sdk-validation-guide.v1");
+    expect(payload.data.guide.safety.acceptsSecrets).toBe(false);
+    expect(payload.data.guide.safety.runsPrivateSdkSigning).toBe(false);
+    expect(JSON.stringify(payload)).not.toContain("/orders/submit");
+    expect(forbiddenFieldPath(payload)).toBeNull();
+  });
+
   test("serves the read-only market execution-chain API contract", async () => {
     const { base } = await boot();
     const { res, payload } = await getJson(base, "/api/crypto/market-execution-chain");

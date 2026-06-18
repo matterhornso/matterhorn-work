@@ -201,3 +201,73 @@ export function buildMarketExecutionChainResponse() {
     cards: [buildMarketExecutionChainCard(guide)],
   } as const;
 }
+
+export function buildMarketSdkValidationGuide() {
+  return {
+    success: true,
+    version: "matterhorn.market.sdk-validation-guide.v1",
+    title: "Official SDK validation",
+    summary: "Public/redacted fixture or operator-owned testnet validation for Hyperliquid and Polymarket signing templates.",
+    modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+    networks: {
+      hyperliquid: ["fixture", "hyperliquid-testnet"],
+      polymarket: ["fixture", "polygon-amoy"],
+    },
+    commands: {
+      doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+      fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --input-dir qa-fixtures/market-official-sdk --output-dir /tmp/matterhorn-market-sdk-public-validation --strict --json",
+      operatorOwnedTestnetValidation: "matterhorn-work crypto sdk-validate-public --mode operator_owned_testnet --input-dir /tmp/operator-public-artifacts --output-dir /tmp/matterhorn-market-sdk-public-validation --hyperliquid-network hyperliquid-testnet --hyperliquid-package-version <hyperliquid-python-sdk-version> --polymarket-network polygon-amoy --polymarket-chain-id 80002 --polymarket-exchange-address <public-amoy-exchange-address> --polymarket-package-version <clob-client-version> --strict --json",
+      operatorLoop: "matterhorn-work crypto sdk-loop --mode fixture --output-dir /tmp/matterhorn-market-sdk-loop --strict --json",
+    },
+    outputs: [
+      "matterhorn-market-sdk-evidence.json",
+      "matterhorn-market-sdk-public-validation.json",
+      "matterhorn-market-sdk-public-validation.md",
+      "matterhorn-market-sdk-public-validation.sha256",
+      "matterhorn-market-sdk-run-manifest.json",
+    ],
+    safety: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+      runsPrivateSdkSigning: false,
+      computesFinalSignatures: false,
+      callsExchanges: false,
+    },
+    forbidden: [
+      "seed phrase",
+      "private key",
+      "API secret",
+      "raw signature",
+      "signed payload",
+      "wallet export",
+      "mainnet validation",
+      "live submit route",
+    ],
+  } as const;
+}
+
+export function buildMarketSdkValidationCard(guide = buildMarketSdkValidationGuide()) {
+  return {
+    kind: "market_sdk_validation",
+    title: "Official SDK validation",
+    summary: "Validate Hyperliquid and Polymarket signing templates with public/redacted fixture or operator-owned testnet evidence only.",
+    tone: "info",
+    source: { source: "matterhorn.sdk-validation", freshness: "live" },
+    items: [
+      { label: "Hyperliquid", value: "Testnet evidence", tone: "info" },
+      { label: "Polymarket", value: "Polygon Amoy evidence", tone: "info" },
+      { label: "Can submit", value: "No", tone: "good" },
+      { label: "Live submission", value: "Off", tone: "good" },
+      { label: "Secret intake", value: "Never", tone: "good" },
+    ],
+    warnings: [
+      "Official SDK validation is public/redacted evidence only.",
+      "Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders.",
+    ],
+    data: { guide },
+  } as const;
+}
