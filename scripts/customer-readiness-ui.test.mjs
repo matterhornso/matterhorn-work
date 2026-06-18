@@ -19,6 +19,9 @@ assert.equal(
 
 for (const phrase of [
   "Customer Demo Checklist",
+  "matterhorn-work crypto readiness --json",
+  "$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness",
+  "Authorization: Bearer $MATTERHORN_WORK_TOKEN",
   "pnpm smoke:customer-ready-crypto",
   "matterhorn-work crypto customer-smoke --dry-run --json",
   "matterhorn-work crypto customer-packet",
