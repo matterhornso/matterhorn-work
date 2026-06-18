@@ -97,6 +97,7 @@
     "test:market-official-sdk-normalize": "node scripts/market-official-sdk-normalize.test.mjs",
     "test:market-official-sdk-operator-loop": "node scripts/market-official-sdk-operator-loop.test.mjs",
     "test:market-official-sdk-validate-public": "node scripts/market-official-sdk-validate-public.test.mjs",
+    "test:market-official-sdk-operator-artifacts": "node scripts/market-official-sdk-operator-artifacts.test.mjs",
     "test:market-sdk-run-manifest-check": "node scripts/market-sdk-run-manifest-check.test.mjs",
     "test:market-official-sdk-validation-fixtures": "node scripts/market-official-sdk-validation-fixtures.test.mjs",
     "test:market-customer-evidence-bundle": "node scripts/market-customer-evidence-bundle.test.mjs",

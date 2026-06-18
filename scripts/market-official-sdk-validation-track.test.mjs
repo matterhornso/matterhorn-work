@@ -84,6 +84,11 @@ if (packageJson.scripts?.["test:market-official-sdk-validation-fixtures"] === "n
 } else {
   fail("package.json exposes test:market-official-sdk-validation-fixtures");
 }
+if (packageJson.scripts?.["test:market-official-sdk-operator-artifacts"] === "node scripts/market-official-sdk-operator-artifacts.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-operator-artifacts");
+} else {
+  fail("package.json exposes test:market-official-sdk-operator-artifacts");
+}
 
 mustContain("docs/market-official-sdk-validation.md", [
   "Hyperliquid's official SDK",
@@ -109,6 +114,8 @@ mustContain("docs/market-official-sdk-validation.md", [
   "matterhorn-work crypto sdk-validate-public",
   "matterhorn-work crypto sdk-manifest-check",
   "matterhorn-work crypto evidence-bundle",
+  "Market Official SDK Operator Artifacts",
+  "market-official-sdk-operator-artifacts.md",
   "operator_owned_fixture",
   "operator_owned_testnet",
   "matterhorn-market-sdk-public-validation.json",
@@ -125,6 +132,19 @@ mustContain("docs/market-official-sdk-validation.md", [
   "pnpm test:market-official-sdk-validate-public",
   "pnpm test:market-sdk-run-manifest-check",
   "pnpm test:market-official-sdk-validation-fixtures",
+  "pnpm test:market-official-sdk-operator-artifacts",
+]);
+
+mustContain("docs/market-official-sdk-operator-artifacts.md", [
+  "hyperliquid-official-public.json",
+  "polymarket-official-public.json",
+  "operator_owned_testnet",
+  "hyperliquid-python-sdk",
+  "@polymarket/clob-client-v2",
+  "matterhorn-work crypto sdk-validate-public",
+  "matterhorn-market-sdk-public-validation.sha256",
+  "does not run private SDK signing",
+  "does not run private SDK signing, compute final signatures, or submit orders",
 ]);
 
 mustContain("scripts/market-official-sdk-validation-evidence.mjs", [
@@ -287,6 +307,9 @@ mustContain("qa-fixtures/market-official-sdk/README.md", [
   "hyperliquid-forbidden-raw-signature.fixture.json",
   "polymarket-mismatched-domain.fixture.json",
   "Do not add private keys",
+  "operator-owned-testnet-example",
+  "hyperliquid-official-public.json",
+  "polymarket-official-public.json",
 ]);
 const fixtureSelfTest = spawnSync("node", ["scripts/market-official-sdk-validation-fixtures.test.mjs"], {
   cwd: root,
@@ -296,6 +319,15 @@ if (fixtureSelfTest.status === 0) {
   pass("official SDK fixture validation test passes");
 } else {
   fail("official SDK fixture validation test passes", fixtureSelfTest.stderr || fixtureSelfTest.stdout || "unknown error");
+}
+const operatorArtifactsSelfTest = spawnSync("node", ["scripts/market-official-sdk-operator-artifacts.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (operatorArtifactsSelfTest.status === 0) {
+  pass("official SDK operator artifact example test passes");
+} else {
+  fail("official SDK operator artifact example test passes", operatorArtifactsSelfTest.stderr || operatorArtifactsSelfTest.stdout || "unknown error");
 }
 
 mustContain("docs/hyperliquid-read-preview.md", [
