@@ -185,7 +185,9 @@ export default function BittensorPanel() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [sidecarStatus, setSidecarStatus] = useState<BittensorSubtensorSidecarHealth | null>(null);
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
+  const [cryptoReadiness, setCryptoReadiness] = useState<ReadinessReport | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
+  const [cryptoReadinessLoading, setCryptoReadinessLoading] = useState(false);
   const [copiedReadinessCommand, setCopiedReadinessCommand] = useState<string | null>(null);
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
@@ -242,6 +244,29 @@ export default function BittensorPanel() {
     }
   }, []);
 
+  const loadCryptoReadiness = useCallback(async () => {
+    setCryptoReadinessLoading(true);
+    try {
+      const res = await fetch("/api/crypto/readiness");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load crypto readiness");
+      setCryptoReadiness((json.report ?? json) as ReadinessReport);
+    } catch (err) {
+      setCryptoReadiness({
+        ready: false,
+        checks: [{
+          id: "crypto_readiness_api",
+          label: "Crypto readiness API",
+          status: "fail",
+          summary: err instanceof Error ? err.message : "Failed to load unified crypto readiness.",
+        }],
+        warnings: ["Unified crypto readiness could not run from the app."],
+      });
+    } finally {
+      setCryptoReadinessLoading(false);
+    }
+  }, []);
+
   const loadDetail = useCallback(async (netuid: number) => {
     setDetailLoading(true);
     try {
@@ -291,7 +316,8 @@ export default function BittensorPanel() {
   useEffect(() => {
     void loadSidecarStatus();
     void loadReadiness();
-  }, [loadReadiness, loadSidecarStatus]);
+    void loadCryptoReadiness();
+  }, [loadCryptoReadiness, loadReadiness, loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -373,6 +399,7 @@ export default function BittensorPanel() {
     void loadSubnets();
     void loadSidecarStatus();
     void loadReadiness();
+    void loadCryptoReadiness();
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
@@ -541,6 +568,16 @@ export default function BittensorPanel() {
         ? "Blocked"
         : "Review"
     : "Unknown";
+  const cryptoReadinessChecks = cryptoReadiness?.checks ?? [];
+  const cryptoReadinessFailures = cryptoReadinessChecks.filter((check) => check.status === "fail");
+  const cryptoReadinessWarnings = cryptoReadinessChecks.filter((check) => check.status === "warning" || check.status === "skip");
+  const cryptoReadinessState = cryptoReadiness
+    ? cryptoReadiness.ready === true && cryptoReadinessFailures.length === 0
+      ? "Ready"
+      : cryptoReadinessFailures.length
+        ? "Blocked"
+        : "Review"
+    : "Unknown";
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -679,6 +716,25 @@ export default function BittensorPanel() {
                 <p className="text-xs leading-5 text-dls-secondary">
                   Use this before a test customer call: run the offline crypto gate, prepare a redacted packet, then demo read/preview-only chat cards.
                 </p>
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Metric label="Crypto Gate" value={cryptoReadinessState} compact />
+                    <Metric label="Venue Checks" value={cryptoReadinessChecks.length ? String(cryptoReadinessChecks.length) : "—"} compact />
+                  </div>
+                  {cryptoReadinessFailures[0] ? (
+                    <p className="mt-2 text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Crypto readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
+                  ) : cryptoReadinessWarnings[0] ? (
+                    <p className="mt-2 text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Crypto readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
+                  ) : cryptoReadiness?.ready ? (
+                    <p className="mt-2 text-xs leading-5 text-emerald-300">Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
+                  ) : (
+                    <p className="mt-2 text-xs leading-5 text-dls-secondary">Run unified crypto readiness before a customer demo.</p>
+                  )}
+                  <Button variant="ghost" size="sm" className="mt-2 gap-1.5 text-xs text-dls-secondary" onClick={loadCryptoReadiness} disabled={cryptoReadinessLoading}>
+                    {cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh Crypto Gate
+                  </Button>
+                </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readiness")}>
                     {copiedCustomerCommand === "readiness" ? "Copied" : "Copy Ready"}
