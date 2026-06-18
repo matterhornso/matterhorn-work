@@ -11,6 +11,18 @@ This document defines the security gate that must pass before Matterhorn Work ca
 - Polymarket compliance-blocked previews carry no executable price, size, estimated shares, or typed-data handoff
 - public receipt import verifies preview/handoff hashes and rejects credential-shaped fields
 
+## Current Safe Execution Chain
+
+The only customer-demo execution chain currently allowed is:
+
+1. Preview or handoff produces a no-submit plan with `canSubmit: false`.
+2. External sign request produces `matterhorn.market.external-sign-request.v1` only with `executionMode=testnet_external_signer`.
+3. Redacted artifact validation accepts only public/redacted `matterhorn.market.redacted-signed-artifact-envelope.v1` metadata and returns `matterhorn.market.artifact-validation.v1`.
+4. Artifact reconciliation turns accepted public validation outputs into customer evidence.
+5. Public receipt import accepts only public status fields and verifies them against the originating handoff.
+
+This chain is deliberately incomplete for live execution. It proves hash binding, redacted evidence handling, and external-signer education without giving Matterhorn a submit/sign/broadcast path.
+
 ## Future External-Signer-Only Architecture
 
 Any future execution path must keep Matterhorn non-custodial:
