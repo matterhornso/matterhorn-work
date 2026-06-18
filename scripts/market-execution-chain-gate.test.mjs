@@ -67,6 +67,7 @@ for (const required of [
 }
 
 for (const required of [
+  "matterhorn-work crypto execution-chain",
   "matterhorn-work hyperliquid sign-request",
   "matterhorn-work polymarket sign-request",
   "matterhorn-work hyperliquid validate-artifact",
@@ -86,6 +87,7 @@ for (const required of [
   "artifact reconciliation",
   "public receipt import",
   "test:market-execution-chain-gate",
+  "test:crypto-cli-fallback",
 ]) {
   assert.ok(matrix.includes(required), `coverage matrix should describe aggregate chain: ${required}`);
 }
@@ -98,6 +100,14 @@ for (const required of [
   "This chain is deliberately incomplete for live execution",
 ]) {
   assert.ok(readinessDoc.includes(required), `security gate doc should describe safe chain: ${required}`);
+}
+
+const smokeDoc = read("docs/customer-ready-crypto-smoke.md");
+for (const required of [
+  "matterhorn-work crypto execution-chain --json",
+  "It is local-only and does not contact the server",
+]) {
+  assert.ok(smokeDoc.includes(required), `customer-ready smoke doc should describe execution-chain helper: ${required}`);
 }
 
 for (const required of [

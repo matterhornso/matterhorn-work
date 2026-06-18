@@ -125,6 +125,14 @@ pnpm test:bittensor-signing-handoff-check
 pnpm test:bittensor-customer-evidence-bundle
 ```
 
+For a copy-pasteable no-submit market execution chain, run:
+
+```bash
+matterhorn-work crypto execution-chain --json
+```
+
+This prints the current preview/handoff, testnet external sign-request, public/redacted artifact validation, artifact reconciliation, and public receipt import commands. It is local-only and does not contact the server.
+
 ## Optional Local Server Smoke
 
 When a local Matterhorn Work server is running, include read/preview/handoff-only live route checks:

@@ -3779,6 +3779,7 @@ function printHelp(): void {
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto readiness [options]",
     "  matterhorn-work crypto execution-readiness [options]",
+    "  matterhorn-work crypto execution-chain [--json]",
     "  matterhorn-work crypto customer-smoke [--offline|--include-live-server] [options]",
     "  matterhorn-work crypto live-public-qa --output-dir <path> [--strict] [options]",
     "  matterhorn-work crypto sdk-doctor [--strict] [--venue all|hyperliquid|polymarket]",
@@ -3819,6 +3820,7 @@ function printHelp(): void {
     "  crypto                  Run unified crypto chat router (read/preview only; aliases: market, markets)",
     "  crypto readiness        Read the unified crypto customer-readiness report from the local server",
     "  crypto execution-readiness Read Hyperliquid/Polymarket execution-readiness contract",
+    "  crypto execution-chain  Print the safe market preview/sign-request/artifact/receipt command plan",
     "  crypto customer-smoke   Run consolidated customer-ready crypto smoke gates",
     "  crypto live-public-qa   Build customer-safe live public-data QA evidence bundle",
     "  crypto sdk-doctor       Check official SDK validation env readiness without signing/submission",
@@ -7883,6 +7885,12 @@ const CRYPTO_ARTIFACT_RECONCILIATION_SUBCOMMANDS = new Set([
   "artifact-evidence",
 ]);
 
+const CRYPTO_EXECUTION_CHAIN_SUBCOMMANDS = new Set([
+  "execution-chain",
+  "market-execution-chain",
+  "safe-execution-chain",
+]);
+
 const CRYPTO_READINESS_SUBCOMMANDS = new Set([
   "readiness",
   "customer-readiness",
@@ -8266,6 +8274,84 @@ async function runCryptoArtifactReconciliation(args: ParsedArgs, outputJson: boo
   await runOfflineCryptoScript("market-artifact-reconciliation.mjs", forwarded, "Market artifact reconciliation");
 }
 
+function buildCryptoExecutionChainGuide() {
+  return {
+    success: true,
+    version: "matterhorn.market.execution-chain-guide.v1",
+    title: "Matterhorn market execution chain",
+    summary: "Preview-only, testnet-external-signer, public/redacted evidence path for Hyperliquid and Polymarket.",
+    safety: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      nonCustodial: true,
+      externalSignerRequired: true,
+      acceptsSecrets: false,
+      acceptsRawSignatures: false,
+      acceptsSignedPayloads: false,
+    },
+    stages: [
+      {
+        id: "preview_handoff",
+        label: "Preview / handoff",
+        purpose: "Build a no-submit plan from public context.",
+        commands: [
+          "matterhorn-work hyperliquid handoff --asset BTC --side buy --size 0.001 --price <testnet-price> --json",
+          "matterhorn-work polymarket handoff --market-id <testnet-market-id> --side yes --amount-usdc 1 --json",
+        ],
+        output: "Public handoff with canSubmit:false and liveSubmissionEnabled:false.",
+      },
+      {
+        id: "external_sign_request",
+        label: "External sign request",
+        purpose: "Create public metadata for an operator-owned testnet signer only.",
+        commands: [
+          "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
+          "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
+        ],
+        output: "matterhorn.market.external-sign-request.v1 with submitSignedAllowedByContract:false.",
+      },
+      {
+        id: "redacted_artifact_validation",
+        label: "Redacted artifact validation",
+        purpose: "Validate public/redacted official-client metadata against the sign request hash.",
+        commands: [
+          "matterhorn-work hyperliquid validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+          "matterhorn-work polymarket validate-artifact --sign-request-file <public-sign-request.json> --artifact-file <redacted-artifact.json> --json",
+        ],
+        output: "matterhorn.market.artifact-validation.v1 plus a public audit receipt candidate.",
+      },
+      {
+        id: "artifact_reconciliation",
+        label: "Artifact reconciliation",
+        purpose: "Turn accepted public artifact validations into customer evidence.",
+        commands: [
+          "matterhorn-work crypto artifact-reconcile --hyperliquid-artifact-validation <hyperliquid-artifact-validation.json> --polymarket-artifact-validation <polymarket-artifact-validation.json> --strict --json",
+        ],
+        output: "matterhorn.market.artifact-reconciliation.v1.",
+      },
+      {
+        id: "public_receipt_import",
+        label: "Public receipt import",
+        purpose: "Verify public status evidence against the original handoff.",
+        commands: [
+          "matterhorn-work hyperliquid receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+          "matterhorn-work polymarket receipt --handoff-file <public-handoff.json> --receipt-file <public-receipt.json> --json",
+        ],
+        output: "matterhorn.market.receipt.v1 public receipt evidence only.",
+      },
+    ],
+    forbidden: [
+      "seed phrase",
+      "private key",
+      "API secret",
+      "raw signature",
+      "signed payload",
+      "wallet export",
+      "live submit route",
+    ],
+  };
+}
+
 async function runCryptoCustomerSmoke(args: ParsedArgs): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_CUSTOMER_SMOKE_BOOL_FLAGS, forwarded);
@@ -8367,6 +8453,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_ARTIFACT_RECONCILIATION_SUBCOMMANDS.has(subcommand)) {
       await runCryptoArtifactReconciliation(args, outputJson);
+      return;
+    }
+
+    if (CRYPTO_EXECUTION_CHAIN_SUBCOMMANDS.has(subcommand)) {
+      outputResult(buildCryptoExecutionChainGuide(), outputJson);
       return;
     }
 
@@ -8473,7 +8564,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), readiness, execution-readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-validate-public, sdk-manifest-check, receipt-check, artifact-reconcile, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, execution-readiness, execution-chain, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-validate-public, sdk-manifest-check, receipt-check, artifact-reconcile, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
