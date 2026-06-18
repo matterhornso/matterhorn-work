@@ -21,6 +21,7 @@ const offlineStages = [
   ["market.execution_safety", "Market execution safety gate", ["pnpm", "test:market-execution-safety-gate"]],
   ["market.execution_readiness", "Market execution-readiness security gate", ["pnpm", "test:market-execution-readiness-gate"]],
   ["market.submit_sign_phase0_contract", "Market submit/sign Phase 0 contract", ["pnpm", "test:market-submit-sign-contract-phase0"]],
+  ["market.sign_request_phase1", "Market sign-request Phase 1 gate", ["pnpm", "test:market-sign-request-phase1"]],
   ["market.official_sdk_validation", "Market official SDK validation track", ["pnpm", "test:market-official-sdk-validation-track"]],
   ["market.official_sdk_capture", "Market official SDK validation capture", ["pnpm", "test:market-official-sdk-validation-capture"]],
   ["market.official_sdk_doctor", "Market official SDK validation doctor", ["pnpm", "test:market-official-sdk-validation-doctor"]],

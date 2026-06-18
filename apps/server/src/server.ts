@@ -130,6 +130,7 @@ import {
   findForbiddenHyperliquidCredentialInput,
   hyperliquidProvider,
   isValidHyperliquidAddress,
+  prepareHyperliquidExternalSignRequestFromRequest,
   prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
   type HyperliquidWatchDescriptor,
@@ -151,6 +152,7 @@ import {
   findForbiddenPolymarketCredentialInput,
   buildPolymarketWatchDescriptor,
   polymarketProvider,
+  preparePolymarketExternalSignRequestFromRequest,
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
   type PolymarketWatchDescriptor,
@@ -4332,6 +4334,28 @@ function createRoutes(
     }
   });
 
+  addRoute(routes, "POST", "/api/hyperliquid/orders/external-sign-request", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const { preview, handoff, signRequest } = await prepareHyperliquidExternalSignRequestFromRequest({
+        asset: typeof body.asset === "string" ? body.asset : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        size: body.size === undefined ? null : body.size as never,
+        price: body.price === undefined ? null : body.price as never,
+        reduceOnly: typeof body.reduceOnly === "boolean" ? body.reduceOnly : null,
+        slippageTolerance: body.slippageTolerance === undefined ? null : body.slippageTolerance as never,
+        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
+      });
+      return jsonResponse({ success: true, signRequest, handoff, preview });
+    } catch (err) {
+      throw new ApiError(400, "invalid_hyperliquid_sign_request", err instanceof Error ? err.message : "Could not prepare Hyperliquid external sign request");
+    }
+  });
+
   addRoute(routes, "POST", "/api/hyperliquid/orders/receipt", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     const forbidden = findForbiddenHyperliquidCredentialInput(body);
@@ -4492,6 +4516,30 @@ function createRoutes(
       return jsonResponse({ success: true, handoff, preview });
     } catch (err) {
       throw new ApiError(400, "invalid_polymarket_handoff", err instanceof Error ? err.message : "Could not prepare Polymarket signing handoff");
+    }
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/orders/external-sign-request", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket sign-request input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    try {
+      const { preview, handoff, signRequest, blocked } = await preparePolymarketExternalSignRequestFromRequest({
+        marketId: typeof body.marketId === "string" ? body.marketId : "",
+        outcome: typeof body.outcome === "string" ? body.outcome : null,
+        side: typeof body.side === "string" ? body.side as never : null,
+        amountUsdc: Number(body.amountUsdc),
+        slippageTolerance: body.slippageTolerance === undefined ? null : Number(body.slippageTolerance),
+        executionMode: typeof body.executionMode === "string" ? body.executionMode : null,
+      });
+      if (blocked) {
+        return jsonResponse({ success: true, blocked: true, preview, handoff: null, signRequest: null, cards: [buildPolymarketOrderPreviewCard(preview)] });
+      }
+      return jsonResponse({ success: true, signRequest, handoff, preview });
+    } catch (err) {
+      throw new ApiError(400, "invalid_polymarket_sign_request", err instanceof Error ? err.message : "Could not prepare Polymarket external sign request");
     }
   });
 

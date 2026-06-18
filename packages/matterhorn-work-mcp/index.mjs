@@ -584,6 +584,23 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_create_sign_request",
+    description: "Create a Phase 1 Hyperliquid external sign request for operator-owned testnet validation. Requires executionMode=testnet_external_signer; Matterhorn does not sign, accept signed artifacts, or submit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        executionMode: { type: "string", enum: ["testnet_external_signer"] },
+        asset: { type: "string" },
+        side: { type: "string", enum: ["buy", "sell", "long", "short"] },
+        size: { oneOf: [{ type: "number" }, { type: "string" }] },
+        price: { oneOf: [{ type: "number" }, { type: "string" }] },
+        reduceOnly: { type: "boolean" },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["executionMode", "asset", "side", "size"],
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_verify_receipt",
     description: "Verify a returned PUBLIC Hyperliquid receipt (order id / tx hash / status) against the handoff that produced it. Public status only; signed material is never accepted.",
     inputSchema: {
@@ -715,6 +732,22 @@ const tools = [
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
       },
       required: ["marketId", "amountUsdc"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_create_sign_request",
+    description: "Create a Phase 1 Polymarket external sign request for operator-owned testnet validation. Requires executionMode=testnet_external_signer; Matterhorn does not sign, accept signed artifacts, store CLOB secrets, or submit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        executionMode: { type: "string", enum: ["testnet_external_signer"] },
+        marketId: { type: "string" },
+        outcome: { type: "string" },
+        side: { type: "string", enum: ["yes", "no"] },
+        amountUsdc: { oneOf: [{ type: "number" }, { type: "string" }] },
+        slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
+      },
+      required: ["executionMode", "marketId", "amountUsdc"],
     },
   },
   {
@@ -2749,6 +2782,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
     case "matterhorn_hyperliquid_prepare_handoff":
       return callServer("/api/hyperliquid/orders/handoff", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_create_sign_request":
+      return callServer("/api/hyperliquid/orders/external-sign-request", { method: "POST", body: args });
     case "matterhorn_hyperliquid_verify_receipt":
       return callServer("/api/hyperliquid/orders/receipt", { method: "POST", body: args });
     case "matterhorn_polymarket_chat":
@@ -2771,6 +2806,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
     case "matterhorn_polymarket_prepare_handoff":
       return callServer("/api/polymarket/orders/handoff", { method: "POST", body: args });
+    case "matterhorn_polymarket_create_sign_request":
+      return callServer("/api/polymarket/orders/external-sign-request", { method: "POST", body: args });
     case "matterhorn_polymarket_verify_receipt":
       return callServer("/api/polymarket/orders/receipt", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":

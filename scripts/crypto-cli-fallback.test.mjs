@@ -105,6 +105,64 @@ async function createMockServer() {
       });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/external-sign-request") {
+      if (body.executionMode !== "testnet_external_signer") {
+        return writeJson(res, 400, { error: "invalid_execution_mode" });
+      }
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body || "signature" in body) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      return writeJson(res, 200, {
+        success: true,
+        signRequest: {
+          version: "matterhorn.market.external-sign-request.v1",
+          venue: "hyperliquid",
+          routeName: "hyperliquid.orders.sign_request",
+          executionMode: "testnet_external_signer",
+          network: "testnet",
+          action: "place_order",
+          readyToSign: true,
+          signedArtifactAccepted: false,
+          submitSignedAllowedByContract: false,
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          externalSignerOnly: true,
+          warnings: ["Mock sign-request: no Matterhorn signing or submission."],
+        },
+        handoff: { canSubmit: false, liveSubmissionEnabled: false },
+        preview: { canSubmit: false, liveSubmissionEnabled: false },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/polymarket/orders/external-sign-request") {
+      if (body.executionMode !== "testnet_external_signer") {
+        return writeJson(res, 400, { error: "invalid_execution_mode" });
+      }
+      if ("apiSecret" in body || "privateKey" in body || "signedPayload" in body || "signature" in body) {
+        return writeJson(res, 400, { error: "market_secret_rejected" });
+      }
+      return writeJson(res, 200, {
+        success: true,
+        signRequest: {
+          version: "matterhorn.market.external-sign-request.v1",
+          venue: "polymarket",
+          routeName: "polymarket.orders.sign_request",
+          executionMode: "testnet_external_signer",
+          network: "amoy",
+          action: "place_order",
+          readyToSign: true,
+          signedArtifactAccepted: false,
+          submitSignedAllowedByContract: false,
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          externalSignerOnly: true,
+          warnings: ["Mock sign-request: no Matterhorn signing or submission."],
+        },
+        handoff: { canSubmit: false, liveSubmissionEnabled: false },
+        preview: { canSubmit: false, liveSubmissionEnabled: false },
+      });
+    }
+
     return writeJson(res, 404, { error: "not_found", path: url.pathname });
   });
   const port = await listen(server);
@@ -186,7 +244,83 @@ async function main() {
       },
     );
 
-    // 3. Credential-shaped flags are rejected before the CLI ever calls the server.
+    // 3. Venue sign-request commands call only the external sign-request route
+    // and keep every execution flag disabled.
+    await expectCli(
+      "hyperliquid sign-request external signer only",
+      mock.url,
+      [
+        "hyperliquid",
+        "sign-request",
+        "--execution-mode",
+        "testnet_external_signer",
+        "--asset",
+        "BTC",
+        "--side",
+        "buy",
+        "--size",
+        "0.1",
+        "--price",
+        "100000",
+      ],
+      (payload) => {
+        if (payload.signRequest?.version !== "matterhorn.market.external-sign-request.v1") {
+          throw new Error("expected Hyperliquid external sign-request version");
+        }
+        if (payload.signRequest?.venue !== "hyperliquid") throw new Error("expected Hyperliquid sign-request venue");
+        if (payload.signRequest?.executionMode !== "testnet_external_signer") throw new Error("expected explicit testnet external signer mode");
+        if (payload.signRequest?.canSubmit !== false) throw new Error("expected Hyperliquid signRequest.canSubmit=false");
+        if (payload.signRequest?.liveSubmissionEnabled !== false) throw new Error("expected Hyperliquid liveSubmissionEnabled=false");
+        if (payload.signRequest?.signedArtifactAccepted !== false) throw new Error("expected Hyperliquid signedArtifactAccepted=false");
+        if (payload.signRequest?.submitSignedAllowedByContract !== false) {
+          throw new Error("expected Hyperliquid submitSignedAllowedByContract=false");
+        }
+      },
+    );
+
+    await expectCli(
+      "polymarket sign-request external signer only",
+      mock.url,
+      [
+        "polymarket",
+        "sign-request",
+        "--execution-mode",
+        "testnet_external_signer",
+        "--market-id",
+        "0xmarket-ai",
+        "--amount-usdc",
+        "10",
+        "--side",
+        "yes",
+      ],
+      (payload) => {
+        if (payload.signRequest?.version !== "matterhorn.market.external-sign-request.v1") {
+          throw new Error("expected Polymarket external sign-request version");
+        }
+        if (payload.signRequest?.venue !== "polymarket") throw new Error("expected Polymarket sign-request venue");
+        if (payload.signRequest?.executionMode !== "testnet_external_signer") throw new Error("expected explicit testnet external signer mode");
+        if (payload.signRequest?.canSubmit !== false) throw new Error("expected Polymarket signRequest.canSubmit=false");
+        if (payload.signRequest?.liveSubmissionEnabled !== false) throw new Error("expected Polymarket liveSubmissionEnabled=false");
+        if (payload.signRequest?.signedArtifactAccepted !== false) throw new Error("expected Polymarket signedArtifactAccepted=false");
+        if (payload.signRequest?.submitSignedAllowedByContract !== false) {
+          throw new Error("expected Polymarket submitSignedAllowedByContract=false");
+        }
+      },
+    );
+
+    const signRequestModeRequestsBefore = mock.requests.length;
+    const missingModeResult = await runCli(mock.url, ["hyperliquid", "sign-request", "--asset", "BTC", "--side", "buy", "--size", "0.1"]);
+    if (missingModeResult.code === 0) throw new Error("hyperliquid sign-request accepted missing execution mode");
+    const missingModePayload = parseJsonOutput(missingModeResult);
+    if (!/execution-mode testnet_external_signer/i.test(String(missingModePayload.error ?? ""))) {
+      throw new Error(`unexpected missing execution-mode error: ${JSON.stringify(missingModePayload)}`);
+    }
+    if (mock.requests.length !== signRequestModeRequestsBefore) {
+      throw new Error("missing execution-mode sign-request reached the server");
+    }
+    console.log("PASS hyperliquid sign-request requires explicit testnet external signer mode");
+
+    // 4. Credential-shaped flags are rejected before the CLI ever calls the server.
     const requestsBefore = mock.requests.length;
     const secretResult = await runCli(mock.url, ["crypto", "chat", "--message", "show BTC funding", "--api-secret", "do-not-accept"]);
     if (secretResult.code === 0) throw new Error("credential-shaped crypto CLI flag was accepted");
@@ -197,7 +331,7 @@ async function main() {
     if (mock.requests.length !== requestsBefore) throw new Error("secret-flag request reached the server; rejection must happen client-side first");
     console.log("PASS crypto secret flag rejection (no server call)");
 
-    // 4. The consolidated customer-ready smoke is exposed through the public CLI
+    // 5. The consolidated customer-ready smoke is exposed through the public CLI
     // and can write JSON evidence without shell redirection.
     const customerSmokeRequestsBefore = mock.requests.length;
     const customerSmokeDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-customer-smoke-cli-"));
@@ -219,7 +353,7 @@ async function main() {
     }
     console.log("PASS crypto customer-smoke CLI writes offline JSON evidence");
 
-    // 5. The live public-data QA pack is exposed through the public CLI and can
+    // 6. The live public-data QA pack is exposed through the public CLI and can
     // create fixture-fallback evidence without calling the server.
     const livePublicRequestsBefore = mock.requests.length;
     const livePublicDir = mkdtempSync(join(tmpdir(), "matterhorn-live-public-qa-cli-"));
@@ -246,7 +380,7 @@ async function main() {
     }
     console.log("PASS crypto live-public-qa CLI writes offline fixture evidence");
 
-    // 6. The Hermes customer QA helper is exposed through the public CLI and
+    // 7. The Hermes customer QA helper is exposed through the public CLI and
     // prints a public/redacted command plan without calling the server.
     const hermesQaRequestsBefore = mock.requests.length;
     await expectCli(
@@ -269,7 +403,7 @@ async function main() {
     if (mock.requests.length !== hermesQaRequestsBefore) throw new Error("crypto hermes-customer-qa should not call the Matterhorn server");
     console.log("PASS crypto hermes-customer-qa CLI prints offline command plan");
 
-    // 6. The official SDK doctor is exposed through the public CLI without
+    // 8. The official SDK doctor is exposed through the public CLI without
     // requiring a Matterhorn server or accepting signing material.
     const sdkDoctorRequestsBefore = mock.requests.length;
     const sdkDoctor = await expectCli(
@@ -288,7 +422,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-doctor CLI is offline and non-custodial");
 
-    // 6. The official SDK normalizer is exposed through the public CLI for
+    // 9. The official SDK normalizer is exposed through the public CLI for
     // redacted public artifacts.
     const sdkNormalizeRequestsBefore = mock.requests.length;
     const normalizedOutput = join(customerSmokeDir, "hyperliquid-normalized.json");
@@ -319,7 +453,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-normalize CLI is offline and non-custodial");
 
-    // 7. The official SDK capture harness is exposed through the public CLI for
+    // 10. The official SDK capture harness is exposed through the public CLI for
     // normalized public artifacts and remains offline.
     const sdkCaptureRequestsBefore = mock.requests.length;
     const captureOutput = join(customerSmokeDir, "official-sdk-capture.json");
@@ -368,7 +502,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-capture CLI is offline and non-custodial");
 
-    // 8. The official SDK evidence validator is exposed through the public CLI
+    // 11. The official SDK evidence validator is exposed through the public CLI
     // for captured public artifacts and remains offline.
     const sdkEvidenceRequestsBefore = mock.requests.length;
     const sdkEvidenceValidation = await expectCli(
@@ -396,7 +530,7 @@ async function main() {
     }
     console.log("PASS crypto sdk-evidence CLI is offline and non-custodial");
 
-    // 9. The official SDK operator loop is exposed through the public CLI without
+    // 12. The official SDK operator loop is exposed through the public CLI without
     // requiring a Matterhorn server or forwarding auth tokens/secrets.
     const sdkRequestsBefore = mock.requests.length;
     const sdkOutputDir = mkdtempSync(join(tmpdir(), "matterhorn-crypto-sdk-loop-cli-"));
@@ -484,7 +618,7 @@ async function main() {
     if (mock.requests.length !== sdkManifestRequestsBefore) throw new Error("crypto sdk-manifest-check should not call the Matterhorn server");
     console.log("PASS crypto sdk-manifest-check CLI is offline and non-custodial");
 
-    // 10. The customer evidence bundle is also available through the public
+    // 13. The customer evidence bundle is also available through the public
     // crypto CLI and stays offline.
     const bundleRequestsBefore = mock.requests.length;
     const smokePath = join(sdkOutputDir, "customer-ready-smoke.json");
@@ -682,7 +816,7 @@ async function main() {
     }
     console.log("PASS crypto customer-packet CLI is offline and non-custodial");
 
-    // 11. The public market receipt checker is available through the crypto CLI
+    // 14. The public market receipt checker is available through the crypto CLI
     // and stays offline.
     const receiptRequestsBefore = mock.requests.length;
     const handoffPath = join(sdkOutputDir, "market-handoff.json");
@@ -728,10 +862,12 @@ async function main() {
     }
     console.log("PASS crypto receipt-check CLI is offline and non-custodial");
 
-    // 12. No request touched a submit/sign/exchange route.
+    // 15. No request touched a submit/sign/exchange route.
     const expectedServerRoutes = new Set([
       "/api/crypto/chat/execute",
       "/api/crypto/readiness",
+      "/api/hyperliquid/orders/external-sign-request",
+      "/api/polymarket/orders/external-sign-request",
     ]);
     for (const entry of mock.requests) {
       if (FORBIDDEN_ROUTE_RE.test(entry.path)) throw new Error(`crypto CLI reached a forbidden route: ${entry.path}`);

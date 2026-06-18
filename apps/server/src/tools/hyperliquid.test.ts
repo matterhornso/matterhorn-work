@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   HyperliquidInfoProvider,
+  buildHyperliquidExternalSignRequest,
   buildHyperliquidWatchDescriptor,
   checkHyperliquidWatchDescriptor,
   buildHyperliquidOrderActionPayload,
@@ -8,6 +9,7 @@ import {
   coerceHyperliquidHandoffReference,
   coerceHyperliquidReceiptInput,
   prepareHyperliquidHandoffFromRequest,
+  prepareHyperliquidExternalSignRequestFromRequest,
   executeHyperliquidChatWorkflow,
   extractHyperliquidOrderInput,
   findForbiddenHyperliquidCredentialInput,
@@ -385,6 +387,36 @@ describe("Hyperliquid L1 order-action payload", () => {
     const { handoff } = await prepareHyperliquidHandoffFromRequest({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
     expect(handoff.signingPayload?.action.orders[0].a).toBe(0); // BTC is index 0 in the mock universe
     expect(handoff.externalSignerOnly).toBe(true);
+  });
+
+  test("Phase 1 sign request requires explicit testnet mode and remains non-submittable", async () => {
+    const { handoff, signRequest } = await prepareHyperliquidExternalSignRequestFromRequest(
+      { asset: "BTC", side: "buy", size: 0.1, price: 65000, executionMode: "testnet_external_signer" },
+      provider(),
+    );
+    expect(signRequest.version).toBe("matterhorn.market.external-sign-request.v1");
+    expect(signRequest.routeName).toBe("hyperliquid.orders.sign_request");
+    expect(signRequest.executionMode).toBe("testnet_external_signer");
+    expect(signRequest.network).toBe("testnet");
+    expect(signRequest.previewSha256).toBe(handoff.previewSha256);
+    expect(signRequest.handoffSha256).toBe(handoff.handoffSha256);
+    expect(signRequest.signRequestSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(signRequest.unsignedPayloadSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(signRequest.readyToSign).toBe(true);
+    expect(signRequest.canSubmit).toBe(false);
+    expect(signRequest.liveSubmissionEnabled).toBe(false);
+    expect(signRequest.submitSignedAllowedByContract).toBe(false);
+    expect(signRequest.signedArtifactAccepted).toBe(false);
+    const serialized = JSON.stringify(signRequest);
+    expect(serialized).not.toContain("privateKey");
+    expect(serialized).not.toContain("apiSecret");
+    expect(serialized).not.toContain("\"rawSignature\"");
+    expect(serialized).not.toContain("\"signedPayload\"");
+  });
+
+  test("Phase 1 sign request fails closed when mode is omitted", async () => {
+    const { handoff } = await prepareHyperliquidHandoffFromRequest({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
+    expect(() => buildHyperliquidExternalSignRequest(handoff)).toThrow(/executionMode=testnet_external_signer/);
   });
 });
 

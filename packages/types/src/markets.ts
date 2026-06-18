@@ -263,6 +263,29 @@ export interface MarketSignedSubmissionEnvelope {
   warnings: string[];
 }
 
+export interface MarketExternalSignRequest {
+  version: "matterhorn.market.external-sign-request.v1";
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  routeName: Extract<MarketFutureExecutionRouteName, "hyperliquid.orders.sign_request" | "polymarket.orders.sign_request">;
+  executionMode: Extract<MarketExecutionMode, "testnet_external_signer">;
+  network: string;
+  action: MarketSignedSubmissionAction;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signRequestSha256: string;
+  readyToSign: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  externalSignerOnly: true;
+  operatorConfirmation: string;
+  createdAt: string;
+  expiresAt: string;
+  warnings: string[];
+}
+
 export interface MarketExecutionAuditRecord {
   version: "matterhorn.market.execution-audit.v1";
   envelopeVersion: MarketSignedSubmissionEnvelope["version"];

@@ -1154,6 +1154,33 @@ export interface HyperliquidSigningHandoff {
   externalSignerOnly: true;
 }
 
+export interface HyperliquidExternalSignRequest {
+  version: "matterhorn.market.external-sign-request.v1";
+  venue: "hyperliquid";
+  routeName: "hyperliquid.orders.sign_request";
+  executionMode: "testnet_external_signer";
+  network: "testnet";
+  action: "place_order";
+  marketId: string;
+  marketLabel: string;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signRequestSha256: string;
+  signingPayload: HyperliquidOrderActionPayload | null;
+  signingInstructions: string;
+  readyToSign: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  externalSignerOnly: true;
+  operatorConfirmation: string;
+  createdAt: string;
+  expiresAt: string;
+  warnings: string[];
+}
+
 /**
  * Canonical Hyperliquid L1 order-action payload plus the EIP-712 Agent signing
  * scaffold. Matterhorn produces the order action object and the fixed Agent
@@ -1358,6 +1385,59 @@ export function buildHyperliquidSigningHandoff(
   };
 }
 
+export function buildHyperliquidExternalSignRequest(
+  handoff: HyperliquidSigningHandoff,
+  options: { executionMode?: string | null } = {},
+): HyperliquidExternalSignRequest {
+  if (options.executionMode !== "testnet_external_signer") {
+    throw new Error("executionMode=testnet_external_signer is required to create a Hyperliquid external sign request.");
+  }
+  const forbidden = findForbiddenHyperliquidCredentialInput(handoff);
+  if (forbidden) throw new Error("Handoff unexpectedly contained credential-shaped data at " + forbidden);
+  const createdAt = new Date().toISOString();
+  const unsignedPayload = handoff.signingPayload ?? handoff.order;
+  const unsignedPayloadSha256 = sha256(unsignedPayload);
+  const readyToSign = Boolean(handoff.signingPayload);
+  const warnings = [
+    ...handoff.warnings,
+    "Phase 1 sign request only: Matterhorn creates a hash-bound request for an external signer, but does not accept signed artifacts and does not submit.",
+    readyToSign
+      ? "Validate the Hyperliquid action with the official SDK on testnet before signing."
+      : "No canonical Hyperliquid signing payload is attached; resolve the asset index and rebuild before signing.",
+  ];
+  const core = {
+    version: "matterhorn.market.external-sign-request.v1",
+    venue: "hyperliquid",
+    routeName: "hyperliquid.orders.sign_request",
+    executionMode: "testnet_external_signer",
+    network: "testnet",
+    previewSha256: handoff.previewSha256,
+    handoffSha256: handoff.handoffSha256,
+    unsignedPayloadSha256,
+    createdAt,
+    expiresAt: handoff.expiresAt,
+  } as const;
+  return {
+    ...core,
+    action: "place_order",
+    marketId: handoff.marketId,
+    marketLabel: handoff.marketLabel,
+    signingPayload: handoff.signingPayload,
+    signingInstructions:
+      "Use your own Hyperliquid-compatible testnet client or official SDK to inspect and sign this unsigned action. " +
+      "Do not paste the signature or signed action back into Matterhorn in Phase 1.",
+    readyToSign,
+    signedArtifactAccepted: false,
+    submitSignedAllowedByContract: false,
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    externalSignerOnly: true,
+    operatorConfirmation: "I understand this is an external testnet sign request only. Matterhorn will not sign, accept the signature, or submit.",
+    signRequestSha256: sha256(core),
+    warnings,
+  };
+}
+
 /**
  * Resolve the asset index, build the preview, and attach the L1 order-action
  * payload — in one pass. Matterhorn still never signs, submits, or holds keys.
@@ -1376,6 +1456,15 @@ export async function prepareHyperliquidHandoffFromRequest(
   }
   const handoff = buildHyperliquidSigningHandoff(preview, { assetIndex });
   return { preview, handoff };
+}
+
+export async function prepareHyperliquidExternalSignRequestFromRequest(
+  input: HyperliquidOrderPreviewInput & { executionMode?: string | null },
+  provider: HyperliquidProvider = hyperliquidProvider,
+): Promise<{ preview: HyperliquidActionPreview; handoff: HyperliquidSigningHandoff; signRequest: HyperliquidExternalSignRequest }> {
+  const { preview, handoff } = await prepareHyperliquidHandoffFromRequest(input, provider);
+  const signRequest = buildHyperliquidExternalSignRequest(handoff, { executionMode: input.executionMode });
+  return { preview, handoff, signRequest };
 }
 
 const HYPERLIQUID_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;

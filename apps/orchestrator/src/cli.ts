@@ -3761,6 +3761,7 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid watch create|list|check|digest [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
+    "  matterhorn-work hyperliquid sign-request --execution-mode testnet_external_signer --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work polymarket chat --message <text> [options]",
     "  matterhorn-work polymarket markets --query <text> [options]",
@@ -3771,6 +3772,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket watch create|list|check|digest [options]",
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
+    "  matterhorn-work polymarket sign-request --execution-mode testnet_external_signer --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
     "  matterhorn-work crypto chat --message <text> [options]",
     "  matterhorn-work crypto readiness [options]",
@@ -7390,6 +7392,30 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "sign-request" || subcommand === "external-sign-request") {
+      const executionMode = readFlag(args.flags, "execution-mode") ?? readFlag(args.flags, "executionMode");
+      if (executionMode !== "testnet_external_signer") {
+        throw new Error("hyperliquid sign-request requires --execution-mode testnet_external_signer");
+      }
+      const asset = readHyperliquidAsset(args, 2);
+      const price = readNumber(args.flags, "price", undefined);
+      const reduceOnly = readBool(args.flags, "reduce-only", false);
+      const result = await fetchJson(`${baseUrl}/api/hyperliquid/orders/external-sign-request`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          executionMode,
+          asset,
+          side: readHyperliquidSide(args),
+          size: readHyperliquidSize(args),
+          ...(typeof price === "number" && Number.isFinite(price) ? { price } : {}),
+          ...(reduceOnly ? { reduceOnly } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "receipt" || subcommand === "verify-receipt") {
       const handoffJson = readFlag(args.flags, "handoff-json");
       const handoffFile = readFlag(args.flags, "handoff-file");
@@ -7433,7 +7459,7 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|watch|preview-order|handoff|receipt");
+    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|watch|preview-order|handoff|sign-request|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -7634,6 +7660,36 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "sign-request" || subcommand === "external-sign-request") {
+      const executionMode = readFlag(args.flags, "execution-mode") ?? readFlag(args.flags, "executionMode");
+      if (executionMode !== "testnet_external_signer") {
+        throw new Error("polymarket sign-request requires --execution-mode testnet_external_signer");
+      }
+      const marketId = readPolymarketMarketId(args, 2);
+      const amountUsdc = readNumber(args.flags, "amount-usdc", undefined) ?? readNumber(args.flags, "amountUsdc", undefined);
+      if (typeof amountUsdc !== "number" || !Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+        throw new Error("amount-usdc is required and must be greater than 0 for polymarket sign-request");
+      }
+      const side = (readFlag(args.flags, "side") ?? "yes").trim().toLowerCase();
+      if (side !== "yes" && side !== "no") throw new Error("side must be yes or no for polymarket sign-request");
+      const outcome = readFlag(args.flags, "outcome");
+      const slippageTolerance = readNumber(args.flags, "slippage-tolerance", undefined);
+      const result = await fetchJson(`${baseUrl}/api/polymarket/orders/external-sign-request`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          executionMode,
+          marketId,
+          side,
+          amountUsdc,
+          ...(outcome ? { outcome } : {}),
+          ...(typeof slippageTolerance === "number" ? { slippageTolerance } : {}),
+        }),
+      });
+      outputResult(result, outputJson);
+      return;
+    }
+
     if (subcommand === "receipt" || subcommand === "verify-receipt") {
       const handoffJson = readFlag(args.flags, "handoff-json");
       const handoffFile = readFlag(args.flags, "handoff-file");
@@ -7675,7 +7731,7 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|watch|preview-order|handoff|receipt");
+    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|watch|preview-order|handoff|sign-request|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

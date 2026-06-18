@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { hashTypedData } from "viem";
 import {
   PolymarketInfoProvider,
+  buildPolymarketExternalSignRequest,
   buildPolymarketOrderTypedData,
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
@@ -11,6 +12,7 @@ import {
   coercePolymarketHandoffReference,
   coercePolymarketReceiptInput,
   preparePolymarketHandoffFromRequest,
+  preparePolymarketExternalSignRequestFromRequest,
   estimatePolymarketFill,
   executePolymarketChatWorkflow,
   extractPolymarketOrderInput,
@@ -477,6 +479,39 @@ describe("Polymarket external-signer handoff + receipt", () => {
     const result = await executePolymarketChatWorkflow({ message: "prepare a $10 Yes order", marketId: "0xmarket-ai" }, { provider: provider({ blocked: true }) });
     expect(result.preview?.execution).toBe("blocked_by_compliance");
     expect(() => buildPolymarketSigningHandoff(result.preview!)).toThrow();
+  });
+
+  test("Phase 1 sign request requires explicit testnet mode and remains non-submittable", async () => {
+    const exchange = { chainId: 80002, verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E", domainName: "Polymarket CTF Exchange", domainVersion: "1" };
+    const { handoff, signRequest } = await preparePolymarketExternalSignRequestFromRequest(
+      { marketId: "0xmarket-ai", side: "yes", amountUsdc: 10, executionMode: "testnet_external_signer" },
+      provider({ blocked: false }),
+      exchange,
+    );
+    expect(handoff).not.toBeNull();
+    expect(signRequest?.version).toBe("matterhorn.market.external-sign-request.v1");
+    expect(signRequest?.routeName).toBe("polymarket.orders.sign_request");
+    expect(signRequest?.executionMode).toBe("testnet_external_signer");
+    expect(signRequest?.network).toBe("testnet");
+    expect(signRequest?.previewSha256).toBe(handoff?.previewSha256);
+    expect(signRequest?.handoffSha256).toBe(handoff?.handoffSha256);
+    expect(signRequest?.signRequestSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(signRequest?.unsignedPayloadSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(signRequest?.readyToSign).toBe(true);
+    expect(signRequest?.canSubmit).toBe(false);
+    expect(signRequest?.liveSubmissionEnabled).toBe(false);
+    expect(signRequest?.submitSignedAllowedByContract).toBe(false);
+    expect(signRequest?.signedArtifactAccepted).toBe(false);
+    const serialized = JSON.stringify(signRequest);
+    expect(serialized).not.toContain("privateKey");
+    expect(serialized).not.toContain("apiSecret");
+    expect(serialized).not.toContain("\"rawSignature\"");
+    expect(serialized).not.toContain("\"signedPayload\"");
+  });
+
+  test("Phase 1 sign request fails closed when mode is omitted", async () => {
+    const handoff = buildPolymarketSigningHandoff(await allowedPreview());
+    expect(() => buildPolymarketExternalSignRequest(handoff)).toThrow(/executionMode=testnet_external_signer/);
   });
 
   test("verifies a matching public receipt", async () => {
