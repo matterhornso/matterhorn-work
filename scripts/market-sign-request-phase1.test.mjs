@@ -80,6 +80,28 @@ for (const required of [
   assert.ok(server.includes(required), `server missing ${required}`);
 }
 
+const hyperliquidRouteStart = server.indexOf('"/api/hyperliquid/orders/external-sign-request"');
+const hyperliquidRouteEnd = server.indexOf('"/api/hyperliquid/orders/external-artifact/validate"', hyperliquidRouteStart);
+const hyperliquidRoute = hyperliquidRouteStart >= 0 ? server.slice(hyperliquidRouteStart, hyperliquidRouteEnd > hyperliquidRouteStart ? hyperliquidRouteEnd : server.length) : "";
+const polymarketRouteStart = server.indexOf('"/api/polymarket/orders/external-sign-request"');
+const polymarketRouteEnd = server.indexOf('"/api/polymarket/orders/external-artifact/validate"', polymarketRouteStart);
+const polymarketRoute = polymarketRouteStart >= 0 ? server.slice(polymarketRouteStart, polymarketRouteEnd > polymarketRouteStart ? polymarketRouteEnd : server.length) : "";
+
+for (const [label, route, forbiddenScanner, invalidError] of [
+  ["Hyperliquid", hyperliquidRoute, "findForbiddenHyperliquidCredentialInput(body)", "invalid_hyperliquid_sign_request"],
+  ["Polymarket", polymarketRoute, "findForbiddenPolymarketCredentialInput(body)", "invalid_polymarket_sign_request"],
+]) {
+  assert.ok(route.includes(forbiddenScanner), `${label} sign-request route should scan the raw request body for secrets`);
+  assert.ok(route.includes("market_secret_rejected"), `${label} sign-request route should reject secret-shaped input`);
+  assert.ok(route.includes("API secrets, private keys, signatures, or signed payloads"), `${label} sign-request route should explain rejected credential material`);
+  assert.ok(route.includes("executionMode: typeof body.executionMode === \"string\""), `${label} sign-request route should forward only explicit executionMode`);
+  assert.ok(route.includes("return jsonResponse({ success: true, signRequest, handoff, preview })"), `${label} sign-request route should return public signRequest/handoff/preview only`);
+  assert.ok(route.includes(invalidError), `${label} sign-request route should use the venue-specific invalid sign-request error`);
+  for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "signedArtifact", "rawSignature"]) {
+    assert.ok(!route.includes(forbidden), `${label} sign-request route must not include ${forbidden}`);
+  }
+}
+
 for (const required of [
   "matterhorn_hyperliquid_create_sign_request",
   "matterhorn_polymarket_create_sign_request",
