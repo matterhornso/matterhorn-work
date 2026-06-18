@@ -81,6 +81,7 @@
     "test:market-sign-request-phase1": "node scripts/market-sign-request-phase1.test.mjs",
     "test:market-artifact-validation-phase2": "node scripts/market-artifact-validation-phase2.test.mjs",
     "test:market-artifact-reconciliation": "node scripts/market-artifact-reconciliation.test.mjs",
+    "test:market-execution-chain-gate": "node scripts/market-execution-chain-gate.test.mjs",
     "test:market-receipt-qa": "node scripts/market-receipt-qa.test.mjs",
     "test:market-customer-qa-runbook": "node scripts/market-customer-qa-runbook.test.mjs",
     "test:hyperliquid-read-preview-qa": "node scripts/hyperliquid-read-preview-qa.mjs --self-test --strict",
