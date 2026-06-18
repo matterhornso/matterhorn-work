@@ -1,0 +1,109 @@
+{
+  "version": "matterhorn.crypto.shared-card.fixtures.v1",
+  "cards": [
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "account_snapshot",
+      "venue": "bittensor",
+      "title": "Wallet snapshot",
+      "summary": "Read-only Bittensor wallet context.",
+      "status": "success",
+      "originalKind": "wallet_snapshot",
+      "source": { "source": "subtensor.sidecar", "freshness": "live", "block": 123456 },
+      "warnings": [],
+      "data": { "kind": "wallet_snapshot", "wallet": { "taoBalance": 3.2, "stakePositions": 2 } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "action_preview",
+      "venue": "bittensor",
+      "title": "Staking preview",
+      "summary": "Unsigned Bittensor staking preview; external signing required.",
+      "status": "warning",
+      "originalKind": "staking_quote",
+      "source": { "source": "subtensor.sidecar", "freshness": "live", "block": 123456 },
+      "warnings": ["External signer required before any broadcast."],
+      "data": { "kind": "staking_quote", "preview": { "requiresExternalSignature": true, "canSubmit": false } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "orderbook_context",
+      "venue": "hyperliquid",
+      "title": "BTC orderbook",
+      "summary": "Read-only Hyperliquid orderbook context.",
+      "status": "success",
+      "originalKind": "hyperliquid_orderbook",
+      "source": { "source": "hyperliquid.info", "freshness": "live" },
+      "warnings": [],
+      "data": { "kind": "hyperliquid_orderbook", "asset": "BTC", "bids": 3, "asks": 3 },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "action_preview",
+      "venue": "hyperliquid",
+      "title": "BTC order preview",
+      "summary": "Non-submittable Hyperliquid order preview.",
+      "status": "warning",
+      "originalKind": "hyperliquid_order_preview",
+      "source": { "source": "hyperliquid.info", "freshness": "live" },
+      "warnings": ["Matterhorn does not sign or submit this order."],
+      "data": { "kind": "hyperliquid_order_preview", "preview": { "asset": "BTC", "side": "buy", "size": 0.001, "price": 65000, "canSubmit": false } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "compliance_block",
+      "venue": "polymarket",
+      "title": "Compliance block",
+      "summary": "Polymarket compliance blocked the preview.",
+      "status": "danger",
+      "originalKind": "polymarket_compliance",
+      "source": { "source": "polymarket.clob", "freshness": "live" },
+      "warnings": ["Blocked region; no executable order terms are exposed."],
+      "data": { "kind": "polymarket_compliance", "compliance": { "status": "blocked", "reason": "geoblocked" } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "action_preview",
+      "venue": "polymarket",
+      "title": "Blocked order preview",
+      "summary": "Compliance-blocked Polymarket preview with no executable order terms.",
+      "status": "danger",
+      "originalKind": "polymarket_order_preview",
+      "source": { "source": "polymarket.clob", "freshness": "live" },
+      "warnings": ["External signer unavailable while compliance is blocked."],
+      "data": { "kind": "polymarket_order_preview", "preview": { "canSubmit": false, "price": null, "size": null, "estimatedShares": null } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "receipt_status",
+      "venue": "hyperliquid",
+      "title": "Public receipt",
+      "summary": "Public order status receipt imported from an external client.",
+      "status": "success",
+      "originalKind": "signing_receipt",
+      "source": { "source": "operator.receipt", "freshness": "public" },
+      "warnings": [],
+      "data": { "kind": "signing_receipt", "receipt": { "status": "filled", "orderId": "public-order-1" } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "watch_alert",
+      "venue": "polymarket",
+      "title": "Watch alert",
+      "summary": "Monitoring alert for a public market watch.",
+      "status": "success",
+      "originalKind": "polymarket_watch",
+      "source": { "source": "matterhorn.watch", "freshness": "scheduled" },
+      "warnings": [],
+      "data": { "kind": "polymarket_watch", "watch": { "id": "watch-1", "status": "triggered" } },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    }
+  ]
+}

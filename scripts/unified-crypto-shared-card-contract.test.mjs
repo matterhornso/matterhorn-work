@@ -21,6 +21,8 @@ const matrix = read("docs/agent-control-coverage-matrix.md");
 const mcpSmoke = read("packages/matterhorn-work-mcp/test-smoke.mjs");
 const cliFallback = read("scripts/crypto-cli-fallback.test.mjs");
 const customerSmoke = read("scripts/customer-ready-crypto-smoke.mjs");
+const sharedCardRenderer = read("apps/app/src/react-app/domains/session/surface/message-list.tsx");
+const fixturePack = JSON.parse(read("qa-fixtures/crypto-shared-cards.v1.json"));
 
 assert.equal(
   rootPackage.scripts?.["test:unified-crypto-shared-card-contract"],
@@ -83,6 +85,55 @@ for (const phrase of [
 }
 
 assert.ok(customerSmoke.includes("test:unified-crypto-shared-card-contract"), "customer-ready smoke should include shared-card contract gate");
+
+for (const rendererPhrase of [
+  "sharedCardDisplayTitle",
+  "External signer",
+  "Freshness",
+  "Block",
+  "Can submit",
+  "Live submission",
+  "slice(0, 8)",
+]) {
+  assert.ok(sharedCardRenderer.includes(rendererPhrase), `transcript renderer should include card polish: ${rendererPhrase}`);
+}
+
+assert.equal(fixturePack.version, "matterhorn.crypto.shared-card.fixtures.v1", "fixture pack should be versioned");
+assert.ok(Array.isArray(fixturePack.cards), "fixture pack should contain cards");
+
+for (const card of fixturePack.cards) {
+  assert.equal(card.version, version, "fixture card should use the shared-card envelope");
+  assert.ok(kinds.includes(card.kind), `fixture card kind should be known: ${card.kind}`);
+  assert.ok(["auto", "bittensor", "hyperliquid", "polymarket"].includes(card.venue), `fixture venue should be known: ${card.venue}`);
+  assert.ok(statuses.includes(card.status), `fixture status should be known: ${card.status}`);
+  assert.equal(card.safety?.nonCustodial, true, "fixture card should be non-custodial");
+  assert.equal(card.safety?.liveSubmissionEnabled, false, "fixture card should keep live submission off");
+  assert.equal(card.safety?.canSubmit, false, "fixture card should keep canSubmit false");
+  assert.ok(card.source?.source, "fixture card should expose source");
+  assert.ok(card.source?.freshness, "fixture card should expose freshness");
+}
+
+for (const required of [
+  ["bittensor", "account_snapshot"],
+  ["bittensor", "action_preview"],
+  ["hyperliquid", "orderbook_context"],
+  ["hyperliquid", "action_preview"],
+  ["polymarket", "compliance_block"],
+  ["polymarket", "action_preview"],
+  ["hyperliquid", "receipt_status"],
+  ["polymarket", "watch_alert"],
+]) {
+  assert.ok(
+    fixturePack.cards.some((card) => card.venue === required[0] && card.kind === required[1]),
+    `fixture pack should include ${required[0]} ${required[1]}`,
+  );
+}
+
+const blockedPolymarketPreview = fixturePack.cards.find((card) => card.venue === "polymarket" && card.kind === "action_preview")?.data?.preview;
+assert.equal(blockedPolymarketPreview?.canSubmit, false, "blocked Polymarket preview must keep canSubmit=false");
+assert.equal(blockedPolymarketPreview?.price, null, "blocked Polymarket preview must not expose executable price");
+assert.equal(blockedPolymarketPreview?.size, null, "blocked Polymarket preview must not expose executable size");
+assert.equal(blockedPolymarketPreview?.estimatedShares, null, "blocked Polymarket preview must not expose executable shares");
 
 for (const forbidden of [
   "/api/hyperliquid/orders/submit",
