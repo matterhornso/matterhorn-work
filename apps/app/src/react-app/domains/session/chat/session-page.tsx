@@ -576,7 +576,7 @@ export function SessionPage(props: SessionPageProps) {
   const selectedWorkspaceErrorTitle =
     props.selectedWorkspaceDisplay.workspaceType === "remote"
       ? "Remote workspace unavailable"
-      : "OpenCode unavailable";
+      : "Matterhorn Work engine unavailable";
 
   const reactSessionBaseUrl = props.opencodeBaseUrl?.trim() ?? "";
   const reactSessionToken =
