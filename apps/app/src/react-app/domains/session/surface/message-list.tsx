@@ -742,6 +742,26 @@ function titleCaseCryptoLabel(value: string): string {
     .join(" ");
 }
 
+function sharedCardDisplayTitle(venueLabel: string, title: string, venue: string): string {
+  if (!venue || venue === "auto") return title;
+  return title.toLowerCase().includes(venueLabel.toLowerCase()) ? title : `${venueLabel}: ${title}`;
+}
+
+function sourceField(source: Record<string, unknown> | null, keys: string[]): string | null {
+  if (!source) return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  return null;
+}
+
+function sharedCardNeedsExternalSigner(kind: string, originalKind: string | null): boolean {
+  if (kind === "external_signer_handoff" || kind === "action_preview") return true;
+  return Boolean(originalKind && /(handoff|signing|signed_action|staking_quote|order_preview)/i.test(originalKind));
+}
+
 function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): BittensorChatCard | null {
   if (card.version !== "matterhorn.crypto.shared-card.v1") return null;
   const title = typeof card.title === "string" && card.title.trim() ? card.title.trim() : "Crypto chat";
@@ -749,6 +769,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
   const venue = typeof card.venue === "string" ? card.venue : "auto";
   const venueLabel = titleCaseCryptoLabel(venue);
   const statusLabel = titleCaseCryptoLabel(status);
+  const kind = typeof card.kind === "string" ? card.kind : "generic";
   const safety = isRecordValue(card.safety) ? card.safety : {};
   const originalKind = typeof card.originalKind === "string" ? card.originalKind : null;
   const source = isRecordValue(card.source)
@@ -757,21 +778,28 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
       ? { source: card.source }
       : null;
   const sourceLabel = source && typeof source.source === "string" ? source.source : null;
+  const freshness = sourceField(source, ["freshness", "freshnessLabel", "dataFreshness"]);
+  const block = sourceField(source, ["block", "blockNumber", "blockHash"]);
   const items: NonNullable<BittensorChatCard["items"]> = [
     { label: "Venue", value: venueLabel, tone: venue === "auto" ? "muted" : "default" },
     { label: "Status", value: statusLabel, tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "muted" },
     { label: "Can submit", value: safety.canSubmit === false ? "No" : "Unavailable", tone: safety.canSubmit === false ? "good" : "warning" },
     { label: "Live submission", value: safety.liveSubmissionEnabled === false ? "Off" : "Unavailable", tone: safety.liveSubmissionEnabled === false ? "good" : "warning" },
   ];
+  if (sharedCardNeedsExternalSigner(kind, originalKind)) {
+    items.push({ label: "External signer", value: "Required", tone: "warning" });
+  }
   if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
+  if (freshness) items.push({ label: "Freshness", value: freshness, tone: "muted" });
+  if (block) items.push({ label: "Block", value: block, tone: "muted" });
   if (originalKind) items.push({ label: "Original card", value: originalKind, tone: "muted" });
 
   return {
     version: "matterhorn.crypto.shared-card.v1",
-    kind: typeof card.kind === "string" ? card.kind : "generic",
+    kind,
     venue,
     status,
-    title,
+    title: sharedCardDisplayTitle(venueLabel, title, venue),
     subtitle: venue === "auto" ? "Crypto" : venueLabel,
     summary: typeof card.summary === "string" ? card.summary : null,
     tone: status === "success" ? "good" : status === "danger" ? "danger" : status === "warning" ? "warning" : "default",
@@ -928,7 +956,7 @@ function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
     <div className="grid gap-2.5">
       {props.cards.map((card, index) => {
         const title = card.title?.trim() || "Bittensor";
-        const items = (card.items ?? []).slice(0, 6);
+        const items = (card.items ?? []).slice(0, 8);
         const warnings = (card.warnings ?? []).filter(Boolean).slice(0, 3);
         const actions = (card.actions ?? []).slice(0, 2);
         return (
