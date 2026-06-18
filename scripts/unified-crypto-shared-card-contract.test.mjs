@@ -90,7 +90,10 @@ assert.ok(customerSmoke.includes("test:unified-crypto-shared-card-contract"), "c
 for (const rendererPhrase of [
   "sharedCardDisplayTitle",
   "sharedCardMissingContext",
+  "sharedCardHighlightedStep",
   "External signer",
+  "Focused step",
+  "Step command",
   "Freshness",
   "Block",
   "Can submit",
