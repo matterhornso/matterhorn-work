@@ -15,6 +15,10 @@ import {
   type PolymarketChatExecutionResult,
   type PolymarketProvider,
 } from "./polymarket.js";
+import {
+  buildMarketExecutionReadinessCard,
+  buildMarketExecutionReadinessReport,
+} from "./market-execution-readiness.js";
 
 export type UnifiedCryptoVenue = "auto" | "bittensor" | "hyperliquid" | "polymarket";
 export type RoutedCryptoVenue = Exclude<UnifiedCryptoVenue, "auto">;
@@ -65,6 +69,7 @@ export interface UnifiedCryptoRoutePlan {
 
 export type UnifiedCryptoSharedCardKind =
   | "clarification"
+  | "readiness_report"
   | "discovery"
   | "account_snapshot"
   | "market_context"
@@ -82,6 +87,7 @@ export const UNIFIED_CRYPTO_SHARED_CARD_VERSION = "matterhorn.crypto.shared-card
 
 export const UNIFIED_CRYPTO_SHARED_CARD_KINDS = [
   "clarification",
+  "readiness_report",
   "discovery",
   "account_snapshot",
   "market_context",
@@ -227,6 +233,9 @@ function sharedKindFor(originalKind: string | null): UnifiedCryptoSharedCardKind
     case "hyperliquid_clarification":
     case "polymarket_clarification":
       return "clarification";
+    case "market_execution_readiness":
+    case "readiness_report":
+      return "readiness_report";
     case "subnet_comparison":
     case "adapter_marketplace":
     case "adapter_roadmap":
@@ -294,6 +303,8 @@ function sharedSummaryFor(kind: UnifiedCryptoSharedCardKind, venue: RoutedCrypto
   switch (kind) {
     case "clarification":
       return "More context is needed before Matterhorn can continue safely.";
+    case "readiness_report":
+      return "Cross-venue execution readiness for Hyperliquid and Polymarket. This is a readiness contract, not execution permission.";
     case "discovery":
       return `Discovery result from ${venue}: ${title}.`;
     case "account_snapshot":
@@ -394,6 +405,15 @@ function routeScores(input: UnifiedCryptoChatInput): Record<RoutedCryptoVenue, n
   return { bittensor, hyperliquid, polymarket };
 }
 
+function isMarketExecutionReadinessRequest(input: UnifiedCryptoChatInput, message: string): boolean {
+  const text = message.toLowerCase();
+  const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
+  const mentionsMarketVenue = selectedMarketVenue
+    || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
+  const mentionsExecutionReadiness = textIncludes(text, /\b(execution readiness|submit readiness|execution ready|live submission|live submit|can submit|submit route|submit routes|sign route|sign routes|sign request|sign-request|signed artifact|signed-artifact|order submission|orders submit)\b/i);
+  return mentionsMarketVenue && mentionsExecutionReadiness;
+}
+
 export function planUnifiedCryptoChat(input: UnifiedCryptoChatInput): UnifiedCryptoRoutePlan {
   const requestedVenue = normalizeVenue(input.venue);
   if (requestedVenue !== "auto") {
@@ -464,6 +484,35 @@ function clarificationResult(input: UnifiedCryptoChatInput, route: UnifiedCrypto
     warnings,
     requiresClarification: true,
     clarificationQuestion: question,
+    route,
+  };
+}
+
+function marketExecutionReadinessResult(input: UnifiedCryptoChatInput, message: string): UnifiedCryptoChatResult {
+  const report = buildMarketExecutionReadinessReport();
+  const cards = [buildMarketExecutionReadinessCard(report)];
+  const warnings = ["This is a readiness contract, not execution permission."];
+  const route: UnifiedCryptoRoutePlan = {
+    requestedVenue: normalizeVenue(input.venue),
+    routedVenue: null,
+    confidence: 1,
+    reason: "The prompt asks about cross-venue market execution readiness.",
+    candidates: routeScores({ ...input, message }),
+    requiresClarification: false,
+    clarificationQuestion: null,
+  };
+  return {
+    venue: "auto",
+    requestedVenue: normalizeVenue(input.venue),
+    intent: "market_execution_readiness",
+    execution: "read_only",
+    responseText: "Hyperliquid and Polymarket are not live-submit enabled in Matterhorn. Matterhorn supports read, preview, external-signer handoff, redacted signed-artifact validation, and public receipt import. Can submit: No. Live submission: Off. A separate security review is required before any future submit route.",
+    cards,
+    sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
+    data: { report },
+    warnings,
+    requiresClarification: false,
+    clarificationQuestion: null,
     route,
   };
 }
@@ -573,6 +622,10 @@ export async function executeUnifiedCryptoChatWorkflow(
       clarificationQuestion: null,
       route: initialRoute,
     };
+  }
+
+  if (isMarketExecutionReadinessRequest(input, message)) {
+    return marketExecutionReadinessResult(input, message);
   }
 
   const route = planUnifiedCryptoChat({ ...input, message });

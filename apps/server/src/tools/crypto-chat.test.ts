@@ -223,6 +223,40 @@ describe("unified crypto chat router", () => {
     expect(plan.clarificationQuestion).toContain("Bittensor");
   });
 
+  test("answers market execution readiness as a cross-venue safety contract", async () => {
+    const result = await executeUnifiedCryptoChatWorkflow({
+      message: "Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show execution readiness.",
+    });
+
+    expect(result.venue).toBe("auto");
+    expect(result.intent).toBe("market_execution_readiness");
+    expect(result.execution).toBe("read_only");
+    expect(result.requiresClarification).toBe(false);
+    expect(result.responseText).toContain("Can submit: No");
+    expect(result.responseText).toContain("Live submission: Off");
+    expect(result.responseText).toContain("separate security review");
+    expect(result.cards[0]).toMatchObject({
+      kind: "market_execution_readiness",
+      title: "Market execution readiness",
+    });
+    expect(result.sharedCards[0]).toMatchObject({
+      kind: "readiness_report",
+      venue: "auto",
+      originalKind: "market_execution_readiness",
+      status: "warning",
+    });
+    const report = (result.data.report ?? {}) as {
+      readyForLiveSubmission?: boolean;
+      safety?: { canSubmit?: boolean; liveSubmissionEnabled?: boolean; signsOrSubmits?: boolean };
+    };
+    expect(report.readyForLiveSubmission).toBe(false);
+    expect(report.safety?.canSubmit).toBe(false);
+    expect(report.safety?.liveSubmissionEnabled).toBe(false);
+    expect(report.safety?.signsOrSubmits).toBe(false);
+    result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
+    expect(JSON.stringify(result)).not.toContain("/orders/submit");
+  });
+
   test("routes Bittensor chat through the Bittensor executor", async () => {
     const result = await executeUnifiedCryptoChatWorkflow(
       { message: "show my TAO", ss58Address: "5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1repo5EYjQX" },

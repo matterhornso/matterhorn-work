@@ -38,6 +38,7 @@ assert.deepEqual(statuses, ["info", "success", "warning", "danger"], "shared-car
 
 for (const requiredKind of [
   "clarification",
+  "readiness_report",
   "discovery",
   "account_snapshot",
   "market_context",
@@ -124,6 +125,7 @@ for (const card of fixturePack.cards) {
 }
 
 for (const required of [
+  ["auto", "readiness_report"],
   ["bittensor", "account_snapshot"],
   ["bittensor", "action_preview"],
   ["hyperliquid", "account_snapshot"],

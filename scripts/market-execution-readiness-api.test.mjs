@@ -8,6 +8,7 @@ function read(path) {
 
 const packageJson = JSON.parse(read("package.json"));
 const server = read("apps/server/src/server.ts");
+const readinessHelper = read("apps/server/src/tools/market-execution-readiness.ts");
 const mcp = read("packages/matterhorn-work-mcp/index.mjs");
 const cli = read("apps/orchestrator/src/cli.ts");
 const matrix = read("docs/agent-control-coverage-matrix.md");
@@ -24,6 +25,9 @@ const routeStart = server.indexOf('"/api/crypto/market-execution-readiness"');
 const routeEnd = server.indexOf('"/api/crypto/readiness"', routeStart);
 const route = routeStart >= 0 ? server.slice(routeStart, routeEnd > routeStart ? routeEnd : server.length) : "";
 assert.ok(route, "server should expose /api/crypto/market-execution-readiness");
+assert.ok(route.includes("buildMarketExecutionReadinessResponse"), "server route should use the shared execution-readiness builder");
+
+const contractSurface = `${route}\n${readinessHelper}`;
 
 for (const phrase of [
   "matterhorn.market.execution-readiness.v1",
@@ -44,7 +48,7 @@ for (const phrase of [
   "signsOrSubmits: false",
   "acceptsSecrets: false",
 ]) {
-  assert.ok(route.includes(phrase), `execution-readiness route should include ${phrase}`);
+  assert.ok(contractSurface.includes(phrase), `execution-readiness contract should include ${phrase}`);
 }
 
 for (const forbidden of [
