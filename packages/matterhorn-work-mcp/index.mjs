@@ -1685,6 +1685,21 @@ const MARKET_CUSTOMER_EVIDENCE_REQUIRED_STAGES = [
   "polymarket.readiness",
   "bittensor.customer_readiness",
 ];
+const CRYPTO_CUSTOMER_PACKET_REQUIRED_STAGES = [
+  "crypto.unified_chat",
+  "crypto.direct_prompt_safety",
+  "crypto.shared_card_contract",
+  "market.execution_safety",
+  "market.sign_request_phase1",
+  "market.artifact_validation_phase2",
+  "market.artifact_reconciliation",
+  "market.official_sdk_validation",
+  "market.customer_evidence_bundle",
+  "market.customer_evidence_verify",
+  "hyperliquid.readiness",
+  "polymarket.readiness",
+  "bittensor.customer_readiness",
+];
 const CUSTOMER_EVIDENCE_MARKDOWN_FORBIDDEN_ASSIGNMENT_RE =
   /\b(seedPhrase|mnemonic|privateKey|private_key|apiKey|api_key|apiSecret|api_secret|walletExport|wallet_export|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)\b\s*[:=]\s*\S+/i;
 
@@ -2040,6 +2055,13 @@ function summarizeMcpCustomerSmoke(raw) {
   if (raw?.safety?.nonCustodial !== true) errors.push("Customer-ready crypto smoke must keep nonCustodial=true.");
   if (raw?.safety?.liveSubmissionEnabled !== false) errors.push("Customer-ready crypto smoke must keep liveSubmissionEnabled=false.");
   if (raw?.safety?.asksForSecrets !== false) errors.push("Customer-ready crypto smoke must keep asksForSecrets=false.");
+  const stageById = new Map(stages.map((stage) => [String(stage?.id ?? ""), stage]));
+  const requiredStages = CRYPTO_CUSTOMER_PACKET_REQUIRED_STAGES.map((id) => {
+    const stage = stageById.get(id);
+    const status = typeof stage?.status === "string" ? stage.status : "missing";
+    if (status !== "pass") errors.push("Customer-ready crypto smoke required stage did not pass: " + id + " (" + status + ").");
+    return { id, status };
+  });
   if (skip > 0) warnings.push("Customer-ready crypto smoke has " + skip + " skipped stage(s).");
   return {
     present: Boolean(raw),
@@ -2047,6 +2069,7 @@ function summarizeMcpCustomerSmoke(raw) {
     pass,
     fail,
     skip,
+    requiredStages,
     errors,
     warnings,
   };

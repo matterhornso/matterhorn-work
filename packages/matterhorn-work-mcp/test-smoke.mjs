@@ -1229,7 +1229,21 @@ try {
       customerReadySmoke: {
         ready: true,
         summary: { pass: 18, fail: 0, skip: 0 },
-        stages: [{ id: "crypto.unified_chat", status: "pass" }],
+        stages: [
+          { id: "crypto.unified_chat", status: "pass" },
+          { id: "crypto.direct_prompt_safety", status: "pass" },
+          { id: "crypto.shared_card_contract", status: "pass" },
+          { id: "market.execution_safety", status: "pass" },
+          { id: "market.sign_request_phase1", status: "pass" },
+          { id: "market.artifact_validation_phase2", status: "pass" },
+          { id: "market.artifact_reconciliation", status: "pass" },
+          { id: "market.official_sdk_validation", status: "pass" },
+          { id: "market.customer_evidence_bundle", status: "pass" },
+          { id: "market.customer_evidence_verify", status: "pass" },
+          { id: "hyperliquid.readiness", status: "pass" },
+          { id: "polymarket.readiness", status: "pass" },
+          { id: "bittensor.customer_readiness", status: "pass" },
+        ],
         safety: {
           nonCustodial: true,
           liveSubmissionEnabled: false,
