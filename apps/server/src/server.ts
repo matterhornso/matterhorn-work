@@ -4016,6 +4016,86 @@ function createRoutes(
     return jsonResponse({ success: true, orderbook, cards: [buildHyperliquidOrderbookCard(orderbook)] });
   });
 
+  addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {
+    const bittensor = await auditBittensorReadiness();
+    const checks = [
+      {
+        id: "bittensor.readiness",
+        label: "Bittensor readiness",
+        status: bittensor.status,
+        summary: bittensor.status === "pass"
+          ? "Bittensor chat, read, preview, and non-custodial safety checks are ready."
+          : "Review Bittensor blockers or warnings before a customer demo.",
+      },
+      {
+        id: "hyperliquid.read_preview",
+        label: "Hyperliquid read/preview",
+        status: "pass" as const,
+        summary: "Hyperliquid is limited to read-only data, unsigned previews, external signer handoff, and public receipt evidence.",
+      },
+      {
+        id: "polymarket.read_preview",
+        label: "Polymarket read/preview",
+        status: "pass" as const,
+        summary: "Polymarket is limited to read-only data, compliance-gated previews, external signer handoff, and public receipt evidence.",
+      },
+      {
+        id: "market.execution_safety",
+        label: "Market execution safety",
+        status: "pass" as const,
+        summary: "Matterhorn exposes no live Hyperliquid or Polymarket submit route and does not accept signing secrets.",
+      },
+    ];
+    const blockers = [
+      ...bittensor.blockers,
+      ...checks.filter((check) => check.status === "fail").map((check) => check.summary),
+    ];
+    const warnings = [
+      ...bittensor.warnings,
+      "This route summarizes runtime and static safety surfaces. Attach offline smoke/CI evidence before saying a customer packet is complete.",
+    ];
+    const ready = blockers.length === 0;
+    const report = {
+      status: ready ? (checks.some((check) => check.status === "warning") ? "warning" : "pass") : "fail",
+      ready,
+      checkedAt: new Date().toISOString(),
+      checks,
+      blockers,
+      warnings,
+      nextActions: ready
+        ? [
+            "Run pnpm smoke:customer-ready-crypto before a customer session.",
+            "Attach matterhorn-work crypto customer-packet output to the customer handoff.",
+          ]
+        : bittensor.nextActions,
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    };
+    return jsonResponse({
+      success: true,
+      report,
+      cards: [{
+        kind: "readiness_report",
+        title: "Crypto customer readiness",
+        summary: ready
+          ? "Runtime crypto surfaces are ready for a guarded customer demo after offline smoke evidence is attached."
+          : "Resolve readiness blockers before a customer demo.",
+        tone: ready ? "good" : "danger",
+        items: [
+          { label: "Bittensor", value: bittensor.status, tone: bittensor.status === "pass" ? "good" : bittensor.status === "warning" ? "warning" : "danger" },
+          { label: "Hyperliquid", value: "Read/preview only", tone: "good" },
+          { label: "Polymarket", value: "Read/preview only", tone: "good" },
+          { label: "Live submission", value: "Off", tone: "good" },
+        ],
+        warnings,
+        data: { report },
+      }],
+    });
+  });
+
   addRoute(routes, "POST", "/api/crypto/chat/execute", "client", async (ctx) => {
     const body = await readJsonBody(ctx.request);
     const message = typeof body.message === "string" ? body.message : "";
