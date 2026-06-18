@@ -134,6 +134,50 @@ such as raw signatures, private keys, API secrets, signed payloads, and wallet
 exports. It does not execute official SDK code, sign orders, submit orders, or
 authorize live execution.
 
+## Consolidated Public Validation Command
+
+Use `sdk-validate-public` when you want one customer-safe command that checks
+mode, network, public artifact hashes, normalized shapes, and evidence output:
+
+```bash
+matterhorn-work crypto sdk-validate-public \
+  --mode fixture \
+  --input-dir qa-fixtures/market-official-sdk \
+  --output-dir /tmp/matterhorn-market-sdk-public-validation \
+  --strict --json
+```
+
+Operator-owned fixture and testnet modes use the same command, but must name the
+mode explicitly:
+
+```bash
+matterhorn-work crypto sdk-validate-public \
+  --mode operator_owned_testnet \
+  --input-dir /tmp/operator-public-artifacts \
+  --output-dir /tmp/matterhorn-market-sdk-public-validation \
+  --hyperliquid-network hyperliquid-testnet \
+  --hyperliquid-package-version <hyperliquid-python-sdk-version> \
+  --polymarket-network polygon-amoy \
+  --polymarket-chain-id 80002 \
+  --polymarket-exchange-address <public-amoy-exchange-address> \
+  --polymarket-package-version <clob-client-version> \
+  --strict --json
+```
+
+Accepted modes are only `fixture`, `operator_owned_fixture`, and
+`operator_owned_testnet`. Mainnet-looking Hyperliquid or Polymarket networks
+fail validation. The command rejects credential-shaped CLI flags, market-scoped
+credential-shaped environment keys, and secret-shaped JSON fields. It writes:
+
+- `matterhorn-market-sdk-evidence.json`
+- `matterhorn-market-sdk-public-validation.json`
+- `matterhorn-market-sdk-public-validation.md`
+- `matterhorn-market-sdk-public-validation.sha256`
+- normalized Hyperliquid and Polymarket public artifacts
+
+These outputs are public/redacted evidence only. Matterhorn does not run private
+SDK signing, compute final signatures, or submit orders.
+
 ## Validation Doctor
 
 Before running official SDK clients or importing captured artifacts, run the
@@ -301,6 +345,7 @@ pnpm test:market-official-sdk-validation-capture
 pnpm test:market-official-sdk-validation-doctor
 pnpm test:market-official-sdk-normalize
 pnpm test:market-official-sdk-operator-loop
+pnpm test:market-official-sdk-validate-public
 pnpm test:market-sdk-run-manifest-check
 pnpm test:market-official-sdk-validation-fixtures
 pnpm test:market-customer-evidence-bundle
@@ -308,6 +353,7 @@ matterhorn-work crypto sdk-doctor --strict --json
 node scripts/market-official-sdk-normalize.mjs --venue hyperliquid --input qa-fixtures/market-official-sdk/hyperliquid-normalized-action.fixture.json --json
 node scripts/market-official-sdk-normalize.mjs --venue polymarket --input qa-fixtures/market-official-sdk/polymarket-normalized-typed-data.fixture.json --json
 node scripts/market-official-sdk-operator-loop.mjs --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json
+matterhorn-work crypto sdk-validate-public --mode fixture --input-dir qa-fixtures/market-official-sdk --output-dir /tmp/matterhorn-market-sdk-public-validation --strict --json
 matterhorn-work crypto sdk-manifest-check --manifest /tmp/matterhorn-market-sdk-loop/matterhorn-market-sdk-run-manifest.json --strict --json
 matterhorn-work crypto sdk-evidence --sample --json
 matterhorn-work crypto sdk-evidence --evidence-file <path> --json

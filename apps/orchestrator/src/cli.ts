@@ -3779,6 +3779,7 @@ function printHelp(): void {
     "  matterhorn-work crypto sdk-capture --hyperliquid-normalized <path> --polymarket-normalized <path> --output <path>",
     "  matterhorn-work crypto sdk-evidence --evidence-file <path> [--json]",
     "  matterhorn-work crypto sdk-loop --fixture --output-dir <path> [options]",
+    "  matterhorn-work crypto sdk-validate-public --mode fixture|operator_owned_fixture|operator_owned_testnet --input-dir <path> --output-dir <path> [options]",
     "  matterhorn-work crypto sdk-manifest-check --manifest <path> [--strict]",
     "  matterhorn-work crypto receipt-check --venue hyperliquid|polymarket --handoff-file <path> --receipt-file <path>",
     "  matterhorn-work crypto evidence-bundle --customer-ready-smoke <path> --official-sdk-validation <path> [--sdk-manifest-check <path>] [--receipt-check <path>] [options]",
@@ -3816,6 +3817,7 @@ function printHelp(): void {
     "  crypto sdk-capture      Build official SDK evidence from normalized public artifacts",
     "  crypto sdk-evidence     Validate or emit official SDK evidence JSON offline",
     "  crypto sdk-loop         Run offline official SDK validation evidence loop (no signing/submission)",
+    "  crypto sdk-validate-public Validate public/redacted official-client artifacts into customer-safe evidence",
     "  crypto sdk-manifest-check Validate SDK loop run manifest hashes and safety flags",
     "  crypto receipt-check    Validate public market receipt evidence offline",
     "  crypto evidence-bundle  Build offline customer evidence bundle from public/redacted artifacts",
@@ -7640,6 +7642,12 @@ const CRYPTO_SDK_LOOP_SUBCOMMANDS = new Set([
   "operator-loop",
 ]);
 
+const CRYPTO_SDK_VALIDATE_PUBLIC_SUBCOMMANDS = new Set([
+  "sdk-validate-public",
+  "sdk-public-validate",
+  "validate-public-sdk",
+]);
+
 const CRYPTO_SDK_DOCTOR_SUBCOMMANDS = new Set([
   "sdk-doctor",
   "official-sdk-doctor",
@@ -7812,6 +7820,22 @@ const CRYPTO_SDK_LOOP_VALUE_FLAGS = [
   "polymarket-chain-id",
 ] as const;
 
+const CRYPTO_SDK_VALIDATE_PUBLIC_BOOL_FLAGS = [
+  "strict",
+] as const;
+
+const CRYPTO_SDK_VALIDATE_PUBLIC_VALUE_FLAGS = [
+  "mode",
+  "input-dir",
+  "output-dir",
+  "hyperliquid-network",
+  "polymarket-network",
+  "hyperliquid-package-version",
+  "polymarket-package-version",
+  "polymarket-exchange-address",
+  "polymarket-chain-id",
+] as const;
+
 const CRYPTO_SDK_MANIFEST_CHECK_BOOL_FLAGS = [
   "self-test",
   "strict",
@@ -7958,6 +7982,14 @@ async function runCryptoSdkLoop(args: ParsedArgs, outputJson: boolean): Promise<
   await runOfflineCryptoScript("market-official-sdk-operator-loop.mjs", forwarded, "Market official SDK operator loop");
 }
 
+async function runCryptoSdkValidatePublic(args: ParsedArgs, outputJson: boolean): Promise<void> {
+  const forwarded: string[] = [];
+  appendBoolFlags(args, CRYPTO_SDK_VALIDATE_PUBLIC_BOOL_FLAGS, forwarded);
+  appendValueFlags(args, CRYPTO_SDK_VALIDATE_PUBLIC_VALUE_FLAGS, forwarded);
+  if (outputJson) forwarded.push("--json");
+  await runOfflineCryptoScript("market-official-sdk-validate-public.mjs", forwarded, "Market official SDK public validator");
+}
+
 async function runCryptoSdkManifestCheck(args: ParsedArgs, outputJson: boolean): Promise<void> {
   const forwarded: string[] = [];
   appendBoolFlags(args, CRYPTO_SDK_MANIFEST_CHECK_BOOL_FLAGS, forwarded);
@@ -8066,6 +8098,11 @@ async function runCrypto(args: ParsedArgs) {
 
     if (CRYPTO_SDK_LOOP_SUBCOMMANDS.has(subcommand)) {
       await runCryptoSdkLoop(args, outputJson);
+      return;
+    }
+
+    if (CRYPTO_SDK_VALIDATE_PUBLIC_SUBCOMMANDS.has(subcommand)) {
+      await runCryptoSdkValidatePublic(args, outputJson);
       return;
     }
 
@@ -8193,7 +8230,7 @@ async function runCrypto(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
+    throw new Error("crypto requires chat (aliases: ask, execute), readiness, customer-smoke, live-public-qa, hermes-customer-qa, sdk-doctor, sdk-normalize, sdk-loop, sdk-validate-public, sdk-manifest-check, receipt-check, evidence-bundle, evidence-verify, bittensor-evidence-verify, or customer-packet");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

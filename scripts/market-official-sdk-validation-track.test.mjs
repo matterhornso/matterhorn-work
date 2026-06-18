@@ -69,6 +69,11 @@ if (packageJson.scripts?.["test:market-official-sdk-operator-loop"] === "node sc
 } else {
   fail("package.json exposes test:market-official-sdk-operator-loop");
 }
+if (packageJson.scripts?.["test:market-official-sdk-validate-public"] === "node scripts/market-official-sdk-validate-public.test.mjs") {
+  pass("package.json exposes test:market-official-sdk-validate-public");
+} else {
+  fail("package.json exposes test:market-official-sdk-validate-public");
+}
 if (packageJson.scripts?.["test:market-sdk-run-manifest-check"] === "node scripts/market-sdk-run-manifest-check.test.mjs") {
   pass("package.json exposes test:market-sdk-run-manifest-check");
 } else {
@@ -101,8 +106,13 @@ mustContain("docs/market-official-sdk-validation.md", [
   "matterhorn-work crypto sdk-capture",
   "matterhorn-work crypto sdk-evidence",
   "matterhorn-work crypto sdk-loop",
+  "matterhorn-work crypto sdk-validate-public",
   "matterhorn-work crypto sdk-manifest-check",
   "matterhorn-work crypto evidence-bundle",
+  "operator_owned_fixture",
+  "operator_owned_testnet",
+  "matterhorn-market-sdk-public-validation.json",
+  "matterhorn-market-sdk-public-validation.sha256",
   "matterhorn-market-sdk-operator-summary.md",
   "matterhorn-market-sdk-run-manifest.json",
   "--operator-summary <operator-summary.md>",
@@ -112,6 +122,7 @@ mustContain("docs/market-official-sdk-validation.md", [
   "pnpm test:market-official-sdk-validation-doctor",
   "pnpm test:market-official-sdk-normalize",
   "pnpm test:market-official-sdk-operator-loop",
+  "pnpm test:market-official-sdk-validate-public",
   "pnpm test:market-sdk-run-manifest-check",
   "pnpm test:market-official-sdk-validation-fixtures",
 ]);
@@ -217,6 +228,32 @@ if (operatorLoopSelfTest.status === 0) {
   pass("official SDK operator loop test passes");
 } else {
   fail("official SDK operator loop test passes", operatorLoopSelfTest.stderr || operatorLoopSelfTest.stdout || "unknown error");
+}
+
+mustContain("scripts/market-official-sdk-validate-public.mjs", [
+  "matterhorn.market.official-sdk-public-validation.v1",
+  "operator_owned_fixture",
+  "operator_owned_testnet",
+  "runOfficialSdkPublicValidation",
+  "runOfficialSdkValidationDoctor",
+  "normalizeOfficialSdkArtifact",
+  "buildCapturedEvidence",
+  "FORBIDDEN_JSON_KEY_RE",
+  "FORBIDDEN_CLI_FLAG_RE",
+  "liveSubmissionEnabled: false",
+  "signsOrSubmits: false",
+  "acceptsSecrets: false",
+  "matterhorn-market-sdk-public-validation.json",
+  "matterhorn-market-sdk-public-validation.sha256",
+]);
+const publicValidationSelfTest = spawnSync("node", ["scripts/market-official-sdk-validate-public.test.mjs"], {
+  cwd: root,
+  encoding: "utf8",
+});
+if (publicValidationSelfTest.status === 0) {
+  pass("official SDK public validation test passes");
+} else {
+  fail("official SDK public validation test passes", publicValidationSelfTest.stderr || publicValidationSelfTest.stdout || "unknown error");
 }
 
 mustContain("scripts/market-sdk-run-manifest-check.mjs", [
