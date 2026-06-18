@@ -36,6 +36,7 @@ const CUSTOMER_DEMO_COMMANDS = {
   executionReadinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionChain: "matterhorn-work crypto execution-chain --json",
   executionChainApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-chain\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
+  sdkValidationApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-sdk-validation\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionChainSignRequest: [
     "matterhorn-work hyperliquid sign-request BTC --side buy --size 0.001 --price <testnet-price> --execution-mode testnet_external_signer --json",
     "matterhorn-work polymarket sign-request <testnet-market-id> --side yes --amount-usdc 1 --execution-mode testnet_external_signer --json",
@@ -140,6 +141,12 @@ const CUSTOMER_DEMO_PROMPTS = [
     betaVisible: false,
     prompt: "Use unified crypto chat. Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
   },
+  {
+    id: "market-sdk-validation",
+    label: "SDK validation",
+    betaVisible: false,
+    prompt: "Use unified crypto chat. Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+  },
 ] as const;
 const BITTENSOR_BETA_MODE = (() => {
   const flag = typeof import.meta.env?.VITE_MATTERHORN_BITTENSOR_BETA === "string"
@@ -163,6 +170,21 @@ type ReadinessReport = {
   blockers?: string[];
   nextActions?: string[];
   checkedAt?: string;
+};
+type MarketSdkValidationGuide = {
+  version?: string;
+  modes?: string[];
+  networks?: {
+    hyperliquid?: string[];
+    polymarket?: string[];
+  };
+  safety?: {
+    canSubmit?: boolean;
+    liveSubmissionEnabled?: boolean;
+    acceptsSecrets?: boolean;
+    runsPrivateSdkSigning?: boolean;
+    callsExchanges?: boolean;
+  };
 };
 function readinessStateForVenue(checks: ReadinessCheck[], venue: string): string {
   const needle = venue.toLowerCase();
@@ -289,10 +311,12 @@ export default function BittensorPanel() {
   const [cryptoReadiness, setCryptoReadiness] = useState<ReadinessReport | null>(null);
   const [marketExecutionReadiness, setMarketExecutionReadiness] = useState<MarketExecutionReadinessReport | null>(null);
   const [marketExecutionChain, setMarketExecutionChain] = useState<MarketExecutionChainGuide | null>(null);
+  const [marketSdkValidation, setMarketSdkValidation] = useState<MarketSdkValidationGuide | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [cryptoReadinessLoading, setCryptoReadinessLoading] = useState(false);
   const [marketExecutionReadinessLoading, setMarketExecutionReadinessLoading] = useState(false);
   const [marketExecutionChainLoading, setMarketExecutionChainLoading] = useState(false);
+  const [marketSdkValidationLoading, setMarketSdkValidationLoading] = useState(false);
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
@@ -420,6 +444,20 @@ export default function BittensorPanel() {
     }
   }, []);
 
+  const loadMarketSdkValidation = useCallback(async () => {
+    setMarketSdkValidationLoading(true);
+    try {
+      const res = await fetch("/api/crypto/market-sdk-validation");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market SDK validation");
+      setMarketSdkValidation((json.guide ?? json) as MarketSdkValidationGuide);
+    } catch {
+      setMarketSdkValidation(null);
+    } finally {
+      setMarketSdkValidationLoading(false);
+    }
+  }, []);
+
   const loadDetail = useCallback(async (netuid: number) => {
     setDetailLoading(true);
     try {
@@ -472,7 +510,8 @@ export default function BittensorPanel() {
     void loadCryptoReadiness();
     void loadMarketExecutionReadiness();
     void loadMarketExecutionChain();
-  }, [loadCryptoReadiness, loadMarketExecutionChain, loadMarketExecutionReadiness, loadReadiness, loadSidecarStatus]);
+    void loadMarketSdkValidation();
+  }, [loadCryptoReadiness, loadMarketExecutionChain, loadMarketExecutionReadiness, loadMarketSdkValidation, loadReadiness, loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -561,6 +600,7 @@ export default function BittensorPanel() {
     void loadCryptoReadiness();
     void loadMarketExecutionReadiness();
     void loadMarketExecutionChain();
+    void loadMarketSdkValidation();
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
@@ -619,6 +659,7 @@ export default function BittensorPanel() {
       cryptoReadiness,
       marketExecutionReadiness,
       marketExecutionChain,
+      marketSdkValidation,
       sourcePrompt: item.id,
     }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
@@ -682,6 +723,16 @@ export default function BittensorPanel() {
       ? "Safe"
       : "Review"
     : "Unknown";
+  const marketSdkValidationState = marketSdkValidation
+    ? marketSdkValidation.safety?.liveSubmissionEnabled === false && marketSdkValidation.safety?.canSubmit === false
+      ? "Safe"
+      : "Review"
+    : "Unknown";
+  const marketSdkValidationModeCount = marketSdkValidation?.modes?.length ? String(marketSdkValidation.modes.length) : "Unknown";
+  const marketSdkValidationSecretState = marketSdkValidation?.safety?.acceptsSecrets === false ? "No" : "Unknown";
+  const marketSdkValidationPrivateSdkState = marketSdkValidation?.safety?.runsPrivateSdkSigning === false && marketSdkValidation?.safety?.callsExchanges === false
+    ? "No"
+    : "Unknown";
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -703,9 +754,9 @@ export default function BittensorPanel() {
             size="sm"
             className="gap-1.5 text-xs text-dls-secondary"
             onClick={refreshBittensor}
-            disabled={loading || marketExecutionReadinessLoading || marketExecutionChainLoading}
+            disabled={loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading}
           >
-            <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading || marketExecutionChainLoading) && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading) && "animate-spin")} />
             Refresh
           </Button>
         </div>
@@ -843,8 +894,8 @@ export default function BittensorPanel() {
                   <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
                 ) : null}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading}>
-                    {readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading}>
+                    {readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
@@ -945,15 +996,22 @@ export default function BittensorPanel() {
             <Section title="SDK validation" icon={<Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <Metric label="Hyperliquid" value="Testnet evidence" compact />
-                  <Metric label="Polymarket" value="Amoy evidence" compact />
-                  <Metric label="Mode" value="Explicit" compact />
-                  <Metric label="Custody" value="None" compact />
+                  <Metric label="SDK API" value={marketSdkValidationState} compact />
+                  <Metric label="Modes" value={marketSdkValidationModeCount} compact />
+                  <Metric label="Secrets accepted" value={marketSdkValidationSecretState} compact />
+                  <Metric label="Private SDK run" value={marketSdkValidationPrivateSdkState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
                   Official SDK validation is public/redacted evidence only. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
                 </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketSdkValidation} disabled={marketSdkValidationLoading}>
+                    {marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkValidationApi")}>
+                    {copiedCustomerCommand === "sdkValidationApi" ? "Copied" : "SDK API"}
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("sdkDoctor")}>
                     {copiedCustomerCommand === "sdkDoctor" ? "Copied" : "SDK doctor"}
                   </Button>

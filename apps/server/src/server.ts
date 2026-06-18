@@ -168,6 +168,7 @@ import {
 import {
   buildMarketExecutionChainResponse,
   buildMarketExecutionReadinessResponse,
+  buildMarketSdkValidationResponse,
 } from "./tools/market-execution-readiness.js";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -4164,6 +4165,10 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/crypto/market-execution-chain", "client", async () => {
     return jsonResponse(buildMarketExecutionChainResponse());
+  });
+
+  addRoute(routes, "GET", "/api/crypto/market-sdk-validation", "client", async () => {
+    return jsonResponse(buildMarketSdkValidationResponse());
   });
 
   addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {

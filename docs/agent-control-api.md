@@ -94,6 +94,7 @@ Common status codes:
 | Route | Purpose |
 | --- | --- |
 | `GET /api/crypto/market-execution-chain` | Returns `matterhorn.market.execution-chain-guide.v1`, the no-submit Hyperliquid/Polymarket preview, external sign request, public/redacted artifact validation, artifact reconciliation, and public receipt import guide. This route is read-only and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
+| `GET /api/crypto/market-sdk-validation` | Returns `matterhorn.market.sdk-validation-guide.v1`, the fixture/operator-owned testnet official SDK validation guide for Hyperliquid and Polymarket. This route is read-only, accepts no artifacts or secrets, and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
 | `matterhorn_bittensor_preview_subnet_invocation` | `POST /api/bittensor/subnets/:netuid/preview` |
 | `matterhorn_bittensor_invoke_subnet` | `POST /api/bittensor/subnets/:netuid/invoke` |
 | `matterhorn_bittensor_create_watch` | `POST /api/bittensor/monitoring/watchlist` |
