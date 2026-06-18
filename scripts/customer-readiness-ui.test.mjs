@@ -19,6 +19,11 @@ assert.equal(
 
 for (const phrase of [
   "Customer Demo Checklist",
+  "/api/crypto/readiness",
+  "Crypto Gate",
+  "Venue Checks",
+  "Refresh Crypto Gate",
+  "Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.",
   "matterhorn-work crypto readiness --json",
   "$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness",
   "Authorization: Bearer $MATTERHORN_WORK_TOKEN",
