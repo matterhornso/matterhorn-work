@@ -710,6 +710,7 @@ try {
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
     "matterhorn_market_execution_readiness",
+    "matterhorn_market_execution_chain",
     "matterhorn_market_artifact_reconcile",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
@@ -750,6 +751,7 @@ try {
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
+  assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
   assert.match(descriptionFor("matterhorn_market_artifact_reconcile"), /public\/redacted/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
@@ -1087,6 +1089,18 @@ try {
   assert.equal(marketExecutionReadiness.report.version, "matterhorn.market.execution-readiness.v1");
   assert.equal(marketExecutionReadiness.report.readyForLiveSubmission, false);
   assert.equal(marketExecutionReadiness.report.safety.canSubmit, false);
+
+  const marketExecutionChain = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_market_execution_chain",
+    arguments: {},
+  }));
+  assert.equal(marketExecutionChain.success, true);
+  assert.equal(marketExecutionChain.version, "matterhorn.market.execution-chain-guide.v1");
+  assert.equal(marketExecutionChain.safety.canSubmit, false);
+  assert.equal(marketExecutionChain.safety.liveSubmissionEnabled, false);
+  assert.equal(marketExecutionChain.safety.acceptsSecrets, false);
+  assert.ok(marketExecutionChain.stages.some((stage) => stage.id === "external_sign_request"));
+  assert.ok(JSON.stringify(marketExecutionChain.stages).includes("matterhorn-work crypto artifact-reconcile"));
 
   const marketCustomerEvidenceSummary = {
     ready: true,

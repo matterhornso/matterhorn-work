@@ -55,6 +55,7 @@ for (const required of [
 }
 
 for (const required of [
+  "matterhorn_market_execution_chain",
   "matterhorn_hyperliquid_create_sign_request",
   "matterhorn_polymarket_create_sign_request",
   "matterhorn_hyperliquid_validate_external_artifact",
@@ -87,6 +88,7 @@ for (const required of [
   "artifact reconciliation",
   "public receipt import",
   "test:market-execution-chain-gate",
+  "test:agent-control-mcp",
   "test:crypto-cli-fallback",
 ]) {
   assert.ok(matrix.includes(required), `coverage matrix should describe aggregate chain: ${required}`);
