@@ -540,6 +540,11 @@ export default function BittensorPanel() {
     await sendToChat(prompt, { readiness });
   };
 
+  const askAgentAboutCryptoReadiness = async () => {
+    const prompt = "Use unified crypto chat. Review the current Matterhorn crypto customer readiness status across Bittensor, Hyperliquid, and Polymarket. Explain blockers, warnings, safe demo paths, and the next command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    await sendToChat(prompt, { cryptoReadiness }, { mode: "crypto", source: "crypto-readiness-panel" });
+  };
+
   const askAgentForCustomerDemo = async (prompt: string) => {
     await sendToChat(prompt, {}, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
@@ -745,10 +750,16 @@ export default function BittensorPanel() {
                   {cryptoReadinessNextAction ? (
                     <p className="mt-2 text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction}</p>
                   ) : null}
-                  <Button variant="ghost" size="sm" className="mt-2 gap-1.5 text-xs text-dls-secondary" onClick={loadCryptoReadiness} disabled={cryptoReadinessLoading}>
-                    {cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-                    Refresh Crypto Gate
-                  </Button>
+                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={loadCryptoReadiness} disabled={cryptoReadinessLoading}>
+                      {cryptoReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                      Refresh Crypto Gate
+                    </Button>
+                    <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
+                      <BrainCircuit className="size-3.5" />
+                      Ask Crypto Chat
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-5">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("readiness")}>
