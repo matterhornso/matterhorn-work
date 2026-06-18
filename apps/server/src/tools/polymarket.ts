@@ -261,6 +261,35 @@ export interface PolymarketSigningHandoff {
   externalSignerOnly: true;
 }
 
+export interface PolymarketExternalSignRequest {
+  version: "matterhorn.market.external-sign-request.v1";
+  venue: "polymarket";
+  routeName: "polymarket.orders.sign_request";
+  executionMode: "testnet_external_signer";
+  network: "testnet";
+  action: "place_order";
+  marketId: string;
+  marketLabel: string;
+  outcome: string;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signRequestSha256: string;
+  signingPayload: PolymarketOrderTypedData | null;
+  signingInstructions: string;
+  readyToSign: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  externalSignerOnly: true;
+  operatorConfirmation: string;
+  createdAt: string;
+  expiresAt: string;
+  compliance: PolymarketComplianceStatus;
+  warnings: string[];
+}
+
 /**
  * EIP-712 typed-data TEMPLATE for a Polymarket CLOB order. Matterhorn fills only
  * the economic terms it can know (token, amounts, side). The user's wallet/client
@@ -1384,6 +1413,69 @@ export function buildPolymarketSigningHandoff(
   };
 }
 
+export function buildPolymarketExternalSignRequest(
+  handoff: PolymarketSigningHandoff,
+  options: { executionMode?: string | null } = {},
+): PolymarketExternalSignRequest {
+  if (options.executionMode !== "testnet_external_signer") {
+    throw new Error("executionMode=testnet_external_signer is required to create a Polymarket external sign request.");
+  }
+  const forbidden = findForbiddenPolymarketCredentialInput({
+    marketId: handoff.marketId,
+    outcome: handoff.outcome,
+    side: handoff.side,
+    sizeUsdc: handoff.sizeUsdc,
+    price: handoff.price,
+    previewSha256: handoff.previewSha256,
+    handoffSha256: handoff.handoffSha256,
+  });
+  if (forbidden) throw new Error("Handoff unexpectedly contained credential-shaped data at " + forbidden);
+  const createdAt = new Date().toISOString();
+  const unsignedPayload = handoff.signingPayload ?? handoff.order;
+  const unsignedPayloadSha256 = sha256(unsignedPayload);
+  const readyToSign = Boolean(handoff.signingPayload);
+  const warnings = [
+    ...handoff.warnings,
+    "Phase 1 sign request only: Matterhorn creates a hash-bound request for an external signer, but does not accept signed artifacts and does not submit.",
+    readyToSign
+      ? "Validate the Polymarket typed data with the official CLOB client on testnet before signing."
+      : "No EIP-712 typed-data is attached; configure a validated Polymarket exchange address and rebuild before signing.",
+  ];
+  const core = {
+    version: "matterhorn.market.external-sign-request.v1",
+    venue: "polymarket",
+    routeName: "polymarket.orders.sign_request",
+    executionMode: "testnet_external_signer",
+    network: "testnet",
+    previewSha256: handoff.previewSha256,
+    handoffSha256: handoff.handoffSha256,
+    unsignedPayloadSha256,
+    createdAt,
+    expiresAt: handoff.expiresAt,
+  } as const;
+  return {
+    ...core,
+    action: "place_order",
+    marketId: handoff.marketId,
+    marketLabel: handoff.marketLabel,
+    outcome: handoff.outcome,
+    signingPayload: handoff.signingPayload,
+    signingInstructions:
+      "Use your own Polymarket testnet/client flow to inspect and sign this unsigned order template. " +
+      "Do not paste the signature, signed order, L2 API secret, or passphrase back into Matterhorn in Phase 1.",
+    readyToSign,
+    signedArtifactAccepted: false,
+    submitSignedAllowedByContract: false,
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    externalSignerOnly: true,
+    operatorConfirmation: "I understand this is an external testnet sign request only. Matterhorn will not sign, accept the signature, store CLOB credentials, or submit.",
+    signRequestSha256: sha256(core),
+    compliance: handoff.compliance,
+    warnings,
+  };
+}
+
 /**
  * Resolve a market, run the compliance gate, build the preview, and (when an
  * exchange address is configured) attach the EIP-712 typed-data — in one pass.
@@ -1408,6 +1500,17 @@ export async function preparePolymarketHandoffFromRequest(
   const preview = await preparePolymarketOrderPreview({ market, outcome, side, amountUsdc: input.amountUsdc, compliance, slippageTolerance: input.slippageTolerance ?? null }, provider);
   const handoff = buildPolymarketSigningHandoff(preview, { tokenId: market.tokenIds[outcome] ?? null, exchange });
   return { preview, handoff, blocked: false };
+}
+
+export async function preparePolymarketExternalSignRequestFromRequest(
+  input: { marketId: string; outcome?: string | null; side?: PolymarketSide | null; amountUsdc: number; slippageTolerance?: number | null; executionMode?: string | null },
+  provider: PolymarketProvider = polymarketProvider,
+  exchange: PolymarketExchangeConfig | null = readPolymarketExchangeConfig(),
+): Promise<{ preview: PolymarketActionPreview; handoff: PolymarketSigningHandoff | null; signRequest: PolymarketExternalSignRequest | null; blocked: boolean }> {
+  const { preview, handoff, blocked } = await preparePolymarketHandoffFromRequest(input, provider, exchange);
+  if (blocked || !handoff) return { preview, handoff, signRequest: null, blocked: true };
+  const signRequest = buildPolymarketExternalSignRequest(handoff, { executionMode: input.executionMode });
+  return { preview, handoff, signRequest, blocked: false };
 }
 
 const PUBLIC_RECEIPT_STATUSES = ["received", "pending", "filled", "cancelled", "rejected", "failed", "unknown"] as const;

@@ -232,6 +232,48 @@ const server = createServer(async (req, res) => {
       cards: [],
     });
   }
+  if (req.method === "POST" && url.pathname === "/api/hyperliquid/orders/external-sign-request") {
+    assert.equal(body.executionMode, "testnet_external_signer");
+    assert.equal(body.asset, "BTC");
+    assert.equal(body.side, "buy");
+    assert.equal(body.size, 0.1);
+    assert.equal("apiSecret" in body, false);
+    assert.equal("privateKey" in body, false);
+    assert.equal("signedPayload" in body, false);
+    return json(res, 200, {
+      success: true,
+      signRequest: {
+        version: "matterhorn.market.external-sign-request.v1",
+        venue: "hyperliquid",
+        executionMode: "testnet_external_signer",
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        signedArtifactAccepted: false,
+        submitSignedAllowedByContract: false,
+      },
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/polymarket/orders/external-sign-request") {
+    assert.equal(body.executionMode, "testnet_external_signer");
+    assert.equal(body.marketId, "0xmarket-ai");
+    assert.equal(body.side, "yes");
+    assert.equal(body.amountUsdc, 10);
+    assert.equal("apiSecret" in body, false);
+    assert.equal("privateKey" in body, false);
+    assert.equal("signedPayload" in body, false);
+    return json(res, 200, {
+      success: true,
+      signRequest: {
+        version: "matterhorn.market.external-sign-request.v1",
+        venue: "polymarket",
+        executionMode: "testnet_external_signer",
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        signedArtifactAccepted: false,
+        submitSignedAllowedByContract: false,
+      },
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/hyperliquid/chat/execute") {
     assert.equal(body.message, "preview buying 0.1 BTC at 65000");
     assert.equal("apiSecret" in body, false);
@@ -537,6 +579,8 @@ try {
     "matterhorn_hyperliquid_get_funding",
     "matterhorn_hyperliquid_get_orderbook",
     "matterhorn_hyperliquid_preview_order",
+    "matterhorn_hyperliquid_create_sign_request",
+    "matterhorn_polymarket_create_sign_request",
     "matterhorn_bittensor_chat",
     "matterhorn_bittensor_list_capabilities",
     "matterhorn_bittensor_get_subnet_capability",
@@ -747,6 +791,26 @@ try {
   }));
   assert.equal(hyperliquidPreview.preview.canSubmit, false);
   assert.equal(hyperliquidPreview.preview.previewSha256.length, 64);
+
+  const hyperliquidSignRequest = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_create_sign_request",
+    arguments: { executionMode: "testnet_external_signer", asset: "BTC", side: "buy", size: 0.1, price: 65000 },
+  }));
+  assert.equal(hyperliquidSignRequest.signRequest.version, "matterhorn.market.external-sign-request.v1");
+  assert.equal(hyperliquidSignRequest.signRequest.canSubmit, false);
+  assert.equal(hyperliquidSignRequest.signRequest.liveSubmissionEnabled, false);
+  assert.equal(hyperliquidSignRequest.signRequest.signedArtifactAccepted, false);
+  assert.equal(hyperliquidSignRequest.signRequest.submitSignedAllowedByContract, false);
+
+  const polymarketSignRequest = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_polymarket_create_sign_request",
+    arguments: { executionMode: "testnet_external_signer", marketId: "0xmarket-ai", amountUsdc: 10, side: "yes" },
+  }));
+  assert.equal(polymarketSignRequest.signRequest.version, "matterhorn.market.external-sign-request.v1");
+  assert.equal(polymarketSignRequest.signRequest.canSubmit, false);
+  assert.equal(polymarketSignRequest.signRequest.liveSubmissionEnabled, false);
+  assert.equal(polymarketSignRequest.signRequest.signedArtifactAccepted, false);
+  assert.equal(polymarketSignRequest.signRequest.submitSignedAllowedByContract, false);
 
   const hyperliquidChat = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_chat",

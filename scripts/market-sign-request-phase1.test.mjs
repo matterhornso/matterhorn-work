@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const read = (path) => readFileSync(path, "utf8");
+
+const packageJson = JSON.parse(read("package.json"));
+assert.equal(packageJson.scripts["test:market-sign-request-phase1"], "node scripts/market-sign-request-phase1.test.mjs");
+
+const types = read("packages/types/src/markets.ts");
+const doc = read("docs/market-sign-request-phase1.md");
+const server = read("apps/server/src/server.ts");
+const hyperliquid = read("apps/server/src/tools/hyperliquid.ts");
+const polymarket = read("apps/server/src/tools/polymarket.ts");
+const mcp = read("packages/matterhorn-work-mcp/index.mjs");
+const cli = read("apps/orchestrator/src/cli.ts");
+const smoke = read("scripts/customer-ready-crypto-smoke.mjs");
+const smokeTest = read("scripts/customer-ready-crypto-smoke.test.mjs");
+const matrix = read("docs/agent-control-coverage-matrix.md");
+
+for (const required of [
+  "MarketExternalSignRequest",
+  "matterhorn.market.external-sign-request.v1",
+  "readyToSign: boolean",
+  "signedArtifactAccepted: false",
+  "submitSignedAllowedByContract: false",
+  "liveSubmissionEnabled: false",
+]) {
+  assert.ok(types.includes(required), `shared market types missing ${required}`);
+}
+
+for (const required of [
+  "Market Sign Request Phase 1",
+  "/api/hyperliquid/orders/external-sign-request",
+  "/api/polymarket/orders/external-sign-request",
+  "matterhorn_hyperliquid_create_sign_request",
+  "matterhorn_polymarket_create_sign_request",
+  "matterhorn-work hyperliquid sign-request --execution-mode testnet_external_signer",
+  "matterhorn-work polymarket sign-request --execution-mode testnet_external_signer",
+  "executionMode=testnet_external_signer",
+  "canSubmit: false",
+  "liveSubmissionEnabled: false",
+  "submitSignedAllowedByContract: false",
+  "signedArtifactAccepted: false",
+  "Phase 2 can add signed-artifact envelope validation only after these gates stay green.",
+]) {
+  assert.ok(doc.includes(required), `Phase 1 doc missing ${required}`);
+}
+
+for (const required of [
+  "prepareHyperliquidExternalSignRequestFromRequest",
+  "buildHyperliquidExternalSignRequest",
+  "matterhorn.market.external-sign-request.v1",
+  "executionMode=testnet_external_signer",
+  "submitSignedAllowedByContract: false",
+  "signedArtifactAccepted: false",
+]) {
+  assert.ok(hyperliquid.includes(required), `Hyperliquid tool missing ${required}`);
+}
+
+for (const required of [
+  "preparePolymarketExternalSignRequestFromRequest",
+  "buildPolymarketExternalSignRequest",
+  "matterhorn.market.external-sign-request.v1",
+  "executionMode=testnet_external_signer",
+  "submitSignedAllowedByContract: false",
+  "signedArtifactAccepted: false",
+]) {
+  assert.ok(polymarket.includes(required), `Polymarket tool missing ${required}`);
+}
+
+for (const required of [
+  "/api/hyperliquid/orders/external-sign-request",
+  "/api/polymarket/orders/external-sign-request",
+  "invalid_hyperliquid_sign_request",
+  "invalid_polymarket_sign_request",
+  "market_secret_rejected",
+]) {
+  assert.ok(server.includes(required), `server missing ${required}`);
+}
+
+for (const required of [
+  "matterhorn_hyperliquid_create_sign_request",
+  "matterhorn_polymarket_create_sign_request",
+  "/api/hyperliquid/orders/external-sign-request",
+  "/api/polymarket/orders/external-sign-request",
+]) {
+  assert.ok(mcp.includes(required), `MCP missing ${required}`);
+}
+
+for (const required of [
+  "matterhorn-work hyperliquid sign-request --execution-mode testnet_external_signer",
+  "matterhorn-work polymarket sign-request --execution-mode testnet_external_signer",
+  "/api/hyperliquid/orders/external-sign-request",
+  "/api/polymarket/orders/external-sign-request",
+]) {
+  assert.ok(cli.includes(required), `CLI missing ${required}`);
+}
+
+for (const [label, text] of [
+  ["server", server],
+  ["MCP", mcp],
+  ["CLI", cli],
+]) {
+  for (const forbidden of [
+    "/api/hyperliquid/orders/sign",
+    "/api/polymarket/orders/sign",
+    "/api/hyperliquid/orders/submit",
+    "/api/polymarket/orders/submit",
+    "/api/hyperliquid/exchange/submit",
+    "/api/polymarket/exchange/submit",
+  ]) {
+    assert.ok(!text.includes(forbidden), `${label} must not contain ${forbidden}`);
+  }
+}
+
+for (const required of [
+  "market.sign_request_phase1",
+  "test:market-sign-request-phase1",
+]) {
+  assert.ok(smoke.includes(required), `customer-ready smoke missing ${required}`);
+  assert.ok(smokeTest.includes(required), `customer-ready smoke test missing ${required}`);
+  assert.ok(matrix.includes(required), `coverage matrix missing ${required}`);
+}
+
+console.log("Market sign-request Phase 1 gate passed.");
