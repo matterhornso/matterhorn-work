@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 const marketTypes = readFileSync("packages/types/src/markets.ts", "utf8");
+const server = readFileSync("apps/server/src/server.ts", "utf8");
 
 assert.ok(marketTypes.includes('version: "matterhorn.market.receipt.v1"'), "shared MarketReceipt version is documented");
 assert.ok(marketTypes.includes("MARKET_FORBIDDEN_CREDENTIAL_KEY_PATTERN"), "shared forbidden credential pattern is exported");
@@ -101,6 +102,27 @@ function expectRejected(label, result, expectedText) {
   assert.equal(result.matchesHandoff, false, `${label} should not match handoff`);
   assert.ok(result.errors.join(" ").includes(expectedText), `${label} should include ${expectedText}`);
   console.log(`PASS ${label}`);
+}
+
+const hyperliquidReceiptRouteStart = server.indexOf('"/api/hyperliquid/orders/receipt"');
+const hyperliquidReceiptRouteEnd = server.indexOf('"/api/polymarket/markets"', hyperliquidReceiptRouteStart);
+const hyperliquidReceiptRoute = hyperliquidReceiptRouteStart >= 0 ? server.slice(hyperliquidReceiptRouteStart, hyperliquidReceiptRouteEnd > hyperliquidReceiptRouteStart ? hyperliquidReceiptRouteEnd : server.length) : "";
+const polymarketReceiptRouteStart = server.indexOf('"/api/polymarket/orders/receipt"');
+const polymarketReceiptRouteEnd = server.indexOf('"/api/bittensor/subnets"', polymarketReceiptRouteStart);
+const polymarketReceiptRoute = polymarketReceiptRouteStart >= 0 ? server.slice(polymarketReceiptRouteStart, polymarketReceiptRouteEnd > polymarketReceiptRouteStart ? polymarketReceiptRouteEnd : server.length) : "";
+
+for (const [label, route, forbiddenScanner, verifier] of [
+  ["Hyperliquid", hyperliquidReceiptRoute, "findForbiddenHyperliquidCredentialInput(body)", "verifyHyperliquidReceipt"],
+  ["Polymarket", polymarketReceiptRoute, "findForbiddenPolymarketCredentialInput(body)", "verifyPolymarketReceipt"],
+]) {
+  assert.ok(route.includes(forbiddenScanner), `${label} receipt route should scan the raw request body for secrets`);
+  assert.ok(route.includes("market_secret_rejected"), `${label} receipt route should reject secret-shaped receipt input`);
+  assert.ok(route.includes("public status"), `${label} receipt route should describe public-status-only input`);
+  assert.ok(route.includes(verifier), `${label} receipt route should verify the receipt against the handoff`);
+  assert.ok(route.includes("invalid_handoff"), `${label} receipt route should require a valid handoff reference`);
+  for (const forbidden of ["/orders/submit", "/orders/sign", "/exchange/submit", "rawSignature", "signedPayload", "submitSigned"]) {
+    assert.ok(!route.includes(forbidden), `${label} receipt route must not include ${forbidden}`);
+  }
 }
 
 const hyperliquidHandoff = {
