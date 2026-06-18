@@ -255,6 +255,20 @@ describe("unified crypto chat router", () => {
     expect(report.safety?.signsOrSubmits).toBe(false);
     result.sharedCards.forEach((card) => expectSharedCardContract(card, "auto"));
     expect(JSON.stringify(result)).not.toContain("/orders/submit");
+
+    const naturalQuestion = await executeUnifiedCryptoChatWorkflow({
+      message: "Can Matterhorn submit Hyperliquid and Polymarket orders yet?",
+    });
+    expect(naturalQuestion.venue).toBe("auto");
+    expect(naturalQuestion.intent).toBe("market_execution_readiness");
+    expect(naturalQuestion.execution).toBe("read_only");
+    expect(naturalQuestion.sharedCards[0]).toMatchObject({
+      kind: "readiness_report",
+      safety: {
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+      },
+    });
   });
 
   test("routes Bittensor chat through the Bittensor executor", async () => {
