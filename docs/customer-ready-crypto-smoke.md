@@ -88,6 +88,7 @@ pnpm test:bittensor-beta-release-gate
 pnpm test:bittensor-beta-customer-packet
 pnpm test:market-safety-contract
 pnpm test:market-execution-safety-gate
+pnpm test:market-execution-readiness-api
 pnpm test:market-execution-readiness-gate
 pnpm test:market-submit-sign-contract-phase0
 pnpm test:market-sign-request-phase1

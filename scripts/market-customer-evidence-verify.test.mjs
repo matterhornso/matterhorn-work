@@ -13,6 +13,7 @@ const requiredStages = [
   "crypto.direct_prompt_safety",
   "crypto.shared_card_contract",
   "market.execution_safety",
+  "market.execution_readiness_api",
   "market.official_sdk_validation",
   "market.artifact_reconciliation",
   "market.customer_evidence_bundle",

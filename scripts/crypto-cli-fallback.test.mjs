@@ -828,6 +828,7 @@ async function main() {
         { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
         { id: "crypto.shared_card_contract", label: "Unified crypto shared-card contract", status: "pass" },
         { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+        { id: "market.execution_readiness_api", label: "Market execution-readiness API and chat contract", status: "pass" },
         { id: "market.sign_request_phase1", label: "Market sign-request Phase 1 gate", status: "pass" },
         { id: "market.artifact_validation_phase2", label: "Market artifact validation Phase 2 gate", status: "pass" },
         { id: "market.official_sdk_validation", label: "Official SDK validation", status: "pass" },

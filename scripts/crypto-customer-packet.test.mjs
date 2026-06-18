@@ -27,6 +27,7 @@ try {
       { id: "crypto.direct_prompt_safety", status: "pass" },
       { id: "crypto.shared_card_contract", status: "pass" },
       { id: "market.execution_safety", status: "pass" },
+      { id: "market.execution_readiness_api", status: "pass" },
       { id: "market.sign_request_phase1", status: "pass" },
       { id: "market.artifact_validation_phase2", status: "pass" },
       { id: "market.artifact_reconciliation", status: "pass" },

@@ -25,7 +25,7 @@ try {
   await writeFile(smoke, JSON.stringify({
     ready: true,
     metadata: { generatedAt: "2026-06-17T00:00:00.000Z", gitSha: "b".repeat(40), gitBranch: "codex/test" },
-    summary: { pass: 23, fail: 0, skip: 0 },
+    summary: { pass: 24, fail: 0, skip: 0 },
     stages: [
       { id: "crypto.unified_chat", label: "Unified crypto chat router", status: "pass" },
       { id: "crypto.direct_prompt_safety", label: "Direct venue credential prompt safety", status: "pass" },
@@ -33,6 +33,7 @@ try {
       { id: "market.official_sdk_validation", label: "Market official SDK validation track", status: "pass" },
       { id: "market.artifact_reconciliation", label: "Market artifact reconciliation evidence", status: "pass" },
       { id: "market.execution_safety", label: "Market execution safety gate", status: "pass" },
+      { id: "market.execution_readiness_api", label: "Market execution-readiness API and chat contract", status: "pass" },
       { id: "market.customer_evidence_bundle", label: "Market customer evidence bundle", status: "pass" },
       { id: "hyperliquid.readiness", label: "Hyperliquid readiness gate", status: "pass" },
       { id: "polymarket.readiness", label: "Polymarket readiness gate", status: "pass" },
@@ -182,9 +183,10 @@ try {
   assert.equal(summary.officialSdkValidation.validation.ok, true);
   assert.equal(summary.officialSdkValidation.allValidated, false);
   assert.equal(summary.customerReadySmoke.gitSha, "b".repeat(40));
-  assert.equal(summary.customerReadySmoke.pass, 23);
+  assert.equal(summary.customerReadySmoke.pass, 24);
   assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.direct_prompt_safety")?.status, "pass");
   assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "crypto.shared_card_contract")?.status, "pass");
+  assert.equal(summary.customerReadySmoke.requiredStages.find((stage) => stage.id === "market.execution_readiness_api")?.status, "pass");
   assert.equal(summary.operatorSummary.present, true);
   assert.equal(summary.operatorSummary.file, "matterhorn-market-sdk-operator-summary.md");
   assert.match(summary.operatorSummary.sha256, /^[a-f0-9]{64}$/);
