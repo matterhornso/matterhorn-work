@@ -425,8 +425,19 @@ function isMarketExecutionChainRequest(input: UnifiedCryptoChatInput, message: s
   const selectedMarketVenue = input.venue === "hyperliquid" || input.venue === "polymarket";
   const mentionsMarketVenue = selectedMarketVenue
     || textIncludes(text, /\b(hyperliquid|polymarket|market|markets|venue|venues|order|orders)\b/i);
-  const mentionsChain = textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request|artifact validation|artifact reconciliation|redacted artifact|external sign request|operator path|safe operator path)\b/i);
+  const mentionsChain = textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request|artifact validation|validate artifact|artifact reconciliation|redacted artifact|external sign request|sign[- ]?request|receipt import|import receipt|operator path|safe operator path)\b/i);
   return mentionsMarketVenue && mentionsChain;
+}
+
+function marketExecutionChainStepId(message: string): string | null {
+  const text = message.toLowerCase();
+  if (textIncludes(text, /\b(execution chain|safe execution chain|preview[- ]?to[- ]?receipt|preview to receipt|sign[- ]?request.*receipt|receipt.*sign[- ]?request)\b/i)) return null;
+  if (textIncludes(text, /\b(receipt import|import receipt|public receipt|receipt)\b/i)) return "public_receipt_import";
+  if (textIncludes(text, /\b(artifact reconciliation|reconcile artifact|evidence bundle)\b/i)) return "artifact_reconciliation";
+  if (textIncludes(text, /\b(artifact validation|validate artifact|redacted artifact|signed artifact)\b/i)) return "redacted_artifact_validation";
+  if (textIncludes(text, /\b(sign[- ]?request|external sign request|signing request)\b/i)) return "external_sign_request";
+  if (textIncludes(text, /\b(preview|handoff)\b/i)) return "preview_handoff";
+  return null;
 }
 
 export function planUnifiedCryptoChat(input: UnifiedCryptoChatInput): UnifiedCryptoRoutePlan {
@@ -534,7 +545,11 @@ function marketExecutionReadinessResult(input: UnifiedCryptoChatInput, message: 
 
 function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: string): UnifiedCryptoChatResult {
   const guide = buildMarketExecutionChainGuide();
-  const cards = [buildMarketExecutionChainCard(guide)];
+  const highlightedStepId = marketExecutionChainStepId(message);
+  const highlightedStep = highlightedStepId
+    ? guide.stages.find((stage) => stage.id === highlightedStepId) ?? null
+    : null;
+  const cards = [buildMarketExecutionChainCard(guide, highlightedStepId)];
   const warnings = [
     "This is a safe execution-chain guide, not execution permission.",
     "Matterhorn accepts only public/redacted artifact metadata and public receipt evidence.",
@@ -551,12 +566,14 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
   return {
     venue: "auto",
     requestedVenue: normalizeVenue(input.venue),
-    intent: "market_execution_chain",
+    intent: highlightedStep ? "market_execution_step_guidance" : "market_execution_chain",
     execution: "read_only",
-    responseText: "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    responseText: highlightedStep
+      ? `${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.`
+      : "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
-    data: { guide },
+    data: { guide, highlightedStep },
     warnings,
     requiresClarification: false,
     clarificationQuestion: null,
