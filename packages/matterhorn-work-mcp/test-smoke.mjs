@@ -302,12 +302,27 @@ const server = createServer(async (req, res) => {
         version: "matterhorn.market.artifact-validation.v1",
         venue: "hyperliquid",
         status: "accepted_public_metadata",
+        validationMode: "public_redacted_metadata",
         matchesSignRequest: true,
+        signRequestSha256: body.signRequest.signRequestSha256,
+        signedArtifactPublicHash: body.artifact.signedArtifactPublicHash,
+        signedArtifactRedacted: true,
+        redactedMetadataAccepted: true,
         canSubmit: false,
         liveSubmissionEnabled: false,
         signedArtifactAccepted: false,
         submitSignedAllowedByContract: false,
-        publicAuditReceiptCandidate: { version: "matterhorn.market.receipt.v1", venue: "hyperliquid", status: "received" },
+        publicAuditReceiptCandidate: {
+          version: "matterhorn.market.receipt.v1",
+          venue: "hyperliquid",
+          status: "received",
+          action: body.signRequest.action,
+          previewSha256: body.signRequest.previewSha256,
+          handoffSha256: body.signRequest.handoffSha256,
+          warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+        },
+        errors: [],
+        warnings: [],
       },
     });
   }
@@ -325,12 +340,27 @@ const server = createServer(async (req, res) => {
         version: "matterhorn.market.artifact-validation.v1",
         venue: "polymarket",
         status: "accepted_public_metadata",
+        validationMode: "public_redacted_metadata",
         matchesSignRequest: true,
+        signRequestSha256: body.signRequest.signRequestSha256,
+        signedArtifactPublicHash: body.artifact.signedArtifactPublicHash,
+        signedArtifactRedacted: true,
+        redactedMetadataAccepted: true,
         canSubmit: false,
         liveSubmissionEnabled: false,
         signedArtifactAccepted: false,
         submitSignedAllowedByContract: false,
-        publicAuditReceiptCandidate: { version: "matterhorn.market.receipt.v1", venue: "polymarket", status: "received" },
+        publicAuditReceiptCandidate: {
+          version: "matterhorn.market.receipt.v1",
+          venue: "polymarket",
+          status: "received",
+          action: body.signRequest.action,
+          previewSha256: body.signRequest.previewSha256,
+          handoffSha256: body.signRequest.handoffSha256,
+          warnings: ["Public audit receipt candidate only. It is not exchange submission evidence."],
+        },
+        errors: [],
+        warnings: [],
       },
     });
   }
@@ -631,6 +661,7 @@ try {
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
+    "matterhorn_market_artifact_reconcile",
     "matterhorn_hyperliquid_chat",
     "matterhorn_hyperliquid_list_markets",
     "matterhorn_hyperliquid_get_account",
@@ -669,6 +700,7 @@ try {
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
+  assert.match(descriptionFor("matterhorn_market_artifact_reconcile"), /public\/redacted/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
@@ -928,6 +960,38 @@ try {
   assert.equal(polymarketArtifactValidation.validation.canSubmit, false);
   assert.equal(polymarketArtifactValidation.validation.publicAuditReceiptCandidate.version, "matterhorn.market.receipt.v1");
 
+  const marketArtifactReconciliation = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_market_artifact_reconcile",
+    arguments: {
+      hyperliquidArtifactValidation,
+      polymarketArtifactValidation,
+      requireHyperliquid: true,
+      requirePolymarket: true,
+    },
+  }));
+  assert.equal(marketArtifactReconciliation.version, "matterhorn.market.artifact-reconciliation.v1");
+  assert.equal(marketArtifactReconciliation.ready, true);
+  assert.equal(marketArtifactReconciliation.safety.liveSubmissionEnabled, false);
+  assert.equal(marketArtifactReconciliation.safety.signsOrSubmits, false);
+  assert.equal(marketArtifactReconciliation.venues.filter((venue) => venue.present && venue.ready).length, 2);
+
+  const badMarketArtifactReconciliation = await mcp.ask("tools/call", {
+    name: "matterhorn_market_artifact_reconcile",
+    arguments: {
+      hyperliquidArtifactValidation: {
+        ...hyperliquidArtifactValidation,
+        validation: {
+          ...hyperliquidArtifactValidation.validation,
+          publicAuditReceiptCandidate: {
+            ...hyperliquidArtifactValidation.validation.publicAuditReceiptCandidate,
+            signature: "0xdeadbeef",
+          },
+        },
+      },
+    },
+  });
+  assert.match(badMarketArtifactReconciliation.error?.message || "", /credential-shaped field/i);
+
   const hyperliquidChat = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_chat",
     arguments: { message: "preview buying 0.1 BTC at 65000" },
@@ -962,6 +1026,7 @@ try {
         "crypto.shared_card_contract",
         "market.execution_safety",
         "market.official_sdk_validation",
+        "market.artifact_reconciliation",
         "market.customer_evidence_bundle",
         "hyperliquid.readiness",
         "polymarket.readiness",
@@ -975,6 +1040,7 @@ try {
     },
     sdkManifestCheck: { present: true, ready: true, ok: true, fileCount: 4, venueCount: 2 },
     receiptCheck: { present: true, ready: true, ok: true, matchesHandoff: true },
+    artifactReconciliation: { present: true, ready: true, venueCount: 2, readyVenues: ["hyperliquid", "polymarket"] },
     warnings: [],
     errors: [],
     safety: {
@@ -997,6 +1063,8 @@ try {
     "",
     "## Public Receipt Evidence",
     "",
+    "## Artifact Reconciliation Evidence",
+    "",
     "## Red Lines",
     "",
   ].join("\n");
@@ -1007,12 +1075,14 @@ try {
       markdown: marketCustomerEvidenceMarkdown,
       requireSdkManifestCheck: true,
       requireReceiptCheck: true,
+      requireArtifactReconciliation: true,
     },
   }));
   assert.equal(marketEvidenceVerify.ready, true);
   assert.equal(marketEvidenceVerify.safety.liveSubmissionEnabled, false);
   assert.ok(marketEvidenceVerify.checks.some((check) => check.id === "sdk_manifest.accepted"));
   assert.ok(marketEvidenceVerify.checks.some((check) => check.id === "receipt.accepted"));
+  assert.ok(marketEvidenceVerify.checks.some((check) => check.id === "artifact_reconciliation.accepted"));
 
   const badMarketEvidenceVerify = await mcp.ask("tools/call", {
     name: "matterhorn_market_customer_evidence_verify",

@@ -45,6 +45,7 @@ for (const [route, tool, command] of rows) {
 
 for (const tool of [
   "matterhorn_market_customer_evidence_verify",
+  "matterhorn_market_artifact_reconcile",
   "matterhorn_bittensor_customer_evidence_verify",
   "matterhorn_crypto_customer_packet",
 ]) {
