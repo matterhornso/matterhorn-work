@@ -16,6 +16,7 @@ import {
   isValidHyperliquidAddress,
   planHyperliquidChat,
   prepareHyperliquidOrderPreview,
+  validateHyperliquidRedactedArtifactEnvelope,
   verifyHyperliquidReceipt,
   type HyperliquidProvider,
 } from "./hyperliquid.js";
@@ -417,6 +418,80 @@ describe("Hyperliquid L1 order-action payload", () => {
   test("Phase 1 sign request fails closed when mode is omitted", async () => {
     const { handoff } = await prepareHyperliquidHandoffFromRequest({ asset: "BTC", side: "buy", size: 0.1, price: 65000 }, provider());
     expect(() => buildHyperliquidExternalSignRequest(handoff)).toThrow(/executionMode=testnet_external_signer/);
+  });
+
+  test("Phase 2 validates redacted artifact metadata and emits a public receipt candidate", async () => {
+    const { signRequest } = await prepareHyperliquidExternalSignRequestFromRequest(
+      { asset: "BTC", side: "buy", size: 0.1, price: 65000, executionMode: "testnet_external_signer" },
+      provider(),
+    );
+    const artifact = {
+      version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+      venue: "hyperliquid",
+      routeName: "hyperliquid.orders.sign_request",
+      validationMode: "public_redacted_metadata",
+      executionMode: "testnet_external_signer",
+      network: signRequest.network,
+      action: signRequest.action,
+      signRequestSha256: signRequest.signRequestSha256,
+      previewSha256: signRequest.previewSha256,
+      handoffSha256: signRequest.handoffSha256,
+      unsignedPayloadSha256: signRequest.unsignedPayloadSha256,
+      signedArtifactPublicHash: "c".repeat(64),
+      signedArtifactRedacted: true,
+      signerAddress: ADDRESS,
+      artifactKind: "wallet_signed_action",
+      producedAt: new Date().toISOString(),
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      warnings: [] as string[],
+    } as const;
+    const result = validateHyperliquidRedactedArtifactEnvelope(signRequest, artifact);
+    expect(result.status).toBe("accepted_public_metadata");
+    expect(result.matchesSignRequest).toBe(true);
+    expect(result.signedArtifactAccepted).toBe(false);
+    expect(result.submitSignedAllowedByContract).toBe(false);
+    expect(result.canSubmit).toBe(false);
+    expect(result.publicAuditReceiptCandidate?.version).toBe("matterhorn.market.receipt.v1");
+    expect(result.publicAuditReceiptCandidate?.status).toBe("received");
+    expect(result.publicAuditReceiptCandidate?.warnings.join(" ")).toContain("not exchange submission evidence");
+  });
+
+  test("Phase 2 rejects hash mismatch and raw artifact material", async () => {
+    const { signRequest } = await prepareHyperliquidExternalSignRequestFromRequest(
+      { asset: "BTC", side: "buy", size: 0.1, price: 65000, executionMode: "testnet_external_signer" },
+      provider(),
+    );
+    const baseArtifact = {
+      version: "matterhorn.market.redacted-signed-artifact-envelope.v1",
+      venue: "hyperliquid",
+      routeName: "hyperliquid.orders.sign_request",
+      validationMode: "public_redacted_metadata",
+      executionMode: "testnet_external_signer",
+      network: signRequest.network,
+      action: signRequest.action,
+      signRequestSha256: signRequest.signRequestSha256,
+      previewSha256: signRequest.previewSha256,
+      handoffSha256: signRequest.handoffSha256,
+      unsignedPayloadSha256: signRequest.unsignedPayloadSha256,
+      signedArtifactPublicHash: "d".repeat(64),
+      signedArtifactRedacted: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      warnings: [] as string[],
+    } as const;
+    const mismatch = validateHyperliquidRedactedArtifactEnvelope(signRequest, { ...baseArtifact, previewSha256: "e".repeat(64) } as never);
+    expect(mismatch.status).toBe("rejected");
+    expect(mismatch.publicAuditReceiptCandidate).toBeNull();
+    expect(mismatch.errors.join(" ")).toContain("previewSha256");
+
+    const raw = validateHyperliquidRedactedArtifactEnvelope(signRequest, {
+      ...baseArtifact,
+      publicButInvalid: { signature: "0x" + "a".repeat(130) },
+    } as never);
+    expect(raw.status).toBe("rejected");
+    expect(raw.errors.join(" ")).toMatch(/Credential-shaped|Raw signed artifact/);
+    expect(JSON.stringify(raw)).not.toContain("0x" + "a".repeat(130));
   });
 });
 

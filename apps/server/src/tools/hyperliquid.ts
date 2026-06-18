@@ -1181,6 +1181,48 @@ export interface HyperliquidExternalSignRequest {
   warnings: string[];
 }
 
+export interface HyperliquidRedactedSignedArtifactEnvelope {
+  version: "matterhorn.market.redacted-signed-artifact-envelope.v1";
+  venue: "hyperliquid";
+  routeName: "hyperliquid.orders.sign_request";
+  validationMode: "public_redacted_metadata";
+  executionMode: "testnet_external_signer";
+  network: string;
+  action: "place_order";
+  signRequestSha256: string;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signedArtifactPublicHash: string;
+  signedArtifactRedacted: true;
+  signerAddress?: string | null;
+  artifactKind?: "wallet_signed_action" | "exchange_order" | "unknown";
+  producedAt?: string | null;
+  source?: HyperliquidSource | null;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  warnings?: string[];
+}
+
+export interface HyperliquidArtifactValidationResult {
+  version: "matterhorn.market.artifact-validation.v1";
+  venue: "hyperliquid";
+  status: "accepted_public_metadata" | "rejected";
+  validationMode: "public_redacted_metadata";
+  matchesSignRequest: boolean;
+  signRequestSha256: string;
+  signedArtifactPublicHash: string | null;
+  signedArtifactRedacted: boolean;
+  redactedMetadataAccepted: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  publicAuditReceiptCandidate: HyperliquidReceipt | null;
+  errors: string[];
+  warnings: string[];
+}
+
 /**
  * Canonical Hyperliquid L1 order-action payload plus the EIP-712 Agent signing
  * scaffold. Matterhorn produces the order action object and the fixed Agent
@@ -1434,6 +1476,134 @@ export function buildHyperliquidExternalSignRequest(
     externalSignerOnly: true,
     operatorConfirmation: "I understand this is an external testnet sign request only. Matterhorn will not sign, accept the signature, or submit.",
     signRequestSha256: sha256(core),
+    warnings,
+  };
+}
+
+function isSha256Hex(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
+}
+
+function findRawHyperliquidArtifactMaterial(value: unknown, path: string[] = []): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (/^0x[a-fA-F0-9]{128,}$/.test(trimmed)) return path.length ? path.join(".") : "input";
+    if (/"(?:signature|signedPayload|signedAction|exchangePayload)"\s*:/i.test(trimmed)) {
+      return path.length ? path.join(".") : "input";
+    }
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = findRawHyperliquidArtifactMaterial(value[index], [...path, String(index)]);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/^(signature|rawSignature|signedPayload|signedAction|exchangePayload|signedOrder)$/i.test(key)) {
+      return [...path, key].join(".");
+    }
+    const nested = findRawHyperliquidArtifactMaterial(child, [...path, key]);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+export function validateHyperliquidRedactedArtifactEnvelope(
+  signRequest: HyperliquidExternalSignRequest,
+  artifact: HyperliquidRedactedSignedArtifactEnvelope,
+): HyperliquidArtifactValidationResult {
+  const errors: string[] = [];
+  const warnings = [
+    "Validation-only Phase 2: Matterhorn accepts public/redacted metadata only and does not submit.",
+    ...signRequest.warnings,
+    ...(artifact.warnings ?? []),
+  ];
+
+  const { unsignedPayloadSha256: artifactUnsignedPayloadSha256, ...artifactForSecretScan } = artifact;
+  const forbiddenCredentialPath = findForbiddenHyperliquidCredentialInput({
+    artifact: { ...artifactForSecretScan, payloadHash: artifactUnsignedPayloadSha256 },
+    signRequest: {
+      venue: signRequest.venue,
+      routeName: signRequest.routeName,
+      executionMode: signRequest.executionMode,
+      network: signRequest.network,
+      action: signRequest.action,
+      signRequestSha256: signRequest.signRequestSha256,
+      previewSha256: signRequest.previewSha256,
+      handoffSha256: signRequest.handoffSha256,
+      payloadHash: signRequest.unsignedPayloadSha256,
+    },
+  });
+  if (forbiddenCredentialPath) errors.push(`Credential-shaped field rejected at ${forbiddenCredentialPath}.`);
+  const rawArtifactPath = findRawHyperliquidArtifactMaterial(artifact);
+  if (rawArtifactPath) errors.push(`Raw signed artifact material rejected at ${rawArtifactPath}.`);
+
+  if (signRequest.version !== "matterhorn.market.external-sign-request.v1") errors.push("Invalid sign-request version.");
+  if (artifact.version !== "matterhorn.market.redacted-signed-artifact-envelope.v1") errors.push("Invalid artifact envelope version.");
+  if (signRequest.venue !== "hyperliquid" || artifact.venue !== "hyperliquid") errors.push("Venue must be hyperliquid.");
+  if (artifact.validationMode !== "public_redacted_metadata") errors.push("Artifact validationMode must be public_redacted_metadata.");
+  if (signRequest.executionMode !== "testnet_external_signer" || artifact.executionMode !== "testnet_external_signer") {
+    errors.push("Only executionMode=testnet_external_signer is accepted in Phase 2.");
+  }
+  if (artifact.signedArtifactRedacted !== true) errors.push("signedArtifactRedacted must be true.");
+  if (artifact.canSubmit !== false || artifact.liveSubmissionEnabled !== false) {
+    errors.push("Artifact metadata must keep canSubmit=false and liveSubmissionEnabled=false.");
+  }
+  if (!isSha256Hex(artifact.signedArtifactPublicHash)) errors.push("signedArtifactPublicHash must be a 64-character SHA-256 hash.");
+
+  for (const field of ["signRequestSha256", "previewSha256", "handoffSha256", "unsignedPayloadSha256", "network", "action", "routeName"] as const) {
+    if (artifact[field] !== signRequest[field]) errors.push(`Artifact ${field} does not match the sign request.`);
+  }
+
+  const expiresAtMs = Date.parse(signRequest.expiresAt);
+  if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) errors.push("Sign request is expired.");
+  if (artifact.producedAt) {
+    const producedAtMs = Date.parse(artifact.producedAt);
+    if (!Number.isFinite(producedAtMs)) errors.push("producedAt must be an ISO timestamp when provided.");
+    else if (Number.isFinite(expiresAtMs) && producedAtMs > expiresAtMs) errors.push("Artifact was produced after the sign request expired.");
+  }
+
+  const ok = errors.length === 0;
+  const receipt: HyperliquidReceipt | null = ok
+    ? {
+        version: "matterhorn.market.receipt.v1",
+        venue: "hyperliquid",
+        status: "received",
+        action: "place_order",
+        previewSha256: signRequest.previewSha256,
+        handoffSha256: signRequest.handoffSha256,
+        orderId: null,
+        txHash: null,
+        asset: signRequest.marketId,
+        side: null,
+        submittedAt: null,
+        warnings: [
+          "Public audit receipt candidate only. It proves redacted metadata matched the sign request; it is not exchange submission evidence.",
+          `signedArtifactPublicHash=${artifact.signedArtifactPublicHash}`,
+          ...(artifact.signerAddress ? [`signerAddress=${artifact.signerAddress}`] : []),
+        ],
+      }
+    : null;
+
+  return {
+    version: "matterhorn.market.artifact-validation.v1",
+    venue: "hyperliquid",
+    status: ok ? "accepted_public_metadata" : "rejected",
+    validationMode: "public_redacted_metadata",
+    matchesSignRequest: ok,
+    signRequestSha256: signRequest.signRequestSha256,
+    signedArtifactPublicHash: typeof artifact.signedArtifactPublicHash === "string" ? artifact.signedArtifactPublicHash : null,
+    signedArtifactRedacted: artifact.signedArtifactRedacted === true,
+    redactedMetadataAccepted: ok,
+    signedArtifactAccepted: false,
+    submitSignedAllowedByContract: false,
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    publicAuditReceiptCandidate: receipt,
+    errors,
     warnings,
   };
 }

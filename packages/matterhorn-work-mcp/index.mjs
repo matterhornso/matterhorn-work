@@ -601,6 +601,21 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_validate_external_artifact",
+    description: "Validate Phase 2 Hyperliquid public/redacted artifact metadata against a Phase 1 sign request. Returns a public audit receipt candidate only; Matterhorn does not accept raw signing material or submit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        signRequest: { type: "object", description: "The matterhorn.market.external-sign-request.v1 packet from Phase 1." },
+        artifact: {
+          type: "object",
+          description: "Public/redacted metadata only: hashes, signerAddress, producedAt, signedArtifactPublicHash, signedArtifactRedacted=true, canSubmit=false.",
+        },
+      },
+      required: ["signRequest", "artifact"],
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_verify_receipt",
     description: "Verify a returned PUBLIC Hyperliquid receipt (order id / tx hash / status) against the handoff that produced it. Public status only; signed material is never accepted.",
     inputSchema: {
@@ -748,6 +763,21 @@ const tools = [
         slippageTolerance: { oneOf: [{ type: "number" }, { type: "string" }] },
       },
       required: ["executionMode", "marketId", "amountUsdc"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_validate_external_artifact",
+    description: "Validate Phase 2 Polymarket public/redacted artifact metadata against a Phase 1 sign request. Returns a public audit receipt candidate only; Matterhorn does not accept CLOB credentials or submit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        signRequest: { type: "object", description: "The matterhorn.market.external-sign-request.v1 packet from Phase 1." },
+        artifact: {
+          type: "object",
+          description: "Public/redacted metadata only: hashes, signerAddress, producedAt, signedArtifactPublicHash, signedArtifactRedacted=true, canSubmit=false.",
+        },
+      },
+      required: ["signRequest", "artifact"],
     },
   },
   {
@@ -2784,6 +2814,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/hyperliquid/orders/handoff", { method: "POST", body: args });
     case "matterhorn_hyperliquid_create_sign_request":
       return callServer("/api/hyperliquid/orders/external-sign-request", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_validate_external_artifact":
+      return callServer("/api/hyperliquid/orders/external-artifact/validate", { method: "POST", body: args });
     case "matterhorn_hyperliquid_verify_receipt":
       return callServer("/api/hyperliquid/orders/receipt", { method: "POST", body: args });
     case "matterhorn_polymarket_chat":
@@ -2808,6 +2840,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/polymarket/orders/handoff", { method: "POST", body: args });
     case "matterhorn_polymarket_create_sign_request":
       return callServer("/api/polymarket/orders/external-sign-request", { method: "POST", body: args });
+    case "matterhorn_polymarket_validate_external_artifact":
+      return callServer("/api/polymarket/orders/external-artifact/validate", { method: "POST", body: args });
     case "matterhorn_polymarket_verify_receipt":
       return callServer("/api/polymarket/orders/receipt", { method: "POST", body: args });
     case "matterhorn_bittensor_chat":

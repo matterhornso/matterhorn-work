@@ -286,6 +286,48 @@ export interface MarketExternalSignRequest {
   warnings: string[];
 }
 
+export interface MarketRedactedSignedArtifactEnvelope {
+  version: "matterhorn.market.redacted-signed-artifact-envelope.v1";
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  routeName: Extract<MarketFutureExecutionRouteName, "hyperliquid.orders.sign_request" | "polymarket.orders.sign_request">;
+  validationMode: "public_redacted_metadata";
+  executionMode: Extract<MarketExecutionMode, "testnet_external_signer">;
+  network: string;
+  action: MarketSignedSubmissionAction;
+  signRequestSha256: string;
+  previewSha256: string;
+  handoffSha256: string;
+  unsignedPayloadSha256: string;
+  signedArtifactPublicHash: string;
+  signedArtifactRedacted: true;
+  signerAddress?: string | null;
+  artifactKind?: "wallet_signed_action" | "clob_order" | "exchange_order" | "unknown";
+  producedAt?: string | null;
+  source?: MarketSourceFreshness | null;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  warnings: string[];
+}
+
+export interface MarketArtifactValidationResult {
+  version: "matterhorn.market.artifact-validation.v1";
+  venue: Extract<MarketVenue, "hyperliquid" | "polymarket">;
+  status: "accepted_public_metadata" | "rejected";
+  validationMode: "public_redacted_metadata";
+  matchesSignRequest: boolean;
+  signRequestSha256: string;
+  signedArtifactPublicHash?: string | null;
+  signedArtifactRedacted: boolean;
+  redactedMetadataAccepted: boolean;
+  signedArtifactAccepted: false;
+  submitSignedAllowedByContract: false;
+  canSubmit: false;
+  liveSubmissionEnabled: false;
+  publicAuditReceiptCandidate: MarketReceipt | null;
+  errors: string[];
+  warnings: string[];
+}
+
 export interface MarketExecutionAuditRecord {
   version: "matterhorn.market.execution-audit.v1";
   envelopeVersion: MarketSignedSubmissionEnvelope["version"];
