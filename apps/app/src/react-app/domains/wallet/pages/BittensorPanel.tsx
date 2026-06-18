@@ -22,6 +22,7 @@ import type {
   BittensorSubnetSummary,
   BittensorSubtensorSidecarHealth,
   BittensorWalletSnapshot,
+  MarketExecutionChainGuide,
   MarketExecutionReadinessReport,
 } from "@matterhorn-work/types";
 
@@ -257,9 +258,11 @@ export default function BittensorPanel() {
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [cryptoReadiness, setCryptoReadiness] = useState<ReadinessReport | null>(null);
   const [marketExecutionReadiness, setMarketExecutionReadiness] = useState<MarketExecutionReadinessReport | null>(null);
+  const [marketExecutionChain, setMarketExecutionChain] = useState<MarketExecutionChainGuide | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [cryptoReadinessLoading, setCryptoReadinessLoading] = useState(false);
   const [marketExecutionReadinessLoading, setMarketExecutionReadinessLoading] = useState(false);
+  const [marketExecutionChainLoading, setMarketExecutionChainLoading] = useState(false);
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
@@ -373,6 +376,20 @@ export default function BittensorPanel() {
     }
   }, []);
 
+  const loadMarketExecutionChain = useCallback(async () => {
+    setMarketExecutionChainLoading(true);
+    try {
+      const res = await fetch("/api/crypto/market-execution-chain");
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market execution chain");
+      setMarketExecutionChain((json.guide ?? json) as MarketExecutionChainGuide);
+    } catch {
+      setMarketExecutionChain(null);
+    } finally {
+      setMarketExecutionChainLoading(false);
+    }
+  }, []);
+
   const loadDetail = useCallback(async (netuid: number) => {
     setDetailLoading(true);
     try {
@@ -424,7 +441,8 @@ export default function BittensorPanel() {
     void loadReadiness();
     void loadCryptoReadiness();
     void loadMarketExecutionReadiness();
-  }, [loadCryptoReadiness, loadMarketExecutionReadiness, loadReadiness, loadSidecarStatus]);
+    void loadMarketExecutionChain();
+  }, [loadCryptoReadiness, loadMarketExecutionChain, loadMarketExecutionReadiness, loadReadiness, loadSidecarStatus]);
 
   useEffect(() => {
     if (selectedNetuid !== null) loadDetail(selectedNetuid);
@@ -512,6 +530,7 @@ export default function BittensorPanel() {
     void loadReadiness();
     void loadCryptoReadiness();
     void loadMarketExecutionReadiness();
+    void loadMarketExecutionChain();
   };
 
   const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
@@ -569,6 +588,7 @@ export default function BittensorPanel() {
       readiness,
       cryptoReadiness,
       marketExecutionReadiness,
+      marketExecutionChain,
       sourcePrompt: item.id,
     }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
@@ -623,6 +643,15 @@ export default function BittensorPanel() {
   const marketExecutionSubmissionState = marketExecutionReadiness
     ? "No"
     : "Unknown";
+  const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
+  const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : "Unknown";
+  const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : "Unknown";
+  const marketExecutionChainSignerState = marketExecutionChain?.safety?.externalSignerRequired === true ? "Required" : "Unknown";
+  const marketExecutionChainState = marketExecutionChain
+    ? marketExecutionChain.safety?.liveSubmissionEnabled === false && marketExecutionChain.safety?.canSubmit === false
+      ? "Safe"
+      : "Review"
+    : "Unknown";
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -644,9 +673,9 @@ export default function BittensorPanel() {
             size="sm"
             className="gap-1.5 text-xs text-dls-secondary"
             onClick={refreshBittensor}
-            disabled={loading || marketExecutionReadinessLoading}
+            disabled={loading || marketExecutionReadinessLoading || marketExecutionChainLoading}
           >
-            <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading) && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", (loading || marketExecutionReadinessLoading || marketExecutionChainLoading) && "animate-spin")} />
             Refresh
           </Button>
         </div>
@@ -837,6 +866,12 @@ export default function BittensorPanel() {
 
             <Section title="Execution chain" icon={<ExternalLink className="size-4" />}>
               <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Chain API" value={marketExecutionChainState} compact />
+                  <Metric label="Stages" value={marketExecutionChainStageCount} compact />
+                  <Metric label="External signer" value={marketExecutionChainSignerState} compact />
+                  <Metric label="Can submit" value={marketExecutionChainSubmitState} compact />
+                </div>
                 <p className="text-xs leading-5 text-dls-secondary">
                   Testnet-only path: preview -&gt; external sign request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
                 </p>
@@ -853,7 +888,11 @@ export default function BittensorPanel() {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading}>
+                    {marketExecutionChainLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                    Refresh
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChain")}>
                     {copiedCustomerCommand === "executionChain" ? "Copied" : "Chain CLI"}
                   </Button>
