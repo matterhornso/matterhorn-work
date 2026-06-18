@@ -9,6 +9,8 @@ function read(path) {
 const rootPackage = JSON.parse(read("package.json"));
 const server = read("apps/server/src/server.ts");
 const matrix = read("docs/agent-control-coverage-matrix.md");
+const mcp = read("packages/matterhorn-work-mcp/index.mjs");
+const cli = read("apps/orchestrator/src/cli.ts");
 const routeStart = server.indexOf('"/api/crypto/readiness"');
 const routeEnd = server.indexOf('"/api/crypto/chat/execute"', routeStart);
 const readinessRoute = routeStart >= 0 ? server.slice(routeStart, routeEnd > routeStart ? routeEnd : server.length) : "";
@@ -50,5 +52,11 @@ for (const forbidden of [
 
 assert.ok(matrix.includes("/api/crypto/readiness"), "coverage matrix should list the crypto readiness API");
 assert.ok(matrix.includes("Customer crypto readiness"), "coverage matrix should name the customer crypto readiness surface");
+assert.ok(matrix.includes("matterhorn_crypto_readiness"), "coverage matrix should list the crypto readiness MCP tool");
+assert.ok(matrix.includes("matterhorn-work crypto readiness"), "coverage matrix should list the crypto readiness CLI command");
+assert.ok(mcp.includes("matterhorn_crypto_readiness"), "MCP package should expose the crypto readiness tool");
+assert.ok(mcp.includes("/api/crypto/readiness"), "MCP package should call the crypto readiness API");
+assert.ok(cli.includes("matterhorn-work crypto readiness"), "CLI help should list crypto readiness");
+assert.ok(cli.includes("/api/crypto/readiness"), "CLI should call the crypto readiness API");
 
 console.log("Crypto readiness API static check passed.");
