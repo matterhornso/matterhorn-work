@@ -5,7 +5,9 @@ import {
   buildPolymarketOrderTypedData,
   buildPolymarketMarketListCard,
   buildPolymarketOrderPreviewCard,
+  buildPolymarketWatchDescriptor,
   buildPolymarketSigningHandoff,
+  checkPolymarketWatchDescriptor,
   coercePolymarketHandoffReference,
   coercePolymarketReceiptInput,
   preparePolymarketHandoffFromRequest,
@@ -265,6 +267,20 @@ describe("Polymarket chat workflow", () => {
     expect(watch.conditions?.[0]?.upperThreshold).toBeCloseTo(0.72, 2); // 0.62 + 0.1
     expect(watch.conditions?.[0]?.lowerThreshold).toBeCloseTo(0.52, 2);
     expect(result.responseText).toMatch(/will not place or auto-execute/);
+    const check = result.data?.check as { status?: string; observations?: unknown[] };
+    expect(check.status).toBe("ok");
+    expect(check.observations?.length).toBeGreaterThan(0);
+  });
+
+  test("checks a read-only market watch and triggers on odds movement", async () => {
+    const market = await provider().getMarket("0xmarket-ai");
+    const watch = buildPolymarketWatchDescriptor(market);
+    watch.conditions[0].upperThreshold = 0.6;
+    const check = await checkPolymarketWatchDescriptor(watch, provider());
+    expect(check.version).toBe("matterhorn.polymarket.watch-check.v1");
+    expect(check.status).toBe("triggered");
+    expect(check.alerts.join(" ")).toContain("rose above");
+    expect(JSON.stringify(check)).not.toMatch(/private|secret|mnemonic|seed/i);
   });
 
   test("monitor works even when the region is geoblocked (research flow)", async () => {

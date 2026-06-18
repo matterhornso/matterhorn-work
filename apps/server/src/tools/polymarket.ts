@@ -369,6 +369,7 @@ export interface PolymarketWatchCondition {
 
 export interface PolymarketWatchDescriptor {
   version: "matterhorn.polymarket.watch.v1";
+  id: string;
   marketId: string;
   marketLabel: string;
   endDate: string | null;
@@ -380,6 +381,41 @@ export interface PolymarketWatchDescriptor {
   note: string;
 }
 
+export interface PolymarketWatchObservation {
+  label: string;
+  value: number | string | null;
+  unit: string | null;
+  source: string;
+}
+
+export interface PolymarketWatchCheckResult {
+  version: "matterhorn.polymarket.watch-check.v1";
+  watchId: string;
+  marketId: string;
+  status: "ok" | "triggered" | "degraded";
+  checkedAt: string;
+  observations: PolymarketWatchObservation[];
+  alerts: string[];
+  source: PolymarketSource;
+  warnings: string[];
+}
+
+export interface PolymarketWatchDigest {
+  version: "matterhorn.polymarket.watch-digest.v1";
+  venue: "polymarket";
+  checkedAt: string;
+  watchCount: number;
+  triggeredCount: number;
+  degradedCount: number;
+  summaries: string[];
+  checks: PolymarketWatchCheckResult[];
+  safety: {
+    nonCustodial: true;
+    liveSubmissionEnabled: false;
+    canSubmit: false;
+  };
+}
+
 export type PolymarketChatCard =
   | { kind: "polymarket_market_list"; title: string; markets: PolymarketMarketSummary[]; warnings: string[] }
   | { kind: "polymarket_event_list"; title: string; events: PolymarketEventSummary[]; warnings: string[] }
@@ -387,7 +423,7 @@ export type PolymarketChatCard =
   | { kind: "polymarket_market_context"; title: string; context: PolymarketMarketContextSnapshot; warnings: string[] }
   | { kind: "polymarket_orderbook"; title: string; orderbook: PolymarketOrderbook; warnings: string[] }
   | { kind: "polymarket_compliance"; title: string; compliance: PolymarketComplianceStatus; warnings: string[] }
-  | { kind: "polymarket_watch"; title: string; watch: PolymarketWatchDescriptor; warnings: string[] }
+  | { kind: "polymarket_watch"; title: string; watch: PolymarketWatchDescriptor; check?: PolymarketWatchCheckResult; warnings: string[] }
   | { kind: "polymarket_order_preview"; title: string; preview: PolymarketActionPreview; warnings: string[] }
   | { kind: "polymarket_clarification"; title: string; question: string; warnings: string[] };
 
@@ -992,17 +1028,101 @@ export function buildPolymarketWatchDescriptor(market: PolymarketMarketSummary):
   }
   if (market.closed) warnings.push("This market is marked closed; a watch may not update.");
 
+  const createdAt = new Date().toISOString();
   return {
     version: "matterhorn.polymarket.watch.v1",
+    id: "pmw_" + sha256({ marketId: market.id, createdAt }).slice(0, 16),
     marketId: market.id,
     marketLabel: market.question,
     endDate: market.endDate,
     resolvesInDays,
     conditions,
-    createdAt: new Date().toISOString(),
+    createdAt,
     source: market.source,
     warnings,
     note: "Read-only watch. Matterhorn surfaces odds moves and a resolution reminder; it never places or auto-executes orders.",
+  };
+}
+
+export async function checkPolymarketWatchDescriptor(
+  watch: PolymarketWatchDescriptor,
+  provider: PolymarketProvider = polymarketProvider,
+): Promise<PolymarketWatchCheckResult> {
+  const observations: PolymarketWatchObservation[] = [];
+  const warnings = [...watch.warnings];
+  const alerts: string[] = [];
+  let source = watch.source;
+  try {
+    const [market, compliance] = await Promise.all([
+      provider.getMarket(watch.marketId),
+      provider.checkCompliance().catch(() => null),
+    ]);
+    source = market.source;
+    observations.push(
+      { label: "Market active", value: market.active ? "yes" : "no", unit: null, source: market.source.source },
+      { label: "Market closed", value: market.closed ? "yes" : "no", unit: null, source: market.source.source },
+      { label: "Liquidity", value: market.liquidity, unit: "USD", source: market.source.source },
+      { label: "Volume", value: market.volume, unit: "USD", source: market.source.source },
+    );
+    if (!market.active || market.closed) alerts.push("Market is inactive or closed.");
+    if (compliance?.status === "blocked") alerts.push("Polymarket compliance is currently blocked for this environment.");
+    for (const condition of watch.conditions) {
+      const current = market.outcomePrices[condition.outcome] ?? null;
+      observations.push({
+        label: condition.outcome + " probability",
+        value: current,
+        unit: "probability",
+        source: market.source.source,
+      });
+      if (current !== null && condition.upperThreshold !== null && current >= condition.upperThreshold) {
+        alerts.push(condition.outcome + " probability rose above " + formatProbability(condition.upperThreshold) + ".");
+      }
+      if (current !== null && condition.lowerThreshold !== null && current <= condition.lowerThreshold) {
+        alerts.push(condition.outcome + " probability fell below " + formatProbability(condition.lowerThreshold) + ".");
+      }
+    }
+    warnings.push(...market.source.warnings);
+  } catch (err) {
+    return {
+      version: "matterhorn.polymarket.watch-check.v1",
+      watchId: watch.id,
+      marketId: watch.marketId,
+      status: "degraded",
+      checkedAt: new Date().toISOString(),
+      observations,
+      alerts: [],
+      source,
+      warnings: [...warnings, err instanceof Error ? err.message : String(err)],
+    };
+  }
+  return {
+    version: "matterhorn.polymarket.watch-check.v1",
+    watchId: watch.id,
+    marketId: watch.marketId,
+    status: alerts.length > 0 ? "triggered" : "ok",
+    checkedAt: new Date().toISOString(),
+    observations,
+    alerts,
+    source,
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
+export function buildPolymarketWatchDigest(checks: PolymarketWatchCheckResult[]): PolymarketWatchDigest {
+  return {
+    version: "matterhorn.polymarket.watch-digest.v1",
+    venue: "polymarket",
+    checkedAt: new Date().toISOString(),
+    watchCount: checks.length,
+    triggeredCount: checks.filter((check) => check.status === "triggered").length,
+    degradedCount: checks.filter((check) => check.status === "degraded").length,
+    summaries: checks.map((check) => check.status + ": " + check.watchId + (check.alerts.length ? " - " + check.alerts.join("; ") : "")),
+    checks,
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      canSubmit: false,
+    },
   };
 }
 
@@ -1536,6 +1656,7 @@ export async function executePolymarketChatWorkflow(
     }
     const market = await provider.getMarket(input.marketId);
     const watch = buildPolymarketWatchDescriptor(market);
+    const check = await checkPolymarketWatchDescriptor(watch, provider);
     return {
       venue: "polymarket",
       intent: "monitor",
@@ -1543,10 +1664,11 @@ export async function executePolymarketChatWorkflow(
       responseText:
         "Read-only watch for \"" + market.question + "\". Suggested alerts:\n" +
         watch.conditions.map((c) => "- " + c.outcome + " (now " + formatProbability(c.currentProbability) + "): " + c.note).join("\n") + "\n" +
+        "Current status: " + check.status + (check.alerts.length ? " (" + check.alerts.join("; ") + ")" : "") + ". " +
         "Matterhorn will not place or auto-execute any order from this watch. " + RISK_DISCLAIMER,
-      cards: [{ kind: "polymarket_watch", title: "Watch: " + market.question, watch, warnings: watch.warnings }],
-      data: { market, watch },
-      warnings: watch.warnings,
+      cards: [buildPolymarketWatchCard(watch, check)],
+      data: { market, watch, check },
+      warnings: check.warnings,
     };
   }
 
@@ -1636,6 +1758,16 @@ export function buildPolymarketOrderbookCard(orderbook: PolymarketOrderbook): Po
 
 export function buildPolymarketComplianceCard(compliance: PolymarketComplianceStatus): PolymarketChatCard {
   return { kind: "polymarket_compliance", title: "Polymarket compliance", compliance, warnings: [] };
+}
+
+export function buildPolymarketWatchCard(watch: PolymarketWatchDescriptor, check?: PolymarketWatchCheckResult): PolymarketChatCard {
+  return {
+    kind: "polymarket_watch",
+    title: "Watch: " + watch.marketLabel,
+    watch,
+    check,
+    warnings: check?.warnings ?? watch.warnings,
+  };
 }
 
 export function buildPolymarketOrderPreviewCard(preview: PolymarketActionPreview): PolymarketChatCard {

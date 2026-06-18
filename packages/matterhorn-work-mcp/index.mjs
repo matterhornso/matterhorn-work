@@ -524,6 +524,32 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_create_watch",
+    description: "Create a read-only Hyperliquid watch for funding, price/orderbook, position margin, open orders, or market availability. Never submits or signs trades.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string" },
+        kind: { type: "string", enum: ["funding_rate", "price_or_orderbook", "position_margin", "open_order_state", "market_availability"] },
+        asset: { type: "string" },
+        address: { type: "string", description: "Optional public 0x account address for account-level watches." },
+        threshold: { type: "number" },
+        direction: { type: "string", enum: ["above", "below", "change", "any"] },
+      },
+    },
+  },
+  {
+    name: "matterhorn_hyperliquid_check_watches",
+    description: "Check Hyperliquid read-only watches and return watch_alert cards. Uses process-local watches unless a public descriptor is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        watch: { type: "object", description: "Optional public watch descriptor returned by matterhorn_hyperliquid_create_watch." },
+        watches: { type: "array", items: { type: "object" } },
+      },
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_preview_order",
     description: "Prepare a non-submittable Hyperliquid order preview. Returns canSubmit=false and never sends the exchange endpoint.",
     inputSchema: {
@@ -638,6 +664,28 @@ const tools = [
     name: "matterhorn_polymarket_check_compliance",
     description: "Check the Polymarket geoblock/compliance status. Read-only.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_polymarket_create_watch",
+    description: "Create a read-only Polymarket watch for market status, odds/liquidity movement, compliance state, and public receipt/status changes. Never submits orders.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        marketId: { type: "string", description: "Polymarket market id." },
+      },
+      required: ["marketId"],
+    },
+  },
+  {
+    name: "matterhorn_polymarket_check_watches",
+    description: "Check Polymarket read-only watches and return watch_alert cards. Uses process-local watches unless a public descriptor is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        watch: { type: "object", description: "Optional public watch descriptor returned by matterhorn_polymarket_create_watch." },
+        watches: { type: "array", items: { type: "object" } },
+      },
+    },
   },
   {
     name: "matterhorn_polymarket_preview_order",
@@ -2693,6 +2741,10 @@ async function handleTool(name, args = {}) {
       return callServer(`/api/hyperliquid/funding/${encodeURIComponent(args.asset)}`);
     case "matterhorn_hyperliquid_get_orderbook":
       return callServer(`/api/hyperliquid/orderbook/${encodeURIComponent(args.asset)}`);
+    case "matterhorn_hyperliquid_create_watch":
+      return callServer("/api/hyperliquid/watches", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_check_watches":
+      return callServer("/api/hyperliquid/watches/check", { method: "POST", body: args });
     case "matterhorn_hyperliquid_preview_order":
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
     case "matterhorn_hyperliquid_prepare_handoff":
@@ -2711,6 +2763,10 @@ async function handleTool(name, args = {}) {
       return callServer(`/api/polymarket/orderbook/${encodeURIComponent(args.tokenId)}`, { query: { outcome: args.outcome, marketId: args.marketId } });
     case "matterhorn_polymarket_check_compliance":
       return callServer("/api/polymarket/compliance");
+    case "matterhorn_polymarket_create_watch":
+      return callServer("/api/polymarket/watches", { method: "POST", body: args });
+    case "matterhorn_polymarket_check_watches":
+      return callServer("/api/polymarket/watches/check", { method: "POST", body: args });
     case "matterhorn_polymarket_preview_order":
       return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
     case "matterhorn_polymarket_prepare_handoff":

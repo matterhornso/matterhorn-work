@@ -3758,6 +3758,7 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid open-orders --address <0x...> [options]",
     "  matterhorn-work hyperliquid funding --asset <symbol> [options]",
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
+    "  matterhorn-work hyperliquid watch create|list|check|digest [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid receipt --handoff-file <path> --receipt-file <path> [options]",
@@ -3767,6 +3768,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket market --market-id <id> [options]",
     "  matterhorn-work polymarket orderbook --token-id <id> [options]",
     "  matterhorn-work polymarket compliance [options]",
+    "  matterhorn-work polymarket watch create|list|check|digest [options]",
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket receipt --handoff-file <path> --receipt-file <path> [options]",
@@ -7229,6 +7231,17 @@ function readMarketReceiptArg(args: ParsedArgs): Record<string, unknown> {
   return { ...base, ...overrides };
 }
 
+function readOptionalJsonFileFlag(args: ParsedArgs, flag: string): unknown | undefined {
+  const file = readFlag(args.flags, flag);
+  if (!file) return undefined;
+  const raw = readFileSync(resolve(file), "utf8");
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Could not parse ${flag} JSON file: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 async function runHyperliquid(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "chat";
@@ -7291,6 +7304,48 @@ async function runHyperliquid(args: ParsedArgs) {
       );
       outputResult(result, outputJson);
       return;
+    }
+
+    if (subcommand === "watch" || subcommand === "watches") {
+      const action = (args.positionals[2] ?? "list").trim().toLowerCase();
+      if (action === "create" || action === "add") {
+        const threshold = readNumber(args.flags, "threshold", undefined);
+        const result = await fetchJson(`${baseUrl}/api/hyperliquid/watches`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            message: readFlag(args.flags, "message") ?? readFlag(args.flags, "prompt") ?? args.positionals.slice(3).join(" ").trim(),
+            ...(readFlag(args.flags, "asset") ? { asset: readFlag(args.flags, "asset") } : {}),
+            ...(readFlag(args.flags, "address") ? { address: readFlag(args.flags, "address") } : {}),
+            ...(readFlag(args.flags, "kind") ? { kind: readFlag(args.flags, "kind") } : {}),
+            ...(readFlag(args.flags, "direction") ? { direction: readFlag(args.flags, "direction") } : {}),
+            ...(typeof threshold === "number" ? { threshold } : {}),
+          }),
+        });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "list") {
+        const result = await fetchJson(`${baseUrl}/api/hyperliquid/watches`, { headers });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "check") {
+        const watch = readOptionalJsonFileFlag(args, "watch-file");
+        const result = await fetchJson(`${baseUrl}/api/hyperliquid/watches/check`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(watch ? { watch } : {}),
+        });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "digest") {
+        const result = await fetchJson(`${baseUrl}/api/hyperliquid/watches/digest`, { headers });
+        outputResult(result, outputJson);
+        return;
+      }
+      throw new Error("hyperliquid watch requires create|list|check|digest");
     }
 
     if (
@@ -7378,7 +7433,7 @@ async function runHyperliquid(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|preview-order|handoff|receipt");
+    throw new Error("hyperliquid requires chat|markets|account|positions|open-orders|funding|orderbook|watch|preview-order|handoff|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;
@@ -7494,6 +7549,41 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
+    if (subcommand === "watch" || subcommand === "watches") {
+      const action = (args.positionals[2] ?? "list").trim().toLowerCase();
+      if (action === "create" || action === "add") {
+        const marketId = readPolymarketMarketId(args, 3);
+        const result = await fetchJson(`${baseUrl}/api/polymarket/watches`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ marketId }),
+        });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "list") {
+        const result = await fetchJson(`${baseUrl}/api/polymarket/watches`, { headers });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "check") {
+        const watch = readOptionalJsonFileFlag(args, "watch-file");
+        const result = await fetchJson(`${baseUrl}/api/polymarket/watches/check`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(watch ? { watch } : {}),
+        });
+        outputResult(result, outputJson);
+        return;
+      }
+      if (action === "digest") {
+        const result = await fetchJson(`${baseUrl}/api/polymarket/watches/digest`, { headers });
+        outputResult(result, outputJson);
+        return;
+      }
+      throw new Error("polymarket watch requires create|list|check|digest");
+    }
+
     if (subcommand === "preview-order" || subcommand === "order-preview" || subcommand === "preview") {
       const marketId = readPolymarketMarketId(args, 2);
       const amountUsdc = readNumber(args.flags, "amount-usdc", undefined) ?? readNumber(args.flags, "amountUsdc", undefined);
@@ -7585,7 +7675,7 @@ async function runPolymarket(args: ParsedArgs) {
       return;
     }
 
-    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|preview-order|handoff|receipt");
+    throw new Error("polymarket requires chat|markets|events|market|orderbook|compliance|watch|preview-order|handoff|receipt");
   } catch (error) {
     outputError(error, outputJson);
     process.exitCode = 1;

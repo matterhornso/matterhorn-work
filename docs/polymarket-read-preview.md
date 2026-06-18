@@ -69,7 +69,32 @@ When compliance is blocked, `risk`, `resolution`, `priceContext`, `liquidity`, `
 
 ## Watchlist / Monitor (read-only)
 
-The `monitor` intent builds a read-only `PolymarketWatchDescriptor` for a market: a current-odds snapshot, suggested ±10pp alert thresholds per outcome, and a resolution reminder. It is research-only and **works even when order previews are geoblocked**. Matterhorn never schedules alerts or auto-executes any order from a watch; the descriptor is a planning artifact for the user/agent to act on.
+The `monitor` intent builds a read-only `PolymarketWatchDescriptor` for a market: a current-odds snapshot, suggested ±10pp alert thresholds per outcome, and a resolution reminder. The watch check reads market status, odds/liquidity, and compliance state, then returns a `watch_alert` card. It is research-only and **works even when order previews are geoblocked**. Matterhorn never auto-executes any order from a watch.
+
+HTTP/MCP/CLI expose the same safe loop:
+
+- `POST /api/polymarket/watches`
+- `GET /api/polymarket/watches`
+- `POST /api/polymarket/watches/check`
+- `GET /api/polymarket/watches/digest`
+- `matterhorn_polymarket_create_watch`
+- `matterhorn_polymarket_check_watches`
+- `matterhorn-work polymarket watch create|list|check|digest`
+
+```bash
+matterhorn-work polymarket watch create \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --market-id 0xmarket-id \
+  --json
+```
+
+```bash
+matterhorn-work polymarket watch check \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --json
+```
 
 ## External-Signer Execution (non-custodial)
 
@@ -121,7 +146,7 @@ The QA harness self-test runs offline with mocked Gamma/CLOB/geoblock endpoints;
 
 ## Scope Notes
 
-This stream is the read/preview tool layer plus QA harness and readiness gate. Server routes (`/api/polymarket/...`), MCP tools, and CLI commands follow the Hyperliquid sequence and can be added in subsequent PRs (a natural Codex pickup point).
+This stream is the read/preview/watch tool layer plus QA harness and readiness gate. Server routes (`/api/polymarket/...`), MCP tools, and CLI commands are available for read-only market data, preview-only orders, external-signer handoffs, public receipts, and watch checks.
 
 References:
 

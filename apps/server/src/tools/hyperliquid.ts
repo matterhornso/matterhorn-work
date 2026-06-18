@@ -18,9 +18,11 @@ const FORBIDDEN_CREDENTIAL_VALUE_RE =
 const FORBIDDEN_CREDENTIAL_COMMAND_RE =
   /\b(?:use|sign with|submit with|authenticate with|broadcast with)\b.{0,80}\b(seed phrase|mnemonic|private key|api secret|raw signature|signed payload|wallet export)\b/i;
 
-export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "funding" | "orderbook" | "order_preview";
+export type HyperliquidIntent = "learn" | "discover" | "account" | "positions" | "funding" | "orderbook" | "monitor" | "order_preview";
 export type HyperliquidExecution = "answered" | "clarification_required" | "read_only" | "unsigned_preview" | "unsupported";
 export type HyperliquidSide = "buy" | "sell" | "long" | "short";
+export type HyperliquidWatchKind = "funding_rate" | "price_or_orderbook" | "position_margin" | "open_order_state" | "market_availability";
+export type HyperliquidWatchDirection = "above" | "below" | "change" | "any";
 
 export interface HyperliquidSource {
   source: string;
@@ -217,10 +219,61 @@ export interface HyperliquidActionPreview {
   canSubmit: false;
 }
 
+export interface HyperliquidWatchDescriptor {
+  version: "matterhorn.hyperliquid.watch.v1";
+  id: string;
+  kind: HyperliquidWatchKind;
+  asset: string | null;
+  address: string | null;
+  threshold: number | null;
+  direction: HyperliquidWatchDirection;
+  createdAt: string;
+  source: HyperliquidSource;
+  warnings: string[];
+  note: string;
+}
+
+export interface HyperliquidWatchObservation {
+  label: string;
+  value: number | string | null;
+  unit: string | null;
+  source: string;
+}
+
+export interface HyperliquidWatchCheckResult {
+  version: "matterhorn.hyperliquid.watch-check.v1";
+  watchId: string;
+  status: "ok" | "triggered" | "degraded";
+  checkedAt: string;
+  observations: HyperliquidWatchObservation[];
+  alerts: string[];
+  source: HyperliquidSource;
+  warnings: string[];
+}
+
+export interface HyperliquidWatchDigest {
+  version: "matterhorn.hyperliquid.watch-digest.v1";
+  venue: "hyperliquid";
+  checkedAt: string;
+  watchCount: number;
+  triggeredCount: number;
+  degradedCount: number;
+  summaries: string[];
+  checks: HyperliquidWatchCheckResult[];
+  safety: {
+    nonCustodial: true;
+    liveSubmissionEnabled: false;
+    canSubmit: false;
+  };
+}
+
 export interface HyperliquidChatExecutionInput {
   message: string;
   address?: string | null;
   asset?: string | null;
+  watchKind?: HyperliquidWatchKind | string | null;
+  threshold?: number | string | null;
+  direction?: HyperliquidWatchDirection | string | null;
   side?: HyperliquidSide | null;
   size?: number | string | null;
   price?: number | string | null;
@@ -248,6 +301,7 @@ export type HyperliquidChatCard =
   | { kind: "hyperliquid_position_risk"; title: string; positions: HyperliquidPositionSummary[]; orders: HyperliquidOpenOrderSummary[]; warnings: string[] }
   | { kind: "hyperliquid_funding"; title: string; funding: HyperliquidFundingSnapshot; warnings: string[] }
   | { kind: "hyperliquid_orderbook"; title: string; orderbook: HyperliquidOrderbook; warnings: string[] }
+  | { kind: "hyperliquid_watch"; title: string; watch: HyperliquidWatchDescriptor; check?: HyperliquidWatchCheckResult; warnings: string[] }
   | { kind: "hyperliquid_order_preview"; title: string; preview: HyperliquidActionPreview; warnings: string[] }
   | { kind: "hyperliquid_clarification"; title: string; question: string; warnings: string[] };
 
@@ -600,6 +654,7 @@ export const hyperliquidProvider = new HyperliquidInfoProvider();
 
 export function planHyperliquidChat(input: HyperliquidChatExecutionInput): HyperliquidIntent {
   const message = input.message.toLowerCase();
+  if (/\b(watch|monitor|track|alert|notify|keep an eye)\b/.test(message)) return "monitor";
   if (/\b(funding|funding rate|premium|open interest|oi)\b/.test(message)) return "funding";
   if (/\b(order\s*book|orderbook|book|bid|ask|liquidity)\b/.test(message)) return "orderbook";
   // Close/reduce intent is an order preview even though it mentions "position".
@@ -645,6 +700,199 @@ export function extractHyperliquidOrderInput(input: HyperliquidChatExecutionInpu
     address: input.address,
     message,
     closeIntent,
+  };
+}
+
+function normalizeHyperliquidWatchKind(value: unknown): HyperliquidWatchKind | null {
+  const text = stringOrNull(value)?.toLowerCase().replace(/[\s-]+/g, "_") ?? "";
+  if (text === "funding" || text === "funding_rate") return "funding_rate";
+  if (text === "price" || text === "orderbook" || text === "order_book" || text === "price_or_orderbook") return "price_or_orderbook";
+  if (text === "margin" || text === "position" || text === "position_margin" || text === "liquidation") return "position_margin";
+  if (text === "orders" || text === "open_orders" || text === "open_order_state") return "open_order_state";
+  if (text === "availability" || text === "market_availability" || text === "listing") return "market_availability";
+  return null;
+}
+
+function inferHyperliquidWatchKind(message: string): HyperliquidWatchKind {
+  const lower = message.toLowerCase();
+  if (/\b(funding|funding rate|premium)\b/.test(lower)) return "funding_rate";
+  if (/\b(position|margin|liquidation|liq|exposure)\b/.test(lower)) return "position_margin";
+  if (/\b(open orders?|orders?|fills?)\b/.test(lower)) return "open_order_state";
+  if (/\b(available|availability|listed|listing|market exists|market status)\b/.test(lower)) return "market_availability";
+  return "price_or_orderbook";
+}
+
+function normalizeHyperliquidWatchDirection(value: unknown): HyperliquidWatchDirection {
+  const text = stringOrNull(value)?.toLowerCase() ?? "";
+  if (text === "above" || text === "over" || text === "gte") return "above";
+  if (text === "below" || text === "under" || text === "lte") return "below";
+  if (text === "change" || text === "moves" || text === "move") return "change";
+  return "any";
+}
+
+function thresholdTriggered(value: number | null, threshold: number | null, direction: HyperliquidWatchDirection): boolean {
+  if (value === null || threshold === null) return false;
+  if (direction === "below") return value <= threshold;
+  if (direction === "change") return Math.abs(value) >= Math.abs(threshold);
+  if (direction === "above") return value >= threshold;
+  return Math.abs(value) >= Math.abs(threshold);
+}
+
+export function buildHyperliquidWatchDescriptor(input: {
+  message?: string | null;
+  asset?: string | null;
+  address?: string | null;
+  watchKind?: HyperliquidWatchKind | string | null;
+  threshold?: number | string | null;
+  direction?: HyperliquidWatchDirection | string | null;
+}): HyperliquidWatchDescriptor {
+  const message = input.message ?? "";
+  const kind = normalizeHyperliquidWatchKind(input.watchKind) ?? inferHyperliquidWatchKind(message);
+  const asset = normalizeAsset(input.asset) ?? extractAsset(message);
+  const address = isValidHyperliquidAddress(input.address) ? input.address.trim() : null;
+  const threshold = numberOrNull(input.threshold);
+  const direction = normalizeHyperliquidWatchDirection(input.direction);
+  const warnings = [
+    "Read-only watch. Matterhorn checks public Hyperliquid data and never submits, signs, or auto-executes trades.",
+  ];
+  if ((kind === "funding_rate" || kind === "price_or_orderbook" || kind === "market_availability") && !asset) {
+    warnings.push("No asset was provided; checking this watch requires an asset such as BTC, ETH, SOL, or HYPE.");
+  }
+  if ((kind === "position_margin" || kind === "open_order_state") && !address) {
+    warnings.push("No public account address was provided; account-level watch checks will be degraded until one is supplied.");
+  }
+  const createdAt = new Date().toISOString();
+  const noteByKind: Record<HyperliquidWatchKind, string> = {
+    funding_rate: "Watch funding/open-interest context for a perp asset.",
+    price_or_orderbook: "Watch top-of-book price, spread, and visible depth for a perp asset.",
+    position_margin: "Watch public account margin and liquidation-risk context.",
+    open_order_state: "Watch public account open-order count and visible order state.",
+    market_availability: "Watch whether an asset appears in the public Hyperliquid market list.",
+  };
+  return {
+    version: "matterhorn.hyperliquid.watch.v1",
+    id: "hlw_" + sha256({ kind, asset, address, threshold, direction, createdAt }).slice(0, 16),
+    kind,
+    asset,
+    address,
+    threshold,
+    direction,
+    createdAt,
+    source: nowSource(),
+    warnings,
+    note: noteByKind[kind],
+  };
+}
+
+export async function checkHyperliquidWatchDescriptor(
+  watch: HyperliquidWatchDescriptor,
+  provider: HyperliquidProvider = hyperliquidProvider,
+): Promise<HyperliquidWatchCheckResult> {
+  const warnings = [...watch.warnings];
+  const observations: HyperliquidWatchObservation[] = [];
+  const alerts: string[] = [];
+  let source = nowSource();
+  try {
+    if (watch.kind === "funding_rate") {
+      if (!watch.asset) throw new Error("asset is required for funding-rate watches");
+      const funding = await provider.getFunding(watch.asset);
+      source = funding.source;
+      observations.push(
+        { label: "Funding rate", value: funding.fundingRate, unit: "hourly", source: funding.source.source },
+        { label: "Open interest", value: funding.openInterest, unit: "contracts", source: funding.source.source },
+        { label: "Mark price", value: funding.markPx, unit: "USDC", source: funding.source.source },
+      );
+      if (thresholdTriggered(funding.fundingRate, watch.threshold, watch.direction)) {
+        alerts.push(watch.asset + " funding crossed " + watch.direction + " threshold " + watch.threshold + ".");
+      }
+      warnings.push(...funding.warnings);
+    } else if (watch.kind === "price_or_orderbook") {
+      if (!watch.asset) throw new Error("asset is required for orderbook watches");
+      const orderbook = await provider.getOrderbook(watch.asset);
+      source = orderbook.source;
+      const bestBid = orderbook.bids[0]?.price ?? null;
+      const bestAsk = orderbook.asks[0]?.price ?? null;
+      const midpoint = bestBid !== null && bestAsk !== null ? Number(((bestBid + bestAsk) / 2).toFixed(8)) : null;
+      const spread = bestBid !== null && bestAsk !== null ? Number((bestAsk - bestBid).toFixed(8)) : null;
+      observations.push(
+        { label: "Best bid", value: bestBid, unit: "USDC", source: orderbook.source.source },
+        { label: "Best ask", value: bestAsk, unit: "USDC", source: orderbook.source.source },
+        { label: "Mid price", value: midpoint, unit: "USDC", source: orderbook.source.source },
+        { label: "Spread", value: spread, unit: "USDC", source: orderbook.source.source },
+      );
+      if (thresholdTriggered(midpoint, watch.threshold, watch.direction)) {
+        alerts.push(watch.asset + " mid price crossed " + watch.direction + " threshold " + watch.threshold + ".");
+      }
+      warnings.push(...orderbook.warnings);
+    } else if (watch.kind === "position_margin" || watch.kind === "open_order_state") {
+      if (!watch.address) throw new Error("public account address is required for account-level watches");
+      const account = await provider.getAccount(watch.address);
+      source = account.source;
+      const positions = watch.asset ? account.positions.filter((position) => position.asset === watch.asset) : account.positions;
+      const orders = watch.asset ? account.orders.filter((order) => order.asset === watch.asset) : account.orders;
+      const marginUsed = positions.reduce((total, position) => total + (position.marginUsed ?? 0), 0) || account.marginUsed;
+      observations.push(
+        { label: "Account value", value: account.accountValue, unit: "USDC", source: account.source.source },
+        { label: "Margin used", value: marginUsed, unit: "USDC", source: account.source.source },
+        { label: "Positions", value: positions.length, unit: "count", source: account.source.source },
+        { label: "Open orders", value: orders.length, unit: "count", source: account.source.source },
+      );
+      if (watch.kind === "position_margin" && thresholdTriggered(marginUsed, watch.threshold, watch.direction)) {
+        alerts.push("Hyperliquid margin used crossed " + watch.direction + " threshold " + watch.threshold + " USDC.");
+      }
+      if (watch.kind === "open_order_state" && thresholdTriggered(orders.length, watch.threshold, watch.direction)) {
+        alerts.push("Hyperliquid open-order count crossed " + watch.direction + " threshold " + watch.threshold + ".");
+      }
+      warnings.push(...account.warnings, ...account.liquidationRiskNotes);
+    } else {
+      const markets = await provider.listMarkets(100);
+      const found = watch.asset ? markets.some((market) => market.asset === watch.asset) : markets.length > 0;
+      source = markets[0]?.source ?? nowSource(["No Hyperliquid market list rows were returned."]);
+      observations.push(
+        { label: "Known markets", value: markets.length, unit: "count", source: source.source },
+        { label: watch.asset ? watch.asset + " available" : "Market list available", value: found ? "yes" : "no", unit: null, source: source.source },
+      );
+      if (!found) alerts.push((watch.asset ?? "Market list") + " is not currently available in the public Hyperliquid market list.");
+    }
+  } catch (err) {
+    return {
+      version: "matterhorn.hyperliquid.watch-check.v1",
+      watchId: watch.id,
+      status: "degraded",
+      checkedAt: new Date().toISOString(),
+      observations,
+      alerts: [],
+      source,
+      warnings: [...warnings, err instanceof Error ? err.message : String(err)],
+    };
+  }
+  return {
+    version: "matterhorn.hyperliquid.watch-check.v1",
+    watchId: watch.id,
+    status: alerts.length > 0 ? "triggered" : "ok",
+    checkedAt: new Date().toISOString(),
+    observations,
+    alerts,
+    source,
+    warnings: Array.from(new Set(warnings)),
+  };
+}
+
+export function buildHyperliquidWatchDigest(checks: HyperliquidWatchCheckResult[]): HyperliquidWatchDigest {
+  return {
+    version: "matterhorn.hyperliquid.watch-digest.v1",
+    venue: "hyperliquid",
+    checkedAt: new Date().toISOString(),
+    watchCount: checks.length,
+    triggeredCount: checks.filter((check) => check.status === "triggered").length,
+    degradedCount: checks.filter((check) => check.status === "degraded").length,
+    summaries: checks.map((check) => check.status + ": " + check.watchId + (check.alerts.length ? " - " + check.alerts.join("; ") : "")),
+    checks,
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      canSubmit: false,
+    },
   };
 }
 
@@ -1328,6 +1576,27 @@ export async function executeHyperliquidChatWorkflow(
     };
   }
 
+  if (intent === "monitor") {
+    const watch = buildHyperliquidWatchDescriptor(input);
+    const check = await checkHyperliquidWatchDescriptor(watch, provider);
+    const alertText = check.alerts.length > 0
+      ? " Current alerts: " + check.alerts.join(" ")
+      : " No threshold alert is triggered right now.";
+    return {
+      venue: "hyperliquid",
+      intent,
+      execution: "read_only",
+      responseText:
+        "Created a read-only Hyperliquid watch for " + watch.kind.replace(/_/g, " ")
+        + (watch.asset ? " on " + watch.asset : "")
+        + ". Matterhorn will not place or auto-execute any order from this watch."
+        + alertText,
+      cards: [buildHyperliquidWatchCard(watch, check)],
+      data: { watch, check },
+      warnings: check.warnings,
+    };
+  }
+
   const orderInput = extractHyperliquidOrderInput(input);
 
   // Close/reduce intent is account-dependent: size and side come from the live
@@ -1440,6 +1709,16 @@ export function buildHyperliquidFundingCard(funding: HyperliquidFundingSnapshot)
 
 export function buildHyperliquidOrderbookCard(orderbook: HyperliquidOrderbook): HyperliquidChatCard {
   return { kind: "hyperliquid_orderbook", title: orderbook.asset + " orderbook", orderbook, warnings: orderbook.warnings };
+}
+
+export function buildHyperliquidWatchCard(watch: HyperliquidWatchDescriptor, check?: HyperliquidWatchCheckResult): HyperliquidChatCard {
+  return {
+    kind: "hyperliquid_watch",
+    title: "Hyperliquid watch: " + watch.kind.replace(/_/g, " "),
+    watch,
+    check,
+    warnings: check?.warnings ?? watch.warnings,
+  };
 }
 
 export function buildHyperliquidOrderPreviewCard(preview: HyperliquidActionPreview): HyperliquidChatCard {

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   HyperliquidInfoProvider,
+  buildHyperliquidWatchDescriptor,
+  checkHyperliquidWatchDescriptor,
   buildHyperliquidOrderActionPayload,
   buildHyperliquidSigningHandoff,
   coerceHyperliquidHandoffReference,
@@ -116,6 +118,7 @@ describe("Hyperliquid read/preview safety", () => {
     expect(planHyperliquidChat({ message: "show BTC funding" })).toBe("funding");
     expect(planHyperliquidChat({ message: "preview buying 0.1 BTC at 65000" })).toBe("order_preview");
     expect(planHyperliquidChat({ message: "list markets" })).toBe("discover");
+    expect(planHyperliquidChat({ message: "watch BTC funding above 0.00005" })).toBe("monitor");
   });
 
   test("extracts order preview fields from natural language", () => {
@@ -193,6 +196,34 @@ describe("Hyperliquid read/preview safety", () => {
     );
     expect(result.execution).toBe("unsupported");
     expect(result.warnings.join(" ")).toContain("apiSecret");
+  });
+
+  test("creates and checks a read-only funding watch", async () => {
+    const watch = buildHyperliquidWatchDescriptor({
+      message: "watch BTC funding",
+      asset: "BTC",
+      watchKind: "funding_rate",
+      threshold: 0.00005,
+      direction: "above",
+    });
+    expect(watch.version).toBe("matterhorn.hyperliquid.watch.v1");
+    expect(watch.kind).toBe("funding_rate");
+    const check = await checkHyperliquidWatchDescriptor(watch, provider());
+    expect(check.version).toBe("matterhorn.hyperliquid.watch-check.v1");
+    expect(check.status).toBe("triggered");
+    expect(check.alerts[0]).toContain("funding crossed");
+    expect(JSON.stringify(check)).not.toMatch(/private|secret|mnemonic|seed/i);
+  });
+
+  test("chat monitor returns a shared watch card without execution terms", async () => {
+    const result = await executeHyperliquidChatWorkflow(
+      { message: "watch BTC orderbook above 64000", asset: "BTC", watchKind: "price_or_orderbook", threshold: 64000, direction: "above" },
+      { provider: provider() },
+    );
+    expect(result.intent).toBe("monitor");
+    expect(result.execution).toBe("read_only");
+    expect(result.cards[0]?.kind).toBe("hyperliquid_watch");
+    expect(JSON.stringify(result)).not.toMatch(/canSubmit\":true|private key|api secret/i);
   });
 });
 
