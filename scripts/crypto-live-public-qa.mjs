@@ -141,9 +141,11 @@ function marketSdkValidationApiCommand() {
 function marketWatchCommand(venue, action) {
   if (venue === "hyperliquid") {
     if (action === "create") return "matterhorn-work hyperliquid watch create --asset <asset> --kind funding_rate --direction change --threshold 0.01 --json";
+    if (action === "act") return "matterhorn-work hyperliquid watch act --watch-file <public-hyperliquid-watch.json> --alert-index 0 --json";
     return `matterhorn-work hyperliquid watch ${action} --json`;
   }
   if (action === "create") return "matterhorn-work polymarket watch create <public-market-id> --json";
+  if (action === "act") return "matterhorn-work polymarket watch act --watch-file <public-polymarket-watch.json> --alert-index 0 --json";
   return `matterhorn-work polymarket watch ${action} --json`;
 }
 
@@ -260,14 +262,49 @@ function validateMarketWatchEvidence(venue, evidence) {
   if (!evidence.create?.success) errors.push(`${venue} watch create did not report success.`);
   if (!evidence.check?.success) errors.push(`${venue} watch check did not report success.`);
   if (!evidence.digest?.success) errors.push(`${venue} watch digest did not report success.`);
+  if (evidence.act && evidence.act.skipped !== true) {
+    if (!evidence.act.success) errors.push(`${venue} watch act did not report success.`);
+    if (evidence.act.safety?.canSubmit !== false) errors.push(`${venue} watch act must set canSubmit:false.`);
+    if (evidence.act.safety?.liveSubmissionEnabled !== false) errors.push(`${venue} watch act must set liveSubmissionEnabled:false.`);
+  }
   const cards = [
     ...(Array.isArray(evidence.create?.cards) ? evidence.create.cards : []),
     ...(Array.isArray(evidence.check?.cards) ? evidence.check.cards : []),
+    ...(Array.isArray(evidence.act?.cards) ? evidence.act.cards : []),
   ];
   if (!cards.some((card) => card?.kind === `${venue}_watch` || card?.kind === "watch_alert")) {
     errors.push(`${venue} watch evidence did not include a watch card.`);
   }
   return errors;
+}
+
+function marketWatchHasAlert(report) {
+  const checks = Array.isArray(report?.checks)
+    ? report.checks
+    : Array.isArray(report?.digest?.checks)
+      ? report.digest.checks
+      : report?.check
+        ? [report.check]
+        : [];
+  return checks.some((check) => {
+    const status = typeof check?.status === "string" ? check.status : "unknown";
+    return status !== "ok";
+  });
+}
+
+function skippedWatchActReport(venue) {
+  return {
+    success: true,
+    skipped: true,
+    reason: "No triggered or degraded watch alert was present, so the read-only alert action route was not called.",
+    safety: {
+      readOnly: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      autoExecutes: false,
+    },
+    source: `matterhorn_${venue}_watch_act_skipped`,
+  };
 }
 
 function validateMarketExecutionChainReport(report) {
@@ -566,6 +603,10 @@ async function main() {
     const digest = create.status === "pass"
       ? await fetchJson(`${serverUrl}/api/hyperliquid/watches/digest`, token, "Hyperliquid watch digest")
       : { status: "fail", error: "Hyperliquid watch create failed before digest." };
+    const shouldAct = create.status === "pass" && check.status === "pass" && marketWatchHasAlert(check.report);
+    const act = shouldAct
+      ? await postJson(`${serverUrl}/api/hyperliquid/watches/act`, token, "Hyperliquid watch act", { watch: create.report?.watch, alertIndex: 0 })
+      : { status: "skip", report: skippedWatchActReport("hyperliquid") };
     const evidence = {
       version: "matterhorn.crypto.market-watch-evidence.v1",
       venue: "hyperliquid",
@@ -579,7 +620,8 @@ async function main() {
       create: create.report ?? null,
       check: check.report ?? null,
       digest: digest.report ?? null,
-      errors: [create.error, check.error, digest.error].filter(Boolean),
+      act: act.report ?? null,
+      errors: [create.error, check.error, digest.error, act.error].filter(Boolean),
     };
     const artifact = join(outputDir, "matterhorn-hyperliquid-watch-evidence.json");
     writeFileSync(artifact, JSON.stringify(evidence, null, 2) + "\n");
@@ -587,16 +629,19 @@ async function main() {
     stages.push({
       id: "hyperliquid_watch_evidence",
       label: "Hyperliquid watch evidence",
-      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && validationErrors.length === 0 ? "pass" : "fail",
+      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && (act.status === "pass" || act.status === "skip") && validationErrors.length === 0 ? "pass" : "fail",
       artifact,
       summary: validationErrors.length
         ? "Hyperliquid watch evidence did not satisfy the read-only contract."
-        : "Created, checked, and digested a read-only Hyperliquid watch.",
+        : shouldAct
+          ? "Created, checked, digested, and reviewed a triggered read-only Hyperliquid watch alert."
+          : "Created, checked, and digested a read-only Hyperliquid watch; no triggered/degraded alert required action review.",
       ...(validationErrors.length ? { errors: validationErrors } : {}),
       command: [
         marketWatchCommand("hyperliquid", "create"),
         marketWatchCommand("hyperliquid", "check"),
         marketWatchCommand("hyperliquid", "digest"),
+        marketWatchCommand("hyperliquid", "act"),
       ].join(" && "),
     });
   } else {
@@ -606,7 +651,12 @@ async function main() {
       fixtureMode
         ? "Fixture mode was requested, so Hyperliquid watch evidence was skipped."
         : "No server URL, client token, or Hyperliquid asset was provided, so Hyperliquid watch evidence was skipped in fixture fallback mode.",
-      marketWatchCommand("hyperliquid", "create"),
+      [
+        marketWatchCommand("hyperliquid", "create"),
+        marketWatchCommand("hyperliquid", "check"),
+        marketWatchCommand("hyperliquid", "digest"),
+        marketWatchCommand("hyperliquid", "act"),
+      ].join(" && "),
     ));
   }
 
@@ -620,6 +670,10 @@ async function main() {
     const digest = create.status === "pass"
       ? await fetchJson(`${serverUrl}/api/polymarket/watches/digest`, token, "Polymarket watch digest")
       : { status: "fail", error: "Polymarket watch create failed before digest." };
+    const shouldAct = create.status === "pass" && check.status === "pass" && marketWatchHasAlert(check.report);
+    const act = shouldAct
+      ? await postJson(`${serverUrl}/api/polymarket/watches/act`, token, "Polymarket watch act", { watch: create.report?.watch, alertIndex: 0 })
+      : { status: "skip", report: skippedWatchActReport("polymarket") };
     const evidence = {
       version: "matterhorn.crypto.market-watch-evidence.v1",
       venue: "polymarket",
@@ -633,7 +687,8 @@ async function main() {
       create: create.report ?? null,
       check: check.report ?? null,
       digest: digest.report ?? null,
-      errors: [create.error, check.error, digest.error].filter(Boolean),
+      act: act.report ?? null,
+      errors: [create.error, check.error, digest.error, act.error].filter(Boolean),
     };
     const artifact = join(outputDir, "matterhorn-polymarket-watch-evidence.json");
     writeFileSync(artifact, JSON.stringify(evidence, null, 2) + "\n");
@@ -641,16 +696,19 @@ async function main() {
     stages.push({
       id: "polymarket_watch_evidence",
       label: "Polymarket watch evidence",
-      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && validationErrors.length === 0 ? "pass" : "fail",
+      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && (act.status === "pass" || act.status === "skip") && validationErrors.length === 0 ? "pass" : "fail",
       artifact,
       summary: validationErrors.length
         ? "Polymarket watch evidence did not satisfy the read-only contract."
-        : "Created, checked, and digested a read-only Polymarket watch.",
+        : shouldAct
+          ? "Created, checked, digested, and reviewed a triggered read-only Polymarket watch alert."
+          : "Created, checked, and digested a read-only Polymarket watch; no triggered/degraded alert required action review.",
       ...(validationErrors.length ? { errors: validationErrors } : {}),
       command: [
         marketWatchCommand("polymarket", "create"),
         marketWatchCommand("polymarket", "check"),
         marketWatchCommand("polymarket", "digest"),
+        marketWatchCommand("polymarket", "act"),
       ].join(" && "),
     });
   } else {
@@ -660,7 +718,12 @@ async function main() {
       fixtureMode
         ? "Fixture mode was requested, so Polymarket watch evidence was skipped."
         : "No server URL, client token, or public Polymarket market id was provided, so Polymarket watch evidence was skipped in fixture fallback mode.",
-      marketWatchCommand("polymarket", "create"),
+      [
+        marketWatchCommand("polymarket", "create"),
+        marketWatchCommand("polymarket", "check"),
+        marketWatchCommand("polymarket", "digest"),
+        marketWatchCommand("polymarket", "act"),
+      ].join(" && "),
     ));
   }
 

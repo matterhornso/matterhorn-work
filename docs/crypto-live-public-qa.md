@@ -56,6 +56,8 @@ Input rules:
 - `--token` is only the local Matterhorn client bearer token and is not persisted into the evidence bundle.
 - Do not point this at customer funds for the pilot demo.
 
+Market watch evidence runs the safe public loop: create, check, digest, and alert action review. The alert action route is called only when a watch check returns a triggered or degraded alert; otherwise the bundle records a public `skipped` action with `canSubmit:false`, `liveSubmissionEnabled:false`, and `autoExecutes:false`.
+
 ## Attach Existing Smoke Evidence
 
 If you have already run the consolidated crypto smoke, attach its JSON output:

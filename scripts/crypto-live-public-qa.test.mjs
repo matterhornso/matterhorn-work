@@ -53,10 +53,14 @@ const hyperliquidWatchStage = payload.stages.find((stage) => stage.id === "hyper
 assert(hyperliquidWatchStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected Hyperliquid watch stage to fixture-skip without server inputs");
 assert(/matterhorn-work hyperliquid watch create/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid watch command in fixture stage");
 assert(/--kind funding_rate/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid watch kind in fixture stage");
+assert(/matterhorn-work hyperliquid watch act/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid watch act command in fixture stage");
+assert(/<public-hyperliquid-watch\.json>/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid public watch file placeholder");
 const polymarketWatchStage = payload.stages.find((stage) => stage.id === "polymarket_watch_evidence");
 assert(polymarketWatchStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected Polymarket watch stage to fixture-skip without server inputs");
 assert(/matterhorn-work polymarket watch create/.test(polymarketWatchStage?.command || ""), "expected Polymarket watch command in fixture stage");
 assert(/<public-market-id>/.test(polymarketWatchStage?.command || ""), "expected public Polymarket market id placeholder");
+assert(/matterhorn-work polymarket watch act/.test(polymarketWatchStage?.command || ""), "expected Polymarket watch act command in fixture stage");
+assert(/<public-polymarket-watch\.json>/.test(polymarketWatchStage?.command || ""), "expected Polymarket public watch file placeholder");
 assert(payload.inputs?.hyperliquidAsset === "BTC", "expected default Hyperliquid asset input");
 assert(payload.inputs?.polymarketMarketIdConfigured === false, "expected no Polymarket market id in fixture mode");
 

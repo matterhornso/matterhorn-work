@@ -178,7 +178,7 @@ matterhorn-work crypto live-public-qa \
   --strict --json
 ```
 
-This writes `matterhorn-live-public-qa.json`, `matterhorn-live-public-qa.md`, and `matterhorn-live-public-qa.sha256`. When server inputs are present, it also captures Hyperliquid watch evidence for the public asset and Polymarket watch evidence when a public market id is supplied. Missing public live inputs are marked `SKIPPED_WITH_FIXTURE_FALLBACK`, not failed. See [Live Public-Data QA](./crypto-live-public-qa.md).
+This writes `matterhorn-live-public-qa.json`, `matterhorn-live-public-qa.md`, and `matterhorn-live-public-qa.sha256`. When server inputs are present, it also captures Hyperliquid watch evidence for the public asset and Polymarket watch evidence when a public market id is supplied, including conditional read-only `watch act` evidence for triggered/degraded alerts. Missing public live inputs are marked `SKIPPED_WITH_FIXTURE_FALLBACK`, not failed. See [Live Public-Data QA](./crypto-live-public-qa.md).
 Existing smoke/evidence outputs can be attached with `--customer-ready-smoke`,
 `--market-evidence-verify`, `--bittensor-evidence-verify`, and
 `--customer-packet`.
