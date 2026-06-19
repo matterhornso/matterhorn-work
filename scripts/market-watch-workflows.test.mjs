@@ -48,8 +48,10 @@ for (const symbol of [
 for (const tool of [
   "matterhorn_hyperliquid_create_watch",
   "matterhorn_hyperliquid_check_watches",
+  "matterhorn_hyperliquid_watch_digest",
   "matterhorn_polymarket_create_watch",
   "matterhorn_polymarket_check_watches",
+  "matterhorn_polymarket_watch_digest",
 ]) {
   assert.ok(mcp.includes(`name: "${tool}"`), `MCP missing ${tool}`);
 }
