@@ -220,12 +220,18 @@ importers:
       electron-updater:
         specifier: ^6.3.9
         version: 6.8.3
+      hyperliquid:
+        specifier: ^1.7.7
+        version: 1.7.7
       jsonc-parser:
         specifier: ^3.2.1
         version: 3.3.1
       minimatch:
         specifier: 10.2.3
         version: 10.2.3
+      viem:
+        specifier: 2.52.2
+        version: 2.52.2(typescript@5.9.3)(zod@4.3.6)
       yaml:
         specifier: 2.8.3
         version: 2.8.3
@@ -233,6 +239,9 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
+      asar:
+        specifier: 3.2.0
+        version: 3.2.0
       electron:
         specifier: ^35.0.0
         version: 35.7.5
@@ -1567,22 +1576,18 @@ packages:
 
   '@opentui/core-darwin-arm64@0.1.77':
     resolution: {integrity: sha512-SNqmygCMEsPCW7xWjzCZ5caBf36xaprwVdAnFijGDOuIzLA4iaDa6um8cj3TJh7awenN3NTRsuRc7OuH42UH+g==}
-    cpu: [arm64]
     os: [darwin]
 
   '@opentui/core-darwin-x64@0.1.77':
     resolution: {integrity: sha512-/8fsa03swEHTQt/9NrGm98kemlU+VuTURI/OFZiH53vPDRrOYIYoa4Jyga/H7ZMcG+iFhkq97zIe+0Kw95LGmA==}
-    cpu: [x64]
     os: [darwin]
 
   '@opentui/core-linux-arm64@0.1.77':
     resolution: {integrity: sha512-QfUXZJPc69OvqoMu+AlLgjqXrwu4IeqcBuUWYMuH8nPTeLsVUc3CBbXdV2lv9UDxWzxzrxdS4ALPaxvmEv9lsQ==}
-    cpu: [arm64]
     os: [linux]
 
   '@opentui/core-linux-x64@0.1.77':
     resolution: {integrity: sha512-Kmfx0yUKnPj67AoXYIgL7qQo0QVsUG5Iw8aRtv6XFzXqa5SzBPhaKkKZ9yHPjOmTalZquUs+9zcCRNKpYYuL7A==}
-    cpu: [x64]
     os: [linux]
 
   '@opentui/core-win32-arm64@0.1.77':
@@ -1592,7 +1597,6 @@ packages:
 
   '@opentui/core-win32-x64@0.1.77':
     resolution: {integrity: sha512-c7GijsbvVgnlzd2murIbwuwrGbcv76KdUw6WlVv7a0vex50z6xJCpv1keGzpe0QfxrZ/6fFEFX7JnwGLno0wjA==}
-    cpu: [x64]
     os: [win32]
 
   '@opentui/core@0.1.77':
@@ -2413,6 +2417,9 @@ packages:
   '@types/fs-extra@9.0.13':
     resolution: {integrity: sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==}
 
+  '@types/glob@7.2.0':
+    resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}
+
   '@types/hast@3.0.4':
     resolution: {integrity: sha512-WPs+bbQw5aCj+x6laNGWLH3wviHtoCv/P3+otBhbOhJgG8qtpdAMlTCxLtsTWA7LH1Oh/bFCHsBn0TPS5m30EQ==}
 
@@ -2690,6 +2697,12 @@ packages:
   aria-hidden@1.2.6:
     resolution: {integrity: sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA==}
     engines: {node: '>=10'}
+
+  asar@3.2.0:
+    resolution: {integrity: sha512-COdw2ZQvKdFGFxXwX3oYh2/sOsJWJegrdJCGxnN4MZ7IULgRBp9P6665aqj9z1v9VwP4oP1hRBojRDQ//IGgAg==}
+    engines: {node: '>=10.12.0'}
+    deprecated: Please use @electron/asar moving forward.  There is no API change, just a package name change
+    hasBin: true
 
   assert-plus@1.0.0:
     resolution: {integrity: sha512-NfJ4UzBCcQGLDlQq7nHxH+tv3kyZ0hHQqF5BO6J7tNJeP5do1llPr8dZ8zHonfhAu0PHAdMkSo+8o0wxg9lZWw==}
@@ -8312,6 +8325,12 @@ snapshots:
     dependencies:
       '@types/node': 25.6.0
 
+  '@types/glob@7.2.0':
+    dependencies:
+      '@types/minimatch': 5.1.2
+      '@types/node': 25.6.0
+    optional: true
+
   '@types/hast@3.0.4':
     dependencies:
       '@types/unist': 3.0.3
@@ -8628,6 +8647,15 @@ snapshots:
   aria-hidden@1.2.6:
     dependencies:
       tslib: 2.8.1
+
+  asar@3.2.0:
+    dependencies:
+      chromium-pickle-js: 0.2.0
+      commander: 5.1.0
+      glob: 7.2.3
+      minimatch: 10.2.3
+    optionalDependencies:
+      '@types/glob': 7.2.0
 
   assert-plus@1.0.0:
     optional: true
