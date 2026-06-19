@@ -143,6 +143,38 @@ interface MatterhornWorkflowQAContract {
 }
 ```
 
+### Evidence Bundle
+
+Workflows produce customer-safe evidence bundles that capture what was requested, what public evidence was collected, which service hooks are planned, and which safety flags apply. Evidence bundles are always read-only: `canExecute: false`.
+
+```ts
+interface MatterhornWorkflowEvidenceItem {
+  id: string;
+  label: string;
+  value: string | number | boolean | null;
+  mimeType?: string;
+  public: boolean;
+  source?: string;
+  verifiedAt?: string | null;
+}
+
+interface MatterhornWorkflowEvidenceBundle {
+  version: "matterhorn.workflow.evidence-bundle.v1";
+  workflowId: string;
+  domain: string;
+  requestedOutcome: string;
+  publicEvidence: MatterhornWorkflowEvidenceItem[];
+  plannedServiceHooks: MatterhornWorkflowServiceHook[];
+  safetyFlags: string[];
+  createdAt: string;
+  source: "operator" | "agent" | "customer" | "system";
+  status: MatterhornWorkflowStatus;
+  canExecute: false;
+}
+```
+
+Evidence bundles are domain-agnostic: wellness, crypto, decentralized services, research, content, and future verticals can all use the same shape. They never contain secrets, private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+
 ## Fixture Manifests
 
 The contract ships with four fixture manifests in `packages/types/src/matterhorn-workflows.ts`:
@@ -154,6 +186,20 @@ The contract ships with four fixture manifests in `packages/types/src/matterhorn
 | `bittensor_operator` | bittensor | `live_local` | Staking/delegation previews and external-signer handoffs for TAO. |
 | `market_read_preview` | markets | `preview_only` | Read-only market data and previews for Hyperliquid/Polymarket. |
 | `decentralized_services_planner` | decentralized_services | `planned_not_live` | Plans future hosting, storage, email, payments, and identity actions. |
+
+## Evidence Bundle Fixtures
+
+The contract ships with five example evidence bundles in `packages/types/src/matterhorn-workflows.ts`:
+
+| Bundle ID | Workflow | Domain | Status | Purpose |
+| --- | --- | --- | --- | --- |
+| `wellness_customer_intake` | `wellness_creator_services` | wellness | `planned_not_live` | Safe intake summary with no PII in public evidence. |
+| `crypto_staking_decision` | `bittensor_operator` | crypto | `external_handoff_required` | Records public wallet address and external-signer requirement. |
+| `decentralized_services_plan` | `decentralized_services_planner` | decentralized_services | `planned_not_live` | Captures planned storage action and example fixture provider. |
+| `research_summary` | `research_summary` | research | `preview_only` | Public topic and source count for a generated summary. |
+| `content_publish_plan` | `content_publish` | content | `planned_not_live` | Plan for newsletter/content publish without live provider action. |
+
+All bundles set `canExecute: false` and contain no secrets or executable provider payloads.
 
 ## Workflow Catalog
 
