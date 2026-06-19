@@ -74,6 +74,7 @@
     "test:bittensor-adapter-readonly-canary": "node scripts/bittensor-adapter-readonly-canary.test.mjs",
     "test:bittensor-receipt-check": "node scripts/bittensor-receipt-check.test.mjs",
     "test:market-safety-contract": "node scripts/market-safety-contract.test.mjs",
+    "test:decentralized-services-contract": "node scripts/decentralized-services-contract.test.mjs",
     "test:market-execution-safety-gate": "node scripts/market-execution-safety-gate.test.mjs",
     "test:market-execution-readiness-api": "node scripts/market-execution-readiness-api.test.mjs",
     "test:market-execution-readiness-gate": "node scripts/market-execution-readiness-gate.test.mjs",

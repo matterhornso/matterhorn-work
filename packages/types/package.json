@@ -27,6 +27,11 @@
       "types": "./src/markets.ts",
       "development": "./src/markets.ts",
       "default": "./src/markets.ts"
+    },
+    "./decentralized-services": {
+      "types": "./src/decentralized-services.ts",
+      "development": "./src/decentralized-services.ts",
+      "default": "./src/decentralized-services.ts"
     }
   },
   "files": [
