@@ -105,6 +105,7 @@ pnpm test:unified-crypto-shared-card-contract
 pnpm test:agent-crypto-operator-loop
 pnpm test:market-execution-safety-gate
 pnpm test:decentralized-services-contract
+pnpm test:decentralized-services-chat-plan
 pnpm test:market-submit-sign-contract-phase0
 pnpm test:market-sign-request-phase1
 pnpm test:market-artifact-validation-phase2
@@ -175,6 +176,7 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 | Capability | HTTP | MCP | CLI | Verification |
 | --- | --- | --- | --- | --- |
 | Decentralized services capability discovery | `GET /api/services/capabilities` returns `matterhorn.services.capability-catalog.v1` with future-contract discovery fixtures and optional `capability` filtering; no live provider execution | `matterhorn_services_get_capabilities` reads the same future-contract catalog for Codex, Claude Code, Cursor, Claude Desktop, and other MCP clients | `matterhorn-work services capabilities --json`; optional `--capability hosting|storage|email|payments|identity` | `test:decentralized-services-contract`, `test:decentralized-services-operator-helper`, `test:agent-control-mcp`, `matterhorn-work-server build` |
+| Decentralized services chat planning | `POST /api/services/chat/plan` returns `matterhorn.services.chat-plan.v1` with future-contract service-plan cards for hosting, storage, email, payments, and identity/access; no live provider execution | `matterhorn_services_chat_plan` lets MCP clients plan service workflows from ordinary chat while rejecting secret-shaped inputs | `matterhorn-work services chat --message "..." --json`; optional `--capability hosting|storage|email|payments|identity` | `test:decentralized-services-chat-plan`, `test:decentralized-services-operator-helper`, `test:agent-control-mcp`, `matterhorn-work-server build` |
 
 - Defines future provider-neutral contracts for hosting, storage, email, payments, and identity.
 - No live providers are wired yet; all manifests default to `status: "future_contract"` and `liveExecutionEnabled: false`.
