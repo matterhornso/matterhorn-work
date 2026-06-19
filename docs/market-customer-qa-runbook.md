@@ -102,7 +102,58 @@ Expected result:
 - Hyperliquid handoff includes `externalSignerOnly: true`, `canSubmit: false`, `previewSha256`, `handoffSha256`, and validation-gated signing payload metadata where available.
 - Polymarket market search returns active read-only markets. Pick one market id before previewing a Polymarket order.
 
-## 5. Receipt Evidence Smoke
+## 5. Testnet Sign-Request And Redacted Artifact Validation Smoke
+
+This step demonstrates the future external-signer chain without giving
+Matterhorn a signature or a submit path. Use testnet/operator-owned examples
+only. Do not paste raw signatures, signed payloads, API secrets, private keys,
+or real customer funds.
+
+```bash
+matterhorn-work hyperliquid sign-request \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --asset BTC --side buy --size 0.001 --price 65000 \
+  --execution-mode testnet_external_signer \
+  --json > /tmp/matterhorn-hyperliquid-sign-request.json
+
+matterhorn-work hyperliquid validate-artifact \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --sign-request-file /tmp/matterhorn-hyperliquid-sign-request.json \
+  --artifact-file ./redacted-hyperliquid-artifact.json \
+  --json
+
+matterhorn-work polymarket sign-request \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --market-id "<testnet-market-id>" --side yes --amount-usdc 1 \
+  --execution-mode testnet_external_signer \
+  --json > /tmp/matterhorn-polymarket-sign-request.json
+
+matterhorn-work polymarket validate-artifact \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --sign-request-file /tmp/matterhorn-polymarket-sign-request.json \
+  --artifact-file ./redacted-polymarket-artifact.json \
+  --json
+```
+
+Expected result:
+
+- Sign requests use `matterhorn.market.external-sign-request.v1`,
+  `executionMode: testnet_external_signer`, `canSubmit: false`,
+  `liveSubmissionEnabled: false`, and `submitSignedAllowedByContract: false`.
+- Artifact validation accepts only
+  `matterhorn.market.redacted-signed-artifact-envelope.v1` public/redacted
+  metadata and returns `matterhorn.market.artifact-validation.v1`.
+- Accepted artifact validation may emit a public audit receipt candidate, but it
+  is not exchange submission evidence.
+- hash mismatches between the artifact and sign request fail.
+- Any raw `signature`, `rawSignature`, `signedPayload`, `privateKey`, or
+  `apiSecret` field fails immediately.
+
+## 6. Receipt Evidence Smoke
 
 Do not paste raw signatures or signed payloads. Import only public order id / tx hash / status evidence.
 
@@ -144,7 +195,7 @@ matterhorn-work crypto evidence-bundle \
 If no external-signer receipt is part of the demo, omit `--receipt-check` and
 `--require-receipt-check`.
 
-## 6. UI/UX Checks
+## 7. UI/UX Checks
 
 Use the desktop app or web UI and capture screenshots for:
 
@@ -155,7 +206,7 @@ Use the desktop app or web UI and capture screenshots for:
 - Handoff cards: show external-signer language, hashes, expiry, and `canSubmit: false`.
 - Error states: missing parameters ask one clear clarification question; secret-shaped input is rejected without echoing the secret value.
 
-## 7. Security Red Lines
+## 8. Security Red Lines
 
 Fail the QA run if any of these happen:
 
@@ -163,10 +214,14 @@ Fail the QA run if any of these happen:
 - Matterhorn stores or logs a secret value.
 - A Hyperliquid or Polymarket route submits an order.
 - A preview or handoff reports `canSubmit: true`.
+- A sign request or artifact validation reports `canSubmit: true` or
+  `submitSignedAllowedByContract: true`.
+- A redacted artifact validation accepts raw signatures, signed payloads, API
+  secrets, private keys, or a hash mismatch.
 - A Polymarket compliance-blocked preview includes executable price/size/share fields.
 - A receipt mismatch is accepted as matching the original handoff.
 
-## 8. Evidence To Report Back
+## 9. Evidence To Report Back
 
 Return a short report with:
 
