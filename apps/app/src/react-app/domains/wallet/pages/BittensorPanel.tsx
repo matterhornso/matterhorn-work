@@ -32,6 +32,9 @@ const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const CUSTOMER_DEMO_COMMANDS = {
   readiness: "matterhorn-work crypto readiness --json",
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
+  desktopInstallGuide: "docs/desktop-beta-first-run.md",
+  desktopTesterArtifact: "pnpm electron:tester-artifact -- --output-dir \"$HOME/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD)\" --json",
+  desktopBetaDoctor: "pnpm desktop:beta-doctor -- --artifact-dir \"$HOME/Desktop/matterhorn-work-build-$(git rev-parse --short=8 HEAD)\" --strict --json",
   executionReadiness: "matterhorn-work crypto execution-readiness --json",
   executionReadinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/market-execution-readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
   executionChain: "matterhorn-work crypto execution-chain --json",
@@ -937,6 +940,39 @@ export default function BittensorPanel() {
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
                     <BrainCircuit className="size-3.5" />
                     Crypto Chat
+                  </Button>
+                </div>
+              </div>
+            </Section>
+
+            <Section title="Desktop beta" icon={<ExternalLink className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  First-run tester path: build an unsigned local DMG/ZIP, run the desktop beta doctor, then capture install, launch, readiness, and safety evidence before a customer session.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <p className="text-xs font-semibold text-dls-text">Bittensor: Beta-ready</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Read, preview, watches, receipts, and external-signer handoff.</p>
+                  </div>
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <p className="text-xs font-semibold text-dls-text">Hyperliquid/Polymarket: Preview only</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
+                  </div>
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <p className="text-xs font-semibold text-dls-text">Services: Workflow/future hooks</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Wellness and decentralized services do not run live payments, email, storage, or access control.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("desktopInstallGuide")}>
+                    {copiedCustomerCommand === "desktopInstallGuide" ? "Copied" : "Open install guide"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("desktopTesterArtifact")}>
+                    {copiedCustomerCommand === "desktopTesterArtifact" ? "Copied" : "Copy tester build"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("desktopBetaDoctor")}>
+                    {copiedCustomerCommand === "desktopBetaDoctor" ? "Copied" : "Copy doctor"}
                   </Button>
                 </div>
               </div>

@@ -127,6 +127,9 @@ jobs:
       - name: Validate Electron local tester artifact helper
         run: pnpm test:electron-local-tester-artifact
 
+      - name: Validate desktop beta first-run readiness
+        run: pnpm test:desktop-beta-first-run
+
       - name: Run e2e tests
         run: pnpm --filter @matterhorn-work/app test:e2e
 
