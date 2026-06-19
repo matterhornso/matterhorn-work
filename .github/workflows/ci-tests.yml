@@ -124,6 +124,9 @@ jobs:
       - name: Validate Electron packaging source contract
         run: pnpm test:electron-packaging-sources
 
+      - name: Validate Electron local tester artifact helper
+        run: pnpm test:electron-local-tester-artifact
+
       - name: Run e2e tests
         run: pnpm --filter @matterhorn-work/app test:e2e
 
