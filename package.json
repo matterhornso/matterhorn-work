@@ -76,6 +76,7 @@
     "test:market-safety-contract": "node scripts/market-safety-contract.test.mjs",
     "test:decentralized-services-contract": "node scripts/decentralized-services-contract.test.mjs",
     "test:decentralized-services-operator-helper": "node scripts/decentralized-services-operator-helper.test.mjs",
+    "test:matterhorn-workflow-contract": "node scripts/matterhorn-workflow-contract.test.mjs",
     "test:decentralized-services-chat-plan": "node scripts/decentralized-services-chat-plan.test.mjs",
     "test:market-execution-safety-gate": "node scripts/market-execution-safety-gate.test.mjs",
     "test:market-execution-readiness-api": "node scripts/market-execution-readiness-api.test.mjs",

@@ -32,6 +32,11 @@
       "types": "./src/decentralized-services.ts",
       "development": "./src/decentralized-services.ts",
       "default": "./src/decentralized-services.ts"
+    },
+    "./matterhorn-workflows": {
+      "types": "./src/matterhorn-workflows.ts",
+      "development": "./src/matterhorn-workflows.ts",
+      "default": "./src/matterhorn-workflows.ts"
     }
   },
   "files": [
