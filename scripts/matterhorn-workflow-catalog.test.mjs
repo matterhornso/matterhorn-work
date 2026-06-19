@@ -24,6 +24,7 @@ for (const phrase of [
   "market_read_preview",
   "decentralized_services_planner",
   "matterhorn-work workflows catalog --json",
+  "matterhorn-work workflows prompts --workflow wellness_creator_workflow --json",
   "pnpm test:matterhorn-workflow-catalog",
 ]) {
   assert.ok(helper.includes(phrase) || contractDoc.includes(phrase), `helper/doc missing phrase: ${phrase}`);
@@ -31,6 +32,7 @@ for (const phrase of [
 
 for (const phrase of [
   "matterhorn-work workflows catalog",
+  "workflows prompts",
   "workflows catalog",
   "runWorkflows",
   "assertNoWorkflowSecrets",
@@ -106,6 +108,31 @@ assert.equal(promptResult.status, 0, `workflow filter should exit 0. stderr=${pr
 const promptCatalog = JSON.parse(promptResult.stdout);
 assert.deepEqual(promptCatalog.workflows.map((workflow) => workflow.workflowId), ["wellness_creator_workflow"]);
 assert.equal(promptCatalog.workflows[0].canonicalPrompts.length, 7);
+
+const promptPackResult = spawnSync(process.execPath, [
+  "scripts/matterhorn-workflow-catalog.mjs",
+  "--prompt-pack",
+  "--workflow",
+  "wellness_creator_workflow",
+  "--json",
+], {
+  encoding: "utf8",
+  maxBuffer: 5 * 1024 * 1024,
+});
+assert.equal(promptPackResult.status, 0, `prompt pack should exit 0. stderr=${promptPackResult.stderr}`);
+const promptPack = JSON.parse(promptPackResult.stdout);
+assert.equal(promptPack.version, "matterhorn.workflow.prompt-pack.v1");
+assert.equal(promptPack.status, "catalog_only");
+assert.equal(promptPack.safety.promptPackOnly, true);
+assert.equal(promptPack.safety.noProviderExecution, true);
+assert.equal(promptPack.safety.canSubmit, false);
+assert.equal(promptPack.safety.liveExecutionEnabled, false);
+assert.deepEqual(promptPack.workflows.map((workflow) => workflow.workflowId), ["wellness_creator_workflow"]);
+assert.equal(promptPack.workflows[0].prompts.length, 7);
+assert.equal(promptPack.workflows[0].prompts[0].step, 1);
+assert.match(promptPack.workflows[0].prompts[0].prompt, /Start a new wellness program/);
+assert.equal(promptPack.workflows[0].safety.acceptsSecrets, false);
+assert.equal(promptPack.workflows[0].safety.noProviderExecution, true);
 
 const categoryResult = spawnSync(process.execPath, [
   "scripts/matterhorn-workflow-catalog.mjs",
