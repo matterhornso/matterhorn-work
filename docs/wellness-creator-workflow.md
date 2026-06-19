@@ -60,8 +60,17 @@ How the program *would* be delivered through Matterhorn services. **Every hook i
 - Artifact: delivery plan describing the four planned hooks (see "Planned-Not-Live Service Hooks" below).
 
 ### 6. Customer management
+Ongoing client retention, deepened with a recurring progress check-in.
 - Prompt: `Set up customer management: follow-up cadence, feedback form, and renewal/up-sell prompts`
-- Artifacts: **follow-up cadence, feedback form, renewal / up-sell prompts.**
+- Artifacts: **follow-up cadence, feedback form, renewal / up-sell prompts, client progress check-in.**
+
+**Follow-up cadence** — Day 1 welcome → Week 1 first check-in → Week 2 adjust → Week 4 progress review and next-block options.
+
+**Feedback form** — what went well, what was hard, energy (1–5), adherence (%), requests for next block. Collected as a standard artifact; no email is sent.
+
+**Renewal / up-sell prompts** — offer a renewal at the end of the block; suggest an add-on (nutrition template, extra check-ins, a group class). All pricing is a draft only — payments are planned, not live, and no payment is processed.
+
+**Client progress check-in** — a reusable weekly check-in, with a reproducible reference at [`docs/wellness-creator-workflow/progress-check-in.md`](./wellness-creator-workflow/progress-check-in.md). It tracks sessions, adherence, energy, sleep, soreness, optional self-reported bodyweight, wins, and blockers, with coach adjustments for the next week. It is **educational progress tracking only, not a medical assessment** — pain, injury, or health concerns are referred to a qualified professional.
 
 ### 7. MCP / artifact export
 How the workflow runs through **Matterhorn Work, Claude Code, Codex, or a shared artifact output**, so the creator re-runs it for the next client.
@@ -91,6 +100,27 @@ Beyond the seven stage prompts, the same pattern handles ad-hoc, role-specific r
 | `Draft a yoga class plan for lower-back mobility` | General mobility-focused yoga class plan | General wellness education only, not medical care. Refer pain or injury to a qualified professional. |
 | `Create a dietician-safe meal planning template without medical claims` | General healthy-eating meal-planning template | General healthy-eating information, not a clinical or therapeutic diet. Not medical advice, diagnosis, or treatment. |
 | `Prepare a future paid program page, but do not process payment` | Draft paid program page with placeholder pricing only | Payments are planned, not live; no payment is processed and no funds move. |
+
+## Any Prompt, One Workflow (Free-Form Support)
+
+The canonical and example prompts are **starting points, not a closed list.** A creator can ask for **anything** in plain chat — a training plan, a diet plan, a custom strength block, a mobility routine, a habit or recovery plan, a client handout, "whatever they want to create" — and the workflow produces a client-safe artifact with the mandatory disclaimers. This is the Web2 / real-world use case of Matterhorn Work: ordinary service professionals doing real work through chat.
+
+Any free-form request is routed to the closest artifact type and always handled within the same safety envelope:
+
+- Every generated artifact carries the mandatory non-medical disclaimer.
+- Educational only — no diagnosis, no prescription, no treatment, no guaranteed outcome.
+- No live payment, email, hosting, storage, or access action; those hooks stay planned, not live.
+- The workflow never requests or accepts secrets, keys, signatures, signed payloads, or wallet exports — secret-shaped input is refused and not echoed.
+- Requests that cross into clinical care are refused and referred to a qualified professional.
+
+The offline helper exposes this routing for review:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --route "Build me a custom 6-week powerlifting peaking block"
+node scripts/wellness-creator-workflow.mjs --route "Draft a vegetarian meal-planning template"
+```
+
+Each returns the routed artifact type plus `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`, and `acceptsSecrets: false`. Secret-shaped input returns `refused: true` and never echoes the input.
 
 ## Safety Disclaimers (Mandatory)
 

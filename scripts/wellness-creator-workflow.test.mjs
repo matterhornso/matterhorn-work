@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { routeFreeformPrompt } from "./wellness-creator-workflow.mjs";
 
 const DOC_PATH = "docs/wellness-creator-workflow.md";
 const HANDOFF_PATH = "docs/handoffs/hermes-wellness-creator-workflow-qa.md";
@@ -279,5 +280,105 @@ assert.ok(
   handoff.includes("Reusable Pattern Black-Box Prompts"),
   "Handoff should include the reusable-pattern black-box prompts",
 );
+
+// 19. Any prompt, one workflow — free-form support is declared and safe.
+assert.equal(contract.freeformSupport?.acceptsAnyPrompt, true, "Workflow should accept any prompt");
+assert.equal(contract.freeformSupport?.notLimitedToCanonical, true, "Workflow should not be limited to canonical prompts");
+assert.ok(
+  Array.isArray(contract.freeformSupport?.guardrails) && contract.freeformSupport.guardrails.length >= 4,
+  "Free-form support should declare safety guardrails",
+);
+const categoriesText = (contract.freeformSupport?.exampleRequestCategories || []).join(" | ").toLowerCase();
+for (const cat of ["training", "diet", "strength", "yoga"]) {
+  assert.ok(categoriesText.includes(cat), `Free-form categories should mention: ${cat}`);
+}
+
+// 19a. THOROUGH: a wide spread of arbitrary trainer prompts must all route to a
+//      client-safe artifact requiring a disclaimer, with no payment/email/secret.
+const PROMPT_SWEEP = [
+  "Create a 4-week beginner strength plan",
+  "Build me a custom 6-week powerlifting peaking block",
+  "Design a 30-minute beginner kettlebell circuit",
+  "Make a hypertrophy upper/lower split",
+  "Write a vegetarian high-protein meal-planning template",
+  "Draft a cutting diet plan for general fat loss",
+  "Plan a restorative yoga class for stress and sleep",
+  "Draft a yoga class plan for lower-back mobility",
+  "Give me a daily mobility and stretching routine",
+  "Create a marathon base-building running plan",
+  "Build a beginner cycling endurance plan",
+  "Give me a daily habit and accountability plan",
+  "Make a sleep and recovery routine",
+  "Turn this into a client PDF packet",
+  "Prepare an offer page and onboarding questionnaire",
+  "Create this week's client progress check-in",
+  "Whatever you think a new client needs in week one",
+  "Surprise me with something useful for my clients",
+  "",
+  "asdf qwer custom thing",
+];
+for (const prompt of PROMPT_SWEEP) {
+  const routed = routeFreeformPrompt(prompt);
+  assert.equal(routed.safe, true, `Free-form prompt should be safe: "${prompt}"`);
+  assert.equal(routed.disclaimerRequired, true, `Free-form prompt should require a disclaimer: "${prompt}"`);
+  assert.equal(routed.refused, false, `Normal prompt should not be refused: "${prompt}"`);
+  assert.ok(routed.artifactType, `Free-form prompt should route to an artifact type: "${prompt}"`);
+  assert.equal(routed.paymentProcessed, false, `Free-form prompt must not process payment: "${prompt}"`);
+  assert.equal(routed.emailSent, false, `Free-form prompt must not send email: "${prompt}"`);
+  assert.equal(routed.acceptsSecrets, false, `Free-form prompt must not accept secrets: "${prompt}"`);
+}
+
+// 19b. Secret-shaped inputs are refused and never echoed back.
+const SECRET_SWEEP = [
+  "my seed phrase is correct horse battery staple apple river",
+  "here is my private key 0x" + "a".repeat(40),
+  "use this api secret sk_live_supersecretvalue",
+  "wallet export: paste the mnemonic below",
+];
+for (const secret of SECRET_SWEEP) {
+  const routed = routeFreeformPrompt(secret);
+  assert.equal(routed.refused, true, `Secret-shaped input should be refused: "${secret}"`);
+  assert.equal(routed.artifactType, null, "Refused routing should produce no artifact type");
+  assert.equal(routed.acceptsSecrets, false, "Refused routing must not accept secrets");
+  assert.equal(JSON.stringify(routed).includes(secret), false, "Refused routing must not echo the secret input");
+}
+
+// 20. Customer-management deepening + reproducible progress check-in fixture.
+const cm = contract.customerManagement;
+assert.ok(cm, "Contract should include a customerManagement block");
+assert.ok(Array.isArray(cm.followUpCadence) && cm.followUpCadence.length >= 3, "followUpCadence should have >=3 touchpoints");
+assert.ok(cm.feedbackForm, "customerManagement should include a feedback form");
+assert.ok(Array.isArray(cm.renewalUpsell) && cm.renewalUpsell.length >= 1, "customerManagement should include renewal/up-sell prompts");
+assert.ok(cm.progressCheckIn?.fixture, "customerManagement should reference a progress check-in fixture");
+
+const PROGRESS_FIXTURE = cm.progressCheckIn.fixture;
+assert.equal(PROGRESS_FIXTURE, "docs/wellness-creator-workflow/progress-check-in.md", "Progress fixture path should be stable");
+assert.ok(existsSync(PROGRESS_FIXTURE), `Progress check-in fixture should exist: ${PROGRESS_FIXTURE}`);
+const progressFixture = readFileSync(PROGRESS_FIXTURE, "utf8");
+assert.ok(
+  progressFixture.includes("not medical advice, diagnosis, or treatment"),
+  "Progress check-in fixture should carry the non-medical disclaimer",
+);
+// The "Client progress check-in" artifact type is part of the customer-management stage.
+const cmStage = contract.stages.find((s) => s.id === "customer-management");
+assert.ok(cmStage.artifacts.includes("Client progress check-in"), "Customer-management stage should include the progress check-in artifact");
+
+// 20a. No medical / live-service / secret strings in the progress fixture.
+const progressText = progressFixture.toLowerCase();
+for (const phrase of [
+  ...["we diagnose", "prescribe a dose", "cure your", "will cure", "guaranteed weight loss", "guaranteed results", "dosage of"],
+  ...["storage is live", "hosting is live", "payments are live", "payment is live", "email sending is live", "token gating is live"],
+  ...["private key", "seed phrase", "api secret", "mnemonic", "wallet export", "signed payload"],
+]) {
+  assert.equal(progressText.includes(phrase), false, `Progress fixture must not contain: "${phrase}"`);
+}
+
+// 21. Doc + handoff carry the free-form and customer-management sections.
+for (const phrase of ["Any Prompt, One Workflow", "Free-Form Support", "client progress check-in", "progress-check-in.md"]) {
+  assert.ok(doc.includes(phrase), `Doc should include: ${phrase}`);
+}
+for (const phrase of ["Free-Form Prompt Tests", "Customer Management & Progress Check-In Tests"]) {
+  assert.ok(handoff.includes(phrase), `Handoff should include: ${phrase}`);
+}
 
 console.log("Wellness Creator Workflow gate passed.");
