@@ -165,6 +165,7 @@ for (const required of [
   "pnpm test:agent-control-mcp",
   "pnpm test:crypto-readiness-api",
   "pnpm test:customer-readiness-ui",
+  "pnpm test:market-sign-artifact-routes",
   "matterhorn-work crypto customer-smoke --dry-run --json",
   "--json-output /tmp/matterhorn-crypto-smoke.json",
   "canSubmit: false",
