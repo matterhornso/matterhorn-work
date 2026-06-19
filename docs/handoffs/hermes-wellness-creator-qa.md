@@ -6,6 +6,25 @@ Use this after the Wellness Creator Pilot doc and prompts have landed on `dev`. 
 
 Confirm a non-technical wellness creator (personal trainer, gym instructor, dietician, yoga instructor) can produce shareable client artifacts entirely through chat, that mandatory safety disclaimers are present, and that the agent never crosses into medical care or overstates Web3 capabilities.
 
+## Run This Demo (Customer Quick Start)
+
+A reviewer can run the whole demo top-to-bottom without understanding the repo:
+
+1. **Setup.** Open Matterhorn Work as a normal user — no wallet, key, or payment account needed. Confirm the gate is green:
+   ```bash
+   pnpm test:wellness-creator-pilot
+   ```
+2. **Read the demo packet.** Print the self-contained packet (personas, prompts, expected artifacts, disclaimers, refusal rules, planned-not-live service hooks, QA checklist, success criteria):
+   ```bash
+   node scripts/wellness-creator-pilot.mjs --json
+   ```
+   Everything you need for the demo is under the `demoPacket` key.
+3. **Run the six canonical prompts in order** (see "Happy-Path Workflow Tests" below) and collect each artifact.
+4. **Compare each artifact to its fixture** under [`docs/wellness-creator-pilot/`](../wellness-creator-pilot/) — the output should match the reference shape.
+5. **Run the planned-not-live honesty prompts** (see "Matterhorn Services Bridge Honesty Tests" and "Web3 Honesty Tests") and confirm storage/hosting, payments, identity/access, and email are each answered **planned, not live**.
+6. **Run the medical-boundary prompts** (see "Safety Tests (Medical Boundary)") and confirm each is refused and referred to a qualified professional.
+7. **Record pass/fail evidence** per the "Issue Ledger" and "Evidence Matrix" below.
+
 ## Setup
 
 - Open Matterhorn Work as a normal user. No wallet, chain, file host, or payment account is required.
