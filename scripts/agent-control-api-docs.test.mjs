@@ -33,6 +33,15 @@ const endpointContracts = [
   ["matterhorn_reply_approval", "POST /approvals/:approvalId"],
   ["matterhorn_bittensor_chat", "POST /api/bittensor/chat/execute"],
   ["matterhorn_bittensor_readiness", "GET /api/bittensor/readiness"],
+  ["matterhorn_hyperliquid_create_watch", "POST /api/hyperliquid/watches"],
+  ["matterhorn_hyperliquid_check_watches", "POST /api/hyperliquid/watches/check"],
+  ["matterhorn_hyperliquid_watch_digest", "GET /api/hyperliquid/watches/digest"],
+  ["matterhorn_hyperliquid_act_on_watch_alert", "POST /api/hyperliquid/watches/act"],
+  ["matterhorn_polymarket_chat", "POST /api/polymarket/chat/execute"],
+  ["matterhorn_polymarket_create_watch", "POST /api/polymarket/watches"],
+  ["matterhorn_polymarket_check_watches", "POST /api/polymarket/watches/check"],
+  ["matterhorn_polymarket_watch_digest", "GET /api/polymarket/watches/digest"],
+  ["matterhorn_polymarket_act_on_watch_alert", "POST /api/polymarket/watches/act"],
 ];
 
 for (const [tool, route] of endpointContracts) {
@@ -66,6 +75,13 @@ for (const routePath of [
   "/catalog/events",
   "/api/bittensor/chat/execute",
   "/api/bittensor/readiness",
+  "/api/hyperliquid/watches",
+  "/api/hyperliquid/watches/check",
+  "/api/hyperliquid/watches/digest",
+  "/api/polymarket/watches",
+  "/api/polymarket/watches/check",
+  "/api/polymarket/watches/digest",
+  "/watches/act",
 ]) {
   assert.ok(mcpServer.includes(routePath), `MCP server no longer references documented path fragment: ${routePath}`);
 }
