@@ -72,6 +72,45 @@ export type DecentralizedServicesCapabilityCatalog = {
   references: string[];
 };
 
+export type DecentralizedServicesChatPlanInput = {
+  message: string;
+  capability?: string | null;
+};
+
+export type DecentralizedServicesChatPlan = {
+  success: true;
+  version: "matterhorn.services.chat-plan.v1";
+  status: "future_contract";
+  execution: "planned_not_live";
+  message: string;
+  responseText: string;
+  matchedCapabilities: DecentralizedServiceCapability[];
+  requiresClarification: boolean;
+  clarificationQuestion: string | null;
+  safety: DecentralizedServicesCapabilityCatalog["safety"];
+  cards: Array<{
+    kind: "service_plan";
+    version: "matterhorn.services.card.v1";
+    title: string;
+    capability: DecentralizedServiceCapability;
+    status: "future_contract";
+    summary: string;
+    providerExamples: string[];
+    outputArtifacts: string[];
+    supportedUserIntents: string[];
+    nextSteps: string[];
+    safety: {
+      canExecute: false;
+      liveExecutionEnabled: false;
+      acceptsSecrets: false;
+      plannedNotLive: true;
+    };
+  }>;
+  nextActions: string[];
+  warnings: string[];
+  catalog: DecentralizedServicesCapabilityCatalog;
+};
+
 const FORBIDDEN_CREDENTIAL_KEY_PATTERN =
   /(?:seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|wallet[-_]?export)/i;
 
@@ -240,6 +279,24 @@ export function findForbiddenDecentralizedServiceQueryKey(keys: Iterable<string>
   return null;
 }
 
+export function findForbiddenDecentralizedServiceInput(value: unknown, path = "body"): string | null {
+  if (!value || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const nested = findForbiddenDecentralizedServiceInput(value[index], `${path}[${index}]`);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+    const nextPath = `${path}.${key}`;
+    if (FORBIDDEN_CREDENTIAL_KEY_PATTERN.test(key)) return nextPath;
+    const nested = findForbiddenDecentralizedServiceInput(nestedValue, nextPath);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 export function buildDecentralizedServicesCapabilityCatalog(input: {
   capability?: string | null;
 } = {}): DecentralizedServicesCapabilityCatalog {
@@ -284,5 +341,97 @@ export function buildDecentralizedServicesCapabilityCatalog(input: {
       "docs/handoffs/kimi-decentralized-services-contract.md",
       "packages/types/src/decentralized-services.ts",
     ],
+  };
+}
+
+const CAPABILITY_KEYWORDS: Record<DecentralizedServiceCapability, string[]> = {
+  hosting: ["host", "hosting", "deploy", "deployment", "publish", "website", "site", "frontend", "domain", "landing"],
+  storage: ["store", "storage", "upload", "file", "artifact", "pin", "cid", "ipfs", "arweave", "backup"],
+  email: ["email", "newsletter", "mail", "message", "notify", "notification", "transactional", "customer update"],
+  payments: ["payment", "payments", "pay", "paid", "charge", "checkout", "invoice", "subscription", "sell", "purchase", "pricing"],
+  identity: ["identity", "login", "access", "gate", "gated", "membership", "member", "wallet gate", "token gate", "verify"],
+};
+
+function classifyServiceCapabilities(message: string, capability?: string | null): DecentralizedServiceCapability[] {
+  const explicit = capability?.trim().toLowerCase() || "";
+  if (explicit) {
+    if (!isDecentralizedServiceCapability(explicit)) {
+      throw new Error(`Unknown decentralized service capability: ${explicit}`);
+    }
+    return [explicit];
+  }
+  const normalized = message.toLowerCase();
+  const matched = CAPABILITIES
+    .filter((item) => CAPABILITY_KEYWORDS[item.capability].some((keyword) => normalized.includes(keyword)))
+    .map((item) => item.capability);
+  if (matched.length) return matched;
+  if (/\b(service|services|web3|decentralized|matterhorn)\b/i.test(message)) {
+    return [...DECENTRALIZED_SERVICE_CAPABILITIES];
+  }
+  return [];
+}
+
+export function planDecentralizedServicesChat(input: DecentralizedServicesChatPlanInput): DecentralizedServicesChatPlan {
+  const message = input.message.trim();
+  if (!message) {
+    throw new Error("message is required");
+  }
+  const matchedCapabilities = classifyServiceCapabilities(message, input.capability);
+  const selectedCapabilities = matchedCapabilities.length ? matchedCapabilities : [...DECENTRALIZED_SERVICE_CAPABILITIES];
+  const catalog = buildDecentralizedServicesCapabilityCatalog(
+    matchedCapabilities.length === 1 ? { capability: matchedCapabilities[0] } : {},
+  );
+  const selectedCatalogItems = catalog.capabilities.filter((item) =>
+    selectedCapabilities.includes(item.capability),
+  );
+  const requiresClarification = matchedCapabilities.length === 0;
+  const capabilityLabels = selectedCatalogItems.map((item) => item.label).join(", ");
+  return {
+    success: true,
+    version: "matterhorn.services.chat-plan.v1",
+    status: "future_contract",
+    execution: "planned_not_live",
+    message,
+    responseText: requiresClarification
+      ? "Matterhorn can plan hosting, storage, email, payments, and identity/access workflows, but these service rails are future-contract only. Which capability should I plan first?"
+      : `Matterhorn can plan this ${capabilityLabels} workflow, but live service execution is not enabled yet. I can show the future provider contract, required context, safety gates, and customer-facing artifact path.`,
+    matchedCapabilities,
+    requiresClarification,
+    clarificationQuestion: requiresClarification
+      ? "Should I plan hosting, storage, email, payments, identity/access, or a combined workflow?"
+      : null,
+    safety: catalog.safety,
+    cards: selectedCatalogItems.map((item) => ({
+      kind: "service_plan",
+      version: "matterhorn.services.card.v1",
+      title: `${item.label} plan`,
+      capability: item.capability,
+      status: "future_contract",
+      summary: item.unsupportedLiveMessage,
+      providerExamples: item.futureProviderExamples,
+      outputArtifacts: item.outputArtifacts,
+      supportedUserIntents: item.userIntents,
+      nextSteps: [
+        "Collect only public/redacted requirements for the desired workflow.",
+        "Render a preview with consequence text, cost estimate, and required confirmation.",
+        "Use external provider or signer handoff only after a future security review enables it.",
+      ],
+      safety: {
+        canExecute: false,
+        liveExecutionEnabled: false,
+        acceptsSecrets: false,
+        plannedNotLive: true,
+      },
+    })),
+    nextActions: [
+      "Use this plan as product guidance only; do not call a live provider.",
+      "Keep secrets, private keys, raw signatures, and provider credentials out of chat and API payloads.",
+      "Run pnpm test:decentralized-services-chat-plan before changing the service planner contract.",
+    ],
+    warnings: [
+      "Services are future-contract only in this build.",
+      "Matterhorn does not host, store, email, charge, gate access, sign, submit, or execute provider actions from this planner.",
+    ],
+    catalog,
   };
 }

@@ -169,7 +169,9 @@ import {
 } from "./tools/crypto-chat.js";
 import {
   buildDecentralizedServicesCapabilityCatalog,
+  findForbiddenDecentralizedServiceInput,
   findForbiddenDecentralizedServiceQueryKey,
+  planDecentralizedServicesChat,
 } from "./tools/decentralized-services.js";
 import {
   buildMarketExecutionChainResponse,
@@ -4351,6 +4353,34 @@ function createRoutes(
         400,
         "invalid_services_capability",
         error instanceof Error ? error.message : "Unknown decentralized service capability",
+      );
+    }
+  });
+
+  addRoute(routes, "POST", "/api/services/chat/plan", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    const message = typeof body.message === "string" ? body.message : "";
+    if (!message.trim()) {
+      throw new ApiError(400, "invalid_message", "message is required");
+    }
+    const forbidden = findForbiddenDecentralizedServiceInput(body);
+    if (forbidden) {
+      throw new ApiError(
+        400,
+        "services_secret_rejected",
+        `Services chat planning does not accept seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or provider credentials (${forbidden}).`,
+      );
+    }
+    try {
+      return jsonResponse(planDecentralizedServicesChat({
+        message,
+        capability: typeof body.capability === "string" ? body.capability : null,
+      }));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_services_chat_plan",
+        error instanceof Error ? error.message : "Could not plan decentralized service workflow",
       );
     }
   });

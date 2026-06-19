@@ -410,6 +410,22 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_services_chat_plan",
+    description: "Plan a future decentralized service workflow from ordinary chat for hosting, storage, email, payments, or identity/access. Planning only: no live provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "Plain-language service request to plan." },
+        capability: {
+          type: "string",
+          enum: ["hosting", "storage", "email", "payments", "identity"],
+          description: "Optional capability filter.",
+        },
+      },
+      required: ["message"],
+    },
+  },
+  {
     name: "matterhorn_crypto_live_public_qa",
     description: "Run the local live public-data QA pack and return public/redacted evidence files. Fixture mode is default; optional live mode uses MCP environment auth only. No token argument, signing, submission, or secrets.",
     inputSchema: {
@@ -3335,6 +3351,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/readiness");
     case "matterhorn_services_get_capabilities":
       return callServer("/api/services/capabilities", { query: { capability: args.capability } });
+    case "matterhorn_services_chat_plan":
+      return callServer("/api/services/chat/plan", { method: "POST", body: args });
     case "matterhorn_crypto_live_public_qa":
       return matterhornCryptoLivePublicQa(args);
     case "matterhorn_market_execution_readiness":

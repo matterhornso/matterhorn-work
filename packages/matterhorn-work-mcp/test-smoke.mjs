@@ -655,6 +655,43 @@ const server = createServer(async (req, res) => {
       }],
     });
   }
+  if (req.method === "POST" && url.pathname === "/api/services/chat/plan") {
+    assert.match(body.message, /paid fitness program/i);
+    assert.equal(body.capability, "payments");
+    return json(res, 200, {
+      success: true,
+      version: "matterhorn.services.chat-plan.v1",
+      status: "future_contract",
+      execution: "planned_not_live",
+      message: body.message,
+      responseText: "Matterhorn can plan this Payments workflow, but live service execution is not enabled yet.",
+      matchedCapabilities: ["payments"],
+      requiresClarification: false,
+      clarificationQuestion: null,
+      safety: {
+        custody: "none",
+        liveExecutionEnabled: false,
+        acceptsPrivateKeys: false,
+        acceptsApiSecrets: false,
+        acceptsRawSignatures: false,
+        acceptsSecrets: false,
+        canExecute: false,
+      },
+      cards: [{
+        kind: "service_plan",
+        version: "matterhorn.services.card.v1",
+        title: "Payments plan",
+        capability: "payments",
+        status: "future_contract",
+        summary: "No real provider is wired up yet.",
+        providerExamples: ["Stripe"],
+        outputArtifacts: ["checkout_preview"],
+        supportedUserIntents: ["Create a paid creator program"],
+        safety: { canExecute: false, liveExecutionEnabled: false, acceptsSecrets: false, plannedNotLive: true },
+      }],
+      warnings: ["Services are future-contract only in this build."],
+    });
+  }
   if (req.method === "GET" && url.pathname === "/api/crypto/market-execution-readiness") {
     return json(res, 200, {
       success: true,
@@ -915,6 +952,7 @@ try {
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
     "matterhorn_services_get_capabilities",
+    "matterhorn_services_chat_plan",
     "matterhorn_crypto_live_public_qa",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
@@ -967,6 +1005,7 @@ try {
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
   assert.match(descriptionFor("matterhorn_services_get_capabilities"), /future decentralized service capability contracts/i);
+  assert.match(descriptionFor("matterhorn_services_chat_plan"), /Plan a future decentralized service workflow/i);
   assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
@@ -1376,6 +1415,16 @@ try {
   assert.equal(servicesCapabilities.capabilities[0].liveExecutionEnabled, false);
   assert.equal(servicesCapabilities.capabilities[0].canExecute, false);
   assert.equal(servicesCapabilities.capabilities[0].discoveryFixtures[0].canExecute, false);
+
+  const servicesChatPlan = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_services_chat_plan",
+    arguments: { message: "Plan payments for a paid fitness program", capability: "payments" },
+  }));
+  assert.equal(servicesChatPlan.version, "matterhorn.services.chat-plan.v1");
+  assert.equal(servicesChatPlan.execution, "planned_not_live");
+  assert.equal(servicesChatPlan.safety.liveExecutionEnabled, false);
+  assert.equal(servicesChatPlan.safety.canExecute, false);
+  assert.equal(servicesChatPlan.cards[0].safety.canExecute, false);
 
   const livePublicQa = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_crypto_live_public_qa",

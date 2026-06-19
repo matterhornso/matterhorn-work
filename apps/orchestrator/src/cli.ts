@@ -3797,6 +3797,7 @@ function printHelp(): void {
     "  matterhorn-work crypto customer-packet --customer-ready-smoke <path> [--market-evidence-verify <path>] [options]",
     "  matterhorn-work crypto hermes-customer-qa --dry-run [options]",
     "  matterhorn-work services capabilities [--capability hosting|storage|email|payments|identity] [--json]",
+    "  matterhorn-work services chat --message <text> [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3839,6 +3840,7 @@ function printHelp(): void {
     "  crypto customer-packet  Build top-level crypto customer QA packet from verified artifacts",
     "  crypto hermes-customer-qa Print a public/redacted Hermes customer QA command plan",
     "  services capabilities   Print future decentralized service capability contracts (no live providers)",
+    "  services chat           Plan future decentralized service workflows from a prompt (no live providers)",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -8649,15 +8651,32 @@ async function runServices(args: ParsedArgs) {
     subcommand === "capability" ||
     subcommand === "catalog" ||
     subcommand === "list";
+  const isChatPlan =
+    subcommand === "chat" ||
+    subcommand === "ask" ||
+    subcommand === "plan" ||
+    subcommand === "execute";
 
   try {
     assertNoServicesSecrets(args);
-    if (!isCapabilities) {
-      throw new Error("services requires capabilities (aliases: capability, catalog, list)");
+    if (!isCapabilities && !isChatPlan) {
+      throw new Error("services requires capabilities (aliases: capability, catalog, list) or chat (aliases: ask, plan)");
     }
     const forwarded: string[] = [];
     if (outputJson) forwarded.push("--json");
     if (capability && capability.trim()) forwarded.push("--capability", capability.trim());
+    if (isChatPlan) {
+      const message =
+        readFlag(args.flags, "message") ??
+        readFlag(args.flags, "prompt") ??
+        args.positionals.slice(2).join(" ").trim();
+      if (!message.trim()) {
+        throw new Error("message is required for services chat planning");
+      }
+      forwarded.push("--message", message.trim());
+      await runOfflineCryptoScript("decentralized-services-chat-plan.mjs", forwarded, "Decentralized services chat planner");
+      return;
+    }
     await runOfflineCryptoScript("decentralized-services-capabilities.mjs", forwarded, "Decentralized services capability helper");
   } catch (error) {
     outputError(error, outputJson);

@@ -25,7 +25,9 @@ any provider:
 ```bash
 matterhorn-work services capabilities --json
 matterhorn-work services capabilities --capability hosting --json
+matterhorn-work services chat --message "Create a paid fitness program with customer emails and gated access" --json
 pnpm test:decentralized-services-operator-helper
+pnpm test:decentralized-services-chat-plan
 ```
 
 The helper emits `matterhorn.services.capability-catalog.v1`, keeps every
@@ -33,6 +35,32 @@ capability at `status: "future_contract"`, and reports `canExecute: false` and
 `liveExecutionEnabled: false`. It rejects credential-shaped flags such as
 `--private-key`, `--api-secret`, `--raw-signature`, `--signed-payload`, and
 `--wallet-export`.
+
+## Chat Planner Layer
+
+Matterhorn Work can also translate ordinary service requests into a
+future-contract plan:
+
+```bash
+matterhorn-work services chat --message "Host this app and take payments for it" --json
+```
+
+The planner emits `matterhorn.services.chat-plan.v1` with `service_plan` cards
+for the matched capabilities. Each card lists the likely future provider
+category, expected public artifacts, next planning steps, and the safety state.
+This is intentionally a planning surface only:
+
+- `execution` is `planned_not_live`.
+- Every card has `canExecute: false` and `liveExecutionEnabled: false`.
+- The planner rejects secret-shaped inputs such as API secrets, private keys,
+  seed phrases, raw signatures, signed payloads, and wallet exports.
+- It must not host, store, email, charge, gate access, sign, submit, or execute
+  a provider action.
+
+Agents should use the planner when a user asks for a decentralized hosting,
+storage, email, payments, or identity/access workflow before any provider is
+integrated. If the request is ambiguous, the planner asks which capability to
+plan first rather than inventing a live workflow.
 
 ## Preview Fixture Layer
 
