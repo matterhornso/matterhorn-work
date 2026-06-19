@@ -17,6 +17,23 @@ through a single chat thread and a single subscription.
 
 This PR establishes the provider-neutral contract, typed schema, and static tests. No real provider is wired up yet.
 
+## Operator Helper
+
+Operators and agents can inspect the future capability catalog without touching
+any provider:
+
+```bash
+matterhorn-work services capabilities --json
+matterhorn-work services capabilities --capability hosting --json
+pnpm test:decentralized-services-operator-helper
+```
+
+The helper emits `matterhorn.services.capability-catalog.v1`, keeps every
+capability at `status: "future_contract"`, and reports `canExecute: false` and
+`liveExecutionEnabled: false`. It rejects credential-shaped flags such as
+`--private-key`, `--api-secret`, `--raw-signature`, `--signed-payload`, and
+`--wallet-export`.
+
 ## Non-overlap
 
 This contract does **not** touch:
