@@ -453,6 +453,29 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_workflows_prompt_pack",
+    description: "Read copy-pasteable staged prompts from the Matterhorn Work workflow registry. Prompt-pack only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workflow: {
+          type: "string",
+          description: "Optional workflow id such as wellness_creator_workflow, bittensor_operator, market_read_preview, or decentralized_services_planner.",
+        },
+        category: {
+          type: "string",
+          enum: ["wellness", "bittensor", "markets", "decentralized_services"],
+          description: "Optional category filter.",
+        },
+        status: {
+          type: "string",
+          enum: ["live_local", "planned_not_live", "preview_only"],
+          description: "Optional status filter.",
+        },
+      },
+    },
+  },
+  {
     name: "matterhorn_crypto_live_public_qa",
     description: "Run the local live public-data QA pack and return public/redacted evidence files. Fixture mode is default; optional live mode uses MCP environment auth only. No token argument, signing, submission, or secrets.",
     inputSchema: {
@@ -3387,6 +3410,14 @@ async function handleTool(name, args = {}) {
           category: args.category,
           status: args.status,
           includePrompts: args.includePrompts === true ? "true" : undefined,
+        },
+      });
+    case "matterhorn_workflows_prompt_pack":
+      return callServer("/api/workflows/prompts", {
+        query: {
+          workflow: args.workflow,
+          category: args.category,
+          status: args.status,
         },
       });
     case "matterhorn_crypto_live_public_qa":

@@ -69,6 +69,53 @@ export type MatterhornWorkflowCatalog = {
   references: string[];
 };
 
+export type MatterhornWorkflowPromptPack = {
+  ok: true;
+  version: "matterhorn.workflow.prompt-pack.v1";
+  status: "catalog_only";
+  generatedAt: string;
+  source: "matterhorn_server_workflow_catalog";
+  summary: string;
+  safety: {
+    acceptsSecrets: false;
+    acceptsPrivateKeys: false;
+    acceptsApiSecrets: false;
+    acceptsRawSignatures: false;
+    canSubmit: false;
+    liveExecutionEnabled: false;
+    promptPackOnly: true;
+    noProviderExecution: true;
+    noCustody: true;
+    noLiveMarketSubmit: true;
+    plannedServicesOnly: true;
+  };
+  counts: {
+    total: number;
+    promptTotal: number;
+  };
+  workflows: Array<{
+    workflowId: string;
+    name: string;
+    category: MatterhornWorkflowCatalogItem["category"];
+    status: MatterhornWorkflowCatalogItem["status"];
+    targetUserPersona: string;
+    starterPrompt: string;
+    prompts: Array<{ step: number; prompt: string }>;
+    commands: Record<string, string>;
+    references: string[];
+    safety: {
+      acceptsSecrets: false;
+      acceptsPrivateKeys: false;
+      acceptsApiSecrets: false;
+      acceptsRawSignatures: false;
+      canSubmit: false;
+      liveExecutionEnabled: false;
+      promptPackOnly: true;
+      noProviderExecution: true;
+    };
+  }>;
+};
+
 const FORBIDDEN_CREDENTIAL_KEY_PATTERN =
   /(?:seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|wallet[-_]?export)/i;
 
@@ -304,11 +351,10 @@ function workflowForOutput(
   };
 }
 
-export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogFilter = {}): MatterhornWorkflowCatalog {
+function filterWorkflows(input: MatterhornWorkflowCatalogFilter = {}): MatterhornWorkflowCatalogItem[] {
   const workflowFilter = parseFilter(input.workflow);
   const categoryFilter = parseFilter(input.category);
   const statusFilter = parseFilter(input.status);
-  const includePrompts = input.includePrompts === true;
   let workflows = WORKFLOWS;
 
   if (workflowFilter) {
@@ -324,6 +370,12 @@ export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogF
     if (workflows.length === 0) throw new Error(`No Matterhorn workflows found for status: ${statusFilter}`);
   }
 
+  return workflows;
+}
+
+export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogFilter = {}): MatterhornWorkflowCatalog {
+  const includePrompts = input.includePrompts === true;
+  const workflows = filterWorkflows(input);
   const outputWorkflows = workflows.map((workflow) => workflowForOutput(workflow, includePrompts));
 
   return {
@@ -367,5 +419,49 @@ export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogF
       "docs/decentralized-services-capability-contract.md",
       "docs/agent-control-coverage-matrix.md",
     ],
+  };
+}
+
+export function buildMatterhornWorkflowPromptPack(
+  input: MatterhornWorkflowCatalogFilter = {},
+): MatterhornWorkflowPromptPack {
+  const workflows = filterWorkflows(input).map((workflow) => ({
+    workflowId: workflow.workflowId,
+    name: workflow.name,
+    category: workflow.category,
+    status: workflow.status,
+    targetUserPersona: workflow.targetUserPersona,
+    starterPrompt: workflow.canonicalPrompts[0] ?? "",
+    prompts: workflow.canonicalPrompts.map((prompt, index) => ({ step: index + 1, prompt })),
+    commands: workflow.commands,
+    references: workflow.references,
+    safety: {
+      ...COMMON_SAFETY,
+      promptPackOnly: true as const,
+      noProviderExecution: true as const,
+    },
+  }));
+
+  return {
+    ok: true,
+    version: "matterhorn.workflow.prompt-pack.v1",
+    status: "catalog_only",
+    generatedAt: new Date(0).toISOString(),
+    source: "matterhorn_server_workflow_catalog",
+    summary:
+      "Copy-pasteable Matterhorn Work workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
+    safety: {
+      ...COMMON_SAFETY,
+      promptPackOnly: true as const,
+      noProviderExecution: true as const,
+      noCustody: true as const,
+      noLiveMarketSubmit: true as const,
+      plannedServicesOnly: true as const,
+    },
+    counts: {
+      total: workflows.length,
+      promptTotal: workflows.reduce((sum, workflow) => sum + workflow.prompts.length, 0),
+    },
+    workflows,
   };
 }
