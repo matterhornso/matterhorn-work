@@ -741,3 +741,391 @@ export const MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES: Record<
   research_summary: RESEARCH_SUMMARY_EVIDENCE_BUNDLE,
   content_publish_plan: CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE,
 };
+
+export interface MatterhornWorkflowTemplateSafetyBoundary {
+  liveExecutionEnabled: false;
+  canExecute: boolean;
+  canSubmit: false;
+  acceptsSecrets: false;
+  acceptsPrivateKeys: false;
+  acceptsRawSignatures: false;
+  acceptsApiSecrets: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+}
+
+export interface MatterhornWorkflowTemplate {
+  version: "matterhorn.workflow.template.v1";
+  templateId: string;
+  title: string;
+  category: MatterhornWorkflowCategory;
+  intendedUser: string;
+  promptStarters: string[];
+  requiredPublicInputs: MatterhornWorkflowInputPrompt[];
+  optionalPublicInputs: MatterhornWorkflowInputPrompt[];
+  generatedArtifacts: MatterhornWorkflowArtifact[];
+  evidenceBundleIds: string[];
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  serviceHooks: MatterhornWorkflowServiceHook[];
+}
+
+export const DEFAULT_MATTERHORN_WORKFLOW_TEMPLATE_SAFETY_BOUNDARY: MatterhornWorkflowTemplateSafetyBoundary = {
+  liveExecutionEnabled: false,
+  canExecute: false,
+  canSubmit: false,
+  acceptsSecrets: false,
+  acceptsPrivateKeys: false,
+  acceptsRawSignatures: false,
+  acceptsApiSecrets: false,
+  requiresExternalSigner: false,
+  allowsRealFunds: false,
+};
+
+export const WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
+  version: "matterhorn.workflow.template.v1",
+  templateId: "wellness_creator_service_workflow",
+  title: "Wellness Creator Service Workflow",
+  category: "wellness",
+  intendedUser: "personal trainer, gym instructor, yoga instructor, or dietician",
+  promptStarters: [
+    "Create a wellness program for my clients",
+    "Design a nutrition plan",
+    "Build a yoga class schedule",
+    "Package my training services",
+  ],
+  requiredPublicInputs: [
+    {
+      id: "audience",
+      label: "Who is the program for?",
+      required: true,
+      type: "text",
+    },
+    {
+      id: "goal",
+      label: "What is the primary goal?",
+      required: true,
+      type: "text",
+    },
+  ],
+  optionalPublicInputs: [
+    {
+      id: "duration_weeks",
+      label: "Program duration in weeks",
+      required: false,
+      type: "number",
+    },
+    {
+      id: "equipment",
+      label: "Available equipment",
+      required: false,
+      type: "text",
+    },
+  ],
+  generatedArtifacts: [
+    {
+      id: "program_design_plan",
+      name: "Program Design Plan",
+      mimeType: "text/markdown",
+      public: false,
+    },
+    {
+      id: "weekly_schedule",
+      name: "Weekly Schedule",
+      mimeType: "text/markdown",
+      public: false,
+    },
+    {
+      id: "pricing_package_draft",
+      name: "Pricing Package Draft",
+      mimeType: "text/markdown",
+      public: false,
+    },
+  ],
+  evidenceBundleIds: ["wellness_customer_intake"],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  serviceHooks: [
+    { hook: "email", status: "planned_not_live" },
+    { hook: "payments", status: "planned_not_live" },
+    { hook: "hosting", status: "planned_not_live" },
+  ],
+};
+
+export const BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
+  version: "matterhorn.workflow.template.v1",
+  templateId: "bittensor_beta_operator_workflow",
+  title: "Bittensor Beta Operator Workflow",
+  category: "bittensor",
+  intendedUser: "TAO operator or delegator participating in the beta",
+  promptStarters: [
+    "Show my Bittensor staking preview",
+    "Prepare a delegation handoff for subnet 1",
+    "What is my current TAO balance?",
+    "Generate an external signer packet for staking",
+  ],
+  requiredPublicInputs: [
+    {
+      id: "wallet_address",
+      label: "Public wallet address",
+      required: true,
+      type: "text",
+      helpText: "Only the public address. Never provide a private key or seed phrase.",
+    },
+  ],
+  optionalPublicInputs: [
+    {
+      id: "subnet",
+      label: "Subnet ID",
+      required: false,
+      type: "number",
+    },
+    {
+      id: "stake_amount",
+      label: "Stake amount to preview",
+      required: false,
+      type: "number",
+    },
+  ],
+  generatedArtifacts: [
+    {
+      id: "stake_preview",
+      name: "Stake Preview",
+      mimeType: "application/json",
+      public: true,
+    },
+    {
+      id: "external_signer_handoff",
+      name: "External Signer Handoff",
+      mimeType: "application/json",
+      public: true,
+    },
+  ],
+  evidenceBundleIds: ["crypto_staking_decision"],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: true,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+  },
+  serviceHooks: [{ hook: "bittensor", status: "live_local" }],
+};
+
+export const HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
+  version: "matterhorn.workflow.template.v1",
+  templateId: "hyperliquid_preview_workflow",
+  title: "Hyperliquid Preview Workflow",
+  category: "markets",
+  intendedUser: "trader who wants read-only Hyperliquid previews",
+  promptStarters: [
+    "Preview a Hyperliquid trade",
+    "Show my Hyperliquid positions",
+    "Generate a Hyperliquid signing handoff",
+  ],
+  requiredPublicInputs: [
+    {
+      id: "wallet_address",
+      label: "Public wallet address",
+      required: true,
+      type: "text",
+      helpText: "Only the public address. Never provide a private key.",
+    },
+  ],
+  optionalPublicInputs: [
+    {
+      id: "market",
+      label: "Market or asset",
+      required: false,
+      type: "text",
+    },
+    {
+      id: "side",
+      label: "Side",
+      required: false,
+      type: "select",
+      options: ["buy", "sell", "long", "short"],
+    },
+  ],
+  generatedArtifacts: [
+    {
+      id: "market_preview",
+      name: "Market Preview",
+      mimeType: "application/json",
+      public: true,
+    },
+    {
+      id: "signing_handoff",
+      name: "Signing Handoff",
+      mimeType: "application/json",
+      public: true,
+    },
+  ],
+  evidenceBundleIds: [],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
+};
+
+export const POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
+  version: "matterhorn.workflow.template.v1",
+  templateId: "polymarket_preview_workflow",
+  title: "Polymarket Preview Workflow",
+  category: "markets",
+  intendedUser: "trader who wants read-only Polymarket previews",
+  promptStarters: [
+    "Preview a Polymarket trade",
+    "Show my Polymarket positions",
+    "Generate a Polymarket signing handoff",
+  ],
+  requiredPublicInputs: [
+    {
+      id: "wallet_address",
+      label: "Public wallet address",
+      required: true,
+      type: "text",
+      helpText: "Only the public address. Never provide a private key.",
+    },
+  ],
+  optionalPublicInputs: [
+    {
+      id: "market_id",
+      label: "Market ID",
+      required: false,
+      type: "text",
+    },
+    {
+      id: "outcome",
+      label: "Outcome",
+      required: false,
+      type: "select",
+      options: ["yes", "no"],
+    },
+  ],
+  generatedArtifacts: [
+    {
+      id: "market_preview",
+      name: "Market Preview",
+      mimeType: "application/json",
+      public: true,
+    },
+    {
+      id: "signing_handoff",
+      name: "Signing Handoff",
+      mimeType: "application/json",
+      public: true,
+    },
+  ],
+  evidenceBundleIds: [],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
+};
+
+export const DECENTRALIZED_SERVICES_FUTURE_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
+  version: "matterhorn.workflow.template.v1",
+  templateId: "decentralized_services_future_workflow",
+  title: "Decentralized Services Future Workflow",
+  category: "decentralized_services",
+  intendedUser: "builder or operator planning future decentralized service actions",
+  promptStarters: [
+    "Plan a decentralized storage upload",
+    "Preview a future email campaign",
+    "Compare provider fixtures for hosting",
+    "Plan identity-gated access for a resource",
+  ],
+  requiredPublicInputs: [
+    {
+      id: "capability",
+      label: "Which decentralized service?",
+      required: true,
+      type: "select",
+      options: ["hosting", "storage", "email", "payments", "identity"],
+    },
+    {
+      id: "intent_description",
+      label: "Describe what you want to do",
+      required: true,
+      type: "text",
+    },
+  ],
+  optionalPublicInputs: [
+    {
+      id: "provider_preference",
+      label: "Preferred provider fixture",
+      required: false,
+      type: "text",
+    },
+  ],
+  generatedArtifacts: [
+    {
+      id: "service_preview",
+      name: "Service Preview",
+      mimeType: "application/json",
+      public: true,
+    },
+    {
+      id: "provider_comparison",
+      name: "Provider Comparison",
+      mimeType: "text/markdown",
+      public: true,
+    },
+  ],
+  evidenceBundleIds: ["decentralized_services_plan"],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  serviceHooks: [
+    { hook: "hosting", status: "planned_not_live" },
+    { hook: "storage", status: "planned_not_live" },
+    { hook: "email", status: "planned_not_live" },
+    { hook: "payments", status: "planned_not_live" },
+    { hook: "identity", status: "planned_not_live" },
+  ],
+};
+
+export const MATTERHORN_WORKFLOW_TEMPLATE_REGISTRY: Record<string, MatterhornWorkflowTemplate> = {
+  wellness_creator_service_workflow: WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE,
+  bittensor_beta_operator_workflow: BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE,
+  hyperliquid_preview_workflow: HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE,
+  polymarket_preview_workflow: POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE,
+  decentralized_services_future_workflow: DECENTRALIZED_SERVICES_FUTURE_WORKFLOW_TEMPLATE,
+};

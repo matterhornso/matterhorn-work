@@ -86,6 +86,7 @@
     "test:matterhorn-workflow-catalog": "node scripts/matterhorn-workflow-catalog.test.mjs",
     "test:matterhorn-workflow-catalog-api-mcp": "node scripts/matterhorn-workflow-catalog-api-mcp.test.mjs",
     "test:matterhorn-workflow-evidence-bundles": "node scripts/matterhorn-workflow-evidence-bundles.test.mjs",
+    "test:matterhorn-workflow-template-registry": "node scripts/matterhorn-workflow-template-registry.test.mjs",
     "workflow:evidence:list": "node scripts/matterhorn-workflow-evidence-bundles.mjs --list",
     "workflow:evidence:show": "node scripts/matterhorn-workflow-evidence-bundles.mjs --id",
     "workflow:evidence:export": "node scripts/matterhorn-workflow-evidence-bundles.mjs --export",

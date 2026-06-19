@@ -256,6 +256,66 @@ Use this before adding a new vertical workflow so the workflow has a discoverabl
 status, safety policy, service hooks, artifacts, commands, references, and QA
 gate.
 
+## Workflow Template Registry
+
+The contract includes a `MatterhornWorkflowTemplate` registry (`MATTERHORN_WORKFLOW_TEMPLATE_REGISTRY`) so agents can pick a reusable workflow template from user intent without custom UI or live provider integration.
+
+```ts
+interface MatterhornWorkflowTemplate {
+  version: "matterhorn.workflow.template.v1";
+  templateId: string;
+  title: string;
+  category: MatterhornWorkflowCategory;
+  intendedUser: string;
+  promptStarters: string[];
+  requiredPublicInputs: MatterhornWorkflowInputPrompt[];
+  optionalPublicInputs: MatterhornWorkflowInputPrompt[];
+  generatedArtifacts: MatterhornWorkflowArtifact[];
+  evidenceBundleIds: string[];
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  serviceHooks: MatterhornWorkflowServiceHook[];
+}
+```
+
+Every template declares safety boundaries:
+
+```ts
+interface MatterhornWorkflowTemplateSafetyBoundary {
+  liveExecutionEnabled: false;
+  canExecute: boolean;
+  canSubmit: false;
+  acceptsSecrets: false;
+  acceptsPrivateKeys: false;
+  acceptsRawSignatures: false;
+  acceptsApiSecrets: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+}
+```
+
+### Built-in templates
+
+| Template ID | Category | Status | Intended user |
+| --- | --- | --- | --- |
+| `wellness_creator_service_workflow` | wellness | `planned_not_live` | personal trainer, gym instructor, yoga instructor, or dietician |
+| `bittensor_beta_operator_workflow` | bittensor | `live_local` | TAO operator or delegator in beta |
+| `hyperliquid_preview_workflow` | markets | `preview_only` | trader wanting read-only Hyperliquid previews |
+| `polymarket_preview_workflow` | markets | `preview_only` | trader wanting read-only Polymarket previews |
+| `decentralized_services_future_workflow` | decentralized_services | `planned_not_live` | builder or operator planning future decentralized service actions |
+
+Agents should:
+
+1. Choose a template from user intent.
+2. Ask only for public/non-secret inputs.
+3. Produce artifacts and evidence bundles.
+4. Never claim live service execution unless the capability contract explicitly says the capability is live.
+
+Run the template registry gate:
+
+```bash
+pnpm test:matterhorn-workflow-template-registry
+```
+
 ## Safety Rules
 
 - No fixture may set `acceptsSecrets`, `acceptsPrivateKeys`, `acceptsRawSignatures`, or `acceptsApiSecrets` to `true`.
