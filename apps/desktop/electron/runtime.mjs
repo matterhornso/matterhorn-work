@@ -430,6 +430,9 @@ function loadUserEnvFile() {
 export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths }) {
   const engineState = createEngineState();
   const matterhornServerState = createOpenworkServerState();
+  // The embedded server implementation still uses the historical OpenWork
+  // internal state naming; the public Electron bridge exposes Matterhorn names.
+  const openworkServerState = matterhornServerState;
   const orchestratorState = createOrchestratorState();
 
   // Serialize engine lifecycle operations. Without this, concurrent renderer
@@ -1383,8 +1386,8 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     return {
       running: engine.running,
       dataDir: null,
-      daemon: openworkServer.running
-        ? { baseUrl: openworkServer.baseUrl, port: openworkServer.port, pid: openworkServer.pid, runtime: "direct" }
+      daemon: matterhornServer.running
+        ? { baseUrl: matterhornServer.baseUrl, port: matterhornServer.port, pid: matterhornServer.pid, runtime: "direct" }
         : null,
       opencode: engine.running
         ? { baseUrl: engine.baseUrl, port: engine.port, pid: engine.pid, projectDir: engine.projectDir, runtime: "direct" }
@@ -1783,8 +1786,8 @@ export function createRuntimeManager({ app, desktopRoot, listLocalWorkspacePaths
     engineInfo,
     engineDoctor,
     engineInstall,
-    openworkServerInfo,
-    openworkServerRestart,
+    matterhornServerInfo,
+    matterhornServerRestart,
     orchestratorStatus,
     orchestratorWorkspaceActivate,
     orchestratorInstanceDispose,
