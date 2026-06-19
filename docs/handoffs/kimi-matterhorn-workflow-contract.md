@@ -161,7 +161,12 @@ pnpm --dir packages/types build
 
 ### CI status on PR #415
 
-Awaiting CI results.
+All GitHub checks on PR #415 passed:
+
+- `openwork-tests (blacksmith-4vcpu-ubuntu-2204)` — SUCCESS
+- `openwork-tests (macos-14)` — SUCCESS
+- `customer-crypto-gates` — SUCCESS
+- `i18n-audit` — SUCCESS
 
 ## Non-overlap observed
 
