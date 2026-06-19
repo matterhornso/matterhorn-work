@@ -14,6 +14,7 @@ const tmp = await mkdtemp(path.join(tmpdir(), "matterhorn-crypto-customer-packet
 try {
   const smoke = path.join(tmp, "smoke.json");
   const marketVerify = path.join(tmp, "market-verify.json");
+  const marketSdkValidationGuide = path.join(tmp, "market-sdk-validation-guide.json");
   const bittensorBundle = path.join(tmp, "bittensor-bundle.json");
   const output = path.join(tmp, "packet.md");
   const jsonOutput = path.join(tmp, "packet.json");
@@ -55,6 +56,34 @@ try {
     warnings: [],
     safety: { nonCustodial: true, liveSubmissionEnabled: false, signsOrSubmits: false, acceptsSecrets: false },
   }));
+  await writeFile(marketSdkValidationGuide, JSON.stringify({
+    success: true,
+    guide: {
+      version: "matterhorn.market.sdk-validation-guide.v1",
+      modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+      networks: {
+        hyperliquid: ["fixture", "hyperliquid-testnet"],
+        polymarket: ["fixture", "polygon-amoy"],
+      },
+      commands: {
+        doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+        fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --strict --json",
+        operatorOwnedTestnetValidation: "matterhorn-work crypto sdk-validate-public --mode operator_owned_testnet --strict --json",
+        operatorLoop: "matterhorn-work crypto sdk-loop --mode fixture --strict --json",
+      },
+      safety: {
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        nonCustodial: true,
+        acceptsSecrets: false,
+        acceptsRawSignatures: false,
+        acceptsSignedPayloads: false,
+        runsPrivateSdkSigning: false,
+        computesFinalSignatures: false,
+        callsExchanges: false,
+      },
+    },
+  }));
   await writeFile(bittensorBundle, JSON.stringify({
     ready: true,
     errors: [],
@@ -64,6 +93,7 @@ try {
   const direct = await buildCryptoCustomerPacket({
     customerReadySmoke: smoke,
     marketEvidenceVerify: marketVerify,
+    marketSdkValidationGuide,
     bittensorEvidenceBundle: bittensorBundle,
     requireMarketEvidence: true,
     requireBittensorEvidence: true,
@@ -75,6 +105,10 @@ try {
   assert.match(direct.markdown, /READY_FOR_TEST_CUSTOMER_QA/);
   assert.match(direct.markdown, /Evidence Hashes/);
   assert.equal(direct.packet.marketEvidence.details.artifactReconciliationAccepted, true);
+  assert.equal(direct.packet.marketSdkValidationGuide.ready, true);
+  assert.deepEqual(direct.packet.marketSdkValidationGuide.networks.hyperliquid, ["fixture", "hyperliquid-testnet"]);
+  assert.match(direct.markdown, /Market SDK-Validation Guide/);
+  assert.match(direct.markdown, /operator_owned_testnet/);
 
   execFileSync("node", [
     script,
@@ -82,6 +116,8 @@ try {
     smoke,
     "--market-evidence-verify",
     marketVerify,
+    "--market-sdk-validation-guide",
+    marketSdkValidationGuide,
     "--bittensor-evidence-bundle",
     bittensorBundle,
     "--require-market-evidence",
@@ -97,8 +133,12 @@ try {
   assert.match(markdown, /Crypto Customer Packet/);
   assert.match(markdown, /Customer-ready crypto smoke/);
   assert.match(markdown, /Market evidence verifier/);
+  assert.match(markdown, /Market SDK-validation guide/);
   assert.match(markdown, /Bittensor evidence bundle/);
   assert.match(markdown, /Market Evidence Details/);
+  assert.match(markdown, /Market SDK-Validation Guide/);
+  assert.match(markdown, /Hyperliquid networks: fixture, hyperliquid-testnet/);
+  assert.match(markdown, /Polymarket networks: fixture, polygon-amoy/);
   assert.match(markdown, /Artifact reconciliation \| yes/);
   assert.match(markdown, /37 passed, 0 failed, 0 skipped/);
   assert.match(markdown, /Smoke git SHA: a{40}/);
@@ -118,9 +158,13 @@ try {
   assert.equal(packet.marketEvidence.details.sdkManifestAccepted, true);
   assert.equal(packet.marketEvidence.details.receiptAccepted, true);
   assert.equal(packet.marketEvidence.details.artifactReconciliationAccepted, true);
+  assert.equal(packet.marketSdkValidationGuide.ready, true);
+  assert.equal(packet.marketSdkValidationGuide.version, "matterhorn.market.sdk-validation-guide.v1");
+  assert.equal(packet.marketSdkValidationGuide.modes.includes("operator_owned_testnet"), true);
   assert.equal(packet.bittensorEvidence.ready, true);
   assert.match(packet.inputEvidence.customerReadySmoke.sha256, /^[a-f0-9]{64}$/);
   assert.match(packet.inputEvidence.marketEvidenceVerify.sha256, /^[a-f0-9]{64}$/);
+  assert.match(packet.inputEvidence.marketSdkValidationGuide.sha256, /^[a-f0-9]{64}$/);
   assert.match(packet.inputEvidence.bittensorEvidenceBundle.sha256, /^[a-f0-9]{64}$/);
 
   const staleSmoke = path.join(tmp, "stale-smoke.json");
@@ -163,6 +207,28 @@ try {
       ], { stdio: "pipe" }),
     /forbidden secret-shaped field/i,
   );
+
+  const badGuide = path.join(tmp, "bad-sdk-guide.json");
+  await writeFile(badGuide, JSON.stringify({
+    success: true,
+    guide: {
+      version: "matterhorn.market.sdk-validation-guide.v1",
+      modes: ["fixture"],
+      networks: { hyperliquid: ["fixture"], polymarket: ["fixture"] },
+      commands: {},
+      safety: { canSubmit: true, liveSubmissionEnabled: true, nonCustodial: true },
+    },
+  }));
+  const badGuideRun = spawnSync("node", [
+    script,
+    "--customer-ready-smoke",
+    smoke,
+    "--market-sdk-validation-guide",
+    badGuide,
+    "--strict",
+  ], { encoding: "utf8" });
+  assert.notEqual(badGuideRun.status, 0, "strict packet should fail when SDK-validation guide safety is invalid");
+  assert.match(`${badGuideRun.stdout}\n${badGuideRun.stderr}`, /safety\.canSubmit must be false/i);
 
   console.log("Crypto customer packet tests passed.");
 } finally {

@@ -1131,8 +1131,37 @@ async function main() {
     const bittensorBundlePath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence.json");
     const bittensorBundleMarkdownPath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence.md");
     const bittensorVerifyPath = join(sdkOutputDir, "matterhorn-bittensor-customer-evidence-verify.json");
+    const sdkValidationGuidePath = join(sdkOutputDir, "matterhorn-market-sdk-validation-guide.json");
     const customerPacketMarkdownPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.md");
     const customerPacketJsonPath = join(sdkOutputDir, "matterhorn-crypto-customer-packet.json");
+    writeFileSync(sdkValidationGuidePath, JSON.stringify({
+      success: true,
+      guide: {
+        version: "matterhorn.market.sdk-validation-guide.v1",
+        modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+        networks: {
+          hyperliquid: ["fixture", "hyperliquid-testnet"],
+          polymarket: ["fixture", "polygon-amoy"],
+        },
+        commands: {
+          doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+          fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --strict --json",
+          operatorOwnedTestnetValidation: "matterhorn-work crypto sdk-validate-public --mode operator_owned_testnet --strict --json",
+          operatorLoop: "matterhorn-work crypto sdk-loop --mode fixture --strict --json",
+        },
+        safety: {
+          canSubmit: false,
+          liveSubmissionEnabled: false,
+          nonCustodial: true,
+          acceptsSecrets: false,
+          acceptsRawSignatures: false,
+          acceptsSignedPayloads: false,
+          runsPrivateSdkSigning: false,
+          computesFinalSignatures: false,
+          callsExchanges: false,
+        },
+      },
+    }));
     writeFileSync(bittensorBundlePath, JSON.stringify({
       ready: true,
       bittensor: { ready: true, detail: "7 passed, 0 failed", passedStages: ["Wallet snapshot"], failedStages: [] },
@@ -1185,6 +1214,8 @@ async function main() {
       smokePath,
       "--market-evidence-verify",
       bundleVerifyPath,
+      "--market-sdk-validation-guide",
+      sdkValidationGuidePath,
       "--bittensor-evidence-bundle",
       bittensorBundlePath,
       "--require-market-evidence",
@@ -1202,6 +1233,8 @@ async function main() {
     if (!/READY_FOR_TEST_CUSTOMER_QA/.test(packetMarkdown)) throw new Error("expected customer packet markdown to be ready");
     if (packetJson.ready !== true) throw new Error("expected customer packet JSON ready=true");
     if (packetJson.marketEvidence?.ready !== true) throw new Error("expected customer packet market evidence ready=true");
+    if (packetJson.marketSdkValidationGuide?.ready !== true) throw new Error("expected customer packet SDK-validation guide ready=true");
+    if (!packetJson.marketSdkValidationGuide?.modes?.includes("operator_owned_testnet")) throw new Error("expected customer packet SDK-validation guide modes");
     if (packetJson.bittensorEvidence?.ready !== true) throw new Error("expected customer packet Bittensor evidence ready=true");
     if (/test-client-token|privateKey|mnemonic|signedPayload|walletExport|apiSecret|rawSignature/i.test(packetMarkdown)) {
       throw new Error("customer packet leaked token or secret-shaped fields");

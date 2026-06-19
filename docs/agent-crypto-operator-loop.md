@@ -229,6 +229,7 @@ matterhorn-work crypto evidence-verify \
 matterhorn-work crypto customer-packet \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --market-evidence-verify /tmp/matterhorn-crypto-customer-evidence-verify.json \
+  --market-sdk-validation-guide /tmp/matterhorn-market-sdk-validation-guide.json \
   --require-market-evidence \
   --output /tmp/matterhorn-crypto-customer-packet.md \
   --json-output /tmp/matterhorn-crypto-customer-packet.json \
@@ -288,6 +289,7 @@ matterhorn-work crypto evidence-verify \
 matterhorn-work crypto customer-packet \
   --customer-ready-smoke /tmp/matterhorn-crypto-smoke.json \
   --market-evidence-verify /tmp/matterhorn-crypto-customer-evidence-verify.json \
+  --market-sdk-validation-guide /tmp/matterhorn-market-sdk-validation-guide.json \
   --require-market-evidence \
   --output /tmp/matterhorn-crypto-customer-packet.md \
   --json-output /tmp/matterhorn-crypto-customer-packet.json \

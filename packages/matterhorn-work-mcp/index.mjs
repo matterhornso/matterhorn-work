@@ -460,6 +460,7 @@ const tools = [
       properties: {
         customerReadySmoke: { type: "object", description: "JSON output from matterhorn-work crypto customer-smoke." },
         marketEvidenceVerify: { type: "object", description: "Optional JSON output from market customer evidence verification." },
+        marketSdkValidationGuide: { type: "object", description: "Optional JSON from GET /api/crypto/market-sdk-validation or matterhorn_market_sdk_validation." },
         bittensorEvidence: { type: "object", description: "Optional JSON output from Bittensor evidence bundle or verification." },
         requireMarketEvidence: { type: "boolean" },
         requireBittensorEvidence: { type: "boolean" },
@@ -1688,7 +1689,7 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
 
 const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)/i;
 const CUSTOMER_EVIDENCE_FORBIDDEN_EXACT_KEY_RE = /^(signature)$/i;
-const CUSTOMER_EVIDENCE_ALLOWED_SAFETY_KEY_RE = /^(asksForSecrets|storesSecrets|acceptsSecrets|nonCustodial|liveSubmissionEnabled|signsOrSubmits|signsOrBroadcasts|submitsTransactions|externalSignerOnly)$/i;
+const CUSTOMER_EVIDENCE_ALLOWED_SAFETY_KEY_RE = /^(asksForSecrets|storesSecrets|acceptsSecrets|acceptsRawSignatures|acceptsSignedPayloads|nonCustodial|liveSubmissionEnabled|signsOrSubmits|signsOrBroadcasts|submitsTransactions|externalSignerOnly|runsPrivateSdkSigning|computesFinalSignatures|callsExchanges)$/i;
 const MARKET_CUSTOMER_EVIDENCE_REQUIRED_STAGES = [
   "crypto.unified_chat",
   "crypto.shared_card_contract",
@@ -2264,6 +2265,60 @@ function summarizeMcpBittensorEvidence(raw, required) {
   };
 }
 
+function summarizeMcpMarketSdkValidationGuide(raw) {
+  if (!raw) {
+    return {
+      present: false,
+      ready: true,
+      version: null,
+      modes: [],
+      networks: { hyperliquid: [], polymarket: [] },
+      errors: [],
+      warnings: ["Market SDK-validation guide is not attached."],
+    };
+  }
+  const guide = raw && typeof raw.guide === "object" && raw.guide ? raw.guide : raw;
+  const errors = [];
+  const warnings = [];
+  if (raw.success !== undefined && raw.success !== true) errors.push("Market SDK-validation guide response did not set success=true.");
+  if (!guide || typeof guide !== "object") errors.push("Market SDK-validation guide is missing guide object.");
+  if (guide?.version !== "matterhorn.market.sdk-validation-guide.v1") {
+    errors.push("Market SDK-validation guide must use matterhorn.market.sdk-validation-guide.v1.");
+  }
+  const modes = Array.isArray(guide?.modes) ? guide.modes.map((item) => String(item)) : [];
+  for (const mode of ["fixture", "operator_owned_fixture", "operator_owned_testnet"]) {
+    if (!modes.includes(mode)) errors.push("Market SDK-validation guide is missing mode " + mode + ".");
+  }
+  const networks = guide?.networks && typeof guide.networks === "object" ? guide.networks : {};
+  const hyperliquid = Array.isArray(networks.hyperliquid) ? networks.hyperliquid.map((item) => String(item)) : [];
+  const polymarket = Array.isArray(networks.polymarket) ? networks.polymarket.map((item) => String(item)) : [];
+  if (!hyperliquid.includes("hyperliquid-testnet")) errors.push("Market SDK-validation guide is missing Hyperliquid testnet.");
+  if (!polymarket.includes("polygon-amoy")) errors.push("Market SDK-validation guide is missing Polygon Amoy.");
+  const safety = guide?.safety && typeof guide.safety === "object" ? guide.safety : {};
+  for (const [key, expected] of Object.entries({
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    nonCustodial: true,
+    acceptsSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    runsPrivateSdkSigning: false,
+    computesFinalSignatures: false,
+    callsExchanges: false,
+  })) {
+    if (safety[key] !== expected) errors.push("Market SDK-validation guide safety." + key + " must be " + String(expected) + ".");
+  }
+  return {
+    present: true,
+    ready: errors.length === 0,
+    version: typeof guide?.version === "string" ? guide.version : null,
+    modes,
+    networks: { hyperliquid, polymarket },
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+  };
+}
+
 function renderMcpCryptoCustomerPacketMarkdown(packet) {
   const warnings = packet.warnings.length ? packet.warnings.map((item) => "- " + item) : ["- None."];
   const errors = packet.errors.length ? packet.errors.map((item) => "- " + item) : ["- None."];
@@ -2285,6 +2340,7 @@ function renderMcpCryptoCustomerPacketMarkdown(packet) {
     "| --- | --- |",
     "| Customer-ready crypto smoke | " + (packet.customerReadySmoke.ready ? "yes" : "no") + " |",
     "| Market evidence verifier | " + (packet.marketEvidence.ready ? "yes" : "no") + " |",
+    "| Market SDK-validation guide | " + (packet.marketSdkValidationGuide.ready ? "yes" : "no") + " |",
     "| Bittensor evidence bundle | " + (packet.bittensorEvidence.ready ? "yes" : "no") + " |",
     "",
     "## Market Evidence Details",
@@ -2296,6 +2352,13 @@ function renderMcpCryptoCustomerPacketMarkdown(packet) {
     "| SDK manifest | " + (packet.marketEvidence.details.sdkManifestAccepted ? "yes" : "no") + " |",
     "| Public receipt evidence | " + (packet.marketEvidence.details.receiptAccepted ? "yes" : "no") + " |",
     "| Artifact reconciliation | " + (packet.marketEvidence.details.artifactReconciliationAccepted ? "yes" : "no") + " |",
+    "",
+    "## Market SDK-Validation Guide",
+    "",
+    "- Version: " + (packet.marketSdkValidationGuide.version || "not attached"),
+    "- Modes: " + (packet.marketSdkValidationGuide.modes.length ? packet.marketSdkValidationGuide.modes.join(", ") : "not attached"),
+    "- Hyperliquid networks: " + (packet.marketSdkValidationGuide.networks.hyperliquid.length ? packet.marketSdkValidationGuide.networks.hyperliquid.join(", ") : "not attached"),
+    "- Polymarket networks: " + (packet.marketSdkValidationGuide.networks.polymarket.length ? packet.marketSdkValidationGuide.networks.polymarket.join(", ") : "not attached"),
     "",
     "## Smoke Summary",
     "",
@@ -2321,26 +2384,31 @@ function renderMcpCryptoCustomerPacketMarkdown(packet) {
 function matterhornCryptoCustomerPacket(args = {}) {
   assertCustomerEvidenceHasNoCredentials(args.customerReadySmoke, "Crypto customer packet smoke evidence");
   assertCustomerEvidenceHasNoCredentials(args.marketEvidenceVerify, "Crypto customer packet market evidence");
+  assertCustomerEvidenceHasNoCredentials(args.marketSdkValidationGuide, "Crypto customer packet market SDK-validation guide");
   assertCustomerEvidenceHasNoCredentials(args.bittensorEvidence, "Crypto customer packet Bittensor evidence");
   const customerReadySmoke = summarizeMcpCustomerSmoke(args.customerReadySmoke);
   const marketEvidence = summarizeMcpMarketEvidence(args.marketEvidenceVerify, args.requireMarketEvidence === true);
+  const marketSdkValidationGuide = summarizeMcpMarketSdkValidationGuide(args.marketSdkValidationGuide);
   const bittensorEvidence = summarizeMcpBittensorEvidence(args.bittensorEvidence, args.requireBittensorEvidence === true);
   const errors = [
     ...customerReadySmoke.errors,
     ...marketEvidence.errors,
+    ...marketSdkValidationGuide.errors,
     ...bittensorEvidence.errors,
   ];
   const warnings = [
     ...customerReadySmoke.warnings,
     ...marketEvidence.warnings,
+    ...marketSdkValidationGuide.warnings,
     ...bittensorEvidence.warnings,
   ];
   const packet = {
     title: args.title || "Matterhorn Work Crypto Customer Packet",
     generatedAt: new Date().toISOString(),
-    ready: customerReadySmoke.ready && marketEvidence.ready && bittensorEvidence.ready && errors.length === 0,
+    ready: customerReadySmoke.ready && marketEvidence.ready && marketSdkValidationGuide.ready && bittensorEvidence.ready && errors.length === 0,
     customerReadySmoke,
     marketEvidence,
+    marketSdkValidationGuide,
     bittensorEvidence,
     warnings: [...new Set(warnings)],
     errors: [...new Set(errors)],
