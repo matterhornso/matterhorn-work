@@ -3796,6 +3796,7 @@ function printHelp(): void {
     "  matterhorn-work crypto bittensor-evidence-verify --bundle-json <path> [--bundle-md <path>] [options]",
     "  matterhorn-work crypto customer-packet --customer-ready-smoke <path> [--market-evidence-verify <path>] [options]",
     "  matterhorn-work crypto hermes-customer-qa --dry-run [options]",
+    "  matterhorn-work services capabilities [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3837,6 +3838,7 @@ function printHelp(): void {
     "  crypto bittensor-evidence-verify Verify final Bittensor customer evidence bundle offline",
     "  crypto customer-packet  Build top-level crypto customer QA packet from verified artifacts",
     "  crypto hermes-customer-qa Print a public/redacted Hermes customer QA command plan",
+    "  services capabilities   Print future decentralized service capability contracts (no live providers)",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -3903,6 +3905,7 @@ function printHelp(): void {
     "  --rate-tolerance <n>      Bittensor rate/slippage tolerance",
     "  --address <0x...>         Hyperliquid public wallet address for account reads",
     "  --asset <symbol>          Hyperliquid market symbol, e.g. BTC or ETH",
+    "  --capability <name>       Decentralized service capability: hosting | storage | email | payments | identity",
     "  --side <side>             Hyperliquid preview side: buy | sell",
     "  --size <n>                Hyperliquid preview order size",
     "  --price <n>               Hyperliquid preview limit price",
@@ -8601,6 +8604,67 @@ async function runCrypto(args: ParsedArgs) {
   }
 }
 
+function assertNoServicesSecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "api-key",
+    "apiKey",
+    "private-key",
+    "privateKey",
+    "seed",
+    "seed-phrase",
+    "seedPhrase",
+    "mnemonic",
+    "raw-signature",
+    "rawSignature",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+    "wallet-export",
+    "walletExport",
+    "password",
+    "passphrase",
+    "keyfile",
+    "suri",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Decentralized services ${key} is not accepted by Matterhorn Work CLI. Services are future-contract only; live provider execution and secret handling are not enabled.`,
+      );
+    }
+  }
+}
+
+async function runServices(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "capabilities";
+  const capability =
+    readFlag(args.flags, "capability") ??
+    readFlag(args.flags, "service") ??
+    (subcommand === "capability" ? args.positionals[2] : undefined);
+  const isCapabilities =
+    subcommand === "capabilities" ||
+    subcommand === "capability" ||
+    subcommand === "catalog" ||
+    subcommand === "list";
+
+  try {
+    assertNoServicesSecrets(args);
+    if (!isCapabilities) {
+      throw new Error("services requires capabilities (aliases: capability, catalog, list)");
+    }
+    const forwarded: string[] = [];
+    if (outputJson) forwarded.push("--json");
+    if (capability && capability.trim()) forwarded.push("--capability", capability.trim());
+    await runOfflineCryptoScript("decentralized-services-capabilities.mjs", forwarded, "Decentralized services capability helper");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -11738,6 +11802,10 @@ async function main() {
   }
   if (command === "crypto" || command === "market" || command === "markets") {
     await runCrypto(args);
+    return;
+  }
+  if (command === "services" || command === "service" || command === "decentralized-services") {
+    await runServices(args);
     return;
   }
   if (command === "upstream") {
