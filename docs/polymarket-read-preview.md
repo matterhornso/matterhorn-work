@@ -77,6 +77,7 @@ HTTP/MCP/CLI expose the same safe loop:
 - `GET /api/polymarket/watches`
 - `POST /api/polymarket/watches/check`
 - `GET /api/polymarket/watches/digest`
+- `POST /api/polymarket/watches/act`
 - `matterhorn_polymarket_create_watch`
 - `matterhorn_polymarket_check_watches`
 - `matterhorn_polymarket_watch_digest`

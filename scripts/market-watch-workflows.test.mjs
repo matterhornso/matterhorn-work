@@ -20,11 +20,27 @@ for (const route of [
   "/api/hyperliquid/watches",
   "/api/hyperliquid/watches/check",
   "/api/hyperliquid/watches/digest",
+  "/api/hyperliquid/watches/act",
   "/api/polymarket/watches",
   "/api/polymarket/watches/check",
   "/api/polymarket/watches/digest",
+  "/api/polymarket/watches/act",
 ]) {
   assert.ok(server.includes(route), `server missing ${route}`);
+}
+
+for (const phrase of [
+  "watch_action_prompt_rejected",
+  "Hyperliquid watch act input must not contain API secrets",
+  "Polymarket watch act input must not contain API secrets",
+  "Review alert with crypto chat",
+  "matterhorn_hyperliquid_watch_act",
+  "matterhorn_polymarket_watch_act",
+  "liveSubmissionEnabled: false",
+  "canSubmit: false",
+  "autoExecutes: false",
+]) {
+  assert.ok(server.includes(phrase), `server watch act route contract missing ${phrase}`);
 }
 
 for (const symbol of [
