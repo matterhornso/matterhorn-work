@@ -56,6 +56,7 @@ writeFileSync(join(distDir, "matterhorn-mac-arm64-0.0.0.zip.blockmap"), "fixture
 
 const result = spawnSync("node", [
   "scripts/electron-local-tester-artifact.mjs",
+  "--",
   "--skip-build",
   "--output-dir",
   outputDir,
