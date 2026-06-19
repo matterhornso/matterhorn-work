@@ -68,10 +68,12 @@ for (const phrase of [
 }
 
 for (const command of [
-  "matterhorn-work hyperliquid watch create|list|check|digest",
-  "matterhorn-work polymarket watch create|list|check|digest",
-  "hyperliquid watch requires create|list|check|digest",
-  "polymarket watch requires create|list|check|digest",
+  "matterhorn-work hyperliquid watch create|list|check|digest|act",
+  "matterhorn-work polymarket watch create|list|check|digest|act",
+  "hyperliquid watch requires create|list|check|digest|act",
+  "polymarket watch requires create|list|check|digest|act",
+  "runMarketWatchAlertAction",
+  "buildMarketWatchAlertReviewPrompt",
 ]) {
   assert.ok(cli.includes(command), `CLI missing ${command}`);
 }
