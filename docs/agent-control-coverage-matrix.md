@@ -104,6 +104,7 @@ pnpm test:crypto-direct-prompt-safety
 pnpm test:unified-crypto-shared-card-contract
 pnpm test:agent-crypto-operator-loop
 pnpm test:market-execution-safety-gate
+pnpm test:decentralized-services-contract
 pnpm test:market-submit-sign-contract-phase0
 pnpm test:market-sign-request-phase1
 pnpm test:market-artifact-validation-phase2
@@ -168,3 +169,13 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 - `matterhorn_bittensor_customer_evidence_bundle` accepts optional `watchAutopilotScheduler` evidence and `requireWatchAutopilotScheduler` for demos where monitoring ran while an operator was away.
 - The evidence summarizes repeated read-only watch checks, alert counts, and safe prompts; it does not sign, submit, broadcast, transfer TAO, move stake, or invoke subnet services.
 - This keeps Codex, Claude Code, Claude Desktop, and Cursor evidence bundles aligned with the CLI customer-evidence flow.
+
+## Decentralized Services (Future Contracts)
+
+| Capability | HTTP | MCP | CLI | Verification |
+| --- | --- | --- | --- | --- |
+| Decentralized services capability contract | No live routes; contract-only | No live tools; contract-only | No live commands; contract-only | `test:decentralized-services-contract` |
+
+- Defines future provider-neutral contracts for hosting, storage, email, payments, and identity.
+- No live providers are wired yet; all manifests default to `status: "future_contract"` and `liveExecutionEnabled: false`.
+- See `docs/decentralized-services-capability-contract.md` and `packages/types/src/decentralized-services.ts`.
