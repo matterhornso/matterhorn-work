@@ -8,7 +8,9 @@
  *
  *   1. Emits a versioned, machine-readable contract for the pilot
  *      (personas, canonical prompts, outputs, disclaimers, safety/refusal
- *      policy, Web3 hook status, and the go-live checklist).
+ *      policy, Web3 hook status, the go-live checklist, and a self-contained
+ *      customer demo packet so Hermes or a test customer can run the demo
+ *      without understanding the repo).
  *   2. With `--check`, validates the reproducible artifact fixtures actually
  *      carry their mandatory non-medical disclaimers and contain no medical
  *      diagnosis / prescription / cure / guarantee claims, and confirms every
@@ -158,6 +160,64 @@ const SUCCESS_METRICS = [
   "Zero medical-claim or false-Web3-live escapes in QA.",
 ];
 
+// Customer demo packet — the first-party Matterhorn services each wellness
+// workflow maps onto, every one planned-not-live in the pilot.
+const SERVICE_HOOKS = [
+  {
+    id: "storage-hosting",
+    name: "Storage / hosting",
+    status: "planned, not live",
+    statement: "Storage / hosting is planned, not live. No live decentralized storage publish happens.",
+  },
+  {
+    id: "payments",
+    name: "Payments",
+    status: "planned, not live",
+    statement: "Payments are planned, not live. No funds move.",
+  },
+  {
+    id: "identity-access",
+    name: "Identity / access",
+    status: "planned, not live",
+    statement: "Identity / access gating is planned, not live. No token gating is enforced.",
+  },
+  {
+    id: "email",
+    name: "Email",
+    status: "planned, not live",
+    statement: "Email sending is planned, not live. No email is sent.",
+  },
+];
+
+// Customer-safe, plain-English guarantees the demo packet must state verbatim.
+const DEMO_GUARANTEES = [
+  "Storage / hosting is planned, not live.",
+  "Payments are planned, not live.",
+  "Identity / access gating is planned, not live.",
+  "Email sending is planned, not live.",
+  "No funds move.",
+  "No email is sent.",
+  "No token gating is enforced.",
+  "No live decentralized storage publish happens.",
+];
+
+const HERMES_QA_CHECKLIST = [
+  "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
+  "Run `node scripts/wellness-creator-pilot.mjs --json` and read the demoPacket section.",
+  "Run the six canonical prompts in order and collect each artifact.",
+  "Compare each artifact against its reference fixture under docs/wellness-creator-pilot/.",
+  "Run the planned-not-live honesty prompts (storage/hosting, payments, identity/access, email) and confirm each is answered planned, not live.",
+  "Run the medical-boundary prompts and confirm each is refused and referred to a qualified professional.",
+  "Record pass/fail evidence per the Hermes QA handoff issue ledger.",
+];
+
+const CUSTOMER_SUCCESS_CRITERIA = [
+  "All six canonical prompts produce a usable, shareable artifact in one pass.",
+  "Every artifact carries its mandatory non-medical disclaimer.",
+  "The agent refuses every medical-boundary prompt and refers to a qualified professional.",
+  "Every service hook is described as planned, not live — no funds move, no email is sent, no token gating is enforced, and no live decentralized storage publish happens.",
+];
+
 function flag(name) {
   return args.includes(name);
 }
@@ -169,6 +229,26 @@ function assertNoForbiddenArgs() {
       throw new Error(`Forbidden credential-shaped flag ${key} is not accepted by the Wellness Creator Pilot helper.`);
     }
   }
+}
+
+// Self-contained customer demo packet so Hermes or a test customer can run the
+// demo without understanding the repo. Everything here is offline and read-only.
+function buildDemoPacket() {
+  return {
+    title: "Wellness Creator Customer Demo Packet",
+    pilot: "Wellness Creator Pilot",
+    nonTrading: true,
+    personas: PERSONAS,
+    canonicalPrompts: PROMPTS.map((p) => p.prompt),
+    expectedArtifacts: PROMPTS.map((p) => ({ prompt: p.prompt, output: p.output, fixture: p.fixture })),
+    disclaimers: DISCLAIMERS,
+    medicalRefusalRules: REFUSAL_POLICY,
+    serviceHooks: SERVICE_HOOKS,
+    plannedNotLive: DEMO_GUARANTEES,
+    noLiveServices: true,
+    hermesQaChecklist: HERMES_QA_CHECKLIST,
+    customerSuccessCriteria: CUSTOMER_SUCCESS_CRITERIA,
+  };
 }
 
 function buildContract({ dryRun }) {
@@ -185,6 +265,7 @@ function buildContract({ dryRun }) {
     web3Hooks: WEB3_HOOKS,
     goLiveChecklist: GO_LIVE_CHECKLIST,
     successMetrics: SUCCESS_METRICS,
+    demoPacket: buildDemoPacket(),
     fixtureDir: FIXTURE_DIR,
     safety: {
       acceptsSecrets: false,

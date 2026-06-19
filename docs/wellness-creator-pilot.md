@@ -146,6 +146,8 @@ Print the versioned contract (personas, prompts, disclaimers, refusal policy, We
 node scripts/wellness-creator-pilot.mjs --json
 ```
 
+The `--json` output also includes a `demoPacket` key — a self-contained customer demo packet (personas, canonical prompts, expected artifacts, disclaimers, medical refusal rules, planned-not-live service hooks, a Hermes QA checklist summary, and customer-safe success criteria) so Hermes or a test customer can run the demo without understanding the repo. See [`docs/handoffs/hermes-wellness-creator-qa.md`](./handoffs/hermes-wellness-creator-qa.md) → "Run This Demo".
+
 Run the go-live check over the artifact fixtures (exits non-zero on any violation):
 
 ```bash

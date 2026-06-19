@@ -283,4 +283,86 @@ for (const path of claimTargets) {
   }
 }
 
+// 19. Customer demo packet: `--json` emits a self-contained packet Hermes or a
+//     test customer can run without understanding the repo.
+const demoPacket = contract.demoPacket;
+assert.ok(demoPacket, "Helper --json should include a demoPacket");
+const demoPacketText = JSON.stringify(demoPacket);
+
+// 19a. All seven canonical prompts.
+const DEMO_PROMPTS = [
+  "Create a 4-week fat-loss plan for a beginner",
+  "Turn this plan into client handouts",
+  "Create a general healthy-eating guide to go with this plan",
+  "Create scripts for 10 short training videos",
+  "Create a client-facing artifact I can share",
+  "Prepare a paid program landing packet",
+  "Package this as a Matterhorn artifact / MCP workflow",
+];
+assert.ok(Array.isArray(demoPacket.canonicalPrompts), "Demo packet should list canonicalPrompts");
+for (const prompt of DEMO_PROMPTS) {
+  assert.ok(demoPacket.canonicalPrompts.includes(prompt), `Demo packet should list canonical prompt: ${prompt}`);
+}
+
+// 19b. All required disclaimers.
+for (const disclaimer of [
+  "not medical advice, diagnosis, or treatment",
+  "general healthy-eating information, not a clinical or therapeutic diet",
+  "No specific outcome, weight change, or fitness result is guaranteed.",
+]) {
+  assert.ok(demoPacketText.includes(disclaimer), `Demo packet should include disclaimer: ${disclaimer}`);
+}
+
+// 19c. Planned-not-live language for storage, hosting, payments, identity/access, email.
+for (const phrase of [
+  "Storage / hosting is planned, not live.",
+  "Payments are planned, not live.",
+  "Identity / access gating is planned, not live.",
+  "Email sending is planned, not live.",
+  "No funds move.",
+  "No email is sent.",
+  "No token gating is enforced.",
+  "No live decentralized storage publish happens.",
+]) {
+  assert.ok(demoPacketText.includes(phrase), `Demo packet should state planned-not-live guarantee: ${phrase}`);
+}
+for (const service of ["Storage / hosting", "Payments", "Identity / access", "Email"]) {
+  assert.ok(demoPacketText.includes(service), `Demo packet should name service hook: ${service}`);
+}
+
+// 19d. No affirmative live-service claims anywhere in the packet.
+for (const forbidden of [
+  "storage is live",
+  "hosting is live",
+  "payments are live",
+  "payment is live",
+  "email sending is live",
+  "email is live",
+  "token gating is live",
+  "identity verification is live",
+  "live payment is available",
+  "live email sending is available",
+  "live storage is available",
+  "live hosting is available",
+  "live token gating is available",
+  "decentralized storage is live",
+]) {
+  assert.equal(
+    demoPacketText.toLowerCase().includes(forbidden.toLowerCase()),
+    false,
+    `Demo packet must not make a live-service claim: ${forbidden}`,
+  );
+}
+
+// 19e. Packet carries the Hermes QA checklist summary and customer-safe success criteria.
+assert.ok(
+  Array.isArray(demoPacket.hermesQaChecklist) && demoPacket.hermesQaChecklist.length >= 5,
+  "Demo packet should include a Hermes QA checklist summary",
+);
+assert.ok(
+  Array.isArray(demoPacket.customerSuccessCriteria) && demoPacket.customerSuccessCriteria.length >= 3,
+  "Demo packet should include customer-safe success criteria",
+);
+assert.equal(demoPacket.noLiveServices, true, "Demo packet should flag noLiveServices: true");
+
 console.log("Wellness Creator Pilot go-live gate passed.");
