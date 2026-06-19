@@ -49,6 +49,16 @@ assert(/Authorization: Bearer <client-token>/.test(chainStage?.command || ""), "
 const sdkValidationStage = payload.stages.find((stage) => stage.id === "market_sdk_validation_api");
 assert(sdkValidationStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected SDK-validation API stage to fixture-skip without server inputs");
 assert(/Authorization: Bearer <client-token>/.test(sdkValidationStage?.command || ""), "expected SDK-validation API command to use bearer auth");
+const hyperliquidWatchStage = payload.stages.find((stage) => stage.id === "hyperliquid_watch_evidence");
+assert(hyperliquidWatchStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected Hyperliquid watch stage to fixture-skip without server inputs");
+assert(/matterhorn-work hyperliquid watch create/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid watch command in fixture stage");
+assert(/--kind funding_rate/.test(hyperliquidWatchStage?.command || ""), "expected Hyperliquid watch kind in fixture stage");
+const polymarketWatchStage = payload.stages.find((stage) => stage.id === "polymarket_watch_evidence");
+assert(polymarketWatchStage?.status === "SKIPPED_WITH_FIXTURE_FALLBACK", "expected Polymarket watch stage to fixture-skip without server inputs");
+assert(/matterhorn-work polymarket watch create/.test(polymarketWatchStage?.command || ""), "expected Polymarket watch command in fixture stage");
+assert(/<public-market-id>/.test(polymarketWatchStage?.command || ""), "expected public Polymarket market id placeholder");
+assert(payload.inputs?.hyperliquidAsset === "BTC", "expected default Hyperliquid asset input");
+assert(payload.inputs?.polymarketMarketIdConfigured === false, "expected no Polymarket market id in fixture mode");
 
 const jsonPath = join(outputDir, "matterhorn-live-public-qa.json");
 const mdPath = join(outputDir, "matterhorn-live-public-qa.md");
@@ -64,6 +74,10 @@ assert(shaFile === `${sha256(json)}  matterhorn-live-public-qa.json`, "expected 
 assert(/Do not use seed phrases, private keys, API secrets/.test(markdown), "expected Markdown safety warning");
 assert(/Market execution-chain API/.test(markdown), "expected Markdown to include execution-chain API stage");
 assert(/Market SDK-validation API/.test(markdown), "expected Markdown to include SDK-validation API stage");
+assert(/Hyperliquid watch evidence/.test(markdown), "expected Markdown to include Hyperliquid watch stage");
+assert(/Polymarket watch evidence/.test(markdown), "expected Markdown to include Polymarket watch stage");
+assert(/--hyperliquid-asset BTC/.test(markdown), "expected Markdown rerun command to include Hyperliquid asset");
+assert(/--polymarket-market-id/.test(markdown), "expected Markdown rerun command to include Polymarket market id");
 assert(!forbidden.test(json), "JSON report leaked secret-shaped fields");
 assert(!forbidden.test(markdown), "Markdown report leaked secret-shaped fields");
 

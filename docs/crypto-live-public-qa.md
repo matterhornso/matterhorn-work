@@ -38,6 +38,8 @@ matterhorn-work crypto live-public-qa \
   --token "$MATTERHORN_WORK_TOKEN" \
   --ss58-address "$MATTERHORN_WORK_BITTENSOR_SS58" \
   --validator-hotkey "$MATTERHORN_WORK_BITTENSOR_VALIDATOR_HOTKEY" \
+  --hyperliquid-asset BTC \
+  --polymarket-market-id "$MATTERHORN_WORK_POLYMARKET_MARKET_ID" \
   --netuid 14 \
   --amount-tao 1 \
   --rate-tolerance 0.01 \
@@ -49,6 +51,8 @@ Input rules:
 
 - `--ss58-address` must be a public Bittensor coldkey/SS58 address.
 - `--validator-hotkey` must be a public validator hotkey.
+- `--hyperliquid-asset` is a public perp symbol used for read-only watch evidence.
+- `--polymarket-market-id` is optional and must be a public market id; without it the Polymarket watch stage is fixture-skipped.
 - `--token` is only the local Matterhorn client bearer token and is not persisted into the evidence bundle.
 - Do not point this at customer funds for the pilot demo.
 

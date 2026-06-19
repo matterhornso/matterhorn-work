@@ -52,6 +52,7 @@ function printHelp() {
     "  --server-url <url> --token <client-token>",
     "  --ss58-address <public-coldkey> --validator-hotkey <public-validator-hotkey>",
     "  --netuid 14 --amount-tao 1 --rate-tolerance 0.01",
+    "  --hyperliquid-asset BTC --polymarket-market-id <public-market-id>",
     "",
     "Optional evidence attachments:",
     "  --customer-ready-smoke <path-to-json>",
@@ -137,6 +138,15 @@ function marketSdkValidationApiCommand() {
   ].join(" ");
 }
 
+function marketWatchCommand(venue, action) {
+  if (venue === "hyperliquid") {
+    if (action === "create") return "matterhorn-work hyperliquid watch create --asset <asset> --kind funding_rate --direction change --threshold 0.01 --json";
+    return `matterhorn-work hyperliquid watch ${action} --json`;
+  }
+  if (action === "create") return "matterhorn-work polymarket watch create <public-market-id> --json";
+  return `matterhorn-work polymarket watch ${action} --json`;
+}
+
 function runNodeJson(script, commandArgs, label) {
   const result = spawnSync(process.execPath, [join(repoRoot, "scripts", script), ...commandArgs], {
     cwd: repoRoot,
@@ -194,6 +204,70 @@ async function fetchJson(url, token, label) {
     };
   }
   return { status: "pass", report: parsed };
+}
+
+async function postJson(url, token, label, body) {
+  assertNoForbiddenPayload(body, label);
+  let response;
+  let raw;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    raw = await response.text();
+  } catch (error) {
+    return {
+      status: "fail",
+      error: `${label} request failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  assertNoForbiddenPayload(raw, label);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return {
+      status: "fail",
+      error: `${label} did not return JSON: ${error instanceof Error ? error.message : String(error)}`,
+      stderr: raw.slice(0, 1000),
+    };
+  }
+  if (!response.ok) {
+    return {
+      status: "fail",
+      error: `${label} returned HTTP ${response.status}`,
+      report: parsed,
+    };
+  }
+  return { status: "pass", report: parsed };
+}
+
+function validateMarketWatchEvidence(venue, evidence) {
+  const errors = [];
+  if (!evidence || typeof evidence !== "object") {
+    return [`${venue} watch evidence was not an object.`];
+  }
+  if (evidence.venue !== venue) errors.push(`${venue} watch evidence has wrong venue.`);
+  if (evidence.safety?.readOnly !== true) errors.push(`${venue} watch evidence must be read-only.`);
+  if (evidence.safety?.canSubmit !== false) errors.push(`${venue} watch evidence must set canSubmit:false.`);
+  if (evidence.safety?.liveSubmissionEnabled !== false) errors.push(`${venue} watch evidence must set liveSubmissionEnabled:false.`);
+  if (evidence.safety?.autoExecutes !== false) errors.push(`${venue} watch evidence must set autoExecutes:false.`);
+  if (!evidence.create?.success) errors.push(`${venue} watch create did not report success.`);
+  if (!evidence.check?.success) errors.push(`${venue} watch check did not report success.`);
+  if (!evidence.digest?.success) errors.push(`${venue} watch digest did not report success.`);
+  const cards = [
+    ...(Array.isArray(evidence.create?.cards) ? evidence.create.cards : []),
+    ...(Array.isArray(evidence.check?.cards) ? evidence.check.cards : []),
+  ];
+  if (!cards.some((card) => card?.kind === `${venue}_watch` || card?.kind === "watch_alert")) {
+    errors.push(`${venue} watch evidence did not include a watch card.`);
+  }
+  return errors;
 }
 
 function validateMarketExecutionChainReport(report) {
@@ -332,6 +406,8 @@ function renderMarkdown(report) {
     `- Client token configured: ${report.inputs.tokenConfigured ? "yes" : "no"}`,
     `- Public SS58/coldkey configured: ${report.inputs.ss58AddressConfigured ? "yes" : "no"}`,
     `- Public validator hotkey configured: ${report.inputs.validatorHotkeyConfigured ? "yes" : "no"}`,
+    `- Hyperliquid asset: ${report.inputs.hyperliquidAsset}`,
+    `- Public Polymarket market id configured: ${report.inputs.polymarketMarketIdConfigured ? "yes" : "no"}`,
     `- Netuid: ${report.inputs.netuid}`,
     `- Amount TAO: ${report.inputs.amountTao}`,
     `- Rate tolerance: ${report.inputs.rateTolerance}`,
@@ -363,6 +439,8 @@ function renderMarkdown(report) {
     "  --token \"$MATTERHORN_WORK_TOKEN\" \\",
     "  --ss58-address \"$MATTERHORN_WORK_BITTENSOR_SS58\" \\",
     "  --validator-hotkey \"$MATTERHORN_WORK_BITTENSOR_VALIDATOR_HOTKEY\" \\",
+    "  --hyperliquid-asset BTC \\",
+    "  --polymarket-market-id \"$MATTERHORN_WORK_POLYMARKET_MARKET_ID\" \\",
     "  --netuid 14 --amount-tao 1 --rate-tolerance 0.01 \\",
     "  --strict --json",
     "```",
@@ -387,6 +465,8 @@ async function main() {
   const netuid = readArg("--netuid", process.env.MATTERHORN_WORK_BITTENSOR_NETUID || "14");
   const amountTao = readArg("--amount-tao", process.env.MATTERHORN_WORK_BITTENSOR_AMOUNT_TAO || "1");
   const rateTolerance = readArg("--rate-tolerance", process.env.MATTERHORN_WORK_BITTENSOR_RATE_TOLERANCE || "0.01");
+  const hyperliquidAsset = readArg("--hyperliquid-asset", process.env.MATTERHORN_WORK_HYPERLIQUID_ASSET || "BTC");
+  const polymarketMarketId = readArg("--polymarket-market-id", process.env.MATTERHORN_WORK_POLYMARKET_MARKET_ID || "");
   const customerReadySmoke = readArg("--customer-ready-smoke", "");
   const marketEvidenceVerify = readArg("--market-evidence-verify", "");
   const bittensorEvidenceVerify = readArg("--bittensor-evidence-verify", "");
@@ -469,6 +549,118 @@ async function main() {
         ? "Fixture mode was requested, so live market route checks were skipped."
         : "No server URL and client token were provided, so live market route checks were skipped in fixture fallback mode.",
       childCommandDisplay("market-live-readonly-smoke.mjs", ["--strict", "--json"]),
+    ));
+  }
+
+  if (!fixtureMode && serverUrl && token && hyperliquidAsset) {
+    const create = await postJson(`${serverUrl}/api/hyperliquid/watches`, token, "Hyperliquid watch create", {
+      asset: hyperliquidAsset,
+      kind: "funding_rate",
+      direction: "change",
+      threshold: 0.01,
+      message: `Watch ${hyperliquidAsset} funding and orderbook movement for a read-only customer demo.`,
+    });
+    const check = create.status === "pass"
+      ? await postJson(`${serverUrl}/api/hyperliquid/watches/check`, token, "Hyperliquid watch check", { watch: create.report?.watch })
+      : { status: "fail", error: "Hyperliquid watch create failed before check." };
+    const digest = create.status === "pass"
+      ? await fetchJson(`${serverUrl}/api/hyperliquid/watches/digest`, token, "Hyperliquid watch digest")
+      : { status: "fail", error: "Hyperliquid watch create failed before digest." };
+    const evidence = {
+      version: "matterhorn.crypto.market-watch-evidence.v1",
+      venue: "hyperliquid",
+      asset: hyperliquidAsset,
+      safety: {
+        readOnly: true,
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        autoExecutes: false,
+      },
+      create: create.report ?? null,
+      check: check.report ?? null,
+      digest: digest.report ?? null,
+      errors: [create.error, check.error, digest.error].filter(Boolean),
+    };
+    const artifact = join(outputDir, "matterhorn-hyperliquid-watch-evidence.json");
+    writeFileSync(artifact, JSON.stringify(evidence, null, 2) + "\n");
+    const validationErrors = validateMarketWatchEvidence("hyperliquid", evidence);
+    stages.push({
+      id: "hyperliquid_watch_evidence",
+      label: "Hyperliquid watch evidence",
+      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && validationErrors.length === 0 ? "pass" : "fail",
+      artifact,
+      summary: validationErrors.length
+        ? "Hyperliquid watch evidence did not satisfy the read-only contract."
+        : "Created, checked, and digested a read-only Hyperliquid watch.",
+      ...(validationErrors.length ? { errors: validationErrors } : {}),
+      command: [
+        marketWatchCommand("hyperliquid", "create"),
+        marketWatchCommand("hyperliquid", "check"),
+        marketWatchCommand("hyperliquid", "digest"),
+      ].join(" && "),
+    });
+  } else {
+    stages.push(stageSkip(
+      "hyperliquid_watch_evidence",
+      "Hyperliquid watch evidence",
+      fixtureMode
+        ? "Fixture mode was requested, so Hyperliquid watch evidence was skipped."
+        : "No server URL, client token, or Hyperliquid asset was provided, so Hyperliquid watch evidence was skipped in fixture fallback mode.",
+      marketWatchCommand("hyperliquid", "create"),
+    ));
+  }
+
+  if (!fixtureMode && serverUrl && token && polymarketMarketId) {
+    const create = await postJson(`${serverUrl}/api/polymarket/watches`, token, "Polymarket watch create", {
+      marketId: polymarketMarketId,
+    });
+    const check = create.status === "pass"
+      ? await postJson(`${serverUrl}/api/polymarket/watches/check`, token, "Polymarket watch check", { watch: create.report?.watch })
+      : { status: "fail", error: "Polymarket watch create failed before check." };
+    const digest = create.status === "pass"
+      ? await fetchJson(`${serverUrl}/api/polymarket/watches/digest`, token, "Polymarket watch digest")
+      : { status: "fail", error: "Polymarket watch create failed before digest." };
+    const evidence = {
+      version: "matterhorn.crypto.market-watch-evidence.v1",
+      venue: "polymarket",
+      marketId: polymarketMarketId,
+      safety: {
+        readOnly: true,
+        canSubmit: false,
+        liveSubmissionEnabled: false,
+        autoExecutes: false,
+      },
+      create: create.report ?? null,
+      check: check.report ?? null,
+      digest: digest.report ?? null,
+      errors: [create.error, check.error, digest.error].filter(Boolean),
+    };
+    const artifact = join(outputDir, "matterhorn-polymarket-watch-evidence.json");
+    writeFileSync(artifact, JSON.stringify(evidence, null, 2) + "\n");
+    const validationErrors = validateMarketWatchEvidence("polymarket", evidence);
+    stages.push({
+      id: "polymarket_watch_evidence",
+      label: "Polymarket watch evidence",
+      status: create.status === "pass" && check.status === "pass" && digest.status === "pass" && validationErrors.length === 0 ? "pass" : "fail",
+      artifact,
+      summary: validationErrors.length
+        ? "Polymarket watch evidence did not satisfy the read-only contract."
+        : "Created, checked, and digested a read-only Polymarket watch.",
+      ...(validationErrors.length ? { errors: validationErrors } : {}),
+      command: [
+        marketWatchCommand("polymarket", "create"),
+        marketWatchCommand("polymarket", "check"),
+        marketWatchCommand("polymarket", "digest"),
+      ].join(" && "),
+    });
+  } else {
+    stages.push(stageSkip(
+      "polymarket_watch_evidence",
+      "Polymarket watch evidence",
+      fixtureMode
+        ? "Fixture mode was requested, so Polymarket watch evidence was skipped."
+        : "No server URL, client token, or public Polymarket market id was provided, so Polymarket watch evidence was skipped in fixture fallback mode.",
+      marketWatchCommand("polymarket", "create"),
     ));
   }
 
@@ -617,6 +809,8 @@ async function main() {
       tokenConfigured: Boolean(token),
       ss58AddressConfigured: Boolean(ss58Address),
       validatorHotkeyConfigured: Boolean(validatorHotkey),
+      hyperliquidAsset,
+      polymarketMarketIdConfigured: Boolean(polymarketMarketId),
       netuid,
       amountTao,
       rateTolerance,
