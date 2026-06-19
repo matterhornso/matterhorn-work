@@ -91,9 +91,12 @@ for (const rendererPhrase of [
   "sharedCardDisplayTitle",
   "sharedCardMissingContext",
   "sharedCardHighlightedStep",
+  "sharedCardSdkValidationItems",
   "External signer",
   "Focused step",
   "Step command",
+  "SDK doctor",
+  "Fixture validation",
   "Freshness",
   "Block",
   "Can submit",
@@ -154,6 +157,14 @@ assert.ok(hyperliquidAccount?.fundingExposure, "Hyperliquid account fixture shou
 const polymarketContext = fixturePack.cards.find((card) => card.venue === "polymarket" && card.originalKind === "polymarket_market_context")?.data?.context;
 assert.equal(polymarketContext?.previewAvailability, "available", "Polymarket context fixture should expose preview availability");
 assert.equal(polymarketContext?.compliance?.status, "allowed", "Polymarket context fixture should expose compliance status");
+
+const sdkValidationGuide = fixturePack.cards.find((card) => card.originalKind === "market_sdk_validation")?.data?.data?.guide;
+assert.ok(sdkValidationGuide, "fixture pack should include the market SDK-validation card");
+assert.ok(sdkValidationGuide.modes?.includes("operator_owned_testnet"), "SDK-validation fixture should expose operator-owned testnet mode");
+assert.ok(sdkValidationGuide.networks?.hyperliquid?.includes("hyperliquid-testnet"), "SDK-validation fixture should expose Hyperliquid testnet");
+assert.ok(sdkValidationGuide.networks?.polymarket?.includes("polygon-amoy"), "SDK-validation fixture should expose Polygon Amoy");
+assert.match(sdkValidationGuide.commands?.doctor || "", /matterhorn-work crypto sdk-doctor/, "SDK-validation fixture should expose the doctor command");
+assert.match(sdkValidationGuide.commands?.fixtureValidation || "", /matterhorn-work crypto sdk-validate-public/, "SDK-validation fixture should expose fixture validation command");
 
 const blockedPolymarketPreview = fixturePack.cards.find((card) => card.venue === "polymarket" && card.kind === "action_preview")?.data?.preview;
 assert.equal(blockedPolymarketPreview?.canSubmit, false, "blocked Polymarket preview must keep canSubmit=false");

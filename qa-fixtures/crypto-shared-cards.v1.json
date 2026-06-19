@@ -22,6 +22,34 @@
     },
     {
       "version": "matterhorn.crypto.shared-card.v1",
+      "kind": "readiness_report",
+      "venue": "auto",
+      "title": "Official SDK validation",
+      "summary": "Public/redacted fixture or operator-owned testnet validation for Hyperliquid and Polymarket signing templates.",
+      "status": "info",
+      "originalKind": "market_sdk_validation",
+      "source": { "source": "matterhorn.sdk-validation", "freshness": "live" },
+      "warnings": ["Matterhorn does not run private SDK signing, compute final signatures, call exchanges, or submit orders."],
+      "data": {
+        "kind": "market_sdk_validation",
+        "data": {
+          "guide": {
+            "modes": ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+            "networks": {
+              "hyperliquid": ["fixture", "hyperliquid-testnet"],
+              "polymarket": ["fixture", "polygon-amoy"]
+            },
+            "commands": {
+              "doctor": "matterhorn-work crypto sdk-doctor --strict --json",
+              "fixtureValidation": "matterhorn-work crypto sdk-validate-public --mode fixture --input-dir qa-fixtures/market-official-sdk --output-dir /tmp/matterhorn-market-sdk-public-validation --strict --json"
+            }
+          }
+        }
+      },
+      "safety": { "nonCustodial": true, "liveSubmissionEnabled": false, "canSubmit": false }
+    },
+    {
+      "version": "matterhorn.crypto.shared-card.v1",
       "kind": "account_snapshot",
       "venue": "bittensor",
       "title": "Wallet snapshot",
