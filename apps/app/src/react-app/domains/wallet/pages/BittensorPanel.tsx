@@ -99,6 +99,7 @@ const CUSTOMER_DEMO_COMMANDS = {
   polymarketWatchDigest: "matterhorn-work polymarket watch digest --json",
   polymarketWatchAct: "matterhorn-work polymarket watch act --watch-file <public-polymarket-watch.json> --alert-index 0 --json",
   smoke: "pnpm smoke:customer-ready-crypto",
+  signArtifactRoutes: "pnpm test:market-sign-artifact-routes",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
   evidenceVerify: [
     "matterhorn-work crypto evidence-verify",
@@ -1130,11 +1131,14 @@ export default function BittensorPanel() {
             <Section title="Evidence" icon={<Database className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Copy customer-safe commands for smoke, live public QA, customer packet, and evidence verification.
+                  Copy customer-safe commands for smoke, route contracts, live public QA, customer packet, and evidence verification.
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("smoke")}>
                     {copiedCustomerCommand === "smoke" ? "Copied" : "Smoke"}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("signArtifactRoutes")}>
+                    {copiedCustomerCommand === "signArtifactRoutes" ? "Copied" : "Route contract"}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("livePublicQa")}>
                     {copiedCustomerCommand === "livePublicQa" ? "Copied" : "Live public QA"}
