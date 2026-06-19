@@ -505,3 +505,239 @@ export const MATTERHORN_WORKFLOW_FIXTURES: Record<string, MatterhornWorkflowMani
   market_read_preview: MARKET_READ_PREVIEW_WORKFLOW,
   decentralized_services_planner: DECENTRALIZED_SERVICES_PLANNER_WORKFLOW,
 };
+
+export interface MatterhornWorkflowEvidenceItem {
+  id: string;
+  label: string;
+  value: string | number | boolean | null;
+  mimeType?: string;
+  public: boolean;
+  source?: string;
+  verifiedAt?: string | null;
+}
+
+export interface MatterhornWorkflowEvidenceBundle {
+  version: "matterhorn.workflow.evidence-bundle.v1";
+  workflowId: string;
+  domain: string;
+  requestedOutcome: string;
+  publicEvidence: MatterhornWorkflowEvidenceItem[];
+  plannedServiceHooks: MatterhornWorkflowServiceHook[];
+  safetyFlags: string[];
+  createdAt: string;
+  source: "operator" | "agent" | "customer" | "system";
+  status: MatterhornWorkflowStatus;
+  canExecute: false;
+}
+
+export const WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "wellness_creator_services",
+  domain: "wellness",
+  requestedOutcome: "Create a safe intake summary for a new wellness client.",
+  publicEvidence: [
+    {
+      id: "client_goal",
+      label: "Client goal",
+      value: "Improve flexibility and reduce stress",
+      mimeType: "text/plain",
+      public: false,
+      source: "customer",
+    },
+    {
+      id: "service_tier",
+      label: "Selected service tier",
+      value: "monthly_yoga_coaching",
+      mimeType: "text/plain",
+      public: false,
+      source: "agent",
+    },
+  ],
+  plannedServiceHooks: [
+    { hook: "email", status: "planned_not_live" },
+    { hook: "payments", status: "planned_not_live" },
+  ],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_execution",
+    "customer_pii_redacted_in_public_evidence",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "agent",
+  status: "planned_not_live",
+  canExecute: false,
+};
+
+export const CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "bittensor_operator",
+  domain: "crypto",
+  requestedOutcome: "Record the inputs and safety checks for a staking preview decision.",
+  publicEvidence: [
+    {
+      id: "wallet_address",
+      label: "Wallet address",
+      value: "5F3xxx...xxxx",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+      verifiedAt: "2026-06-19T12:00:00Z",
+    },
+    {
+      id: "subnet",
+      label: "Subnet ID",
+      value: 1,
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "external_signer_required",
+      label: "External signer required",
+      value: true,
+      mimeType: "text/plain",
+      public: true,
+      source: "system",
+    },
+  ],
+  plannedServiceHooks: [{ hook: "bittensor", status: "live_local" }],
+  safetyFlags: [
+    "no_private_key_collected",
+    "external_signer_required",
+    "no_live_execution_by_matterhorn",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "operator",
+  status: "external_handoff_required",
+  canExecute: false,
+};
+
+export const DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "decentralized_services_planner",
+  domain: "decentralized_services",
+  requestedOutcome: "Capture the planned decentralized-service action and provider comparison.",
+  publicEvidence: [
+    {
+      id: "capability",
+      label: "Selected capability",
+      value: "storage",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "intent_description",
+      label: "Intent description",
+      value: "Pin a public research dataset to IPFS.",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "provider_fixture",
+      label: "Example provider fixture",
+      value: "example-storage-ipfs",
+      mimeType: "text/plain",
+      public: true,
+      source: "agent",
+    },
+  ],
+  plannedServiceHooks: [
+    { hook: "storage", status: "planned_not_live" },
+    { hook: "identity", status: "planned_not_live" },
+  ],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_provider_execution",
+    "future_contract_only",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "agent",
+  status: "planned_not_live",
+  canExecute: false,
+};
+
+export const RESEARCH_SUMMARY_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "research_summary",
+  domain: "research",
+  requestedOutcome: "Record the public inputs used to generate a research summary.",
+  publicEvidence: [
+    {
+      id: "topic",
+      label: "Research topic",
+      value: "Decentralized identity adoption in 2026",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "source_count",
+      label: "Number of public sources reviewed",
+      value: 12,
+      mimeType: "text/plain",
+      public: true,
+      source: "agent",
+    },
+  ],
+  plannedServiceHooks: [{ hook: "storage", status: "planned_not_live" }],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_execution",
+    "public_sources_only",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "system",
+  status: "preview_only",
+  canExecute: false,
+};
+
+export const CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "content_publish",
+  domain: "content",
+  requestedOutcome: "Capture the plan for publishing content without executing provider actions.",
+  publicEvidence: [
+    {
+      id: "content_title",
+      label: "Content title",
+      value: "Intro to Bittensor Staking",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "publish_channel",
+      label: "Publish channel",
+      value: "newsletter",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+  ],
+  plannedServiceHooks: [
+    { hook: "email", status: "planned_not_live" },
+    { hook: "hosting", status: "planned_not_live" },
+  ],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_execution",
+    "preview_before_publish",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "agent",
+  status: "planned_not_live",
+  canExecute: false,
+};
+
+export const MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES: Record<
+  string,
+  MatterhornWorkflowEvidenceBundle
+> = {
+  wellness_customer_intake: WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE,
+  crypto_staking_decision: CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE,
+  decentralized_services_plan: DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE,
+  research_summary: RESEARCH_SUMMARY_EVIDENCE_BUNDLE,
+  content_publish_plan: CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE,
+};

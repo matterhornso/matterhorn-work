@@ -30,11 +30,14 @@ for (const token of [
   "MatterhornWorkflowQAContract",
   "MatterhornWorkflowStatus",
   "MatterhornWorkflowServiceHookType",
+  "MatterhornWorkflowEvidenceItem",
+  "MatterhornWorkflowEvidenceBundle",
   "MATTERHORN_WORKFLOW_STATUSES",
   "MATTERHORN_WORKFLOW_CATEGORIES",
   "MATTERHORN_WORKFLOW_SERVICE_HOOK_TYPES",
   "DEFAULT_MATTERHORN_WORKFLOW_SAFETY_POLICY",
   "MATTERHORN_WORKFLOW_FIXTURES",
+  "MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES",
 ]) {
   assert.ok(types.includes(token), `types missing workflow token: ${token}`);
 }
@@ -167,12 +170,94 @@ for (const snippet of [
   "MatterhornWorkflowServiceHook",
   "MatterhornWorkflowSafetyPolicy",
   "MatterhornWorkflowQAContract",
+  "MatterhornWorkflowEvidenceBundle",
   "wellness_creator_services",
   "bittensor_operator",
   "market_read_preview",
   "decentralized_services_planner",
 ]) {
   assert.ok(doc.includes(snippet), `doc missing: ${snippet}`);
+}
+
+// 12. Evidence bundle fixtures are safe and complete.
+const evidenceBundleIds = [
+  "wellness_customer_intake",
+  "crypto_staking_decision",
+  "decentralized_services_plan",
+  "research_summary",
+  "content_publish_plan",
+];
+
+for (const id of evidenceBundleIds) {
+  const constantName = `${id.toUpperCase()}_EVIDENCE_BUNDLE`;
+  assert.ok(types.includes(constantName), `types missing evidence bundle constant: ${constantName}`);
+}
+
+function extractEvidenceBundleBlocks(text) {
+  const blocks = {};
+  const regex = /export const (\w+)_EVIDENCE_BUNDLE:\s*MatterhornWorkflowEvidenceBundle\s*=\s*\{/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    const start = match.index;
+    let braceDepth = 0;
+    let inString = false;
+    let stringChar = "";
+    let started = false;
+    for (let i = match.index + match[0].length - 1; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") {
+          i++;
+          continue;
+        }
+        if (ch === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = true;
+        stringChar = ch;
+        continue;
+      }
+      if (ch === "{") {
+        braceDepth++;
+        started = true;
+      } else if (ch === "}") {
+        braceDepth--;
+      }
+      if (started && braceDepth === 0) {
+        blocks[name] = text.slice(start, i + 1);
+        break;
+      }
+    }
+  }
+  return blocks;
+}
+
+const evidenceBlocks = extractEvidenceBundleBlocks(types);
+assert.equal(Object.keys(evidenceBlocks).length, evidenceBundleIds.length, `expected ${evidenceBundleIds.length} evidence bundle blocks`);
+
+for (const [name, block] of Object.entries(evidenceBlocks)) {
+  assert.ok(block.includes('version: "matterhorn.workflow.evidence-bundle.v1"'), `${name} must use evidence bundle version`);
+  assert.ok(block.includes("workflowId:"), `${name} must include workflowId`);
+  assert.ok(block.includes("domain:"), `${name} must include domain`);
+  assert.ok(block.includes("requestedOutcome:"), `${name} must include requestedOutcome`);
+  assert.ok(/publicEvidence:[\s\S]*?\{[\s\S]*?\}/.test(block), `${name} must have at least one public evidence item`);
+  assert.ok(/plannedServiceHooks:[\s\S]*?\{[\s\S]*?\}/.test(block), `${name} must have at least one planned service hook`);
+  assert.ok(block.includes("safetyFlags:"), `${name} must include safetyFlags`);
+  assert.ok(block.includes("createdAt:"), `${name} must include createdAt`);
+  assert.ok(block.includes("source:"), `${name} must include source`);
+  assert.ok(block.includes("canExecute: false"), `${name} must set canExecute: false`);
+  for (const forbidden of ["privateKey", "seedPhrase", "mnemonic", "apiSecret", "rawSignature", "signedPayload", "walletExport", "passphrase", "password", "keyfile", "suri"]) {
+    assert.equal(block.includes(forbidden), false, `${name} must not contain credential-shaped value: ${forbidden}`);
+  }
+}
+
+const evidenceRegistryBlock = types.slice(types.indexOf("MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES"));
+for (const id of evidenceBundleIds) {
+  assert.ok(evidenceRegistryBlock.includes(id), `evidence bundle registry missing: ${id}`);
 }
 
 console.log("Matterhorn workflow contract static check passed.");
