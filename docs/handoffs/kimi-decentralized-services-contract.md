@@ -95,6 +95,28 @@ No changes were made to:
 - `docs/wellness-creator-pilot.md`
 - `docs/handoffs/hermes-wellness-creator-qa.md`
 
+## Next fixture layer
+
+The PR also added readonly provider-discovery fixture constants in `packages/types/src/decentralized-services.ts`:
+
+- `HOSTING_DISCOVERY_FIXTURES`
+- `STORAGE_DISCOVERY_FIXTURES`
+- `EMAIL_DISCOVERY_FIXTURES`
+- `PAYMENTS_DISCOVERY_FIXTURES`
+- `IDENTITY_DISCOVERY_FIXTURES`
+- `DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES` — a record mapping each capability to its fixture array
+
+Each fixture is typed as `DecentralizedServiceDiscoveryFixture` with:
+
+- `status: "future_contract"`
+- `discoveryMode: "fixture"`
+- `liveExecutionEnabled: false`
+- `canExecute: false`
+- `acceptsSecrets: false`, `acceptsPrivateKeys: false`, `acceptsRawSignatures: false`
+- `publicMetadata` containing only public/redacted provider metadata
+
+The static test was extended to assert at least one fixture block per capability and to verify each fixture block contains the readonly/future-contract fields and no forbidden credential keys.
+
 ## Useful references
 
 - Contract doc: `docs/decentralized-services-capability-contract.md`

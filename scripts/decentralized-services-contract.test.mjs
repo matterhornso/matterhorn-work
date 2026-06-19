@@ -101,4 +101,67 @@ assert.ok(index.includes('export * from "./decentralized-services"'), "types ind
 assert.ok(typesPackage.exports["./decentralized-services"], "types package should export ./decentralized-services");
 assert.equal(rootPackage.scripts["test:decentralized-services-contract"], "node scripts/decentralized-services-contract.test.mjs");
 
+// 8. Provider-discovery fixtures exist for every capability and are readonly/future-contract only.
+const fixtureConstants = [
+  "HOSTING_DISCOVERY_FIXTURES",
+  "STORAGE_DISCOVERY_FIXTURES",
+  "EMAIL_DISCOVERY_FIXTURES",
+  "PAYMENTS_DISCOVERY_FIXTURES",
+  "IDENTITY_DISCOVERY_FIXTURES",
+  "DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES",
+];
+for (const constant of fixtureConstants) {
+  assert.ok(types.includes(constant), `types missing discovery fixture constant: ${constant}`);
+}
+
+function extractFixtureBlocks(text) {
+  const blocks = [];
+  const regex = /:\s*DecentralizedServiceDiscoveryFixture\[\]\s*=\s*\[([\s\S]*?)\];/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) blocks.push(match[1]);
+  return blocks;
+}
+
+const fixtureBlocks = extractFixtureBlocks(types);
+assert.ok(fixtureBlocks.length >= 5, `expected at least 5 capability fixture blocks, found ${fixtureBlocks.length}`);
+
+const forbiddenFixtureKeys = [
+  '"privateKey":',
+  '"private_key":',
+  '"seed":',
+  '"seedPhrase":',
+  '"seed_phrase":',
+  '"mnemonic":',
+  '"rawSignature":',
+  '"raw_signature":',
+  '"apiSecret":',
+  '"api_secret":',
+  '"apiKeySecret":',
+  '"walletExport":',
+  '"wallet_export":',
+  '"passphrase":',
+  '"password":',
+  '"keyfile":',
+  '"suri":',
+];
+
+for (const block of fixtureBlocks) {
+  assert.ok(/status:\s*"future_contract"|status:\s*"readonly_preview"/.test(block), "fixture status must be future_contract or readonly_preview");
+  assert.ok(block.includes("liveExecutionEnabled: false"), "fixture must set liveExecutionEnabled: false");
+  assert.ok(block.includes("canExecute: false"), "fixture must set canExecute: false");
+  assert.ok(block.includes("acceptsSecrets: false"), "fixture must set acceptsSecrets: false");
+  assert.ok(block.includes("acceptsPrivateKeys: false"), "fixture must set acceptsPrivateKeys: false");
+  assert.ok(block.includes("acceptsRawSignatures: false"), "fixture must set acceptsRawSignatures: false");
+  assert.ok(block.includes("publicMetadata:"), "fixture must use publicMetadata for provider metadata");
+  for (const forbidden of forbiddenFixtureKeys) {
+    assert.equal(block.includes(forbidden), false, `fixture must not request forbidden key: ${forbidden}`);
+  }
+}
+
+// 9. Fixture registry maps all capabilities to at least one fixture.
+const registryBlock = types.slice(types.indexOf("DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES"));
+for (const capability of capabilities) {
+  assert.ok(registryBlock.includes(capability), `fixture registry missing capability: ${capability}`);
+}
+
 console.log("Decentralized services capability contract static check passed.");
