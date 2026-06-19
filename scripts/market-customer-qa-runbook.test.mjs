@@ -16,10 +16,11 @@ for (const section of [
   "## 2. Offline Venue QA",
   "## 3. Local Server Smoke",
   "## 4. Preview And Handoff Smoke",
-  "## 5. Receipt Evidence Smoke",
-  "## 6. UI/UX Checks",
-  "## 7. Security Red Lines",
-  "## 8. Evidence To Report Back",
+  "## 5. Testnet Sign-Request And Redacted Artifact Validation Smoke",
+  "## 6. Receipt Evidence Smoke",
+  "## 7. UI/UX Checks",
+  "## 8. Security Red Lines",
+  "## 9. Evidence To Report Back",
 ]) {
   assert.ok(doc.includes(section), `runbook missing section: ${section}`);
 }
@@ -35,6 +36,10 @@ for (const command of [
   "matterhorn-work hyperliquid preview-order",
   "matterhorn-work hyperliquid handoff",
   "matterhorn-work polymarket markets",
+  "matterhorn-work hyperliquid sign-request",
+  "matterhorn-work hyperliquid validate-artifact",
+  "matterhorn-work polymarket sign-request",
+  "matterhorn-work polymarket validate-artifact",
   "matterhorn-work hyperliquid receipt",
 ]) {
   assert.ok(doc.includes(command), `runbook missing command: ${command}`);
@@ -46,8 +51,16 @@ for (const required of [
   "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
   "externalSignerOnly: true",
+  "matterhorn.market.external-sign-request.v1",
+  "matterhorn.market.redacted-signed-artifact-envelope.v1",
+  "matterhorn.market.artifact-validation.v1",
+  "executionMode: testnet_external_signer",
+  "submitSignedAllowedByContract: false",
+  "submitSignedAllowedByContract: true",
+  "hash mismatches",
   "previewSha256",
   "handoffSha256",
+  "rawSignature",
   "signature",
   "privateKey",
   "apiSecret",
