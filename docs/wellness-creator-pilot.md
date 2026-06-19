@@ -96,6 +96,24 @@ These are roadmap items. None are enabled in this pilot. Do not describe any of 
 
 The pilot is deliberately useful with **zero** Web3 setup. Web3 is the upgrade path, not the entry fee — consistent with Matterhorn Work's goal of letting normal users do Web3-shaped work through chat without needing to understand wallets, chains, or payments first.
 
+## Matterhorn Services Bridge (Planned — Not Live)
+
+The pilot delivers value today with zero infrastructure — every output is a chat-generated Matterhorn artifact. As Matterhorn Work's first-party platform services come online, each wellness workflow has a natural upgrade path onto a Matterhorn service. **Every mapping below is planned, not live.** None of these services is enabled in the pilot, and the app must never claim any of them is active.
+
+| Wellness workflow (live today) | Future Matterhorn service | Status |
+|---|---|---|
+| Client artifact (shareable doc) | **Storage / hosting** — durable, creator-owned hosting of the artifact | Planned — not live |
+| Paid program landing packet | **Payments** — real checkout so a client can pay the creator | Planned — not live |
+| Gated client access (premium program or community) | **Identity / access** — verify a client and gate who can open the artifact | Planned — not live |
+| Customer updates / newsletter | **Email** — send program updates and newsletters to clients | Planned — not live |
+
+- **Storage / hosting (planned).** Today the client artifact is a standard Matterhorn artifact shared as a link or file. The future hook publishes it to Matterhorn-hosted (and optionally decentralized) storage so the share link is durable and creator-owned. Not live — no hosting or storage service is wired in the pilot.
+- **Payments (planned).** Today the landing packet uses placeholder pricing and a placeholder call-to-action; no checkout runs and no funds move. The future hook adds a real checkout so a client can pay the creator directly. Not live — the pilot processes no payment.
+- **Identity / access (planned).** Today there is no gating; an artifact is open to anyone with the link. The future hook adds client verification and access control so a premium program or community can be gated. Not live — no token gating or access control is active in the pilot.
+- **Email (planned).** Today the creator copies content out of Matterhorn and sends it themselves. The future hook sends program updates and newsletters to clients from Matterhorn. Not live — the pilot sends no email.
+
+Until each service ships, the app must never claim it can host on a live storage service, take a payment, enforce token-gated access, or send email. These remain **planned, not live** capabilities, consistent with the Future Web3 Hooks above.
+
 ## How This Demonstrates Matterhorn Work
 
 - **Chat-first work creation:** a non-technical creator gets professional output from plain-language prompts.

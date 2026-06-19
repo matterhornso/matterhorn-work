@@ -244,4 +244,43 @@ assert.ok(
   "Pilot helper should explain forbidden credential flags",
 );
 
+// 16. Matterhorn Services Bridge: each wellness workflow maps to a future
+//     Matterhorn service, every one disclosed as planned-not-live.
+assert.ok(doc.includes("Matterhorn Services Bridge"), "Pilot doc should include the Matterhorn Services Bridge section");
+assert.ok(doc.includes("Planned — not live"), "Services Bridge should label each mapping planned-not-live");
+for (const service of ["Storage / hosting", "Payments", "Identity / access", "Email"]) {
+  assert.ok(doc.includes(service), `Services Bridge should map a workflow to future service: ${service}`);
+}
+
+// 17. Handoff covers service-bridge honesty (no live payments/storage/token gating/email).
+assert.ok(
+  handoff.includes("Matterhorn Services Bridge Honesty Tests"),
+  "Hermes handoff should include the Matterhorn Services Bridge honesty tests",
+);
+for (const phrase of [
+  "email sending is planned, not live",
+  "no payment is taken",
+  "no token gating is enforced",
+]) {
+  assert.ok(handoff.includes(phrase), `Hermes handoff should confirm a service is not live: ${phrase}`);
+}
+
+// 18. No fixture or doc may claim a Matterhorn bridge service is live.
+const FORBIDDEN_SERVICE_LIVE = [
+  "storage service is live",
+  "payment processing is live",
+  "token gating is live",
+  "email sending is live",
+];
+for (const path of claimTargets) {
+  const text = readFileSync(path, "utf8").toLowerCase();
+  for (const forbidden of FORBIDDEN_SERVICE_LIVE) {
+    assert.equal(
+      text.includes(forbidden.toLowerCase()),
+      false,
+      `${path} must not claim a Matterhorn service is live: ${forbidden}`,
+    );
+  }
+}
+
 console.log("Wellness Creator Pilot go-live gate passed.");
