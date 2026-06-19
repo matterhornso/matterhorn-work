@@ -1815,7 +1815,7 @@ async function bootRuntimeForSelectedWorkspace() {
     name: bootWorkspace.name ?? bootWorkspace.displayName ?? null,
   }).catch(() => undefined);
   const matterhornServer = assertMatterhornServerReady(await runtimeManager.matterhornServerInfo());
-  return { ok: true, skipped: false, engine, openworkServer, workspaceId: bootWorkspace.id ?? null };
+  return { ok: true, skipped: false, engine, matterhornServer, workspaceId: bootWorkspace.id ?? null };
 }
 
 function ensureRuntimeBootstrap() {
