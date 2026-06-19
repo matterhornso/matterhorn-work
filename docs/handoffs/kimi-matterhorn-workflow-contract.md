@@ -2,8 +2,9 @@
 
 **Owner:** Kimi (coding agent)  
 **PR:** https://github.com/matterhornso/matterhorn-work/pull/406  
-**Branch:** `kimi/workflow-contract-generic-layer`  
-**Base:** `dev`  
+**Branch merged to dev:** `kimi/workflow-contract-generic-layer`  
+**Merge commit:** `2798467e`  
+**Merged at:** 2026-06-19T16:17:12Z  
 **Scope:** Generic, reusable workflow contract layer for wellness, Web3, Bittensor, markets, decentralized services, and future vertical workflows. Contract/test/doc work only. No live provider execution, signing, submission, custody, or secrets.
 
 ## What was built
@@ -98,9 +99,14 @@ pnpm --dir packages/types build
 pnpm test:market-execution-safety-gate
 ```
 
-## CI status
+## CI status on merge
 
-Awaiting CI results on PR #406.
+All GitHub checks on PR #406 passed:
+
+- `openwork-tests (blacksmith-4vcpu-ubuntu-2204)` — SUCCESS
+- `openwork-tests (macos-14)` — SUCCESS
+- `customer-crypto-gates` — SUCCESS
+- `i18n-audit` — SUCCESS
 
 ## Non-overlap observed
 
