@@ -147,6 +147,69 @@ pnpm --dir packages/types build
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
+## PR #401: preview-only fixtures
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/401  
+**Branch merged to dev:** `kimi/decentralized-services-preview-fixtures`  
+**Scope:** Public/redacted, non-executable preview fixture constants for all five capabilities.
+
+### New types added
+
+In `packages/types/src/decentralized-services.ts`:
+
+- `HOSTING_PREVIEW_FIXTURES`
+- `STORAGE_PREVIEW_FIXTURES`
+- `EMAIL_PREVIEW_FIXTURES`
+- `PAYMENTS_PREVIEW_FIXTURES`
+- `IDENTITY_PREVIEW_FIXTURES`
+- `DECENTRALIZED_SERVICE_PREVIEW_FIXTURES` — a record mapping each capability to its preview fixture array
+
+Each preview fixture:
+
+- Uses `version: "matterhorn.services.preview.v1"`.
+- Sets `canExecute: false`.
+- Uses a future/preview-only `execution` state (`preview_required`, `confirmation_required`, or `external_handoff_required`).
+- Includes `consequence`, `confirmationText`, and `previewSha256`.
+- Contains no private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+- Has no submit route, sign route, or live execution path.
+
+### Test extensions
+
+`scripts/decentralized-services-contract.test.mjs` was extended to assert:
+
+- Every capability has at least one preview fixture constant.
+- Every preview fixture block uses `matterhorn.services.preview.v1`.
+- Every preview fixture block sets `canExecute: false`.
+- Every preview fixture block uses a future/preview-only `execution` state.
+- Every preview fixture block includes `consequence`, `confirmationText`, and `previewSha256`.
+- No preview fixture block contains forbidden credential-shaped values (`privateKey`, `seedPhrase`, `mnemonic`, `apiSecret`, `rawSignature`, `signedPayload`, `walletExport`, `passphrase`, `password`, `keyfile`, `suri`).
+- The `DECENTRALIZED_SERVICE_PREVIEW_FIXTURES` registry covers all five capabilities.
+
+### Doc updates
+
+`docs/decentralized-services-capability-contract.md` gained a "Preview Fixture Layer" section explaining that the fixtures are safe examples for future previews, are not executable, and exist so agents can show previews before any real provider is integrated.
+
+### Commands that pass on PR #401
+
+```bash
+pnpm test:decentralized-services-contract
+pnpm test:market-execution-safety-gate
+pnpm --dir packages/types build
+```
+
+### Non-overlap observed
+
+No changes were made to:
+
+- `apps/server/src/server.ts`
+- `packages/matterhorn-work-mcp/index.mjs`
+- `apps/orchestrator/src/cli.ts`
+- `scripts/decentralized-services-capabilities.mjs`
+- `scripts/decentralized-services-operator-helper.test.mjs`
+- `docs/wellness-creator-pilot.md`
+- `scripts/wellness-creator-pilot.*`
+- stale PR #2
+
 ## Useful references
 
 - Contract doc: `docs/decentralized-services-capability-contract.md`
