@@ -608,6 +608,18 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_hyperliquid_act_on_watch_alert",
+    description: "Select one Hyperliquid watch alert and run a deterministic read-only crypto-chat review prompt. Never signs, submits, or auto-executes trades.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        watch: { type: "object", description: "Optional public watch descriptor returned by matterhorn_hyperliquid_create_watch." },
+        watches: { type: "array", items: { type: "object" } },
+        alertIndex: { type: "number", description: "Zero-based index into triggered/degraded watch checks." },
+      },
+    },
+  },
+  {
     name: "matterhorn_hyperliquid_preview_order",
     description: "Prepare a non-submittable Hyperliquid order preview. Returns canSubmit=false and never sends the exchange endpoint.",
     inputSchema: {
@@ -781,6 +793,18 @@ const tools = [
     name: "matterhorn_polymarket_watch_digest",
     description: "Summarize Polymarket read-only watch alerts into an agent-facing digest. Never signs, submits, or auto-executes orders.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_polymarket_act_on_watch_alert",
+    description: "Select one Polymarket watch alert and run a deterministic read-only crypto-chat review prompt. Never signs, submits, or auto-executes orders.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        watch: { type: "object", description: "Optional public watch descriptor returned by matterhorn_polymarket_create_watch." },
+        watches: { type: "array", items: { type: "object" } },
+        alertIndex: { type: "number", description: "Zero-based index into triggered/degraded watch checks." },
+      },
+    },
   },
   {
     name: "matterhorn_polymarket_preview_order",
@@ -1717,6 +1741,100 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
     },
     chat,
     source: "matterhorn_bittensor_act_on_watch_alert",
+  };
+}
+
+function marketWatchChecks(result) {
+  if (Array.isArray(result?.checks)) return result.checks;
+  if (Array.isArray(result?.digest?.checks)) return result.digest.checks;
+  if (result?.check && typeof result.check === "object") return [result.check];
+  return [];
+}
+
+function summarizeMarketWatchCheck(venue, check, fallbackWatch = {}) {
+  const watch = check?.watch && typeof check.watch === "object" ? check.watch : fallbackWatch;
+  const observations = Array.isArray(check?.observations) ? check.observations : [];
+  const alerts = Array.isArray(check?.alerts) ? check.alerts.filter((item) => typeof item === "string" && item.trim()) : [];
+  const source = check?.source && typeof check.source === "object" ? check.source : {};
+  return {
+    venue,
+    status: check?.status || "unknown",
+    watchId: check?.watchId || watch?.id || null,
+    marketId: check?.marketId || watch?.marketId || null,
+    asset: watch?.asset || null,
+    kind: watch?.kind || null,
+    alerts,
+    observationCount: observations.length,
+    source: source?.source || null,
+    freshness: source?.freshness || null,
+  };
+}
+
+function buildMarketWatchAlertPrompt(venue, selected) {
+  const venueLabel = venue === "hyperliquid" ? "Hyperliquid" : "Polymarket";
+  const summary = summarizeMarketWatchCheck(venue, selected.check, selected.watch);
+  const subject = summary.asset || summary.marketId || summary.watchId || "the selected watch";
+  const alertText = summary.alerts.length ? summary.alerts.join("; ") : `status is ${summary.status}`;
+  return [
+    `Use unified crypto chat. Review this read-only ${venueLabel} watch alert for ${subject}.`,
+    `Alert context: ${alertText}.`,
+    "Explain the public observations, source/freshness, risk notes, and safe next steps.",
+    "Do not sign, submit, broadcast, auto-execute, request API secrets, request private keys, or accept raw signatures or signed payloads.",
+  ].join(" ");
+}
+
+function selectMarketWatchAlert(venue, result, args = {}) {
+  const checks = marketWatchChecks(result);
+  const watches = Array.isArray(args.watches) ? args.watches : [];
+  const alertLike = checks.filter((check) => {
+    const status = check?.status || "unknown";
+    return status !== "ok";
+  });
+  const alertIndex = parseNonNegativeInteger(args.alertIndex, 0, "alertIndex");
+  const check = alertLike[alertIndex];
+  if (!check) {
+    throw new Error(`No ${venue} watch alert found at alertIndex ${alertIndex}.`);
+  }
+  const watch = checks.length === 1 && args.watch && typeof args.watch === "object"
+    ? args.watch
+    : watches.find((candidate) => candidate && typeof candidate === "object" && (candidate.id === check.watchId || candidate.marketId === check.marketId)) || {};
+  return { check, watch };
+}
+
+async function matterhornMarketActOnWatchAlert(venue, args = {}) {
+  const basePath = venue === "hyperliquid" ? "/api/hyperliquid" : "/api/polymarket";
+  const result = await callServer(`${basePath}/watches/check`, {
+    method: "POST",
+    body: {
+      ...(args.watch && typeof args.watch === "object" ? { watch: args.watch } : {}),
+      ...(Array.isArray(args.watches) ? { watches: args.watches } : {}),
+    },
+  });
+  const selected = selectMarketWatchAlert(venue, result, args);
+  const prompt = buildMarketWatchAlertPrompt(venue, selected);
+  const chat = await callServer(`${basePath}/chat/execute`, {
+    method: "POST",
+    body: {
+      message: prompt,
+      ...(venue === "hyperliquid" && typeof selected.watch?.asset === "string" ? { asset: selected.watch.asset } : {}),
+      ...(venue === "hyperliquid" && typeof selected.watch?.address === "string" ? { address: selected.watch.address } : {}),
+      ...(venue === "polymarket" && typeof selected.watch?.marketId === "string" ? { marketId: selected.watch.marketId } : {}),
+    },
+  });
+  return {
+    ok: chat?.success !== false,
+    selectedAlert: summarizeMarketWatchCheck(venue, selected.check, selected.watch),
+    action: {
+      label: "Review alert with crypto chat",
+      prompt,
+    },
+    chat,
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      canSubmit: false,
+    },
+    source: `matterhorn_${venue}_act_on_watch_alert`,
   };
 }
 
@@ -3319,6 +3437,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/hyperliquid/watches/check", { method: "POST", body: args });
     case "matterhorn_hyperliquid_watch_digest":
       return callServer("/api/hyperliquid/watches/digest");
+    case "matterhorn_hyperliquid_act_on_watch_alert":
+      return matterhornMarketActOnWatchAlert("hyperliquid", args);
     case "matterhorn_hyperliquid_preview_order":
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
     case "matterhorn_hyperliquid_prepare_handoff":
@@ -3347,6 +3467,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/polymarket/watches/check", { method: "POST", body: args });
     case "matterhorn_polymarket_watch_digest":
       return callServer("/api/polymarket/watches/digest");
+    case "matterhorn_polymarket_act_on_watch_alert":
+      return matterhornMarketActOnWatchAlert("polymarket", args);
     case "matterhorn_polymarket_preview_order":
       return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
     case "matterhorn_polymarket_prepare_handoff":

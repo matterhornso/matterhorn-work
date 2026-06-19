@@ -231,9 +231,18 @@ const server = createServer(async (req, res) => {
     });
   }
   if (req.method === "POST" && url.pathname === "/api/hyperliquid/watches/check") {
+    const watch = body.watch ?? { id: "hl-watch-mcp", asset: "BTC" };
+    const isAlert = watch.id === "hl-watch-alert";
     return json(res, 200, {
       success: true,
-      checks: [{ watch: body.watch ?? { id: "hl-watch-mcp", asset: "BTC" }, status: "ok", cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid watch alert" }] }],
+      checks: [{
+        watch,
+        watchId: watch.id,
+        status: isAlert ? "triggered" : "ok",
+        alerts: isAlert ? ["BTC funding moved past the configured threshold."] : [],
+        source: { source: "mock.hyperliquid", freshness: "live" },
+        cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid watch alert" }],
+      }],
       cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid watch alert" }],
     });
   }
@@ -325,9 +334,19 @@ const server = createServer(async (req, res) => {
     });
   }
   if (req.method === "POST" && url.pathname === "/api/polymarket/watches/check") {
+    const watch = body.watch ?? { id: "pm-watch-mcp", marketId: "0xmarket-ai" };
+    const isAlert = watch.id === "pm-watch-alert";
     return json(res, 200, {
       success: true,
-      checks: [{ watch: body.watch ?? { id: "pm-watch-mcp", marketId: "0xmarket-ai" }, status: "ok", cards: [{ kind: "polymarket_watch", title: "Polymarket watch alert" }] }],
+      checks: [{
+        watch,
+        watchId: watch.id,
+        marketId: watch.marketId,
+        status: isAlert ? "triggered" : "ok",
+        alerts: isAlert ? ["Market liquidity moved past the configured threshold."] : [],
+        source: { source: "mock.polymarket", freshness: "live" },
+        cards: [{ kind: "polymarket_watch", title: "Polymarket watch alert" }],
+      }],
       cards: [{ kind: "polymarket_watch", title: "Polymarket watch alert" }],
     });
   }
@@ -420,6 +439,20 @@ const server = createServer(async (req, res) => {
     });
   }
   if (req.method === "POST" && url.pathname === "/api/hyperliquid/chat/execute") {
+    if (typeof body.message === "string" && body.message.startsWith("Use unified crypto chat. Review this read-only Hyperliquid watch alert")) {
+      assert.equal(body.asset, "BTC");
+      assert.equal("apiSecret" in body, false);
+      assert.equal("privateKey" in body, false);
+      assert.equal("signedPayload" in body, false);
+      return json(res, 200, {
+        success: true,
+        venue: "hyperliquid",
+        execution: "read_only",
+        responseText: "Hyperliquid watch alert review ready.",
+        cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid alert review" }],
+        warnings: [],
+      });
+    }
     assert.equal(body.message, "preview buying 0.1 BTC at 65000");
     assert.equal("apiSecret" in body, false);
     return json(res, 200, {
@@ -431,6 +464,22 @@ const server = createServer(async (req, res) => {
       cards: [],
       warnings: [],
     });
+  }
+  if (req.method === "POST" && url.pathname === "/api/polymarket/chat/execute") {
+    if (typeof body.message === "string" && body.message.startsWith("Use unified crypto chat. Review this read-only Polymarket watch alert")) {
+      assert.equal(body.marketId, "0xmarket-ai");
+      assert.equal("apiSecret" in body, false);
+      assert.equal("privateKey" in body, false);
+      assert.equal("signedPayload" in body, false);
+      return json(res, 200, {
+        success: true,
+        venue: "polymarket",
+        execution: "read_only",
+        responseText: "Polymarket watch alert review ready.",
+        cards: [{ kind: "polymarket_watch", title: "Polymarket alert review" }],
+        warnings: [],
+      });
+    }
   }
   if (req.method === "POST" && url.pathname === "/api/crypto/chat/execute") {
     assert.equal("apiSecret" in body, false);
@@ -779,6 +828,7 @@ try {
     "matterhorn_hyperliquid_create_watch",
     "matterhorn_hyperliquid_check_watches",
     "matterhorn_hyperliquid_watch_digest",
+    "matterhorn_hyperliquid_act_on_watch_alert",
     "matterhorn_hyperliquid_preview_order",
     "matterhorn_hyperliquid_create_sign_request",
     "matterhorn_hyperliquid_validate_external_artifact",
@@ -787,6 +837,7 @@ try {
     "matterhorn_polymarket_create_watch",
     "matterhorn_polymarket_check_watches",
     "matterhorn_polymarket_watch_digest",
+    "matterhorn_polymarket_act_on_watch_alert",
     "matterhorn_bittensor_chat",
     "matterhorn_bittensor_list_capabilities",
     "matterhorn_bittensor_get_subnet_capability",
@@ -819,7 +870,9 @@ try {
   assert.match(descriptionFor("matterhorn_market_sdk_validation"), /official SDK validation guide/i);
   assert.match(descriptionFor("matterhorn_market_artifact_reconcile"), /public\/redacted/i);
   assert.match(descriptionFor("matterhorn_hyperliquid_watch_digest"), /agent-facing digest/i);
+  assert.match(descriptionFor("matterhorn_hyperliquid_act_on_watch_alert"), /deterministic read-only crypto-chat review/i);
   assert.match(descriptionFor("matterhorn_polymarket_watch_digest"), /agent-facing digest/i);
+  assert.match(descriptionFor("matterhorn_polymarket_act_on_watch_alert"), /deterministic read-only crypto-chat review/i);
   assert.match(descriptionFor("matterhorn_bittensor_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_bittensor_list_capabilities"), /before previewing or invoking/i);
   assert.match(descriptionFor("matterhorn_bittensor_get_subnet_capability"), /before previewing or invoking/i);
@@ -1018,6 +1071,16 @@ try {
   assert.equal(hyperliquidWatchDigest.digest.version, "matterhorn.hyperliquid.watch-digest.v1");
   assert.equal(hyperliquidWatchDigest.digest.alertCount, 0);
 
+  const hyperliquidWatchAct = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_hyperliquid_act_on_watch_alert",
+    arguments: { watch: { id: "hl-watch-alert", kind: "funding_rate", asset: "BTC" } },
+  }));
+  assert.equal(hyperliquidWatchAct.selectedAlert.status, "triggered");
+  assert.equal(hyperliquidWatchAct.selectedAlert.asset, "BTC");
+  assert.match(hyperliquidWatchAct.action.prompt, /Do not sign, submit, broadcast, auto-execute/);
+  assert.equal(hyperliquidWatchAct.chat.responseText, "Hyperliquid watch alert review ready.");
+  assert.equal(hyperliquidWatchAct.safety.canSubmit, false);
+
   const hyperliquidPreview = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_preview_order",
     arguments: { asset: "BTC", side: "buy", size: 0.1, price: 65000 },
@@ -1064,6 +1127,16 @@ try {
   }));
   assert.equal(polymarketWatchDigest.digest.version, "matterhorn.polymarket.watch-digest.v1");
   assert.equal(polymarketWatchDigest.digest.alertCount, 0);
+
+  const polymarketWatchAct = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_polymarket_act_on_watch_alert",
+    arguments: { watch: { id: "pm-watch-alert", marketId: "0xmarket-ai" } },
+  }));
+  assert.equal(polymarketWatchAct.selectedAlert.status, "triggered");
+  assert.equal(polymarketWatchAct.selectedAlert.marketId, "0xmarket-ai");
+  assert.match(polymarketWatchAct.action.prompt, /Do not sign, submit, broadcast, auto-execute/);
+  assert.equal(polymarketWatchAct.chat.responseText, "Polymarket watch alert review ready.");
+  assert.equal(polymarketWatchAct.safety.canSubmit, false);
 
   const hyperliquidArtifactValidation = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_hyperliquid_validate_external_artifact",
