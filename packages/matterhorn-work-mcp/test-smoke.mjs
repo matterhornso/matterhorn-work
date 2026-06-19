@@ -709,6 +709,7 @@ try {
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
+    "matterhorn_crypto_live_public_qa",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
     "matterhorn_market_sdk_validation",
@@ -751,6 +752,7 @@ try {
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
+  assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
   assert.match(descriptionFor("matterhorn_market_sdk_validation"), /official SDK validation guide/i);
@@ -1082,6 +1084,25 @@ try {
   assert.equal(cryptoReadiness.ready, true);
   assert.equal(cryptoReadiness.report.safety.liveSubmissionEnabled, false);
   assert.equal(cryptoReadiness.report.safety.canSubmit, false);
+
+  const livePublicQa = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_crypto_live_public_qa",
+    arguments: {
+      outputDir: `/tmp/matterhorn-live-public-qa-mcp-smoke-${process.pid}`,
+      fixture: true,
+      strict: true,
+      hyperliquidAsset: "BTC",
+    },
+  }));
+  assert.equal(livePublicQa.ok, true);
+  assert.equal(livePublicQa.ready, true);
+  assert.equal(livePublicQa.status, "SKIPPED_WITH_FIXTURE_FALLBACK");
+  assert.equal(livePublicQa.safety.liveSubmissionEnabled, false);
+  assert.equal(livePublicQa.safety.signsOrSubmits, false);
+  assert.match(livePublicQa.markdown, /Matterhorn Work Live Public-Data QA/);
+  assert.match(livePublicQa.sha256, /matterhorn-live-public-qa\.json/);
+  assert.ok(livePublicQa.report.stages.some((stage) => stage.id === "hyperliquid_watch_evidence"));
+  assert.ok(livePublicQa.report.stages.some((stage) => stage.id === "polymarket_watch_evidence"));
 
   const marketExecutionReadiness = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_market_execution_readiness",

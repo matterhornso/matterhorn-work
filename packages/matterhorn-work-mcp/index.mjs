@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * matterhorn-work-mcp
@@ -33,6 +34,7 @@ const HOST_TOKEN =
 
 const REQUEST_TIMEOUT_MS = Number(process.env.MATTERHORN_WORK_MCP_TIMEOUT_MS || 15_000);
 const MAX_TEXT_BYTES = Number(process.env.MATTERHORN_WORK_MCP_MAX_TEXT_BYTES || 512_000);
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 
 const UPSTREAM_OPENWORK_DEFAULTS = {
   upstreamUrl: process.env.OPENWORK_UPSTREAM_REMOTE || "https://github.com/different-ai/openwork.git",
@@ -392,6 +394,27 @@ const tools = [
     name: "matterhorn_crypto_readiness",
     description: "Read the unified Matterhorn Work crypto customer-readiness report for Bittensor, Hyperliquid, and Polymarket. Server-side read-only summary; no signing, submission, or secrets.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "matterhorn_crypto_live_public_qa",
+    description: "Run the local live public-data QA pack and return public/redacted evidence files. Fixture mode is default; optional live mode uses MCP environment auth only. No token argument, signing, submission, or secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        outputDir: { type: "string", description: "Directory for matterhorn-live-public-qa JSON, Markdown, and SHA-256 outputs. Defaults to /tmp/matterhorn-live-public-qa-mcp." },
+        fixture: { type: "boolean", description: "When true, force fixture fallback and avoid live server calls. Defaults to true unless includeLiveServer is true." },
+        includeLiveServer: { type: "boolean", description: "When true, allow the script to use MATTERHORN_WORK_SERVER_URL and MATTERHORN_WORK_TOKEN from the MCP environment." },
+        strict: { type: "boolean", description: "When true, fail if any configured live stage fails." },
+        serverUrl: { type: "string", description: "Optional public/local Matterhorn server URL. Auth still comes from the MCP environment, not from tool arguments." },
+        ss58Address: { type: "string", description: "Optional public Bittensor coldkey/SS58 address." },
+        validatorHotkey: { type: "string", description: "Optional public Bittensor validator hotkey." },
+        netuid: { oneOf: [{ type: "number" }, { type: "string" }], description: "Optional Bittensor netuid." },
+        amountTao: { oneOf: [{ type: "number" }, { type: "string" }], description: "Optional public preview amount for Bittensor QA." },
+        rateTolerance: { oneOf: [{ type: "number" }, { type: "string" }], description: "Optional Bittensor quote tolerance." },
+        hyperliquidAsset: { type: "string", description: "Optional public Hyperliquid asset for watch evidence, e.g. BTC." },
+        polymarketMarketId: { type: "string", description: "Optional public Polymarket market id for watch evidence." },
+      },
+    },
   },
   {
     name: "matterhorn_market_execution_readiness",
@@ -2431,6 +2454,76 @@ function matterhornCryptoCustomerPacket(args = {}) {
   };
 }
 
+function appendOptionalCliArg(argv, flag, value) {
+  if (value === undefined || value === null || value === "") return;
+  argv.push(flag, String(value));
+}
+
+function assertLivePublicQaOutputSafe(report) {
+  const serialized = JSON.stringify(report);
+  if (/(apiSecret|api_secret|privateKey|private_key|seedPhrase|seed_phrase|mnemonic|rawSignature|raw_signature|signedPayload|signed_payload|signedOrder|signed_order|walletExport|wallet_export|"signature"\s*:)/i.test(serialized)) {
+    throw new Error("Crypto live public QA output contained secret-shaped fields or signing material.");
+  }
+  if (report?.safety?.nonCustodial !== true) throw new Error("Crypto live public QA output must be non-custodial.");
+  if (report?.safety?.liveSubmissionEnabled !== false) throw new Error("Crypto live public QA output must keep liveSubmissionEnabled=false.");
+  if (report?.safety?.signsOrSubmits !== false) throw new Error("Crypto live public QA output must keep signsOrSubmits=false.");
+  if (report?.safety?.acceptsSecrets !== false) throw new Error("Crypto live public QA output must keep acceptsSecrets=false.");
+}
+
+async function matterhornCryptoLivePublicQa(args = {}) {
+  assertCustomerEvidenceHasNoCredentials(args, "Crypto live public QA MCP input");
+  const outputDir = String(args.outputDir || process.env.MATTERHORN_WORK_LIVE_PUBLIC_QA_DIR || "/tmp/matterhorn-live-public-qa-mcp").trim();
+  if (!outputDir) throw new Error("outputDir is required.");
+  const argv = [
+    join(REPO_ROOT, "scripts", "crypto-live-public-qa.mjs"),
+    "--output-dir",
+    outputDir,
+    "--json",
+  ];
+  const fixture = args.includeLiveServer === true ? args.fixture === true : args.fixture !== false;
+  if (fixture) argv.push("--fixture");
+  if (args.strict === true) argv.push("--strict");
+  appendOptionalCliArg(argv, "--server-url", args.serverUrl);
+  appendOptionalCliArg(argv, "--ss58-address", args.ss58Address);
+  appendOptionalCliArg(argv, "--validator-hotkey", args.validatorHotkey);
+  appendOptionalCliArg(argv, "--netuid", args.netuid);
+  appendOptionalCliArg(argv, "--amount-tao", args.amountTao);
+  appendOptionalCliArg(argv, "--rate-tolerance", args.rateTolerance);
+  appendOptionalCliArg(argv, "--hyperliquid-asset", args.hyperliquidAsset);
+  appendOptionalCliArg(argv, "--polymarket-market-id", args.polymarketMarketId);
+
+  let stdout;
+  try {
+    stdout = execFileSync(process.execPath, argv, {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      maxBuffer: 20 * 1024 * 1024,
+      env: process.env,
+    });
+  } catch (error) {
+    const stderr = String(error?.stderr || error?.message || "");
+    throw new Error("Crypto live public QA failed: " + stderr.split("\n").slice(0, 5).join("\n"));
+  }
+  assertCustomerEvidenceMarkdownHasNoCredentials(stdout, "Crypto live public QA stdout");
+  const report = JSON.parse(stdout);
+  assertLivePublicQaOutputSafe(report);
+  const markdown = await readFile(report.files.markdown, "utf8");
+  const sha256 = await readFile(report.files.sha256, "utf8");
+  assertCustomerEvidenceMarkdownHasNoCredentials(markdown, "Crypto live public QA Markdown");
+  assertCustomerEvidenceMarkdownHasNoCredentials(sha256, "Crypto live public QA SHA-256");
+  return {
+    ok: true,
+    ready: report.ready === true,
+    status: report.status,
+    mode: report.mode,
+    report,
+    markdown,
+    sha256: sha256.trim(),
+    files: report.files,
+    safety: report.safety,
+  };
+}
+
 function customerEvidenceSummaryValue(report, key) {
   const value = report?.summary?.[key];
   return Number.isFinite(value) ? value : 0;
@@ -3180,6 +3273,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
     case "matterhorn_crypto_readiness":
       return callServer("/api/crypto/readiness");
+    case "matterhorn_crypto_live_public_qa":
+      return matterhornCryptoLivePublicQa(args);
     case "matterhorn_market_execution_readiness":
       return callServer("/api/crypto/market-execution-readiness");
     case "matterhorn_market_execution_chain":
