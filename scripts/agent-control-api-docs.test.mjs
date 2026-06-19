@@ -37,11 +37,15 @@ const endpointContracts = [
   ["matterhorn_hyperliquid_check_watches", "POST /api/hyperliquid/watches/check"],
   ["matterhorn_hyperliquid_watch_digest", "GET /api/hyperliquid/watches/digest"],
   ["matterhorn_hyperliquid_act_on_watch_alert", "POST /api/hyperliquid/watches/act"],
+  ["matterhorn_hyperliquid_create_sign_request", "POST /api/hyperliquid/orders/external-sign-request"],
+  ["matterhorn_hyperliquid_validate_external_artifact", "POST /api/hyperliquid/orders/external-artifact/validate"],
   ["matterhorn_polymarket_chat", "POST /api/polymarket/chat/execute"],
   ["matterhorn_polymarket_create_watch", "POST /api/polymarket/watches"],
   ["matterhorn_polymarket_check_watches", "POST /api/polymarket/watches/check"],
   ["matterhorn_polymarket_watch_digest", "GET /api/polymarket/watches/digest"],
   ["matterhorn_polymarket_act_on_watch_alert", "POST /api/polymarket/watches/act"],
+  ["matterhorn_polymarket_create_sign_request", "POST /api/polymarket/orders/external-sign-request"],
+  ["matterhorn_polymarket_validate_external_artifact", "POST /api/polymarket/orders/external-artifact/validate"],
 ];
 
 for (const [tool, route] of endpointContracts) {
@@ -82,6 +86,8 @@ for (const routePath of [
   "/api/polymarket/watches/check",
   "/api/polymarket/watches/digest",
   "/watches/act",
+  "/orders/external-sign-request",
+  "/orders/external-artifact/validate",
 ]) {
   assert.ok(mcpServer.includes(routePath), `MCP server no longer references documented path fragment: ${routePath}`);
 }
