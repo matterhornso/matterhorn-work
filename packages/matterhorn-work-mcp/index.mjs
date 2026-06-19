@@ -1744,98 +1744,16 @@ async function matterhornBittensorActOnWatchAlert(args = {}) {
   };
 }
 
-function marketWatchChecks(result) {
-  if (Array.isArray(result?.checks)) return result.checks;
-  if (Array.isArray(result?.digest?.checks)) return result.digest.checks;
-  if (result?.check && typeof result.check === "object") return [result.check];
-  return [];
-}
-
-function summarizeMarketWatchCheck(venue, check, fallbackWatch = {}) {
-  const watch = check?.watch && typeof check.watch === "object" ? check.watch : fallbackWatch;
-  const observations = Array.isArray(check?.observations) ? check.observations : [];
-  const alerts = Array.isArray(check?.alerts) ? check.alerts.filter((item) => typeof item === "string" && item.trim()) : [];
-  const source = check?.source && typeof check.source === "object" ? check.source : {};
-  return {
-    venue,
-    status: check?.status || "unknown",
-    watchId: check?.watchId || watch?.id || null,
-    marketId: check?.marketId || watch?.marketId || null,
-    asset: watch?.asset || null,
-    kind: watch?.kind || null,
-    alerts,
-    observationCount: observations.length,
-    source: source?.source || null,
-    freshness: source?.freshness || null,
-  };
-}
-
-function buildMarketWatchAlertPrompt(venue, selected) {
-  const venueLabel = venue === "hyperliquid" ? "Hyperliquid" : "Polymarket";
-  const summary = summarizeMarketWatchCheck(venue, selected.check, selected.watch);
-  const subject = summary.asset || summary.marketId || summary.watchId || "the selected watch";
-  const alertText = summary.alerts.length ? summary.alerts.join("; ") : `status is ${summary.status}`;
-  return [
-    `Use unified crypto chat. Review this read-only ${venueLabel} watch alert for ${subject}.`,
-    `Alert context: ${alertText}.`,
-    "Explain the public observations, source/freshness, risk notes, and safe next steps.",
-    "Do not sign, submit, broadcast, auto-execute, request API secrets, request private keys, or accept raw signatures or signed payloads.",
-  ].join(" ");
-}
-
-function selectMarketWatchAlert(venue, result, args = {}) {
-  const checks = marketWatchChecks(result);
-  const watches = Array.isArray(args.watches) ? args.watches : [];
-  const alertLike = checks.filter((check) => {
-    const status = check?.status || "unknown";
-    return status !== "ok";
-  });
-  const alertIndex = parseNonNegativeInteger(args.alertIndex, 0, "alertIndex");
-  const check = alertLike[alertIndex];
-  if (!check) {
-    throw new Error(`No ${venue} watch alert found at alertIndex ${alertIndex}.`);
-  }
-  const watch = checks.length === 1 && args.watch && typeof args.watch === "object"
-    ? args.watch
-    : watches.find((candidate) => candidate && typeof candidate === "object" && (candidate.id === check.watchId || candidate.marketId === check.marketId)) || {};
-  return { check, watch };
-}
-
 async function matterhornMarketActOnWatchAlert(venue, args = {}) {
   const basePath = venue === "hyperliquid" ? "/api/hyperliquid" : "/api/polymarket";
-  const result = await callServer(`${basePath}/watches/check`, {
+  return callServer(`${basePath}/watches/act`, {
     method: "POST",
     body: {
       ...(args.watch && typeof args.watch === "object" ? { watch: args.watch } : {}),
       ...(Array.isArray(args.watches) ? { watches: args.watches } : {}),
+      ...(args.alertIndex !== undefined ? { alertIndex: args.alertIndex } : {}),
     },
   });
-  const selected = selectMarketWatchAlert(venue, result, args);
-  const prompt = buildMarketWatchAlertPrompt(venue, selected);
-  const chat = await callServer(`${basePath}/chat/execute`, {
-    method: "POST",
-    body: {
-      message: prompt,
-      ...(venue === "hyperliquid" && typeof selected.watch?.asset === "string" ? { asset: selected.watch.asset } : {}),
-      ...(venue === "hyperliquid" && typeof selected.watch?.address === "string" ? { address: selected.watch.address } : {}),
-      ...(venue === "polymarket" && typeof selected.watch?.marketId === "string" ? { marketId: selected.watch.marketId } : {}),
-    },
-  });
-  return {
-    ok: chat?.success !== false,
-    selectedAlert: summarizeMarketWatchCheck(venue, selected.check, selected.watch),
-    action: {
-      label: "Review alert with crypto chat",
-      prompt,
-    },
-    chat,
-    safety: {
-      nonCustodial: true,
-      liveSubmissionEnabled: false,
-      canSubmit: false,
-    },
-    source: `matterhorn_${venue}_act_on_watch_alert`,
-  };
 }
 
 const CUSTOMER_EVIDENCE_FORBIDDEN_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|signedExtrinsic|signed_extrinsic)/i;
