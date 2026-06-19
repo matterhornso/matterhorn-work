@@ -84,6 +84,8 @@ Common status codes:
 | `matterhorn_hyperliquid_watch_digest` | `GET /api/hyperliquid/watches/digest` |
 | `matterhorn_hyperliquid_act_on_watch_alert` | `POST /api/hyperliquid/watches/act` |
 | `matterhorn_hyperliquid_preview_order` | `POST /api/hyperliquid/orders/preview` |
+| `matterhorn_hyperliquid_create_sign_request` | `POST /api/hyperliquid/orders/external-sign-request` |
+| `matterhorn_hyperliquid_validate_external_artifact` | `POST /api/hyperliquid/orders/external-artifact/validate` |
 | `matterhorn_polymarket_chat` | `POST /api/polymarket/chat/execute` |
 | `matterhorn_polymarket_search_markets` | `GET /api/polymarket/markets` |
 | `matterhorn_polymarket_search_events` | `GET /api/polymarket/events` |
@@ -95,6 +97,8 @@ Common status codes:
 | `matterhorn_polymarket_watch_digest` | `GET /api/polymarket/watches/digest` |
 | `matterhorn_polymarket_act_on_watch_alert` | `POST /api/polymarket/watches/act` |
 | `matterhorn_polymarket_preview_order` | `POST /api/polymarket/orders/preview` |
+| `matterhorn_polymarket_create_sign_request` | `POST /api/polymarket/orders/external-sign-request` |
+| `matterhorn_polymarket_validate_external_artifact` | `POST /api/polymarket/orders/external-artifact/validate` |
 | `matterhorn_bittensor_chat` | `POST /api/bittensor/chat/execute` |
 | `matterhorn_bittensor_readiness` | `GET /api/bittensor/readiness` |
 | `matterhorn_bittensor_list_capabilities` | `GET /api/bittensor/capabilities` |
