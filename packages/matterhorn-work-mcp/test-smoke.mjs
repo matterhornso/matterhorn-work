@@ -689,6 +689,45 @@ const server = createServer(async (req, res) => {
       }],
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/workflows/prompts") {
+    assert.equal(url.searchParams.get("workflow"), "wellness_creator_workflow");
+    return json(res, 200, {
+      ok: true,
+      version: "matterhorn.workflow.prompt-pack.v1",
+      status: "catalog_only",
+      source: "mock.workflows",
+      safety: {
+        promptPackOnly: true,
+        noProviderExecution: true,
+        noCustody: true,
+        noLiveMarketSubmit: true,
+        acceptsSecrets: false,
+        acceptsPrivateKeys: false,
+        acceptsApiSecrets: false,
+        acceptsRawSignatures: false,
+        canSubmit: false,
+        liveExecutionEnabled: false,
+      },
+      counts: { total: 1, promptTotal: 2 },
+      workflows: [{
+        workflowId: "wellness_creator_workflow",
+        category: "wellness",
+        status: "live_local",
+        starterPrompt: "Start a new wellness program",
+        prompts: [
+          { step: 1, prompt: "Start a new wellness program" },
+          { step: 2, prompt: "Design the program with safety disclaimers" },
+        ],
+        safety: {
+          promptPackOnly: true,
+          noProviderExecution: true,
+          acceptsSecrets: false,
+          canSubmit: false,
+          liveExecutionEnabled: false,
+        },
+      }],
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/services/chat/plan") {
     assert.match(body.message, /paid fitness program/i);
     assert.equal(body.capability, "payments");
@@ -988,6 +1027,7 @@ try {
     "matterhorn_services_get_capabilities",
     "matterhorn_services_chat_plan",
     "matterhorn_workflows_catalog",
+    "matterhorn_workflows_prompt_pack",
     "matterhorn_crypto_live_public_qa",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
@@ -1042,6 +1082,7 @@ try {
   assert.match(descriptionFor("matterhorn_services_get_capabilities"), /future decentralized service capability contracts/i);
   assert.match(descriptionFor("matterhorn_services_chat_plan"), /Plan a future decentralized service workflow/i);
   assert.match(descriptionFor("matterhorn_workflows_catalog"), /catalog-only Matterhorn Work workflow registry/i);
+  assert.match(descriptionFor("matterhorn_workflows_prompt_pack"), /copy-pasteable staged prompts/i);
   assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
@@ -1464,6 +1505,19 @@ try {
   assert.equal(workflowCatalog.workflows[0].workflowId, "wellness_creator_workflow");
   assert.equal(workflowCatalog.workflows[0].canExecuteProviderActions, false);
   assert.equal(workflowCatalog.workflows[0].safety.acceptsSecrets, false);
+
+  const workflowPromptPack = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_workflows_prompt_pack",
+    arguments: { workflow: "wellness_creator_workflow" },
+  }));
+  assert.equal(workflowPromptPack.version, "matterhorn.workflow.prompt-pack.v1");
+  assert.equal(workflowPromptPack.status, "catalog_only");
+  assert.equal(workflowPromptPack.safety.promptPackOnly, true);
+  assert.equal(workflowPromptPack.safety.liveExecutionEnabled, false);
+  assert.equal(workflowPromptPack.safety.canSubmit, false);
+  assert.equal(workflowPromptPack.workflows[0].workflowId, "wellness_creator_workflow");
+  assert.equal(workflowPromptPack.workflows[0].prompts[0].step, 1);
+  assert.equal(workflowPromptPack.workflows[0].safety.noProviderExecution, true);
 
   const servicesChatPlan = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_services_chat_plan",

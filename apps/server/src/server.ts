@@ -175,6 +175,7 @@ import {
 } from "./tools/decentralized-services.js";
 import {
   buildMatterhornWorkflowCatalog,
+  buildMatterhornWorkflowPromptPack,
   findForbiddenMatterhornWorkflowQueryKey,
 } from "./tools/matterhorn-workflows.js";
 import {
@@ -4387,6 +4388,34 @@ function createRoutes(
         400,
         "invalid_workflow_catalog_filter",
         error instanceof Error ? error.message : "Could not build Matterhorn workflow catalog",
+      );
+    }
+  });
+
+  addRoute(routes, "GET", "/api/workflows/prompts", "client", async (ctx) => {
+    const forbiddenKey = findForbiddenMatterhornWorkflowQueryKey(ctx.url.searchParams.keys());
+    if (forbiddenKey) {
+      throw new ApiError(
+        400,
+        "workflow_secret_rejected",
+        `Matterhorn workflow prompt packs do not accept credential-shaped query fields such as ${forbiddenKey}.`,
+      );
+    }
+    const workflow =
+      ctx.url.searchParams.get("workflow") ?? ctx.url.searchParams.get("workflowId");
+    const category = ctx.url.searchParams.get("category");
+    const status = ctx.url.searchParams.get("status");
+    try {
+      return jsonResponse(buildMatterhornWorkflowPromptPack({
+        workflow,
+        category,
+        status,
+      }));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_workflow_prompt_pack_filter",
+        error instanceof Error ? error.message : "Could not build Matterhorn workflow prompt pack",
       );
     }
   });
