@@ -49,11 +49,22 @@ for (const tool of [
   "matterhorn_hyperliquid_create_watch",
   "matterhorn_hyperliquid_check_watches",
   "matterhorn_hyperliquid_watch_digest",
+  "matterhorn_hyperliquid_act_on_watch_alert",
   "matterhorn_polymarket_create_watch",
   "matterhorn_polymarket_check_watches",
   "matterhorn_polymarket_watch_digest",
+  "matterhorn_polymarket_act_on_watch_alert",
 ]) {
   assert.ok(mcp.includes(`name: "${tool}"`), `MCP missing ${tool}`);
+}
+
+for (const phrase of [
+  "deterministic read-only crypto-chat review",
+  "Do not sign, submit, broadcast, auto-execute",
+  "matterhorn_hyperliquid_act_on_watch_alert",
+  "matterhorn_polymarket_act_on_watch_alert",
+]) {
+  assert.ok(mcp.includes(phrase), `MCP watch alert action contract missing ${phrase}`);
 }
 
 for (const command of [
