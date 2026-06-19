@@ -94,6 +94,7 @@ pnpm test:market-execution-readiness-gate
 pnpm test:market-submit-sign-contract-phase0
 pnpm test:market-sign-request-phase1
 pnpm test:market-artifact-validation-phase2
+pnpm test:market-sign-artifact-routes
 pnpm test:market-execution-chain-gate
 pnpm test:market-artifact-reconciliation
 pnpm test:market-official-sdk-validation-track
