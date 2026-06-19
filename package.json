@@ -80,6 +80,7 @@
     "test:market-submit-sign-contract-phase0": "node scripts/market-submit-sign-contract-phase0.test.mjs",
     "test:market-sign-request-phase1": "node scripts/market-sign-request-phase1.test.mjs",
     "test:market-artifact-validation-phase2": "node scripts/market-artifact-validation-phase2.test.mjs",
+    "test:market-sign-artifact-routes": "bun test apps/server/src/market-sign-artifact-routes.e2e.test.ts",
     "test:market-artifact-reconciliation": "node scripts/market-artifact-reconciliation.test.mjs",
     "test:market-execution-chain-gate": "node scripts/market-execution-chain-gate.test.mjs",
     "test:market-receipt-qa": "node scripts/market-receipt-qa.test.mjs",
