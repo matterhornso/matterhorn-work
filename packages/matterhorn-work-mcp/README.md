@@ -88,7 +88,13 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_hyperliquid_get_open_orders` — read normalized public open-order summaries
 - `matterhorn_hyperliquid_get_funding` — read funding/open-interest context for an asset
 - `matterhorn_hyperliquid_get_orderbook` — read an L2 orderbook snapshot
+- `matterhorn_hyperliquid_create_watch` — create a read-only Hyperliquid funding/orderbook/account watch
+- `matterhorn_hyperliquid_check_watches` — evaluate Hyperliquid watches and return alert cards
+- `matterhorn_hyperliquid_watch_digest` — summarize Hyperliquid watch alerts into an agent-facing digest
 - `matterhorn_hyperliquid_preview_order` — prepare a non-submittable order preview
+- `matterhorn_polymarket_create_watch` — create a read-only Polymarket market/compliance/liquidity watch
+- `matterhorn_polymarket_check_watches` — evaluate Polymarket watches and return alert cards
+- `matterhorn_polymarket_watch_digest` — summarize Polymarket watch alerts into an agent-facing digest
 - `matterhorn_bittensor_chat` — run the chat-first Bittensor workflow
 - `matterhorn_bittensor_readiness` — run Bittensor readiness checks
 - `matterhorn_bittensor_list_capabilities` — list Bittensor subnet capability manifests

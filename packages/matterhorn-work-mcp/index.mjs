@@ -603,6 +603,11 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_hyperliquid_watch_digest",
+    description: "Summarize Hyperliquid read-only watch alerts into an agent-facing digest. Never signs, submits, or auto-executes trades.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "matterhorn_hyperliquid_preview_order",
     description: "Prepare a non-submittable Hyperliquid order preview. Returns canSubmit=false and never sends the exchange endpoint.",
     inputSchema: {
@@ -771,6 +776,11 @@ const tools = [
         watches: { type: "array", items: { type: "object" } },
       },
     },
+  },
+  {
+    name: "matterhorn_polymarket_watch_digest",
+    description: "Summarize Polymarket read-only watch alerts into an agent-facing digest. Never signs, submits, or auto-executes orders.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "matterhorn_polymarket_preview_order",
@@ -3307,6 +3317,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/hyperliquid/watches", { method: "POST", body: args });
     case "matterhorn_hyperliquid_check_watches":
       return callServer("/api/hyperliquid/watches/check", { method: "POST", body: args });
+    case "matterhorn_hyperliquid_watch_digest":
+      return callServer("/api/hyperliquid/watches/digest");
     case "matterhorn_hyperliquid_preview_order":
       return callServer("/api/hyperliquid/orders/preview", { method: "POST", body: args });
     case "matterhorn_hyperliquid_prepare_handoff":
@@ -3333,6 +3345,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/polymarket/watches", { method: "POST", body: args });
     case "matterhorn_polymarket_check_watches":
       return callServer("/api/polymarket/watches/check", { method: "POST", body: args });
+    case "matterhorn_polymarket_watch_digest":
+      return callServer("/api/polymarket/watches/digest");
     case "matterhorn_polymarket_preview_order":
       return callServer("/api/polymarket/orders/preview", { method: "POST", body: args });
     case "matterhorn_polymarket_prepare_handoff":
