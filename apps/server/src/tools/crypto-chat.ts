@@ -581,8 +581,8 @@ function marketExecutionChainResult(input: UnifiedCryptoChatInput, message: stri
     intent: highlightedStep ? "market_execution_step_guidance" : "market_execution_chain",
     execution: "read_only",
     responseText: highlightedStep
-      ? `${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.`
-      : "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+      ? `${highlightedStep.label}: ${highlightedStep.purpose} Use only public/redacted inputs. Every accepted artifact must be hash-bound to the sign request, and hash mismatches fail closed. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.`
+      : "The safe Hyperliquid/Polymarket chain is: preview or handoff, external sign request, public/redacted artifact validation, artifact reconciliation, then public receipt import. Artifact validation is hash-bound to the sign request, and hash mismatches fail closed. Can submit: No. Live submission: Off. Matterhorn never takes private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
     cards,
     sharedCards: buildUnifiedCryptoSharedCards("auto", "read_only", cards, warnings),
     data: { guide, highlightedStep },

@@ -281,6 +281,8 @@ describe("unified crypto chat router", () => {
     expect(result.execution).toBe("read_only");
     expect(result.requiresClarification).toBe(false);
     expect(result.responseText).toContain("preview or handoff");
+    expect(result.responseText).toContain("hash-bound to the sign request");
+    expect(result.responseText).toContain("hash mismatches fail closed");
     expect(result.responseText).toContain("Can submit: No");
     expect(result.responseText).toContain("Live submission: Off");
     expect(result.responseText).toContain("never takes private keys");
@@ -338,6 +340,8 @@ describe("unified crypto chat router", () => {
     expect(result.execution).toBe("read_only");
     expect(result.responseText).toContain("External sign request");
     expect(result.responseText).toContain("Use only public/redacted inputs");
+    expect(result.responseText).toContain("hash-bound to the sign request");
+    expect(result.responseText).toContain("hash mismatches fail closed");
     expect(result.responseText).toContain("Can submit: No");
     expect(result.responseText).toContain("Live submission: Off");
     expect(result.cards[0]).toMatchObject({
