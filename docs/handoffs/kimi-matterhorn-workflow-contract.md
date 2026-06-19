@@ -221,7 +221,12 @@ pnpm test:matterhorn-workflow-evidence-bundles
 
 ### CI status on PR #420
 
-Awaiting CI results.
+All GitHub checks on PR #420 passed:
+
+- `openwork-tests (blacksmith-4vcpu-ubuntu-2204)` — SUCCESS
+- `openwork-tests (macos-14)` — SUCCESS
+- `customer-crypto-gates` — SUCCESS
+- `i18n-audit` — SUCCESS
 
 ## Non-overlap observed
 
