@@ -108,6 +108,61 @@ All GitHub checks on PR #406 passed:
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
+## PR #415: generic workflow evidence bundle contract
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/415  
+**Branch merged to dev:** `kimi/workflow-evidence-bundle-contract`  
+**Scope:** Generic, customer-safe evidence bundles that capture workflow inputs, planned service hooks, and safety flags across wellness, crypto, decentralized services, research, and content domains.
+
+### New types added
+
+In `packages/types/src/matterhorn-workflows.ts`:
+
+- `MatterhornWorkflowEvidenceItem`
+- `MatterhornWorkflowEvidenceBundle`
+- `WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE`
+- `CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE`
+- `DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE`
+- `RESEARCH_SUMMARY_EVIDENCE_BUNDLE`
+- `CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE`
+- `MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES` — a record mapping each bundle ID to its bundle
+
+Each evidence bundle:
+
+- Uses `version: "matterhorn.workflow.evidence-bundle.v1"`.
+- Sets `canExecute: false`.
+- Includes `workflowId`, `domain`, `requestedOutcome`, `publicEvidence`, `plannedServiceHooks`, `safetyFlags`, `createdAt`, and `source`.
+- Contains no secrets, private keys, API secrets, raw signatures, signed payloads, wallet exports, passwords, passphrases, keyfiles, or SURI.
+- Contains no executable provider payloads.
+
+### Doc updates
+
+`docs/matterhorn-workflow-contract.md` gained an Evidence Bundle schema section and an Evidence Bundle Fixtures table.
+
+### Test extensions
+
+`scripts/matterhorn-workflow-contract.test.mjs` was extended to assert:
+
+- `MatterhornWorkflowEvidenceItem`, `MatterhornWorkflowEvidenceBundle`, and `MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES` exist.
+- All five evidence bundle fixture constants exist.
+- Each bundle block uses the evidence bundle version and includes `workflowId`, `domain`, `requestedOutcome`, at least one `publicEvidence` item, at least one `plannedServiceHook`, `safetyFlags`, `createdAt`, and `source`.
+- Every bundle sets `canExecute: false`.
+- No bundle contains credential-shaped values.
+- The evidence bundle registry covers all five bundle IDs.
+
+### Commands that pass on PR #415
+
+```bash
+pnpm test:decentralized-services-contract
+pnpm test:market-execution-safety-gate
+pnpm test:matterhorn-workflow-contract
+pnpm --dir packages/types build
+```
+
+### CI status on PR #415
+
+Awaiting CI results.
+
 ## Non-overlap observed
 
 No changes were made to:
@@ -116,6 +171,10 @@ No changes were made to:
 - `docs/handoffs/hermes-wellness-creator-qa.md`
 - `scripts/wellness-creator-workflow.mjs`
 - `scripts/wellness-creator-workflow.test.mjs`
+- `apps/desktop/**`
+- `apps/desktop/package.json`
+- `apps/desktop/scripts/electron-after-pack.cjs`
+- `scripts/electron-packaging-sources.test.mjs`
 - `apps/server/src/server.ts`
 - `packages/matterhorn-work-mcp/index.mjs`
 - `apps/orchestrator/src/cli.ts`
