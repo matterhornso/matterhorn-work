@@ -79,6 +79,23 @@ const CUSTOMER_DEMO_COMMANDS = {
     "--strict",
     "--json",
   ].join(" "),
+  hyperliquidWatchCreate: [
+    "matterhorn-work hyperliquid watch create",
+    "--asset BTC",
+    "--kind funding_rate",
+    "--direction change",
+    "--threshold 0.01",
+    "--json",
+  ].join(" "),
+  hyperliquidWatchCheck: "matterhorn-work hyperliquid watch check --json",
+  hyperliquidWatchDigest: "matterhorn-work hyperliquid watch digest --json",
+  polymarketWatchCreate: [
+    "matterhorn-work polymarket watch create",
+    "<public-market-id>",
+    "--json",
+  ].join(" "),
+  polymarketWatchCheck: "matterhorn-work polymarket watch check --json",
+  polymarketWatchDigest: "matterhorn-work polymarket watch digest --json",
   smoke: "pnpm smoke:customer-ready-crypto",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
   evidenceVerify: [
@@ -146,6 +163,18 @@ const CUSTOMER_DEMO_PROMPTS = [
     label: "SDK validation",
     betaVisible: false,
     prompt: "Use unified crypto chat. Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+  },
+  {
+    id: "hyperliquid-watch",
+    label: "Hyperliquid watch",
+    betaVisible: false,
+    prompt: "Use unified crypto chat. Create a read-only Hyperliquid watch plan for BTC funding and orderbook movement. Show the watch kind, asset, threshold, source/freshness, watch_alert card behavior, and confirm no orders are signed, submitted, or auto-executed.",
+  },
+  {
+    id: "polymarket-watch",
+    label: "Polymarket watch",
+    betaVisible: false,
+    prompt: "Use unified crypto chat. Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
 ] as const;
 const BITTENSOR_BETA_MODE = (() => {
@@ -1043,6 +1072,50 @@ export default function BittensorPanel() {
                     </span>
                   </button>
                 ))}
+              </div>
+            </Section>
+
+            <Section title="Market watches" icon={<AlertTriangle className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Hyperliquid and Polymarket watches are read-only alert plans. They check public market/account context, surface watch_alert cards, and never sign, submit, custody, broadcast, or auto-execute orders.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <p className="text-xs font-semibold text-dls-text">Hyperliquid watches</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
+                      Funding, price/orderbook, position margin, open orders, and market availability.
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("hyperliquidWatchCreate")}>
+                        {copiedCustomerCommand === "hyperliquidWatchCreate" ? "Copied" : "Create HL watch"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("hyperliquidWatchCheck")}>
+                        {copiedCustomerCommand === "hyperliquidWatchCheck" ? "Copied" : "Check HL watches"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("hyperliquidWatchDigest")}>
+                        {copiedCustomerCommand === "hyperliquidWatchDigest" ? "Copied" : "Digest HL watches"}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                    <p className="text-xs font-semibold text-dls-text">Polymarket watches</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
+                      Market status, odds/liquidity movement, compliance block state, and public receipt/status changes.
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 gap-2">
+                      <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("polymarketWatchCreate")}>
+                        {copiedCustomerCommand === "polymarketWatchCreate" ? "Copied" : "Create PM watch"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("polymarketWatchCheck")}>
+                        {copiedCustomerCommand === "polymarketWatchCheck" ? "Copied" : "Check PM watches"}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("polymarketWatchDigest")}>
+                        {copiedCustomerCommand === "polymarketWatchDigest" ? "Copied" : "Digest PM watches"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </Section>
 
