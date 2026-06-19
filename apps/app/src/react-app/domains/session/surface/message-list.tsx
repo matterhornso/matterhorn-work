@@ -757,6 +757,101 @@ function sourceField(source: Record<string, unknown> | null, keys: string[]): st
   return null;
 }
 
+function sharedCardNumber(value: unknown, options?: { prefix?: string; suffix?: string; digits?: number }): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const digits = options?.digits ?? (Math.abs(value) >= 100 ? 0 : 2);
+  const formatted = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: 0,
+  }).format(value);
+  return `${options?.prefix ?? ""}${formatted}${options?.suffix ?? ""}`;
+}
+
+function sharedCardText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function sharedCardDetailItems(
+  data: Record<string, unknown> | null,
+  venue: string,
+  kind: string,
+  originalKind: string | null,
+): NonNullable<BittensorChatCard["items"]> {
+  if (!data) return [];
+  const items: NonNullable<BittensorChatCard["items"]> = [];
+  const preview = isRecordValue(data.preview) ? data.preview : null;
+  const account = isRecordValue(data.account) ? data.account : null;
+  const context = isRecordValue(data.context) ? data.context : null;
+  const receipt = isRecordValue(data.receipt) ? data.receipt : null;
+  const watch = isRecordValue(data.watch) ? data.watch : null;
+
+  if (venue === "hyperliquid" && kind === "account_snapshot" && account) {
+    const accountValue = sharedCardNumber(account.accountValue, { prefix: "$" });
+    const withdrawable = sharedCardNumber(account.withdrawableUsd, { prefix: "$" });
+    const marginUsed = sharedCardNumber(account.marginUsed, { prefix: "$" });
+    if (accountValue) items.push({ label: "Account value", value: accountValue, tone: "default" });
+    if (withdrawable) items.push({ label: "Withdrawable", value: withdrawable, tone: "default" });
+    if (marginUsed) items.push({ label: "Margin used", value: marginUsed, tone: "warning" });
+    const positionCount = sharedCardNumber(account.positionCount, { digits: 0 });
+    const openOrderCount = sharedCardNumber(account.openOrderCount, { digits: 0 });
+    if (positionCount) items.push({ label: "Positions", value: positionCount, tone: "muted" });
+    if (openOrderCount) items.push({ label: "Open orders", value: openOrderCount, tone: "muted" });
+    const fundingExposure = sharedCardText(account.fundingExposure);
+    if (fundingExposure) items.push({ label: "Funding exposure", value: fundingExposure, tone: "muted" });
+    const liquidationNote = Array.isArray(account.liquidationRiskNotes)
+      ? account.liquidationRiskNotes.find((item): item is string => typeof item === "string" && item.trim().length > 0)?.trim() ?? null
+      : null;
+    if (liquidationNote) items.push({ label: "Liquidation note", value: liquidationNote, tone: "warning" });
+  }
+
+  if (venue === "polymarket" && kind === "market_context" && context) {
+    const previewAvailability = sharedCardText(context.previewAvailability);
+    if (previewAvailability) items.push({ label: "Preview availability", value: previewAvailability, tone: "default" });
+    const compliance = isRecordValue(context.compliance) ? sharedCardText(context.compliance.status) : null;
+    if (compliance) items.push({ label: "Compliance", value: compliance, tone: compliance === "allowed" ? "good" : "warning" });
+    const liquidity = sharedCardNumber(context.liquidityUsd, { prefix: "$" });
+    const volume = sharedCardNumber(context.volumeUsd, { prefix: "$" });
+    if (liquidity) items.push({ label: "Liquidity", value: liquidity, tone: "default" });
+    if (volume) items.push({ label: "Volume", value: volume, tone: "muted" });
+    const firstOutcome = Array.isArray(context.outcomes) && isRecordValue(context.outcomes[0]) ? context.outcomes[0] : null;
+    const outcome = firstOutcome ? sharedCardText(firstOutcome.outcome) : null;
+    const probability = firstOutcome ? sharedCardNumber(firstOutcome.probability, { suffix: "", digits: 2 }) : null;
+    if (outcome) items.push({ label: "Top outcome", value: probability ? `${outcome} (${probability})` : outcome, tone: "muted" });
+  }
+
+  if (kind === "action_preview" && preview) {
+    const asset = sharedCardText(preview.asset);
+    const side = sharedCardText(preview.side);
+    const size = sharedCardNumber(preview.size, { digits: 6 });
+    const price = sharedCardNumber(preview.price, { prefix: venue === "polymarket" ? "" : "$", digits: 6 });
+    if (asset) items.push({ label: "Asset", value: asset, tone: "default" });
+    if (side) items.push({ label: "Side", value: side, tone: "default" });
+    if (size) items.push({ label: "Preview size", value: size, tone: "muted" });
+    if (price) items.push({ label: "Preview price", value: price, tone: "muted" });
+    if (preview.canSubmit === false) items.push({ label: "Preview submit", value: "Disabled", tone: "good" });
+  }
+
+  if (kind === "receipt_status" && receipt) {
+    const status = sharedCardText(receipt.status);
+    const orderId = sharedCardText(receipt.orderId);
+    if (status) items.push({ label: "Receipt status", value: status, tone: status === "filled" ? "good" : "muted" });
+    if (orderId) items.push({ label: "Public order id", value: orderId, tone: "muted" });
+  }
+
+  if (kind === "watch_alert" && watch) {
+    const watchId = sharedCardText(watch.id);
+    const status = sharedCardText(watch.status);
+    if (watchId) items.push({ label: "Watch id", value: watchId, tone: "muted" });
+    if (status) items.push({ label: "Watch status", value: status, tone: status === "triggered" ? "good" : "muted" });
+  }
+
+  if (originalKind === "market_execution_chain" && !items.some((item) => item.label === "Preview submit")) {
+    items.push({ label: "Preview submit", value: "Disabled", tone: "good" });
+  }
+
+  return items;
+}
+
 function sharedCardMissingContext(data: Record<string, unknown> | null, venue: string, kind: string): string | null {
   if (!data || kind !== "action_preview") return null;
   const preview = isRecordValue(data.preview) ? data.preview : null;
@@ -863,6 +958,7 @@ function normalizeUnifiedCryptoSharedCard(card: Record<string, unknown>): Bitten
     if (highlightedStep.command) items.push({ label: "Step command", value: highlightedStep.command, tone: "muted" });
   }
   if (missingContext) items.push({ label: "Missing context", value: missingContext, tone: "warning" });
+  items.push(...sharedCardDetailItems(data, venue, kind, originalKind));
   items.push(...sharedCardSdkValidationItems(data, originalKind));
   if (sourceLabel) items.push({ label: "Source", value: sourceLabel, tone: "muted" });
   if (freshness) items.push({ label: "Freshness", value: freshness, tone: "muted" });
@@ -1031,7 +1127,7 @@ function BittensorToolCards(props: { cards: BittensorChatCard[] }) {
     <div className="grid gap-2.5">
       {props.cards.map((card, index) => {
         const title = card.title?.trim() || "Bittensor";
-        const items = (card.items ?? []).slice(0, 8);
+        const items = (card.items ?? []).slice(0, 12);
         const warnings = (card.warnings ?? []).filter(Boolean).slice(0, 3);
         const actions = (card.actions ?? []).slice(0, 2);
         return (

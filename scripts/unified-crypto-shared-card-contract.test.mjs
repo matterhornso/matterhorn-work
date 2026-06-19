@@ -91,6 +91,7 @@ for (const rendererPhrase of [
   "sharedCardDisplayTitle",
   "sharedCardMissingContext",
   "sharedCardHighlightedStep",
+  "sharedCardDetailItems",
   "sharedCardSdkValidationItems",
   "External signer",
   "Focused step",
@@ -102,7 +103,7 @@ for (const rendererPhrase of [
   "Can submit",
   "Live submission",
   "Missing context",
-  "slice(0, 8)",
+  "slice(0, 12)",
 ]) {
   assert.ok(sharedCardRenderer.includes(rendererPhrase), `transcript renderer should include card polish: ${rendererPhrase}`);
 }
