@@ -120,6 +120,7 @@
     "test:crypto-customer-packet": "node scripts/crypto-customer-packet.test.mjs",
     "test:agent-crypto-operator-loop": "node scripts/agent-crypto-operator-loop.test.mjs",
     "test:hermes-crypto-customer-qa": "node scripts/hermes-crypto-customer-qa.test.mjs",
+    "test:wellness-creator-pilot": "node scripts/wellness-creator-pilot.test.mjs",
     "test:customer-crypto-ci-workflow": "node scripts/customer-crypto-ci-workflow.test.mjs"
   },
   "devDependencies": {
