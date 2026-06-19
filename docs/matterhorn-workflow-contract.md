@@ -154,6 +154,32 @@ The contract ships with four fixture manifests in `packages/types/src/matterhorn
 | `market_read_preview` | markets | `preview_only` | Read-only market data and previews for Hyperliquid/Polymarket. |
 | `decentralized_services_planner` | decentralized_services | `planned_not_live` | Plans future hosting, storage, email, payments, and identity actions. |
 
+## Workflow Catalog
+
+Operators and agents can inspect the cross-vertical workflow catalog without
+starting the app or touching any provider:
+
+```bash
+matterhorn-work workflows catalog --json
+matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json
+matterhorn-work workflows catalog --category wellness --json
+pnpm test:matterhorn-workflow-catalog
+```
+
+The catalog emits `matterhorn.workflow.catalog.v1` and covers the typed fixture
+manifests plus the full Wellness Creator Workflow. It is catalog-only:
+
+- no provider execution;
+- no custody;
+- no live market submission;
+- no live storage, hosting, email, payments, or identity/access action;
+- no seed phrase, private key, API secret, raw signature, signed payload, wallet
+  export, password, passphrase, token, keyfile, or SURI input.
+
+Use this before adding a new vertical workflow so the workflow has a discoverable
+status, safety policy, service hooks, artifacts, commands, references, and QA
+gate.
+
 ## Safety Rules
 
 - No fixture may set `acceptsSecrets`, `acceptsPrivateKeys`, `acceptsRawSignatures`, or `acceptsApiSecrets` to `true`.
