@@ -191,7 +191,34 @@ jobs:
             echo "The Electron app build completed, but signed packaging and release publishing were skipped because Apple signing secrets are not configured."
             echo
             echo "Missing secrets: \`${{ steps.alpha-signing.outputs.missing }}\`"
+            echo
+            echo "An unsigned tester artifact will be uploaded to this workflow run for internal QA. It is not notarized and is not published to the alpha updater release."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package Electron alpha tester artifact (macOS, unsigned)
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          set -euo pipefail
+          pnpm --dir apps/desktop exec electron-builder \
+            --config electron-builder.yml \
+            --mac \
+            --arm64 \
+            --publish never
+
+      - name: Upload unsigned Electron alpha tester artifact
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: matterhorn-alpha-macos-arm64-unsigned
+          path: |
+            apps/desktop/dist-electron/*.dmg
+            apps/desktop/dist-electron/*.zip
+            apps/desktop/dist-electron/*.blockmap
+            apps/desktop/dist-electron/latest-mac.yml
+          if-no-files-found: error
 
       - name: Package Electron alpha (macOS, signed + notarized)
         if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'

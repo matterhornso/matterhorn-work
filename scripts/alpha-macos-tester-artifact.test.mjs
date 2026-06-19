@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
+const workflow = readFileSync(".github/workflows/alpha-macos-aarch64.yml", "utf8");
+
+assert.equal(
+  rootPackage.scripts["test:alpha-macos-tester-artifact"],
+  "node scripts/alpha-macos-tester-artifact.test.mjs",
+  "package.json should expose the alpha macOS tester artifact gate",
+);
+
+for (const phrase of [
+  "Package Electron alpha tester artifact (macOS, unsigned)",
+  "Upload unsigned Electron alpha tester artifact",
+  "matterhorn-alpha-macos-arm64-unsigned",
+  "CSC_IDENTITY_AUTO_DISCOVERY: false",
+  "actions/upload-artifact@v4",
+  "apps/desktop/dist-electron/*.dmg",
+  "apps/desktop/dist-electron/*.zip",
+  "if-no-files-found: error",
+]) {
+  assert.ok(workflow.includes(phrase), `alpha workflow missing tester artifact phrase: ${phrase}`);
+}
+
+for (const phrase of [
+  "Package Electron alpha (macOS, signed + notarized)",
+  "Create immutable alpha prerelease",
+  "Upload Electron alpha updater assets",
+  "Update alpha updater pointer",
+]) {
+  const index = workflow.indexOf(phrase);
+  assert.ok(index >= 0, `alpha workflow missing signed release step: ${phrase}`);
+  const stepBlock = workflow.slice(Math.max(0, index - 220), index + 500);
+  assert.ok(
+    stepBlock.includes("steps.alpha-signing.outputs.configured == 'true'"),
+    `${phrase} must remain gated behind configured Apple signing secrets`,
+  );
+}
+
+for (const forbidden of [
+  "gh release upload \"$ALPHA_RELEASE_TAG\"",
+  "gh release upload \"$ALPHA_RUN_RELEASE_TAG\" \"${assets[@]}\"",
+]) {
+  const unsignedStepIndex = workflow.indexOf("Upload unsigned Electron alpha tester artifact");
+  const signedUploadIndex = workflow.indexOf(forbidden);
+  assert.ok(
+    signedUploadIndex === -1 || signedUploadIndex > unsignedStepIndex,
+    `unsigned tester artifact must not publish through release upload path: ${forbidden}`,
+  );
+}
+
+console.log("Alpha macOS tester artifact workflow check passed.");
