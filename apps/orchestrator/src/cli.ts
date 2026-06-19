@@ -3758,7 +3758,7 @@ function printHelp(): void {
     "  matterhorn-work hyperliquid open-orders --address <0x...> [options]",
     "  matterhorn-work hyperliquid funding --asset <symbol> [options]",
     "  matterhorn-work hyperliquid orderbook --asset <symbol> [options]",
-    "  matterhorn-work hyperliquid watch create|list|check|digest [options]",
+    "  matterhorn-work hyperliquid watch create|list|check|digest|act [options]",
     "  matterhorn-work hyperliquid preview-order --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid handoff --asset <symbol> --side buy|sell --size <n> [options]",
     "  matterhorn-work hyperliquid sign-request --execution-mode testnet_external_signer --asset <symbol> --side buy|sell --size <n> [options]",
@@ -3770,7 +3770,7 @@ function printHelp(): void {
     "  matterhorn-work polymarket market --market-id <id> [options]",
     "  matterhorn-work polymarket orderbook --token-id <id> [options]",
     "  matterhorn-work polymarket compliance [options]",
-    "  matterhorn-work polymarket watch create|list|check|digest [options]",
+    "  matterhorn-work polymarket watch create|list|check|digest|act [options]",
     "  matterhorn-work polymarket preview-order --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket handoff --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
     "  matterhorn-work polymarket sign-request --execution-mode testnet_external_signer --market-id <id> --amount-usdc <n> [--side yes|no] [options]",
@@ -7267,6 +7267,112 @@ function readOptionalJsonFileFlag(args: ParsedArgs, flag: string): unknown | und
   }
 }
 
+type MarketWatchVenue = "hyperliquid" | "polymarket";
+
+function marketWatchChecks(result: Record<string, any>): any[] {
+  if (Array.isArray(result.checks)) return result.checks;
+  if (Array.isArray(result.digest?.checks)) return result.digest.checks;
+  if (result.check && typeof result.check === "object") return [result.check];
+  return [];
+}
+
+function summarizeMarketWatchCheck(venue: MarketWatchVenue, check: any, fallbackWatch: Record<string, any> = {}) {
+  const watch = check?.watch && typeof check.watch === "object" ? check.watch : fallbackWatch;
+  const alerts = Array.isArray(check?.alerts)
+    ? check.alerts.filter((item: unknown): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const observations = Array.isArray(check?.observations) ? check.observations : [];
+  const source = check?.source && typeof check.source === "object" ? check.source : {};
+  return {
+    venue,
+    status: check?.status ?? "unknown",
+    watchId: check?.watchId ?? watch.id,
+    marketId: check?.marketId ?? watch.marketId,
+    asset: watch.asset,
+    kind: watch.kind,
+    alerts,
+    observationCount: observations.length,
+    source: source.source,
+    freshness: source.freshness,
+  };
+}
+
+function selectMarketWatchAlert(
+  venue: MarketWatchVenue,
+  result: Record<string, any>,
+  watch: unknown,
+  alertIndex: number,
+) {
+  const checks = marketWatchChecks(result);
+  const alertChecks = checks.filter((check) => {
+    const status = typeof check?.status === "string" ? check.status : "unknown";
+    return status !== "ok";
+  });
+  const selected = alertChecks[alertIndex];
+  if (!selected) {
+    throw new Error(`No ${venue} watch alert found at alert-index ${alertIndex}`);
+  }
+  const fallbackWatch = watch && typeof watch === "object" ? watch as Record<string, any> : {};
+  return {
+    check: selected,
+    watch: selected.watch && typeof selected.watch === "object" ? selected.watch as Record<string, any> : fallbackWatch,
+  };
+}
+
+function buildMarketWatchAlertReviewPrompt(venue: MarketWatchVenue, selected: { check: any; watch: Record<string, any> }): string {
+  const venueLabel = venue === "hyperliquid" ? "Hyperliquid" : "Polymarket";
+  const summary = summarizeMarketWatchCheck(venue, selected.check, selected.watch);
+  const subject = summary.asset ?? summary.marketId ?? summary.watchId ?? "the selected watch";
+  const alertText = summary.alerts.length ? summary.alerts.join("; ") : `status is ${summary.status}`;
+  return [
+    `Use unified crypto chat. Review this read-only ${venueLabel} watch alert for ${subject}.`,
+    `Alert context: ${alertText}.`,
+    "Explain the public observations, source/freshness, risk notes, and safe next steps.",
+    "Do not sign, submit, broadcast, auto-execute, request API secrets, request private keys, or accept raw signatures or signed payloads.",
+  ].join(" ");
+}
+
+async function runMarketWatchAlertAction(args: ParsedArgs, options: {
+  venue: MarketWatchVenue;
+  baseUrl: string;
+  headers: Record<string, string>;
+  outputJson: boolean;
+}) {
+  const alertIndex = Math.max(0, Math.floor(readNumber(args.flags, "alert-index", 0) ?? 0));
+  const watch = readOptionalJsonFileFlag(args, "watch-file");
+  const checkResult = await fetchJson(`${options.baseUrl}/api/${options.venue}/watches/check`, {
+    method: "POST",
+    headers: options.headers,
+    body: JSON.stringify(watch ? { watch } : {}),
+  }) as Record<string, any>;
+  const selected = selectMarketWatchAlert(options.venue, checkResult, watch, alertIndex);
+  const prompt = buildMarketWatchAlertReviewPrompt(options.venue, selected);
+  const chat = await fetchJson(`${options.baseUrl}/api/${options.venue}/chat/execute`, {
+    method: "POST",
+    headers: options.headers,
+    body: JSON.stringify({
+      message: prompt,
+      ...(options.venue === "hyperliquid" && typeof selected.watch.asset === "string" ? { asset: selected.watch.asset } : {}),
+      ...(options.venue === "hyperliquid" && typeof selected.watch.address === "string" ? { address: selected.watch.address } : {}),
+      ...(options.venue === "polymarket" && typeof selected.watch.marketId === "string" ? { marketId: selected.watch.marketId } : {}),
+    }),
+  });
+  outputResult({
+    success: (chat as Record<string, any>).success !== false,
+    selectedAlert: summarizeMarketWatchCheck(options.venue, selected.check, selected.watch),
+    action: {
+      label: "Review alert with crypto chat",
+      prompt,
+    },
+    chat,
+    safety: {
+      nonCustodial: true,
+      liveSubmissionEnabled: false,
+      canSubmit: false,
+    },
+  }, options.outputJson);
+}
+
 async function runHyperliquid(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "chat";
@@ -7370,7 +7476,11 @@ async function runHyperliquid(args: ParsedArgs) {
         outputResult(result, outputJson);
         return;
       }
-      throw new Error("hyperliquid watch requires create|list|check|digest");
+      if (action === "act" || action === "review" || action === "act-on-alert" || action === "alert-action") {
+        await runMarketWatchAlertAction(args, { venue: "hyperliquid", baseUrl, headers, outputJson });
+        return;
+      }
+      throw new Error("hyperliquid watch requires create|list|check|digest|act");
     }
 
     if (
@@ -7642,7 +7752,11 @@ async function runPolymarket(args: ParsedArgs) {
         outputResult(result, outputJson);
         return;
       }
-      throw new Error("polymarket watch requires create|list|check|digest");
+      if (action === "act" || action === "review" || action === "act-on-alert" || action === "alert-action") {
+        await runMarketWatchAlertAction(args, { venue: "polymarket", baseUrl, headers, outputJson });
+        return;
+      }
+      throw new Error("polymarket watch requires create|list|check|digest|act");
     }
 
     if (subcommand === "preview-order" || subcommand === "order-preview" || subcommand === "preview") {

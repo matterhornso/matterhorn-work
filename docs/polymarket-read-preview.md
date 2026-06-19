@@ -79,7 +79,9 @@ HTTP/MCP/CLI expose the same safe loop:
 - `GET /api/polymarket/watches/digest`
 - `matterhorn_polymarket_create_watch`
 - `matterhorn_polymarket_check_watches`
-- `matterhorn-work polymarket watch create|list|check|digest`
+- `matterhorn_polymarket_watch_digest`
+- `matterhorn_polymarket_act_on_watch_alert`
+- `matterhorn-work polymarket watch create|list|check|digest|act`
 
 ```bash
 matterhorn-work polymarket watch create \
@@ -95,6 +97,17 @@ matterhorn-work polymarket watch check \
   --token "$MATTERHORN_WORK_TOKEN" \
   --json
 ```
+
+```bash
+matterhorn-work polymarket watch act \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --watch-file ./public-polymarket-watch.json \
+  --alert-index 0 \
+  --json
+```
+
+`watch act` only converts a triggered/degraded watch into a deterministic read-only crypto-chat review. It does not sign, submit, broadcast, auto-execute, or accept API secrets, private keys, raw signatures, or signed payloads.
 
 ## External-Signer Execution (non-custodial)
 

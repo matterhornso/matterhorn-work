@@ -146,6 +146,17 @@ matterhorn-work hyperliquid watch check \
 ```
 
 ```bash
+matterhorn-work hyperliquid watch act \
+  --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --watch-file ./public-hyperliquid-watch.json \
+  --alert-index 0 \
+  --json
+```
+
+`watch act` only converts a triggered/degraded watch into a deterministic read-only crypto-chat review. It does not sign, submit, broadcast, auto-execute, or accept API secrets, private keys, raw signatures, or signed payloads.
+
+```bash
 matterhorn-work hyperliquid preview-order \
   --openwork-url "$MATTERHORN_WORK_SERVER_URL" \
   --token "$MATTERHORN_WORK_TOKEN" \
