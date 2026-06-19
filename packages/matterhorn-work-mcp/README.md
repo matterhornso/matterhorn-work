@@ -81,6 +81,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_close_file_session` — close a file session
 - `matterhorn_list_approvals` — list pending host approval requests
 - `matterhorn_reply_approval` — allow or deny an approval request
+- `matterhorn_services_get_capabilities` — read future decentralized service capability contracts for hosting, storage, email, payments, and identity/access; discovery only, no live provider execution
 - `matterhorn_hyperliquid_chat` — run the read/preview-only Hyperliquid workflow
 - `matterhorn_hyperliquid_list_markets` — list Hyperliquid markets through Matterhorn server reads
 - `matterhorn_hyperliquid_get_account` — read a public Hyperliquid account snapshot

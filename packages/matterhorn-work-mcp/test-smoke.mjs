@@ -621,6 +621,40 @@ const server = createServer(async (req, res) => {
       },
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/services/capabilities") {
+    assert.equal(url.searchParams.get("capability"), "storage");
+    return json(res, 200, {
+      success: true,
+      version: "matterhorn.services.capability-catalog.v1",
+      status: "future_contract",
+      source: "mock.services",
+      safety: {
+        custody: "none",
+        liveExecutionEnabled: false,
+        acceptsPrivateKeys: false,
+        acceptsApiSecrets: false,
+        acceptsRawSignatures: false,
+        acceptsSecrets: false,
+        canExecute: false,
+      },
+      capabilities: [{
+        capability: "storage",
+        label: "Storage",
+        version: "matterhorn.services.provider-manifest.v1",
+        status: "future_contract",
+        liveExecutionEnabled: false,
+        canExecute: false,
+        discoveryFixtures: [{
+          version: "matterhorn.services.discovery-fixture.v1",
+          capability: "storage",
+          providerId: "example-storage-ipfs",
+          status: "future_contract",
+          liveExecutionEnabled: false,
+          canExecute: false,
+        }],
+      }],
+    });
+  }
   if (req.method === "GET" && url.pathname === "/api/crypto/market-execution-readiness") {
     return json(res, 200, {
       success: true,
@@ -880,6 +914,7 @@ try {
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
+    "matterhorn_services_get_capabilities",
     "matterhorn_crypto_live_public_qa",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
@@ -931,6 +966,7 @@ try {
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
+  assert.match(descriptionFor("matterhorn_services_get_capabilities"), /future decentralized service capability contracts/i);
   assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
@@ -1327,6 +1363,19 @@ try {
   assert.equal(cryptoReadiness.ready, true);
   assert.equal(cryptoReadiness.report.safety.liveSubmissionEnabled, false);
   assert.equal(cryptoReadiness.report.safety.canSubmit, false);
+
+  const servicesCapabilities = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_services_get_capabilities",
+    arguments: { capability: "storage" },
+  }));
+  assert.equal(servicesCapabilities.version, "matterhorn.services.capability-catalog.v1");
+  assert.equal(servicesCapabilities.status, "future_contract");
+  assert.equal(servicesCapabilities.safety.liveExecutionEnabled, false);
+  assert.equal(servicesCapabilities.safety.canExecute, false);
+  assert.deepEqual(servicesCapabilities.capabilities.map((item) => item.capability), ["storage"]);
+  assert.equal(servicesCapabilities.capabilities[0].liveExecutionEnabled, false);
+  assert.equal(servicesCapabilities.capabilities[0].canExecute, false);
+  assert.equal(servicesCapabilities.capabilities[0].discoveryFixtures[0].canExecute, false);
 
   const livePublicQa = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_crypto_live_public_qa",

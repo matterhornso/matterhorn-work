@@ -168,6 +168,10 @@ import {
   type UnifiedCryptoChatInput,
 } from "./tools/crypto-chat.js";
 import {
+  buildDecentralizedServicesCapabilityCatalog,
+  findForbiddenDecentralizedServiceQueryKey,
+} from "./tools/decentralized-services.js";
+import {
   buildMarketExecutionChainResponse,
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
@@ -4328,6 +4332,27 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/crypto/market-sdk-validation", "client", async () => {
     return jsonResponse(buildMarketSdkValidationResponse());
+  });
+
+  addRoute(routes, "GET", "/api/services/capabilities", "client", async (ctx) => {
+    const forbiddenKey = findForbiddenDecentralizedServiceQueryKey(ctx.url.searchParams.keys());
+    if (forbiddenKey) {
+      throw new ApiError(
+        400,
+        "services_secret_rejected",
+        `Services capability discovery does not accept credential-shaped query fields such as ${forbiddenKey}.`,
+      );
+    }
+    const capability = ctx.url.searchParams.get("capability") ?? ctx.url.searchParams.get("service");
+    try {
+      return jsonResponse(buildDecentralizedServicesCapabilityCatalog({ capability }));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_services_capability",
+        error instanceof Error ? error.message : "Unknown decentralized service capability",
+      );
+    }
   });
 
   addRoute(routes, "GET", "/api/crypto/readiness", "client", async () => {
