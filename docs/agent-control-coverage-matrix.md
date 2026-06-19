@@ -174,7 +174,7 @@ The smoke test binds a local mock server, so it may need to run outside restrict
 
 | Capability | HTTP | MCP | CLI | Verification |
 | --- | --- | --- | --- | --- |
-| Decentralized services capability contract | No live routes; contract-only | No live tools; contract-only | No live commands; contract-only | `test:decentralized-services-contract` |
+| Decentralized services capability discovery | `GET /api/services/capabilities` returns `matterhorn.services.capability-catalog.v1` with future-contract discovery fixtures and optional `capability` filtering; no live provider execution | `matterhorn_services_get_capabilities` reads the same future-contract catalog for Codex, Claude Code, Cursor, Claude Desktop, and other MCP clients | `matterhorn-work services capabilities --json`; optional `--capability hosting|storage|email|payments|identity` | `test:decentralized-services-contract`, `test:decentralized-services-operator-helper`, `test:agent-control-mcp`, `matterhorn-work-server build` |
 
 - Defines future provider-neutral contracts for hosting, storage, email, payments, and identity.
 - No live providers are wired yet; all manifests default to `status: "future_contract"` and `liveExecutionEnabled: false`.

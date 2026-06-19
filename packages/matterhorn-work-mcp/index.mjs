@@ -396,6 +396,20 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_services_get_capabilities",
+    description: "Read Matterhorn Work future decentralized service capability contracts for hosting, storage, email, payments, and identity/access. Discovery only: no live provider execution, custody, signing, submission, or secrets.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capability: {
+          type: "string",
+          enum: ["hosting", "storage", "email", "payments", "identity"],
+          description: "Optional capability filter.",
+        },
+      },
+    },
+  },
+  {
     name: "matterhorn_crypto_live_public_qa",
     description: "Run the local live public-data QA pack and return public/redacted evidence files. Fixture mode is default; optional live mode uses MCP environment auth only. No token argument, signing, submission, or secrets.",
     inputSchema: {
@@ -3319,6 +3333,8 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
     case "matterhorn_crypto_readiness":
       return callServer("/api/crypto/readiness");
+    case "matterhorn_services_get_capabilities":
+      return callServer("/api/services/capabilities", { query: { capability: args.capability } });
     case "matterhorn_crypto_live_public_qa":
       return matterhornCryptoLivePublicQa(args);
     case "matterhorn_market_execution_readiness":

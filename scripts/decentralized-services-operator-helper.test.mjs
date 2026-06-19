@@ -7,6 +7,9 @@ const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const helper = readFileSync("scripts/decentralized-services-capabilities.mjs", "utf8");
 const doc = readFileSync("docs/decentralized-services-capability-contract.md", "utf8");
 const cli = readFileSync("apps/orchestrator/src/cli.ts", "utf8");
+const server = readFileSync("apps/server/src/server.ts", "utf8");
+const serverTool = readFileSync("apps/server/src/tools/decentralized-services.ts", "utf8");
+const mcp = readFileSync("packages/matterhorn-work-mcp/index.mjs", "utf8");
 
 assert.equal(
   rootPackage.scripts["test:decentralized-services-operator-helper"],
@@ -44,6 +47,23 @@ for (const phrase of [
   "--capability <name>",
 ]) {
   assert.ok(cli.includes(phrase), `CLI should expose decentralized services helper phrase: ${phrase}`);
+}
+
+for (const phrase of [
+  "/api/services/capabilities",
+  "buildDecentralizedServicesCapabilityCatalog",
+  "findForbiddenDecentralizedServiceQueryKey",
+  "services_secret_rejected",
+]) {
+  assert.ok(server.includes(phrase), `server should expose decentralized services discovery phrase: ${phrase}`);
+}
+
+for (const phrase of [
+  "matterhorn_services_get_capabilities",
+  "/api/services/capabilities",
+  "future decentralized service capability contracts",
+]) {
+  assert.ok(mcp.includes(phrase), `MCP should expose decentralized services discovery phrase: ${phrase}`);
 }
 
 const result = spawnSync(process.execPath, ["scripts/decentralized-services-capabilities.mjs", "--json"], {
@@ -110,6 +130,8 @@ for (const forbidden of [
 ]) {
   assert.equal(helper.includes(forbidden), false, `helper must not expose ${forbidden}`);
   assert.equal(cli.includes(forbidden), false, `CLI must not expose ${forbidden}`);
+  assert.equal(serverTool.includes(forbidden), false, `server tool must not expose ${forbidden}`);
+  assert.equal(mcp.includes(forbidden), false, `MCP must not expose ${forbidden}`);
 }
 
 console.log("Decentralized services operator helper check passed.");
