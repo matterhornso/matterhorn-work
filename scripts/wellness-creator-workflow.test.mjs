@@ -207,4 +207,77 @@ for (const phrase of [
   assert.ok(handoff.includes(phrase), `Hermes handoff should include: ${phrase}`);
 }
 
+// 18. Reusable Matterhorn workflow pattern slice.
+assert.equal(contract.category, "wellness", "Workflow category should be wellness");
+assert.equal(
+  contract.manifestVersion,
+  "matterhorn.workflow.manifest.v1",
+  "manifestVersion should match the shared workflow contract",
+);
+const ALLOWED_MANIFEST_STATUSES = [
+  "live_local",
+  "planned_not_live",
+  "preview_only",
+  "external_handoff_required",
+  "blocked_by_policy",
+];
+assert.ok(
+  ALLOWED_MANIFEST_STATUSES.includes(contract.manifestStatus),
+  "manifestStatus should be an allowed contract status",
+);
+assert.equal(contract.reusablePattern?.isReusablePattern, true, "Workflow should declare a reusable pattern");
+assert.equal(contract.reusablePattern?.notCustomUi, true, "Workflow should declare no custom UI");
+assert.ok(
+  String(contract.reusablePattern?.sharedContract).includes("matterhorn-workflow-contract"),
+  "Reusable pattern should reference the shared workflow contract",
+);
+
+// Reusability across service-professional roles, not a single role.
+const professionals = contract.serviceProfessionals.join(" | ");
+for (const pro of ["Personal trainer", "Yoga instructor", "Dietician", "Gym", "service professionals"]) {
+  assert.ok(professionals.includes(pro), `serviceProfessionals should include: ${pro}`);
+}
+
+// Every service hook carries the contract planned_not_live status.
+for (const hook of contract.serviceHooks) {
+  assert.equal(hook.contractStatus, "planned_not_live", `Service hook ${hook.id} should be planned_not_live`);
+}
+
+// The five reusable QA example prompts, each client-safe (no payment, no email).
+const EXAMPLE_PROMPTS = [
+  "Create a 4-week beginner strength plan",
+  "Turn this into a client PDF packet",
+  "Draft a yoga class plan for lower-back mobility",
+  "Create a dietician-safe meal planning template without medical claims",
+  "Prepare a future paid program page, but do not process payment",
+];
+const examplePromptText = contract.examplePrompts.map((e) => e.prompt);
+for (const prompt of EXAMPLE_PROMPTS) {
+  assert.ok(examplePromptText.includes(prompt), `Workflow should include example prompt: ${prompt}`);
+  assert.ok(doc.includes(prompt), `Doc should include example prompt: ${prompt}`);
+  assert.ok(handoff.includes(prompt), `Handoff should include example prompt: ${prompt}`);
+}
+for (const example of contract.examplePrompts) {
+  assert.ok(
+    typeof example.safetyCaveat === "string" && example.safetyCaveat.length > 0,
+    `Example ${example.id} should carry a safety caveat`,
+  );
+  assert.equal(example.processesPayment, false, `Example ${example.id} must not process payment`);
+  assert.equal(example.sendsEmail, false, `Example ${example.id} must not send email`);
+}
+
+// Doc + handoff carry the reusable-pattern sections.
+for (const phrase of [
+  "Reusable Matterhorn Workflow Pattern",
+  "Example Prompts (Reusable Variants)",
+  "wellness_creator_workflow",
+  "planned_not_live",
+]) {
+  assert.ok(doc.includes(phrase), `Doc should include: ${phrase}`);
+}
+assert.ok(
+  handoff.includes("Reusable Pattern Black-Box Prompts"),
+  "Handoff should include the reusable-pattern black-box prompts",
+);
+
 console.log("Wellness Creator Workflow gate passed.");

@@ -10,6 +10,20 @@ This is a use case on the universal chat-first platform. It deliberately blurs t
 
 The earlier Wellness Creator *Pilot* proved a handful of canonical prompts end-to-end. This workflow is the productised version: a complete, seven-stage operating flow a creator runs from first idea to a packaged, exportable service. It is framed as a first-class Matterhorn Work workflow — the same shape the platform uses for any other use case — not a one-off demo and not a bespoke wellness app.
 
+## Reusable Matterhorn Workflow Pattern
+
+This is a **reusable workflow pattern**, not a custom vertical app. It conforms to the shared [Matterhorn Workflow Contract](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`), is registered in the workflow catalog as `wellness_creator_workflow` (category `wellness`), and **runs through the same Matterhorn chat/operator system as every other workflow** — Bittensor playbooks, market previews, decentralized-services planners, and future verticals. There is no bespoke wellness UI.
+
+The same pattern serves a range of **client-facing service professionals**, not just one role:
+
+- Personal trainers
+- Yoga instructors
+- Dieticians / nutrition coaches
+- Gym / group-class instructors
+- Other client-facing service professionals
+
+The workflow's core artifacts are generated locally today (`live_local`); every external service hook (storage/hosting, email, payments, identity/access) is `planned_not_live`. The helper at [`scripts/wellness-creator-workflow.mjs`](../scripts/wellness-creator-workflow.mjs) emits the manifest-aligned fields (`category`, `manifestStatus`, `reusablePattern`, `serviceProfessionals`) so the workflow can be discovered, validated, and tested without custom UI.
+
 ## Personas
 
 1. **Personal trainer (independent).**
@@ -65,6 +79,18 @@ These are validated by the workflow gate; keep them stable. The seven stage prom
 5. `Draft the delivery plan: storage/hosting, email updates, payments, and client access`
 6. `Set up customer management: follow-up cadence, feedback form, and renewal/up-sell prompts`
 7. `Export this as a Matterhorn workflow / MCP artifact`
+
+## Example Prompts (Reusable Variants)
+
+Beyond the seven stage prompts, the same pattern handles ad-hoc, role-specific requests. These are the reusable variants the QA pass exercises — each produces useful, client-safe content with an explicit caveat, and none triggers a live payment, email, hosting, storage, or access action:
+
+| Prompt | Expected artifact | Safety caveat |
+|---|---|---|
+| `Create a 4-week beginner strength plan` | Structured 4-week beginner strength plan | General fitness education only. Not medical advice, diagnosis, or treatment. |
+| `Turn this into a client PDF packet` | Client-facing program packet ready to export | Standard Matterhorn artifact. Storage / hosting is planned, not live. |
+| `Draft a yoga class plan for lower-back mobility` | General mobility-focused yoga class plan | General wellness education only, not medical care. Refer pain or injury to a qualified professional. |
+| `Create a dietician-safe meal planning template without medical claims` | General healthy-eating meal-planning template | General healthy-eating information, not a clinical or therapeutic diet. Not medical advice, diagnosis, or treatment. |
+| `Prepare a future paid program page, but do not process payment` | Draft paid program page with placeholder pricing only | Payments are planned, not live; no payment is processed and no funds move. |
 
 ## Safety Disclaimers (Mandatory)
 
