@@ -201,6 +201,32 @@ The contract ships with five example evidence bundles in `packages/types/src/mat
 
 All bundles set `canExecute: false` and contain no secrets or executable provider payloads.
 
+## Operator Evidence Export
+
+Operators can list, inspect, and export workflow evidence bundles without running the app or touching any provider:
+
+```bash
+pnpm workflow:evidence:list
+pnpm workflow:evidence:show decentralized_services_plan
+pnpm workflow:evidence:export /tmp/evidence-bundles.json --checksum
+```
+
+The helper script is `scripts/matterhorn-workflow-evidence-bundles.mjs`. It supports:
+
+- `--list` — list all evidence bundle IDs.
+- `--id <bundle-id>` — print one evidence bundle as JSON.
+- `--export <path>` — write all bundles to a public JSON file (public evidence only).
+- `--checksum` — write a SHA-256 checksum file next to the export.
+- `--include-non-public` — include non-public evidence items in export (not the default).
+
+By default, exports contain only `public: true` evidence items and always preserve `canExecute: false`. The export contains no private keys, seed phrases, mnemonics, API secrets, raw signatures, signed payloads, wallet exports, passwords, passphrases, keyfiles, or SURI.
+
+Run the operator helper gate:
+
+```bash
+pnpm test:matterhorn-workflow-evidence-bundles
+```
+
 ## Workflow Catalog
 
 Operators and agents can inspect the cross-vertical workflow catalog without

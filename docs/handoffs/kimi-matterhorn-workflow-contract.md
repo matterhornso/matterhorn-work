@@ -168,6 +168,61 @@ All GitHub checks on PR #415 passed:
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
+## PR #420: Workflow Evidence Bundle Operator Helper
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/420  
+**Branch:** `kimi/workflow-evidence-bundle-operator-helper`  
+**Scope:** Command-line helper that makes workflow evidence bundles operator-usable without running the app or touching providers.
+
+### New files
+
+| File | What it contains |
+| --- | --- |
+| `scripts/matterhorn-workflow-evidence-bundles.mjs` | Operator helper: list, show, export public evidence bundles, optional SHA-256 checksum, rejects credential-shaped flags. |
+| `scripts/matterhorn-workflow-evidence-bundles.test.mjs` | Static/runtime gate for the helper. |
+
+### Modified files
+
+| File | What changed |
+| --- | --- |
+| `package.json` | Added `test:matterhorn-workflow-evidence-bundles`, `workflow:evidence:list`, `workflow:evidence:show`, `workflow:evidence:export`. |
+| `docs/matterhorn-workflow-contract.md` | Added Operator Evidence Export section. |
+
+### Helper commands
+
+```bash
+pnpm workflow:evidence:list
+pnpm workflow:evidence:show decentralized_services_plan
+pnpm workflow:evidence:export /tmp/evidence-bundles.json --checksum
+pnpm test:matterhorn-workflow-evidence-bundles
+```
+
+### Test assertions
+
+`scripts/matterhorn-workflow-evidence-bundles.test.mjs` verifies:
+
+- Package scripts are exposed.
+- Helper fixture IDs match the typed registry in `packages/types/src/matterhorn-workflows.ts`.
+- `--list` returns all five bundle IDs.
+- `--id <bundle-id>` returns a bundle with `canExecute: false` and no credential-shaped values.
+- `--export <path> --checksum` writes a public-only JSON file and a valid SHA-256 checksum.
+- Exported bundles contain only `public: true` evidence items.
+- Credential-shaped flags such as `--private-key` are rejected.
+- Helper source contains no submit/sign/live execution patterns.
+
+### Commands that pass on PR #420
+
+```bash
+pnpm test:matterhorn-workflow-contract
+pnpm test:market-execution-safety-gate
+pnpm --dir packages/types build
+pnpm test:matterhorn-workflow-evidence-bundles
+```
+
+### CI status on PR #420
+
+Awaiting CI results.
+
 ## Non-overlap observed
 
 No changes were made to:
@@ -177,9 +232,10 @@ No changes were made to:
 - `scripts/wellness-creator-workflow.mjs`
 - `scripts/wellness-creator-workflow.test.mjs`
 - `apps/desktop/**`
-- `apps/desktop/package.json`
-- `apps/desktop/scripts/electron-after-pack.cjs`
-- `scripts/electron-packaging-sources.test.mjs`
+- `apps/app/src/react-app/**`
+- `scripts/electron-*.mjs`
+- `scripts/desktop-beta-*.mjs`
+- `docs/desktop-beta-first-run.md`
 - `apps/server/src/server.ts`
 - `packages/matterhorn-work-mcp/index.mjs`
 - `apps/orchestrator/src/cli.ts`
