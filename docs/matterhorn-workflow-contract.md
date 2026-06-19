@@ -149,6 +149,7 @@ The contract ships with four fixture manifests in `packages/types/src/matterhorn
 
 | Workflow ID | Category | Status | Purpose |
 | --- | --- | --- | --- |
+| `wellness_creator_workflow` | wellness | `live_local` | Full seven-stage wellness creator workflow for trainers, gym instructors, yoga instructors, and dieticians. |
 | `wellness_creator_services` | wellness | `planned_not_live` | Plans wellness services, content, and customer touchpoints. |
 | `bittensor_operator` | bittensor | `live_local` | Staking/delegation previews and external-signer handoffs for TAO. |
 | `market_read_preview` | markets | `preview_only` | Read-only market data and previews for Hyperliquid/Polymarket. |
@@ -163,11 +164,14 @@ starting the app or touching any provider:
 matterhorn-work workflows catalog --json
 matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json
 matterhorn-work workflows catalog --category wellness --json
+matterhorn-work workflows prompts --workflow wellness_creator_workflow --json
 pnpm test:matterhorn-workflow-catalog
 ```
 
-The catalog emits `matterhorn.workflow.catalog.v1` and covers the typed fixture
-manifests plus the full Wellness Creator Workflow. It is catalog-only:
+The catalog emits `matterhorn.workflow.catalog.v1`; the prompt-pack view emits
+`matterhorn.workflow.prompt-pack.v1` for copy-pasteable staged prompts. Both
+views cover the typed fixture manifests plus the full Wellness Creator Workflow.
+They are catalog-only:
 
 - no provider execution;
 - no custody;

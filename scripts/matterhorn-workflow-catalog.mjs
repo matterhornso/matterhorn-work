@@ -229,6 +229,7 @@ function parseArgs(argv) {
     json: args.includes("--json"),
     help: args.includes("--help") || args.includes("-h"),
     includePrompts: args.includes("--include-prompts"),
+    promptPack: args.includes("--prompt-pack"),
     workflow: value("--workflow", value("--workflow-id", "")).trim(),
     category: value("--category", "").trim(),
     status: value("--status", "").trim(),
@@ -317,6 +318,54 @@ function buildCatalog(config) {
   };
 }
 
+function buildPromptPack(config) {
+  const workflows = filterWorkflows({ ...config, includePrompts: true }).map((workflow) => ({
+    workflowId: workflow.workflowId,
+    name: workflow.name,
+    category: workflow.category,
+    status: workflow.status,
+    targetUserPersona: workflow.targetUserPersona,
+    starterPrompt: workflow.canonicalPrompts[0] ?? "",
+    prompts: workflow.canonicalPrompts.map((prompt, index) => ({
+      step: index + 1,
+      prompt,
+    })),
+    commands: workflow.commands,
+    references: workflow.references,
+    safety: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      promptPackOnly: true,
+      noProviderExecution: true,
+    },
+  }));
+  return {
+    ok: true,
+    version: "matterhorn.workflow.prompt-pack.v1",
+    status: "catalog_only",
+    generatedAt: new Date(0).toISOString(),
+    summary:
+      "Copy-pasteable Matterhorn Work workflow prompts for agents and operators. Prompt packs do not execute provider actions.",
+    safety: {
+      ...COMMON_SAFETY,
+      promptPackOnly: true,
+      noProviderExecution: true,
+      noCustody: true,
+      noLiveMarketSubmit: true,
+      plannedServicesOnly: true,
+    },
+    counts: {
+      total: workflows.length,
+      promptTotal: workflows.reduce((sum, workflow) => sum + workflow.prompts.length, 0),
+    },
+    workflows,
+  };
+}
+
 function printText(catalog) {
   process.stdout.write(`${catalog.summary}\n\n`);
   process.stdout.write("Safety: catalog only; no custody; no provider execution; no market submission.\n\n");
@@ -330,15 +379,30 @@ function printText(catalog) {
   }
 }
 
+function printPromptPackText(promptPack) {
+  process.stdout.write(`${promptPack.summary}\n\n`);
+  process.stdout.write("Safety: prompt pack only; no custody; no provider execution; no market submission.\n\n");
+  for (const workflow of promptPack.workflows) {
+    process.stdout.write(`${workflow.name} (${workflow.workflowId})\n`);
+    process.stdout.write(`  Persona: ${workflow.targetUserPersona}\n`);
+    for (const prompt of workflow.prompts) {
+      process.stdout.write(`  ${prompt.step}. ${prompt.prompt}\n`);
+    }
+    process.stdout.write("\n");
+  }
+}
+
 function printHelp() {
   process.stdout.write([
     "Matterhorn Work workflow catalog",
     "",
     "Usage:",
     "  node scripts/matterhorn-workflow-catalog.mjs [--json] [--include-prompts]",
+    "  node scripts/matterhorn-workflow-catalog.mjs --prompt-pack --workflow wellness_creator_workflow --json",
     "  node scripts/matterhorn-workflow-catalog.mjs --workflow wellness_creator_workflow --json",
     "  node scripts/matterhorn-workflow-catalog.mjs --category wellness --json",
     "  matterhorn-work workflows catalog --json",
+    "  matterhorn-work workflows prompts --workflow wellness_creator_workflow --json",
     "",
     "This helper is catalog-only. It never accepts secrets, signs, submits, moves funds, or executes provider actions.",
     "",
@@ -351,9 +415,11 @@ try {
     printHelp();
   } else {
     assertNoForbiddenArgs(config.args);
-    const catalog = buildCatalog(config);
+    const catalog = config.promptPack ? buildPromptPack(config) : buildCatalog(config);
     if (config.json) {
       process.stdout.write(`${JSON.stringify(catalog, null, 2)}\n`);
+    } else if (config.promptPack) {
+      printPromptPackText(catalog);
     } else {
       printText(catalog);
     }

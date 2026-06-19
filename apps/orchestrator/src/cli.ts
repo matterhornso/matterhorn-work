@@ -3799,6 +3799,7 @@ function printHelp(): void {
     "  matterhorn-work services capabilities [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work services chat --message <text> [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work workflows catalog [--workflow <id>] [--category <name>] [--include-prompts] [--json]",
+    "  matterhorn-work workflows prompts [--workflow <id>] [--category <name>] [--json]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -8728,21 +8729,29 @@ async function runWorkflows(args: ParsedArgs) {
     subcommand === "list" ||
     subcommand === "show" ||
     subcommand === "inspect";
+  const isPromptPack =
+    subcommand === "prompts" ||
+    subcommand === "prompt-pack" ||
+    subcommand === "starter-prompts";
 
   try {
     assertNoWorkflowSecrets(args);
-    if (!isCatalog) {
-      throw new Error("workflows requires catalog (aliases: list, show, inspect)");
+    if (!isCatalog && !isPromptPack) {
+      throw new Error("workflows requires catalog (aliases: list, show, inspect) or prompts");
     }
 
     const forwarded: string[] = [];
     if (outputJson) forwarded.push("--json");
-    if (readBool(args.flags, "include-prompts", false)) forwarded.push("--include-prompts");
+    if (isPromptPack) {
+      forwarded.push("--prompt-pack");
+    } else if (readBool(args.flags, "include-prompts", false)) {
+      forwarded.push("--include-prompts");
+    }
 
     const workflow =
       readFlag(args.flags, "workflow") ??
       readFlag(args.flags, "workflow-id") ??
-      (subcommand === "show" || subcommand === "inspect" ? args.positionals[2] : undefined);
+      (subcommand === "show" || subcommand === "inspect" || isPromptPack ? args.positionals[2] : undefined);
     const category = readFlag(args.flags, "category");
     const status = readFlag(args.flags, "status");
     if (workflow && workflow.trim()) forwarded.push("--workflow", workflow.trim());
