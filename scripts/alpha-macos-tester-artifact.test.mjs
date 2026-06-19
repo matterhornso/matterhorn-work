@@ -24,6 +24,18 @@ for (const phrase of [
   assert.ok(workflow.includes(phrase), `alpha workflow missing tester artifact phrase: ${phrase}`);
 }
 
+const unsignedPackageIndex = workflow.indexOf("Package Electron alpha tester artifact (macOS, unsigned)");
+assert.ok(unsignedPackageIndex >= 0, "alpha workflow should include the unsigned package step");
+const unsignedPackageBlock = workflow.slice(unsignedPackageIndex, unsignedPackageIndex + 650);
+assert.ok(
+  unsignedPackageBlock.includes("--mac dmg zip"),
+  "unsigned tester artifact packaging should request the same macOS DMG/ZIP targets used by release packaging",
+);
+assert.ok(
+  unsignedPackageBlock.includes("--publish never"),
+  "unsigned tester artifact packaging must not publish release assets",
+);
+
 for (const phrase of [
   "Package Electron alpha (macOS, signed + notarized)",
   "Create immutable alpha prerelease",

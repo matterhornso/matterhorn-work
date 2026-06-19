@@ -204,8 +204,7 @@ jobs:
           set -euo pipefail
           pnpm --dir apps/desktop exec electron-builder \
             --config electron-builder.yml \
-            --mac \
-            --arm64 \
+            --mac dmg zip \
             --publish never
 
       - name: Upload unsigned Electron alpha tester artifact
