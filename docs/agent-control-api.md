@@ -73,6 +73,7 @@ Common status codes:
 | `matterhorn_crypto_readiness` | `GET /api/crypto/readiness` |
 | `matterhorn_services_get_capabilities` | `GET /api/services/capabilities` |
 | `matterhorn_services_chat_plan` | `POST /api/services/chat/plan` |
+| `matterhorn_workflows_catalog` | `GET /api/workflows/catalog` |
 | `matterhorn_market_execution_readiness` | `GET /api/crypto/market-execution-readiness` |
 | `matterhorn_hyperliquid_chat` | `POST /api/hyperliquid/chat/execute` |
 | `matterhorn_hyperliquid_list_markets` | `GET /api/hyperliquid/markets` |
@@ -114,6 +115,7 @@ Common status codes:
 
 | Route | Purpose |
 | --- | --- |
+| `GET /api/workflows/catalog` | Returns `matterhorn.workflow.catalog.v1`, the catalog-only registry for wellness creator workflows, Bittensor operator workflows, market read/preview workflows, decentralized service planning, and future verticals. Optional `workflow`, `category`, `status`, and `includePrompts=true` filters are supported. This route is read-only, rejects credential-shaped query fields, and keeps provider execution, custody, signing, submission, payments, email sending, hosting, and storage publish disabled. |
 | `GET /api/services/capabilities` | Returns `matterhorn.services.capability-catalog.v1`, the future-contract catalog for hosting, storage, email, payments, and identity/access. Optional `capability` filter is supported. This route is read-only, accepts no secrets, and keeps every capability `status: "future_contract"`, `canExecute: false`, and `liveExecutionEnabled: false`. |
 | `POST /api/services/chat/plan` | Returns `matterhorn.services.chat-plan.v1`, a deterministic future-contract plan from a plain-language service prompt. The route accepts `message` and optional `capability`; it rejects secret-shaped fields and keeps every card `canExecute: false` and `liveExecutionEnabled: false`. |
 | `GET /api/crypto/market-execution-chain` | Returns `matterhorn.market.execution-chain-guide.v1`, the no-submit Hyperliquid/Polymarket preview, external sign request, public/redacted artifact validation, artifact reconciliation, and public receipt import guide. This route is read-only and keeps `canSubmit: false` plus `liveSubmissionEnabled: false`. |
