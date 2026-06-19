@@ -164,4 +164,70 @@ for (const capability of capabilities) {
   assert.ok(registryBlock.includes(capability), `fixture registry missing capability: ${capability}`);
 }
 
+// 10. Preview fixtures exist for every capability and are strictly non-executable.
+const previewFixtureConstants = [
+  "HOSTING_PREVIEW_FIXTURES",
+  "STORAGE_PREVIEW_FIXTURES",
+  "EMAIL_PREVIEW_FIXTURES",
+  "PAYMENTS_PREVIEW_FIXTURES",
+  "IDENTITY_PREVIEW_FIXTURES",
+  "DECENTRALIZED_SERVICE_PREVIEW_FIXTURES",
+];
+for (const constant of previewFixtureConstants) {
+  assert.ok(types.includes(constant), `types missing preview fixture constant: ${constant}`);
+}
+
+function extractPreviewFixtureBlocks(text) {
+  const blocks = [];
+  const regex = /:\s*DecentralizedServicePreview\[\]\s*=\s*\[([\s\S]*?)\];/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) blocks.push(match[1]);
+  return blocks;
+}
+
+const previewFixtureBlocks = extractPreviewFixtureBlocks(types);
+assert.ok(previewFixtureBlocks.length >= 5, `expected at least 5 capability preview fixture blocks, found ${previewFixtureBlocks.length}`);
+
+const forbiddenPreviewValues = [
+  '"privateKey":',
+  '"private_key":',
+  '"seed":',
+  '"seedPhrase":',
+  '"seed_phrase":',
+  '"mnemonic":',
+  '"rawSignature":',
+  '"raw_signature":',
+  '"apiSecret":',
+  '"api_secret":',
+  '"apiKeySecret":',
+  '"walletExport":',
+  '"wallet_export":',
+  '"passphrase":',
+  '"password":',
+  '"keyfile":',
+  '"suri":',
+  '"signedPayload":',
+  '"signed_payload":',
+];
+
+for (const block of previewFixtureBlocks) {
+  assert.ok(block.includes('version: "matterhorn.services.preview.v1"'), "preview fixture must use preview version");
+  assert.ok(block.includes("canExecute: false"), "preview fixture must set canExecute: false");
+  assert.ok(
+    /execution:\s*"preview_required"|execution:\s*"confirmation_required"|execution:\s*"external_handoff_required"/.test(block),
+    "preview fixture execution must be future/preview-only"
+  );
+  assert.ok(block.includes("consequence:"), "preview fixture must include consequence");
+  assert.ok(block.includes("confirmationText:"), "preview fixture must include confirmationText");
+  assert.ok(block.includes("previewSha256:"), "preview fixture must include previewSha256");
+  for (const forbidden of forbiddenPreviewValues) {
+    assert.equal(block.includes(forbidden), false, `preview fixture must not contain forbidden value: ${forbidden}`);
+  }
+}
+
+const previewRegistryBlock = types.slice(types.indexOf("DECENTRALIZED_SERVICE_PREVIEW_FIXTURES"));
+for (const capability of capabilities) {
+  assert.ok(previewRegistryBlock.includes(capability), `preview fixture registry missing capability: ${capability}`);
+}
+
 console.log("Decentralized services capability contract static check passed.");

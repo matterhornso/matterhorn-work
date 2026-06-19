@@ -34,6 +34,21 @@ capability at `status: "future_contract"`, and reports `canExecute: false` and
 `--private-key`, `--api-secret`, `--raw-signature`, `--signed-payload`, and
 `--wallet-export`.
 
+## Preview Fixture Layer
+
+The contract includes `DECENTRALIZED_SERVICE_PREVIEW_FIXTURES`: a registry of example `DecentralizedServicePreview` objects, one set per capability. These fixtures are not connected to any live provider and are not executable.
+
+Their purpose is to give agents concrete, safe preview examples they can render in chat before a real provider is integrated. Each fixture:
+
+- Uses `version: "matterhorn.services.preview.v1"`.
+- Sets `canExecute: false`.
+- Uses a future/preview-only `execution` state (`preview_required`, `confirmation_required`, or `external_handoff_required`).
+- Includes a `consequence`, `confirmationText`, and `previewSha256`.
+- Contains no private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+- Has no submit route, sign route, or live execution path.
+
+Agents may display these previews to customers, but they must not proceed to execution, custody, payment collection, email sending, hosting publish, or storage publish using a fixture.
+
 ## Non-overlap
 
 This contract does **not** touch:

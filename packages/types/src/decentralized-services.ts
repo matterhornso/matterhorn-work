@@ -329,3 +329,130 @@ export const DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES: Record<
   payments: PAYMENTS_DISCOVERY_FIXTURES,
   identity: IDENTITY_DISCOVERY_FIXTURES,
 };
+
+export const HOSTING_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
+  {
+    version: "matterhorn.services.preview.v1",
+    capability: "hosting",
+    providerId: "example-hosting-akash",
+    intent: "deploy_frontend",
+    execution: "confirmation_required",
+    summary: "Build and deploy a public preview of the frontend to example hosting.",
+    consequence:
+      "This would create a public deployment URL. No live build, DNS change, or hosting publish happens because this is a fixture preview.",
+    confirmationText: "Preview this frontend deployment?",
+    previewSha256:
+      "0000000000000000000000000000000000000000000000000000000000000000",
+    estimatedCost: { amount: null, asset: null, period: null },
+    requiredAuth: ["oauth2", "wallet_address"],
+    requiresExternalSigner: false,
+    requiresCustomerConfirmation: true,
+    warnings: ["This is a fixture preview. No provider is connected."],
+    canExecute: false,
+  },
+];
+
+export const STORAGE_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
+  {
+    version: "matterhorn.services.preview.v1",
+    capability: "storage",
+    providerId: "example-storage-ipfs",
+    intent: "upload_file",
+    execution: "confirmation_required",
+    summary: "Upload and pin a file to decentralized storage.",
+    consequence:
+      "This would produce a public CID. No file is stored, pinned, or published because this is a fixture preview.",
+    confirmationText: "Preview this storage upload?",
+    previewSha256:
+      "0000000000000000000000000000000000000000000000000000000000000001",
+    estimatedCost: { amount: null, asset: null, period: null },
+    requiredAuth: ["wallet_address", "did"],
+    requiresExternalSigner: false,
+    requiresCustomerConfirmation: true,
+    warnings: ["This is a fixture preview. No provider is connected."],
+    canExecute: false,
+  },
+];
+
+export const EMAIL_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
+  {
+    version: "matterhorn.services.preview.v1",
+    capability: "email",
+    providerId: "example-email-resend",
+    intent: "send_transactional",
+    execution: "confirmation_required",
+    summary: "Send a transactional email to verified recipients.",
+    consequence:
+      "This would queue an email send. No messages are sent because this is a fixture preview.",
+    confirmationText: "Preview this transactional email?",
+    previewSha256:
+      "0000000000000000000000000000000000000000000000000000000000000002",
+    estimatedCost: { amount: null, asset: null, period: null },
+    requiredAuth: ["oauth2", "api_key_reference"],
+    requiresExternalSigner: false,
+    requiresCustomerConfirmation: true,
+    warnings: ["This is a fixture preview. No provider is connected."],
+    canExecute: false,
+  },
+];
+
+export const PAYMENTS_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
+  {
+    version: "matterhorn.services.preview.v1",
+    capability: "payments",
+    providerId: "example-payments-stripe",
+    intent: "create_checkout",
+    execution: "external_handoff_required",
+    summary: "Create a checkout page for a one-time payment.",
+    consequence:
+      "This would create a public checkout URL. No payment is collected, charged, or settled because this is a fixture preview.",
+    confirmationText: "Preview this checkout creation?",
+    previewSha256:
+      "0000000000000000000000000000000000000000000000000000000000000003",
+    estimatedCost: { amount: 10.0, asset: "USD", period: null },
+    requiredAuth: ["oauth2", "wallet_address", "external_signer"],
+    requiresExternalSigner: true,
+    requiresCustomerConfirmation: true,
+    warnings: [
+      "This is a fixture preview. No provider is connected.",
+      "Customer must complete payment outside Matterhorn Work.",
+    ],
+    canExecute: false,
+  },
+];
+
+export const IDENTITY_PREVIEW_FIXTURES: DecentralizedServicePreview[] = [
+  {
+    version: "matterhorn.services.preview.v1",
+    capability: "identity",
+    providerId: "example-identity-ens",
+    intent: "gate_by_wallet",
+    execution: "external_handoff_required",
+    summary: "Create a wallet-gated access policy for a resource.",
+    consequence:
+      "This would create an on-chain access policy. No policy is deployed, no access is granted, and no identity is verified because this is a fixture preview.",
+    confirmationText: "Preview this wallet gate?",
+    previewSha256:
+      "0000000000000000000000000000000000000000000000000000000000000004",
+    estimatedCost: { amount: null, asset: null, period: null },
+    requiredAuth: ["wallet_address", "did", "external_signer"],
+    requiresExternalSigner: true,
+    requiresCustomerConfirmation: true,
+    warnings: [
+      "This is a fixture preview. No provider is connected.",
+      "Ownership proof happens through an external signer handoff, never by sharing a private key.",
+    ],
+    canExecute: false,
+  },
+];
+
+export const DECENTRALIZED_SERVICE_PREVIEW_FIXTURES: Record<
+  DecentralizedServiceCapability,
+  DecentralizedServicePreview[]
+> = {
+  hosting: HOSTING_PREVIEW_FIXTURES,
+  storage: STORAGE_PREVIEW_FIXTURES,
+  email: EMAIL_PREVIEW_FIXTURES,
+  payments: PAYMENTS_PREVIEW_FIXTURES,
+  identity: IDENTITY_PREVIEW_FIXTURES,
+};
