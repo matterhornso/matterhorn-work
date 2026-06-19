@@ -80,5 +80,6 @@ assert.match(
 );
 
 rmSync(outputDir, { recursive: true, force: true });
+rmSync(distDir, { recursive: true, force: true });
 
 console.log("Electron local tester artifact helper check passed.");

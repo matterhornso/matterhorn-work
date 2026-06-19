@@ -65,6 +65,7 @@ const distDir = resolve("apps/desktop/dist-electron");
 assertSafeOutputDir(outputDir);
 
 if (!args.skipBuild) {
+  rmSync(distDir, { recursive: true, force: true });
   run("pnpm", [
     "--filter",
     "@matterhorn-work/desktop",
