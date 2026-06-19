@@ -426,6 +426,33 @@ const tools = [
     },
   },
   {
+    name: "matterhorn_workflows_catalog",
+    description: "Read the catalog-only Matterhorn Work workflow registry for wellness creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workflow: {
+          type: "string",
+          description: "Optional workflow id such as wellness_creator_workflow, bittensor_operator, market_read_preview, or decentralized_services_planner.",
+        },
+        category: {
+          type: "string",
+          enum: ["wellness", "bittensor", "markets", "decentralized_services"],
+          description: "Optional category filter.",
+        },
+        status: {
+          type: "string",
+          enum: ["live_local", "planned_not_live", "preview_only"],
+          description: "Optional status filter.",
+        },
+        includePrompts: {
+          type: "boolean",
+          description: "When true, include full canonical prompt lists instead of a short preview.",
+        },
+      },
+    },
+  },
+  {
     name: "matterhorn_crypto_live_public_qa",
     description: "Run the local live public-data QA pack and return public/redacted evidence files. Fixture mode is default; optional live mode uses MCP environment auth only. No token argument, signing, submission, or secrets.",
     inputSchema: {
@@ -3353,6 +3380,15 @@ async function handleTool(name, args = {}) {
       return callServer("/api/services/capabilities", { query: { capability: args.capability } });
     case "matterhorn_services_chat_plan":
       return callServer("/api/services/chat/plan", { method: "POST", body: args });
+    case "matterhorn_workflows_catalog":
+      return callServer("/api/workflows/catalog", {
+        query: {
+          workflow: args.workflow,
+          category: args.category,
+          status: args.status,
+          includePrompts: args.includePrompts === true ? "true" : undefined,
+        },
+      });
     case "matterhorn_crypto_live_public_qa":
       return matterhornCryptoLivePublicQa(args);
     case "matterhorn_market_execution_readiness":

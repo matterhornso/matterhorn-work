@@ -174,6 +174,10 @@ import {
   planDecentralizedServicesChat,
 } from "./tools/decentralized-services.js";
 import {
+  buildMatterhornWorkflowCatalog,
+  findForbiddenMatterhornWorkflowQueryKey,
+} from "./tools/matterhorn-workflows.js";
+import {
   buildMarketExecutionChainResponse,
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
@@ -4353,6 +4357,36 @@ function createRoutes(
         400,
         "invalid_services_capability",
         error instanceof Error ? error.message : "Unknown decentralized service capability",
+      );
+    }
+  });
+
+  addRoute(routes, "GET", "/api/workflows/catalog", "client", async (ctx) => {
+    const forbiddenKey = findForbiddenMatterhornWorkflowQueryKey(ctx.url.searchParams.keys());
+    if (forbiddenKey) {
+      throw new ApiError(
+        400,
+        "workflow_secret_rejected",
+        `Matterhorn workflow catalog does not accept credential-shaped query fields such as ${forbiddenKey}.`,
+      );
+    }
+    const workflow =
+      ctx.url.searchParams.get("workflow") ?? ctx.url.searchParams.get("workflowId");
+    const category = ctx.url.searchParams.get("category");
+    const status = ctx.url.searchParams.get("status");
+    const includePrompts = ctx.url.searchParams.get("includePrompts") === "true";
+    try {
+      return jsonResponse(buildMatterhornWorkflowCatalog({
+        workflow,
+        category,
+        status,
+        includePrompts,
+      }));
+    } catch (error) {
+      throw new ApiError(
+        400,
+        "invalid_workflow_catalog_filter",
+        error instanceof Error ? error.message : "Could not build Matterhorn workflow catalog",
       );
     }
   });
