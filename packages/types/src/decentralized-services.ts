@@ -180,3 +180,152 @@ export interface DecentralizedServiceSafetyChecklist {
   publicReceiptRequired: true;
   rollbackFieldRequired: true;
 }
+
+export interface DecentralizedServiceDiscoveryFixture {
+  version: "matterhorn.services.discovery-fixture.v1";
+  capability: DecentralizedServiceCapability;
+  providerId: string;
+  displayName: string;
+  status: "future_contract" | "readonly_preview";
+  discoveryMode: "fixture";
+  authModels: DecentralizedServiceAuthModel[];
+  supportedIntents: string[];
+  outputArtifacts: string[];
+  publicMetadata: Record<string, unknown>;
+  liveExecutionEnabled: false;
+  canExecute: false;
+  acceptsSecrets: false;
+  acceptsPrivateKeys: false;
+  acceptsRawSignatures: false;
+}
+
+export const HOSTING_DISCOVERY_FIXTURES: DecentralizedServiceDiscoveryFixture[] = [
+  {
+    version: "matterhorn.services.discovery-fixture.v1",
+    capability: "hosting",
+    providerId: "example-hosting-akash",
+    displayName: "Example Akash Hosting (Fixture)",
+    status: "future_contract",
+    discoveryMode: "fixture",
+    authModels: ["oauth2", "wallet_address", "subscription"],
+    supportedIntents: ["deploy_frontend", "publish_site"],
+    outputArtifacts: ["deployment_url", "build_hash", "domain_record"],
+    publicMetadata: {
+      network: "akash-sandbox",
+      region: "fixture-region",
+      estimatedCostUsd: null,
+    },
+    liveExecutionEnabled: false,
+    canExecute: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+  },
+];
+
+export const STORAGE_DISCOVERY_FIXTURES: DecentralizedServiceDiscoveryFixture[] = [
+  {
+    version: "matterhorn.services.discovery-fixture.v1",
+    capability: "storage",
+    providerId: "example-storage-ipfs",
+    displayName: "Example IPFS Storage (Fixture)",
+    status: "future_contract",
+    discoveryMode: "fixture",
+    authModels: ["wallet_address", "did", "api_key_reference"],
+    supportedIntents: ["upload_file", "pin_cid", "retrieve_file"],
+    outputArtifacts: ["cid", "retrieval_url", "storage_deal_id"],
+    publicMetadata: {
+      network: "ipfs-fixnet",
+      replicationTarget: 1,
+      estimatedCostUsd: null,
+    },
+    liveExecutionEnabled: false,
+    canExecute: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+  },
+];
+
+export const EMAIL_DISCOVERY_FIXTURES: DecentralizedServiceDiscoveryFixture[] = [
+  {
+    version: "matterhorn.services.discovery-fixture.v1",
+    capability: "email",
+    providerId: "example-email-resend",
+    displayName: "Example Resend Email (Fixture)",
+    status: "future_contract",
+    discoveryMode: "fixture",
+    authModels: ["oauth2", "api_key_reference", "subscription"],
+    supportedIntents: ["send_transactional", "send_newsletter", "verify_email"],
+    outputArtifacts: ["message_id", "delivery_status", "template_version"],
+    publicMetadata: {
+      providerDomain: "example.com",
+      maxRecipientsPerBatch: 50,
+      estimatedCostUsd: null,
+    },
+    liveExecutionEnabled: false,
+    canExecute: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+  },
+];
+
+export const PAYMENTS_DISCOVERY_FIXTURES: DecentralizedServiceDiscoveryFixture[] = [
+  {
+    version: "matterhorn.services.discovery-fixture.v1",
+    capability: "payments",
+    providerId: "example-payments-stripe",
+    displayName: "Example Stripe Payments (Fixture)",
+    status: "future_contract",
+    discoveryMode: "fixture",
+    authModels: ["oauth2", "api_key_reference", "wallet_address", "external_signer"],
+    supportedIntents: ["create_checkout", "create_invoice", "create_subscription", "create_creator_program"],
+    outputArtifacts: ["checkout_url", "invoice_id", "subscription_id", "public_payment_link"],
+    publicMetadata: {
+      currencyAllowlist: ["USD"],
+      creatorProgramSupported: true,
+      estimatedCostUsd: null,
+    },
+    liveExecutionEnabled: false,
+    canExecute: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+  },
+];
+
+export const IDENTITY_DISCOVERY_FIXTURES: DecentralizedServiceDiscoveryFixture[] = [
+  {
+    version: "matterhorn.services.discovery-fixture.v1",
+    capability: "identity",
+    providerId: "example-identity-ens",
+    displayName: "Example ENS Identity (Fixture)",
+    status: "future_contract",
+    discoveryMode: "fixture",
+    authModels: ["wallet_address", "did", "external_signer"],
+    supportedIntents: ["create_login", "gate_by_wallet", "issue_membership", "verify_did"],
+    outputArtifacts: ["access_policy_id", "membership_nft_contract", "did_document_url", "gate_check_url"],
+    publicMetadata: {
+      chain: "ethereum-sepolia-fixture",
+      proofKind: "wallet_ownership",
+      estimatedCostUsd: null,
+    },
+    liveExecutionEnabled: false,
+    canExecute: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+  },
+];
+
+export const DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES: Record<
+  DecentralizedServiceCapability,
+  DecentralizedServiceDiscoveryFixture[]
+> = {
+  hosting: HOSTING_DISCOVERY_FIXTURES,
+  storage: STORAGE_DISCOVERY_FIXTURES,
+  email: EMAIL_DISCOVERY_FIXTURES,
+  payments: PAYMENTS_DISCOVERY_FIXTURES,
+  identity: IDENTITY_DISCOVERY_FIXTURES,
+};

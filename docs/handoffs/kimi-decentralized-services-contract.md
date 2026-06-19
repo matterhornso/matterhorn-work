@@ -95,6 +95,58 @@ No changes were made to:
 - `docs/wellness-creator-pilot.md`
 - `docs/handoffs/hermes-wellness-creator-qa.md`
 
+## PR #399: provider-discovery fixture coverage
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/399  
+**Branch merged to dev:** `kimi/decentralized-services-discovery-fixtures`  
+**Scope:** Readonly provider-discovery fixture constants for all five capabilities.
+
+### New types added
+
+In `packages/types/src/decentralized-services.ts`:
+
+- `DecentralizedServiceDiscoveryFixture` interface
+- `HOSTING_DISCOVERY_FIXTURES`
+- `STORAGE_DISCOVERY_FIXTURES`
+- `EMAIL_DISCOVERY_FIXTURES`
+- `PAYMENTS_DISCOVERY_FIXTURES`
+- `IDENTITY_DISCOVERY_FIXTURES`
+- `DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES` — a record mapping each capability to its fixture array
+
+Each fixture has:
+
+- `status: "future_contract"`
+- `discoveryMode: "fixture"`
+- `liveExecutionEnabled: false`
+- `canExecute: false`
+- `acceptsSecrets: false`, `acceptsPrivateKeys: false`, `acceptsRawSignatures: false`
+- `publicMetadata` containing only public/redacted provider metadata
+
+### Test extensions
+
+`scripts/decentralized-services-contract.test.mjs` was extended to assert:
+
+- Every capability has at least one discovery fixture constant.
+- Every fixture block uses `status: "future_contract"` or `status: "readonly_preview"`.
+- Every fixture block sets `liveExecutionEnabled: false`, `canExecute: false`, `acceptsSecrets: false`, `acceptsPrivateKeys: false`, and `acceptsRawSignatures: false`.
+- Every fixture block uses `publicMetadata` and contains no forbidden credential keys (`privateKey`, `seedPhrase`, `mnemonic`, `apiSecret`, `rawSignature`, `signedPayload`, `walletExport`, `passphrase`, `password`, `keyfile`, `suri`).
+- The `DECENTRALIZED_SERVICE_DISCOVERY_FIXTURES` registry maps all five capabilities.
+
+### Commands that pass on PR #399
+
+```bash
+pnpm test:decentralized-services-contract
+pnpm test:market-execution-safety-gate
+pnpm --dir packages/types build
+```
+
+### CI status on PR #399
+
+- `openwork-tests (blacksmith-4vcpu-ubuntu-2204)` — SUCCESS
+- `openwork-tests (macos-14)` — SUCCESS
+- `customer-crypto-gates` — SUCCESS
+- `i18n-audit` — SUCCESS
+
 ## Useful references
 
 - Contract doc: `docs/decentralized-services-capability-contract.md`
