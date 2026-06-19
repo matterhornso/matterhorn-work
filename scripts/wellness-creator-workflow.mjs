@@ -23,12 +23,25 @@
  * It never accepts secrets, never gives medical advice, and never moves funds.
  */
 
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { resolve, join } from "node:path";
+
 const args = process.argv.slice(2);
+const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 const VERSION = "matterhorn.wellness.creator-workflow.v1";
 
 const FORBIDDEN_ARG_RE =
   /^--(?:api[-_]?secret|api[-_]?key|private[-_]?key|seed(?:[-_]?phrase)?|mnemonic|raw[-_]?signature|signed[-_]?payload|signed[-_]?order|wallet[-_]?export|keyfile|suri|password|passphrase|token)$/i;
+
+// Heuristic for free-form prompt text that looks like a secret. Such input is
+// refused and never echoed back.
+const SECRET_TEXT_RE =
+  /(seed phrase|mnemonic|private key|api secret|api key|raw signature|signed payload|signed order|wallet export|passphrase|-----BEGIN|0x[a-f0-9]{40,})/i;
+
+const FIXTURE_DIR = "docs/wellness-creator-workflow";
+const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
 
 // Affirmative medical / guarantee claims the workflow must never make. Written
 // to NOT match the mandatory disclaimers (which contain the bare words
@@ -117,7 +130,7 @@ const STAGES = [
     description: "Plan ongoing customer management for the program.",
     prompt:
       "Set up customer management: follow-up cadence, feedback form, and renewal/up-sell prompts",
-    artifacts: ["Follow-up cadence", "Feedback form", "Renewal / up-sell prompts"],
+    artifacts: ["Follow-up cadence", "Feedback form", "Renewal / up-sell prompts", "Client progress check-in"],
   },
   {
     id: "export",
@@ -315,6 +328,109 @@ const EXAMPLE_PROMPTS = [
   },
 ];
 
+// Any prompt, one workflow. A creator can ask for anything in plain chat — a
+// training plan, a diet plan, a custom strength block, a mobility routine, a
+// habit plan, a client handout — and the workflow produces a client-safe
+// artifact with the mandatory disclaimers. The canonical and example prompts
+// are starting points, not a closed list.
+const FREEFORM_SUPPORT = {
+  acceptsAnyPrompt: true,
+  notLimitedToCanonical: true,
+  routesToArtifact: true,
+  note: "A creator can ask for anything in plain chat and the workflow produces a client-safe artifact with mandatory disclaimers. The canonical and example prompts are starting points, not a closed list.",
+  exampleRequestCategories: [
+    "Training plans (strength, hypertrophy, endurance, beginner to advanced)",
+    "Diet and nutrition education plans and templates",
+    "Custom strength-training blocks and progressions",
+    "Yoga and mobility class plans",
+    "Habit, recovery, sleep, and accountability plans",
+    "Client handouts, checklists, FAQs, and progress trackers",
+    "Service packaging: offer pages, onboarding, terms",
+  ],
+  guardrails: [
+    "Every generated artifact carries the mandatory non-medical disclaimer.",
+    "Educational only — no diagnosis, no prescription, no treatment, no guaranteed outcome.",
+    "No live payment, email, hosting, storage, or access action; those hooks stay planned, not live.",
+    "Never requests or accepts secrets, keys, signatures, signed payloads, or wallet exports.",
+    "Requests that cross into clinical care are refused and referred to a qualified professional.",
+  ],
+};
+
+// Deepened customer-management stage, including a weekly client progress
+// check-in backed by a reproducible fixture.
+const CUSTOMER_MANAGEMENT = {
+  followUpCadence: [
+    "Day 1: welcome message and how to use the plan.",
+    "Week 1: first check-in — adherence, energy, and any pain or discomfort.",
+    "Week 2: adjust volume or load based on the check-in.",
+    "Week 4: progress review and next-block options.",
+  ],
+  feedbackForm: {
+    fields: ["What went well", "What was hard", "Energy (1-5)", "Adherence (%)", "Requests for next block"],
+    note: "Collected in-app as a standard artifact. No email is sent.",
+  },
+  renewalUpsell: [
+    "Offer a renewal at the end of the block.",
+    "Suggest an add-on (nutrition template, extra check-ins, a group class).",
+    "All pricing is a draft only — payments are planned, not live, and no payment is processed.",
+  ],
+  progressCheckIn: {
+    cadence: "weekly",
+    fixture: `${FIXTURE_DIR}/${PROGRESS_CHECKIN_FIXTURE}`,
+    fields: [
+      "Date",
+      "Sessions completed this week",
+      "Adherence (%)",
+      "Energy (1-5)",
+      "Soreness / discomfort (note, refer pain to a professional)",
+      "Bodyweight (optional, self-reported)",
+      "Wins and blockers",
+      "Coach adjustments for next week",
+    ],
+    note: "Educational progress tracking only. Not a medical assessment. Refer pain, injury, or health concerns to a qualified professional.",
+  },
+};
+
+// Route ANY free-form prompt to a client-safe artifact type. Secret-shaped
+// input is refused and never echoed. This is the contract-level guarantee that
+// the workflow can help with whatever a creator asks, within safety bounds.
+function routeFreeformPrompt(prompt) {
+  const raw = String(prompt ?? "");
+  if (SECRET_TEXT_RE.test(raw)) {
+    return {
+      artifactType: null,
+      safe: true,
+      refused: true,
+      reason: "Input looks like a secret; refused and not echoed.",
+      educationalOnly: true,
+      disclaimerRequired: false,
+      paymentProcessed: false,
+      emailSent: false,
+      acceptsSecrets: false,
+    };
+  }
+  const text = raw.toLowerCase();
+  let artifactType = "Custom wellness program artifact";
+  if (/check.?in|progress|review/.test(text)) artifactType = "Client progress check-in";
+  else if (/diet|meal|nutrition|eating|macro/.test(text)) artifactType = "Nutrition education artifact";
+  else if (/yoga|mobility|stretch|flexib/.test(text)) artifactType = "Yoga / mobility class plan";
+  else if (/strength|lift|hypertroph|powerlift|squat|deadlift|bench/.test(text)) artifactType = "Strength program artifact";
+  else if (/run|cardio|endurance|marathon|cycling|row/.test(text)) artifactType = "Endurance program artifact";
+  else if (/habit|sleep|recovery|accountab|mindful/.test(text)) artifactType = "Habit / recovery plan artifact";
+  else if (/offer|pricing|package|onboard|terms|landing/.test(text)) artifactType = "Service packaging artifact";
+  else if (/plan|program|workout|training|class|routine/.test(text)) artifactType = "Training program artifact";
+  return {
+    artifactType,
+    safe: true,
+    refused: false,
+    educationalOnly: true,
+    disclaimerRequired: true,
+    paymentProcessed: false,
+    emailSent: false,
+    acceptsSecrets: false,
+  };
+}
+
 function flag(name) {
   return args.includes(name);
 }
@@ -347,6 +463,8 @@ function buildContract() {
     personas: PERSONAS,
     canonicalPrompts: CANONICAL_PROMPTS,
     examplePrompts: EXAMPLE_PROMPTS,
+    freeformSupport: FREEFORM_SUPPORT,
+    customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
     expectedArtifactTypes: EXPECTED_ARTIFACT_TYPES,
@@ -413,6 +531,63 @@ function runCheck() {
   if (contract.safety.acceptsSecrets !== false) failures.push("safety.acceptsSecrets must be false.");
   if (contract.safety.givesMedicalAdvice !== false) failures.push("safety.givesMedicalAdvice must be false.");
 
+  // Free-form support: any prompt is accepted and routed safely.
+  if (contract.freeformSupport?.acceptsAnyPrompt !== true) {
+    failures.push("freeformSupport.acceptsAnyPrompt must be true.");
+  }
+  if (contract.freeformSupport?.notLimitedToCanonical !== true) {
+    failures.push("freeformSupport.notLimitedToCanonical must be true.");
+  }
+  // Routing must be safe for arbitrary input, and must refuse secret-shaped input.
+  const routingProbe = [
+    "Create a 4-week fat-loss plan",
+    "Build me a powerlifting peaking block",
+    "Draft a vegetarian meal plan template",
+    "Plan a restorative yoga class",
+    "Whatever — surprise me with a mobility routine",
+    "Make a weekly client progress check-in",
+  ];
+  for (const probe of routingProbe) {
+    const routed = routeFreeformPrompt(probe);
+    if (routed.safe !== true || routed.disclaimerRequired !== true) {
+      failures.push(`Free-form routing for "${probe}" must be safe and require a disclaimer.`);
+    }
+    if (routed.paymentProcessed !== false || routed.emailSent !== false || routed.acceptsSecrets !== false) {
+      failures.push(`Free-form routing for "${probe}" must not pay, email, or accept secrets.`);
+    }
+  }
+  const secretRouted = routeFreeformPrompt("here is my private key 0x" + "a".repeat(40));
+  if (secretRouted.refused !== true || secretRouted.acceptsSecrets !== false) {
+    failures.push("Free-form routing must refuse secret-shaped input.");
+  }
+
+  // Customer-management deepening + progress check-in fixture.
+  const cm = contract.customerManagement;
+  if (!cm || !Array.isArray(cm.followUpCadence) || cm.followUpCadence.length < 3) {
+    failures.push("customerManagement.followUpCadence must have at least three touchpoints.");
+  }
+  if (!cm?.feedbackForm || !cm?.renewalUpsell) {
+    failures.push("customerManagement must include a feedback form and renewal/up-sell prompts.");
+  }
+  const fixturePath = cm?.progressCheckIn?.fixture;
+  if (!fixturePath) {
+    failures.push("customerManagement.progressCheckIn.fixture must be set.");
+  } else {
+    const abs = join(repoRoot, fixturePath);
+    if (!existsSync(abs)) {
+      failures.push(`Progress check-in fixture is missing: ${fixturePath}`);
+    } else {
+      const fixture = readFileSync(abs, "utf8");
+      if (!fixture.includes("not medical advice, diagnosis, or treatment")) {
+        failures.push("Progress check-in fixture must carry the non-medical disclaimer.");
+      }
+      for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+        const match = fixture.match(re);
+        if (match) failures.push(`Progress check-in fixture contains a forbidden string: "${match[0]}"`);
+      }
+    }
+  }
+
   // No affirmative medical or live-service claim in the emitted content
   // (everything except the forbidden-claims allowlist).
   const { forbiddenClaims, ...scannable } = contract;
@@ -441,6 +616,13 @@ function main() {
     return;
   }
 
+  if (flag("--route")) {
+    const idx = args.indexOf("--route");
+    const prompt = args[idx + 1] ?? "";
+    process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "route", ...routeFreeformPrompt(prompt) }, null, 2)}\n`);
+    return;
+  }
+
   if (flag("--check")) {
     const result = runCheck();
     const payload = { version: VERSION, mode: "check", ...result };
@@ -461,4 +643,17 @@ function main() {
   process.stdout.write(`${JSON.stringify(buildContract(), null, 2)}\n`);
 }
 
-main();
+// Run only when invoked directly, so the contract/router can be imported and
+// unit-tested without executing the CLI.
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try {
+    return fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun()) main();
+
+export { buildContract, routeFreeformPrompt };
