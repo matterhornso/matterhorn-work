@@ -233,6 +233,88 @@ const SAFETY = {
   movesFunds: false,
 };
 
+// Alignment with the shared Matterhorn Workflow Contract
+// (docs/matterhorn-workflow-contract.md). This wellness workflow is the
+// `wellness` category entry in that reusable, catalog-discoverable pattern —
+// run through the same chat/operator system, not a custom vertical UI.
+const MANIFEST_VERSION = "matterhorn.workflow.manifest.v1";
+const WORKFLOW_CATEGORY = "wellness";
+const MANIFEST_STATUS = "live_local"; // core artifacts are generated locally today
+const ALLOWED_MANIFEST_STATUSES = [
+  "live_local",
+  "planned_not_live",
+  "preview_only",
+  "external_handoff_required",
+  "blocked_by_policy",
+];
+const CONTRACT_DOC = "docs/matterhorn-workflow-contract.md";
+const CATALOG_WORKFLOW_ID = "wellness_creator_workflow";
+
+const SERVICE_PROFESSIONALS = [
+  "Personal trainer",
+  "Yoga instructor",
+  "Dietician / nutrition coach",
+  "Gym / group-class instructor",
+  "Other client-facing service professionals",
+];
+
+const REUSABLE_PATTERN = {
+  isReusablePattern: true,
+  notCustomUi: true,
+  runsThroughChatOperator: true,
+  sharedContract: CONTRACT_DOC,
+  catalogWorkflowId: CATALOG_WORKFLOW_ID,
+  appliesTo: SERVICE_PROFESSIONALS,
+  note: "Runs through the same Matterhorn chat/operator system as every other workflow; no custom vertical UI.",
+};
+
+// Reusable prompt variants a service professional can run. Each is client-safe:
+// educational only, with an explicit caveat and no live payment, email,
+// hosting, storage, or access claim.
+const EXAMPLE_PROMPTS = [
+  {
+    id: "strength-plan",
+    prompt: "Create a 4-week beginner strength plan",
+    expectedArtifact: "Structured 4-week beginner strength plan.",
+    safetyCaveat: "General fitness education only. Not medical advice, diagnosis, or treatment.",
+    processesPayment: false,
+    sendsEmail: false,
+  },
+  {
+    id: "pdf-packet",
+    prompt: "Turn this into a client PDF packet",
+    expectedArtifact: "Client-facing program packet ready to export as a document.",
+    safetyCaveat: "Exported as a standard Matterhorn artifact. Storage / hosting is planned, not live.",
+    processesPayment: false,
+    sendsEmail: false,
+  },
+  {
+    id: "yoga-mobility",
+    prompt: "Draft a yoga class plan for lower-back mobility",
+    expectedArtifact: "General mobility-focused yoga class plan.",
+    safetyCaveat: "General wellness education only, not medical care. Refer pain or injury to a qualified professional.",
+    processesPayment: false,
+    sendsEmail: false,
+  },
+  {
+    id: "dietician-template",
+    prompt: "Create a dietician-safe meal planning template without medical claims",
+    expectedArtifact: "General healthy-eating meal-planning template.",
+    safetyCaveat:
+      "General healthy-eating information, not a clinical or therapeutic diet. Not medical advice, diagnosis, or treatment.",
+    processesPayment: false,
+    sendsEmail: false,
+  },
+  {
+    id: "future-paid-page",
+    prompt: "Prepare a future paid program page, but do not process payment",
+    expectedArtifact: "Draft paid program page with placeholder pricing only.",
+    safetyCaveat: "Payments are planned, not live; no payment is processed and no funds move.",
+    processesPayment: false,
+    sendsEmail: false,
+  },
+];
+
 function flag(name) {
   return args.includes(name);
 }
@@ -255,13 +337,21 @@ function buildContract() {
     fullWorkflow: true,
     isPilot: false,
     nonTrading: true,
+    manifestVersion: MANIFEST_VERSION,
+    category: WORKFLOW_CATEGORY,
+    manifestStatus: MANIFEST_STATUS,
+    contractDoc: CONTRACT_DOC,
+    catalogWorkflowId: CATALOG_WORKFLOW_ID,
+    reusablePattern: REUSABLE_PATTERN,
+    serviceProfessionals: SERVICE_PROFESSIONALS,
     personas: PERSONAS,
     canonicalPrompts: CANONICAL_PROMPTS,
+    examplePrompts: EXAMPLE_PROMPTS,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
     expectedArtifactTypes: EXPECTED_ARTIFACT_TYPES,
     disclaimers: DISCLAIMERS,
-    serviceHooks: SERVICE_HOOKS,
+    serviceHooks: SERVICE_HOOKS.map((hook) => ({ ...hook, contractStatus: "planned_not_live" })),
     deliveryGuarantees: DELIVERY_GUARANTEES,
     demoChecklist: DEMO_CHECKLIST,
     hermesQaChecklist: HERMES_QA_CHECKLIST,
@@ -288,11 +378,33 @@ function runCheck() {
     if (!mapping.artifacts.length) failures.push(`Prompt "${mapping.prompt}" produces no artifact.`);
   }
 
-  // Every service hook must be planned, not live.
+  // Every service hook must be planned, not live (human + contract status).
   for (const hook of contract.serviceHooks) {
     if (hook.status !== "planned, not live") {
       failures.push(`Service hook ${hook.id} must be planned, not live.`);
     }
+    if (hook.contractStatus !== "planned_not_live") {
+      failures.push(`Service hook ${hook.id} must carry contractStatus planned_not_live.`);
+    }
+  }
+
+  // Manifest alignment with the shared workflow contract.
+  if (!ALLOWED_MANIFEST_STATUSES.includes(contract.manifestStatus)) {
+    failures.push(`manifestStatus must be one of ${ALLOWED_MANIFEST_STATUSES.join(", ")}.`);
+  }
+  if (contract.category !== WORKFLOW_CATEGORY) failures.push("category must be wellness.");
+  if (contract.reusablePattern?.isReusablePattern !== true) {
+    failures.push("reusablePattern.isReusablePattern must be true.");
+  }
+  if (contract.reusablePattern?.notCustomUi !== true) {
+    failures.push("reusablePattern.notCustomUi must be true.");
+  }
+
+  // Every example prompt is client-safe: a caveat, and no live payment/email.
+  for (const example of contract.examplePrompts) {
+    if (!example.safetyCaveat) failures.push(`Example prompt ${example.id} is missing a safety caveat.`);
+    if (example.processesPayment !== false) failures.push(`Example prompt ${example.id} must not process payment.`);
+    if (example.sendsEmail !== false) failures.push(`Example prompt ${example.id} must not send email.`);
   }
   for (const [key, value] of Object.entries(contract.safety)) {
     if (key.endsWith("Live") && value !== false) failures.push(`safety.${key} must be false.`);
