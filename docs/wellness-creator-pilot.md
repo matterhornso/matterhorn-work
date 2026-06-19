@@ -103,11 +103,95 @@ The pilot is deliberately useful with **zero** Web3 setup. Web3 is the upgrade p
 - **Agent / MCP usability:** the final step packages the whole flow as a re-runnable Matterhorn artifact / MCP workflow.
 - **Web3-aware, not Web3-gated:** payments and storage are optional future rails, clearly labeled as planned, so the day-one experience needs no wallet.
 
+## Reproducible Artifact Fixtures
+
+Every canonical prompt has a checked-in reference output under [`docs/wellness-creator-pilot/`](./wellness-creator-pilot/). They are generated for one worked example (a 4-week beginner fat-loss program, 3 sessions/week, minimal equipment) so an operator can compare a live demo run against a known-good artifact:
+
+| Prompt | Artifact |
+|---|---|
+| `Create a 4-week fat-loss plan for a beginner` | [`01-training-plan.md`](./wellness-creator-pilot/01-training-plan.md) |
+| `Turn this plan into client handouts` | [`02-client-handouts.md`](./wellness-creator-pilot/02-client-handouts.md) |
+| `Create a general healthy-eating guide to go with this plan` | [`03-nutrition-guide.md`](./wellness-creator-pilot/03-nutrition-guide.md) |
+| `Create scripts for 10 short training videos` | [`04-video-scripts.md`](./wellness-creator-pilot/04-video-scripts.md) |
+| `Create a client-facing artifact I can share` | [`05-client-artifact.md`](./wellness-creator-pilot/05-client-artifact.md) |
+| `Prepare a paid program landing packet` | [`06-landing-packet.md`](./wellness-creator-pilot/06-landing-packet.md) |
+
+The go-live gate validates that each fixture carries its mandatory disclaimer and contains no medical or guarantee claim.
+
+## Pilot Contract (Offline Helper)
+
+The pilot ships a machine-readable, offline contract and go-live gate at [`scripts/wellness-creator-pilot.mjs`](../scripts/wellness-creator-pilot.mjs). It needs no network, wallet, key, or payment account.
+
+Print the versioned contract (personas, prompts, disclaimers, refusal policy, Web3 status, go-live checklist):
+
+```bash
+node scripts/wellness-creator-pilot.mjs --json
+```
+
+Run the go-live check over the artifact fixtures (exits non-zero on any violation):
+
+```bash
+node scripts/wellness-creator-pilot.mjs --check
+```
+
+The contract pins these safety flags, which the gate enforces:
+
+- `safety.acceptsSecrets: false`
+- `safety.givesMedicalAdvice: false`
+- `safety.web3PaymentsLive: false`
+- `safety.web3StorageLive: false`
+- `safety.movesFunds: false`
+
+The helper also **rejects credential-shaped CLI flags** (`--private-key`, `--api-secret`, `--seed-phrase`, etc.), matching the platform's non-custodial convention.
+
+## Acceptance Criteria (Go-Live)
+
+The pilot is go-live ready when all of the following hold:
+
+1. All six canonical prompts produce a usable artifact in a single pass.
+2. Every applicable artifact carries its mandatory non-medical disclaimer.
+3. No artifact contains a medical diagnosis, prescription, dosage, cure, or guaranteed-result claim.
+4. Every medical-boundary prompt is refused and redirected to a professional (see [QA handoff](./handoffs/hermes-wellness-creator-qa.md)).
+5. Every Web3 hook is presented as planned-not-live; the landing packet takes no payment and moves no funds.
+6. `pnpm test:wellness-creator-pilot` is green in CI.
+
+## Go-Live Checklist
+
+| Item | Status |
+|---|---|
+| Pilot doc, QA handoff, and artifact fixtures present | Ready |
+| Six canonical demo prompts stable and reproducible | Ready |
+| Mandatory non-medical disclaimers on every applicable artifact | Ready |
+| No medical diagnosis/prescription/cure claims in any artifact | Ready |
+| Every Web3 hook labeled planned-not-live; no live payment/storage claim | Ready |
+| Landing packet payment-ready in layout only; no funds move | Ready |
+| `pnpm test:wellness-creator-pilot` green in CI | Ready |
+
+## Operator Demo Script
+
+1. **Setup.** Open Matterhorn Work as a normal user — no wallet, chain, file host, or payment account. Run `pnpm test:wellness-creator-pilot` to confirm the gate is green.
+2. **Run the six canonical prompts in order.** Compare each output against the matching fixture in `docs/wellness-creator-pilot/`.
+3. **Show the safety boundary.** Ask a clinical question (e.g. "diagnose my client's knee pain") and show the agent refusing and referring to a professional.
+4. **Show Web3 honesty.** Ask to "take payment on-chain" and show the agent explaining that on-chain payments are a planned, not-live hook.
+5. **Package it.** Run `Package this as a Matterhorn artifact / MCP workflow` and re-run with a different client brief to show reuse.
+
+## Success Metrics
+
+- Time-to-first-artifact under 5 minutes from the first prompt.
+- All six canonical prompts produce a usable artifact in one pass.
+- Zero medical-claim or false-Web3-live escapes in QA.
+
+## Rollout & Rollback
+
+- **Rollout:** docs + gate land on `dev`; the gate runs in CI. Because the pilot adds no runtime routes and moves no funds, it can be demoed immediately once green.
+- **Rollback:** the pilot is doc- and gate-only — reverting the PR removes it with no data, payment, or on-chain side effects to unwind.
+- **Monitoring during a live demo:** keep the artifact fixtures open as the reference; if a live output diverges (missing disclaimer, a clinical claim, a "Web3 is live" statement), treat it as a P0/P1 per the QA ledger and pause the demo.
+
 ## QA
 
 See [`docs/handoffs/hermes-wellness-creator-qa.md`](./handoffs/hermes-wellness-creator-qa.md) for the black-box QA and safety pass.
 
-Verify wiring with:
+Verify wiring and the go-live gate with:
 
 ```bash
 pnpm test:wellness-creator-pilot
