@@ -8155,6 +8155,7 @@ const CRYPTO_CUSTOMER_PACKET_BOOL_FLAGS = [
 const CRYPTO_CUSTOMER_PACKET_VALUE_FLAGS = [
   "customer-ready-smoke",
   "market-evidence-verify",
+  "market-sdk-validation-guide",
   "bittensor-evidence-bundle",
   "output",
   "json-output",

@@ -1355,6 +1355,34 @@ try {
         },
       },
       marketEvidenceVerify,
+      marketSdkValidationGuide: {
+        success: true,
+        guide: {
+          version: "matterhorn.market.sdk-validation-guide.v1",
+          modes: ["fixture", "operator_owned_fixture", "operator_owned_testnet"],
+          networks: {
+            hyperliquid: ["fixture", "hyperliquid-testnet"],
+            polymarket: ["fixture", "polygon-amoy"],
+          },
+          commands: {
+            doctor: "matterhorn-work crypto sdk-doctor --strict --json",
+            fixtureValidation: "matterhorn-work crypto sdk-validate-public --mode fixture --strict --json",
+            operatorOwnedTestnetValidation: "matterhorn-work crypto sdk-validate-public --mode operator_owned_testnet --strict --json",
+            operatorLoop: "matterhorn-work crypto sdk-loop --mode fixture --strict --json",
+          },
+          safety: {
+            canSubmit: false,
+            liveSubmissionEnabled: false,
+            nonCustodial: true,
+            acceptsSecrets: false,
+            acceptsRawSignatures: false,
+            acceptsSignedPayloads: false,
+            runsPrivateSdkSigning: false,
+            computesFinalSignatures: false,
+            callsExchanges: false,
+          },
+        },
+      },
       bittensorEvidence: bittensorEvidenceVerify,
       requireMarketEvidence: true,
       requireBittensorEvidence: true,
@@ -1366,10 +1394,14 @@ try {
   assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.sdkManifestAccepted, true);
   assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.receiptAccepted, true);
   assert.equal(cryptoCustomerPacket.packet.marketEvidence.details.artifactReconciliationAccepted, true);
+  assert.equal(cryptoCustomerPacket.packet.marketSdkValidationGuide.ready, true);
+  assert.equal(cryptoCustomerPacket.packet.marketSdkValidationGuide.modes.includes("operator_owned_testnet"), true);
+  assert.equal(cryptoCustomerPacket.packet.marketSdkValidationGuide.networks.hyperliquid.includes("hyperliquid-testnet"), true);
   assert.equal(cryptoCustomerPacket.packet.bittensorEvidence.ready, true);
   assert.equal(cryptoCustomerPacket.safety.liveSubmissionEnabled, false);
   assert.match(cryptoCustomerPacket.markdown, /READY_FOR_TEST_CUSTOMER_QA/);
   assert.match(cryptoCustomerPacket.markdown, /Artifact reconciliation \| yes/);
+  assert.match(cryptoCustomerPacket.markdown, /Market SDK-Validation Guide/);
 
   const badCryptoCustomerPacket = await mcp.ask("tools/call", {
     name: "matterhorn_crypto_customer_packet",

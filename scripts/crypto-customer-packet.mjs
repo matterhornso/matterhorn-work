@@ -39,6 +39,7 @@ function flag(name) {
 const config = {
   customerReadySmoke: arg("--customer-ready-smoke"),
   marketEvidenceVerify: arg("--market-evidence-verify"),
+  marketSdkValidationGuide: arg("--market-sdk-validation-guide"),
   bittensorEvidenceBundle: arg("--bittensor-evidence-bundle"),
   output: arg("--output") || arg("-o"),
   jsonOutput: arg("--json-output"),
@@ -56,6 +57,7 @@ function usage() {
     "Options:",
     "  --customer-ready-smoke <path>       JSON from matterhorn-work crypto customer-smoke.",
     "  --market-evidence-verify <path>     JSON from matterhorn-work crypto evidence-verify.",
+    "  --market-sdk-validation-guide <path> Optional JSON from GET /api/crypto/market-sdk-validation.",
     "  --bittensor-evidence-bundle <path>  Optional JSON from scripts/bittensor-customer-evidence-bundle.mjs or bittensor-evidence-verify.",
     "  --require-market-evidence           Require accepted market evidence verification.",
     "  --require-bittensor-evidence        Require ready Bittensor evidence bundle.",
@@ -227,6 +229,68 @@ function summarizeBittensorEvidence(path, raw, required) {
   };
 }
 
+function summarizeMarketSdkValidationGuide(path, raw) {
+  if (!path || raw === null) {
+    return {
+      present: false,
+      ready: true,
+      file: null,
+      version: null,
+      modes: [],
+      networks: { hyperliquid: [], polymarket: [] },
+      errors: [],
+      warnings: ["Market SDK-validation guide is not attached."],
+    };
+  }
+  const guide = isRecord(raw?.guide) ? raw.guide : raw;
+  const errors = [];
+  const warnings = [];
+  if (raw.success !== undefined && raw.success !== true) errors.push("Market SDK-validation guide response did not set success=true.");
+  if (!isRecord(guide)) errors.push("Market SDK-validation guide is missing guide object.");
+  if (guide?.version !== "matterhorn.market.sdk-validation-guide.v1") {
+    errors.push("Market SDK-validation guide must use matterhorn.market.sdk-validation-guide.v1.");
+  }
+  const modes = Array.isArray(guide?.modes) ? guide.modes.map((item) => String(item)) : [];
+  for (const mode of ["fixture", "operator_owned_fixture", "operator_owned_testnet"]) {
+    if (!modes.includes(mode)) errors.push(`Market SDK-validation guide is missing mode ${mode}.`);
+  }
+  const networks = isRecord(guide?.networks) ? guide.networks : {};
+  const hyperliquid = Array.isArray(networks.hyperliquid) ? networks.hyperliquid.map((item) => String(item)) : [];
+  const polymarket = Array.isArray(networks.polymarket) ? networks.polymarket.map((item) => String(item)) : [];
+  if (!hyperliquid.includes("hyperliquid-testnet")) errors.push("Market SDK-validation guide is missing Hyperliquid testnet.");
+  if (!polymarket.includes("polygon-amoy")) errors.push("Market SDK-validation guide is missing Polygon Amoy.");
+  const safety = isRecord(guide?.safety) ? guide.safety : {};
+  for (const [key, expected] of Object.entries({
+    canSubmit: false,
+    liveSubmissionEnabled: false,
+    nonCustodial: true,
+    acceptsSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    runsPrivateSdkSigning: false,
+    computesFinalSignatures: false,
+    callsExchanges: false,
+  })) {
+    if (safety[key] !== expected) errors.push(`Market SDK-validation guide safety.${key} must be ${String(expected)}.`);
+  }
+  const commands = isRecord(guide?.commands) ? guide.commands : {};
+  for (const command of ["doctor", "fixtureValidation", "operatorOwnedTestnetValidation", "operatorLoop"]) {
+    if (typeof commands[command] !== "string" || !commands[command].trim()) {
+      errors.push(`Market SDK-validation guide is missing command ${command}.`);
+    }
+  }
+  return {
+    present: true,
+    ready: errors.length === 0,
+    file: basename(path),
+    version: typeof guide?.version === "string" ? guide.version : null,
+    modes,
+    networks: { hyperliquid, polymarket },
+    errors: [...new Set(errors)],
+    warnings: [...new Set(warnings)],
+  };
+}
+
 function bullet(text) {
   return `- ${String(text || "").replace(/\n/g, " ").trim()}`;
 }
@@ -250,6 +314,7 @@ function renderMarkdown(packet) {
     "| --- | --- | --- |",
     `| Customer-ready crypto smoke | ${packet.customerReadySmoke.ready ? "yes" : "no"} | ${packet.customerReadySmoke.file ?? "missing"} |`,
     `| Market evidence verifier | ${packet.marketEvidence.ready ? "yes" : "no"} | ${packet.marketEvidence.file ?? "not attached"} |`,
+    `| Market SDK-validation guide | ${packet.marketSdkValidationGuide.ready ? "yes" : "no"} | ${packet.marketSdkValidationGuide.file ?? "not attached"} |`,
     `| Bittensor evidence bundle | ${packet.bittensorEvidence.ready ? "yes" : "no"} | ${packet.bittensorEvidence.file ?? "not attached"} |`,
     "",
     "## Market Evidence Details",
@@ -261,6 +326,13 @@ function renderMarkdown(packet) {
     `| SDK manifest | ${packet.marketEvidence.details.sdkManifestAccepted ? "yes" : "no"} |`,
     `| Public receipt evidence | ${packet.marketEvidence.details.receiptAccepted ? "yes" : "no"} |`,
     `| Artifact reconciliation | ${packet.marketEvidence.details.artifactReconciliationAccepted ? "yes" : "no"} |`,
+    "",
+    "## Market SDK-Validation Guide",
+    "",
+    bullet(`Version: ${packet.marketSdkValidationGuide.version ?? "not attached"}`),
+    bullet(`Modes: ${packet.marketSdkValidationGuide.modes.length ? packet.marketSdkValidationGuide.modes.join(", ") : "not attached"}`),
+    bullet(`Hyperliquid networks: ${packet.marketSdkValidationGuide.networks.hyperliquid.length ? packet.marketSdkValidationGuide.networks.hyperliquid.join(", ") : "not attached"}`),
+    bullet(`Polymarket networks: ${packet.marketSdkValidationGuide.networks.polymarket.length ? packet.marketSdkValidationGuide.networks.polymarket.join(", ") : "not attached"}`),
     "",
     "## Smoke Summary",
     "",
@@ -274,6 +346,7 @@ function renderMarkdown(packet) {
     "| --- | --- | --- |",
     `| Customer-ready crypto smoke | ${packet.inputEvidence.customerReadySmoke.file ?? "missing"} | ${packet.inputEvidence.customerReadySmoke.sha256 ?? "missing"} |`,
     `| Market evidence verifier | ${packet.inputEvidence.marketEvidenceVerify.file ?? "not attached"} | ${packet.inputEvidence.marketEvidenceVerify.sha256 ?? "not attached"} |`,
+    `| Market SDK-validation guide | ${packet.inputEvidence.marketSdkValidationGuide.file ?? "not attached"} | ${packet.inputEvidence.marketSdkValidationGuide.sha256 ?? "not attached"} |`,
     `| Bittensor evidence bundle | ${packet.inputEvidence.bittensorEvidenceBundle.file ?? "not attached"} | ${packet.inputEvidence.bittensorEvidenceBundle.sha256 ?? "not attached"} |`,
     "",
     "## Warnings",
@@ -296,31 +369,37 @@ function renderMarkdown(packet) {
 export async function buildCryptoCustomerPacket(config) {
   const smokeRaw = await readJson(config.customerReadySmoke, "customer-ready crypto smoke");
   const marketRaw = await readJson(config.marketEvidenceVerify, "market evidence verification");
+  const marketSdkValidationGuideRaw = await readJson(config.marketSdkValidationGuide, "market SDK-validation guide");
   const bittensorRaw = await readJson(config.bittensorEvidenceBundle, "Bittensor evidence bundle");
   const customerReadySmoke = summarizeSmoke(config.customerReadySmoke, smokeRaw);
   const marketEvidence = summarizeMarketEvidence(config.marketEvidenceVerify, marketRaw, config.requireMarketEvidence);
+  const marketSdkValidationGuide = summarizeMarketSdkValidationGuide(config.marketSdkValidationGuide, marketSdkValidationGuideRaw);
   const bittensorEvidence = summarizeBittensorEvidence(config.bittensorEvidenceBundle, bittensorRaw, config.requireBittensorEvidence);
   const inputEvidence = {
     customerReadySmoke: await evidenceFileHash(config.customerReadySmoke),
     marketEvidenceVerify: await evidenceFileHash(config.marketEvidenceVerify),
+    marketSdkValidationGuide: await evidenceFileHash(config.marketSdkValidationGuide),
     bittensorEvidenceBundle: await evidenceFileHash(config.bittensorEvidenceBundle),
   };
   const warnings = [
     ...customerReadySmoke.warnings,
     ...marketEvidence.warnings,
+    ...marketSdkValidationGuide.warnings,
     ...bittensorEvidence.warnings,
   ];
   const errors = [
     ...customerReadySmoke.errors,
     ...marketEvidence.errors,
+    ...marketSdkValidationGuide.errors,
     ...bittensorEvidence.errors,
   ];
-  const ready = customerReadySmoke.ready && marketEvidence.ready && bittensorEvidence.ready && errors.length === 0;
+  const ready = customerReadySmoke.ready && marketEvidence.ready && marketSdkValidationGuide.ready && bittensorEvidence.ready && errors.length === 0;
   const packet = {
     title: config.title,
     ready,
     customerReadySmoke,
     marketEvidence,
+    marketSdkValidationGuide,
     bittensorEvidence,
     inputEvidence,
     warnings,
