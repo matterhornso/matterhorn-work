@@ -3798,6 +3798,7 @@ function printHelp(): void {
     "  matterhorn-work crypto hermes-customer-qa --dry-run [options]",
     "  matterhorn-work services capabilities [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work services chat --message <text> [--capability hosting|storage|email|payments|identity] [--json]",
+    "  matterhorn-work workflows catalog [--workflow <id>] [--category <name>] [--include-prompts] [--json]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3841,6 +3842,7 @@ function printHelp(): void {
     "  crypto hermes-customer-qa Print a public/redacted Hermes customer QA command plan",
     "  services capabilities   Print future decentralized service capability contracts (no live providers)",
     "  services chat           Plan future decentralized service workflows from a prompt (no live providers)",
+    "  workflows catalog       Print the safe cross-vertical Matterhorn workflow catalog",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -8684,6 +8686,76 @@ async function runServices(args: ParsedArgs) {
   }
 }
 
+function assertNoWorkflowSecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "api-key",
+    "apiKey",
+    "private-key",
+    "privateKey",
+    "seed",
+    "seed-phrase",
+    "seedPhrase",
+    "mnemonic",
+    "raw-signature",
+    "rawSignature",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+    "wallet-export",
+    "walletExport",
+    "password",
+    "passphrase",
+    "keyfile",
+    "suri",
+    "token",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Matterhorn workflow ${key} is not accepted by Matterhorn Work CLI. Workflow catalog commands are public metadata only; secrets, signing material, and live execution are not enabled.`,
+      );
+    }
+  }
+}
+
+async function runWorkflows(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "catalog";
+  const isCatalog =
+    subcommand === "catalog" ||
+    subcommand === "list" ||
+    subcommand === "show" ||
+    subcommand === "inspect";
+
+  try {
+    assertNoWorkflowSecrets(args);
+    if (!isCatalog) {
+      throw new Error("workflows requires catalog (aliases: list, show, inspect)");
+    }
+
+    const forwarded: string[] = [];
+    if (outputJson) forwarded.push("--json");
+    if (readBool(args.flags, "include-prompts", false)) forwarded.push("--include-prompts");
+
+    const workflow =
+      readFlag(args.flags, "workflow") ??
+      readFlag(args.flags, "workflow-id") ??
+      (subcommand === "show" || subcommand === "inspect" ? args.positionals[2] : undefined);
+    const category = readFlag(args.flags, "category");
+    const status = readFlag(args.flags, "status");
+    if (workflow && workflow.trim()) forwarded.push("--workflow", workflow.trim());
+    if (category && category.trim()) forwarded.push("--category", category.trim());
+    if (status && status.trim()) forwarded.push("--status", status.trim());
+
+    await runOfflineCryptoScript("matterhorn-workflow-catalog.mjs", forwarded, "Matterhorn workflow catalog");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -11825,6 +11897,10 @@ async function main() {
   }
   if (command === "services" || command === "service" || command === "decentralized-services") {
     await runServices(args);
+    return;
+  }
+  if (command === "workflows" || command === "workflow" || command === "flow") {
+    await runWorkflows(args);
     return;
   }
   if (command === "upstream") {
