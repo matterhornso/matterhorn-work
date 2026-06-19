@@ -246,6 +246,40 @@ const server = createServer(async (req, res) => {
       cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid watch alert" }],
     });
   }
+  if (req.method === "POST" && url.pathname === "/api/hyperliquid/watches/act") {
+    assert.equal(body.watch.id, "hl-watch-alert");
+    assert.equal(body.watch.asset, "BTC");
+    assert.equal("message" in body, false);
+    assert.equal("prompt" in body, false);
+    assert.equal("apiSecret" in body, false);
+    assert.equal("privateKey" in body, false);
+    assert.equal("signedPayload" in body, false);
+    return json(res, 200, {
+      success: true,
+      selectedAlert: {
+        venue: "hyperliquid",
+        status: "triggered",
+        watchId: "hl-watch-alert",
+        asset: "BTC",
+        kind: "funding_rate",
+        alerts: ["BTC funding moved past the configured threshold."],
+      },
+      action: {
+        label: "Review alert with crypto chat",
+        prompt: "Use unified crypto chat. Review this read-only Hyperliquid watch alert. Do not sign, submit, broadcast, auto-execute.",
+      },
+      chat: {
+        success: true,
+        venue: "hyperliquid",
+        execution: "read_only",
+        responseText: "Hyperliquid watch alert review ready.",
+        cards: [{ kind: "hyperliquid_watch", title: "Hyperliquid alert review" }],
+        warnings: [],
+      },
+      safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+      source: "matterhorn_hyperliquid_watch_act",
+    });
+  }
   if (req.method === "GET" && url.pathname === "/api/hyperliquid/watches/digest") {
     return json(res, 200, {
       success: true,
@@ -348,6 +382,39 @@ const server = createServer(async (req, res) => {
         cards: [{ kind: "polymarket_watch", title: "Polymarket watch alert" }],
       }],
       cards: [{ kind: "polymarket_watch", title: "Polymarket watch alert" }],
+    });
+  }
+  if (req.method === "POST" && url.pathname === "/api/polymarket/watches/act") {
+    assert.equal(body.watch.id, "pm-watch-alert");
+    assert.equal(body.watch.marketId, "0xmarket-ai");
+    assert.equal("message" in body, false);
+    assert.equal("prompt" in body, false);
+    assert.equal("apiSecret" in body, false);
+    assert.equal("privateKey" in body, false);
+    assert.equal("signedPayload" in body, false);
+    return json(res, 200, {
+      success: true,
+      selectedAlert: {
+        venue: "polymarket",
+        status: "triggered",
+        watchId: "pm-watch-alert",
+        marketId: "0xmarket-ai",
+        alerts: ["Market liquidity moved past the configured threshold."],
+      },
+      action: {
+        label: "Review alert with crypto chat",
+        prompt: "Use unified crypto chat. Review this read-only Polymarket watch alert. Do not sign, submit, broadcast, auto-execute.",
+      },
+      chat: {
+        success: true,
+        venue: "polymarket",
+        execution: "read_only",
+        responseText: "Polymarket watch alert review ready.",
+        cards: [{ kind: "polymarket_watch", title: "Polymarket alert review" }],
+        warnings: [],
+      },
+      safety: { nonCustodial: true, liveSubmissionEnabled: false, canSubmit: false },
+      source: "matterhorn_polymarket_watch_act",
     });
   }
   if (req.method === "GET" && url.pathname === "/api/polymarket/watches/digest") {

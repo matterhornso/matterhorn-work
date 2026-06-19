@@ -76,7 +76,8 @@ for (const tool of [
 
 for (const phrase of [
   "deterministic read-only crypto-chat review",
-  "Do not sign, submit, broadcast, auto-execute",
+  "/watches/act",
+  "Never signs, submits, or auto-executes",
   "matterhorn_hyperliquid_act_on_watch_alert",
   "matterhorn_polymarket_act_on_watch_alert",
 ]) {
@@ -89,7 +90,7 @@ for (const command of [
   "hyperliquid watch requires create|list|check|digest|act",
   "polymarket watch requires create|list|check|digest|act",
   "runMarketWatchAlertAction",
-  "buildMarketWatchAlertReviewPrompt",
+  "/watches/act",
 ]) {
   assert.ok(cli.includes(command), `CLI missing ${command}`);
 }
