@@ -228,6 +228,65 @@ All GitHub checks on PR #420 passed:
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
+## PR #423: Matterhorn Workflow Template Registry
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/423  
+**Branch:** `kimi/workflow-template-registry-contract`  
+**Scope:** Reusable workflow template registry so agents can choose a template from user intent without custom UI or live provider execution.
+
+### New types added
+
+In `packages/types/src/matterhorn-workflows.ts`:
+
+- `MatterhornWorkflowTemplate`
+- `MatterhornWorkflowTemplateSafetyBoundary`
+- `DEFAULT_MATTERHORN_WORKFLOW_TEMPLATE_SAFETY_BOUNDARY`
+- `WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE`
+- `BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE`
+- `HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE`
+- `POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE`
+- `DECENTRALIZED_SERVICES_FUTURE_WORKFLOW_TEMPLATE`
+- `MATTERHORN_WORKFLOW_TEMPLATE_REGISTRY`
+
+### Template fixture summary
+
+| Template ID | Category | Status | `canExecute` | Notes |
+| --- | --- | --- | --- | --- |
+| `wellness_creator_service_workflow` | wellness | `planned_not_live` | `false` | Trainers, instructors, dieticians |
+| `bittensor_beta_operator_workflow` | bittensor | `live_local` | `true` | Requires external signer |
+| `hyperliquid_preview_workflow` | markets | `preview_only` | `false` | Read-only previews |
+| `polymarket_preview_workflow` | markets | `preview_only` | `false` | Read-only previews |
+| `decentralized_services_future_workflow` | decentralized_services | `planned_not_live` | `false` | Future-contract planning |
+
+Every template sets `liveExecutionEnabled: false`, `canSubmit: false`, `allowsRealFunds: false`, and all secret acceptance flags to `false`.
+
+### Test assertions
+
+`scripts/matterhorn-workflow-template-registry.test.mjs` verifies:
+
+- Required types and constants exist.
+- All five template fixture constants exist.
+- Every template has prompt starters and safety boundaries.
+- No template asks for private keys, seed phrases, API secrets, raw signatures, signed payloads, wallet exports, passwords, passphrases, keyfiles, SURI, or real funds.
+- Market templates remain `preview_only` with `canExecute: false`.
+- Decentralized services template remains `planned_not_live` with all service hooks `planned_not_live`.
+- All templates set `liveExecutionEnabled: false` and `canSubmit: false`.
+- Registry covers all five template IDs.
+- Doc coverage includes all required types and template IDs.
+
+### Commands that pass on PR #423
+
+```bash
+pnpm --dir packages/types build
+pnpm test:market-execution-safety-gate
+pnpm test:matterhorn-workflow-contract
+pnpm test:matterhorn-workflow-template-registry
+```
+
+### CI status on PR #423
+
+Awaiting CI results.
+
 ## Non-overlap observed
 
 No changes were made to:
