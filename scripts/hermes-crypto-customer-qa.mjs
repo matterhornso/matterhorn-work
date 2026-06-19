@@ -147,6 +147,20 @@ function buildPlan() {
       "Confirms read/preview behavior without live submission.",
     ),
     command(
+      "markets.execution_chain",
+      "Print the safe market execution-chain command plan",
+      "matterhorn-work crypto execution-chain --json",
+      "Market sign-request and artifact validation QA",
+      "Shows preview/handoff, testnet external sign-request, redacted artifact validation, artifact reconciliation, and public receipt import commands without contacting a server.",
+    ),
+    command(
+      "markets.sign_artifact_routes",
+      "Run sign-request and artifact-validation route contract",
+      "pnpm test:market-sign-artifact-routes",
+      "Market sign-request and artifact validation QA",
+      "Confirms routes stay public/redacted, hash-bound, no-submit, and reject raw signatures, signed payloads, private keys, API secrets, and hash mismatches.",
+    ),
+    command(
       "sdk.loop",
       "Run official SDK fixture evidence loop",
       "matterhorn-work crypto sdk-loop --fixture --output-dir /tmp/matterhorn-market-sdk-loop --json",
@@ -212,6 +226,16 @@ function buildPlan() {
         "Run read/preview gates and unified crypto chat prompts for both venues.",
         "Confirm every preview and handoff reports canSubmit: false and liveSubmissionEnabled: false.",
         "Confirm Polymarket compliance blocks contain no executable price, size, or share fields.",
+      ],
+    },
+    {
+      id: "market_sign_artifact_qa",
+      title: "Market sign-request and artifact validation QA",
+      checklist: [
+        "Run the execution-chain helper and confirm it prints preview, sign-request, redacted artifact validation, artifact reconciliation, and public receipt steps.",
+        "Run the route-contract test and confirm sign requests use testnet external signer mode only.",
+        "Confirm accepted artifacts are hash-bound to their sign request and hash mismatches fail closed.",
+        "Confirm raw signatures, signed payloads, private keys, API secrets, wallet exports, and submit routes are rejected or absent.",
       ],
     },
     {
