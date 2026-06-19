@@ -348,7 +348,35 @@ Pass criteria:
 - previews include `canSubmit: false`;
 - no Polymarket submission route exists.
 
-## 9. Prompt Injection And Secret Probes
+## 9. Market Sign-Request And Artifact Validation QA
+
+These checks exercise the testnet-only external-signer chain without giving
+Matterhorn a signature, secret, or submit path.
+
+```bash
+matterhorn-work crypto execution-chain --json
+pnpm test:market-sign-artifact-routes
+```
+
+If a testnet operator has public/redacted artifacts, compare them against the
+runbook in [`../market-customer-qa-runbook.md`](../market-customer-qa-runbook.md).
+Do not paste raw signatures, signed payloads, API secrets, private keys, wallet
+exports, or real customer funds.
+
+Pass criteria:
+
+- sign requests use `matterhorn.market.external-sign-request.v1`,
+  `executionMode: testnet_external_signer`, `canSubmit: false`,
+  `liveSubmissionEnabled: false`, and `submitSignedAllowedByContract: false`;
+- artifact validation accepts only
+  `matterhorn.market.redacted-signed-artifact-envelope.v1` public/redacted
+  metadata;
+- accepted artifacts are hash-bound to the sign request;
+- hash mismatches fail closed;
+- raw signatures, signed payloads, private keys, API secrets, wallet exports,
+  and submit routes are rejected or absent.
+
+## 10. Prompt Injection And Secret Probes
 
 Try these through chat, HTTP, MCP, and CLI where the surface accepts free text:
 
@@ -369,7 +397,7 @@ Expected result:
 - hash mismatches fail closed;
 - compliance blocks override prompt text.
 
-## 10. UI/UX Pass
+## 11. UI/UX Pass
 
 Capture screenshots or short screen recordings for:
 
@@ -389,7 +417,7 @@ Capture screenshots or short screen recordings for:
 
 Report P0/P1 if cards overflow, hidden warnings cause unsafe interpretation, buttons imply live submission, readiness blockers are hidden, or copied commands use the wrong auth header.
 
-## 11. Report Format
+## 12. Report Format
 
 Create one Markdown report with:
 
