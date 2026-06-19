@@ -134,6 +134,7 @@ import {
   prepareHyperliquidHandoffFromRequest,
   prepareHyperliquidOrderPreview,
   validateHyperliquidRedactedArtifactEnvelope,
+  type HyperliquidWatchCheckResult,
   type HyperliquidWatchDescriptor,
   verifyHyperliquidReceipt,
 } from "./tools/hyperliquid.js";
@@ -157,6 +158,7 @@ import {
   preparePolymarketHandoffFromRequest,
   preparePolymarketOrderFromRequest,
   validatePolymarketRedactedArtifactEnvelope,
+  type PolymarketWatchCheckResult,
   type PolymarketWatchDescriptor,
   verifyPolymarketReceipt,
 } from "./tools/polymarket.js";
@@ -4049,6 +4051,120 @@ function createRoutes(
     };
   };
 
+  const readMarketWatchAlertIndex = (body: Record<string, unknown>) => {
+    const value = body.alertIndex ?? body.alert_index;
+    if (value === undefined || value === null || value === "") return 0;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || Math.floor(parsed) !== parsed) {
+      throw new ApiError(400, "invalid_watch_alert_index", "alertIndex must be a non-negative integer.");
+    }
+    return parsed;
+  };
+
+  const rejectCustomWatchActionPrompt = (body: Record<string, unknown>, venueLabel: string) => {
+    if (typeof body.message === "string" || typeof body.prompt === "string") {
+      throw new ApiError(
+        400,
+        "watch_action_prompt_rejected",
+        `${venueLabel} watch act builds a deterministic read-only review prompt from public watch data; do not provide custom message or prompt text.`,
+      );
+    }
+  };
+
+  const summarizeHyperliquidWatchAlert = (
+    check: HyperliquidWatchCheckResult,
+    watch: HyperliquidWatchDescriptor,
+  ) => ({
+    venue: "hyperliquid" as const,
+    status: check.status,
+    watchId: check.watchId || watch.id,
+    asset: watch.asset,
+    kind: watch.kind,
+    alerts: check.alerts,
+    observationCount: check.observations.length,
+    source: check.source.source,
+    freshness: check.source.freshness,
+  });
+
+  const summarizePolymarketWatchAlert = (
+    check: PolymarketWatchCheckResult,
+    watch: PolymarketWatchDescriptor,
+  ) => ({
+    venue: "polymarket" as const,
+    status: check.status,
+    watchId: check.watchId || watch.id,
+    marketId: check.marketId || watch.marketId,
+    marketLabel: watch.marketLabel,
+    alerts: check.alerts,
+    observationCount: check.observations.length,
+    source: check.source.source,
+    freshness: check.source.freshness,
+  });
+
+  const buildHyperliquidWatchAlertReviewPrompt = (
+    check: HyperliquidWatchCheckResult,
+    watch: HyperliquidWatchDescriptor,
+  ) => {
+    const summary = summarizeHyperliquidWatchAlert(check, watch);
+    const subject = summary.asset || summary.watchId || "the selected watch";
+    const alertText = summary.alerts.length ? summary.alerts.join("; ") : `status is ${summary.status}`;
+    return [
+      `Use unified crypto chat. Review this read-only Hyperliquid watch alert for ${subject}.`,
+      `Alert context: ${alertText}.`,
+      "Explain the public observations, source/freshness, risk notes, and safe next steps.",
+      "Do not sign, submit, broadcast, auto-execute, request API secrets, request private keys, or accept raw signatures or signed payloads.",
+    ].join(" ");
+  };
+
+  const buildPolymarketWatchAlertReviewPrompt = (
+    check: PolymarketWatchCheckResult,
+    watch: PolymarketWatchDescriptor,
+  ) => {
+    const summary = summarizePolymarketWatchAlert(check, watch);
+    const subject = summary.marketId || summary.watchId || "the selected watch";
+    const alertText = summary.alerts.length ? summary.alerts.join("; ") : `status is ${summary.status}`;
+    return [
+      `Use unified crypto chat. Review this read-only Polymarket watch alert for ${subject}.`,
+      `Alert context: ${alertText}.`,
+      "Explain the public observations, source/freshness, risk notes, compliance notes, and safe next steps.",
+      "Do not sign, submit, broadcast, auto-execute, request API secrets, request private keys, or accept raw signatures or signed payloads.",
+    ].join(" ");
+  };
+
+  const selectHyperliquidWatchAlert = (
+    watches: HyperliquidWatchDescriptor[],
+    checks: HyperliquidWatchCheckResult[],
+    alertIndex: number,
+  ) => {
+    const alertCandidates = checks
+      .map((check, index) => ({ check, watch: watches[index] }))
+      .filter((candidate): candidate is { check: HyperliquidWatchCheckResult; watch: HyperliquidWatchDescriptor } => {
+        return Boolean(candidate.watch) && candidate.check.status !== "ok";
+      });
+    const selected = alertCandidates[alertIndex];
+    if (!selected) {
+      throw new ApiError(404, "no_hyperliquid_watch_alert", `No Hyperliquid watch alert found at alertIndex ${alertIndex}.`);
+    }
+    return selected;
+  };
+
+  const selectPolymarketWatchAlert = (
+    watches: PolymarketWatchDescriptor[],
+    checks: PolymarketWatchCheckResult[],
+    alertIndex: number,
+  ) => {
+    const alertCandidates = checks
+      .map((check, index) => ({ check, watch: watches[index] }))
+      .filter((candidate): candidate is { check: PolymarketWatchCheckResult; watch: PolymarketWatchDescriptor } => {
+        return Boolean(candidate.watch) && candidate.check.status !== "ok";
+      });
+    const selected = alertCandidates[alertIndex];
+    if (!selected) {
+      throw new ApiError(404, "no_polymarket_watch_alert", `No Polymarket watch alert found at alertIndex ${alertIndex}.`);
+    }
+    return selected;
+  };
+
   addRoute(routes, "GET", "/api/hyperliquid/markets", "client", async (ctx) => {
     const limit = ctx.url.searchParams.get("limit") ? Number(ctx.url.searchParams.get("limit")) : 20;
     const markets = await hyperliquidProvider.listMarkets(limit);
@@ -4150,6 +4266,49 @@ function createRoutes(
       checks,
       cards: watches.map((watch, index) => buildHyperliquidWatchCard(watch, checks[index])),
       digest: buildHyperliquidWatchDigest(checks),
+    });
+  });
+
+  addRoute(routes, "POST", "/api/hyperliquid/watches/act", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    rejectCustomWatchActionPrompt(body, "Hyperliquid");
+    const forbidden = findForbiddenHyperliquidCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Hyperliquid watch act input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const explicit = coerceHyperliquidWatch(body.watch);
+    const watches = explicit
+      ? [explicit]
+      : Array.isArray(body.watches)
+        ? body.watches.map(coerceHyperliquidWatch).filter((watch): watch is HyperliquidWatchDescriptor => Boolean(watch))
+        : Array.from(hyperliquidWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkHyperliquidWatchDescriptor(watch, hyperliquidProvider)));
+    const selected = selectHyperliquidWatchAlert(watches, checks, readMarketWatchAlertIndex(body));
+    const prompt = buildHyperliquidWatchAlertReviewPrompt(selected.check, selected.watch);
+    const chat = await executeHyperliquidChatWorkflow({
+      message: prompt,
+      asset: selected.watch.asset,
+      address: selected.watch.address,
+      watchKind: selected.watch.kind,
+    }, { provider: hyperliquidProvider });
+    return jsonResponse({
+      success: true,
+      selectedAlert: summarizeHyperliquidWatchAlert(selected.check, selected.watch),
+      action: {
+        label: "Review alert with crypto chat",
+        prompt,
+        endpoint: "/api/hyperliquid/chat/execute",
+      },
+      chat,
+      cards: chat.cards,
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+        signsOrSubmits: false,
+        autoExecutes: false,
+      },
+      source: "matterhorn_hyperliquid_watch_act",
     });
   });
 
@@ -4490,6 +4649,47 @@ function createRoutes(
       checks,
       cards: watches.map((watch, index) => buildPolymarketWatchCard(watch, checks[index])),
       digest: buildPolymarketWatchDigest(checks),
+    });
+  });
+
+  addRoute(routes, "POST", "/api/polymarket/watches/act", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    rejectCustomWatchActionPrompt(body, "Polymarket");
+    const forbidden = findForbiddenPolymarketCredentialInput(body);
+    if (forbidden) {
+      throw new ApiError(400, "market_secret_rejected", `Polymarket watch act input must not contain API secrets, private keys, signatures, or signed payloads (${forbidden}).`);
+    }
+    const explicit = coercePolymarketWatch(body.watch);
+    const watches = explicit
+      ? [explicit]
+      : Array.isArray(body.watches)
+        ? body.watches.map(coercePolymarketWatch).filter((watch): watch is PolymarketWatchDescriptor => Boolean(watch))
+        : Array.from(polymarketWatchStore.values());
+    const checks = await Promise.all(watches.map((watch) => checkPolymarketWatchDescriptor(watch, polymarketProvider)));
+    const selected = selectPolymarketWatchAlert(watches, checks, readMarketWatchAlertIndex(body));
+    const prompt = buildPolymarketWatchAlertReviewPrompt(selected.check, selected.watch);
+    const chat = await executePolymarketChatWorkflow({
+      message: prompt,
+      marketId: selected.watch.marketId,
+    }, { provider: polymarketProvider });
+    return jsonResponse({
+      success: true,
+      selectedAlert: summarizePolymarketWatchAlert(selected.check, selected.watch),
+      action: {
+        label: "Review alert with crypto chat",
+        prompt,
+        endpoint: "/api/polymarket/chat/execute",
+      },
+      chat,
+      cards: chat.cards,
+      safety: {
+        nonCustodial: true,
+        liveSubmissionEnabled: false,
+        canSubmit: false,
+        signsOrSubmits: false,
+        autoExecutes: false,
+      },
+      source: "matterhorn_polymarket_watch_act",
     });
   });
 

@@ -10,6 +10,7 @@ This is Matterhorn Work's first Hyperliquid slice. It is intentionally read-only
 - Read current funding/open-interest context for a market from `metaAndAssetCtxs`.
 - Read an L2 orderbook snapshot for a requested asset.
 - Create/check/digest read-only watches for funding, price/orderbook movement, position margin, open-order state, and market availability.
+- Convert a triggered/degraded watch into a deterministic read-only alert review through `POST /api/hyperliquid/watches/act` without accepting custom prompts or signing material.
 - Prepare a non-submittable order preview with consequence text, source labels, warnings, and `canSubmit: false`.
 - Resolve close/reduce intent ("close half my ETH position") against the live public position when an address is supplied.
 
