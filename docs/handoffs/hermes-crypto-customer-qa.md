@@ -215,6 +215,8 @@ matterhorn-work crypto live-public-qa \
   --token "$MATTERHORN_WORK_TOKEN" \
   --ss58-address "$MATTERHORN_WORK_BITTENSOR_SS58" \
   --validator-hotkey "$MATTERHORN_WORK_BITTENSOR_VALIDATOR_HOTKEY" \
+  --hyperliquid-asset BTC \
+  --polymarket-market-id "$MATTERHORN_WORK_POLYMARKET_MARKET_ID" \
   --netuid 14 --amount-tao 1 --rate-tolerance 0.01 \
   --strict --json
 ```
@@ -226,6 +228,8 @@ Pass criteria:
 - `/tmp/matterhorn-live-public-qa/matterhorn-live-public-qa.sha256` exists;
 - JSON records command, git SHA, generated time, source/freshness where
   available, and safety flags;
+- when public market inputs are configured, JSON includes Hyperliquid and
+  Polymarket watch evidence stages that are read-only and non-executing;
 - live public reads are read-only and do not sign or submit.
 
 ## 5. Unified Crypto Chat

@@ -172,11 +172,13 @@ matterhorn-work crypto live-public-qa \
   --token "$MATTERHORN_WORK_TOKEN" \
   --ss58-address "$MATTERHORN_WORK_BITTENSOR_SS58" \
   --validator-hotkey "$MATTERHORN_WORK_BITTENSOR_VALIDATOR_HOTKEY" \
+  --hyperliquid-asset BTC \
+  --polymarket-market-id "$MATTERHORN_WORK_POLYMARKET_MARKET_ID" \
   --netuid 14 --amount-tao 1 --rate-tolerance 0.01 \
   --strict --json
 ```
 
-This writes `matterhorn-live-public-qa.json`, `matterhorn-live-public-qa.md`, and `matterhorn-live-public-qa.sha256`. Missing public live inputs are marked `SKIPPED_WITH_FIXTURE_FALLBACK`, not failed. See [Live Public-Data QA](./crypto-live-public-qa.md).
+This writes `matterhorn-live-public-qa.json`, `matterhorn-live-public-qa.md`, and `matterhorn-live-public-qa.sha256`. When server inputs are present, it also captures Hyperliquid watch evidence for the public asset and Polymarket watch evidence when a public market id is supplied. Missing public live inputs are marked `SKIPPED_WITH_FIXTURE_FALLBACK`, not failed. See [Live Public-Data QA](./crypto-live-public-qa.md).
 Existing smoke/evidence outputs can be attached with `--customer-ready-smoke`,
 `--market-evidence-verify`, `--bittensor-evidence-verify`, and
 `--customer-packet`.
