@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
+const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
+const Module = require("node:module");
 
 const computerUseHelperAppName = "OpenWork Computer Use.app";
 
@@ -10,6 +13,22 @@ const sidecarBases = [
   "openwork-orchestrator",
   "chrome-devtools-mcp",
 ];
+
+function loadAsar() {
+  const originalLoad = Module._load;
+  Module._load = function patchedLoad(request, parent, isMain) {
+    const loaded = originalLoad.apply(this, [request, parent, isMain]);
+    if (request === "minimatch" && loaded && typeof loaded !== "function" && typeof loaded.minimatch === "function") {
+      return loaded.minimatch;
+    }
+    return loaded;
+  };
+  try {
+    return require("asar");
+  } finally {
+    Module._load = originalLoad;
+  }
+}
 
 function targetTriple(platformName, arch) {
   if (platformName === "darwin") {
@@ -45,6 +64,111 @@ function resolveMacAppPath(context) {
   const entries = fs.existsSync(context.appOutDir) ? fs.readdirSync(context.appOutDir) : [];
   const fallback = entries.find((entry) => entry.endsWith(".app"));
   return fallback ? path.join(context.appOutDir, fallback) : null;
+}
+
+function resolveResourcesDir(context) {
+  if (context.electronPlatformName === "darwin") {
+    const appPath = resolveMacAppPath(context);
+    return appPath ? path.join(appPath, "Contents", "Resources") : null;
+  }
+  return path.join(context.appOutDir, "resources");
+}
+
+function updateMacAsarIntegrity(context, asarPath) {
+  if (context.electronPlatformName !== "darwin") return;
+
+  const appPath = resolveMacAppPath(context);
+  if (!appPath) return;
+  const infoPlistPath = path.join(appPath, "Contents", "Info.plist");
+  if (!fs.existsSync(infoPlistPath)) return;
+
+  const hash = crypto.createHash("sha256").update(fs.readFileSync(asarPath)).digest("hex");
+  const result = spawnSync("/usr/libexec/PlistBuddy", [
+    "-c",
+    `Set :ElectronAsarIntegrity:Resources/app.asar:hash ${hash}`,
+    infoPlistPath,
+  ], { stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`Could not update ElectronAsarIntegrity for ${asarPath}`);
+  }
+}
+
+function archiveHasEntry(archiveEntries, requiredArchivePath) {
+  const normalized = requiredArchivePath.replace(/^\/+/, "");
+  return archiveEntries.has(normalized) || archiveEntries.has(`/${normalized}`);
+}
+
+function assertArchiveHasEntries(asar, asarPath, requiredArchivePaths) {
+  const archiveEntries = new Set(asar.listPackage(asarPath));
+  for (const requiredArchivePath of requiredArchivePaths) {
+    if (archiveHasEntry(archiveEntries, requiredArchivePath)) continue;
+
+    const basename = path.basename(requiredArchivePath);
+    const nearbyEntries = [...archiveEntries]
+      .filter((entry) => entry.endsWith(`/${basename}`) || entry.endsWith(basename))
+      .slice(0, 5);
+    throw new Error(
+      `Packaged app.asar is missing ${requiredArchivePath}; nearby entries: ${nearbyEntries.join(", ") || "none"}`,
+    );
+  }
+}
+
+async function waitForArchiveEntries(asar, asarPath, requiredArchivePaths) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    try {
+      assertArchiveHasEntries(asar, asarPath, requiredArchivePaths);
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  throw lastError;
+}
+
+async function repairPackagedAppAsar(context) {
+  const asar = loadAsar();
+  const resourcesDir = resolveResourcesDir(context);
+  if (!resourcesDir) return;
+
+  const asarPath = path.join(resourcesDir, "app.asar");
+  if (!fs.existsSync(asarPath)) {
+    throw new Error(`Missing packaged app.asar at ${asarPath}`);
+  }
+
+  const desktopRoot = path.resolve(__dirname, "..");
+  const electronSource = path.join(desktopRoot, "electron");
+  const serverSource = path.join(desktopRoot, "server");
+  const packageSource = path.join(desktopRoot, "package.json");
+  for (const requiredPath of [electronSource, serverSource, packageSource]) {
+    if (!fs.existsSync(requiredPath)) {
+      throw new Error(`Missing Electron package source required for app.asar: ${requiredPath}`);
+    }
+  }
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "matterhorn-app-asar-"));
+  try {
+    asar.extractAll(asarPath, tempDir);
+    asar.uncache(asarPath);
+    fs.rmSync(path.join(tempDir, "electron"), { recursive: true, force: true });
+    fs.rmSync(path.join(tempDir, "server"), { recursive: true, force: true });
+    fs.cpSync(electronSource, path.join(tempDir, "electron"), { recursive: true });
+    fs.cpSync(serverSource, path.join(tempDir, "server"), { recursive: true });
+    fs.copyFileSync(packageSource, path.join(tempDir, "package.json"));
+
+    fs.rmSync(asarPath, { force: true });
+    fs.rmSync(`${asarPath}.unpacked`, { recursive: true, force: true });
+    await asar.createPackageWithOptions(tempDir, asarPath, { unpack: "**/*.node" });
+    asar.uncache(asarPath);
+
+    await waitForArchiveEntries(asar, asarPath, ["electron/main.mjs", "server/dist/server.js"]);
+    updateMacAsarIntegrity(context, asarPath);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function signComputerUseHelper(context) {
@@ -87,6 +211,8 @@ function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
 }
 
 async function afterPack(context) {
+  await repairPackagedAppAsar(context);
+
   const triple = targetTriple(context.electronPlatformName, context.arch);
   if (!triple) return;
 

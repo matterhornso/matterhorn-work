@@ -28,12 +28,15 @@
     "@opencode-ai/sdk": "^1.14.38",
     "better-sqlite3": "^11.10.0",
     "electron-updater": "^6.3.9",
+    "hyperliquid": "^1.7.7",
     "jsonc-parser": "^3.2.1",
     "minimatch": "^10.0.1",
+    "viem": "^2.50.4",
     "yaml": "^2.6.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "asar": "3.2.0",
     "electron": "^35.0.0",
     "electron-builder": "^25.1.8",
     "electron-devtools-installer": "^4.0.0"

@@ -49,6 +49,7 @@
     "test:agent-browser-live-probe": "node scripts/agent-browser-live-probe.mjs",
     "test:agent-session-event-stream-contract": "node scripts/agent-session-event-stream-contract.test.mjs",
     "test:agent-session-progress-smoke": "node scripts/agent-session-progress-smoke.test.mjs",
+    "test:electron-packaging-sources": "node scripts/electron-packaging-sources.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
     "test:opencode-abstraction-copy": "node scripts/opencode-abstraction-copy.test.mjs",
