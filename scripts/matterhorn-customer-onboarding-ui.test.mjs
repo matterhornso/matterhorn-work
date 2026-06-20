@@ -22,6 +22,8 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
+const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
@@ -133,6 +135,19 @@ assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and e
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.ok(sessionPage.includes('card.id === "decentralized_services_operator"'), "right rail should expose future Services workflow launcher");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
+
+for (const phrase of [
+  "matterhorn-work.server.token",
+  "openwork.server.token",
+  "VITE_MATTERHORN_WORK_TOKEN",
+  "VITE_OPENWORK_TOKEN",
+  "Authorization: `Bearer ${token}`",
+]) {
+  assert.ok(
+    `${serverProvider}\n${globalSdkProvider}`.includes(phrase),
+    `server SDK providers should use Matterhorn token aliases for authenticated health/API calls: ${phrase}`,
+  );
+}
 
 assert.ok(cryptoPrompt.includes("matterhorn_crypto_chat"), "crypto prompt should route to unified crypto chat first");
 assert.ok(cryptoPrompt.includes("Public-read and preview flows do\n * not require an EVM wallet connection."), "crypto prompt should document no-wallet public reads");
