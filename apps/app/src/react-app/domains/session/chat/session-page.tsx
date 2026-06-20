@@ -1,12 +1,11 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
-  Activity,
   BarChart3,
   BrainCircuit,
-  Command,
   Dumbbell,
   FileText,
   Globe,
@@ -72,6 +71,11 @@ import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { cn } from "@/lib/utils";
+import {
+  buildCustomerWorkflowStarterCards,
+  fetchCustomerWorkflowTemplates,
+  type CustomerWorkflowIconHint,
+} from "../workflows/customer-workflow-templates";
 
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
@@ -86,83 +90,14 @@ function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel 
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
 }
 
-const MATTERHORN_STARTER_TASKS = [
-  {
-    title: "Use Bittensor",
-    description: "Find subnets for image generation and explain how I can use them safely.",
-    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Explain what each subnet does, what Matterhorn can do today, adapter support, risks, and safe next steps.",
-    icon: BrainCircuit,
-  },
-  {
-    title: "Show my TAO",
-    description: "Read a public SS58 wallet and summarize TAO/stake exposure.",
-    prompt: "Use unified crypto chat. Show my TAO and where I am staked for this public SS58 address: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
-    icon: WalletIcon,
-  },
-  {
-    title: "Compare validators",
-    description: "Review subnet 14 validator choices with a balanced strategy.",
-    prompt: "Use unified crypto chat. Compare validators on Bittensor subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, and what context is missing before a staking preview.",
-    icon: Activity,
-  },
-  {
-    title: "Preview Hyperliquid",
-    description: "Inspect orderbook/exposure with live submission off.",
-    prompt: "Use unified crypto chat. Show Hyperliquid BTC orderbook context and explain the preview-only external-signer flow. Make clear Can submit: No and Live submission: Off.",
-    icon: BarChart3,
-  },
-  {
-    title: "Analyze Polymarket",
-    description: "Summarize a prediction market and compliance status.",
-    prompt: "Use unified crypto chat. Summarize a Polymarket market for this query: <topic>. Include market status, outcomes, liquidity/orderbook context if available, compliance state, and preview availability.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Create wellness workflow",
-    description: "Build a client-safe training plan packet.",
-    prompt: "Create a 4-week beginner strength and mobility plan for a personal trainer client, including a check-in template, safe non-medical disclaimer, and deliverable packet structure.",
-    icon: Dumbbell,
-  },
-  {
-    title: "Build any workflow",
-    description: "Turn a plain-English business request into artifacts.",
-    prompt: "Create a reusable workflow packet for a yoga instructor offering an 8-week program: offer page copy, onboarding questionnaire, weekly check-in artifact, client-safe disclaimers, and follow-up cadence.",
-    icon: Layers3,
-  },
-  {
-    title: "Create evidence",
-    description: "Generate a safe customer readiness checklist.",
-    prompt: "Create a customer-safe readiness checklist for Matterhorn Work that covers Bittensor, Hyperliquid, Polymarket, wellness workflows, external-signer boundaries, and what evidence a tester should collect.",
-    icon: FileText,
-  },
-] as const;
-
-const MATTERHORN_WORKSPACE_LAUNCHERS = [
-  {
-    title: "Open Bittensor desk",
-    description: "TAO wallet reads, subnets, validators, watches, and staking previews.",
-    panel: "bittensor",
-    icon: BrainCircuit,
-  },
-  {
-    title: "Open Hyperliquid desk",
-    description: "Account context, orderbook reads, funding watches, and preview-only orders.",
-    panel: "hyperliquid",
-    icon: BarChart3,
-  },
-  {
-    title: "Open Polymarket desk",
-    description: "Market summaries, outcomes, compliance, receipts, and preview-only orders.",
-    panel: "polymarket",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Build wellness workflow",
-    description: "Training plans, dietician packets, check-ins, and client follow-up artifacts.",
-    prompt: "Create a full Matterhorn wellness workflow for a personal trainer, yoga instructor, or dietician: offer design, onboarding questionnaire, client plan artifact, check-in cadence, safe non-medical disclaimer, and customer handoff packet.",
-    icon: Dumbbell,
-  },
-] as const;
+const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  bittensor: BrainCircuit,
+  hyperliquid: BarChart3,
+  polymarket: ShieldCheck,
+  wellness: Dumbbell,
+  services: Layers3,
+  blank: FileText,
+};
 
 type StatusBarOverrides = Pick<
   StatusBarProps,
@@ -377,6 +312,19 @@ export function SessionPage(props: SessionPageProps) {
     [],
   );
   const voiceExtensionEnabled = voiceExtension ? isMatterhornExtensionEnabled(voiceExtension) : false;
+  const customerWorkflowTemplatesQuery = useQuery({
+    queryKey: ["matterhorn-customer-workflow-templates"],
+    queryFn: fetchCustomerWorkflowTemplates,
+    staleTime: 60_000,
+  });
+  const customerWorkflowStarterCards = useMemo(
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data),
+    [customerWorkflowTemplatesQuery.data],
+  );
+  const customerWorkflowLaunchers = useMemo(
+    () => customerWorkflowStarterCards.filter((card) => card.id !== "blank_chat_workflow"),
+    [customerWorkflowStarterCards],
+  );
 
   useReactRenderWatchdog("SessionPage", {
     selectedSessionId: props.selectedSessionId,
@@ -1016,15 +964,15 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                          {MATTERHORN_WORKSPACE_LAUNCHERS.map((launcher) => {
-                            const Icon = launcher.icon;
+                          {customerWorkflowLaunchers.map((launcher) => {
+                            const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
                             return (
                               <button
-                                key={launcher.title}
+                                key={launcher.id}
                                 type="button"
                                 className="flex min-h-[104px] w-full flex-col items-start gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.55)] hover:bg-[rgba(var(--matterhorn-blue-rgb),0.1)]"
                                 onClick={() => {
-                                  if ("panel" in launcher) {
+                                  if (launcher.panel) {
                                     openVenueRailPane(launcher.panel);
                                     return;
                                   }
@@ -1047,11 +995,11 @@ export function SessionPage(props: SessionPageProps) {
                           })}
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
-                          {MATTERHORN_STARTER_TASKS.map((task) => {
-                            const Icon = task.icon;
+                          {customerWorkflowStarterCards.map((task) => {
+                            const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
                             return (
                               <button
-                                key={task.title}
+                                key={task.id}
                                 type="button"
                                 className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
                                 onClick={() => {
