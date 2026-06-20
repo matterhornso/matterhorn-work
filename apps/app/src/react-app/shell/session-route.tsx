@@ -128,7 +128,9 @@ import { useControlAction, type MatterhornControlAction } from "./control/contro
 import { useReactRenderWatchdog } from "./react-render-watchdog";
 import { useWallet } from "../domains/wallet/WalletProvider";
 import {
+  buildMatterhornOrientationSystemPrompt,
   buildCryptoSystemPrompt,
+  shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
 } from "../domains/wallet/prompts/crypto-system-prompt";
 
@@ -2056,6 +2058,10 @@ export function SessionRoute() {
         // Bittensor and market read/preview flows are public/external-signer-first
         // and should not require an EVM wallet connection before the agent can
         // see the Matterhorn crypto tools and safety rules.
+        const matterhornOrientationPrompt = shouldInjectMatterhornOrientationPrompt(text)
+          ? buildMatterhornOrientationSystemPrompt()
+          : "";
+
         const cryptoPrompt =
           shouldInjectCryptoPrompt(text)
             ? buildCryptoSystemPrompt(
@@ -2066,7 +2072,7 @@ export function SessionRoute() {
               )
             : "";
 
-        const systemContext = [envSystemContext, walletContext, cryptoPrompt].filter(Boolean).join("\n") || undefined;
+        const systemContext = [envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt].filter(Boolean).join("\n") || undefined;
 
         const result = await opencodeClient.session.promptAsync({
           sessionID: selectedSessionId,

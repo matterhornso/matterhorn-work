@@ -140,6 +140,28 @@ assert.equal(cryptoPrompt.includes("hl_submitOrder"), false, "prompt should not 
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");
 assert.ok(sessionRoute.includes("shouldInjectCryptoPrompt(text)"), "crypto prompt injection should still be keyword-gated");
+for (const phrase of [
+  "buildMatterhornOrientationSystemPrompt",
+  "shouldInjectMatterhornOrientationPrompt(text)",
+  "matterhornOrientationPrompt",
+  "[envSystemContext, walletContext, matterhornOrientationPrompt, cryptoPrompt]",
+]) {
+  assert.ok(sessionRoute.includes(phrase), `broad starter prompts should receive Matterhorn orientation context: ${phrase}`);
+}
+for (const phrase of [
+  "MATTERHORN_ORIENTATION_PATTERNS",
+  "\\bwhat can i do\\b",
+  "## Matterhorn Work Orientation",
+  "Answer as Matterhorn Work, not as a generic code assistant.",
+  "If the workspace is empty, do not lead with internal runtime files such as opencode.json or .opencode/.",
+  "Bittensor: explain subnets",
+  "Hyperliquid: read markets/orderbooks/account exposure",
+  "Polymarket: search/summarize markets",
+  "Wellness workflows",
+  "Can submit: No. Live submission: Off.",
+]) {
+  assert.ok(cryptoPrompt.includes(phrase), `orientation prompt should keep starter answers Matterhorn-native: ${phrase}`);
+}
 
 for (const phrase of [
   'id: "matterhorn-crypto"',

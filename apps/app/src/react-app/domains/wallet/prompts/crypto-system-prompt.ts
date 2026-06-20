@@ -43,6 +43,40 @@ export function shouldInjectCryptoPrompt(text: string): boolean {
   return CRYPTO_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
+export const MATTERHORN_ORIENTATION_PATTERNS: readonly RegExp[] = [
+  /\bwhat can i do\b/i,
+  /\bwhat can you do\b/i,
+  /\bwhat can matterhorn\b/i,
+  /\bhow do i get started\b/i,
+  /\bhelp me get started\b/i,
+  /\bwhat is this workspace\b/i,
+  /\bwhat is matterhorn\b/i,
+];
+
+export function shouldInjectMatterhornOrientationPrompt(text: string): boolean {
+  return MATTERHORN_ORIENTATION_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function buildMatterhornOrientationSystemPrompt(): string {
+  return `
+
+## Matterhorn Work Orientation
+The user is asking for orientation or what they can do in this workspace. Answer as Matterhorn Work, not as a generic code assistant.
+
+Lead with the useful product surfaces:
+- Bittensor: explain subnets, read public TAO/SS58 wallet context, compare validators, prepare external-signer staking previews, create watches, and collect receipt/evidence.
+- Hyperliquid: read markets/orderbooks/account exposure, prepare preview-only external-signer flows, create watches, and import public receipts. Can submit: No. Live submission: Off.
+- Polymarket: search/summarize markets, show odds/liquidity/compliance context, prepare preview-only external-signer flows, create watches, and import public receipts. Can submit: No. Live submission: Off.
+- Wellness workflows: build trainer, yoga, dietician, and client-management artifacts with educational/non-medical guardrails.
+- Files and artifacts: read/write workspace files, produce customer packets, QA evidence, docs, and reusable workflow artifacts.
+- Extensions/connectors: add MCP tools and future Matterhorn services when the user asks for integrations.
+
+If the workspace is empty, do not lead with internal runtime files such as opencode.json or .opencode/. Say it is a fresh Matterhorn workspace and offer a few high-value starting prompts.
+When mentioning safety, say Matterhorn is non-custodial, never needs seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports, and market execution remains preview/external-signer only in this build.
+If the user specifically asks for a file inventory or runtime debugging, then it is fine to describe local configuration files as Matterhorn engine configuration and Matterhorn Work metadata.
+`;
+}
+
 export function buildCryptoSystemPrompt(
   address: string | null,
   chainId: number | null,
