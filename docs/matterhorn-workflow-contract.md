@@ -426,6 +426,65 @@ pnpm test:matterhorn-customer-workflow-template-registry
 The registry emits `matterhorn.customer.workflow.template.v1`; it is catalog-only
 and rejects credential-shaped flags.
 
+## Protocol Workspace Manifest Registry
+
+The contract includes a `MatterhornProtocolWorkspaceManifest` registry
+(`MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY`) that maps customer
+workflow templates to protocol workspaces without touching app UI code.
+
+```ts
+interface MatterhornProtocolWorkspaceManifest {
+  version: "matterhorn.protocol.workspace.manifest.v1";
+  id: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "decentralized_services";
+  displayName: string;
+  category: MatterhornWorkflowCategory;
+  customerStatus: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
+  allowedIntents: string[];
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  primaryPanelRouteId: string;
+  mcpCliHints: {
+    cli?: string;
+    mcp?: string;
+  };
+  supportedCardKinds: (
+    | "balance_card"
+    | "market_card"
+    | "validator_card"
+    | "preview_card"
+    | "handoff_card"
+    | "receipt_card"
+    | "plan_card"
+    | "schedule_card"
+    | "package_card"
+    | "capability_card"
+    | "provider_card"
+  )[];
+  demoPrompt: string;
+  launchBehavior: "starts_chat" | "opens_desk" | "planned_not_live";
+}
+```
+
+Customer templates map to workspaces one-to-one (blank chat is intentionally
+unmapped):
+
+| Customer template | Workspace | `customerStatus` | `launchBehavior` | Panel route |
+| --- | --- | --- | --- | --- |
+| `bittensor_operator` | `bittensor` | `beta_ready` | `opens_desk` | `/workspaces/bittensor` |
+| `hyperliquid_trader` | `hyperliquid` | `preview_only` | `opens_desk` | `/workspaces/hyperliquid` |
+| `polymarket_researcher` | `polymarket` | `preview_only` | `opens_desk` | `/workspaces/polymarket` |
+| `wellness_creator_workflow` | `wellness` | `workflow_ready` | `starts_chat` | `/workspaces/wellness` |
+| `decentralized_services_operator` | `decentralized_services` | `planned_not_live` | `planned_not_live` | `/workspaces/decentralized-services` |
+
+The mapping is exported as `MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE`.
+
+### Workspace safety
+
+- Bittensor is `beta_ready`, may execute safe read/preview handoffs, and requires an external signer.
+- Hyperliquid and Polymarket are `preview_only`, non-executing, and never submit or take custody.
+- Wellness is `workflow_ready`, educational, and non-medical.
+- Decentralized services are `planned_not_live` future contracts.
+- Every workspace keeps `liveExecutionEnabled: false`, `canSubmit: false`, and all secret-acceptance flags `false`.
+
 ## Safety Rules
 
 - No fixture may set `acceptsSecrets`, `acceptsPrivateKeys`, `acceptsRawSignatures`, or `acceptsApiSecrets` to `true`.

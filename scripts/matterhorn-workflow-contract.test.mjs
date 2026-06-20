@@ -32,12 +32,19 @@ for (const token of [
   "MatterhornWorkflowServiceHookType",
   "MatterhornWorkflowEvidenceItem",
   "MatterhornWorkflowEvidenceBundle",
+  "MatterhornProtocolWorkspaceManifest",
+  "MatterhornProtocolWorkspaceId",
+  "MatterhornProtocolWorkspaceCustomerStatus",
+  "MatterhornProtocolWorkspaceLaunchBehavior",
+  "MatterhornProtocolWorkspaceCardKind",
   "MATTERHORN_WORKFLOW_STATUSES",
   "MATTERHORN_WORKFLOW_CATEGORIES",
   "MATTERHORN_WORKFLOW_SERVICE_HOOK_TYPES",
   "DEFAULT_MATTERHORN_WORKFLOW_SAFETY_POLICY",
   "MATTERHORN_WORKFLOW_FIXTURES",
   "MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES",
+  "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
+  "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
 ]) {
   assert.ok(types.includes(token), `types missing workflow token: ${token}`);
 }
@@ -157,12 +164,103 @@ for (const [name, block] of Object.entries(blocks)) {
   }
 }
 
-// 10. No submit/sign/live provider route is implied.
+// 10. Protocol workspace manifests are safe and complete.
+const protocolWorkspaceIds = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "decentralized_services",
+];
+
+for (const id of protocolWorkspaceIds) {
+  const constantName = `${id.toUpperCase()}_PROTOCOL_WORKSPACE_MANIFEST`;
+  assert.ok(types.includes(constantName), `types missing protocol workspace manifest constant: ${constantName}`);
+}
+
+function extractProtocolWorkspaceBlocks(text) {
+  const blocks = {};
+  const regex = /export const (\w+)_PROTOCOL_WORKSPACE_MANIFEST:\s*MatterhornProtocolWorkspaceManifest\s*=\s*\{/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    const start = match.index;
+    let braceDepth = 0;
+    let inString = false;
+    let stringChar = "";
+    let started = false;
+    for (let i = match.index + match[0].length - 1; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") {
+          i++;
+          continue;
+        }
+        if (ch === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = true;
+        stringChar = ch;
+        continue;
+      }
+      if (ch === "{") {
+        braceDepth++;
+        started = true;
+      } else if (ch === "}") {
+        braceDepth--;
+      }
+      if (started && braceDepth === 0) {
+        blocks[name] = text.slice(start, i + 1);
+        break;
+      }
+    }
+  }
+  return blocks;
+}
+
+const protocolBlocks = extractProtocolWorkspaceBlocks(types);
+assert.equal(Object.keys(protocolBlocks).length, protocolWorkspaceIds.length, `expected ${protocolWorkspaceIds.length} protocol workspace manifest blocks`);
+
+for (const [name, block] of Object.entries(protocolBlocks)) {
+  assert.ok(block.includes('version: "matterhorn.protocol.workspace.manifest.v1"'), `${name} must use protocol workspace manifest version`);
+  assert.ok(block.includes("allowedIntents:"), `${name} must include allowedIntents`);
+  assert.ok(/allowedIntents:[\s\S]*?"/.test(block), `${name} must have at least one allowed intent`);
+  assert.ok(block.includes("primaryPanelRouteId:"), `${name} must include primaryPanelRouteId`);
+  assert.ok(block.includes("supportedCardKinds:"), `${name} must include supportedCardKinds`);
+  assert.ok(/supportedCardKinds:[\s\S]*?"/.test(block), `${name} must have at least one supported card kind`);
+  assert.ok(block.includes("demoPrompt:"), `${name} must include demoPrompt`);
+  assert.ok(block.includes("launchBehavior:"), `${name} must include launchBehavior`);
+  assert.ok(block.includes("liveExecutionEnabled: false"), `${name} must set liveExecutionEnabled: false`);
+  assert.ok(block.includes("canSubmit: false"), `${name} must set canSubmit: false`);
+  assert.equal(block.includes("acceptsSecrets: true"), false, `${name} must not accept secrets`);
+  assert.equal(block.includes("acceptsPrivateKeys: true"), false, `${name} must not accept private keys`);
+  assert.equal(block.includes("acceptsRawSignatures: true"), false, `${name} must not accept raw signatures`);
+  assert.equal(block.includes("acceptsApiSecrets: true"), false, `${name} must not accept API secrets`);
+}
+
+// Market protocol workspaces must not enable live submission or custody.
+for (const id of ["hyperliquid", "polymarket"]) {
+  const block = protocolBlocks[id.toUpperCase()];
+  assert.ok(block, `${id} protocol workspace manifest block must exist`);
+  assert.ok(block.includes('customerStatus: "preview_only"'), `${id} must be preview_only`);
+  assert.ok(block.includes("canExecute: false"), `${id} must set canExecute: false`);
+  assert.ok(block.includes("requiresExternalSigner: false"), `${id} must not require external signer`);
+}
+
+const mappingBlock = types.slice(types.indexOf("MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE"));
+for (const id of protocolWorkspaceIds) {
+  assert.ok(mappingBlock.includes(id), `customer-template-to-workspace mapping missing: ${id}`);
+}
+
+// 11. No submit/sign/live provider route is implied.
 for (const forbidden of ["submitRoute", "signRoute", "/submit", "/sign"]) {
   assert.equal(types.includes(forbidden), false, `workflow contract must not imply ${forbidden}`);
 }
 
-// 11. Doc coverage.
+// 12. Doc coverage.
 for (const snippet of [
   "MatterhornWorkflowManifest",
   "MatterhornWorkflowStep",
@@ -171,6 +269,8 @@ for (const snippet of [
   "MatterhornWorkflowSafetyPolicy",
   "MatterhornWorkflowQAContract",
   "MatterhornWorkflowEvidenceBundle",
+  "MatterhornProtocolWorkspaceManifest",
+  "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "wellness_creator_services",
   "bittensor_operator",
   "market_read_preview",
@@ -179,7 +279,7 @@ for (const snippet of [
   assert.ok(doc.includes(snippet), `doc missing: ${snippet}`);
 }
 
-// 12. Evidence bundle fixtures are safe and complete.
+// 13. Evidence bundle fixtures are safe and complete.
 const evidenceBundleIds = [
   "wellness_creator_workflow",
   "bittensor_beta_workflow",

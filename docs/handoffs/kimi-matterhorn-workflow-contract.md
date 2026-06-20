@@ -411,6 +411,55 @@ pnpm test:market-execution-safety-gate
 
 Pending merge.
 
+## PR #TBD: Protocol Workspace Manifest Integration Layer
+
+**PR:** TBD — opened from `kimi/protocol-workspace-manifest` to `dev`  
+**Branch:** `kimi/protocol-workspace-manifest`  
+**Scope:** Typed protocol workspace manifest registry that maps customer workflow templates to workspaces, so CLI/MCP/runtime agents can launch them consistently without touching app UI.
+
+### Modified files
+
+| File | What changed |
+| --- | --- |
+| `packages/types/src/matterhorn-workflows.ts` | Added `MatterhornProtocolWorkspaceManifest`, union constants, five workspace manifest fixtures, `MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY`, and `MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE` mapping. |
+| `scripts/matterhorn-workflow-contract.test.mjs` | Added assertions that protocol workspace manifest types/constants exist, every manifest is safe/complete, and market workspaces are preview-only/non-executing. |
+| `scripts/matterhorn-customer-workflow-template-registry.test.mjs` | Added assertions that each non-blank customer template maps to exactly one protocol workspace manifest. |
+| `docs/matterhorn-workflow-contract.md` | Added Protocol Workspace Manifest Registry section with schema, mapping table, and safety rules. |
+| `docs/handoffs/kimi-matterhorn-workflow-contract.md` | Added this handoff section. |
+
+### Workspace design
+
+| Workspace | Customer status | Launch behavior | Panel route | Allowed intent example |
+| --- | --- | --- | --- | --- |
+| `bittensor` | `beta_ready` | `opens_desk` | `/workspaces/bittensor` | preview stake / prepare handoff |
+| `hyperliquid` | `preview_only` | `opens_desk` | `/workspaces/hyperliquid` | preview trade / show exposure |
+| `polymarket` | `preview_only` | `opens_desk` | `/workspaces/polymarket` | research market / preview trade |
+| `wellness` | `workflow_ready` | `starts_chat` | `/workspaces/wellness` | plan program / build schedule |
+| `decentralized_services` | `planned_not_live` | `planned_not_live` | `/workspaces/decentralized-services` | plan storage / compare fixtures |
+
+### Safety rules
+
+- Bittensor may execute safe read/preview handoffs and requires an external signer.
+- Hyperliquid and Polymarket remain preview-only, non-executing, and custody-free.
+- Wellness is educational and non-medical.
+- Decentralized services are future-contract only.
+- Every workspace keeps `liveExecutionEnabled: false`, `canSubmit: false`, and all secret-acceptance flags `false`.
+
+### Commands that pass on PR #TBD
+
+```bash
+pnpm --dir packages/types build
+pnpm test:matterhorn-workflow-contract
+pnpm test:matterhorn-customer-workflow-template-registry
+pnpm test:matterhorn-workflow-template-registry
+pnpm test:matterhorn-workflow-catalog
+pnpm test:market-execution-safety-gate
+```
+
+### CI status on PR #TBD
+
+Pending merge.
+
 ## Non-overlap observed
 
 No changes were made to:
