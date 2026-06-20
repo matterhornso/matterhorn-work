@@ -195,6 +195,37 @@ Realistic prompts and the artifact each produces. Every output is educational/ge
 
 **Clinical / sensitive prompts redirect** (no artifact): anything that asks to diagnose, prescribe, treat a condition/injury, or that is pregnancy- or eating-disorder-specific returns a referral to a qualified professional. **Secret-shaped text is refused** and never echoed.
 
+## Client Lifecycle (Full Test-Customer Demo Path)
+
+The **Client Lifecycle** is the complete, ordered client-delivery path a wellness creator runs through chat — a test customer can walk the whole flow end to end. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline: nothing is hosted, charged, emailed, or gated.
+
+The seven stages (each produces a client-safe artifact):
+
+1. **Lead intake** → intake questionnaire
+2. **Service offer** → offer page (placeholder pricing only)
+3. **Onboarding questionnaire** → intake questionnaire
+4. **Weekly program** → client plan
+5. **Progress check-in** → weekly check-in
+6. **Renewal / follow-up** → renewal note
+7. **Client handoff packet** → wrap-up packet
+
+Run the full lifecycle for a persona, or a single stage:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --lifecycle personal_trainer --json
+node scripts/wellness-creator-workflow.mjs --lifecycle yoga_instructor --json
+node scripts/wellness-creator-workflow.mjs --lifecycle dietician --json
+node scripts/wellness-creator-workflow.mjs --stage weekly_program --json
+```
+
+Every service hook (storage/hosting, payments, email, identity/access) is `planned_not_live`; safety is educational-only (no diagnosis, no treatment plan, no payment, no email).
+
+Reproducible full-lifecycle reference walk-throughs (customer-demo safe, with non-medical disclaimers):
+
+- [`personal-trainer-lifecycle.md`](./wellness-creator-workflow/personal-trainer-lifecycle.md)
+- [`yoga-instructor-lifecycle.md`](./wellness-creator-workflow/yoga-instructor-lifecycle.md)
+- [`dietician-lifecycle.md`](./wellness-creator-workflow/dietician-lifecycle.md)
+
 ## Customer Offer Builder
 
 The **Wellness Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Work is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.

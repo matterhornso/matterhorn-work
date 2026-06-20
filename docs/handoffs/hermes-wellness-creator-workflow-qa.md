@@ -77,6 +77,36 @@ node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coachi
 
 Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
 
+## Client Lifecycle (Full Flow) Tests
+
+A non-coding tester can run the complete client-delivery path end to end. For each persona, run the full lifecycle and confirm seven ordered stages, every service hook `planned_not_live`, and a reference fixture:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --lifecycle personal_trainer --json
+node scripts/wellness-creator-workflow.mjs --lifecycle yoga_instructor --json
+node scripts/wellness-creator-workflow.mjs --lifecycle dietician --json
+```
+
+Then run each lifecycle stage on its own:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --stage lead_intake --json
+node scripts/wellness-creator-workflow.mjs --stage service_offer --json
+node scripts/wellness-creator-workflow.mjs --stage onboarding_questionnaire --json
+node scripts/wellness-creator-workflow.mjs --stage weekly_program --json
+node scripts/wellness-creator-workflow.mjs --stage progress_check_in --json
+node scripts/wellness-creator-workflow.mjs --stage renewal_follow_up --json
+node scripts/wellness-creator-workflow.mjs --stage client_handoff_packet --json
+```
+
+Open the three reference walk-throughs and confirm each carries the non-medical disclaimer and uses placeholder (not-live) pricing:
+
+- `docs/wellness-creator-workflow/personal-trainer-lifecycle.md`
+- `docs/wellness-creator-workflow/yoga-instructor-lifecycle.md`
+- `docs/wellness-creator-workflow/dietician-lifecycle.md`
+
+Confirm across the whole flow: no diagnosis, no prescription, no guaranteed results, no live payments/email/hosting/access, and that a secret-shaped prompt (`--route "my seed phrase is ..."`) is refused and not echoed. An unknown persona or stage exits non-zero with an error.
+
 ## Customer Offer Builder Tests
 
 Confirm a trainer / yoga instructor / dietician can package a full service offer safely:
