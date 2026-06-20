@@ -996,8 +996,14 @@ export function SessionPage(props: SessionPageProps) {
                                   <Icon className="size-4" />
                                 </span>
                                 <span>
-                                  <span className="block text-[13px] font-semibold text-dls-text">{launcher.title}</span>
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[13px] font-semibold text-dls-text">{launcher.title}</span>
+                                    <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.22)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
+                                      {launcher.statusLabel}
+                                    </span>
+                                  </span>
                                   <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{launcher.description}</span>
+                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{launcher.safetySummary}</span>
                                 </span>
                               </button>
                             );
@@ -1019,8 +1025,14 @@ export function SessionPage(props: SessionPageProps) {
                                   <Icon className="size-4" />
                                 </span>
                                 <span>
-                                  <span className="block text-[13px] font-medium text-dls-text">{task.title}</span>
+                                  <span className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[13px] font-medium text-dls-text">{task.title}</span>
+                                    <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                      {task.statusLabel}
+                                    </span>
+                                  </span>
                                   <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{task.description}</span>
+                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{task.safetySummary}</span>
                                 </span>
                               </button>
                             );
