@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Matterhorn Work — Customer UX Refresh Prototype</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230C0C0C'/%3E%3Cpath d='M16 5 L27 25 H5 Z' fill='none' stroke='%23D1F2FF' stroke-width='2' stroke-linejoin='round'/%3E%3Cline x1='11' y1='17' x2='21' y2='17' stroke='%23D1F2FF' stroke-width='1.5'/%3E%3C/svg%3E" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     NAVIGATION
+═══════════════════════════════════════════════════════════ -->
+<nav class="showcase-nav">
+  <!-- Logo -->
+  <div class="showcase-nav-logo">
+    <svg class="mh-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#141414"/>
+      <path d="M16 6 L26 24 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="1.8" stroke-linejoin="round"/>
+      <line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/>
+    </svg>
+    Matterhorn Work
+  </div>
+
+  <div class="showcase-nav-tabs" id="navTabs">
+    <button class="showcase-nav-tab active" data-tab="welcome">1. Welcome</button>
+    <button class="showcase-nav-tab" data-tab="workspace">2. Workspace</button>
+    <button class="showcase-nav-tab" data-tab="empty-session">3. Empty Starter</button>
+    <button class="showcase-nav-tab" data-tab="chat">4. Main Chat</button>
+    <button class="showcase-nav-tab" data-tab="panel">5. Crypto Panel</button>
+    <button class="showcase-nav-tab" data-tab="bittensor-card">6. Bittensor Card</button>
+    <button class="showcase-nav-tab" data-tab="hyperliquid-card">7. Hyperliquid Card</button>
+    <button class="showcase-nav-tab" data-tab="polymarket-card">8. Polymarket Card</button>
+    <button class="showcase-nav-tab" data-tab="wellness-card">9. Wellness Card</button>
+    <button class="showcase-nav-tab" data-tab="design-system">Design System</button>
+  </div>
+
+  <span class="showcase-badge">Prototype</span>
+
+  <style>
+    /* Local nav styles — single-file friendly */
+    .showcase-nav [data-tab] { all: unset; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border: 1px solid transparent; transition: all 150ms; white-space: nowrap; }
+    .showcase-nav [data-tab]:hover { color: var(--text-primary); background: var(--bg-elevated); }
+    .showcase-nav [data-tab].active { color: var(--accent); background: var(--accent-dim); border-color: var(--border-accent); }
+    .screen { display: none; padding: 40px 24px; max-width: 1400px; margin: 0 auto; }
+    .screen.active { display: block; }
+    .screen-header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+    .screen-header h2 { font-size: 24px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.4px; }
+    .tag { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tag-screen  { background: rgba(96,165,250,0.12); color: #60A5FA; }
+    .tag-card    { background: rgba(52,211,153,0.12); color: #34D399; }
+    .tag-design  { background: rgba(251,191,36,0.12); color: #FBBF24; }
+    .screens-row { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+    @media (max-width: 1100px) { .screens-row { grid-template-columns: 1fr; } }
+    .phone-frame { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+    .phone-frame iframe, .phone-frame .frame-content { width: 100%; height: 100%; border: none; }
+    .frame-label { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  </style>
+</nav>
+
+<div class="showcase-body">
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 1 — First-Run Welcome
+═══════════════════════════════════════════════════════════ -->
+<section class="screen active" id="screen-welcome">
+  <div class="screen-header">
+    <h2>Screen 1 — First-Run Welcome</h2>
+    <span class="tag tag-screen">Screen</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color: var(--text-secondary); line-height:1.7; max-width: 480px;">
+        First screen users see after installing the DMG. Establishes trust immediately with a clear safety statement and a calm, premium aesthetic. Beta badge clarifies the shipping state. CTA is minimal — just "Get Started."
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;"><span style="color:var(--accent); font-weight:700;">→</span> Mountain SVG mark — geometric, minimal, on-brand</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;"><span style="color:var(--accent); font-weight:700;">→</span> Value prop in one line — "Do anything with Web3 through chat"</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;"><span style="color:var(--accent); font-weight:700;">→</span> Safety callout — non-custodial, no secrets, not a trading terminal</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;"><span style="color:var(--accent); font-weight:700;">→</span> Beta badge — sets expectations honestly</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;"><span style="color:var(--accent); font-weight:700;">→</span> Background radial glow — premium, calm, not aggressive</li>
+      </ul>
+    </div>
+
+    <!-- Desktop mockup -->
+    <div class="phone-frame" style="height: 600px;">
+      <div style="height:100%; display:flex; flex-direction:column; background:var(--bg-primary); overflow:hidden; position:relative;">
+        <div style="position:absolute; inset:0; background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(209,242,255,0.07) 0%, transparent 60%), radial-gradient(ellipse 40% 30% at 80% 80%, rgba(209,242,255,0.03) 0%, transparent 50%); pointer-events:none;"></div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:48px 32px; text-align:center; position:relative; z-index:1;">
+          <!-- Mountain Logo -->
+          <div style="margin-bottom:32px; animation: fade-up 400ms cubic-bezier(0.16,1,0.3,1) both;">
+            <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="72" height="72" rx="16" fill="#141414"/>
+              <path d="M36 14 L58 54 H14 Z" fill="none" stroke="#D1F2FF" stroke-width="2.5" stroke-linejoin="round"/>
+              <line x1="24" y1="38" x2="48" y2="38" stroke="#D1F2FF" stroke-width="2"/>
+              <line x1="29" y1="46" x2="43" y2="46" stroke="#D1F2FF" stroke-width="1.5" opacity="0.5"/>
+              <circle cx="36" cy="14" r="3" fill="#D1F2FF"/>
+            </svg>
+          </div>
+          <div style="font-size:36px; font-weight:700; letter-spacing:-1.5px; color:var(--text-primary); margin-bottom:12px; animation: fade-up 400ms cubic-bezier(0.16,1,0.3,1) 80ms both;">
+            Matterhorn <span style="color:var(--accent);">Work</span>
+          </div>
+          <div style="font-size:15px; color:var(--text-secondary); max-width:360px; line-height:1.7; margin-bottom:32px; animation: fade-up 400ms cubic-bezier(0.16,1,0.3,1) 160ms both;">
+            Do anything with Web3 — staking, trading research, wellness programs, and real-world workflows — all through chat.
+          </div>
+          <div style="display:flex; flex-direction:column; gap:12px; width:100%; max-width:280px; animation: fade-up 400ms cubic-bezier(0.16,1,0.3,1) 240ms both;">
+            <button class="btn btn-primary btn-xl" style="width:100%;">Get Started</button>
+            <div style="display:flex; align-items:center; gap:12px; width:100%;">
+              <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+              <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">Desktop Beta</span>
+              <div style="flex:1; height:1px; background:var(--border-subtle);"></div>
+            </div>
+          </div>
+          <!-- Safety callout -->
+          <div style="margin-top:40px; padding:16px 20px; background:var(--bg-surface); border:1px solid var(--border-subtle); border-left:3px solid var(--success); border-radius:0 12px 12px 0; max-width:440px; width:100%; text-align:left; animation: fade-up 400ms cubic-bezier(0.16,1,0.3,1) 400ms both;">
+            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--success); margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Non-custodial by design
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="font-size:12px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+                <span style="color:var(--text-muted);">—</span> Never asks for seed phrases or private keys
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+                <span style="color:var(--text-muted);">—</span> No live trading — preview and external signer only
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+                <span style="color:var(--text-muted);">—</span> You hold your keys. Always.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 2 — Create Workspace
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-workspace">
+  <div class="screen-header">
+    <h2>Screen 2 — Create Workspace</h2>
+    <span class="tag tag-screen">Screen</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        After onboarding, users create their first workspace. The form is minimal — a name, optional icon, and a template gallery that surfaces the five core use cases: Bittensor, Hyperliquid, Polymarket, Wellness, and a blank workspace for builders.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Name field — short, clear, no jargon</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Icon picker — five pre-selected icons for each use case</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Template gallery — one-click start for each vertical</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> "Create workspace" is the only primary action</li>
+      </ul>
+    </div>
+    <div class="phone-frame" style="height: 620px;">
+      <div style="height:100%; display:flex; flex-direction:column; background:var(--bg-primary);">
+        <!-- Minimal header -->
+        <div style="padding:20px 24px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; gap:12px;">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx="6" fill="#141414"/>
+            <path d="M16 6 L26 24 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="1.8" stroke-linejoin="round"/>
+            <line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/>
+          </svg>
+          <span style="font-size:14px; font-weight:700; color:var(--accent);">Matterhorn Work</span>
+          <span style="font-size:11px; color:var(--warning); background:var(--warning-dim); padding:2px 8px; border-radius:9999px; margin-left:auto;">Beta</span>
+        </div>
+        <!-- Form -->
+        <div style="flex:1; overflow-y:auto; padding:32px 24px;">
+          <h1 style="font-size:22px; font-weight:700; letter-spacing:-0.4px; color:var(--text-primary); margin-bottom:4px;">New workspace</h1>
+          <p style="font-size:13px; color:var(--text-secondary); margin-bottom:28px;">Give your workspace a name and pick a starting point.</p>
+
+          <!-- Name field -->
+          <div class="form-group" style="margin-bottom:20px;">
+            <label class="form-label">Workspace name</label>
+            <input class="input input-lg" type="text" placeholder="e.g. My Web3 Lab" value="Web3 Research" />
+          </div>
+
+          <!-- Icon picker -->
+          <div class="form-group" style="margin-bottom:24px;">
+            <label class="form-label">Icon</label>
+            <div class="icon-picker">
+              <div class="icon-option selected" title="Web3">🌐</div>
+              <div class="icon-option" title="Trading">📊</div>
+              <div class="icon-option" title="Wellness">💪</div>
+              <div class="icon-option" title="Analytics">📡</div>
+              <div class="icon-option" title="Custom">⚙️</div>
+            </div>
+          </div>
+
+          <!-- Template gallery -->
+          <div class="form-group" style="margin-bottom:24px;">
+            <label class="form-label">Start from a template</label>
+            <div class="template-gallery">
+              <div class="template-card selected">
+                <div class="template-icon">🌐</div>
+                <div class="template-name">Bittensor</div>
+                <div class="template-desc">Stake, delegate, monitor</div>
+              </div>
+              <div class="template-card">
+                <div class="template-icon">📊</div>
+                <div class="template-name">Hyperliquid</div>
+                <div class="template-desc">Preview perps, no submit</div>
+              </div>
+              <div class="template-card">
+                <div class="template-icon">🔮</div>
+                <div class="template-name">Polymarket</div>
+                <div class="template-desc">Research markets, compliance</div>
+              </div>
+              <div class="template-card">
+                <div class="template-icon">💪</div>
+                <div class="template-name">Wellness</div>
+                <div class="template-desc">Client plans, artifacts</div>
+              </div>
+              <div class="template-card">
+                <div class="template-icon">⚡</div>
+                <div class="template-name">Blank</div>
+                <div class="template-desc">Start from scratch</div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%; padding:14px;">Create workspace</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 3 — Empty Session Starter
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-empty-session">
+  <div class="screen-header">
+    <h2>Screen 3 — Empty Session Starter</h2>
+    <span class="tag tag-screen">Screen</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        The first screen in an active workspace when no chat history exists. A curated set of prompt chips helps users experience the most valuable features immediately, without needing to know what to ask. Recent sessions are surfaced below for returning users.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Six prompt chips — one per use case, with icons</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Quick-action grid — surface the five use cases visually</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Safety reminder — "Matterhorn never asks for your keys"</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Recent sessions — fast re-entry for returning users</li>
+      </ul>
+    </div>
+    <div class="phone-frame" style="height: 640px;">
+      <div style="height:100%; display:flex; flex-direction:column; background:var(--bg-primary);">
+        <!-- Sidebar -->
+        <div style="display:flex; flex:1; overflow:hidden;">
+          <div class="sidebar" style="width:220px; flex-shrink:0;">
+            <div class="sidebar-header" style="padding:16px;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#141414"/><path d="M16 6 L26 24 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="1.8" stroke-linejoin="round"/><line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/></svg>
+                <span style="font-size:13px; font-weight:700; color:var(--accent);">Matterhorn</span>
+              </div>
+              <span style="font-size:11px; color:var(--text-muted);">Web3 Research</span>
+            </div>
+            <div class="sidebar-nav">
+              <div class="sidebar-item active"><span class="sidebar-item-icon">💬</span> Chat</div>
+              <div class="sidebar-item"><span class="sidebar-item-icon">📊</span> Crypto <span class="sidebar-item-badge">Beta</span></div>
+              <div class="sidebar-item"><span class="sidebar-item-icon">💪</span> Wellness</div>
+              <div class="sidebar-item"><span class="sidebar-item-icon">⚡</span> Workflows</div>
+              <div style="height:1px; background:var(--border-subtle); margin:8px 0;"></div>
+              <div class="sidebar-item"><span class="sidebar-item-icon">🕐</span> History</div>
+              <div class="sidebar-item"><span class="sidebar-item-icon">⚙️</span> Settings</div>
+            </div>
+          </div>
+          <!-- Main -->
+          <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; border-left:1px solid var(--border-subtle);">
+            <div style="flex:1; overflow-y:auto; padding:32px 28px;">
+              <!-- Greeting -->
+              <div style="margin-bottom:28px;">
+                <div style="font-size:20px; font-weight:700; letter-spacing:-0.3px; color:var(--text-primary); margin-bottom:4px;">Good afternoon</div>
+                <div style="font-size:13px; color:var(--text-secondary);">What would you like to explore?</div>
+              </div>
+              <!-- Prompt chips -->
+              <div style="margin-bottom:24px;">
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Try asking</div>
+                <div class="chip-grid">
+                  <button class="chip active"><span class="chip-icon">📡</span> Show my TAO</button>
+                  <button class="chip"><span class="chip-icon">⚖️</span> Compare validators</button>
+                  <button class="chip"><span class="chip-icon">📊</span> BTC orderbook</button>
+                  <button class="chip"><span class="chip-icon">🔮</span> Polymarket market</button>
+                  <button class="chip"><span class="chip-icon">💪</span> Training plan</button>
+                  <button class="chip"><span class="chip-icon">🔗</span> Customer workflow</button>
+                </div>
+              </div>
+              <!-- Quick actions -->
+              <div style="margin-bottom:24px;">
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:12px;">Quick start</div>
+                <div class="quick-actions-grid" style="grid-template-columns:1fr 1fr;">
+                  <div class="quick-action-card">
+                    <div class="quick-action-icon">📡</div>
+                    <div class="quick-action-title">Bittensor</div>
+                    <div class="quick-action-desc">Stake, delegate, monitor subnets</div>
+                  </div>
+                  <div class="quick-action-card">
+                    <div class="quick-action-icon">📊</div>
+                    <div class="quick-action-title">Hyperliquid</div>
+                    <div class="quick-action-desc">Preview perps, external signer</div>
+                  </div>
+                  <div class="quick-action-card">
+                    <div class="quick-action-icon">🔮</div>
+                    <div class="quick-action-title">Polymarket</div>
+                    <div class="quick-action-desc">Research markets, check compliance</div>
+                  </div>
+                  <div class="quick-action-card">
+                    <div class="quick-action-icon">💪</div>
+                    <div class="quick-action-title">Wellness</div>
+                    <div class="quick-action-desc">Client plans, artifacts, delivery</div>
+                  </div>
+                </div>
+              </div>
+              <!-- Safety callout -->
+              <div class="safety-callout" style="font-size:12px;">
+                <strong>🔒 Matterhorn never asks for your seed phrase, private key, or API secret.</strong> All actions are read-only or require your external wallet — Matterhorn never holds your keys.
+              </div>
+            </div>
+            <!-- Composer -->
+            <div class="composer" style="padding:12px 20px;">
+              <div class="composer-input">
+                <textarea class="composer-textarea" rows="1" placeholder="Ask anything…">Show my TAO for 5DSf8...</textarea>
+                <button class="btn btn-primary btn-icon" style="flex-shrink:0;">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-3 6 3 6-12-6z" fill="currentColor"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 4 — Main Chat
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-chat">
+  <div class="screen-header">
+    <h2>Screen 4 — Main Chat</h2>
+    <span class="tag tag-screen">Screen</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        The core interface. Chat is the primary surface — everything else is secondary. The crypto side panel is accessible via sidebar but does not compete with the conversation. Cards appear inline in the transcript to clarify and confirm, never as popups that interrupt flow.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Chat is the primary surface — panels are secondary</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Bittensor response with inline data card</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Message bubbles — user on left, assistant on right</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Status indicator in sidebar — green when ready</li>
+      </ul>
+    </div>
+    <div class="phone-frame" style="height: 680px;">
+      <div style="height:100%; display:flex; background:var(--bg-primary); overflow:hidden;">
+        <!-- Sidebar -->
+        <div class="sidebar" style="width:220px;">
+          <div class="sidebar-header" style="padding:16px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#141414"/><path d="M16 6 L26 24 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="1.8" stroke-linejoin="round"/><line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/></svg>
+              <span style="font-size:13px; font-weight:700; color:var(--accent);">Matterhorn</span>
+            </div>
+          </div>
+          <div class="sidebar-nav">
+            <div class="sidebar-item active"><span class="sidebar-item-icon">💬</span> Chat</div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">📊</span> Crypto <span class="sidebar-item-badge">Beta</span></div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">💪</span> Wellness</div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">⚡</span> Workflows</div>
+            <div style="height:1px; background:var(--border-subtle); margin:8px 0;"></div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">🕐</span> History</div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">⚙️</span> Settings</div>
+          </div>
+          <!-- Workspace footer -->
+          <div style="padding:12px 16px; border-top:1px solid var(--border-subtle);">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div class="status-dot"></div>
+              <span style="font-size:11px; color:var(--text-secondary);">All systems ready</span>
+            </div>
+          </div>
+        </div>
+        <!-- Main chat -->
+        <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0;">
+          <!-- Chat header -->
+          <div style="padding:12px 20px; border-bottom:1px solid var(--border-subtle); display:flex; align-items:center; justify-content:space-between;">
+            <div>
+              <div style="font-size:14px; font-weight:700; color:var(--text-primary);">Web3 Research</div>
+              <div style="font-size:11px; color:var(--success); display:flex; align-items:center; gap:5px;">
+                <div class="status-dot" style="width:6px;height:6px;"></div>
+                Connected
+              </div>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-ghost btn-icon btn-sm">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.5"/></svg>
+              </button>
+              <button class="btn btn-ghost btn-icon btn-sm">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <!-- Chat messages -->
+          <div class="chat-area" style="padding:20px;">
+            <!-- User message -->
+            <div class="chat-message">
+              <div class="avatar" style="background:var(--accent-dim); border-color:var(--border-accent); color:var(--accent);">AR</div>
+              <div class="chat-bubble user">
+                <p>Show my TAO for <span class="mono" style="font-size:12px; color:var(--accent);">5DSf8…3Kk9</span></p>
+                <div class="bubble-meta">Just now</div>
+              </div>
+            </div>
+            <!-- Assistant response with card -->
+            <div class="chat-message">
+              <div class="avatar">
+                <svg width="16" height="16" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="16" fill="#141414"/><path d="M16 8 L26 22 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="2" stroke-linejoin="round"/><line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/></svg>
+              </div>
+              <div style="flex:1; min-width:0;">
+                <div class="chat-bubble" style="margin-bottom:12px;">
+                  <p>Your Bittensor wallet is connected. Here's your current state:</p>
+                </div>
+                <!-- Bittensor wallet card -->
+                <div class="data-card" style="margin-bottom:12px;">
+                  <div class="data-card-header">
+                    <div class="data-card-title">
+                      <span style="font-size:14px;">📡</span>
+                      Bittensor Wallet
+                      <span class="badge badge-success badge-dot">Beta Ready</span>
+                    </div>
+                    <span class="mono" style="font-size:11px; color:var(--text-muted);">5DSf8…3Kk9</span>
+                  </div>
+                  <div class="data-card-body">
+                    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
+                      <div class="stat-item"><div class="stat-value">312.4</div><div class="stat-label">TAO Balance</div></div>
+                      <div class="stat-item"><div class="stat-value">148.2</div><div class="stat-label">Staked</div></div>
+                      <div class="stat-item"><div class="stat-value" style="color:var(--success);">+2.1%</div><div class="stat-label">30d Return</div></div>
+                    </div>
+                    <table class="data-table">
+                      <thead><tr><th>Subnet</th><th>Stake</th><th class="text-right">Return</th></tr></thead>
+                      <tbody>
+                        <tr><td><span style="color:var(--accent); font-weight:600;">14</span> — Inference</td><td>98.2 TAO</td><td class="text-right" style="color:var(--success);">+2.4%</td></tr>
+                        <tr><td><span style="color:var(--accent); font-weight:600;">8</span> — Image Gen</td><td>50.0 TAO</td><td class="text-right" style="color:var(--success);">+1.8%</td></tr>
+                      </tbody>
+                    </table>
+                    <!-- No-submit banner -->
+                    <div class="no-submit-banner">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                      Read-only. Staking requires external signer.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Composer -->
+          <div class="composer" style="padding:12px 20px;">
+            <div class="composer-input">
+              <textarea class="composer-textarea" rows="1" placeholder="Ask anything…"></textarea>
+              <button class="btn btn-primary btn-icon" style="flex-shrink:0;">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-3 6 3 6-12-6z" fill="currentColor"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 5 — Crypto Workspace Side Panel
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-panel">
+  <div class="screen-header">
+    <h2>Screen 5 — Crypto Workspace Side Panel</h2>
+    <span class="tag tag-screen">Screen</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        The crypto side panel gives structured access to all three Web3 verticals. It is accessible from the sidebar but does not dominate the interface. Each tab shows a one-line readiness status so users always know what is live, preview-only, or planned.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Four tabs: Bittensor, Hyperliquid, Polymarket, Workflows</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Per-venue readiness indicator — green/yellow/gray</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Prompt chips per tab — action-oriented, specific</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Safety copy per tab — explains the execution boundary</li>
+      </ul>
+    </div>
+    <div class="phone-frame" style="height: 680px;">
+      <div style="height:100%; display:flex; background:var(--bg-primary); overflow:hidden;">
+        <!-- Sidebar -->
+        <div class="sidebar" style="width:200px; flex-shrink:0;">
+          <div class="sidebar-header" style="padding:16px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#141414"/><path d="M16 6 L26 24 H6 Z" fill="none" stroke="#D1F2FF" stroke-width="1.8" stroke-linejoin="round"/><line x1="11" y1="16" x2="21" y2="16" stroke="#D1F2FF" stroke-width="1.5"/></svg>
+              <span style="font-size:13px; font-weight:700; color:var(--accent);">Matterhorn</span>
+            </div>
+          </div>
+          <div class="sidebar-nav">
+            <div class="sidebar-item active"><span class="sidebar-item-icon">💬</span> Chat</div>
+            <div class="sidebar-item" style="background:var(--accent-dim); color:var(--accent);"><span class="sidebar-item-icon">📊</span> Crypto <span class="sidebar-item-badge">Beta</span></div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">💪</span> Wellness</div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">⚡</span> Workflows</div>
+            <div style="height:1px; background:var(--border-subtle); margin:8px 0;"></div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">🕐</span> History</div>
+            <div class="sidebar-item"><span class="sidebar-item-icon">⚙️</span> Settings</div>
+          </div>
+        </div>
+        <!-- Main area with panel open -->
+        <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; border-left:1px solid var(--border-subtle);">
+          <!-- Empty chat -->
+          <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:32px;">
+            <div style="text-align:center; max-width:280px;">
+              <div style="font-size:32px; margin-bottom:16px;">💬</div>
+              <div style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:8px;">Web3 Research</div>
+              <div style="font-size:13px; color:var(--text-secondary); line-height:1.6;">Ask about Bittensor, Hyperliquid, Polymarket, or wellness workflows.</div>
+            </div>
+          </div>
+          <!-- Composer -->
+          <div class="composer" style="padding:12px 20px;">
+            <div class="composer-input">
+              <textarea class="composer-textarea" rows="1" placeholder="Ask anything…"></textarea>
+              <button class="btn btn-primary btn-icon" style="flex-shrink:0;"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8l12-6-3 6 3 6-12-6z" fill="currentColor"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <!-- Side panel -->
+        <div class="side-panel" style="width:300px; flex-shrink:0;">
+          <div class="side-panel-header">
+            <div style="font-size:13px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Web3 Tools</div>
+            <!-- Tabs -->
+            <div class="tabs" style="gap:0;">
+              <div class="tab active">📡<br><span style="font-size:10px;">Bitt</span></div>
+              <div class="tab">📊<br><span style="font-size:10px;">HL</span></div>
+              <div class="tab">🔮<br><span style="font-size:10px;">Poly</span></div>
+              <div class="tab">⚡<br><span style="font-size:10px;">Flow</span></div>
+            </div>
+          </div>
+          <div class="side-panel-body">
+            <!-- Bittensor tab content -->
+            <div>
+              <!-- Readiness -->
+              <div style="padding:12px; background:var(--success-dim); border:1px solid rgba(52,211,153,0.2); border-radius:8px; margin-bottom:12px; display:flex; align-items:flex-start; gap:8px;">
+                <div class="status-dot"></div>
+                <div>
+                  <div style="font-size:12px; font-weight:700; color:var(--success); margin-bottom:2px;">Bittensor — Beta Ready</div>
+                  <div style="font-size:11px; color:var(--text-secondary); line-height:1.5;">Read, preview, watch, receipt, external signer. No live subnet execution.</div>
+                </div>
+              </div>
+              <!-- Prompt chips -->
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:8px;">Ask</div>
+              <div class="chip-grid" style="margin-bottom:12px;">
+                <button class="chip"><span class="chip-icon">📡</span> Show my TAO</button>
+                <button class="chip"><span class="chip-icon">⚖️</span> Compare validators</button>
+                <button class="chip"><span class="chip-icon">📋</span> Watch subnet 14</button>
+                <button class="chip"><span class="chip-icon">🔍</span> Subnet 8 explainer</button>
+              </div>
+              <!-- Quick stats -->
+              <div class="data-card" style="margin-bottom:12px;">
+                <div class="data-card-header">
+                  <div class="data-card-title" style="font-size:12px;">Your Stake</div>
+                  <span class="badge badge-success badge-dot" style="font-size:10px;">Live</span>
+                </div>
+                <div style="padding:12px;">
+                  <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="font-size:12px; color:var(--text-secondary);">Balance</span>
+                    <span style="font-size:12px; font-weight:700; color:var(--accent);">312.4 TAO</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between;">
+                    <span style="font-size:12px; color:var(--text-secondary);">Staked</span>
+                    <span style="font-size:12px; font-weight:700; color:var(--text-primary);">148.2 TAO</span>
+                  </div>
+                </div>
+              </div>
+              <!-- Safety boundary -->
+              <div style="font-size:11px; color:var(--text-muted); line-height:1.5; padding:10px 12px; background:var(--bg-elevated); border-radius:6px; border-left:2px solid var(--border);">
+                Matterhorn reads public data only. Staking requires external signer handoff.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 6 — Bittensor Wallet/Subnet Card
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-bittensor-card">
+  <div class="screen-header">
+    <h2>Screen 6 — Bittensor Wallet Card</h2>
+    <span class="tag tag-card">Card</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        Bittensor cards appear inline in the chat transcript. They show wallet state, stake distribution, and validator comparison — all read from public chain data. The "External signer required" banner is non-negotiable on any action-oriented card.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Stat grid — balance, staked, 30d return</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Validator comparison table with trust scores</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> "No submit" banner — external signer required</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Beta-ready badge — honest status</li>
+      </ul>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <!-- Validator comparison card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>⚖️</span>
+            Validator Comparison — Subnet 14
+            <span class="badge badge-accent badge-dot" style="font-size:10px;">Beta</span>
+          </div>
+          <span class="caption">Updated 2m ago</span>
+        </div>
+        <div class="data-card-body">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Validator</th>
+                <th>Trust</th>
+                <th class="text-right">Stake</th>
+                <th class="text-right">Return</th>
+                <th class="text-right">Comm.</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">5Cf…Jk2</span></td>
+                <td><span class="badge badge-success" style="font-size:10px;">High</span></td>
+                <td class="text-right">24.1 TAO</td>
+                <td class="text-right" style="color:var(--success);">+3.2%</td>
+                <td class="text-right text-muted">8%</td>
+              </tr>
+              <tr>
+                <td><span style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">4Bn…Lp7</span></td>
+                <td><span class="badge badge-success" style="font-size:10px;">High</span></td>
+                <td class="text-right">18.4 TAO</td>
+                <td class="text-right" style="color:var(--success);">+2.8%</td>
+                <td class="text-right text-muted">10%</td>
+              </tr>
+              <tr>
+                <td><span style="font-family:var(--font-mono); font-size:11px; color:var(--text-secondary);">7Xz…Qm3</span></td>
+                <td><span class="badge badge-warning" style="font-size:10px;">Med</span></td>
+                <td class="text-right">12.0 TAO</td>
+                <td class="text-right" style="color:var(--warning);">+1.4%</td>
+                <td class="text-right text-muted">12%</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="no-submit-banner">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Read-only. Staking requires your external wallet signer.
+          </div>
+        </div>
+      </div>
+      <!-- Staking preview card -->
+      <div class="data-card card-accent">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>📋</span>
+            Staking Preview — Subnet 14
+          </div>
+          <span class="badge badge-warning" style="font-size:10px;">⚠ Preview only</span>
+        </div>
+        <div class="data-card-body">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Amount</td>
+              <td style="padding:6px 0; text-align:right; font-weight:700; color:var(--accent);">1.0 TAO</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Validator</td>
+              <td style="padding:6px 0; text-align:right; font-family:var(--font-mono); font-size:11px;">5Cf…Jk2</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Est. fee</td>
+              <td style="padding:6px 0; text-align:right; color:var(--text-primary);">~0.0008 TAO</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Source</td>
+              <td style="padding:6px 0; text-align:right; font-size:12px; color:var(--text-muted);">Bittensor API · fallback</td>
+            </tr>
+          </table>
+          <div class="no-submit-banner" style="margin-top:12px;">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            External signer required. Matterhorn will not sign, submit, or broadcast.
+          </div>
+          <button class="btn btn-secondary" style="width:100%; margin-top:12px; justify-content:center;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1L14 8H10v7H6V8H2L8 1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            Open External Signer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 7 — Hyperliquid Preview Card
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-hyperliquid-card">
+  <div class="screen-header">
+    <h2>Screen 7 — Hyperliquid Preview Card</h2>
+    <span class="tag tag-card">Card</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        Hyperliquid cards show position data and orderbook snapshots without requiring an API key. Every preview card carries a visible "Can Submit: No" badge. The action buttons are for informational preview only — there is no live submit path in the beta.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Position summary — size, entry, unrealized PnL</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> "Preview only" badge — no submit</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Orderbook snapshot with bid/ask</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Liquidation risk analysis</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> No API key required — public data only</li>
+      </ul>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <!-- Position card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>📊</span>
+            BTC/USDC — Your Position
+            <span class="badge badge-warning" style="font-size:10px;">Long</span>
+          </div>
+          <span class="badge badge-success badge-dot" style="font-size:10px;">Preview Only</span>
+        </div>
+        <div class="data-card-body">
+          <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);">
+            <div class="stat-item"><div class="stat-value" style="font-size:14px;">0.15</div><div class="stat-label">Size (BTC)</div></div>
+            <div class="stat-item"><div class="stat-value" style="font-size:14px;">$64,280</div><div class="stat-label">Entry</div></div>
+            <div class="stat-item"><div class="stat-value" style="font-size:14px; color:var(--success);">+$312</div><div class="stat-label">Unr. PnL</div></div>
+            <div class="stat-item"><div class="stat-value" style="font-size:14px;">18.4%</div><div class="stat-label">Margin</div></div>
+          </div>
+          <div class="no-submit-banner">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Can Submit: No · External signer required for any order
+          </div>
+        </div>
+      </div>
+      <!-- Orderbook preview card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>📈</span>
+            BTC/USDC Orderbook
+          </div>
+          <span class="caption">Live snapshot</span>
+        </div>
+        <div class="data-card-body" style="padding:16px;">
+          <!-- Bid side -->
+          <div style="margin-bottom:8px;">
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:6px;">Bids</div>
+            <div style="display:flex; flex-direction:column; gap:3px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 8px; background:rgba(52,211,153,0.08); border-radius:4px;">
+                <span style="color:var(--success); font-weight:600;">$64,312</span>
+                <span style="color:var(--text-secondary);">0.82 BTC</span>
+                <div style="width:60%; height:6px; background:var(--success); border-radius:3px; opacity:0.3;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 8px;">
+                <span style="color:var(--success); font-weight:600;">$64,305</span>
+                <span style="color:var(--text-secondary);">1.14 BTC</span>
+                <div style="width:80%; height:6px; background:var(--success); border-radius:3px; opacity:0.2;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 8px;">
+                <span style="color:var(--success); font-weight:600;">$64,298</span>
+                <span style="color:var(--text-secondary);">0.63 BTC</span>
+                <div style="width:45%; height:6px; background:var(--success); border-radius:3px; opacity:0.15;"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Spread -->
+          <div style="text-align:center; padding:6px 0; font-size:11px; color:var(--text-muted); border-top:1px solid var(--border-subtle); border-bottom:1px solid var(--border-subtle); margin-bottom:8px;">
+            Spread <span style="color:var(--text-primary); font-weight:600;">$14</span> · Top bid $64,312 · Top ask $64,326
+          </div>
+          <!-- Ask side -->
+          <div>
+            <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:6px;">Asks</div>
+            <div style="display:flex; flex-direction:column; gap:3px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 8px; background:rgba(248,113,113,0.08); border-radius:4px;">
+                <span style="color:var(--danger); font-weight:600;">$64,326</span>
+                <span style="color:var(--text-secondary);">0.91 BTC</span>
+                <div style="width:65%; height:6px; background:var(--danger); border-radius:3px; opacity:0.3;"></div>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; padding:4px 8px;">
+                <span style="color:var(--danger); font-weight:600;">$64,334</span>
+                <span style="color:var(--text-secondary);">1.28 BTC</span>
+                <div style="width:90%; height:6px; background:var(--danger); border-radius:3px; opacity:0.2;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="no-submit-banner">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            No API key needed · Read-only · No order submission
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 8 — Polymarket Compliance Card
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-polymarket-card">
+  <div class="screen-header">
+    <h2>Screen 8 — Polymarket Compliance Card</h2>
+    <span class="tag tag-card">Card</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        Polymarket cards surface market data, odds, and compliance state without requiring an account. Compliance information is informational only — never legal advice. Bet previews are unsigned and labeled "Preview only." No submission path exists in the beta.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Market question, odds, volume, end date</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Liquidity pool depth</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> US compliance block — amber, informational</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Bet preview card — unsigned, no submit</li>
+      </ul>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <!-- Market card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>🔮</span>
+            Polymarket Market
+          </div>
+          <span class="badge badge-muted" style="font-size:10px;">Public data</span>
+        </div>
+        <div class="data-card-body">
+          <div style="font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:12px; line-height:1.4;">
+            Will BTC exceed $100,000 by end of 2025?
+          </div>
+          <div class="stat-grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:12px;">
+            <div class="stat-item"><div class="stat-value" style="font-size:16px;">42¢</div><div class="stat-label">Yes price</div></div>
+            <div class="stat-item"><div class="stat-value" style="font-size:16px; color:var(--danger);">58¢</div><div class="stat-label">No price</div></div>
+            <div class="stat-item"><div class="stat-value" style="font-size:16px;">$2.4M</div><div class="stat-label">Volume</div></div>
+          </div>
+          <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:5px 0; color:var(--text-secondary);">Liquidity</td>
+              <td style="padding:5px 0; text-align:right; font-weight:600; color:var(--text-primary);">$1.8M</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:5px 0; color:var(--text-secondary);">Ends</td>
+              <td style="padding:5px 0; text-align:right; color:var(--text-primary);">Dec 31, 2025</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0; color:var(--text-secondary);">Market ID</td>
+              <td style="padding:5px 0; text-align:right; font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">0x3f5c…e921</td>
+            </tr>
+          </table>
+          <!-- Compliance block -->
+          <div class="compliance-block">
+            <div class="compliance-icon">🌐</div>
+            <div>
+              <div class="compliance-title">US Compliance — Informational Only</div>
+              <div class="compliance-text">This market may not be accessible to US persons. Compliance status is based on current geoblock data and is not legal advice. You are responsible for your own compliance.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Bet preview card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>📋</span>
+            Bet Preview — Yes @ 42¢
+          </div>
+          <span class="badge badge-warning" style="font-size:10px;">⚠ Preview only</span>
+        </div>
+        <div class="data-card-body">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Stake</td>
+              <td style="padding:6px 0; text-align:right; font-weight:700; color:var(--accent);">$10 USDC</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Price</td>
+              <td style="padding:6px 0; text-align:right;">42¢</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+              <td style="padding:6px 0; color:var(--text-secondary);">Est. fee</td>
+              <td style="padding:6px 0; text-align:right; color:var(--text-muted);">~$0.01</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0; color:var(--text-secondary);">Potential payout</td>
+              <td style="padding:6px 0; text-align:right; font-weight:700; color:var(--success);">$23.81</td>
+            </tr>
+          </table>
+          <div class="no-submit-banner">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Preview only · No Polymarket API key required · No submission in beta
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCREEN 9 — Wellness Artifact Card
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-wellness-card">
+  <div class="screen-header">
+    <h2>Screen 9 — Wellness Artifact Card</h2>
+    <span class="tag tag-card">Card</span>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="caption" style="margin-bottom:24px; color:var(--text-secondary); line-height:1.7; max-width:480px;">
+        Wellness artifact cards surface the structured output of the wellness creator workflow. Every card carries a mandatory disclaimer and clearly labels any service hook as "planned, not live." No medical claims, no payment processing, no email sending.
+      </p>
+      <ul style="list-style:none; display:flex; flex-direction:column; gap:8px;">
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Program plan — structured, session-by-session</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Artifact list — weekly plan, video script, checklist</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Non-medical disclaimer — mandatory on every card</li>
+        <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px;"><span style="color:var(--accent); font-weight:700;">→</span> Service hooks — labeled planned-not-live</li>
+      </ul>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:24px;">
+      <!-- Wellness artifact card -->
+      <div class="wellness-artifact">
+        <div class="wellness-artifact-header">
+          <div class="wellness-artifact-title" style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px;">💪</span>
+            4-Week Strength Plan — Client: Alex
+          </div>
+          <span class="badge badge-info" style="font-size:10px;">Artifact Generated</span>
+        </div>
+        <div class="wellness-artifact-body">
+          <div style="font-size:13px; color:var(--text-secondary); margin-bottom:16px; line-height:1.6;">
+            A progressive overload program designed for a beginner client over 4 weeks. Includes weekly volume increases, deload week, and movement variations. <strong style="color:var(--text-primary);">Not medical advice.</strong>
+          </div>
+          <!-- Artifact list -->
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-muted); margin-bottom:10px;">Generated Artifacts</div>
+          <ul class="artifact-list">
+            <li class="artifact-item">
+              <div class="artifact-item-icon">📋</div>
+              <div style="flex:1; min-width:0;">
+                <div class="artifact-item-name">Weekly Plan — Weeks 1–4</div>
+                <div class="artifact-item-meta">Markdown · Generated today</div>
+              </div>
+              <button class="btn btn-ghost btn-sm">View</button>
+            </li>
+            <li class="artifact-item">
+              <div class="artifact-item-icon">🎬</div>
+              <div style="flex:1; min-width:0;">
+                <div class="artifact-item-name">Video Script — Week 2 Demo</div>
+                <div class="artifact-item-meta">Markdown · Generated today</div>
+              </div>
+              <button class="btn btn-ghost btn-sm">View</button>
+            </li>
+            <li class="artifact-item">
+              <div class="artifact-item-icon">✅</div>
+              <div style="flex:1; min-width:0;">
+                <div class="artifact-item-name">Client Checklist</div>
+                <div class="artifact-item-meta">Markdown · Generated today</div>
+              </div>
+              <button class="btn btn-ghost btn-sm">View</button>
+            </li>
+            <li class="artifact-item">
+              <div class="artifact-item-icon">📈</div>
+              <div style="flex:1; min-width:0;">
+                <div class="artifact-item-name">Progress Tracker</div>
+                <div class="artifact-item-meta">Markdown · Generated today</div>
+              </div>
+              <button class="btn btn-ghost btn-sm">View</button>
+            </li>
+          </ul>
+          <!-- Disclaimer -->
+          <div class="disclaimer-banner">
+            ⚠ This content is for general fitness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program.
+          </div>
+        </div>
+      </div>
+      <!-- Service hooks card -->
+      <div class="data-card">
+        <div class="data-card-header">
+          <div class="data-card-title">
+            <span>🔗</span>
+            Service Hooks — Delivery Stage
+          </div>
+          <span class="badge badge-muted" style="font-size:10px;">Planned · Not Live</span>
+        </div>
+        <div class="data-card-body" style="padding:16px;">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--bg-elevated); border-radius:8px; border:1px solid var(--border-subtle);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">🗄️</span>
+                <div>
+                  <div style="font-size:13px; font-weight:600; color:var(--text-primary);">Artifact Storage</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Decentralized hosting for client files</div>
+                </div>
+              </div>
+              <span class="badge badge-muted" style="font-size:10px;">Planned</span>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--bg-elevated); border-radius:8px; border:1px solid var(--border-subtle);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">📧</span>
+                <div>
+                  <div style="font-size:13px; font-weight:600; color:var(--text-primary);">Client Email Updates</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Automated progress check-ins</div>
+                </div>
+              </div>
+              <span class="badge badge-muted" style="font-size:10px;">Planned</span>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--bg-elevated); border-radius:8px; border:1px solid var(--border-subtle);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">💳</span>
+                <div>
+                  <div style="font-size:13px; font-weight:600; color:var(--text-primary);">Payments</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Creator receives, Matterhorn routes</div>
+                </div>
+              </div>
+              <span class="badge badge-muted" style="font-size:10px;">Planned</span>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--bg-elevated); border-radius:8px; border:1px solid var(--border-subtle);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">🔐</span>
+                <div>
+                  <div style="font-size:13px; font-weight:600; color:var(--text-primary);">Token Gated Access</div>
+                  <div style="font-size:11px; color:var(--text-muted);">Premium program gating</div>
+                </div>
+              </div>
+              <span class="badge badge-muted" style="font-size:10px;">Planned</span>
+            </div>
+          </div>
+          <div style="margin-top:12px; font-size:11px; color:var(--text-muted); text-align:center; line-height:1.6;">
+            No live service execution · No real payments, emails, or storage in beta
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     DESIGN SYSTEM
+═══════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-design-system">
+  <div class="screen-header">
+    <h2>Design System</h2>
+    <span class="tag tag-design">Reference</span>
+  </div>
+  <div class="two-col" style="margin-bottom:32px;">
+    <div>
+      <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Color Palette</h3>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch-color" style="background:#0C0C0C; border:1px solid #2A2A2A;"></div><div class="swatch-label">bg-primary</div><div class="swatch-hex">#0C0C0C</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#141414;"></div><div class="swatch-label">bg-surface</div><div class="swatch-hex">#141414</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#1C1C1C;"></div><div class="swatch-label">bg-elevated</div><div class="swatch-hex">#1C1C1C</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#D1F2FF; border:1px solid rgba(209,242,255,0.3);"></div><div class="swatch-label">accent</div><div class="swatch-hex">#D1F2FF</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#34D399;"></div><div class="swatch-label">success</div><div class="swatch-hex">#34D399</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#FBBF24;"></div><div class="swatch-label">warning</div><div class="swatch-hex">#FBBF24</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#F87171;"></div><div class="swatch-label">danger</div><div class="swatch-hex">#F87171</div></div>
+        <div class="swatch"><div class="swatch-color" style="background:#2A2A2A;"></div><div class="swatch-label">border</div><div class="swatch-hex">#2A2A2A</div></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Typography Scale</h3>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="font-size:32px; font-weight:700; letter-spacing:-1px; color:var(--text-primary);">Display — 32px Bold</div>
+        <div style="font-size:24px; font-weight:700; letter-spacing:-0.4px; color:var(--text-primary);">Heading — 24px Bold</div>
+        <div style="font-size:17px; font-weight:600; color:var(--text-primary);">Subheading — 17px Semibold</div>
+        <div style="font-size:15px; color:var(--text-primary);">Body — 15px Regular</div>
+        <div style="font-size:13px; color:var(--text-secondary);">Caption — 13px Secondary</div>
+        <div style="font-size:11px; color:var(--text-muted);">Micro — 11px Muted</div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:32px;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Prompt Chips</h3>
+    <div class="chip-grid">
+      <button class="chip active"><span class="chip-icon">📡</span> Show my TAO</button>
+      <button class="chip"><span class="chip-icon">⚖️</span> Compare validators on subnet 14</button>
+      <button class="chip"><span class="chip-icon">📊</span> Show Hyperliquid BTC orderbook</button>
+      <button class="chip"><span class="chip-icon">🔮</span> Summarize Polymarket market</button>
+      <button class="chip"><span class="chip-icon">💪</span> Create a 4-week training plan</button>
+      <button class="chip"><span class="chip-icon">🔗</span> Build a customer onboarding workflow</button>
+    </div>
+  </div>
+  <div style="margin-bottom:32px;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Buttons</h3>
+    <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+      <button class="btn btn-primary">Primary</button>
+      <button class="btn btn-secondary">Secondary</button>
+      <button class="btn btn-ghost">Ghost</button>
+      <button class="btn btn-danger">Danger</button>
+      <button class="btn btn-primary btn-sm">Small</button>
+      <button class="btn btn-primary btn-lg">Large</button>
+    </div>
+  </div>
+  <div style="margin-bottom:32px;">
+    <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">Badges</h3>
+    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+      <span class="badge badge-success badge-dot">Beta Ready</span>
+      <span class="badge badge-warning badge-dot">Preview Only</span>
+      <span class="badge badge-danger badge-dot">Blocked</span>
+      <span class="badge badge-info">Artifact</span>
+      <span class="badge badge-accent">External Signer</span>
+      <span class="badge badge-muted">Planned</span>
+    </div>
+  </div>
+  <div>
+    <h3 style="font-size:16px; font-weight:700; color:var(--text-primary); margin-bottom:12px;">No-Submit Banners</h3>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div class="no-submit-banner">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6l1.5 1.5L8 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Read-only. Staking requires external signer. Matterhorn will not sign, submit, or broadcast.
+      </div>
+      <div class="compliance-block" style="max-width:400px;">
+        <div class="compliance-icon">🌐</div>
+        <div>
+          <div class="compliance-title">US Compliance — Informational Only</div>
+          <div class="compliance-text">This market may not be accessible to US persons.</div>
+        </div>
+      </div>
+      <div class="disclaimer-banner" style="max-width:400px;">
+        ⚠ General fitness education only. Not medical advice, diagnosis, or treatment.
+      </div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /showcase-body -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     TAB NAVIGATION SCRIPT
+═══════════════════════════════════════════════════════════ -->
+<script>
+  const tabs = document.querySelectorAll('[data-tab]');
+  const screens = document.querySelectorAll('.screen');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      const target = tab.dataset.tab;
+      screens.forEach(s => s.classList.remove('active'));
+      const targetScreen = document.getElementById('screen-' + target);
+      if (targetScreen) targetScreen.classList.add('active');
+
+      targetScreen?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
+
+</body>
+</html>
