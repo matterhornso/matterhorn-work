@@ -546,7 +546,7 @@ function UiControlConnectionDetails(props: { launchCommand?: string[]; environme
 
       <Card variant="outline" size="sm">
         <CardHeader>
-          <CardTitle>OpenCode</CardTitle>
+          <CardTitle>Matterhorn-Code</CardTitle>
         </CardHeader>
         <CardContent>
           <pre className="max-h-[180px] overflow-x-auto rounded-xl border border-border p-3 text-xs leading-relaxed text-card-foreground">

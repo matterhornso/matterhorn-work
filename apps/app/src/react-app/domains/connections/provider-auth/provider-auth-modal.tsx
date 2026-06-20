@@ -49,7 +49,7 @@ type ProviderOAuthSession = ProviderOAuthStartResult & {
 
 const PROVIDER_LABELS: Record<string, string> = {
   matterhorn: "Matterhorn Work",
-  opencode: "OpenCode Zen",
+  opencode: "Matterhorn-Code Zen",
   openai: "OpenAI",
   anthropic: "Anthropic",
   google: "Google",
@@ -691,7 +691,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
       return method.description ?? "Use the provider and credential managed by your organization.";
     }
     if (isOpencodeZenProvider(entry.id)) {
-      return "Sign in to OpenCode Zen with an API key to unlock paid models alongside the free tier.";
+      return "Sign in to Matterhorn-Code Zen with an API key to unlock paid models alongside the free tier.";
     }
     return "Paste a secret key that Matterhorn stores locally on this device.";
   };
@@ -854,7 +854,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                       <div className="text-sm font-medium text-gray-12">{selectedEntry.name}</div>
                       <div className="text-xs text-gray-10 mt-1">
                         {isOpencodeZenProvider(selectedEntry.id)
-                          ? "Sign in to OpenCode Zen with an API key from opencode.ai/auth."
+                          ? "Sign in to Matterhorn-Code Zen with an API key from opencode.ai/auth."
                           : "Paste your API key to connect."}
                       </div>
                     </div>
@@ -865,7 +865,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                   {isOpencodeZenProvider(selectedEntry.id) ? (
                     <div className="rounded-lg border border-indigo-5/30 bg-indigo-3/15 px-3 py-2.5 text-xs text-indigo-12 space-y-1.5">
                       <div>
-                        OpenCode Zen gives you access to the best coding models. Free models keep working without a key.
+                        Matterhorn-Code Zen gives you access to the best coding models. Free models keep working without a key.
                       </div>
                       <button
                         type="button"
@@ -896,7 +896,7 @@ export default function ProviderAuthModal(props: ProviderAuthModalProps) {
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-[11px] text-gray-9">Keys are stored locally by OpenCode.</div>
+                    <div className="text-[11px] text-gray-9">Keys are stored locally by Matterhorn Work engine.</div>
                     <Button
                       onClick={handleApiSubmit}
                       disabled={actionDisabled || !apiKeyInput.trim()}
