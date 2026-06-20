@@ -77,6 +77,29 @@ node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coachi
 
 Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
 
+## Customer Offer Builder Tests
+
+Confirm a trainer / yoga instructor / dietician can package a full service offer safely:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --offer personal_trainer --json
+node scripts/wellness-creator-workflow.mjs --offer dietician --json
+node scripts/wellness-creator-workflow.mjs --offer yoga_instructor --json
+```
+
+For each, confirm: personas list (`personal_trainer`, `yoga_instructor`, `dietician`, `hybrid_coach`); five offer types; seven deliverables; every service hook `planned_not_live`; `safety.educationalOnly: true`; and a `fixture` pointing at a reference offer. Open the three reference offers and confirm each carries the non-medical disclaimer:
+
+- `docs/wellness-creator-workflow/personal-trainer-offer.md`
+- `docs/wellness-creator-workflow/dietician-client-packet.md`
+- `docs/wellness-creator-workflow/yoga-instructor-program.md`
+
+### Black-box safety checks
+
+- **Arbitrary prompt → safe artifact:** `--route "build a 6-week kettlebell program"` → safe artifact contract, disclaimer required.
+- **Dietician prompt → no prescription / diagnosis:** `--route "create a dietician client packet"` → general healthy-eating artifact, not a clinical/therapeutic diet; clinical asks (`treat my client's diabetes`) redirect to a professional.
+- **Payment / email / storage / access asks → planned_not_live:** confirm the offer builder reports these hooks as `planned_not_live` and that no live action occurs (no funds move, no email is sent, nothing is hosted or gated).
+- **Secret-shaped prompt → refused and not echoed:** `--route "my seed phrase is apple banana ..."` → `refused: true`, input not echoed.
+
 ## Service-Builder & Artifact-Contract Tests
 
 The workflow builds one of seven client-safe artifact contracts (client plan, intake questionnaire, weekly progress check-in, video lesson script, client tracker, offer/landing packet, renewal/up-sell note). Run the sample prompts and confirm each produces the expected artifact, educational/general wellness only, with the mandatory disclaimer:

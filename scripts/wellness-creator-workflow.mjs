@@ -208,6 +208,77 @@ const DELIVERY_GUARANTEES = [
   "No live decentralized storage publish happens.",
 ];
 
+// ---- Wellness Creator Customer Offer Builder ----
+// A complete, customer-safe layer for trainers, yoga instructors, and
+// dieticians to package and deliver their services through Matterhorn Work.
+// Everything is artifact-first and offline: no payment, email, hosting, or
+// access action happens.
+const OFFER_PERSONAS = ["personal_trainer", "yoga_instructor", "dietician", "hybrid_coach"];
+const OFFER_PERSONA_LABELS = {
+  personal_trainer: "Personal trainer",
+  yoga_instructor: "Yoga instructor",
+  dietician: "Dietician",
+  hybrid_coach: "Hybrid coach",
+};
+const OFFER_TYPES = [
+  { id: "starter_4_week", name: "4-week starter" },
+  { id: "transformation_8_week", name: "8-week transformation" },
+  { id: "group_cohort", name: "Group cohort" },
+  { id: "corporate_wellness", name: "Corporate wellness" },
+  { id: "habit_reset", name: "Habit reset" },
+];
+const OFFER_DELIVERABLES = [
+  { id: "offer_page", name: "Offer page", artifactContract: "offer_landing_packet" },
+  { id: "client_intake", name: "Client intake", artifactContract: "intake_questionnaire" },
+  { id: "weekly_plan", name: "Weekly plan", artifactContract: "client_plan" },
+  { id: "video_script", name: "Video script", artifactContract: "video_lesson_script" },
+  { id: "progress_tracker", name: "Progress tracker", artifactContract: "client_tracker" },
+  { id: "check_in_note", name: "Check-in note", artifactContract: "progress_check_in" },
+  { id: "renewal_offer", name: "Renewal offer", artifactContract: "renewal_upsell_note" },
+];
+const OFFER_SERVICE_HOOKS = [
+  { id: "storage-hosting", name: "Storage / hosting", status: "planned_not_live" },
+  { id: "payments", name: "Payments", status: "planned_not_live" },
+  { id: "email", name: "Email", status: "planned_not_live" },
+  { id: "identity-access", name: "Identity / access", status: "planned_not_live" },
+];
+const OFFER_SAFETY = {
+  educationalOnly: true,
+  noMedicalDiagnosis: true,
+  noTreatmentPlan: true,
+  noPaymentProcessing: true,
+  noEmailSending: true,
+  noHosting: true,
+  noTokenGating: true,
+  noSecrets: true,
+};
+const OFFER_FIXTURES = {
+  personal_trainer: `${FIXTURE_DIR}/personal-trainer-offer.md`,
+  dietician: `${FIXTURE_DIR}/dietician-client-packet.md`,
+  yoga_instructor: `${FIXTURE_DIR}/yoga-instructor-program.md`,
+};
+
+function buildOfferBuilder(persona = null) {
+  const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
+  return {
+    title: "Wellness Creator Customer Offer Builder",
+    notCustomApp: true,
+    educationalOnly: true,
+    personas: OFFER_PERSONAS,
+    persona: resolved,
+    personaLabel: resolved ? OFFER_PERSONA_LABELS[resolved] : null,
+    offerTypes: OFFER_TYPES,
+    deliverables: OFFER_DELIVERABLES,
+    serviceHooks: OFFER_SERVICE_HOOKS,
+    plannedNotLive: DELIVERY_GUARANTEES,
+    safety: OFFER_SAFETY,
+    fixtures: OFFER_FIXTURES,
+    fixture: resolved ? OFFER_FIXTURES[resolved] ?? null : null,
+    disclaimer: DISCLAIMERS.general,
+    note: "Package and deliver a wellness service as client-safe artifacts. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
+  };
+}
+
 const DEMO_CHECKLIST = [
   "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
   "Run `node scripts/wellness-creator-workflow.mjs --json` and read the full workflow contract.",
@@ -657,6 +728,7 @@ function buildContract() {
       };
     }),
     matterhornBeyondWeb3: MATTERHORN_BEYOND_WEB3,
+    offerBuilder: buildOfferBuilder(),
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
@@ -818,6 +890,58 @@ function runCheck() {
     }
   }
 
+  // Customer Offer Builder layer.
+  const offer = contract.offerBuilder;
+  if (!offer) {
+    failures.push("offerBuilder must be present in the contract.");
+  } else {
+    for (const persona of ["personal_trainer", "yoga_instructor", "dietician", "hybrid_coach"]) {
+      if (!offer.personas.includes(persona)) failures.push(`offerBuilder.personas should include ${persona}.`);
+    }
+    if (!Array.isArray(offer.offerTypes) || offer.offerTypes.length < 5) {
+      failures.push("offerBuilder.offerTypes should include the five offer types.");
+    }
+    if (!Array.isArray(offer.deliverables) || offer.deliverables.length < 7) {
+      failures.push("offerBuilder.deliverables should include the seven deliverables.");
+    }
+    for (const hook of offer.serviceHooks || []) {
+      if (hook.status !== "planned_not_live") {
+        failures.push(`offerBuilder service hook ${hook.id} must be planned_not_live.`);
+      }
+    }
+    for (const flagKey of [
+      "educationalOnly",
+      "noMedicalDiagnosis",
+      "noTreatmentPlan",
+      "noPaymentProcessing",
+      "noEmailSending",
+      "noHosting",
+      "noTokenGating",
+    ]) {
+      if (offer.safety?.[flagKey] !== true) failures.push(`offerBuilder.safety.${flagKey} must be true.`);
+    }
+    // Each persona offer must resolve and (for the three with fixtures) be a real file.
+    for (const persona of OFFER_PERSONAS) {
+      const built = buildOfferBuilder(persona);
+      if (built.persona !== persona) failures.push(`buildOfferBuilder(${persona}) should resolve the persona.`);
+    }
+    for (const [persona, relPath] of Object.entries(OFFER_FIXTURES)) {
+      const abs = join(repoRoot, relPath);
+      if (!existsSync(abs)) {
+        failures.push(`Offer fixture missing for ${persona}: ${relPath}`);
+        continue;
+      }
+      const fixture = readFileSync(abs, "utf8");
+      if (!fixture.includes("not medical advice, diagnosis, or treatment")) {
+        failures.push(`Offer fixture ${relPath} must carry the non-medical disclaimer.`);
+      }
+      for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+        const match = fixture.match(re);
+        if (match) failures.push(`Offer fixture ${relPath} contains a forbidden string: "${match[0]}"`);
+      }
+    }
+  }
+
   // Exposed through the existing generic Matterhorn workflow surfaces.
   const gs = contract.genericSurfaces;
   if (gs?.notCustomApp !== true) failures.push("genericSurfaces.notCustomApp must be true.");
@@ -901,6 +1025,19 @@ function main() {
     const idx = args.indexOf("--route");
     const prompt = args[idx + 1] ?? "";
     process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "route", ...routeFreeformPrompt(prompt) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--offer")) {
+    const idx = args.indexOf("--offer");
+    const persona = args[idx + 1] ?? "";
+    if (!OFFER_PERSONAS.includes(persona)) {
+      const message = `Unknown offer persona "${persona}". Expected one of: ${OFFER_PERSONAS.join(", ")}.`;
+      process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "offer", ...buildOfferBuilder(persona) }, null, 2)}\n`);
     return;
   }
 

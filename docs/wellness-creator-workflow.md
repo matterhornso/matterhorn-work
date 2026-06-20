@@ -195,6 +195,30 @@ Realistic prompts and the artifact each produces. Every output is educational/ge
 
 **Clinical / sensitive prompts redirect** (no artifact): anything that asks to diagnose, prescribe, treat a condition/injury, or that is pregnancy- or eating-disorder-specific returns a referral to a qualified professional. **Secret-shaped text is refused** and never echoed.
 
+## Customer Offer Builder
+
+The **Wellness Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Work is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.
+
+- **Personas:** `personal_trainer`, `yoga_instructor`, `dietician`, `hybrid_coach`.
+- **Offer types:** 4-week starter, 8-week transformation, group cohort, corporate wellness, habit reset.
+- **Deliverables:** offer page, client intake, weekly plan, video script, progress tracker, check-in note, renewal offer (each maps to a workflow artifact contract).
+- **Service hooks:** storage/hosting, payments, email, identity/access — all explicitly **`planned_not_live`**.
+- **Safety:** educational only; no medical diagnosis, no treatment plan, no payment processing, no email sending.
+
+Inspect a persona's offer builder:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --offer personal_trainer --json
+node scripts/wellness-creator-workflow.mjs --offer dietician --json
+node scripts/wellness-creator-workflow.mjs --offer yoga_instructor --json
+```
+
+Reproducible reference offers (customer-demo safe, with non-medical disclaimers):
+
+- [`personal-trainer-offer.md`](./wellness-creator-workflow/personal-trainer-offer.md)
+- [`dietician-client-packet.md`](./wellness-creator-workflow/dietician-client-packet.md)
+- [`yoga-instructor-program.md`](./wellness-creator-workflow/yoga-instructor-program.md)
+
 ## How This Demonstrates Matterhorn Beyond Web3
 
 Wellness Creator is Matterhorn's **first Web2 / customer-business workflow**. A trainer, yoga instructor, dietician, or coach does real client work through the **same chat/workflow system** as the Web3 workspaces (Bittensor, Hyperliquid, Polymarket) — no crypto knowledge and no custom vertical app required.
