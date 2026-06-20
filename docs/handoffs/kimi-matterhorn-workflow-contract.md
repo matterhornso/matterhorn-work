@@ -292,9 +292,9 @@ All GitHub checks on PR #423 passed:
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
-## PR #TBD: Customer Workflow Template Registry
+## PR #436: Customer Workflow Template Registry
 
-**PR:** TBD — opened from `kimi/customer-workflow-template-registry` to `dev`  
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/436  
 **Branch:** `kimi/customer-workflow-template-registry`  
 **Scope:** Customer-facing workflow template registry for chat-first goal selection. Extends the generic workflow contract with copy-paste prompts, promises, expected artifacts, forbidden inputs, handoff/receipt support, and service hook metadata.
 
@@ -346,7 +346,7 @@ Every customer template sets `liveExecutionEnabled: false`, `canSubmit: false`, 
 
 `scripts/matterhorn-workflow-catalog.test.mjs` additionally verifies that the main catalog JSON includes `customerTemplates` with six entries and the same safety baseline.
 
-### Commands that pass on PR #TBD
+### Commands that pass on PR #436
 
 ```bash
 pnpm --dir packages/types build
@@ -357,7 +357,7 @@ pnpm test:matterhorn-customer-workflow-template-registry
 pnpm test:matterhorn-workflow-catalog
 ```
 
-### CI status on PR #TBD
+### CI status on PR #436
 
 Pending merge.
 
