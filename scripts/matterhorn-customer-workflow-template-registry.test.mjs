@@ -26,6 +26,9 @@ assert.equal(
 for (const token of [
   "MatterhornCustomerWorkflowTemplate",
   "MatterhornCustomerWorkflowStatus",
+  "MatterhornCustomerWorkflowLaunchMetadata",
+  "MatterhornCustomerWorkflowUiMetadata",
+  "MatterhornCustomerWorkflowRoutingMetadata",
   "MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY",
 ]) {
   assert.ok(types.includes(token), `types missing customer workflow template token: ${token}`);
@@ -78,6 +81,35 @@ for (const template of catalog.customerTemplates) {
   assert.ok(Array.isArray(template.forbiddenInputs), `${template.id} must declare forbidden inputs`);
   assert.ok(Array.isArray(template.serviceHooks), `${template.id} must declare service hooks`);
   assert.ok(template.safetyBoundaries, `${template.id} must declare safety boundaries`);
+  assert.ok(template.launch, `${template.id} must declare launch metadata`);
+  assert.ok(template.ui, `${template.id} must declare ui metadata`);
+  assert.ok(template.routing, `${template.id} must declare routing metadata`);
+
+  assert.ok(template.launch.primaryCta, `${template.id} launch.primaryCta is required`);
+  assert.ok(template.launch.defaultPrompt, `${template.id} launch.defaultPrompt is required`);
+  assert.ok(
+    ["protocol_desk", "workflow_chat", "evidence_packet", "future_service"].includes(
+      template.launch.recommendedSurface,
+    ),
+    `${template.id} launch.recommendedSurface must be a known surface`,
+  );
+  assert.ok(template.ui.iconHint, `${template.id} ui.iconHint is required`);
+  assert.ok(
+    ["matterhorn_blue", "neutral", "caution"].includes(template.ui.accent),
+    `${template.id} ui.accent must be a known accent`,
+  );
+  assert.ok(template.ui.shortDescription, `${template.id} ui.shortDescription is required`);
+  assert.ok(
+    template.ui.shortDescription.length <= 90,
+    `${template.id} ui.shortDescription must be <= 90 chars (got ${template.ui.shortDescription.length})`,
+  );
+  assert.equal(template.routing.startsSession, true, `${template.id} routing.startsSession must be true`);
+  assert.ok(
+    ["bittensor", "hyperliquid", "polymarket", "wellness", "services", "general"].includes(
+      template.routing.chatMode,
+    ),
+    `${template.id} routing.chatMode must be a known mode`,
+  );
 
   const safety = template.safetyBoundaries;
   assert.equal(safety.liveExecutionEnabled, false, `${template.id} must not enable live execution`);
@@ -87,9 +119,47 @@ for (const template of catalog.customerTemplates) {
   assert.equal(safety.acceptsApiSecrets, false, `${template.id} must not accept API secrets`);
   assert.equal(safety.acceptsRawSignatures, false, `${template.id} must not accept raw signatures`);
   assert.equal(safety.allowsRealFunds, false, `${template.id} must not allow real funds`);
+
+  // Launch prompts must never ask for secrets or signing material.
+  const launchText = `${template.launch.defaultPrompt} ${template.launch.handoffContextLabel}`.toLowerCase();
+  for (const forbidden of [
+    "private key",
+    "seed phrase",
+    "mnemonic",
+    "api secret",
+    "raw signature",
+    "signed payload",
+    "signed order",
+    "wallet export",
+  ]) {
+    assert.equal(
+      launchText.includes(forbidden),
+      false,
+      `${template.id} launch prompt must not ask for ${forbidden}`,
+    );
+  }
 }
 
-// 6. Crypto/market templates stay preview-only or handoff-only.
+// 6. Market templates include preview-only wording.
+for (const id of ["hyperliquid_trader", "polymarket_researcher"]) {
+  const template = catalog.customerTemplates.find((t) => t.id === id);
+  const safetyText = `${template.summary} ${template.promise} ${template.ui.shortDescription} ${template.handoffReceiptSupport.description ?? ""}`.toLowerCase();
+  assert.ok(
+    /preview|read-only|no live submission|can submit: no/.test(safetyText),
+    `${id} must include preview-only wording in prompt or safety text`,
+  );
+}
+
+// 7. Wellness template includes non-medical / educational safety.
+const wellness = catalog.customerTemplates.find((t) => t.id === "wellness_creator_workflow");
+assert.ok(wellness, "wellness_creator_workflow must exist");
+const wellnessSafetyText = `${wellness.promise} ${wellness.summary} ${wellness.ui.shortDescription}`.toLowerCase();
+assert.ok(
+  /medical advice|not medical|educational|without giving medical/.test(wellnessSafetyText),
+  "wellness template must include non-medical/educational safety wording",
+);
+
+// 8. Crypto/market templates stay preview-only or handoff-only.
 const bittensor = catalog.customerTemplates.find((t) => t.id === "bittensor_operator");
 assert.ok(bittensor, "bittensor_operator template must exist");
 assert.equal(bittensor.status, "beta_ready");
@@ -109,7 +179,7 @@ for (const id of ["hyperliquid_trader", "polymarket_researcher"]) {
   assert.equal(template.safetyBoundaries.requiresExternalSigner, false, `${id} must not require external signer`);
 }
 
-// 7. Wellness and decentralized services templates are planned-not-live.
+// 9. Wellness and decentralized services templates are planned-not-live.
 for (const id of ["wellness_creator_workflow", "decentralized_services_operator"]) {
   const template = catalog.customerTemplates.find((t) => t.id === id);
   assert.ok(template, `${id} template must exist`);
@@ -124,7 +194,7 @@ for (const id of ["wellness_creator_workflow", "decentralized_services_operator"
   }
 }
 
-// 8. Blank chat template has no hooks, artifacts, or context and stays safe.
+// 10. Blank chat template has no hooks, artifacts, or context and stays safe.
 const blank = catalog.customerTemplates.find((t) => t.id === "blank_chat_workflow");
 assert.ok(blank, "blank_chat_workflow template must exist");
 assert.equal(blank.status, "blank");
@@ -135,7 +205,7 @@ assert.deepEqual(blank.serviceHooks, []);
 assert.equal(blank.safetyBoundaries.canExecute, false);
 assert.equal(blank.safetyBoundaries.requiresExternalSigner, false);
 
-// 9. Filtering works.
+// 11. Filtering works.
 const categoryResult = run(["--category", "markets"]);
 assert.equal(categoryResult.status, 0, `category filter should exit 0. stderr=${categoryResult.stderr}`);
 const categoryCatalog = JSON.parse(categoryResult.stdout);
@@ -149,7 +219,7 @@ assert.equal(singleResult.status, 0, `single template filter should exit 0. stde
 const singleCatalog = JSON.parse(singleResult.stdout);
 assert.deepEqual(singleCatalog.customerTemplates.map((t) => t.id), ["bittensor_operator"]);
 
-// 10. Credential-shaped flags are rejected.
+// 12. Credential-shaped flags are rejected.
 const reject = spawnSync(
   process.execPath,
   ["scripts/matterhorn-workflow-template-registry.mjs", "--json", "--private-key", "redacted"],
