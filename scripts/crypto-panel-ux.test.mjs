@@ -72,6 +72,7 @@ for (const phrase of [
   "Local Matterhorn API unavailable for /api/crypto/readiness",
   "This blocks live customer evidence collection until the local server/auth token is healthy",
   "Local API check",
+  "Check pending",
   "You can still copy the evidence commands below for a terminal check.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel safety copy should include: ${phrase}`);
