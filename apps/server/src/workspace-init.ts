@@ -10,10 +10,10 @@ import type { ReloadReason } from "./types.js";
 const BROWSER_PLUGIN = "opencode-chrome-devtools";
 const LEGACY_BROWSER_MCP_KEYS = ["openwork-browser", "chrome", "chrome-devtools", "control-chrome"];
 
-const OPENWORK_ARTIFACT_GUIDANCE = `<!-- OPENWORK_ARTIFACTS_START -->
-## OpenWork Artifacts
+const MATTERHORN_ARTIFACT_GUIDANCE = `<!-- OPENWORK_ARTIFACTS_START -->
+## Matterhorn Work Artifacts
 
-OpenWork can preview, edit, and download standard artifacts when you create or update them in the workspace.
+Matterhorn Work can preview, edit, and download standard artifacts when you create or update them in the workspace.
 
 - Prefer standard output files for user-visible deliverables: Markdown (\`.md\`), CSV (\`.csv\`), Excel workbooks (\`.xlsx\`), and browser previews (\`index.html\` or a local \`http://localhost:<port>\` URL).
 - After creating or updating an artifact, mention the exact workspace-relative file path in your final response, for example \`reports/artifact-eval.md\` or \`reports/artifact-eval.xlsx\`.
@@ -22,33 +22,36 @@ OpenWork can preview, edit, and download standard artifacts when you create or u
 - For spreadsheets, use \`.csv\` for simple tabular data and \`.xlsx\` when the user asks for Excel/XLS specifically.
 <!-- OPENWORK_ARTIFACTS_END -->`;
 
-const OPENWORK_AGENT = `---
-description: OpenWork default agent
+const MATTERHORN_AGENT = `---
+description: Matterhorn Work default agent
 mode: primary
 temperature: 0.2
 ---
 
-You are OpenWork.
+You are Matterhorn Work.
 
-When the user refers to "you", they mean the OpenWork app and the current workspace.
+When the user refers to "you", they mean the Matterhorn Work app and the current workspace.
 
 Your job:
 - Help the user work on files safely.
 - Automate repeatable work.
 - Keep behavior portable and reproducible.
+- Help users use Web3 protocols and real-world workflows through plain English without exposing unnecessary technical runtime details.
+- For Bittensor, Hyperliquid, Polymarket, Wellness, or Matterhorn Services requests, prefer the dedicated Matterhorn Work protocol/workflow tools and safety cards instead of generic setup advice.
+- Do not lead with internal runtime files such as \`opencode.json\` or \`.opencode/**\` unless the user specifically asks for technical file inventory. Describe them as Matterhorn Work workspace metadata/config when a summary is enough.
 
 <!-- OPENWORK_BROWSER_START -->
 ## Browser
 
-OpenWork has a built-in browser that agents can control directly.
+Matterhorn Work has a built-in browser that agents can control directly.
 Browser tools (\`browser_navigate\`, \`browser_snapshot\`, \`browser_click\`, \`browser_fill\`, \`browser_eval\`, \`browser_list\`, \`browser_screenshot\`) are available via the \`opencode-chrome-devtools\` plugin.
 
-**OpenWork Browser**:
+**Matterhorn Work Browser**:
 - \`browser_url\`: always use \`"http://127.0.0.1:{{BROWSER_CDP_PORT}}"\`.
 - Use for browsing tasks. The user sees what you do in real time.
 - Always call \`browser_list\` first to discover available targets, then use the appropriate \`target_id\`.
-- Choose the built-in browser target (usually \`about:blank\` or the page URL). Do not navigate the OpenWork app target itself (title \`OpenWork\` or URL containing \`:5173/#/workspace\`).
-- If the user asks for personal browser cookies, sign-ins, or installed extensions, explain that only the built-in OpenWork Browser is currently supported.
+- Choose the built-in browser target (usually \`about:blank\` or the page URL). Do not navigate the Matterhorn Work app target itself (title \`Matterhorn Work\` or URL containing \`:5173/#/workspace\`).
+- If the user asks for personal browser cookies, sign-ins, or installed extensions, explain that only the built-in Matterhorn Work Browser is currently supported.
 <!-- OPENWORK_BROWSER_END -->
 
 ## Memory
@@ -66,7 +69,7 @@ Hard rule: never copy private memory into repo files. Store only redacted summar
 - If steps repeat, factor them into a skill.
 - Prefer clear, practical steps over abstract explanations.
 
-${OPENWORK_ARTIFACT_GUIDANCE}
+${MATTERHORN_ARTIFACT_GUIDANCE}
 `;
 
 type WorkspaceOpenworkConfig = {
@@ -126,7 +129,7 @@ async function ensureOpencodeConfig(workspaceRoot: string): Promise<boolean> {
 
   await writeJsoncFile(path, {
     $schema: "https://opencode.ai/config.json",
-    default_agent: "openwork",
+    default_agent: "matterhorn",
     plugin: [BROWSER_PLUGIN],
   });
   return true;
@@ -134,12 +137,12 @@ async function ensureOpencodeConfig(workspaceRoot: string): Promise<boolean> {
 
 function resolveAgentTemplate(): string {
   const cdpPort = process.env.OPENWORK_ELECTRON_REMOTE_DEBUG_PORT?.trim() || "9222";
-  return OPENWORK_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
+  return MATTERHORN_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
 }
 
-async function ensureOpenworkAgent(workspaceRoot: string): Promise<boolean> {
+async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
   const agentsDir = join(workspaceRoot, ".opencode", "agents");
-  const agentPath = join(agentsDir, "openwork.md");
+  const agentPath = join(agentsDir, "matterhorn.md");
   const agentContent = resolveAgentTemplate();
   await ensureDir(agentsDir);
   if (!(await exists(agentPath))) {
@@ -155,10 +158,10 @@ async function ensureOpenworkAgent(workspaceRoot: string): Promise<boolean> {
   const artStartIdx = current.indexOf(artStart);
   const artEndIdx = current.indexOf(artEnd);
   if (artStartIdx >= 0 && artEndIdx > artStartIdx) {
-    const patched = `${current.slice(0, artStartIdx)}${OPENWORK_ARTIFACT_GUIDANCE}${current.slice(artEndIdx + artEnd.length)}`;
+    const patched = `${current.slice(0, artStartIdx)}${MATTERHORN_ARTIFACT_GUIDANCE}${current.slice(artEndIdx + artEnd.length)}`;
     if (patched !== current) { current = patched; changed = true; }
   } else {
-    current = `${current.trimEnd()}\n\n${OPENWORK_ARTIFACT_GUIDANCE}\n`;
+    current = `${current.trimEnd()}\n\n${MATTERHORN_ARTIFACT_GUIDANCE}\n`;
     changed = true;
   }
 
@@ -194,7 +197,7 @@ async function ensureBrowserPlugin(workspaceRoot: string): Promise<boolean> {
   const mcp = typeof config.mcp === "object" && config.mcp !== null ? config.mcp as Record<string, unknown> : null;
   const hasLegacyMcps = mcp ? LEGACY_BROWSER_MCP_KEYS.some((key) => key in mcp) : false;
   const shouldClaimDesktopCreatedConfig = await exists(openworkConfigPath(workspaceRoot)) && isSchemaOnlyOpencodeConfig(config);
-  const isOpenWorkOwned = config.default_agent === "openwork" || shouldClaimDesktopCreatedConfig;
+  const isOpenWorkOwned = config.default_agent === "openwork" || config.default_agent === "matterhorn" || shouldClaimDesktopCreatedConfig;
 
   if (hasPlugin && !hasLegacyMcps) return false;
 
@@ -207,7 +210,7 @@ async function ensureBrowserPlugin(workspaceRoot: string): Promise<boolean> {
   }
 
   if (shouldClaimDesktopCreatedConfig) {
-    updates.default_agent = "openwork";
+    updates.default_agent = "matterhorn";
   }
 
   if (!Object.keys(updates).length && !hasLegacyMcps) return false;
@@ -237,7 +240,7 @@ export async function ensureWorkspaceFiles(workspaceRoot: string, presetInput: s
   const reloadReasons = new Set<ReloadReason>();
   if (await ensureOpencodeConfig(workspaceRoot)) reloadReasons.add("config");
   if (await ensureBrowserPlugin(workspaceRoot)) reloadReasons.add("config");
-  if (await ensureOpenworkAgent(workspaceRoot)) reloadReasons.add("agents");
+  if (await ensureMatterhornAgent(workspaceRoot)) reloadReasons.add("agents");
   const openworkConfigChanged = await ensureWorkspaceOpenworkConfig(workspaceRoot, preset);
   return {
     changed: openworkConfigChanged || reloadReasons.size > 0,
