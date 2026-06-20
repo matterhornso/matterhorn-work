@@ -957,7 +957,13 @@ export function SessionPage(props: SessionPageProps) {
                           <button
                             type="button"
                             className="inline-flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                            onClick={openWalletRailPane}
+                            onClick={() => {
+                              openWalletRailPane();
+                              const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
+                              if (bittensorLauncher && props.sidebar.onCreateTaskWithPrompt) {
+                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, bittensorLauncher.prompt);
+                              }
+                            }}
                           >
                             <WalletIcon className="size-4" />
                             Open Bittensor workspace
@@ -974,7 +980,10 @@ export function SessionPage(props: SessionPageProps) {
                                 onClick={() => {
                                   if (launcher.panel) {
                                     openVenueRailPane(launcher.panel);
-                                    return;
+                                    if (props.sidebar.onCreateTaskWithPrompt) {
+                                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
+                                      return;
+                                    }
                                   }
                                   if (props.sidebar.onCreateTaskWithPrompt) {
                                     props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
@@ -1271,7 +1280,7 @@ export function SessionPage(props: SessionPageProps) {
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
         commands={[
-          { id: "send", label: "Send crypto", shortcut: "→ Send", action: () => {/* open send panel */} },
+          { id: "send", label: "Send tokens", shortcut: "→ Send", action: () => {/* open send panel */} },
           { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
           { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
           { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },

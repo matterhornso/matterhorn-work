@@ -73,13 +73,17 @@ for (const forbidden of [
   "Create a sample spreadsheet",
   "Control your browser",
   "Your computer, but it works for you.",
+  "Crypto workspace",
+  "Send crypto",
 ]) {
   assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
 }
 
-assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Crypto rail should mount the Bittensor/Crypto panel");
-assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Wallet/Crypto panel should render the selected protocol workspace");
-assert.ok(walletPanel.includes("Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews"), "no-wallet crypto panel should explain public read flows");
+assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
+assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
+assert.ok(walletPanel.includes("Protocol desks still support Bittensor public reads, subnet discovery, Hyperliquid previews, Polymarket previews"), "no-wallet protocol panel should explain public read flows");
+assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt)"), "protocol launchers should create an editable prompt draft");
+assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, bittensorLauncher.prompt)"), "Bittensor top launcher should create an editable prompt draft");
 assert.ok(workflowTemplates.includes('opensPanel: "bittensor"'), "right rail should expose a dedicated Bittensor workspace");
 assert.ok(workflowTemplates.includes('opensPanel: "hyperliquid"'), "right rail should expose a dedicated Hyperliquid workspace");
 assert.ok(workflowTemplates.includes('opensPanel: "polymarket"'), "right rail should expose a dedicated Polymarket workspace");

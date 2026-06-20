@@ -1006,7 +1006,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
       setNotice({
-        title: isGenericCryptoHandoff ? "Crypto prompt ready" : "Bittensor prompt ready",
+        title: isGenericCryptoHandoff ? "Protocol prompt ready" : "Bittensor prompt ready",
         description: "Review or send it from the chat composer.",
         tone: "info",
       });

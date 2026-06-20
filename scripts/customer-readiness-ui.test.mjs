@@ -40,14 +40,15 @@ for (const phrase of [
   "loadMarketSdkValidation",
   "marketExecutionChain",
   "marketSdkValidation",
-  "Unified smoke",
+  "All-protocol smoke",
   "Blocker:",
   "Next:",
-  "Crypto Chat",
+  "Protocol Chat",
+  "Market Chat",
   "crypto-readiness-panel",
   "market-execution-readiness-panel",
   "Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
-  "Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.",
+  "Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.",
   "matterhorn-work crypto readiness --json",
   "matterhorn-work crypto execution-readiness --json",
   "matterhorn-work crypto execution-chain --json",
@@ -155,7 +156,7 @@ for (const phrase of [
   "External signer required",
   "Read/preview-only",
   "No market submit",
-  "Use unified crypto chat.",
+  "Use Matterhorn protocol chat.",
   "no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission",
 ]) {
   assert.ok(panel.includes(phrase), `Bittensor panel should include customer demo checklist text: ${phrase}`);
@@ -174,7 +175,7 @@ for (const forbidden of [
 
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff"), "demo prompts should use the generic crypto chat handoff event");
 assert.ok(surface.includes("matterhorn:crypto-chat-handoff"), "session surface should listen for the generic crypto handoff event");
-assert.ok(surface.includes("Crypto prompt ready"), "session notice should distinguish generic crypto prompts from Bittensor-only prompts");
+assert.ok(surface.includes("Protocol prompt ready"), "session notice should distinguish protocol prompts from Bittensor-only prompts");
 assert.ok(surface.includes("crypto.chat_handoff.applied"), "generic crypto handoffs should have their own inspector event");
 assert.ok(sharedCardRenderer.includes("matterhorn.crypto.shared-card.v1"), "transcript should render versioned shared crypto cards");
 
