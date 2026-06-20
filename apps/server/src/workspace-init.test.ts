@@ -19,9 +19,13 @@ describe("ensureWorkspaceFiles", () => {
   test("creates default agent with artifact guidance for new workspaces", async () => {
     await withWorkspace(async (root) => {
       const result = await ensureWorkspaceFiles(root, "starter");
-      const agent = await readFile(join(root, ".opencode", "agents", "openwork.md"), "utf8");
-      expect(agent).toContain("OpenWork Artifacts");
+      const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
+      const config = await readFile(join(root, "opencode.jsonc"), "utf8");
+      expect(agent).toContain("You are Matterhorn Work.");
+      expect(agent).toContain("Matterhorn Work Artifacts");
+      expect(agent).toContain("Do not lead with internal runtime files");
       expect(agent).toContain("reports/artifact-eval.xlsx");
+      expect(config).toContain('"default_agent": "matterhorn"');
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
 
       const secondResult = await ensureWorkspaceFiles(root, "starter");
@@ -43,14 +47,14 @@ describe("ensureWorkspaceFiles", () => {
     });
   });
 
-  test("adds artifact guidance to existing OpenWork agents", async () => {
+  test("adds artifact guidance to existing Matterhorn agents", async () => {
     await withWorkspace(async (root) => {
       await mkdir(join(root, ".opencode", "agents"), { recursive: true });
-      await writeFile(join(root, ".opencode", "agents", "openwork.md"), "---\ndescription: Old\n---\n\nOld instructions\n", "utf8");
+      await writeFile(join(root, ".opencode", "agents", "matterhorn.md"), "---\ndescription: Old\n---\n\nOld instructions\n", "utf8");
       const result = await ensureWorkspaceFiles(root, "starter");
-      const agent = await readFile(join(root, ".opencode", "agents", "openwork.md"), "utf8");
+      const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
       expect(agent).toContain("Old instructions");
-      expect(agent).toContain("OpenWork Artifacts");
+      expect(agent).toContain("Matterhorn Work Artifacts");
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
     });
   });
@@ -103,7 +107,7 @@ describe("ensureWorkspaceFiles", () => {
       const result = await ensureWorkspaceFiles(root, "starter");
       const config = await readFile(configPath, "utf8");
 
-      expect(config).toContain('"default_agent": "openwork"');
+      expect(config).toContain('"default_agent": "matterhorn"');
       expect(config).toContain('"opencode-chrome-devtools"');
       expect(result.reloadReasons).toContain("config");
     });
