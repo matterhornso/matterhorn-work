@@ -40,7 +40,13 @@ for (const phrase of [
 for (const phrase of [
   "New blank chat",
   "Open Bittensor workspace",
-  "Choose a workspace, then ask in plain English.",
+  "Test customer launch hub",
+  "Start with a desk, then chat.",
+  "Protocol desks",
+  "Separate interfaces for TAO, perps, and prediction markets",
+  "No hidden auto-send",
+  "Business workflows",
+  "Use the same chat engine for real-world customer work",
   "Open Bittensor panel",
   "Open Hyperliquid panel",
   "Open Polymarket panel",
@@ -76,6 +82,17 @@ for (const phrase of [
   "Future-contract planning only. No provider execution or credentials.",
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+}
+
+for (const phrase of [
+  "protocolWorkflowLaunchers",
+  "businessWorkflowLaunchers",
+  "blankWorkflowLauncher",
+  'card.panel === "bittensor"',
+  'card.panel === "hyperliquid"',
+  'card.panel === "polymarket"',
+]) {
+  assert.ok(sessionPage.includes(phrase), `session launch hub should group customer entry points: ${phrase}`);
 }
 
 for (const forbidden of [
