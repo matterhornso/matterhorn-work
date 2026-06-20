@@ -3800,6 +3800,7 @@ function printHelp(): void {
     "  matterhorn-work services chat --message <text> [--capability hosting|storage|email|payments|identity] [--json]",
     "  matterhorn-work workflows catalog [--workflow <id>] [--category <name>] [--include-prompts] [--json]",
     "  matterhorn-work workflows prompts [--workflow <id>] [--category <name>] [--json]",
+    "  matterhorn-work workflows templates [--customer-template <id>] [--category <name>] [--status <name>] [--json]",
     "  matterhorn-work upstream openwork check [options]",
     "  matterhorn-work doctor [--workspace-id <id>] [--session-id <id>] [options]",
     "  matterhorn-work mcp config [--target <name>] [--profile <name>]",
@@ -3844,6 +3845,7 @@ function printHelp(): void {
     "  services capabilities   Print future decentralized service capability contracts (no live providers)",
     "  services chat           Plan future decentralized service workflows from a prompt (no live providers)",
     "  workflows catalog       Print the safe cross-vertical Matterhorn workflow catalog",
+    "  workflows templates     Print customer-facing workflow templates for the app entrypoints",
     "  upstream openwork check  Build the upstream OpenWork sync intake plan",
     "  doctor                  Run a unified agent-readiness report",
     "  mcp config              Print MCP config for Claude Code, Codex, Cursor, or Claude Desktop",
@@ -8733,16 +8735,25 @@ async function runWorkflows(args: ParsedArgs) {
     subcommand === "prompts" ||
     subcommand === "prompt-pack" ||
     subcommand === "starter-prompts";
+  const isCustomerTemplates =
+    subcommand === "templates" ||
+    subcommand === "template" ||
+    subcommand === "customer-templates" ||
+    subcommand === "customer-template";
 
   try {
     assertNoWorkflowSecrets(args);
-    if (!isCatalog && !isPromptPack) {
-      throw new Error("workflows requires catalog (aliases: list, show, inspect) or prompts");
+    if (!isCatalog && !isPromptPack && !isCustomerTemplates) {
+      throw new Error(
+        "workflows requires catalog (aliases: list, show, inspect), prompts, or templates",
+      );
     }
 
     const forwarded: string[] = [];
     if (outputJson) forwarded.push("--json");
-    if (isPromptPack) {
+    if (isCustomerTemplates) {
+      forwarded.push("--customer-templates");
+    } else if (isPromptPack) {
       forwarded.push("--prompt-pack");
     } else if (readBool(args.flags, "include-prompts", false)) {
       forwarded.push("--include-prompts");
@@ -8752,9 +8763,17 @@ async function runWorkflows(args: ParsedArgs) {
       readFlag(args.flags, "workflow") ??
       readFlag(args.flags, "workflow-id") ??
       (subcommand === "show" || subcommand === "inspect" || isPromptPack ? args.positionals[2] : undefined);
+    const customerTemplate =
+      readFlag(args.flags, "customer-template") ??
+      readFlag(args.flags, "customerTemplate") ??
+      readFlag(args.flags, "template") ??
+      (isCustomerTemplates ? args.positionals[2] : undefined);
     const category = readFlag(args.flags, "category");
     const status = readFlag(args.flags, "status");
-    if (workflow && workflow.trim()) forwarded.push("--workflow", workflow.trim());
+    if (workflow && workflow.trim() && !isCustomerTemplates) forwarded.push("--workflow", workflow.trim());
+    if (customerTemplate && customerTemplate.trim()) {
+      forwarded.push("--customer-template", customerTemplate.trim());
+    }
     if (category && category.trim()) forwarded.push("--category", category.trim());
     if (status && status.trim()) forwarded.push("--status", status.trim());
 

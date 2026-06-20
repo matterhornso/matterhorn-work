@@ -116,6 +116,106 @@ export type MatterhornWorkflowPromptPack = {
   }>;
 };
 
+type MatterhornCustomerWorkflowCategory =
+  | "bittensor"
+  | "markets"
+  | "wellness"
+  | "decentralized_services"
+  | "future";
+
+type MatterhornCustomerWorkflowStatus =
+  | "beta_ready"
+  | "preview_only"
+  | "planned_not_live"
+  | "workflow_ready"
+  | "blank";
+
+type MatterhornCustomerWorkflowTemplate = {
+  id: string;
+  name: string;
+  summary: string;
+  promise: string;
+  category: MatterhornCustomerWorkflowCategory;
+  examplePrompts: string[];
+  expectedArtifacts: Array<{ id: string; name: string; mimeType: string; public: true }>;
+  requiredContext: Array<{
+    id: string;
+    label: string;
+    required: boolean;
+    type: string;
+    helpText?: string;
+    options?: string[];
+  }>;
+  optionalContext: Array<{
+    id: string;
+    label: string;
+    required: boolean;
+    type: string;
+    helpText?: string;
+    options?: string[];
+  }>;
+  status: MatterhornCustomerWorkflowStatus;
+  safetyBoundaries: {
+    acceptsSecrets: false;
+    acceptsPrivateKeys: false;
+    acceptsApiSecrets: false;
+    acceptsRawSignatures: false;
+    canSubmit: false;
+    liveExecutionEnabled: false;
+    canExecute: boolean;
+    requiresExternalSigner: boolean;
+    allowsRealFunds: false;
+  };
+  forbiddenInputs: string[];
+  handoffReceiptSupport: {
+    supported: boolean;
+    types?: string[];
+    description?: string;
+  };
+  serviceHooks: Array<{ hook: string; status: string }>;
+  chatMode: string;
+  recommendedCommands?: {
+    cli?: string[];
+    mcp?: string[];
+  };
+};
+
+export type MatterhornCustomerWorkflowTemplateFilter = {
+  customerTemplate?: string | null;
+  category?: string | null;
+  status?: string | null;
+};
+
+export type MatterhornCustomerWorkflowTemplateCatalog = {
+  ok: true;
+  version: "matterhorn.customer.workflow.template.v1";
+  status: "catalog_only";
+  generatedAt: string;
+  source: "matterhorn_server_customer_workflow_templates";
+  summary: string;
+  commands: Record<string, string>;
+  safety: {
+    acceptsSecrets: false;
+    acceptsPrivateKeys: false;
+    acceptsApiSecrets: false;
+    acceptsRawSignatures: false;
+    canSubmit: false;
+    liveExecutionEnabled: false;
+    catalogOnly: true;
+    noProviderExecution: true;
+    noCustody: true;
+    noLiveMarketSubmit: true;
+    plannedServicesOnly: true;
+  };
+  counts: {
+    total: number;
+    byCategory: Record<string, number>;
+    byStatus: Record<string, number>;
+  };
+  customerTemplates: MatterhornCustomerWorkflowTemplate[];
+  references: string[];
+};
+
 const FORBIDDEN_CREDENTIAL_KEY_PATTERN =
   /(?:seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|apiKey|api_key|apiSecret|api_secret|rawSignature|raw_signature|signature|signedPayload|signed_payload|wallet[-_]?export)/i;
 
@@ -327,6 +427,277 @@ const WORKFLOWS: MatterhornWorkflowCatalogItem[] = [
   },
 ];
 
+const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
+  {
+    id: "bittensor_operator",
+    name: "Use Bittensor",
+    summary: "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
+    promise: "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
+    category: "bittensor",
+    examplePrompts: [
+      "Show my TAO",
+      "Which subnet is useful for image generation?",
+      "Compare validators on subnet 14",
+      "Prepare staking 1 TAO",
+    ],
+    expectedArtifacts: [
+      { id: "balance_card", name: "TAO Balance Card", mimeType: "application/json", public: true },
+      { id: "subnet_comparison", name: "Subnet Comparison", mimeType: "text/markdown", public: true },
+      { id: "stake_preview", name: "Stake Preview", mimeType: "application/json", public: true },
+      { id: "external_signer_handoff", name: "External Signer Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key or seed phrase.",
+      },
+    ],
+    optionalContext: [
+      { id: "subnet", label: "Subnet ID", required: false, type: "number" },
+      { id: "stake_amount", label: "Stake amount to preview", required: false, type: "number" },
+    ],
+    status: "beta_ready",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: true,
+      requiresExternalSigner: true,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "seed phrase", "mnemonic", "raw signature", "signed payload", "wallet export"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["external_signer_handoff", "stake_preview_receipt"],
+      description: "Produces an external-signer handoff and a public stake preview receipt.",
+    },
+    serviceHooks: [{ hook: "bittensor", status: "live_local" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "show my TAO" --json'],
+      mcp: ["matterhorn_crypto_chat"],
+    },
+  },
+  {
+    id: "hyperliquid_trader",
+    name: "Trade on Hyperliquid",
+    summary: "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
+    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    category: "markets",
+    examplePrompts: [
+      "Preview a Hyperliquid BTC-PERP trade",
+      "Show my Hyperliquid exposure",
+      "Generate a Hyperliquid signing handoff",
+    ],
+    expectedArtifacts: [
+      { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key.",
+      },
+    ],
+    optionalContext: [
+      { id: "market", label: "Market or asset", required: false, type: "text" },
+      { id: "side", label: "Side", required: false, type: "select", options: ["buy", "sell", "long", "short"] },
+      { id: "size", label: "Order size", required: false, type: "number" },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "raw signature", "signed payload", "signed order"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["market_preview", "signing_handoff"],
+      description: "Produces a read-only market preview and an external-signer handoff.",
+    },
+    serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json'],
+      mcp: ["matterhorn_hyperliquid_prepare_handoff"],
+    },
+  },
+  {
+    id: "polymarket_researcher",
+    name: "Bet on Polymarket",
+    summary:
+      "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
+    promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+    category: "markets",
+    examplePrompts: ["Summarize this Polymarket market", "Preview a Polymarket trade", "Show my Polymarket positions"],
+    expectedArtifacts: [
+      { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key.",
+      },
+    ],
+    optionalContext: [
+      { id: "market_id", label: "Market ID", required: false, type: "text" },
+      { id: "outcome", label: "Outcome", required: false, type: "select", options: ["yes", "no"] },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "raw signature", "signed payload", "signed order"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["market_preview", "signing_handoff"],
+      description: "Produces a read-only market preview and an external-signer handoff.",
+    },
+    serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "preview Polymarket market" --json'],
+      mcp: ["matterhorn_polymarket_prepare_handoff"],
+    },
+  },
+  {
+    id: "wellness_creator_workflow",
+    name: "Build a Wellness Creator business workflow",
+    summary: "Design wellness programs, service packages, and client management workflows without giving medical advice.",
+    promise:
+      "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    category: "wellness",
+    examplePrompts: [
+      "Create a wellness program for my clients",
+      "Design a nutrition plan",
+      "Build a yoga class schedule",
+      "Package my training services",
+    ],
+    expectedArtifacts: [
+      { id: "program_design_plan", name: "Program Design Plan", mimeType: "text/markdown", public: true },
+      { id: "weekly_schedule", name: "Weekly Schedule", mimeType: "text/markdown", public: true },
+      { id: "pricing_package_draft", name: "Pricing Package Draft", mimeType: "text/markdown", public: true },
+      { id: "service_plan", name: "Service Plan", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      { id: "audience", label: "Who is the program for?", required: true, type: "text" },
+      { id: "goal", label: "What is the primary goal?", required: true, type: "text" },
+    ],
+    optionalContext: [
+      { id: "duration_weeks", label: "Program duration in weeks", required: false, type: "number" },
+      { id: "equipment", label: "Available equipment", required: false, type: "text" },
+    ],
+    status: "workflow_ready",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["medical diagnosis", "prescription advice", "protected health information beyond redacted goals"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["service_plan", "content_calendar"],
+      description: "Produces a public/redacted service plan and workflow evidence bundle.",
+    },
+    serviceHooks: [
+      { hook: "email", status: "planned_not_live" },
+      { hook: "payments", status: "planned_not_live" },
+      { hook: "hosting", status: "planned_not_live" },
+    ],
+    chatMode: "workflow chat",
+    recommendedCommands: {
+      cli: ["matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json"],
+    },
+  },
+  {
+    id: "decentralized_services_operator",
+    name: "Explore future decentralized services",
+    summary: "Plan future decentralized service actions across storage, hosting, email, payments, and identity.",
+    promise: "Future-contract planning only. No live provider execution.",
+    category: "decentralized_services",
+    examplePrompts: [
+      "Plan a decentralized storage upload",
+      "Preview a future email campaign",
+      "Compare provider fixtures for hosting",
+      "Plan identity-gated access for a resource",
+    ],
+    expectedArtifacts: [
+      { id: "service_preview", name: "Service Preview", mimeType: "application/json", public: true },
+      { id: "provider_comparison", name: "Provider Comparison", mimeType: "text/markdown", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "capability",
+        label: "Which decentralized service?",
+        required: true,
+        type: "select",
+        options: ["hosting", "storage", "email", "payments", "identity"],
+      },
+      { id: "intent_description", label: "Describe what you want to do", required: true, type: "text" },
+    ],
+    optionalContext: [{ id: "provider_preference", label: "Preferred provider fixture", required: false, type: "text" }],
+    status: "planned_not_live",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "payment credential", "email password", "hosting credential"],
+    handoffReceiptSupport: {
+      supported: false,
+      description: "Future contract; handoffs are not yet implemented.",
+    },
+    serviceHooks: [
+      { hook: "hosting", status: "planned_not_live" },
+      { hook: "storage", status: "planned_not_live" },
+      { hook: "email", status: "planned_not_live" },
+      { hook: "payments", status: "planned_not_live" },
+      { hook: "identity", status: "planned_not_live" },
+    ],
+    chatMode: "services chat",
+    recommendedCommands: {
+      cli: ["matterhorn-work services capabilities --json"],
+    },
+  },
+  {
+    id: "blank_chat_workflow",
+    name: "Blank chat",
+    summary: "Start a free-form chat session with the Matterhorn Work engine.",
+    promise: "Open-ended assistance. You choose the goal.",
+    category: "future",
+    examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
+    expectedArtifacts: [],
+    requiredContext: [],
+    optionalContext: [],
+    status: "blank",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: [],
+    handoffReceiptSupport: { supported: false },
+    serviceHooks: [],
+    chatMode: "free chat",
+  },
+];
+
 export function findForbiddenMatterhornWorkflowQueryKey(keys: Iterable<string>): string | null {
   for (const key of keys) {
     if (FORBIDDEN_CREDENTIAL_KEY_PATTERN.test(key)) return key;
@@ -371,6 +742,30 @@ function filterWorkflows(input: MatterhornWorkflowCatalogFilter = {}): Matterhor
   }
 
   return workflows;
+}
+
+function filterCustomerTemplates(
+  input: MatterhornCustomerWorkflowTemplateFilter = {},
+): MatterhornCustomerWorkflowTemplate[] {
+  const customerTemplateFilter = parseFilter(input.customerTemplate);
+  const categoryFilter = parseFilter(input.category);
+  const statusFilter = parseFilter(input.status);
+  let templates = CUSTOMER_TEMPLATES;
+
+  if (customerTemplateFilter) {
+    templates = templates.filter((template) => template.id === customerTemplateFilter);
+    if (templates.length === 0) throw new Error(`Unknown customer workflow template: ${customerTemplateFilter}`);
+  }
+  if (categoryFilter) {
+    templates = templates.filter((template) => template.category === categoryFilter);
+    if (templates.length === 0) throw new Error(`No customer workflow templates found for category: ${categoryFilter}`);
+  }
+  if (statusFilter) {
+    templates = templates.filter((template) => template.status === statusFilter);
+    if (templates.length === 0) throw new Error(`No customer workflow templates found for status: ${statusFilter}`);
+  }
+
+  return templates;
 }
 
 export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogFilter = {}): MatterhornWorkflowCatalog {
@@ -419,6 +814,47 @@ export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogF
       "docs/decentralized-services-capability-contract.md",
       "docs/agent-control-coverage-matrix.md",
     ],
+  };
+}
+
+export function buildMatterhornCustomerWorkflowTemplates(
+  input: MatterhornCustomerWorkflowTemplateFilter = {},
+): MatterhornCustomerWorkflowTemplateCatalog {
+  const customerTemplates = filterCustomerTemplates(input);
+  return {
+    ok: true,
+    version: "matterhorn.customer.workflow.template.v1",
+    status: "catalog_only",
+    generatedAt: new Date(0).toISOString(),
+    source: "matterhorn_server_customer_workflow_templates",
+    summary: "Customer-facing Matterhorn Work workflow templates for chat-first goal selection.",
+    commands: {
+      customerTemplates: "matterhorn-work workflows templates --json",
+      customerTemplateFilter: "matterhorn-work workflows templates --customer-template bittensor_operator --json",
+      registryGate: "pnpm test:matterhorn-workflow-template-registry",
+      catalogGate: "pnpm test:matterhorn-workflow-catalog",
+    },
+    safety: {
+      ...COMMON_SAFETY,
+      catalogOnly: true,
+      noProviderExecution: true,
+      noCustody: true,
+      noLiveMarketSubmit: true,
+      plannedServicesOnly: true,
+    },
+    counts: {
+      total: customerTemplates.length,
+      byCategory: customerTemplates.reduce<Record<string, number>>((acc, template) => {
+        acc[template.category] = (acc[template.category] ?? 0) + 1;
+        return acc;
+      }, {}),
+      byStatus: customerTemplates.reduce<Record<string, number>>((acc, template) => {
+        acc[template.status] = (acc[template.status] ?? 0) + 1;
+        return acc;
+      }, {}),
+    },
+    customerTemplates,
+    references: ["docs/matterhorn-workflow-contract.md", "packages/types/src/matterhorn-workflows.ts"],
   };
 }
 
