@@ -130,6 +130,9 @@ jobs:
       - name: Validate desktop beta first-run readiness
         run: pnpm test:desktop-beta-first-run
 
+      - name: Validate Matterhorn brand assets
+        run: pnpm test:matterhorn-brand-assets
+
       - name: Run e2e tests
         run: pnpm --filter @matterhorn-work/app test:e2e
 
