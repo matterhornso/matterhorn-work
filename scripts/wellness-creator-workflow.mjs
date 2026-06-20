@@ -41,11 +41,11 @@ const SECRET_TEXT_RE =
   /(seed phrase|mnemonic|private key|api secret|api key|raw signature|signed payload|signed order|wallet export|passphrase|-----BEGIN|0x[a-f0-9]{40,})/i;
 
 // Heuristic for prompts that ask for clinical care — diagnosis, prescription,
-// medication/dosing, or treating a named condition or injury. These are
-// redirected to educational/safety language and a referral, never answered as
-// medical advice.
+// medication/dosing, treating a named condition or injury, or pregnancy- and
+// eating-disorder-specific work. These are redirected to educational/safety
+// language and a referral, never answered as medical advice.
 const MEDICAL_INTENT_RE =
-  /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica)\b/i;
+  /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica)\b|\b(pregnan\w*|prenatal|ante[- ]?natal|post[- ]?natal|postpartum)\b|\b(eating disorder|disordered eating|anorexi\w*|bulimi\w*|binge[- ]?eating)\b/i;
 
 const FIXTURE_DIR = "docs/wellness-creator-workflow";
 const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
@@ -423,6 +423,117 @@ const CUSTOMER_MANAGEMENT = {
 // Route ANY free-form prompt to a client-safe artifact type. Secret-shaped
 // input is refused and never echoed. This is the contract-level guarantee that
 // the workflow can help with whatever a creator asks, within safety bounds.
+// ---- Wellness Creator Service Workflow: artifact contracts ----
+// Every client-safe artifact the workflow can build. All are educational /
+// general wellness only and live_local (generated in chat today; no external
+// service executes).
+const ARTIFACT_CONTRACTS = [
+  {
+    id: "client_plan",
+    name: "Client plan",
+    description: "A structured training, yoga, or nutrition-education program for a client.",
+    includes: ["Goal and constraints recap", "Weekly structure", "Progression notes", "Educational disclaimer"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.general,
+  },
+  {
+    id: "intake_questionnaire",
+    name: "Intake questionnaire",
+    description: "An onboarding questionnaire to learn a client's goals, experience, schedule, and general (non-clinical) wellness context.",
+    includes: ["Goals", "Experience level", "Availability and equipment", "General non-clinical context", "Consent and disclaimer"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.general,
+  },
+  {
+    id: "progress_check_in",
+    name: "Weekly progress check-in",
+    description: "A recurring check-in to track adherence, energy, and progress, with coach adjustments.",
+    includes: ["Sessions completed", "Adherence", "Energy and sleep", "Wins and blockers", "Coach adjustments"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.general,
+    fixture: `${FIXTURE_DIR}/${PROGRESS_CHECKIN_FIXTURE}`,
+  },
+  {
+    id: "video_lesson_script",
+    name: "Video lesson script",
+    description: "A short-form script for a client video or lesson: hook, demo, cue, and call-to-action.",
+    includes: ["Hook", "Demonstration steps", "Coaching cues", "Call-to-action", "Educational disclaimer"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.general,
+  },
+  {
+    id: "client_tracker",
+    name: "Client tracker",
+    description: "A simple tracker or log for sessions, habits, or measurements the client self-reports.",
+    includes: ["Tracked fields", "Cadence", "Self-reported only", "Educational disclaimer"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.general,
+  },
+  {
+    id: "offer_landing_packet",
+    name: "Offer / landing packet",
+    description: "A paid-program landing packet with placeholder pricing only. No payment is processed.",
+    includes: ["Offer summary", "What's included", "Placeholder pricing", "Sign-up call-to-action (draft)", "No-guarantee note"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.noGuarantee,
+  },
+  {
+    id: "renewal_upsell_note",
+    name: "Renewal / up-sell note",
+    description: "A renewal or up-sell message draft for an existing client. Pricing is a draft only; no payment is processed.",
+    includes: ["Progress recap", "Renewal or up-sell option", "Placeholder pricing", "No-guarantee note"],
+    status: "live_local",
+    disclaimer: DISCLAIMERS.noGuarantee,
+  },
+];
+const ARTIFACT_CONTRACT_BY_ID = Object.fromEntries(ARTIFACT_CONTRACTS.map((contract) => [contract.id, contract]));
+
+// Named service-builder intents and the artifact each one builds.
+const SERVICE_BUILDER_INTENTS = [
+  { id: "training-plan", intent: "create a 4-week training plan", contractId: "client_plan" },
+  { id: "yoga-program", intent: "create a yoga program", contractId: "client_plan" },
+  { id: "dietician-packet", intent: "create a dietician client packet", contractId: "client_plan" },
+  { id: "client-check-in", intent: "create a client check-in", contractId: "progress_check_in" },
+  { id: "paid-program", intent: "package a paid program", contractId: "offer_landing_packet" },
+  { id: "client-video", intent: "create a client video script", contractId: "video_lesson_script" },
+];
+
+// Realistic sample prompts + expected artifact summaries for Hermes / demos.
+const SAMPLE_PROMPTS = [
+  { prompt: "create a 4-week training plan for a beginner", artifact: "client_plan", summary: "A 4-week beginner program with weekly structure, progression notes, and the educational disclaimer." },
+  { prompt: "create a yoga program for office workers with tight hips", artifact: "client_plan", summary: "A general mobility-focused yoga program; educational only." },
+  { prompt: "create a dietician client packet with a meal-planning template", artifact: "client_plan", summary: "A general healthy-eating plan and template; not a clinical or therapeutic diet." },
+  { prompt: "create an intake questionnaire for a new coaching client", artifact: "intake_questionnaire", summary: "Onboarding questions covering goals, experience, schedule, and non-clinical context." },
+  { prompt: "create a weekly client check-in", artifact: "progress_check_in", summary: "A weekly check-in tracking adherence, energy, wins/blockers, and coach adjustments." },
+  { prompt: "create a client video script for a kettlebell swing tutorial", artifact: "video_lesson_script", summary: "A short-form script: hook, demo, coaching cues, and call-to-action." },
+  { prompt: "create a client habit tracker", artifact: "client_tracker", summary: "A simple self-reported tracker for habits and sessions." },
+  { prompt: "package a paid 8-week coaching program", artifact: "offer_landing_packet", summary: "A landing packet with placeholder pricing only; no payment is processed." },
+  { prompt: "write a renewal note for a client finishing their block", artifact: "renewal_upsell_note", summary: "A renewal/up-sell draft with a progress recap and placeholder pricing." },
+  { prompt: "build a 12-week strength program with progressions", artifact: "client_plan", summary: "A structured strength program; educational only." },
+];
+
+// How this demonstrates Matterhorn beyond Web3.
+const MATTERHORN_BEYOND_WEB3 = {
+  summary:
+    "Wellness Creator is Matterhorn's first Web2 / customer-business workflow: a non-crypto service professional does real client work through the same chat/workflow system as Bittensor, Hyperliquid, and Polymarket.",
+  firstWeb2Workflow: true,
+  sharesGenericSurface: true,
+  plannedNotLiveServiceHooks: ["storage/hosting", "payments", "email", "identity/access"],
+  note:
+    "Future Matterhorn service hooks (storage/hosting, payments, email, identity/access) are planned, not live. Nothing here hosts, charges, emails, or gates access.",
+};
+
+// Map any normal wellness/business prompt to one of the artifact contracts.
+function routeServiceArtifactId(text) {
+  if (/check.?in|\bprogress\b|weekly review|follow.?up/.test(text)) return "progress_check_in";
+  if (/intake|questionnaire|onboard|screening|new client form/.test(text)) return "intake_questionnaire";
+  if (/video|script|lesson|reel|tutorial|youtube|tiktok/.test(text)) return "video_lesson_script";
+  if (/tracker|log\b|spreadsheet|journal|tracking sheet/.test(text)) return "client_tracker";
+  if (/renewal|renew\b|up-?sell|win-?back|retention|retain/.test(text)) return "renewal_upsell_note";
+  if (/paid|pricing|offer|landing|sales page|package a|sell /.test(text)) return "offer_landing_packet";
+  return "client_plan";
+}
+
 function routeFreeformPrompt(prompt) {
   const raw = String(prompt ?? "");
   if (SECRET_TEXT_RE.test(raw)) {
@@ -463,8 +574,11 @@ function routeFreeformPrompt(prompt) {
   else if (/habit|sleep|recovery|accountab|mindful/.test(text)) artifactType = "Habit / recovery plan artifact";
   else if (/offer|pricing|package|onboard|terms|landing/.test(text)) artifactType = "Service packaging artifact";
   else if (/plan|program|workout|training|class|routine/.test(text)) artifactType = "Training program artifact";
+  const serviceArtifactContract = routeServiceArtifactId(text);
   return {
     artifactType,
+    serviceArtifactContract,
+    serviceArtifactName: ARTIFACT_CONTRACT_BY_ID[serviceArtifactContract]?.name ?? null,
     safe: true,
     refused: false,
     educationalOnly: true,
@@ -521,6 +635,28 @@ function buildContract() {
       };
     }),
     freeformSupport: FREEFORM_SUPPORT,
+    serviceBuilder: {
+      intents: SERVICE_BUILDER_INTENTS.map((intent) => ({
+        ...intent,
+        artifactName: ARTIFACT_CONTRACT_BY_ID[intent.contractId]?.name ?? null,
+        routed: routeFreeformPrompt(intent.intent).serviceArtifactContract,
+      })),
+      routesArbitraryPrompts: true,
+      note: "Named intents and arbitrary wellness/business prompts both route into one of the artifact contracts. Clinical prompts redirect to a qualified professional; secret-shaped text is refused and not echoed.",
+    },
+    artifactContracts: ARTIFACT_CONTRACTS,
+    samplePrompts: SAMPLE_PROMPTS.map((sample) => {
+      const routed = routeFreeformPrompt(sample.prompt);
+      return {
+        prompt: sample.prompt,
+        expectedArtifact: sample.artifact,
+        summary: sample.summary,
+        routedArtifactContract: routed.serviceArtifactContract,
+        safe: routed.safe,
+        disclaimerRequired: routed.disclaimerRequired,
+      };
+    }),
+    matterhornBeyondWeb3: MATTERHORN_BEYOND_WEB3,
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
@@ -621,6 +757,65 @@ function runCheck() {
   const medicalRouted = routeFreeformPrompt("diagnose my client's knee injury and prescribe medication");
   if (medicalRouted.redirected !== true || medicalRouted.disclaimerRequired !== true) {
     failures.push("Free-form routing must redirect clinical requests to educational/safety language.");
+  }
+  // Pregnancy- and eating-disorder-specific prompts must also redirect.
+  for (const clinical of [
+    "build a prenatal yoga plan for my pregnant client",
+    "make a meal plan for a client with an eating disorder",
+  ]) {
+    if (routeFreeformPrompt(clinical).redirected !== true) {
+      failures.push(`Sensitive clinical prompt must redirect: "${clinical}"`);
+    }
+  }
+
+  // Service-builder layer: artifact contracts, intents, and sample prompts.
+  const contractsById = new Map((contract.artifactContracts || []).map((item) => [item.id, item]));
+  for (const id of [
+    "client_plan",
+    "intake_questionnaire",
+    "progress_check_in",
+    "video_lesson_script",
+    "client_tracker",
+    "offer_landing_packet",
+    "renewal_upsell_note",
+  ]) {
+    const item = contractsById.get(id);
+    if (!item) {
+      failures.push(`Missing artifact contract: ${id}`);
+      continue;
+    }
+    if (item.status !== "live_local") failures.push(`Artifact contract ${id} should be live_local.`);
+    if (!item.disclaimer) failures.push(`Artifact contract ${id} must carry a disclaimer.`);
+  }
+  for (const intent of contract.serviceBuilder?.intents || []) {
+    if (!contractsById.has(intent.contractId)) {
+      failures.push(`Service-builder intent "${intent.intent}" maps to unknown contract ${intent.contractId}.`);
+    }
+    if (intent.routed !== intent.contractId) {
+      failures.push(`Service-builder intent "${intent.intent}" should route to ${intent.contractId} (got ${intent.routed}).`);
+    }
+  }
+  if (!Array.isArray(contract.samplePrompts) || contract.samplePrompts.length < 8) {
+    failures.push("samplePrompts must include at least eight Hermes/demo prompts.");
+  }
+  for (const sample of contract.samplePrompts || []) {
+    if (!contractsById.has(sample.routedArtifactContract)) {
+      failures.push(`Sample prompt "${sample.prompt}" routed to unknown contract ${sample.routedArtifactContract}.`);
+    }
+    if (sample.routedArtifactContract !== sample.expectedArtifact) {
+      failures.push(`Sample prompt "${sample.prompt}" expected ${sample.expectedArtifact} but routed ${sample.routedArtifactContract}.`);
+    }
+    if (sample.safe !== true || sample.disclaimerRequired !== true) {
+      failures.push(`Sample prompt "${sample.prompt}" must be safe and require a disclaimer.`);
+    }
+  }
+  // Matterhorn-beyond-Web3 framing with planned-not-live future hooks.
+  const beyond = contract.matterhornBeyondWeb3;
+  if (beyond?.firstWeb2Workflow !== true) failures.push("matterhornBeyondWeb3.firstWeb2Workflow must be true.");
+  for (const hook of ["storage/hosting", "payments", "email", "identity/access"]) {
+    if (!(beyond?.plannedNotLiveServiceHooks || []).includes(hook)) {
+      failures.push(`matterhornBeyondWeb3 should list planned-not-live hook: ${hook}`);
+    }
   }
 
   // Exposed through the existing generic Matterhorn workflow surfaces.
