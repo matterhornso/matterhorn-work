@@ -325,6 +325,18 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowStarterCards],
   );
+  const protocolWorkflowLaunchers = useMemo(
+    () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket"),
+    [customerWorkflowStarterCards],
+  );
+  const businessWorkflowLaunchers = useMemo(
+    () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow" || card.id === "decentralized_services_operator"),
+    [customerWorkflowStarterCards],
+  );
+  const blankWorkflowLauncher = useMemo(
+    () => customerWorkflowStarterCards.find((card) => card.id === "blank_chat_workflow") ?? null,
+    [customerWorkflowStarterCards],
+  );
   const wellnessRailLauncher = useMemo(
     () => customerWorkflowStarterCards.find((card) => card.id === "wellness_creator_workflow") ?? null,
     [customerWorkflowStarterCards],
@@ -941,15 +953,19 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : (
-                    <div className="flex flex-1 items-center justify-center px-6 py-16">
-                      <div className="w-full max-w-3xl space-y-6">
-                        <div className="space-y-1 text-center">
-                          <h2 className="text-lg font-semibold text-dls-text">
-                            Choose a workspace, then ask in plain English.
+                    <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-14">
+                      <div className="w-full max-w-5xl space-y-7">
+                        <div className="mx-auto max-w-2xl space-y-3 text-center">
+                          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.26)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
+                            Test customer launch hub
+                          </div>
+                          <h2 className="text-2xl font-semibold tracking-[-0.01em] text-dls-text sm:text-3xl">
+                            Start with a desk, then chat.
                           </h2>
-                          <p className="mx-auto max-w-xl text-xs leading-relaxed text-dls-secondary">
-                            Open a dedicated protocol desk for Bittensor, Hyperliquid, or Polymarket,
-                            or start a workflow session for wellness and other customer artifacts.
+                          <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
+                            Matterhorn Work gives each high-risk domain its own guided surface. Pick Bittensor,
+                            Hyperliquid, Polymarket, or a business workflow; Matterhorn inserts an editable prompt
+                            and keeps safety boundaries visible.
                           </p>
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
@@ -957,7 +973,13 @@ export function SessionPage(props: SessionPageProps) {
                             type="button"
                             className="inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-medium text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff]"
                             disabled={props.sidebar.newTaskDisabled}
-                            onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
+                            onClick={() => {
+                              if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
+                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
+                                return;
+                              }
+                              props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                            }}
                           >
                             <Plus className="size-4" />
                             New blank chat
@@ -977,74 +999,116 @@ export function SessionPage(props: SessionPageProps) {
                             Open Bittensor workspace
                           </button>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                          {customerWorkflowLaunchers.map((launcher) => {
-                            const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
-                            return (
-                              <button
-                                key={launcher.id}
-                                type="button"
-                                className="flex min-h-[104px] w-full flex-col items-start gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.55)] hover:bg-[rgba(var(--matterhorn-blue-rgb),0.1)]"
-                                onClick={() => {
-                                  if (launcher.panel) {
-                                    openVenueRailPane(launcher.panel);
+                        <section className="space-y-3">
+                          <div className="flex items-end justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold text-dls-text">Protocol desks</h3>
+                              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                                Separate interfaces for TAO, perps, and prediction markets. Each opens its own rail and starts an editable prompt.
+                              </p>
+                            </div>
+                            <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                              No hidden auto-send
+                            </span>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            {protocolWorkflowLaunchers.map((launcher) => {
+                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
+                              return (
+                                <button
+                                  key={launcher.id}
+                                  type="button"
+                                  className="flex min-h-[156px] w-full flex-col items-start gap-3 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.55)] hover:bg-[rgba(var(--matterhorn-blue-rgb),0.1)]"
+                                  onClick={() => {
+                                    if (launcher.panel) {
+                                      openVenueRailPane(launcher.panel);
+                                    }
                                     if (props.sidebar.onCreateTaskWithPrompt) {
                                       props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
                                       return;
                                     }
-                                  }
-                                  if (props.sidebar.onCreateTaskWithPrompt) {
-                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
-                                    return;
-                                  }
-                                  props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
-                                }}
-                              >
-                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)]">
-                                  <Icon className="size-4" />
-                                </span>
-                                <span>
-                                  <span className="flex flex-wrap items-center gap-2">
-                                    <span className="text-[13px] font-semibold text-dls-text">{launcher.title}</span>
-                                    <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.22)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
-                                      {launcher.statusLabel}
-                                    </span>
+                                    props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                                  }}
+                                >
+                                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)]">
+                                    <Icon className="size-4" />
                                   </span>
-                                  <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{launcher.description}</span>
-                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{launcher.safetySummary}</span>
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {customerWorkflowStarterCards.map((task) => {
-                            const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
-                            return (
-                              <button
-                                key={task.id}
-                                type="button"
-                                className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
-                                onClick={() => {
-                                  props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
-                                }}
-                              >
-                                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                                  <Icon className="size-4" />
-                                </span>
-                                <span>
-                                  <span className="flex flex-wrap items-center gap-2">
-                                    <span className="text-[13px] font-medium text-dls-text">{task.title}</span>
-                                    <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                                      {task.statusLabel}
+                                  <span className="min-w-0">
+                                    <span className="flex flex-wrap items-center gap-2">
+                                      <span className="text-[14px] font-semibold text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
+                                      <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.22)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
+                                        {launcher.statusLabel}
+                                      </span>
                                     </span>
+                                    <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
+                                    <span className="mt-3 block text-[10px] leading-relaxed text-dls-secondary/90">{launcher.safetySummary}</span>
                                   </span>
-                                  <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{task.description}</span>
-                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{task.safetySummary}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                        <section className="space-y-3">
+                          <div>
+                            <h3 className="text-sm font-semibold text-dls-text">Business workflows</h3>
+                            <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                              Use the same chat engine for real-world customer work: wellness creator services now, decentralized service planning next.
+                            </p>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {businessWorkflowLaunchers.map((task) => {
+                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
+                              return (
+                                <button
+                                  key={task.id}
+                                  type="button"
+                                  className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                                  onClick={() => {
+                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
+                                  }}
+                                >
+                                  <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                                    <Icon className="size-4" />
+                                  </span>
+                                  <span>
+                                    <span className="flex flex-wrap items-center gap-2">
+                                      <span className="text-[13px] font-medium text-dls-text">{task.title}</span>
+                                      <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                        {task.statusLabel}
+                                      </span>
+                                    </span>
+                                    <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{task.description}</span>
+                                    <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{task.safetySummary}</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                        <section className="grid gap-2 md:grid-cols-2">
+                          {blankWorkflowLauncher ? (
+                            <button
+                              type="button"
+                              className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                              onClick={() => {
+                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
+                              }}
+                            >
+                              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                                <FileText className="size-4" />
+                              </span>
+                              <span>
+                                <span className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[13px] font-medium text-dls-text">{blankWorkflowLauncher.title}</span>
+                                  <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                    {blankWorkflowLauncher.statusLabel}
+                                  </span>
                                 </span>
-                              </button>
-                            );
-                          })}
+                                <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{blankWorkflowLauncher.description}</span>
+                                <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{blankWorkflowLauncher.safetySummary}</span>
+                              </span>
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
@@ -1060,7 +1124,7 @@ export function SessionPage(props: SessionPageProps) {
                               <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, agent tools, wallet connectors, and Matterhorn services.</span>
                             </span>
                           </button>
-                        </div>
+                        </section>
                       </div>
                     </div>
                   )}
