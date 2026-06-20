@@ -148,7 +148,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
           <BittensorPanel initialVenue={initialVenue} />
         </Suspense>
         <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-xl border border-dls-border bg-dls-surface/95 px-3 py-2 text-[11px] leading-relaxed text-dls-secondary shadow-[var(--dls-card-shadow)]">
-          EVM wallet not connected. Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews, and external-signer guidance still work from here.
+          EVM wallet not connected. Protocol desks still support Bittensor public reads, subnet discovery, Hyperliquid previews, Polymarket previews, and external-signer guidance.
         </div>
       </div>
     );
@@ -275,7 +275,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
 
       {/* Quick Actions — Icon grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        <ActionButton icon={<BrainCircuit className="size-4" />} label="Crypto" accent="blue" onClick={() => setActivePanel("crypto")} primary />
+        <ActionButton icon={<BrainCircuit className="size-4" />} label="Protocols" accent="blue" onClick={() => setActivePanel("crypto")} primary />
         <ActionButton icon={<Send className="size-4" />} label="Send" accent="violet" onClick={() => setActivePanel("send")} primary />
         <ActionButton icon={<Bot className="size-4" />} label="Agent" accent="violet" onClick={() => setActivePanel("agent")} />
         <ActionButton icon={<BarChart3 className="size-4" />} label="Portfolio" accent="violet" onClick={handlePortfolioOpen} />

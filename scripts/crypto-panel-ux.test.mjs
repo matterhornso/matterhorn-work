@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Static gate for the beta-tester Crypto workspace panel UX.
-// Verifies the "Try in chat" prompts, "Safety status" card, and "Evidence / QA"
+// Static gate for the beta-tester protocol workspace panel UX.
+// Verifies the venue desks, "Try in chat" prompts, "Safety status" card, and "Evidence / QA"
 // card exist; that prompt buttons insert (not auto-send) via the handoff event;
 // and that no copy claims live market submission or asks for secrets.
 import assert from "node:assert/strict";
@@ -14,15 +14,29 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(
   pkg.scripts?.["test:crypto-panel-ux"],
   "node scripts/crypto-panel-ux.test.mjs",
-  "package.json should expose the crypto panel UX gate",
+  "package.json should expose the protocol panel UX gate",
 );
 
-// 2. The three beta-tester sections exist.
+// 2. Separate venue desks exist; the customer surface should not collapse into
+//    a single "Crypto workspace" entry point.
+for (const phrase of [
+  "Bittensor workspace",
+  "Hyperliquid workspace",
+  "Polymarket workspace",
+  "Use Bittensor without learning the CLI first.",
+  "Preview Hyperliquid trades through chat, with execution off.",
+  "Analyze prediction markets and preview safely.",
+]) {
+  assert.ok(panel.includes(phrase), `Panel should expose a dedicated venue desk: ${phrase}`);
+}
+assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
+
+// 3. The three beta-tester sections exist.
 for (const section of ["Try in chat", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 
-// 3. The six "Try in chat" prompt button labels exist.
+// 4. The six "Try in chat" prompt button labels exist.
 for (const label of [
   "show my TAO",
   "find Bittensor subnets for image generation",
@@ -34,14 +48,14 @@ for (const label of [
   assert.ok(panel.includes(label), `Panel should include Try-in-chat prompt: ${label}`);
 }
 
-// 4. Buttons insert into the composer (do not auto-send): they use the handoff
+// 5. Buttons insert into the composer (do not auto-send): they use the handoff
 //    helper, and the copy makes the no-auto-send behavior explicit.
 assert.ok(panel.includes("askAgentBetaTryPrompt"), "Try-in-chat buttons should call the beta prompt handler");
 assert.ok(panel.includes('source: "crypto-beta-try"'), "Beta prompts should route through the crypto handoff source");
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff") || panel.includes('mode: item.mode'), "Beta prompts should use the insert handoff event");
 assert.ok(panel.includes("Nothing sends automatically"), "Panel should tell testers prompts are not auto-sent");
 
-// 5. Safety status: the three venue lines + the custody/no-live-trade statement.
+// 6. Safety status: the three venue lines + the custody/no-live-trade statement.
 for (const phrase of [
   "Most complete beta flow",
   "External signer required for actions",
@@ -53,9 +67,9 @@ for (const phrase of [
   assert.ok(panel.includes(phrase), `Panel safety copy should include: ${phrase}`);
 }
 
-// 6. Evidence / QA card names the three artifacts and their commands.
+// 7. Evidence / QA card names the three artifacts and their commands.
 for (const phrase of [
-  "Customer crypto smoke",
+  "Customer readiness smoke",
   "pnpm smoke:customer-ready-crypto",
   "Bittensor beta packet",
   "pnpm beta:bittensor:packet",
@@ -65,7 +79,17 @@ for (const phrase of [
   assert.ok(panel.includes(phrase), `Panel evidence card should include: ${phrase}`);
 }
 
-// 7. No copy claims live market submission.
+// 8. Market desk copy must show the preview-only treatment.
+for (const phrase of [
+  "Preview Only",
+  "Can submit",
+  "Live submission",
+  "External signer/client required",
+]) {
+  assert.ok(panel.includes(phrase), `Panel should include market preview-only copy: ${phrase}`);
+}
+
+// 9. No copy claims live market submission.
 for (const forbidden of [
   "Live submission: On",
   "Can submit: Yes",
@@ -77,7 +101,7 @@ for (const forbidden of [
   assert.equal(panel.includes(forbidden), false, `Panel must not claim live submission: ${forbidden}`);
 }
 
-// 8. No copy asks for secrets.
+// 10. No copy asks for secrets.
 for (const forbidden of [
   "privateKey:",
   "apiSecret:",
@@ -90,4 +114,4 @@ for (const forbidden of [
   assert.equal(panel.includes(forbidden), false, `Panel must not ask for secrets: ${forbidden}`);
 }
 
-console.log("Crypto panel UX static check passed.");
+console.log("Protocol panel UX static check passed.");

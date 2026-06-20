@@ -127,61 +127,61 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "bittensor-image-subnets",
     label: "Bittensor discovery",
     betaVisible: true,
-    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
+    prompt: "Use Bittensor chat mode. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
     id: "bittensor-tao-wallet",
     label: "TAO wallet",
     betaVisible: true,
-    prompt: "Use unified crypto chat. Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
+    prompt: "Use Bittensor chat mode. Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
   },
   {
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+    prompt: "Use Hyperliquid chat mode. Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "polymarket-compliance",
     label: "Polymarket compliance",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
+    prompt: "Use Polymarket chat mode. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
   },
   {
     id: "external-signer-preview",
     label: "Signer preview",
     betaVisible: true,
-    prompt: "Use unified crypto chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
+    prompt: "Use Matterhorn protocol chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
   },
   {
     id: "market-execution-readiness",
     label: "Execution readiness",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
+    prompt: "Use Matterhorn protocol chat. Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
   },
   {
     id: "market-execution-chain",
     label: "Safe execution chain",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
+    prompt: "Use Matterhorn protocol chat. Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
   },
   {
     id: "market-sdk-validation",
     label: "SDK validation",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    prompt: "Use Matterhorn protocol chat. Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
   },
   {
     id: "hyperliquid-watch",
     label: "Hyperliquid watch",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Create a read-only Hyperliquid watch plan for BTC funding and orderbook movement. Show the watch kind, asset, threshold, source/freshness, watch_alert card behavior, and confirm no orders are signed, submitted, or auto-executed.",
+    prompt: "Use Hyperliquid chat mode. Create a read-only Hyperliquid watch plan for BTC funding and orderbook movement. Show the watch kind, asset, threshold, source/freshness, watch_alert card behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
   {
     id: "polymarket-watch",
     label: "Polymarket watch",
     betaVisible: false,
-    prompt: "Use unified crypto chat. Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
+    prompt: "Use Polymarket chat mode. Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
 ] as const;
 // Beta-tester "Try in chat" quick prompts. Each inserts a ready-to-review
@@ -200,7 +200,7 @@ const BETA_TRY_PROMPTS = [
     label: "find Bittensor subnets for image generation",
     mode: "crypto",
     prompt:
-      "Use unified crypto chat. Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
+      "Use Bittensor chat mode. Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
     id: "beta-validators-14",
@@ -221,14 +221,14 @@ const BETA_TRY_PROMPTS = [
     label: "show Hyperliquid BTC orderbook",
     mode: "crypto",
     prompt:
-      "Use unified crypto chat. Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+      "Use Hyperliquid chat mode. Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "beta-pm-summary",
     label: "summarize a Polymarket market",
     mode: "crypto",
     prompt:
-      "Use unified crypto chat. Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
+      "Use Polymarket chat mode. Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
   },
 ] as const;
 const BITTENSOR_BETA_MODE = (() => {
@@ -244,6 +244,7 @@ type ActionType = BittensorActionQuote["action"];
 const VENUE_DESKS: Record<CryptoVenue, {
   label: string;
   shortLabel: string;
+  workspaceTitle: string;
   eyebrow: string;
   headline: string;
   description: string;
@@ -257,6 +258,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   bittensor: {
     label: "Bittensor",
     shortLabel: "TAO",
+    workspaceTitle: "Bittensor workspace",
     eyebrow: "Wallet · subnets · validators",
     headline: "Use Bittensor without learning the CLI first.",
     description: "Read public SS58 wallets, understand subnets, compare validators, prepare staking previews, and create watches. Actions still require an external Bittensor-compatible signer.",
@@ -287,6 +289,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   hyperliquid: {
     label: "Hyperliquid",
     shortLabel: "HL",
+    workspaceTitle: "Hyperliquid workspace",
     eyebrow: "Orderbook · account · previews",
     headline: "Preview Hyperliquid trades through chat, with execution off.",
     description: "Inspect orderbooks, account exposure, funding, open-order context, watch plans, and external-signer handoffs. Matterhorn does not submit live Hyperliquid orders in this build.",
@@ -317,6 +320,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   polymarket: {
     label: "Polymarket",
     shortLabel: "PM",
+    workspaceTitle: "Polymarket workspace",
     eyebrow: "Markets · outcomes · compliance",
     headline: "Analyze prediction markets and preview safely.",
     description: "Find markets, explain outcomes as probabilities, read orderbook/liquidity context, check compliance state, and prepare external-signer previews without sending orders from Matterhorn.",
@@ -578,11 +582,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         ready: false,
         checks: [{
           id: "crypto_readiness_api",
-          label: "Crypto readiness API",
+          label: "Protocol readiness API",
           status: "fail",
-          summary: err instanceof Error ? err.message : "Failed to load unified crypto readiness.",
+          summary: err instanceof Error ? err.message : "Failed to load protocol readiness.",
         }],
-        warnings: ["Unified crypto readiness could not run from the app."],
+        warnings: ["Protocol readiness could not run from the app."],
       });
     } finally {
       setCryptoReadinessLoading(false);
@@ -836,12 +840,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutCryptoReadiness = async () => {
-    const prompt = "Use unified crypto chat. Review the current Matterhorn crypto customer readiness status across Bittensor, Hyperliquid, and Polymarket. Explain blockers, warnings, safe demo paths, and the next command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Use Matterhorn protocol chat. Review the current Matterhorn readiness status across Bittensor, Hyperliquid, and Polymarket. Explain blockers, warnings, safe demo paths, and the next command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { cryptoReadiness }, { mode: "crypto", source: "crypto-readiness-panel" });
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Use unified crypto chat. Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Use Matterhorn protocol chat. Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -963,7 +967,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               <BrainCircuit className="size-5 text-sky-400" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-dls-text">{activeVenue.label}</h2>
+              <h2 className="text-base font-semibold text-dls-text">{activeVenue.workspaceTitle}</h2>
               <p className="text-xs text-dls-secondary">
                 {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeVenue.statusLabel}
               </p>
@@ -1032,7 +1036,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue !== "bittensor" && (
           <div className="space-y-4">
-            <Section title={`${activeVenue.label} workspace`} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
+            <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-200">{activeVenue.eyebrow}</div>
@@ -1099,6 +1103,24 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue === "bittensor" && tab === "overview" && (
           <div className="space-y-4">
+            <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-200">{activeVenue.eyebrow}</div>
+                  <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
+                  <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Interface" value={activeVenue.statusLabel} compact />
+                  <Metric label="Signing" value={activeVenue.signer} compact />
+                  <Metric label="Wallet input" value="Public SS58" compact />
+                  <Metric label="Custody" value="Never" compact />
+                </div>
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Use this desk for TAO balance reads, subnet discovery, validator comparison, watchlists, receipts, and unsigned staking previews. Matterhorn never asks for seed phrases, private keys, mnemonics, or wallet exports.
+                </p>
+              </div>
+            </Section>
             <div className="grid grid-cols-2 gap-2">
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
               <Metric label="Favorites" value={String(favorites.length)} />
@@ -1221,7 +1243,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title="Evidence / QA" icon={<Database className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
                 <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
-                  <p className="text-xs font-semibold text-dls-text">Customer crypto smoke</p>
+                  <p className="text-xs font-semibold text-dls-text">Customer readiness smoke</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm smoke:customer-ready-crypto</code>
                 </div>
                 <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
@@ -1241,7 +1263,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label={BITTENSOR_BETA_MODE ? "Bittensor Beta" : "Bittensor"} value={readinessState} compact />
                   <Metric label="Hyperliquid" value={hyperliquidReadinessState} compact />
                   <Metric label="Polymarket" value={polymarketReadinessState} compact />
-                  <Metric label="Unified smoke" value={cryptoReadinessState} compact />
+                  <Metric label="All-protocol smoke" value={cryptoReadinessState} compact />
                 </div>
                 {BITTENSOR_BETA_MODE ? (
                   <p className="text-xs leading-5 text-sky-200">
@@ -1251,11 +1273,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {cryptoReadinessBlocker ? (
                   <p className="text-xs leading-5 text-red-300">Blocker: {cryptoReadinessBlocker}</p>
                 ) : cryptoReadinessFailures[0] ? (
-                  <p className="text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Crypto readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
+                  <p className="text-xs leading-5 text-red-300">{cryptoReadinessFailures[0].label ?? "Protocol readiness"}: {cryptoReadinessFailures[0].summary ?? "Needs attention before customer demo."}</p>
                 ) : cryptoReadinessWarnings[0] ? (
-                  <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Crypto readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
+                  <p className="text-xs leading-5 text-amber-300">{cryptoReadinessWarnings[0].label ?? "Protocol readiness"}: {cryptoReadinessWarnings[0].summary ?? "Review before customer demo."}</p>
                 ) : cryptoReadiness?.ready && readiness?.ready ? (
-                  <p className="text-xs leading-5 text-emerald-300">Unified crypto readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
+                  <p className="text-xs leading-5 text-emerald-300">Protocol readiness is green for Bittensor, Hyperliquid, and Polymarket read/preview demo flows.</p>
                 ) : (
                   <p className="text-xs leading-5 text-dls-secondary">Refresh readiness before a test customer session.</p>
                 )}
@@ -1273,7 +1295,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
                     <BrainCircuit className="size-3.5" />
-                    Crypto Chat
+                    Protocol Chat
                   </Button>
                 </div>
               </div>
@@ -1338,7 +1360,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutMarketExecutionReadiness} disabled={!marketExecutionReadiness}>
                     <BrainCircuit className="size-3.5" />
-                    Crypto Chat
+                    Market Chat
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyCustomerDemoCommand("executionReadiness")}>
                     {copiedCustomerCommand === "executionReadiness" ? "Copied" : "Execution CLI"}
