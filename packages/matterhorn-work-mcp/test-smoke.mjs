@@ -728,6 +728,46 @@ const server = createServer(async (req, res) => {
       }],
     });
   }
+  if (req.method === "GET" && url.pathname === "/api/workflows/templates") {
+    assert.equal(url.searchParams.get("customerTemplate"), "bittensor_operator");
+    return json(res, 200, {
+      ok: true,
+      version: "matterhorn.customer.workflow.template.v1",
+      status: "catalog_only",
+      source: "mock.customer-templates",
+      safety: {
+        catalogOnly: true,
+        noProviderExecution: true,
+        noCustody: true,
+        noLiveMarketSubmit: true,
+        acceptsSecrets: false,
+        acceptsPrivateKeys: false,
+        acceptsApiSecrets: false,
+        acceptsRawSignatures: false,
+        canSubmit: false,
+        liveExecutionEnabled: false,
+      },
+      counts: { total: 1, byCategory: { bittensor: 1 }, byStatus: { beta_ready: 1 } },
+      customerTemplates: [{
+        id: "bittensor_operator",
+        name: "Use Bittensor",
+        category: "bittensor",
+        status: "beta_ready",
+        examplePrompts: ["Show my TAO"],
+        safetyBoundaries: {
+          acceptsSecrets: false,
+          acceptsPrivateKeys: false,
+          acceptsApiSecrets: false,
+          acceptsRawSignatures: false,
+          canSubmit: false,
+          liveExecutionEnabled: false,
+          canExecute: true,
+          requiresExternalSigner: true,
+          allowsRealFunds: false,
+        },
+      }],
+    });
+  }
   if (req.method === "POST" && url.pathname === "/api/services/chat/plan") {
     assert.match(body.message, /paid fitness program/i);
     assert.equal(body.capability, "payments");
@@ -1028,6 +1068,7 @@ try {
     "matterhorn_services_chat_plan",
     "matterhorn_workflows_catalog",
     "matterhorn_workflows_prompt_pack",
+    "matterhorn_workflows_customer_templates",
     "matterhorn_crypto_live_public_qa",
     "matterhorn_market_execution_readiness",
     "matterhorn_market_execution_chain",
@@ -1083,6 +1124,7 @@ try {
   assert.match(descriptionFor("matterhorn_services_chat_plan"), /Plan a future decentralized service workflow/i);
   assert.match(descriptionFor("matterhorn_workflows_catalog"), /catalog-only Matterhorn Work workflow registry/i);
   assert.match(descriptionFor("matterhorn_workflows_prompt_pack"), /copy-pasteable staged prompts/i);
+  assert.match(descriptionFor("matterhorn_workflows_customer_templates"), /customer-facing Matterhorn Work workflow templates/i);
   assert.match(descriptionFor("matterhorn_crypto_live_public_qa"), /live public-data QA pack/i);
   assert.match(descriptionFor("matterhorn_market_execution_readiness"), /execution-readiness contract/i);
   assert.match(descriptionFor("matterhorn_market_execution_chain"), /safe execution-chain command plan/i);
@@ -1518,6 +1560,19 @@ try {
   assert.equal(workflowPromptPack.workflows[0].workflowId, "wellness_creator_workflow");
   assert.equal(workflowPromptPack.workflows[0].prompts[0].step, 1);
   assert.equal(workflowPromptPack.workflows[0].safety.noProviderExecution, true);
+
+  const customerTemplates = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_workflows_customer_templates",
+    arguments: { customerTemplate: "bittensor_operator" },
+  }));
+  assert.equal(customerTemplates.version, "matterhorn.customer.workflow.template.v1");
+  assert.equal(customerTemplates.status, "catalog_only");
+  assert.equal(customerTemplates.safety.catalogOnly, true);
+  assert.equal(customerTemplates.safety.liveExecutionEnabled, false);
+  assert.equal(customerTemplates.safety.canSubmit, false);
+  assert.equal(customerTemplates.customerTemplates[0].id, "bittensor_operator");
+  assert.equal(customerTemplates.customerTemplates[0].safetyBoundaries.acceptsSecrets, false);
+  assert.equal(customerTemplates.customerTemplates[0].safetyBoundaries.liveExecutionEnabled, false);
 
   const servicesChatPlan = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_services_chat_plan",
