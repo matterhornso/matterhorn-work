@@ -34,6 +34,7 @@ import {
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
 const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
+const CHECK_PENDING_LABEL = "Check pending";
 const CUSTOMER_DEMO_COMMANDS = {
   readiness: "matterhorn-work crypto readiness --json",
   readinessApi: "curl -sS \"$MATTERHORN_WORK_SERVER_URL/api/crypto/readiness\" -H \"Authorization: Bearer $MATTERHORN_WORK_TOKEN\"",
@@ -416,7 +417,7 @@ function readinessStateForVenue(checks: ReadinessCheck[], venue: string): string
     const label = check.label?.toLowerCase() ?? "";
     return id.includes(needle) || label.includes(needle);
   });
-  if (!matches.length) return "Unknown";
+  if (!matches.length) return CHECK_PENDING_LABEL;
   if (matches.some((check) => check.status === "fail")) return "Blocked";
   if (matches.some((check) => check.status === "warning" || check.status === "skip")) return "Review";
   return "Ready";
@@ -949,7 +950,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       : readinessFailures.length
         ? "Blocked"
         : "Review"
-    : "Unknown";
+    : CHECK_PENDING_LABEL;
   const cryptoReadinessChecks = cryptoReadiness?.checks ?? [];
   const cryptoReadinessFailures = cryptoReadinessChecks.filter((check) => check.status === "fail");
   const cryptoReadinessWarnings = cryptoReadinessChecks.filter((check) => check.status === "warning" || check.status === "skip");
@@ -964,7 +965,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       : cryptoReadinessFailures.length
         ? "Blocked"
         : "Review"
-    : "Unknown";
+    : CHECK_PENDING_LABEL;
   const hyperliquidReadinessState = readinessStateForVenue(cryptoReadinessChecks, "hyperliquid");
   const polymarketReadinessState = readinessStateForVenue(cryptoReadinessChecks, "polymarket");
   const marketExecutionControls = marketExecutionReadiness?.controls ?? [];
@@ -973,31 +974,31 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const marketExecutionNextAction = marketExecutionReadiness?.nextActions?.find(Boolean) ?? null;
   const marketVenueState = (venueName: string): string => {
     const venue = marketExecutionReadiness?.venues?.find((item) => item.venue?.toLowerCase() === venueName);
-    if (!venue) return "Unknown";
+    if (!venue) return CHECK_PENDING_LABEL;
     return venue.blockedNow?.includes("live_submit") ? "Disabled" : "Review";
   };
   const marketExecutionSubmissionState = marketExecutionReadiness
     ? "No"
-    : "Unknown";
+    : CHECK_PENDING_LABEL;
   const marketExecutionChainStages = marketExecutionChain?.stages ?? [];
-  const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : "Unknown";
-  const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : "Unknown";
-  const marketExecutionChainSignerState = marketExecutionChain?.safety?.externalSignerRequired === true ? "Required" : "Unknown";
+  const marketExecutionChainStageCount = marketExecutionChainStages.length ? String(marketExecutionChainStages.length) : CHECK_PENDING_LABEL;
+  const marketExecutionChainSubmitState = marketExecutionChain?.safety?.canSubmit === false ? "No" : CHECK_PENDING_LABEL;
+  const marketExecutionChainSignerState = marketExecutionChain?.safety?.externalSignerRequired === true ? "Required" : CHECK_PENDING_LABEL;
   const marketExecutionChainState = marketExecutionChain
     ? marketExecutionChain.safety?.liveSubmissionEnabled === false && marketExecutionChain.safety?.canSubmit === false
       ? "Safe"
       : "Review"
-    : "Unknown";
+    : CHECK_PENDING_LABEL;
   const marketSdkValidationState = marketSdkValidation
     ? marketSdkValidation.safety?.liveSubmissionEnabled === false && marketSdkValidation.safety?.canSubmit === false
       ? "Safe"
       : "Review"
-    : "Unknown";
-  const marketSdkValidationModeCount = marketSdkValidation?.modes?.length ? String(marketSdkValidation.modes.length) : "Unknown";
-  const marketSdkValidationSecretState = marketSdkValidation?.safety?.acceptsSecrets === false ? "No" : "Unknown";
+    : CHECK_PENDING_LABEL;
+  const marketSdkValidationModeCount = marketSdkValidation?.modes?.length ? String(marketSdkValidation.modes.length) : CHECK_PENDING_LABEL;
+  const marketSdkValidationSecretState = marketSdkValidation?.safety?.acceptsSecrets === false ? "No" : CHECK_PENDING_LABEL;
   const marketSdkValidationPrivateSdkState = marketSdkValidation?.safety?.runsPrivateSdkSigning === false && marketSdkValidation?.safety?.callsExchanges === false
     ? "No"
-    : "Unknown";
+    : CHECK_PENDING_LABEL;
   const activeVenue = VENUE_DESKS[venue];
   const activeManifest = VENUE_PROTOCOL_MANIFESTS[venue];
   const activeManifestStatus = protocolStatusLabel(activeManifest.customerStatus);
