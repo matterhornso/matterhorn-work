@@ -137,6 +137,33 @@ const MATTERHORN_STARTER_TASKS = [
   },
 ] as const;
 
+const MATTERHORN_WORKSPACE_LAUNCHERS = [
+  {
+    title: "Open Bittensor desk",
+    description: "TAO wallet reads, subnets, validators, watches, and staking previews.",
+    panel: "bittensor",
+    icon: BrainCircuit,
+  },
+  {
+    title: "Open Hyperliquid desk",
+    description: "Account context, orderbook reads, funding watches, and preview-only orders.",
+    panel: "hyperliquid",
+    icon: BarChart3,
+  },
+  {
+    title: "Open Polymarket desk",
+    description: "Market summaries, outcomes, compliance, receipts, and preview-only orders.",
+    panel: "polymarket",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Build wellness workflow",
+    description: "Training plans, dietician packets, check-ins, and client follow-up artifacts.",
+    prompt: "Create a full Matterhorn wellness workflow for a personal trainer, yoga instructor, or dietician: offer design, onboarding questionnaire, client plan artifact, check-in cadence, safe non-medical disclaimer, and customer handoff packet.",
+    icon: Dumbbell,
+  },
+] as const;
+
 type StatusBarOverrides = Pick<
   StatusBarProps,
   | "loading"
@@ -962,11 +989,11 @@ export function SessionPage(props: SessionPageProps) {
                       <div className="w-full max-w-3xl space-y-6">
                         <div className="space-y-1 text-center">
                           <h2 className="text-lg font-semibold text-dls-text">
-                            Start from chat, then review the evidence.
+                            Choose a workspace, then ask in plain English.
                           </h2>
                           <p className="mx-auto max-w-xl text-xs leading-relaxed text-dls-secondary">
-                            Create a session or choose a Matterhorn task. These prompts open the real product lanes:
-                            Bittensor, market previews, workflow artifacts, and customer-safe evidence.
+                            Open a dedicated protocol desk for Bittensor, Hyperliquid, or Polymarket,
+                            or start a workflow session for wellness and other customer artifacts.
                           </p>
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
@@ -977,7 +1004,7 @@ export function SessionPage(props: SessionPageProps) {
                             onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
                           >
                             <Plus className="size-4" />
-                            Create blank session
+                            New blank chat
                           </button>
                           <button
                             type="button"
@@ -987,6 +1014,37 @@ export function SessionPage(props: SessionPageProps) {
                             <WalletIcon className="size-4" />
                             Open Bittensor workspace
                           </button>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                          {MATTERHORN_WORKSPACE_LAUNCHERS.map((launcher) => {
+                            const Icon = launcher.icon;
+                            return (
+                              <button
+                                key={launcher.title}
+                                type="button"
+                                className="flex min-h-[104px] w-full flex-col items-start gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.55)] hover:bg-[rgba(var(--matterhorn-blue-rgb),0.1)]"
+                                onClick={() => {
+                                  if ("panel" in launcher) {
+                                    openVenueRailPane(launcher.panel);
+                                    return;
+                                  }
+                                  if (props.sidebar.onCreateTaskWithPrompt) {
+                                    props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
+                                    return;
+                                  }
+                                  props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                                }}
+                              >
+                                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)]">
+                                  <Icon className="size-4" />
+                                </span>
+                                <span>
+                                  <span className="block text-[13px] font-semibold text-dls-text">{launcher.title}</span>
+                                  <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{launcher.description}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {MATTERHORN_STARTER_TASKS.map((task) => {

@@ -21,11 +21,13 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 
 for (const phrase of [
-  "Do anything with Web3 and real-world workflows through chat.",
-  "One chat for Web3",
-  "Use Bittensor",
-  "Preview markets",
-  "Build workflows",
+  "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
+  "Separate workspaces",
+  "one Matterhorn chat.",
+  "Bittensor workspace",
+  "Hyperliquid desk",
+  "Polymarket desk",
+  "Wellness builder",
   "Stay non-custodial",
   "/matterhorn-logo-square.svg",
   'alt="Matterhorn Work"',
@@ -35,8 +37,13 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Create blank session",
+  "New blank chat",
   "Open Bittensor workspace",
+  "Choose a workspace, then ask in plain English.",
+  "Open Bittensor desk",
+  "Open Hyperliquid desk",
+  "Open Polymarket desk",
+  "Build wellness workflow",
   "Use Bittensor",
   "Show my TAO",
   "Compare validators",
