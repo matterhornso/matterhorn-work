@@ -528,9 +528,6 @@ export function SessionPage(props: SessionPageProps) {
   const openVoiceRailPane = useCallback(() => {
     toggleCurrentSidePanel("voice");
   }, [toggleCurrentSidePanel]);
-  const openWalletRailPane = useCallback(() => {
-    toggleCurrentSidePanel("bittensor");
-  }, [toggleCurrentSidePanel]);
   const primeProtocolRailPrompt = useCallback((panel: VenueSidePanel) => {
     const launcher = protocolWorkflowLaunchers.find((item) => item.panel === panel);
     if (!launcher?.prompt) return;
@@ -1021,11 +1018,8 @@ export function SessionPage(props: SessionPageProps) {
                             type="button"
                             className="inline-flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             onClick={() => {
-                              openWalletRailPane();
                               const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
-                              if (bittensorLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, bittensorLauncher.prompt);
-                              }
+                              if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel, { primePrompt: true });
                             }}
                           >
                             <WalletIcon className="size-4" />
@@ -1054,10 +1048,7 @@ export function SessionPage(props: SessionPageProps) {
                                   className="flex min-h-[156px] w-full flex-col items-start gap-3 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.55)] hover:bg-[rgba(var(--matterhorn-blue-rgb),0.1)]"
                                   onClick={() => {
                                     if (launcher.panel) {
-                                      openVenueRailPane(launcher.panel);
-                                    }
-                                    if (props.sidebar.onCreateTaskWithPrompt) {
-                                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
+                                      openVenueRailPane(launcher.panel, { primePrompt: true });
                                       return;
                                     }
                                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);

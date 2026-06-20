@@ -119,8 +119,8 @@ for (const forbidden of [
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
 assert.ok(walletPanel.includes("Protocol desks still support Bittensor public reads, subnet discovery, Hyperliquid previews, Polymarket previews"), "no-wallet protocol panel should explain public read flows");
-assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt)"), "protocol launchers should create an editable prompt draft");
-assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, bittensorLauncher.prompt)"), "Bittensor top launcher should create an editable prompt draft");
+assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel, { primePrompt: true })"), "protocol launchers should open a dedicated desk and prime an editable prompt draft");
+assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel, { primePrompt: true })"), "Bittensor top launcher should open the Bittensor desk and prime an editable prompt draft");
 assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
 assert.ok(sessionPage.includes("{launcher.safetySummary}"), "protocol launchers should show manifest-backed safety summaries");
 assert.ok(sessionPage.includes("{task.statusLabel}"), "starter task cards should show manifest-backed status labels");
