@@ -29,6 +29,9 @@ for (const token of [
   "MatterhornCustomerWorkflowLaunchMetadata",
   "MatterhornCustomerWorkflowUiMetadata",
   "MatterhornCustomerWorkflowRoutingMetadata",
+  "MatterhornProtocolWorkspaceManifest",
+  "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
+  "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
   "MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY",
 ]) {
   assert.ok(types.includes(token), `types missing customer workflow template token: ${token}`);
@@ -39,6 +42,31 @@ const registryBlock = types.slice(types.indexOf("MATTERHORN_CUSTOMER_WORKFLOW_TE
 for (const id of expectedIds) {
   assert.ok(registryBlock.includes(id), `customer template registry missing: ${id}`);
 }
+
+// 3b. Every non-blank customer template maps to exactly one protocol workspace manifest.
+const workspaceRegistryBlock = types.slice(types.indexOf("MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY"));
+const mappingBlock = types.slice(types.indexOf("MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE"));
+const mappedTemplateIds = [
+  "bittensor_operator",
+  "hyperliquid_trader",
+  "polymarket_researcher",
+  "wellness_creator_workflow",
+  "decentralized_services_operator",
+];
+for (const id of mappedTemplateIds) {
+  assert.ok(mappingBlock.includes(id), `customer-template-to-workspace mapping missing: ${id}`);
+  const workspaceMatch = mappingBlock.match(new RegExp(`${id}:\\s*"([^"]+)"`));
+  assert.ok(workspaceMatch, `${id} must map to a protocol workspace`);
+  const workspaceId = workspaceMatch[1];
+  assert.ok(workspaceRegistryBlock.includes(workspaceId), `mapped workspace ${workspaceId} must exist in registry`);
+}
+const mappingEntries = [...mappingBlock.matchAll(/(\w+):\s*"(\w+)"/g)];
+const mappedWorkspaces = mappingEntries.map(([, , workspaceId]) => workspaceId);
+assert.equal(
+  new Set(mappedWorkspaces).size,
+  mappedWorkspaces.length,
+  "each customer template must map to exactly one protocol workspace",
+);
 
 // 4. Registry script emits a valid catalog envelope.
 const run = (extraArgs = []) =>

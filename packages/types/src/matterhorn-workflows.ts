@@ -1945,3 +1945,286 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY: Record<
   decentralized_services_operator: DECENTRALIZED_SERVICES_OPERATOR_CUSTOMER_TEMPLATE,
   blank_chat_workflow: BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE,
 };
+
+
+// -----------------------------------------------------------------------------
+// Protocol Workspace Manifest Registry
+// -----------------------------------------------------------------------------
+// Integration-layer metadata that maps customer workflow templates to protocol
+// workspaces without touching app UI code. Used by CLI, MCP, and runtime agents
+// to decide how to launch and constrain a workspace session.
+// -----------------------------------------------------------------------------
+
+export const MATTERHORN_PROTOCOL_WORKSPACE_IDS = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "decentralized_services",
+] as const;
+export type MatterhornProtocolWorkspaceId =
+  (typeof MATTERHORN_PROTOCOL_WORKSPACE_IDS)[number];
+
+export const MATTERHORN_PROTOCOL_WORKSPACE_CUSTOMER_STATUSES = [
+  "beta_ready",
+  "preview_only",
+  "workflow_ready",
+  "planned_not_live",
+] as const;
+export type MatterhornProtocolWorkspaceCustomerStatus =
+  (typeof MATTERHORN_PROTOCOL_WORKSPACE_CUSTOMER_STATUSES)[number];
+
+export const MATTERHORN_PROTOCOL_WORKSPACE_LAUNCH_BEHAVIORS = [
+  "starts_chat",
+  "opens_desk",
+  "planned_not_live",
+] as const;
+export type MatterhornProtocolWorkspaceLaunchBehavior =
+  (typeof MATTERHORN_PROTOCOL_WORKSPACE_LAUNCH_BEHAVIORS)[number];
+
+export const MATTERHORN_PROTOCOL_WORKSPACE_CARD_KINDS = [
+  "balance_card",
+  "market_card",
+  "validator_card",
+  "preview_card",
+  "handoff_card",
+  "receipt_card",
+  "plan_card",
+  "schedule_card",
+  "package_card",
+  "capability_card",
+  "provider_card",
+] as const;
+export type MatterhornProtocolWorkspaceCardKind =
+  (typeof MATTERHORN_PROTOCOL_WORKSPACE_CARD_KINDS)[number];
+
+export interface MatterhornProtocolWorkspaceMcpCliHints {
+  cli?: string;
+  mcp?: string;
+}
+
+export interface MatterhornProtocolWorkspaceManifest {
+  version: "matterhorn.protocol.workspace.manifest.v1";
+  id: MatterhornProtocolWorkspaceId;
+  displayName: string;
+  category: MatterhornWorkflowCategory;
+  customerStatus: MatterhornProtocolWorkspaceCustomerStatus;
+  allowedIntents: string[];
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  primaryPanelRouteId: string;
+  mcpCliHints: MatterhornProtocolWorkspaceMcpCliHints;
+  supportedCardKinds: MatterhornProtocolWorkspaceCardKind[];
+  demoPrompt: string;
+  launchBehavior: MatterhornProtocolWorkspaceLaunchBehavior;
+}
+
+export const BITTENSOR_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "bittensor",
+  displayName: "Bittensor",
+  category: "bittensor",
+  customerStatus: "beta_ready",
+  allowedIntents: [
+    "read balance",
+    "compare subnets",
+    "compare validators",
+    "preview stake",
+    "prepare handoff",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: true,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/bittensor",
+  mcpCliHints: {
+    cli: 'matterhorn-work crypto chat --message "show my TAO" --json',
+    mcp: "matterhorn_crypto_chat",
+  },
+  supportedCardKinds: [
+    "balance_card",
+    "validator_card",
+    "preview_card",
+    "handoff_card",
+    "receipt_card",
+  ],
+  demoPrompt: "Show my TAO",
+  launchBehavior: "opens_desk",
+};
+
+export const HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "hyperliquid",
+  displayName: "Hyperliquid",
+  category: "markets",
+  customerStatus: "preview_only",
+  allowedIntents: [
+    "preview trade",
+    "show exposure",
+    "prepare handoff",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/hyperliquid",
+  mcpCliHints: {
+    cli: 'matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json',
+    mcp: "matterhorn_hyperliquid_prepare_handoff",
+  },
+  supportedCardKinds: [
+    "market_card",
+    "preview_card",
+    "handoff_card",
+    "receipt_card",
+  ],
+  demoPrompt: "Preview a Hyperliquid BTC-PERP trade",
+  launchBehavior: "opens_desk",
+};
+
+export const POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "polymarket",
+  displayName: "Polymarket",
+  category: "markets",
+  customerStatus: "preview_only",
+  allowedIntents: [
+    "research market",
+    "preview trade",
+    "show positions",
+    "prepare handoff",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/polymarket",
+  mcpCliHints: {
+    cli: 'matterhorn-work crypto chat --message "preview Polymarket market" --json',
+    mcp: "matterhorn_polymarket_prepare_handoff",
+  },
+  supportedCardKinds: [
+    "market_card",
+    "preview_card",
+    "handoff_card",
+    "receipt_card",
+  ],
+  demoPrompt: "Summarize this Polymarket market",
+  launchBehavior: "opens_desk",
+};
+
+export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "wellness",
+  displayName: "Wellness Creator",
+  category: "wellness",
+  customerStatus: "workflow_ready",
+  allowedIntents: [
+    "plan program",
+    "design nutrition plan",
+    "build schedule",
+    "package services",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/wellness",
+  mcpCliHints: {
+    cli: "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
+  },
+  supportedCardKinds: [
+    "plan_card",
+    "schedule_card",
+    "package_card",
+    "receipt_card",
+  ],
+  demoPrompt: "Create a wellness program for my clients",
+  launchBehavior: "starts_chat",
+};
+
+export const DECENTRALIZED_SERVICES_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
+  version: "matterhorn.protocol.workspace.manifest.v1",
+  id: "decentralized_services",
+  displayName: "Decentralized Services",
+  category: "decentralized_services",
+  customerStatus: "planned_not_live",
+  allowedIntents: [
+    "plan storage",
+    "plan hosting",
+    "plan email",
+    "plan payments",
+    "plan identity",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  primaryPanelRouteId: "/workspaces/decentralized-services",
+  mcpCliHints: {
+    cli: "matterhorn-work services capabilities --json",
+  },
+  supportedCardKinds: [
+    "capability_card",
+    "provider_card",
+    "plan_card",
+  ],
+  demoPrompt: "Plan a decentralized storage upload",
+  launchBehavior: "planned_not_live",
+};
+
+export const MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY: Record<
+  string,
+  MatterhornProtocolWorkspaceManifest
+> = {
+  bittensor: BITTENSOR_PROTOCOL_WORKSPACE_MANIFEST,
+  hyperliquid: HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST,
+  polymarket: POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST,
+  wellness: WELLNESS_PROTOCOL_WORKSPACE_MANIFEST,
+  decentralized_services: DECENTRALIZED_SERVICES_PROTOCOL_WORKSPACE_MANIFEST,
+};
+
+export const MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE: Record<
+  string,
+  MatterhornProtocolWorkspaceId
+> = {
+  bittensor_operator: "bittensor",
+  hyperliquid_trader: "hyperliquid",
+  polymarket_researcher: "polymarket",
+  wellness_creator_workflow: "wellness",
+  decentralized_services_operator: "decentralized_services",
+};
