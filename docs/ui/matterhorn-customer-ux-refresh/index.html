@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matterhorn Work — Customer UX Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { background: #080808; }
+    .showcase-header {
+      position: sticky; top: 0; z-index: 200;
+      background: rgba(8,8,8,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid #1f1f1f;
+      padding: 12px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .showcase-header__title { font-size: 13px; font-weight: 600; color: #f0f0f0; font-family: 'JetBrains Mono', monospace; }
+    .showcase-header__meta { font-size: 11px; color: #5c5c5c; display: flex; gap: 12px; align-items: center; }
+    .showcase-grid { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 53px); }
+    .showcase-nav { position: sticky; top: 53px; height: calc(100vh - 53px); overflow-y: auto; background: #0c0c0c; border-right: 1px solid #1f1f1f; padding: 16px 12px; }
+    .showcase-nav__section { margin-bottom: 20px; }
+    .showcase-nav__label { font-size: 10px; font-weight: 600; color: #3a3a3a; text-transform: uppercase; letter-spacing: 0.1em; padding: 0 8px; margin-bottom: 4px; }
+    .showcase-nav__item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12px; color: #6a6a6a; cursor: pointer; transition: background 0.15s, color 0.15s; border: none; background: none; width: 100%; text-align: left; text-decoration: none; }
+    .showcase-nav__item:hover { background: #141414; color: #a0a0a0; }
+    .showcase-nav__item.active { background: rgba(209,242,255,0.08); color: #D1F2FF; }
+    .showcase-nav__num { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: #3a3a3a; width: 16px; text-align: right; flex-shrink: 0; }
+    .showcase-nav__item.active .showcase-nav__num { color: #D1F2FF; }
+    .showcase-content { padding: 24px 32px; overflow-y: auto; }
+    .screen-block { margin-bottom: 48px; border: 1px solid #1f1f1f; border-radius: 12px; overflow: hidden; }
+    .screen-block__label { background: #0c0c0c; padding: 10px 16px; border-bottom: 1px solid #1f1f1f; display: flex; align-items: center; justify-content: space-between; }
+    .screen-block__title { font-size: 12px; font-weight: 600; color: #a0a0a0; font-family: 'JetBrains Mono', monospace; }
+    .screen-block__badge { font-size: 10px; color: #5c5c5c; background: #141414; border: 1px solid #2a2a2a; padding: 2px 8px; border-radius: 99px; }
+    .demo-screen { background: #0c0c0c; min-height: 100vh; }
+    .screen-frame { width: 100%; }
+    .screen-annotation { background: #080808; border: 1px dashed #2a2a2a; border-radius: 8px; padding: 16px; margin-top: 16px; font-size: 12px; color: #5c5c5c; line-height: 1.7; }
+    .screen-annotation strong { color: #8a8a8a; }
+    .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .filter-chip { padding: 4px 12px; border-radius: 99px; font-size: 12px; cursor: pointer; background: #141414; border: 1px solid #2a2a2a; color: #8a8a8a; transition: all 0.15s; }
+    .filter-chip.active { background: rgba(209,242,255,0.10); border-color: rgba(209,242,255,0.30); color: #D1F2FF; }
+    .orderbook { display: flex; gap: 2px; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .orderbook__bid, .orderbook__ask { flex: 1; }
+    .orderbook__row { display: flex; justify-content: space-between; padding: 2px 8px; position: relative; }
+    .orderbook__depth { position: absolute; top: 0; bottom: 0; opacity: 0.12; border-radius: 2px; }
+    .orderbook__bid .orderbook__depth { right: 0; background: #22C55E; }
+    .orderbook__ask .orderbook__depth { left: 0; background: #EF4444; }
+    .orderbook__price { z-index: 1; }
+    .orderbook__bid .orderbook__price { color: #22C55E; }
+    .orderbook__ask .orderbook__price { color: #EF4444; }
+    .orderbook__size { z-index: 1; color: #5c5c5c; }
+    .workflow-canvas { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: #0a0a0a; border: 1px solid #1f1f1f; border-radius: 8px; }
+    .workflow-node { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; cursor: pointer; transition: border-color 0.15s; }
+    .workflow-node:hover { border-color: #5c5c5c; }
+    .workflow-node--active { border-color: #D1F2FF; background: rgba(209,242,255,0.05); }
+    .workflow-node__icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; }
+    .workflow-node__label { font-size: 13px; font-weight: 500; color: #f0f0f0; }
+    .workflow-node__sublabel { font-size: 11px; color: #5c5c5c; }
+    .connector { width: 2px; height: 16px; background: #2a2a2a; margin-left: 27px; }
+    .settings-list { display: flex; flex-direction: column; gap: 8px; }
+    .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; }
+    .settings-row__label { font-size: 13px; color: #f0f0f0; font-weight: 500; }
+    .settings-row__desc { font-size: 11px; color: #5c5c5c; margin-top: 2px; }
+    .docs-search { background: #141414; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .docs-search input { flex: 1; background: none; border: none; outline: none; font-size: 13px; color: #f0f0f0; }
+    .docs-search input::placeholder { color: #5c5c5c; }
+    .quick-stats { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .market-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #1f1f1f; }
+    .market-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; color: #6a6a6a; cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+    .market-tab.active { color: #D1F2FF; border-bottom-color: #D1F2FF; }
+  </style>
+</head>
+<body>
+
+<div class="showcase-header">
+  <div class="showcase-header__title">Matterhorn Work — Customer UX Prototype</div>
+  <div class="showcase-header__meta">
+    <span>16 Screens</span><span>·</span>
+    <span style="color:#22C55E">● Safety Gates Pass</span><span>·</span>
+    <span>#D1F2FF accent · #0C0C0C bg</span>
+  </div>
+</div>
+
+<div class="showcase-grid">
+  <nav class="showcase-nav">
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Onboarding</div>
+      <a class="showcase-nav__item active" href="#screen-1"><span class="showcase-nav__num">01</span> Welcome</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Core Views</div>
+      <a class="showcase-nav__item" href="#screen-2"><span class="showcase-nav__num">02</span> Dashboard</a>
+      <a class="showcase-nav__item" href="#screen-3"><span class="showcase-nav__num">03</span> Markets Browser</a>
+      <a class="showcase-nav__item" href="#screen-4"><span class="showcase-nav__num">04</span> Market Detail</a>
+      <a class="showcase-nav__item" href="#screen-5"><span class="showcase-nav__num">05</span> Order Preview</a>
+      <a class="showcase-nav__item" href="#screen-6"><span class="showcase-nav__num">06</span> External Signer Handoff</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Portfolio</div>
+      <a class="showcase-nav__item" href="#screen-7"><span class="showcase-nav__num">07</span> Positions</a>
+      <a class="showcase-nav__item" href="#screen-8"><span class="showcase-nav__num">08</span> Activity Log</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Workflows</div>
+      <a class="showcase-nav__item" href="#screen-9"><span class="showcase-nav__num">09</span> Workflow Builder</a>
+      <a class="showcase-nav__item" href="#screen-10"><span class="showcase-nav__num">10</span> Workflow Run Panel</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Settings</div>
+      <a class="showcase-nav__item" href="#screen-11"><span class="showcase-nav__num">11</span> Settings: Markets</a>
+      <a class="showcase-nav__item" href="#screen-12"><span class="showcase-nav__num">12</span> Settings: Notifications</a>
+      <a class="showcase-nav__item" href="#screen-13"><span class="showcase-nav__num">13</span> Documentation Hub</a>
+      <a class="showcase-nav__item" href="#screen-14"><span class="showcase-nav__num">14</span> Market Safety Explainer</a>
+      <a class="showcase-nav__item" href="#screen-15"><span class="showcase-nav__num">15</span> Artifacts Panel</a>
+      <a class="showcase-nav__item" href="#screen-16"><span class="showcase-nav__num">16</span> Settings: General</a>
+    </div>
+  </nav>
+
+  <main class="showcase-content">
+
+    <!-- SCREEN 1 — Welcome / Onboarding -->
+    <div class="screen-block" id="screen-1">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 01 — Welcome / Onboarding</span>
+        <span class="screen-block__badge">No execution UI · Purely informational</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell" style="grid-template-areas:'main';grid-template-columns:1fr">
+          <header class="header" style="grid-area:unset;position:static;border-bottom:1px solid var(--mh-border);justify-content:flex-start;gap:12px;">
+            <div style="width:28px;height:28px;border-radius:8px;background:var(--mh-accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <span style="font-size:15px;font-weight:600;color:var(--mh-text-primary);">Matterhorn Work</span>
+            <div style="flex:1"></div>
+            <button class="mh-btn mh-btn--ghost mh-btn--sm">Documentation</button>
+            <button class="mh-btn mh-btn--ghost mh-btn--sm">Support</button>
+          </header>
+          <main style="grid-area:unset;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(100vh - 53px);padding:64px 32px;">
+            <div style="width:56px;height:56px;background:var(--mh-accent);border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:32px;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <h1 style="font-size:32px;font-weight:700;color:var(--mh-text-primary);letter-spacing:-0.04em;margin-bottom:16px;">Welcome to Matterhorn Work</h1>
+            <p style="font-size:17px;color:var(--mh-text-secondary);max-width:480px;line-height:1.7;margin-bottom:40px;">Your Web3-native workspace. Browse markets, build automated execution workflows, and track your portfolio — all with non-custodial safety.</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:64px;">
+              <button class="mh-btn mh-btn--primary mh-btn--lg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                Connect Wallet
+              </button>
+              <button class="mh-btn mh-btn--secondary mh-btn--lg">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Read the Docs
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:720px;text-align:left;">
+              <div>
+                <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px;">Market Browser</div>
+                <div style="font-size:13px;color:var(--mh-text-secondary);line-height:1.6;">Browse Hyperliquid perps and Polymarket markets with live previews and risk context.</div>
+              </div>
+              <div>
+                <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px;">Workflow Builder</div>
+                <div style="font-size:13px;color:var(--mh-text-secondary);line-height:1.6;">Chain market actions into repeatable automated workflows with visual editor.</div>
+              </div>
+              <div>
+                <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px;">Non-Custodial Safety</div>
+                <div style="font-size:13px;color:var(--mh-text-secondary);line-height:1.6;">External signer model — Matterhorn never holds keys, signs, or broadcasts.</div>
+              </div>
+            </div>
+            <div style="margin-top:48px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mh-text-tertiary);">
+              <span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>External Signer Live</span>
+              <span>Matterhorn Work is non-custodial. Your keys, your wallet.</span>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Welcome screen is purely informational. No execution affordances, no API key inputs, no submit buttons. Primary CTA is wallet connection. Safety badge grounds the non-custodial promise immediately.</div>
+    </div>
+
+    <!-- SCREEN 2 — Dashboard -->
+    <div class="screen-block" id="screen-2">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 02 — Main Dashboard</span>
+        <span class="screen-block__badge">Overview · Quick stats · Activity feed</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item active" href="#"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer">
+              <div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mh-text-tertiary);font-family:var(--font-mono);">0x7099…79C8</div>
+            </div>
+          </aside>
+          <header class="header" style="grid-area:unset">
+            <span class="header__title">Dashboard</span>
+            <div style="flex:1"></div>
+            <button class="header__search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Search markets, workflows…</button>
+            <div class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</div>
+          </header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="quick-stats">
+              <div class="mh-card" style="flex:1;min-width:160px"><div class="mh-stat__label">Total Equity</div><div class="mh-stat__value">$12,840.50</div></div>
+              <div class="mh-card" style="flex:1;min-width:160px"><div class="mh-stat__label">Open PnL</div><div class="mh-stat__value text-long">+$342.18</div></div>
+              <div class="mh-card" style="flex:1;min-width:160px"><div class="mh-stat__label">Active Positions</div><div class="mh-stat__value">3</div></div>
+              <div class="mh-card" style="flex:1;min-width:160px"><div class="mh-stat__label">Safety Mode</div><div><span class="mh-badge mh-badge--live" style="margin-top:4px;display:inline-flex"><span class="mh-badge__dot"></span>Handoff Allowed</span></div></div>
+            </div>
+            <div class="mh-section">
+              <div class="mh-section__header">
+                <div class="mh-section__title">Quick Markets</div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">View All</button>
+              </div>
+              <div class="mh-grid-3">
+                <div class="market-card">
+                  <div class="market-card__top"><div><div class="market-card__venue">HYP</div><div class="market-card__symbol">BTC-PERP</div></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Live</span></div>
+                  <div><span class="market-card__price">$64,250</span><span class="market-card__change market-card__change--up">+2.34%</span></div>
+                  <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Funding</span><span class="market-card__stat-value">+0.0001/hr</span></div><div class="market-card__stat"><span class="market-card__stat-label">OI</span><span class="market-card__stat-value">$12.4B</span></div></div>
+                </div>
+                <div class="market-card">
+                  <div class="market-card__top"><div><div class="market-card__venue">HYP</div><div class="market-card__symbol">ETH-PERP</div></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Live</span></div>
+                  <div><span class="market-card__price">$3,482</span><span class="market-card__change market-card__change--down">-1.12%</span></div>
+                  <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Funding</span><span class="market-card__stat-value">+0.0003/hr</span></div><div class="market-card__stat"><span class="market-card__stat-label">OI</span><span class="market-card__stat-value">$4.2B</span></div></div>
+                </div>
+                <div class="market-card">
+                  <div class="market-card__top"><div><div class="market-card__venue">POLY</div><div class="market-card__symbol">ETH &gt; $2,000</div></div><span class="mh-badge mh-badge--planned"><span class="mh-badge__dot"></span>Planned</span></div>
+                  <div><span class="market-card__price">74¢</span><span class="market-card__change market-card__change--up">+2.1%</span></div>
+                  <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Liquidity</span><span class="market-card__stat-value">$1.2M</span></div><div class="market-card__stat"><span class="market-card__stat-label">Vol</span><span class="market-card__stat-value">$820K</span></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="mh-section">
+              <div class="mh-section__header"><div class="mh-section__title">Recent Activity</div><button class="mh-btn mh-btn--ghost mh-btn--sm">View All</button></div>
+              <div class="mh-feed">
+                <div class="mh-feed-item">
+                  <div class="mh-feed-item__icon mh-feed-item__icon--green"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div class="mh-feed-item__body"><div class="mh-feed-item__title">Receipt verified — BTC-PERP buy order filled</div><div class="mh-feed-item__meta">Order ID: 0xf3a8… · Filled · 2 min ago</div></div>
+                </div>
+                <div class="mh-feed-item">
+                  <div class="mh-feed-item__icon mh-feed-item__icon--green"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div class="mh-feed-item__body"><div class="mh-feed-item__title">External signer handoff created — ETH-PERP</div><div class="mh-feed-item__meta">SHA: 7b4e… · Expires in 28 min · 14 min ago</div></div>
+                </div>
+                <div class="mh-feed-item">
+                  <div class="mh-feed-item__icon mh-feed-item__icon--blue"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                  <div class="mh-feed-item__body"><div class="mh-feed-item__title">Workflow "BTC Dip Alert" triggered</div><div class="mh-feed-item__meta">Funding alert · 1 hr ago</div></div>
+                </div>
+                <div class="mh-feed-item">
+                  <div class="mh-feed-item__icon mh-feed-item__icon--amber"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+                  <div class="mh-feed-item__body"><div class="mh-feed-item__title">Compliance blocked — Polymarket jurisdiction</div><div class="mh-feed-item__meta">User in restricted region · 3 hr ago</div></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Dashboard shows equity, PnL, and position count. Safety mode badge is always visible in the stats row. Market shortcuts use green (live) and blue (planned) badges. Activity feed uses green (success), blue (info), and amber (restricted) — never red without an explicit error.</div>
+    </div>
+
+    <!-- SCREEN 3 — Markets Browser -->
+    <div class="screen-block" id="screen-3">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 03 — Markets Browser</span>
+        <span class="screen-block__badge">Hyperliquid + Polymarket tabs · Searchable list</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item active" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Markets</span><div style="flex:1"></div><button class="header__search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Search markets…</button><div class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</div></header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="market-tabs">
+              <div class="market-tab active"><span style="font-size:8px;font-weight:700;background:rgba(255,165,0,0.15);color:#FFA500;padding:2px 4px;border-radius:3px;margin-right:6px;font-family:'JetBrains Mono',monospace;">HYP</span>Hyperliquid</div>
+              <div class="market-tab"><span style="font-size:8px;font-weight:700;background:rgba(139,92,246,0.15);color:#8B5CF6;padding:2px 4px;border-radius:3px;margin-right:6px;font-family:'JetBrains Mono',monospace;">POLY</span>Polymarket <span class="mh-badge mh-badge--planned" style="margin-left:6px;font-size:10px;padding:1px 6px;">Planned</span></div>
+            </div>
+            <div class="filter-bar">
+              <div class="filter-chip active">All Markets</div>
+              <div class="filter-chip">Favorites ★</div>
+              <div class="filter-chip">Perpetuals</div>
+              <div class="filter-chip">Spot</div>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                <span style="font-size:12px;color:var(--mh-text-tertiary)">Safety:</span>
+                <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>External Signer Live</span>
+              </div>
+            </div>
+            <div class="mh-grid-2" style="gap:12px">
+              <div class="market-card" style="cursor:pointer">
+                <div class="market-card__top"><div><div class="market-card__venue">HYP · BTC-PERP</div><div class="market-card__symbol" style="font-size:15px">Bitcoin / USD</div></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Live</span></div>
+                <div style="display:flex;align-items:baseline;gap:8px"><span class="market-card__price" style="font-size:18px">$64,250.00</span><span class="market-card__change market-card__change--up">+2.34%</span></div>
+                <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Funding</span><span class="market-card__stat-value">+0.0001/hr</span></div><div class="market-card__stat"><span class="market-card__stat-label">OI</span><span class="market-card__stat-value">$12.4B</span></div><div class="market-card__stat"><span class="market-card__stat-label">24h Vol</span><span class="market-card__stat-value">$4.1B</span></div></div>
+                <div style="margin-top:10px;display:flex;gap:8px"><button class="mh-btn mh-btn--accent-ghost mh-btn--sm" style="flex:1">Preview →</button><button class="mh-btn mh-btn--secondary mh-btn--sm">Watch</button></div>
+              </div>
+              <div class="market-card">
+                <div class="market-card__top"><div><div class="market-card__venue">HYP · ETH-PERP</div><div class="market-card__symbol" style="font-size:15px">Ethereum / USD</div></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Live</span></div>
+                <div style="display:flex;align-items:baseline;gap:8px"><span class="market-card__price" style="font-size:18px">$3,482.50</span><span class="market-card__change market-card__change--down">-1.12%</span></div>
+                <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Funding</span><span class="market-card__stat-value">+0.0003/hr</span></div><div class="market-card__stat"><span class="market-card__stat-label">OI</span><span class="market-card__stat-value">$4.2B</span></div><div class="market-card__stat"><span class="market-card__stat-label">24h Vol</span><span class="market-card__stat-value">$1.8B</span></div></div>
+                <div style="margin-top:10px;display:flex;gap:8px"><button class="mh-btn mh-btn--accent-ghost mh-btn--sm" style="flex:1">Preview →</button><button class="mh-btn mh-btn--secondary mh-btn--sm">Watch</button></div>
+              </div>
+              <div class="market-card">
+                <div class="market-card__top"><div><div class="market-card__venue">HYP · SOL-PERP</div><div class="market-card__symbol" style="font-size:15px">Solana / USD</div></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Live</span></div>
+                <div style="display:flex;align-items:baseline;gap:8px"><span class="market-card__price" style="font-size:18px">$178.30</span><span class="market-card__change market-card__change--up">+4.67%</span></div>
+                <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Funding</span><span class="market-card__stat-value">-0.0001/hr</span></div><div class="market-card__stat"><span class="market-card__stat-label">OI</span><span class="market-card__stat-value">$890M</span></div><div class="market-card__stat"><span class="market-card__stat-label">24h Vol</span><span class="market-card__stat-value">$420M</span></div></div>
+                <div style="margin-top:10px;display:flex;gap:8px"><button class="mh-btn mh-btn--accent-ghost mh-btn--sm" style="flex:1">Preview →</button><button class="mh-btn mh-btn--secondary mh-btn--sm">Watch</button></div>
+              </div>
+              <div class="market-card" style="border-style:dashed;opacity:0.6">
+                <div class="market-card__top"><div><div class="market-card__venue">POLY · ETH &gt; $2,000</div><div class="market-card__symbol" style="font-size:15px">ETH above $2,000</div></div><span class="mh-badge mh-badge--planned"><span class="mh-badge__dot"></span>Planned</span></div>
+                <div style="display:flex;align-items:baseline;gap:8px"><span class="market-card__price" style="font-size:18px">74¢</span><span class="market-card__change market-card__change--up">+2.1%</span></div>
+                <div class="market-card__stats"><div class="market-card__stat"><span class="market-card__stat-label">Liquidity</span><span class="market-card__stat-value">$1.2M</span></div><div class="market-card__stat"><span class="market-card__stat-label">24h Vol</span><span class="market-card__stat-value">$820K</span></div></div>
+                <div style="margin-top:10px"><span style="font-size:12px;color:var(--mh-text-tertiary)">Preview available when Polymarket launches</span></div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Markets browser has two tabs: Hyperliquid (active, green) and Polymarket (blue "Planned" badge). Each market card shows a safety badge, price, change, key stats, and a "Preview →" button. NO submit button. Polymarket card is visually muted (dashed border, lower opacity) to indicate it's planned.</div>
+    </div>
+
+    <!-- SCREEN 4 — Market Detail -->
+    <div class="screen-block" id="screen-4">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 04 — Market Detail</span>
+        <span class="screen-block__badge">Orderbook · Stats · Position entry · Safety badge</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item active" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">BTC-PERP · Hyperliquid</span><div style="flex:1"></div><span class="mh-badge mh-badge--live" style="margin-right:8px"><span class="mh-badge__dot"></span>External Signer Live</span><button class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</button></header>
+          <main class="main-content" style="grid-area:unset">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:16px">
+              <div><div style="font-size:32px;font-weight:700;font-family:var(--font-mono);color:var(--mh-text-primary);letter-spacing:-0.03em">$64,250.00</div><div style="font-size:15px;font-family:var(--font-mono);color:var(--mh-long);margin-top:4px">▲ +$1,462.50 (+2.34%) today</div></div>
+              <div style="display:flex;gap:8px;align-items:center"><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>External Signer Live</span><button class="mh-btn mh-btn--secondary mh-btn--sm">Add to Watch</button></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start">
+              <div>
+                <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
+                  <div><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em">24h High</div><div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-text-primary)">$65,100</div></div>
+                  <div><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em">24h Low</div><div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-text-primary)">$62,800</div></div>
+                  <div><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em">Open Interest</div><div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-text-primary)">$12.4B</div></div>
+                  <div><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em">Funding Rate</div><div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-long)">+0.0001/hr</div></div>
+                  <div><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em">Max Leverage</div><div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-text-primary)">20×</div></div>
+                </div>
+                <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:12px;padding:16px;margin-bottom:16px">
+                  <div style="font-size:13px;font-weight:600;color:var(--mh-text-secondary);margin-bottom:12px">Price Chart <span style="font-size:11px;font-weight:400;color:var(--mh-text-tertiary)">(read-only)</span></div>
+                  <div style="height:160px;background:var(--mh-bg-elevated);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--mh-text-tertiary);font-size:12px">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:8px;opacity:0.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Live chart — Hyperliquid info endpoint
+                  </div>
+                </div>
+                <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:12px;padding:16px">
+                  <div style="font-size:13px;font-weight:600;color:var(--mh-text-secondary);margin-bottom:12px">Order Book <span style="font-size:11px;font-weight:400;color:var(--mh-text-tertiary)">(read-only)</span></div>
+                  <div class="orderbook">
+                    <div class="orderbook__bid">
+                      <div style="display:flex;justify-content:space-between;padding:2px 8px;font-size:10px;color:var(--mh-text-tertiary);margin-bottom:4px"><span>Price</span><span>Size</span></div>
+                      <div class="orderbook__row" style="justify-content:flex-end"><span class="orderbook__price">64,250.00</span><span class="orderbook__size">0.8231</span><div class="orderbook__depth" style="width:60%"></div></div>
+                      <div class="orderbook__row" style="justify-content:flex-end"><span class="orderbook__price">64,249.50</span><span class="orderbook__size">0.4100</span><div class="orderbook__depth" style="width:30%"></div></div>
+                      <div class="orderbook__row" style="justify-content:flex-end"><span class="orderbook__price">64,248.00</span><span class="orderbook__size">1.2000</span><div class="orderbook__depth" style="width:85%"></div></div>
+                      <div class="orderbook__row" style="justify-content:flex-end"><span class="orderbook__price">64,247.25</span><span class="orderbook__size">0.5500</span><div class="orderbook__depth" style="width:40%"></div></div>
+                      <div class="orderbook__row" style="justify-content:flex-end"><span class="orderbook__price">64,246.00</span><span class="orderbook__size">2.1000</span><div class="orderbook__depth" style="width:100%"></div></div>
+                    </div>
+                    <div class="orderbook__ask">
+                      <div style="display:flex;justify-content:space-between;padding:2px 8px;font-size:10px;color:var(--mh-text-tertiary);margin-bottom:4px"><span>Price</span><span>Size</span></div>
+                      <div class="orderbook__row"><div class="orderbook__depth" style="width:55%"></div><span class="orderbook__size">0.7100</span><span class="orderbook__price">64,250.50</span></div>
+                      <div class="orderbook__row"><div class="orderbook__depth" style="width:25%"></div><span class="orderbook__size">0.3300</span><span class="orderbook__price">64,251.00</span></div>
+                      <div class="orderbook__row"><div class="orderbook__depth" style="width:70%"></div><span class="orderbook__size">0.9800</span><span class="orderbook__price">64,252.00</span></div>
+                      <div class="orderbook__row"><div class="orderbook__depth" style="width:35%"></div><span class="orderbook__size">0.4750</span><span class="orderbook__price">64,253.50</span></div>
+                      <div class="orderbook__row"><div class="orderbook__depth" style="width:90%"></div><span class="orderbook__size">1.2500</span><span class="orderbook__price">64,255.00</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div class="mh-panel" style="margin-bottom:16px">
+                  <div class="mh-panel__header">
+                    <div class="mh-panel__header-icon mh-panel__header-icon--info"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg></div>
+                    <div><div class="mh-panel__title">BTC-PERP · Position</div><div class="mh-panel__subtitle">0x7099… · No open position</div></div>
+                  </div>
+                  <div class="mh-panel__body">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                      <div>
+                        <div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Side</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                          <button class="mh-btn mh-btn--secondary" style="background:var(--mh-long-dim);border-color:rgba(34,197,94,0.3);color:var(--mh-long);font-size:11px;padding:6px 4px">Buy/Long</button>
+                          <button class="mh-btn mh-btn--ghost" style="color:var(--mh-text-secondary);font-size:11px;padding:6px 4px">Sell/Short</button>
+                        </div>
+                      </div>
+                      <div>
+                        <div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Order Type</div>
+                        <select class="mh-input mh-select" style="height:34px;font-size:12px"><option>GTC Limit</option><option>IOC Limit</option><option>Market</option></select>
+                      </div>
+                    </div>
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Size (BTC)</div><input class="mh-input mh-input--mono" type="text" value="0.10" style="height:36px;font-size:15px"></div>
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Price (USD)</div><input class="mh-input mh-input--mono" type="text" value="64,250.00" style="height:36px;font-size:15px"></div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);margin-bottom:12px;padding:8px;background:var(--mh-bg-elevated);border-radius:6px;font-family:var(--font-mono)">Notional: <span style="color:var(--mh-text-primary)">$6,425.00</span> · Slip: <span style="color:var(--mh-text-primary)">0.02%</span></div>
+                    <button class="mh-btn mh-btn--accent-ghost" style="width:100%"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Preview Order</button>
+                  </div>
+                  <div class="mh-panel__footer">
+                    <div class="mh-disclaimer" style="flex:1;padding:8px 10px;font-size:11px"><svg class="mh-disclaimer__icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>External signer model — no submit</div>
+                  </div>
+                </div>
+                <div class="mh-callout mh-callout--info" style="margin-top:12px">
+                  <svg class="mh-callout__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div><div class="mh-callout__title" style="font-size:12px">Max Leverage: 20×</div><div class="mh-callout__body" style="font-size:11px">Preview generates full risk context including estimated leverage.</div></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Market detail shows read-only orderbook and chart. "Preview Order" generates a preview rather than submitting. NO "Submit" or "Confirm Trade" button. Disclaimer in panel footer explains external signer model.</div>
+    </div>
+
+    <!-- SCREEN 5 — Order Preview -->
+    <div class="screen-block" id="screen-5">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 05 — Order Preview</span>
+        <span class="screen-block__badge">canSubmit: false · Full risk context · Handoff CTA only</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item active" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">BTC-PERP · Order Preview</span><div style="flex:1"></div><span class="mh-badge mh-badge--live" style="margin-right:8px"><span class="mh-badge__dot"></span>External Signer Live</span><div class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</div></header>
+          <main class="main-content" style="grid-area:unset;max-width:680px">
+            <div style="margin-bottom:24px"><a href="#screen-4" style="font-size:12px;color:var(--mh-text-tertiary);display:flex;align-items:center;gap:4px;text-decoration:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>Back to BTC-PERP</a></div>
+            <div class="mh-panel">
+              <div class="mh-panel__header">
+                <div class="mh-panel__header-icon mh-panel__header-icon--warning"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+                <div style="flex:1"><div class="mh-panel__title">Order Preview</div><div class="mh-panel__subtitle">Preview Only — Can Not Submit</div></div>
+                <span class="mh-badge mh-badge--planned" style="font-size:10px"><span class="mh-badge__dot"></span>canSubmit: false</span>
+              </div>
+              <div class="mh-panel__body">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+                  <div><div style="font-size:17px;font-weight:600;color:var(--mh-text-primary)">BTC-PERP · Hyperliquid</div><div style="font-size:12px;color:var(--mh-text-tertiary);margin-top:2px">Base Sepolia · Preview generated just now</div></div>
+                  <span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>External Signer Live</span>
+                </div>
+                <div class="mh-terms">
+                  <div class="mh-term"><span class="mh-term__label">Side</span><span class="mh-term__value text-long">BUY / Long</span></div>
+                  <div class="mh-term"><span class="mh-term__label">Size</span><span class="mh-term__value">0.1000 BTC</span></div>
+                  <div class="mh-term"><span class="mh-term__label">Price</span><span class="mh-term__value">$64,250.00</span></div>
+                  <div class="mh-term"><span class="mh-term__label">Order Type</span><span class="mh-term__value">GTC Limit</span></div>
+                  <div class="mh-term"><span class="mh-term__label">Preview SHA256</span><span class="mh-hash">a3f8…c12d</span></div>
+                  <div class="mh-term"><span class="mh-term__label">Est. Total</span><span class="mh-term__value">$6,425.00</span></div>
+                </div>
+                <div class="mh-risk-box">
+                  <div class="mh-risk-box__title">Risk Context</div>
+                  <div class="mh-risk-grid">
+                    <div class="mh-term"><span class="mh-term__label">Notional</span><span class="mh-term__value">$6,425.00</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Est. Slippage</span><span class="mh-term__value" style="color:var(--mh-long)">0.02%</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Est. Fill Price</span><span class="mh-term__value">$64,262.80</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Funding / Day</span><span class="mh-term__value">+$0.64</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Est. Leverage</span><span class="mh-term__value">4.3×</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Est. Liq. Price</span><span class="mh-term__value">$51,400</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Max Leverage</span><span class="mh-term__value">20×</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Depth Sufficient</span><span class="mh-term__value" style="color:var(--mh-long)">Yes</span></div>
+                  </div>
+                </div>
+                <div class="mh-callout mh-callout--warning" style="margin-bottom:16px">
+                  <svg class="mh-callout__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  <div><div class="mh-callout__title">Planned action: BUY 0.1 BTC-PERP at $64,250</div><div class="mh-callout__body">Matterhorn will not sign, submit, or broadcast this order. If you proceed, you must sign and submit using your own wallet via Hyperliquid's official client.</div></div>
+                </div>
+                <button class="mh-btn mh-btn--live" style="width:100%;padding:12px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>View External Signer Handoff →</button>
+              </div>
+              <div class="mh-panel__footer">
+                <div class="mh-disclaimer"><svg class="mh-disclaimer__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Matterhorn does not sign, submit, or hold keys. You execute using your own wallet.</span></div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Complete order preview with "canSubmit: false" badge. Only action: "View External Signer Handoff →" (green). NO "Submit" or "Confirm Trade". Consequence callout explicitly states "Matterhorn will not sign or submit." Safety disclaimer in footer is green.</div>
+    </div>
+
+</main></div></body></html>
+
+
+  <main class="showcase-content">
+
+    <!-- SCREEN 6 — External Signer Handoff -->
+    <div class="screen-block" id="screen-6">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 06 — External Signer Handoff</span>
+        <span class="screen-block__badge">Public order terms · Handoff SHA · Expiry · User signs externally</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item active" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">External Signer Handoff</span><div style="flex:1"></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>External Signer Live</span><div class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</div></header>
+          <main class="main-content" style="grid-area:unset;max-width:680px">
+            <div style="margin-bottom:24px"><a href="#screen-5" style="font-size:12px;color:var(--mh-text-tertiary);display:flex;align-items:center;gap:4px;text-decoration:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>Back to Order Preview</a></div>
+            <div class="mh-panel">
+              <div class="mh-panel__header">
+                <div class="mh-panel__header-icon mh-panel__header-icon--live"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <div style="flex:1"><div class="mh-panel__title">External Signer Handoff</div><div class="mh-panel__subtitle">Review and sign with your own wallet</div></div>
+                <span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>External Signer Live</span>
+              </div>
+              <div class="mh-panel__body">
+                <div class="mh-disclaimer" style="margin-bottom:20px">
+                  <svg class="mh-disclaimer__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <div><strong>You sign and submit.</strong> Matterhorn provides the order terms below. You must sign using Hyperliquid's official SDK or web interface. Matterhorn never receives your signature.</div>
+                </div>
+                <div style="margin-bottom:20px">
+                  <div style="font-size:12px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px">Order Terms (public)</div>
+                  <div class="mh-terms">
+                    <div class="mh-term"><span class="mh-term__label">Asset</span><span class="mh-term__value">BTC-PERP</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Venue</span><span class="mh-term__value">Hyperliquid</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Side</span><span class="mh-term__value text-long">BUY</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Size</span><span class="mh-term__value">0.1000 BTC</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Price</span><span class="mh-term__value">$64,250.00</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Type</span><span class="mh-term__value">GTC Limit</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Chain</span><span class="mh-term__value">Base Sepolia</span></div>
+                    <div class="mh-term"><span class="mh-term__label">Signer</span><span class="mh-address"><span class="mh-address__prefix">0x</span>70997970…79C8</span></div>
+                  </div>
+                </div>
+                <div style="margin-bottom:20px">
+                  <div style="font-size:12px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Signing Payload Template</div>
+                  <div style="background:#0a0a0a;border:1px solid var(--mh-border);border-radius:8px;padding:12px;font-family:var(--font-mono);font-size:11px;color:#6a6a6a;line-height:1.7;overflow-x:auto">
+                    <div>type: "order"</div>
+                    <div style="padding-left:12px">orders: [{ a: &lt;asset_idx&gt;, b: true, p: &lt;price&gt;, s: "0.1", r: false, t: { limit: { tif: "Gtc" } } }]</div>
+                    <div>grouping: "na"</div>
+                    <div style="color:#4a4a4a;margin-top:8px">EIP-712 Agent scaffold: Exchange/1/chainId 1337</div>
+                    <div style="color:#D1F2FF;margin-top:8px">connectionId: <span style="color:#F59E0B">requiresClientCompute</span></div>
+                    <div style="color:#D1F2FF">nonce: <span style="color:#F59E0B">requiresClientCompute</span></div>
+                    <div style="color:#D1F2FF">signature: <span style="color:#F59E0B">requiresClientCompute</span></div>
+                  </div>
+                  <div style="font-size:11px;color:var(--mh-text-tertiary);margin-top:6px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:4px;vertical-align:middle"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Amber fields require your wallet/SDK to compute — not provided by Matterhorn.</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+                  <div style="background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px;padding:12px"><div style="font-size:10px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Preview SHA256</div><div style="font-family:var(--font-mono);font-size:12px;color:var(--mh-text-secondary)">a3f8c4…71c12d</div></div>
+                  <div style="background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px;padding:12px"><div style="font-size:10px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Handoff SHA256</div><div style="font-family:var(--font-mono);font-size:12px;color:var(--mh-text-secondary)">7b4e92…f19f82</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;padding:10px 12px;background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--mh-text-tertiary);flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span style="font-size:12px;color:var(--mh-text-secondary)">This handoff expires in <strong style="color:var(--mh-amber)">28 minutes</strong>. Sign and submit before expiry.</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+                  <button class="mh-btn mh-btn--live" style="padding:11px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>Sign with your wallet →</button>
+                  <button class="mh-btn mh-btn--secondary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy Handoff</button>
+                </div>
+                <div class="mh-callout mh-callout--info">
+                  <svg class="mh-callout__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <div><div class="mh-callout__title" style="font-size:12px">How external signing works</div><div class="mh-callout__body" style="font-size:11px">Open Hyperliquid's web interface or SDK, paste the public order terms, sign with your wallet, and submit. Your signature never touches Matterhorn's servers. Import the resulting order ID or tx hash as a public receipt.</div></div>
+                </div>
+              </div>
+              <div class="mh-panel__footer">
+                <div class="mh-disclaimer"><svg class="mh-disclaimer__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Matterhorn is non-custodial. No key storage, no signing, no broadcasting.</span></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">Cancel</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Handoff shows public order terms and signing payload template. Fields requiring client computation (connectionId, nonce, signature) are highlighted in amber. Handoff SHA256 binds the terms. Expiry shown prominently in amber. "Sign with your wallet →" and "Copy Handoff" buttons. NO field to paste a signature back — receipt import is separate.</div>
+    </div>
+
+    <!-- SCREEN 7 — Portfolio / Positions -->
+    <div class="screen-block" id="screen-7">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 07 — Portfolio / Positions</span>
+        <span class="screen-block__badge">Read-only table · Per-position compliance badges</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item active" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Portfolio</span><div style="flex:1"></div><span class="mh-badge mh-badge--live" style="margin-right:8px"><span class="mh-badge__dot"></span>Read-Only</span><div class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</div></header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="quick-stats">
+              <div class="mh-card" style="flex:1;min-width:140px"><div class="mh-stat__label">Total Equity</div><div class="mh-stat__value">$12,840.50</div></div>
+              <div class="mh-card" style="flex:1;min-width:140px"><div class="mh-stat__label">Unrealized PnL</div><div class="mh-stat__value text-long">+$342.18</div></div>
+              <div class="mh-card" style="flex:1;min-width:140px"><div class="mh-stat__label">Open Positions</div><div class="mh-stat__value">3</div></div>
+              <div class="mh-card" style="flex:1;min-width:140px"><div class="mh-stat__label">Total Notional</div><div class="mh-stat__value" style="font-size:18px">$28,450</div></div>
+            </div>
+            <div style="margin-bottom:12px"><div class="mh-section__title" style="font-size:17px">Open Positions</div></div>
+            <div class="mh-table-wrapper">
+              <table class="mh-table">
+                <thead><tr><th>Market</th><th>Side</th><th>Size</th><th>Entry</th><th>Mark</th><th>Notional</th><th>PnL USD</th><th>PnL %</th><th>Safety</th><th></th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span style="font-weight:500">BTC-PERP</span><br><span style="font-size:10px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">HYP · Base Sepolia</span></td>
+                    <td><span style="color:var(--mh-long);font-weight:500;font-family:var(--font-mono)">BUY</span></td>
+                    <td style="font-family:var(--font-mono)">+0.1000</td>
+                    <td style="font-family:var(--font-mono)">$63,800</td>
+                    <td style="font-family:var(--font-mono)">$64,250</td>
+                    <td style="font-family:var(--font-mono)">$6,425</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+$45.00</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+0.71%</td>
+                    <td><span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Live</span></td>
+                    <td><button class="mh-btn mh-btn--ghost mh-btn--sm">Close ↗</button></td>
+                  </tr>
+                  <tr>
+                    <td><span style="font-weight:500">ETH-PERP</span><br><span style="font-size:10px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">HYP · Base Sepolia</span></td>
+                    <td><span style="color:var(--mh-short);font-weight:500;font-family:var(--font-mono)">SELL</span></td>
+                    <td style="font-family:var(--font-mono)">-0.5000</td>
+                    <td style="font-family:var(--font-mono)">$3,520</td>
+                    <td style="font-family:var(--font-mono)">$3,482</td>
+                    <td style="font-family:var(--font-mono)">$1,741</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+$19.00</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+1.08%</td>
+                    <td><span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Live</span></td>
+                    <td><button class="mh-btn mh-btn--ghost mh-btn--sm">Close ↗</button></td>
+                  </tr>
+                  <tr>
+                    <td><span style="font-weight:500">ETH &gt; $2,000</span><br><span style="font-size:10px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">POLY · CLOB</span></td>
+                    <td><span style="color:var(--mh-long);font-weight:500;font-family:var(--font-mono)">YES</span></td>
+                    <td style="font-family:var(--font-mono)">$500</td>
+                    <td style="font-family:var(--font-mono)">$0.68</td>
+                    <td style="font-family:var(--font-mono)">$0.74</td>
+                    <td style="font-family:var(--font-mono)">$370</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+$30.00</td>
+                    <td style="font-family:var(--font-mono);color:var(--mh-long)">+8.82%</td>
+                    <td><span class="mh-badge mh-badge--planned" style="font-size:10px"><span class="mh-badge__dot"></span>Planned</span></td>
+                    <td><button class="mh-btn mh-btn--ghost mh-btn--sm" style="opacity:0.4">—</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mh-disclaimer" style="margin-top:16px"><svg class="mh-disclaimer__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Portfolio data is read from public blockchain data. Positions shown are for informational purposes only. All close/reduce actions require external signing.</span></div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Portfolio is read-only — no "Submit" or "Trade" actions. Close/reduce available via ghost buttons (opens preview, not direct submit). Polymarket positions show blue "Planned" badge, not green. Safety badge says "Read-Only · External Signer Only".</div>
+    </div>
+
+    <!-- SCREEN 8 — Activity / Execution Log -->
+    <div class="screen-block" id="screen-8">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 08 — Activity / Execution Log</span>
+        <span class="screen-block__badge">Chronological feed · Filterable by type and venue</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item active" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Activity</span><div style="flex:1"></div><button class="header__search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Search activity…</button><button class="mh-btn mh-btn--secondary mh-btn--sm">Export Log</button></header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="filter-bar">
+              <div class="filter-chip active">All Events</div>
+              <div class="filter-chip">Previews</div>
+              <div class="filter-chip">Handoffs</div>
+              <div class="filter-chip">Receipts</div>
+              <div class="filter-chip">Workflows</div>
+              <div class="filter-chip">Alerts</div>
+              <div style="margin-left:auto;display:flex;gap:8px">
+                <select class="mh-input mh-select" style="height:30px;font-size:12px;width:140px;padding-right:28px"><option>All Venues</option><option>Hyperliquid</option><option>Polymarket</option></select>
+              </div>
+            </div>
+            <div class="mh-feed" style="gap:6px">
+              <div class="mh-feed-item" style="border-left:2px solid var(--mh-green);padding-left:12px">
+                <div class="mh-feed-item__icon mh-feed-item__icon--green"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <div class="mh-feed-item__body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="mh-feed-item__title">Receipt verified — Order filled</span><span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Verified</span></div><div class="mh-feed-item__meta">BTC-PERP · BUY 0.1 · $64,250 · Order ID: 0xf3a8… · 2 min ago</div></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">View</button>
+              </div>
+              <div class="mh-feed-item" style="border-left:2px solid var(--mh-green);padding-left:12px">
+                <div class="mh-feed-item__icon mh-feed-item__icon--green"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+                <div class="mh-feed-item__body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="mh-feed-item__title">External signer handoff created</span><span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Pending</span></div><div class="mh-feed-item__meta">ETH-PERP · SELL 0.5 · $3,482 · SHA: 7b4e… · Expires in 18 min · 12 min ago</div></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">View</button>
+              </div>
+              <div class="mh-feed-item" style="border-left:2px solid var(--mh-accent);padding-left:12px">
+                <div class="mh-feed-item__icon mh-feed-item__icon--blue"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+                <div class="mh-feed-item__body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="mh-feed-item__title">Order preview generated</span><span class="mh-badge mh-badge--planned" style="font-size:10px">canSubmit: false</span></div><div class="mh-feed-item__meta">SOL-PERP · BUY 5.0 · $178.30 · Notional: $891.50 · 34 min ago</div></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">View</button>
+              </div>
+              <div class="mh-feed-item" style="border-left:2px solid var(--mh-amber);padding-left:12px">
+                <div class="mh-feed-item__icon mh-feed-item__icon--amber"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+                <div class="mh-feed-item__body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="mh-feed-item__title">Compliance blocked — Polymarket jurisdiction restriction</span><span class="mh-badge mh-badge--restricted" style="font-size:10px">Restricted</span></div><div class="mh-feed-item__meta">ETH &gt; $2,000 · Preview rejected · User jurisdiction not supported · 3 hr ago</div></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">Info</button>
+              </div>
+              <div class="mh-feed-item" style="border-left:2px solid var(--mh-amber);padding-left:12px">
+                <div class="mh-feed-item__icon mh-feed-item__icon--amber"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+                <div class="mh-feed-item__body"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="mh-feed-item__title">Receipt imported — review needed</span><span class="mh-badge mh-badge--review" style="font-size:10px">No Order ID</span></div><div class="mh-feed-item__meta">BTC-PERP · BUY · Status: pending · Handoff matched · 5 hr ago</div></div>
+                <button class="mh-btn mh-btn--ghost mh-btn--sm">Review</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Activity log uses color-coded left borders: green (success/receipt verified), amber (warning/compliance blocked), blue (info/alert). No red entries without explicit errors. Polymarket compliance blocks show amber "Restricted" badge. Filter chips allow narrowing by event type and venue.</div>
+    </div>
+
+    <!-- SCREEN 9 — Workflow Builder -->
+    <div class="screen-block" id="screen-9">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 09 — Workflow Builder</span>
+        <span class="screen-block__badge">Visual workflow editor · Safety badges on execution nodes</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item active" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Workflow Builder</span><div style="flex:1"></div><span class="mh-badge mh-badge--blue" style="margin-right:8px"><span class="mh-badge__dot"></span>Simulation Mode</span><button class="mh-btn mh-btn--secondary mh-btn--sm">Save Draft</button><button class="mh-btn mh-btn--primary mh-btn--sm">Preview Workflow ▶</button></header>
+          <main class="main-content" style="grid-area:unset">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+              <div><input class="mh-input" value="BTC Dip Alert Workflow" style="font-size:18px;font-weight:600;border:none;background:none;padding:0;width:300px;color:var(--mh-text-primary)"><div style="font-size:12px;color:var(--mh-text-tertiary);margin-top:4px">Created 2 days ago · 3 runs · Last run: 1 hr ago</div></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mh-badge mh-badge--planned"><span class="mh-badge__dot"></span>Planned — Simulation Only</span></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start">
+              <div class="workflow-canvas">
+                <div class="workflow-node workflow-node--active">
+                  <div class="workflow-node__icon" style="background:var(--mh-blue-dim);color:var(--mh-blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Trigger: Funding Rate Alert</div><div class="workflow-node__sublabel">BTC-PERP · Above +0.0002/hr</div></div>
+                  <span class="mh-badge mh-badge--blue" style="font-size:10px">Active</span>
+                </div>
+                <div class="connector"></div>
+                <div class="workflow-node">
+                  <div class="workflow-node__icon" style="background:var(--mh-bg-elevated);color:var(--mh-text-secondary)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Market: BTC-PERP</div><div class="workflow-node__sublabel">Hyperliquid · Base Sepolia</div></div>
+                </div>
+                <div class="connector"></div>
+                <div class="workflow-node">
+                  <div class="workflow-node__icon" style="background:var(--mh-accent-dim);color:var(--mh-accent)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Step 1: Generate Preview</div><div class="workflow-node__sublabel">BUY 0.1 BTC at market · canSubmit: false</div></div>
+                  <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Ready</span>
+                </div>
+                <div class="connector"></div>
+                <div class="workflow-node">
+                  <div class="workflow-node__icon" style="background:var(--mh-green-dim);color:var(--mh-green)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Step 2: External Signer Handoff</div><div class="workflow-node__sublabel">Public order terms only · User signs externally</div></div>
+                  <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Ready</span>
+                </div>
+                <div class="connector"></div>
+                <div class="workflow-node">
+                  <div class="workflow-node__icon" style="background:var(--mh-bg-elevated);color:var(--mh-text-secondary)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Step 3: Verify Receipt</div><div class="workflow-node__sublabel">Public order ID or tx hash · Hash verification</div></div>
+                </div>
+                <div class="connector"></div>
+                <div class="workflow-node">
+                  <div class="workflow-node__icon" style="background:var(--mh-blue-dim);color:var(--mh-blue)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+                  <div style="flex:1"><div class="workflow-node__label">Notify: Send Alert</div><div class="workflow-node__sublabel">Notify on completion or failure</div></div>
+                </div>
+              </div>
+              <div>
+                <div class="mh-panel">
+                  <div class="mh-panel__header"><div class="mh-panel__header-icon mh-panel__header-icon--info"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/></svg></div><div><div class="mh-panel__title">Workflow Properties</div><div class="mh-panel__subtitle">BTC Dip Alert Workflow</div></div></div>
+                  <div class="mh-panel__body">
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Trigger</div><div style="font-size:13px;color:var(--mh-text-primary)">Funding Rate Alert</div></div>
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Market</div><div style="font-size:13px;color:var(--mh-text-primary)">BTC-PERP · Hyperliquid</div></div>
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Chain</div><div style="font-size:13px;color:var(--mh-text-primary)">Base Sepolia</div></div>
+                    <div style="margin-bottom:12px"><div style="font-size:11px;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Safety Mode</div><div><span class="mh-badge mh-badge--planned"><span class="mh-badge__dot"></span>Simulation Only</span></div></div>
+                    <div class="mh-callout mh-callout--info">
+                      <svg class="mh-callout__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      <div><div class="mh-callout__title" style="font-size:12px">Workflows run in simulation mode</div><div class="mh-callout__body" style="font-size:11px">All execution steps generate previews and handoffs. Real signing requires explicit user action.</div></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Visual workflow editor with node types: Trigger, Market Select, Preview (accent badge), Handoff (green badge), Receipt, Notification. Every execution node carries a safety badge. "Simulation Mode" blue badge in header. Properties panel shows safety mode for the workflow. No direct submit path visible.</div>
+    </div>
+
+    <!-- SCREEN 10 — Workflow Run Panel -->
+    <div class="screen-block" id="screen-10">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 10 — Workflow Run Panel</span>
+        <span class="screen-block__badge">Step-by-step progress · Live status · Cancel on pending</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item active" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">BTC Dip Alert Workflow — Running</span><div style="flex:1"></div><button class="mh-btn mh-btn--danger mh-btn--sm">Cancel Run</button></header>
+          <main class="main-content" style="grid-area:unset;max-width:680px">
+            <div style="margin-bottom:24px">
+              <a href="#screen-9" style="font-size:12px;color:var(--mh-text-tertiary);display:flex;align-items:center;gap:4px;text-decoration:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>Back to Workflow Builder</a>
+            </div>
+            <div class="mh-panel">
+              <div class="mh-panel__header">
+                <div class="mh-panel__header-icon mh-panel__header-icon--live"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
+                <div style="flex:1"><div class="mh-panel__title">Workflow Run — BTC Dip Alert</div><div class="mh-panel__subtitle">Started 30 seconds ago · Running</div></div>
+                <span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>In Progress</span>
+              </div>
+              <div class="mh-panel__body">
+                <div class="mh-step mh-step--completed">
+                  <div class="mh-step__indicator"><div class="mh-step__icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Trigger: Funding Rate Alert</div>
+                    <div class="mh-step__meta">BTC-PERP funding rate exceeded +0.0002/hr threshold · Completed 30s ago</div>
+                    <div class="mh-step__actions"><button class="mh-btn mh-btn--ghost mh-btn--sm">View Details</button></div>
+                  </div>
+                </div>
+                <div class="mh-step mh-step--completed">
+                  <div class="mh-step__indicator"><div class="mh-step__icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Market: BTC-PERP selected</div>
+                    <div class="mh-step__meta">Hyperliquid · Base Sepolia · $64,250 mark price · Completed 28s ago</div>
+                    <div class="mh-step__actions"><button class="mh-btn mh-btn--ghost mh-btn--sm">View Details</button></div>
+                  </div>
+                </div>
+                <div class="mh-step mh-step--completed">
+                  <div class="mh-step__indicator"><div class="mh-step__icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Order Preview generated</div>
+                    <div class="mh-step__meta">BUY 0.1 BTC-PERP at $64,250 · canSubmit: false · Handoff SHA: 7b4e… · Completed 25s ago</div>
+                    <div class="mh-step__actions"><button class="mh-btn mh-btn--ghost mh-btn--sm">View Preview</button><button class="mh-btn mh-btn--live mh-btn--sm">Handoff</button></div>
+                  </div>
+                </div>
+                <div class="mh-step mh-step--active">
+                  <div class="mh-step__indicator"><div class="mh-step__icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Awaiting external signer execution</div>
+                    <div class="mh-step__meta"><span style="color:var(--mh-amber)">⚠ Awaiting user action</span> · Handoff expires in 28 min · Waiting since 25s ago</div>
+                    <div class="mh-step__actions"><button class="mh-btn mh-btn--accent-ghost mh-btn--sm">Open Handoff</button></div>
+                  </div>
+                </div>
+                <div class="mh-step mh-step--pending">
+                  <div class="mh-step__indicator"><div class="mh-step__icon" style="color:var(--mh-text-tertiary)">4</div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Verify Receipt (pending)</div>
+                    <div class="mh-step__meta">Public order ID or tx hash required · Waiting for external execution</div>
+                    <div class="mh-step__actions"></div>
+                  </div>
+                </div>
+                <div class="mh-step mh-step--pending">
+                  <div class="mh-step__indicator"><div class="mh-step__icon" style="color:var(--mh-text-tertiary)">5</div><div class="mh-step__connector"></div></div>
+                  <div class="mh-step__content">
+                    <div class="mh-step__title">Send Notification (pending)</div>
+                    <div class="mh-step__meta">Alert on completion or failure · Pending previous steps</div>
+                    <div class="mh-step__actions"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mh-panel__footer">
+                <div class="mh-disclaimer"><svg class="mh-disclaimer__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Matterhorn does not execute step 4. User must sign and submit externally before receipt import.</span></div>
+                <button class="mh-btn mh-btn--danger mh-btn--sm">Cancel Run</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Step-by-step workflow progress showing completed (green), active (accent), and pending (gray) states. Step 4 "Awaiting external signer" is highlighted in amber with a warning. Cancel available only on pending/active steps. Each step has action buttons. Safety disclaimer in footer explains Matterhorn doesn't execute step 4.</div>
+    </div>
+
+    <!-- SCREEN 11 — Settings: Markets -->
+    <div class="screen-block" id="screen-11">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 11 — Settings: Markets</span>
+        <span class="screen-block__badge">Market preferences · Safety mode · No credentials</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item active" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-12"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Notifications</a>
+              <a class="sidebar__item" href="#screen-16"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>General</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Settings · Markets</span><div style="flex:1"></div><button class="mh-btn mh-btn--primary mh-btn--sm">Save Changes</button></header>
+          <main class="main-content" style="grid-area:unset;max-width:640px">
+            <div style="margin-bottom:32px">
+              <div style="font-size:20px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px">Market Execution</div>
+              <div style="font-size:13px;color:var(--mh-text-secondary)">Configure market browsing and execution preferences. No API keys or credentials are stored.</div>
+            </div>
+            <div class="settings-list">
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Default Chain</div>
+                  <div class="settings-row__desc">Chain used for previews and handoffs</div>
+                </div>
+                <select class="mh-input mh-select" style="width:180px;height:34px">
+                  <option>Base Sepolia (testnet)</option>
+                  <option>Base (mainnet)</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Slippage Tolerance</div>
+                  <div class="settings-row__desc">Default slippage for market order previews</div>
+                </div>
+                <select class="mh-input mh-select" style="width:180px;height:34px">
+                  <option>0.5%</option>
+                  <option selected>0.1%</option>
+                  <option>1.0%</option>
+                  <option>Custom…</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Safety Mode</div>
+                  <div class="settings-row__desc">Controls what execution actions are available</div>
+                </div>
+                <select class="mh-input mh-select" style="width:180px;height:34px">
+                  <option>Read-Only (Preview Only)</option>
+                  <option selected>External Signer Handoff</option>
+                  <option>Compliance Locked</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Hyperliquid Integration</div>
+                  <div class="settings-row__desc">Read-only via Hyperliquid info API. No exchange API key needed.</div>
+                </div>
+                <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Live</span>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Polymarket Integration</div>
+                  <div class="settings-row__desc">Coming soon. Previews will be available at launch.</div>
+                </div>
+                <span class="mh-badge mh-badge--planned" style="font-size:10px"><span class="mh-badge__dot"></span>Planned</span>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-row__label">Receipt Import</div>
+                  <div class="settings-row__desc">Import public order IDs and tx hashes for verification</div>
+                </div>
+                <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Enabled</span>
+              </div>
+            </div>
+            <div class="mh-callout mh-callout--info" style="margin-top:24px">
+              <svg class="mh-callout__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <div><div class="mh-callout__title" style="font-size:12px">No credentials stored</div><div class="mh-callout__body" style="font-size:11px">Matterhorn Work does not store API keys, private keys, or seed phrases. Market data comes from public endpoints. Signing always happens in your own wallet.</div></div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Market settings page — configuration only, no execution credentials. Safety mode selector shows three modes: Read-Only, External Signer Handoff, Compliance Locked. Hyperliquid and Polymarket integrations shown with their safety states. Explicit "No credentials stored" callout.</div>
+    </div>
+
+    <!-- SCREEN 12 — Settings: Notifications -->
+    <div class="screen-block" id="screen-12">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 12 — Settings: Notifications</span>
+        <span class="screen-block__badge">Toggle rows · Per-type notification config</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Markets</a>
+              <a class="sidebar__item active" href="#screen-12"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Notifications</a>
+              <a class="sidebar__item" href="#screen-16"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>General</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Settings · Notifications</span><div style="flex:1"></div><button class="mh-btn mh-btn--primary mh-btn--sm">Save Changes</button></header>
+          <main class="main-content" style="grid-area:unset;max-width:640px">
+            <div style="margin-bottom:32px">
+              <div style="font-size:20px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px">Notifications</div>
+              <div style="font-size:13px;color:var(--mh-text-secondary)">Choose which events trigger alerts in-app and via desktop notifications.</div>
+            </div>
+            <div class="settings-list">
+              <div class="settings-row">
+                <div><div class="settings-row__label">Funding Rate Alerts</div><div class="settings-row__desc">Alert when a watched market's funding rate crosses your threshold</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Position Liquidation Warnings</div><div class="settings-row__desc">Alert when estimated liquidation price approaches mark price</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Receipt Received</div><div class="settings-row__desc">Notify when an execution receipt is imported and verified</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Workflow Step Completion</div><div class="settings-row__desc">Alert when each workflow step completes or fails</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input"><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Handoff Expiry Warning</div><div class="settings-row__desc">Alert 5 minutes before an active handoff expires</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Compliance Block Notifications</div><div class="settings-row__desc">Alert when a Polymarket action is blocked by jurisdiction</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Desktop Notifications</div><div class="settings-row__desc">Show notifications as OS-level desktop alerts</div></div>
+                <label class="mh-toggle"><input type="checkbox" class="mh-toggle__input" checked><span class="mh-toggle__track"></span><span class="mh-toggle__thumb"></span></label>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Notification settings as toggle rows. Types include: funding alerts, liquidation warnings, receipt received, workflow step completion, handoff expiry, compliance blocks. Toggle components use CSS custom properties. No execution-related toggles (no "enable live trading" etc.).</div>
+    </div>
+
+    <!-- SCREEN 13 — Documentation Hub -->
+    <div class="screen-block" id="screen-13">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 13 — Documentation Hub</span>
+        <span class="screen-block__badge">Searchable docs overlay · Sections for all product areas</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Documentation</span><div style="flex:1"></div><button class="mh-btn mh-btn--ghost mh-btn--sm">× Close</button></header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="docs-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--mh-text-tertiary);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" placeholder="Search documentation…">
+            </div>
+            <div style="display:grid;grid-template-columns:200px 1fr;gap:24px">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Sections</div>
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-accent-dim);color:var(--mh-accent);font-size:13px;font-weight:500;cursor:pointer">Getting Started</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">Market Execution</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">Hyperliquid Guide</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">Polymarket Guide</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">Workflows</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">Safety &amp; Compliance</div>
+                  <div style="padding:8px 10px;border-radius:6px;background:var(--mh-bg-elevated);color:var(--mh-text-secondary);font-size:13px;cursor:pointer;border:1px solid var(--mh-border)">API Reference</div>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:17px;font-weight:600;color:var(--mh-text-primary);margin-bottom:16px">Getting Started</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:8px;padding:14px;cursor:pointer">
+                    <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:4px">Connecting Your Wallet</div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);line-height:1.5">Learn how to connect a Web3 wallet to Matterhorn Work. Matterhorn supports any EVM-compatible wallet via WalletConnect.</div>
+                  </div>
+                  <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:8px;padding:14px;cursor:pointer">
+                    <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:4px">Understanding the External Signer Model</div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);line-height:1.5">Matterhorn never holds your keys. Every execution requires you to sign and submit using your own wallet. This guide explains how it works.</div>
+                  </div>
+                  <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:8px;padding:14px;cursor:pointer">
+                    <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:4px">Market Browser Overview</div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);line-height:1.5">Browse Hyperliquid perpetual markets and Polymarket prediction markets. All previews are read-only by default.</div>
+                  </div>
+                  <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:8px;padding:14px;cursor:pointer">
+                    <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:4px">Building Your First Workflow</div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);line-height:1.5">Automate market monitoring and execution alerts with the visual workflow builder. All workflows run in simulation mode until you're ready.</div>
+                  </div>
+                  <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:8px;padding:14px;cursor:pointer">
+                    <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:4px">Safety and Compliance</div>
+                    <div style="font-size:12px;color:var(--mh-text-tertiary);line-height:1.5">Learn about Matterhorn's non-custodial architecture, compliance restrictions, and how the safety gate protects your funds.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Documentation hub as a full-viewport overlay. Search bar at top. Left sidebar with section navigation. "Getting Started" selected by default. "Safety & Compliance" section explicitly present. "External Signer Model" is a prominent doc entry. No execution content that encourages bypassing safety.</div>
+    </div>
+
+    <!-- SCREEN 14 — Market Safety Explainer -->
+    <div class="screen-block" id="screen-14">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 14 — Market Safety Explainer</span>
+        <span class="screen-block__badge">Non-custodial architecture · FAQ · No custody messaging</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Safety &amp; Compliance</span><div style="flex:1"></div><span class="mh-badge mh-badge--live"><span class="mh-badge__dot"></span>Non-Custodial</span></header>
+          <main class="main-content" style="grid-area:unset;max-width:680px">
+            <div style="margin-bottom:32px">
+              <div style="font-size:20px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px">Non-Custodial Safety Architecture</div>
+              <div style="font-size:13px;color:var(--mh-text-secondary)">Matterhorn Work is designed so that your keys, your funds, and your signing capability always stay in your wallet.</div>
+            </div>
+            <!-- Architecture diagram -->
+            <div style="background:var(--mh-bg-surface);border:1px solid var(--mh-border);border-radius:12px;padding:24px;margin-bottom:24px;text-align:center">
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:16px">
+                <div style="background:var(--mh-blue-dim);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:10px 20px;font-size:13px;font-weight:500;color:var(--mh-blue)">Matterhorn Work</div>
+                <div style="font-size:11px;color:var(--mh-text-tertiary)">generates preview</div>
+                <div style="color:var(--mh-text-tertiary);font-size:20px;margin:4px 0">↓</div>
+              </div>
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:16px">
+                <div style="background:var(--mh-green-dim);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 20px;font-size:13px;font-weight:500;color:var(--mh-green)">Public Order Terms (no keys)</div>
+                <div style="font-size:11px;color:var(--mh-text-tertiary)">handoff SHA256 bound</div>
+                <div style="color:var(--mh-text-tertiary);font-size:20px;margin:4px 0">↓</div>
+              </div>
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:16px">
+                <div style="background:var(--mh-accent-dim);border:1px solid rgba(209,242,255,0.3);border-radius:8px;padding:10px 20px;font-size:13px;font-weight:500;color:var(--mh-accent)">Your Wallet / Hyperliquid SDK</div>
+                <div style="font-size:11px;color:var(--mh-text-tertiary)">you sign and submit</div>
+                <div style="color:var(--mh-text-tertiary);font-size:20px;margin:4px 0">↓</div>
+              </div>
+              <div style="display:inline-flex;flex-direction:column;align-items:center;gap:4px">
+                <div style="background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px;padding:10px 20px;font-size:13px;font-weight:500;color:var(--mh-text-primary)">Public Receipt Import</div>
+                <div style="font-size:11px;color:var(--mh-text-tertiary)">order ID or tx hash only</div>
+              </div>
+            </div>
+            <!-- FAQ -->
+            <div class="mh-accordion">
+              <div class="mh-accordion__item open">
+                <button class="mh-accordion__trigger">Does Matterhorn hold my private keys?<svg class="mh-accordion__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="mh-accordion__content">No. Matterhorn Work is a non-custodial application. It never asks for, stores, or handles your private keys, seed phrases, or API secrets. All signing happens in your own wallet, outside of Matterhorn.</div>
+              </div>
+              <div class="mh-accordion__item">
+                <button class="mh-accordion__trigger">What does Matterhorn see when I execute?<svg class="mh-accordion__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="mh-accordion__content">Matterhorn sees only the public order terms you specify (asset, side, size, price) and the public receipt returned from the venue (order ID or tx hash). It never receives your wallet signature.</div>
+              </div>
+              <div class="mh-accordion__item">
+                <button class="mh-accordion__trigger">Can Matterhorn submit orders on my behalf?<svg class="mh-accordion__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="mh-accordion__content">No. Every order must be signed and submitted by you using your own wallet and the venue's official client or SDK. Matterhorn generates the order terms and a signing template, but never executes the transaction itself.</div>
+              </div>
+              <div class="mh-accordion__item">
+                <button class="mh-accordion__trigger">What happens if I try to use a restricted jurisdiction?<svg class="mh-accordion__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="mh-accordion__content">Polymarket previews are blocked for restricted jurisdictions. Matterhorn shows an amber compliance-blocked state instead of a preview. Hyperliquid markets are available on Base and Base Sepolia, which are permissionless — no jurisdiction restrictions apply.</div>
+              </div>
+              <div class="mh-accordion__item">
+                <button class="mh-accordion__trigger">What is the external signer model?<svg class="mh-accordion__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg></button>
+                <div class="mh-accordion__content">The external signer model means Matterhorn prepares order terms but you, the user, are the sole signer. Your wallet computes the cryptographic signature. Matterhorn has no access to it. This is enforced technically: canSubmit is always false, and Matterhorn never accepts raw signatures in receipt imports.</div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Safety explainer screen with visual architecture diagram (SVG flow showing Matterhorn → Public Terms → Your Wallet → Receipt Import). FAQ accordion with 5 questions covering keys, data visibility, submission, jurisdiction, and the external signer model. NO custody messaging ("your funds are safe with Matterhorn"). Language is precise: "you are the sole signer", "Matterhorn never holds keys".</div>
+    </div>
+
+    <!-- SCREEN 15 — Artifacts Panel -->
+    <div class="screen-block" id="screen-15">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 15 — Artifacts / Evidence Panel</span>
+        <span class="screen-block__badge">Slide-over · Execution artifacts · Evidence export</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item active" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Dashboard</span><div style="flex:1"></div><button class="header__wallet"><span class="header__wallet-dot"></span>0x7099…79C8</button></header>
+          <main class="main-content" style="grid-area:unset">
+            <div class="mh-panel" style="position:relative">
+              <div class="mh-panel__header">
+                <div class="mh-panel__header-icon mh-panel__header-icon--info"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div style="flex:1"><div class="mh-panel__title">Execution Artifacts — Session</div><div class="mh-panel__subtitle">5 artifacts · Last updated just now</div></div>
+                <button class="mh-btn mh-btn--primary mh-btn--sm">Export Evidence Log</button>
+              </div>
+              <div class="mh-panel__body" style="display:flex;flex-direction:column;gap:8px">
+                <div style="background:var(--mh-bg-elevated);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                    <div style="font-size:13px;font-weight:500;color:var(--mh-text-primary)">Receipt Verified</div>
+                    <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Verified</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">BTC-PERP · BUY 0.1 · $64,250 · 2 min ago</div>
+                  <div style="display:flex;gap:6px;margin-top:8px"><button class="mh-btn mh-btn--ghost mh-btn--sm">View</button><button class="mh-btn mh-btn--ghost mh-btn--sm">Download</button><button class="mh-btn mh-btn--ghost mh-btn--sm">Copy SHA</button></div>
+                </div>
+                <div style="background:var(--mh-bg-elevated);border:1px solid rgba(34,197,94,0.25);border-radius:8px;padding:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                    <div style="font-size:13px;font-weight:500;color:var(--mh-text-primary)">External Signer Handoff</div>
+                    <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Pending</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">ETH-PERP · SELL 0.5 · SHA: 7b4e… · 12 min ago</div>
+                  <div style="display:flex;gap:6px;margin-top:8px"><button class="mh-btn mh-btn--ghost mh-btn--sm">View</button><button class="mh-btn mh-btn--ghost mh-btn--sm">Import Receipt</button><button class="mh-btn mh-btn--ghost mh-btn--sm">Copy Handoff</button></div>
+                </div>
+                <div style="background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px;padding:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                    <div style="font-size:13px;font-weight:500;color:var(--mh-text-primary)">Order Preview</div>
+                    <span class="mh-badge mh-badge--planned" style="font-size:10px">canSubmit: false</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">SOL-PERP · BUY 5.0 · $178.30 · 34 min ago</div>
+                  <div style="display:flex;gap:6px;margin-top:8px"><button class="mh-btn mh-btn--ghost mh-btn--sm">View Preview</button><button class="mh-btn mh-btn--live mh-btn--sm">Handoff</button></div>
+                </div>
+                <div style="background:var(--mh-bg-elevated);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                    <div style="font-size:13px;font-weight:500;color:var(--mh-text-primary)">Compliance Blocked</div>
+                    <span class="mh-badge mh-badge--restricted" style="font-size:10px">Restricted</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">ETH &gt; $2,000 · Polymarket · 3 hr ago</div>
+                  <div style="display:flex;gap:6px;margin-top:8px"><button class="mh-btn mh-btn--ghost mh-btn--sm">View Info</button></div>
+                </div>
+                <div style="background:var(--mh-bg-elevated);border:1px solid var(--mh-border);border-radius:8px;padding:12px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">
+                    <div style="font-size:13px;font-weight:500;color:var(--mh-text-primary)">Receipt Review Needed</div>
+                    <span class="mh-badge mh-badge--review" style="font-size:10px">No Order ID</span>
+                  </div>
+                  <div style="font-size:12px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">BTC-PERP · BUY · 5 hr ago</div>
+                  <div style="display:flex;gap:6px;margin-top:8px"><button class="mh-btn mh-btn--ghost mh-btn--sm">Review</button></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Artifacts panel (slide-over in real app, embedded here) listing all execution artifacts for the session: receipts (green), handoffs (green), previews (blue), compliance blocks (amber), review-needed (amber). Each artifact has type, market, timestamp, status badge, and action buttons (View, Download, Copy SHA, Import Receipt). "Export Evidence Log" exports to a local file.</div>
+    </div>
+
+    <!-- SCREEN 16 — Settings: General -->
+    <div class="screen-block" id="screen-16">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 16 — Settings: General</span>
+        <span class="screen-block__badge">App preferences · Session chain · Wallet info · Sign out</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:0">
+        <div class="app-shell">
+          <aside class="sidebar">
+            <div class="sidebar__header"><div class="sidebar__logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><span class="sidebar__brand">Matterhorn</span></div>
+            <nav class="sidebar__nav">
+              <div class="sidebar__section-label">Workspace</div>
+              <a class="sidebar__item" href="#screen-2"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/></svg>Dashboard</a>
+              <a class="sidebar__item" href="#screen-3"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-7"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/></svg>Portfolio</a>
+              <a class="sidebar__item" href="#screen-8"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>Activity</a>
+              <a class="sidebar__item" href="#screen-9"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Workflows</a>
+              <div class="sidebar__section-label" style="margin-top:8px">Settings</div>
+              <a class="sidebar__item" href="#screen-11"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>Markets</a>
+              <a class="sidebar__item" href="#screen-12"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Notifications</a>
+              <a class="sidebar__item active" href="#screen-16"><svg class="sidebar__item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>General</a>
+            </nav>
+            <div class="sidebar__footer"><div class="sidebar__chain-badge"><span class="sidebar__chain-dot"></span>Base Sepolia</div></div>
+          </aside>
+          <header class="header" style="grid-area:unset"><span class="header__title">Settings · General</span><div style="flex:1"></div><button class="mh-btn mh-btn--primary mh-btn--sm">Save Changes</button></header>
+          <main class="main-content" style="grid-area:unset;max-width:640px">
+            <div style="margin-bottom:32px">
+              <div style="font-size:20px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px">General Settings</div>
+              <div style="font-size:13px;color:var(--mh-text-secondary)">App preferences and session information.</div>
+            </div>
+            <!-- Connected wallet -->
+            <div style="background:var(--mh-bg-surface);border:1px solid rgba(209,242,255,0.2);border-radius:12px;padding:16px;margin-bottom:24px">
+              <div style="font-size:12px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px">Connected Wallet</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <div class="mh-user__avatar" style="width:40px;height:40px;border-radius:50%;background:var(--mh-accent-dim);border:1px solid rgba(209,242,255,0.2);display:flex;align-items:center;justify-content:center;color:var(--mh-accent);font-size:14px;font-weight:600">0x</div>
+                <div>
+                  <div style="font-size:15px;font-weight:600;color:var(--mh-text-primary)">Ethereum Address</div>
+                  <div style="font-size:12px;font-family:var(--font-mono);color:var(--mh-text-tertiary)">0x70997970C51812dc3A010C7d01b50e0d17dc79C8</div>
+                </div>
+                <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+                  <span style="width:8px;height:8px;border-radius:50%;background:var(--mh-green);flex-shrink:0"></span>
+                  <span style="font-size:12px;color:var(--mh-green)">Connected</span>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="mh-btn mh-btn--secondary mh-btn--sm">View on Etherscan</button>
+                <button class="mh-btn mh-btn--danger mh-btn--sm">Disconnect</button>
+              </div>
+            </div>
+            <!-- Settings rows -->
+            <div class="settings-list">
+              <div class="settings-row">
+                <div><div class="settings-row__label">Session Chain</div><div class="settings-row__desc">Current blockchain network for market data</div></div>
+                <select class="mh-input mh-select" style="width:200px;height:34px">
+                  <option>Base Sepolia (testnet)</option>
+                  <option>Base (mainnet)</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Theme</div><div class="settings-row__desc">Visual appearance</div></div>
+                <select class="mh-input mh-select" style="width:200px;height:34px">
+                  <option>Dark (default)</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Font Size</div><div class="settings-row__desc">Base text size for the interface</div></div>
+                <select class="mh-input mh-select" style="width:200px;height:34px">
+                  <option>Default (15px)</option>
+                  <option>Large (17px)</option>
+                  <option>Compact (13px)</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Language</div><div class="settings-row__desc">Interface language</div></div>
+                <select class="mh-input mh-select" style="width:200px;height:34px">
+                  <option>English</option>
+                </select>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Data Directory</div><div class="settings-row__desc">Local storage location for session data and artifacts</div></div>
+                <div style="font-size:12px;font-family:var(--font-mono);color:var(--mh-text-tertiary)">~/Library/Application Support/Matterhorn</div>
+              </div>
+              <div class="settings-row">
+                <div><div class="settings-row__label">Safety Gate Version</div><div class="settings-row__desc">Current market execution safety contract</div></div>
+                <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>v1.0 — External Signer Only</span>
+              </div>
+              <div class="settings-row" style="border-color:rgba(239,68,68,0.2)">
+                <div><div class="settings-row__label">Sign Out</div><div class="settings-row__desc">Disconnect wallet and clear session data from this device</div></div>
+                <button class="mh-btn mh-btn--danger mh-btn--sm">Sign Out</button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> General settings: connected wallet address displayed prominently (monospaced), chain selector, theme (dark only for v1), font size, language, data directory. Safety gate version shown with a live badge. "Sign Out" row is visually distinct with a red accent. No account settings — wallet IS the identity.</div>
+    </div>
+
+  </main>
+</div></body></html>
