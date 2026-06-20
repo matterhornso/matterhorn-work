@@ -325,6 +325,14 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowStarterCards],
   );
+  const wellnessRailLauncher = useMemo(
+    () => customerWorkflowStarterCards.find((card) => card.id === "wellness_creator_workflow") ?? null,
+    [customerWorkflowStarterCards],
+  );
+  const servicesRailLauncher = useMemo(
+    () => customerWorkflowStarterCards.find((card) => card.id === "decentralized_services_operator") ?? null,
+    [customerWorkflowStarterCards],
+  );
 
   useReactRenderWatchdog("SessionPage", {
     selectedSessionId: props.selectedSessionId,
@@ -1230,6 +1238,44 @@ export function SessionPage(props: SessionPageProps) {
                   title={item.title}
                   aria-label={item.title}
                   aria-pressed={item.active}
+                >
+                  <Icon size={17} />
+                  <span className="text-[9px] leading-none">{item.label}</span>
+                </Button>
+              );
+            })}
+            {([
+              {
+                id: "wellness_creator_workflow",
+                label: "Wellness",
+                title: "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
+                icon: Dumbbell,
+                launcher: wellnessRailLauncher,
+              },
+              {
+                id: "decentralized_services_operator",
+                label: "Services",
+                title: "Services: planned hosting, storage, email, payments, and identity workflows",
+                icon: Layers3,
+                launcher: servicesRailLauncher,
+              },
+            ]).map((item) => {
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.id}
+                  variant="ghost"
+                  size="icon-sm"
+                  className="h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    if (item.launcher && props.sidebar.onCreateTaskWithPrompt) {
+                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt);
+                      return;
+                    }
+                    props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+                  }}
+                  title={item.title}
+                  aria-label={item.title}
                 >
                   <Icon size={17} />
                   <span className="text-[9px] leading-none">{item.label}</span>

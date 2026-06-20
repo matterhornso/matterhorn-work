@@ -56,6 +56,8 @@ for (const phrase of [
   "Plan a decentralized storage upload",
   "Connect Web3 tools",
   "Start with a Matterhorn workflow",
+  "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
+  "Services: planned hosting, storage, email, payments, and identity workflows",
   "Can submit: No",
   "Live submission: Off",
   "Matterhorn never signs",
@@ -109,6 +111,9 @@ assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launch
 assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
+assert.ok(sessionPage.includes('card.id === "decentralized_services_operator"'), "right rail should expose future Services workflow launcher");
+assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 
 assert.ok(cryptoPrompt.includes("matterhorn_crypto_chat"), "crypto prompt should route to unified crypto chat first");
 assert.ok(cryptoPrompt.includes("Public-read and preview flows do\n * not require an EVM wallet connection."), "crypto prompt should document no-wallet public reads");
