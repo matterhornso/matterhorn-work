@@ -61,6 +61,22 @@ These exercise the reusable workflow pattern across service-professional roles. 
 
 Expected for every prompt: useful, client-safe content; an explicit caveat; no medical diagnosis or prescriptive claim; and no statement that Matterhorn currently processes payments, sends email, hosts on live storage, or gates access.
 
+## Generic-Surface & Operator-Example Tests
+
+Confirm this is **not a custom wellness app** — it is exposed through the generic Matterhorn workflow surfaces and runs the four demo prompts like any other workflow:
+
+- It is registered as `wellness_creator_workflow` in the workflow catalog and `wellness_creator_service_workflow` in the template registry (the helper's `--json` `genericSurfaces` block names both, and the gate verifies they actually appear in those files).
+- Run each operator example and confirm a useful, client-safe artifact:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --route "create a 4-week fat loss plan for a beginner"
+node scripts/wellness-creator-workflow.mjs --route "make a yoga mobility plan for an office worker"
+node scripts/wellness-creator-workflow.mjs --route "create a client progress check-in"
+node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coaching program"
+```
+
+Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
+
 ## Free-Form Prompt Tests (Any Request)
 
 The workflow must help with **any** trainer request, not just the canonical/example prompts. Try a wide spread and confirm each returns useful, client-safe content with the mandatory disclaimer and no live-service action:
