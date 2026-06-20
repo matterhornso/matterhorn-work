@@ -85,9 +85,9 @@ function ShellWireframe({ config }: { config: ShellConfig }) {
         {/* Starter cards */}
         <g className="transition-all duration-300" style={{ opacity: config.starterCards ? 1 : 0 }}>
           {[
-            { x: cx + 12, icon: "\u{1F4CA}", label: "Edit a CSV" },
-            { x: cx + 12 + (cw - 36) / 3 + 6, icon: "\u{1F310}", label: "Browse web" },
-            { x: cx + 12 + ((cw - 36) / 3 + 6) * 2, icon: "\u{1F50C}", label: "Extensions" },
+            { x: cx + 12, icon: "\u{03A4}", label: "Use TAO" },
+            { x: cx + 12 + (cw - 36) / 3 + 6, icon: "\u{25B3}", label: "Preview HL" },
+            { x: cx + 12 + ((cw - 36) / 3 + 6) * 2, icon: "\u{25C7}", label: "Markets" },
           ].map((card, i) => {
             const w = (cw - 36) / 3;
             return (

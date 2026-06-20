@@ -184,13 +184,13 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "matterhorn-crypto",
     name: "Matterhorn Crypto",
-    description: "Unified chat workflows for Bittensor, Hyperliquid, and Polymarket with read/preview-only market safety and external-signer handoffs.",
+    description: "Shared safety, readiness, and evidence layer behind the Bittensor, Hyperliquid, and Polymarket protocol workspaces.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/matterhorn-wallet.svg" },
     composer: { prompt: "Use unified crypto chat. " },
     setup: {
-      instructions: "Crypto workflows are available from the session Crypto rail and the unified crypto chat tools. Market routes are read/preview-only; signing stays external.",
-      primaryCta: "Open Crypto panel",
+      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket workspaces in the session rail. Market routes are read/preview-only; signing stays external.",
+      primaryCta: "Open protocol workspace",
     },
     resources: [
       { type: "tool", id: "crypto-chat-execute", label: "Unified crypto chat", path: "/api/crypto/chat/execute", required: true },
@@ -198,8 +198,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       { type: "mcp", id: "matterhorn-crypto-chat", label: "Matterhorn crypto chat MCP", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
-      { type: "session-side-panel", ref: "matterhorn.crypto.panel", label: "Crypto", location: "session-right-pane" },
-      { type: "session-rail-item", ref: "matterhorn.crypto.rail", label: "Crypto", location: "session-rail" },
+      { type: "session-side-panel", ref: "matterhorn.crypto.panel", label: "Protocol workspaces", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.crypto.rail", label: "Protocols", location: "session-rail" },
       { type: "server-route", ref: "POST /api/crypto/chat/execute", location: "server" },
       { type: "composer-prompt", prompt: "Use unified crypto chat. ", location: "composer" },
     ],
@@ -215,7 +215,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     composer: { prompt: "Use unified crypto chat. For Bittensor, " },
     setup: {
       instructions: "Bittensor support is public-read and external-signer-first. Paste public SS58 coldkeys only; never paste seed phrases, private keys, or mnemonics.",
-      primaryCta: "Open Bittensor in Crypto",
+      primaryCta: "Open Bittensor workspace",
     },
     resources: [
       { type: "tool", id: "bittensor-chat-execute", label: "Bittensor chat execution", path: "/api/bittensor/chat/execute", required: true },
@@ -223,7 +223,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       { type: "mcp", id: "bittensor-chat-mcp", label: "Bittensor MCP tools", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
-      { type: "session-side-panel", ref: "matterhorn.crypto.panel", label: "Bittensor", location: "session-right-pane" },
+      { type: "session-side-panel", ref: "matterhorn.bittensor.panel", label: "Bittensor", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.bittensor.rail", label: "Bittensor", location: "session-rail" },
       { type: "server-route", ref: "POST /api/bittensor/chat/execute", location: "server" },
       { type: "composer-prompt", prompt: "Use unified crypto chat. For Bittensor, ", location: "composer" },
     ],
@@ -239,13 +240,15 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     composer: { prompt: "Use unified crypto chat. For Hyperliquid, " },
     setup: {
       instructions: "Hyperliquid is preview-only in this build. Matterhorn does not accept API secrets, raw signatures, signed payloads, or live order submission.",
-      primaryCta: "Open Hyperliquid in Crypto",
+      primaryCta: "Open Hyperliquid workspace",
     },
     resources: [
       { type: "tool", id: "hyperliquid-readiness", label: "Hyperliquid readiness", path: "/api/hyperliquid/readiness", required: true },
       { type: "mcp", id: "hyperliquid-mcp", label: "Hyperliquid MCP tools", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
+      { type: "session-side-panel", ref: "matterhorn.hyperliquid.panel", label: "Hyperliquid", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.hyperliquid.rail", label: "Hyperliquid", location: "session-rail" },
       { type: "server-route", ref: "GET /api/hyperliquid/readiness", location: "server" },
       { type: "composer-prompt", prompt: "Use unified crypto chat. For Hyperliquid, ", location: "composer" },
     ],
@@ -261,13 +264,15 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     composer: { prompt: "Use unified crypto chat. For Polymarket, " },
     setup: {
       instructions: "Polymarket support is read/preview-only. Compliance-blocked markets must not expose executable price, size, or share terms.",
-      primaryCta: "Open Polymarket in Crypto",
+      primaryCta: "Open Polymarket workspace",
     },
     resources: [
       { type: "tool", id: "polymarket-readiness", label: "Polymarket readiness", path: "/api/polymarket/readiness", required: true },
       { type: "mcp", id: "polymarket-mcp", label: "Polymarket MCP tools", mcpServerName: "matterhorn-work", required: false },
     ],
     contributions: [
+      { type: "session-side-panel", ref: "matterhorn.polymarket.panel", label: "Polymarket", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.polymarket.rail", label: "Polymarket", location: "session-rail" },
       { type: "server-route", ref: "GET /api/polymarket/readiness", location: "server" },
       { type: "composer-prompt", prompt: "Use unified crypto chat. For Polymarket, ", location: "composer" },
     ],

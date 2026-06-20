@@ -36,7 +36,7 @@ for (const phrase of [
 
 for (const phrase of [
   "Create blank session",
-  "Open Crypto panel",
+  "Open Bittensor workspace",
   "Use Bittensor",
   "Show my TAO",
   "Compare validators",
@@ -67,9 +67,14 @@ for (const forbidden of [
 }
 
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Crypto rail should mount the Bittensor/Crypto panel");
-assert.ok(walletPanel.includes("<BittensorPanel />"), "Wallet/Crypto panel should render BittensorPanel");
+assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Wallet/Crypto panel should render the selected protocol workspace");
 assert.ok(walletPanel.includes("Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews"), "no-wallet crypto panel should explain public read flows");
-assert.ok(sessionPage.includes("Crypto: Bittensor, Hyperliquid, Polymarket"), "right rail should label the crypto surface");
+assert.ok(sessionPage.includes('panel: "bittensor"'), "right rail should expose a dedicated Bittensor workspace");
+assert.ok(sessionPage.includes('panel: "hyperliquid"'), "right rail should expose a dedicated Hyperliquid workspace");
+assert.ok(sessionPage.includes('panel: "polymarket"'), "right rail should expose a dedicated Polymarket workspace");
+assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
+assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
 
 assert.ok(cryptoPrompt.includes("matterhorn_crypto_chat"), "crypto prompt should route to unified crypto chat first");
 assert.ok(cryptoPrompt.includes("Public-read and preview flows do\n * not require an EVM wallet connection."), "crypto prompt should document no-wallet public reads");
@@ -89,6 +94,12 @@ for (const phrase of [
   'name: "Polymarket"',
   "read/preview-only",
   "external-signer",
+  "Open Bittensor workspace",
+  "Open Hyperliquid workspace",
+  "Open Polymarket workspace",
+  'ref: "matterhorn.bittensor.rail"',
+  'ref: "matterhorn.hyperliquid.rail"',
+  'ref: "matterhorn.polymarket.rail"',
 ]) {
   assert.ok(extensions.includes(phrase), `extensions catalog should expose Web3 connector: ${phrase}`);
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   AlertTriangle,
   ArrowUpDown,
+  BarChart3,
   BrainCircuit,
   Database,
   ExternalLink,
@@ -238,7 +239,112 @@ const BITTENSOR_BETA_MODE = (() => {
 })();
 
 type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
+type CryptoVenue = "bittensor" | "hyperliquid" | "polymarket";
 type ActionType = BittensorActionQuote["action"];
+const VENUE_DESKS: Record<CryptoVenue, {
+  label: string;
+  shortLabel: string;
+  eyebrow: string;
+  headline: string;
+  description: string;
+  statusLabel: string;
+  canSubmit: string;
+  liveSubmission: string;
+  signer: string;
+  source: string;
+  prompts: { label: string; prompt: string }[];
+}> = {
+  bittensor: {
+    label: "Bittensor",
+    shortLabel: "TAO",
+    eyebrow: "Wallet · subnets · validators",
+    headline: "Use Bittensor without learning the CLI first.",
+    description: "Read public SS58 wallets, understand subnets, compare validators, prepare staking previews, and create watches. Actions still require an external Bittensor-compatible signer.",
+    statusLabel: "Beta-ready",
+    canSubmit: "External signer",
+    liveSubmission: "External signing required",
+    signer: "External Bittensor signer required",
+    source: "Subtensor sidecar, TAO.app, or fallback data",
+    prompts: [
+      {
+        label: "Find image subnets",
+        prompt: "Use Bittensor chat mode. Find Bittensor subnets useful for image generation. Explain each subnet in beginner language, adapter availability, live data freshness, risks, and safe next steps.",
+      },
+      {
+        label: "Show my TAO",
+        prompt: "Use Bittensor chat mode. Show my TAO and where I am staked for this public SS58 coldkey: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
+      },
+      {
+        label: "Compare validators",
+        prompt: "Use Bittensor chat mode. Compare validators on subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, hotkey meaning, and what is missing before a staking preview.",
+      },
+      {
+        label: "Prepare staking",
+        prompt: "Use Bittensor chat mode. Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
+      },
+    ],
+  },
+  hyperliquid: {
+    label: "Hyperliquid",
+    shortLabel: "HL",
+    eyebrow: "Orderbook · account · previews",
+    headline: "Preview Hyperliquid trades through chat, with execution off.",
+    description: "Inspect orderbooks, account exposure, funding, open-order context, watch plans, and external-signer handoffs. Matterhorn does not submit live Hyperliquid orders in this build.",
+    statusLabel: "Preview-only",
+    canSubmit: "No",
+    liveSubmission: "Off",
+    signer: "External signer/client required",
+    source: "Hyperliquid public info endpoints and fixture/testnet evidence",
+    prompts: [
+      {
+        label: "BTC orderbook",
+        prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
+      },
+      {
+        label: "Account exposure",
+        prompt: "Use Hyperliquid chat mode. Show my Hyperliquid exposure for this public address: <paste public address>. Summarize account value, margin, positions, open orders, funding exposure, and risk notes where data exists.",
+      },
+      {
+        label: "Preview order",
+        prompt: "Use Hyperliquid chat mode. Prepare a preview for buying 0.001 BTC with a testnet external-signer flow. Do not submit, sign, or ask for API secrets. Show Can submit: No, Live submission: Off, missing context, and preview hash expectations.",
+      },
+      {
+        label: "Create watch",
+        prompt: "Use Hyperliquid chat mode. Create a read-only watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert card behavior, and confirm no auto-execution.",
+      },
+    ],
+  },
+  polymarket: {
+    label: "Polymarket",
+    shortLabel: "PM",
+    eyebrow: "Markets · outcomes · compliance",
+    headline: "Analyze prediction markets and preview safely.",
+    description: "Find markets, explain outcomes as probabilities, read orderbook/liquidity context, check compliance state, and prepare external-signer previews without sending orders from Matterhorn.",
+    statusLabel: "Preview-only",
+    canSubmit: "No",
+    liveSubmission: "Off",
+    signer: "External wallet/client required",
+    source: "Polymarket Gamma/Data/CLOB public reads and fixture/testnet evidence",
+    prompts: [
+      {
+        label: "Find markets",
+        prompt: "Use Polymarket chat mode. Find and summarize Polymarket markets about this topic: <topic>. Explain outcomes, implied probabilities, liquidity/orderbook context where available, and compliance status.",
+      },
+      {
+        label: "Compliance read",
+        prompt: "Use Polymarket chat mode. Review whether this market can be previewed: <market id or URL>. If compliance-blocked, return no executable price, size, or share fields.",
+      },
+      {
+        label: "Preview prediction",
+        prompt: "Use Polymarket chat mode. Prepare a preview-only YES/NO prediction for this testnet/operator-owned market: <market id>. Do not sign, submit, or ask for API secrets. Show Can submit: No, Live submission: Off, and external signer requirements.",
+      },
+      {
+        label: "Create watch",
+        prompt: "Use Polymarket chat mode. Create a read-only watch plan for odds/liquidity movement and compliance status on this public market: <market id>. Confirm no order signing, submission, or auto-execution.",
+      },
+    ],
+  },
+};
 type ReadinessCheck = {
   id?: string;
   label?: string;
@@ -365,7 +471,8 @@ function buildBittensorChatPrompt(prompt: string, context: Record<string, unknow
   return lines.length ? `${prompt}\n\nBittensor context:\n${lines.join("\n")}` : prompt;
 }
 
-export default function BittensorPanel() {
+export default function BittensorPanel({ initialVenue = "bittensor" }: { initialVenue?: CryptoVenue }) {
+  const [venue, setVenue] = useState<CryptoVenue>(initialVenue);
   const [tab, setTab] = useState<Tab>("overview");
   const [subnets, setSubnets] = useState<BittensorSubnetSummary[]>([]);
   const [selectedNetuid, setSelectedNetuid] = useState<number | null>(null);
@@ -402,6 +509,11 @@ export default function BittensorPanel() {
   const [copiedCustomerCommand, setCopiedCustomerCommand] = useState<string | null>(null);
   const [agentPromptReady, setAgentPromptReady] = useState(false);
   const [loadedSavedWatchAddress, setLoadedSavedWatchAddress] = useState(false);
+
+  useEffect(() => {
+    setVenue(initialVenue);
+    setTab("overview");
+  }, [initialVenue]);
 
   const loadSubnets = useCallback(async () => {
     setLoading(true);
@@ -755,6 +867,22 @@ export default function BittensorPanel() {
     }, { mode: item.mode, source: "crypto-beta-try" });
   };
 
+  const askAgentForVenuePrompt = async (prompt: string) => {
+    await sendToChat(prompt, {
+      venue,
+      ss58Address: watchAddress.trim() || undefined,
+      wallet,
+      readiness,
+      cryptoReadiness,
+      marketExecutionReadiness,
+      marketExecutionChain,
+      marketSdkValidation,
+    }, {
+      mode: venue === "bittensor" ? "bittensor" : "crypto",
+      source: `${venue}-workspace-panel`,
+    });
+  };
+
   const askAgentAboutQuote = async () => {
     if (!quote) return;
     const prompt = `Use Bittensor chat mode. Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
@@ -824,6 +952,7 @@ export default function BittensorPanel() {
   const marketSdkValidationPrivateSdkState = marketSdkValidation?.safety?.runsPrivateSdkSigning === false && marketSdkValidation?.safety?.callsExchanges === false
     ? "No"
     : "Unknown";
+  const activeVenue = VENUE_DESKS[venue];
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -834,9 +963,9 @@ export default function BittensorPanel() {
               <BrainCircuit className="size-5 text-sky-400" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-dls-text">Crypto workspace</h2>
+              <h2 className="text-base font-semibold text-dls-text">{activeVenue.label}</h2>
               <p className="text-xs text-dls-secondary">
-                Bittensor · Hyperliquid · Polymarket · {sidecarStatus?.configured ? "Subtensor sidecar ready" : "public reads and previews"}
+                {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeVenue.statusLabel}
               </p>
             </div>
           </div>
@@ -851,14 +980,33 @@ export default function BittensorPanel() {
             Refresh
           </Button>
         </div>
-        <div className="grid grid-cols-5 gap-1 rounded-lg bg-dls-surface p-1">
-          {[
-            { key: "overview" as const, label: "Overview" },
-            { key: "demo" as const, label: "Demo" },
-            { key: "subnets" as const, label: "Subnets" },
-            { key: "wallet" as const, label: "Wallet" },
-            { key: "actions" as const, label: "Actions" },
-          ].map((item) => (
+        <div className="mb-3 grid grid-cols-3 gap-1 rounded-lg bg-dls-surface p-1">
+          {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={cn(
+                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                venue === item ? "bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:text-dls-text",
+              )}
+              onClick={() => {
+                setVenue(item);
+                setTab("overview");
+              }}
+            >
+              {VENUE_DESKS[item].label}
+            </button>
+          ))}
+        </div>
+        {venue === "bittensor" ? (
+          <div className="grid grid-cols-5 gap-1 rounded-lg bg-dls-surface p-1">
+            {[
+              { key: "overview" as const, label: "Overview" },
+              { key: "demo" as const, label: "Demo" },
+              { key: "subnets" as const, label: "Subnets" },
+              { key: "wallet" as const, label: "Wallet" },
+              { key: "actions" as const, label: "Actions" },
+            ].map((item) => (
             <button
               key={item.key}
               type="button"
@@ -870,18 +1018,86 @@ export default function BittensorPanel() {
             >
               {item.label}
             </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        {error && (
+        {venue === "bittensor" && error && (
           <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor provider">
             {error}
           </Notice>
         )}
 
-        {tab === "overview" && (
+        {venue !== "bittensor" && (
+          <div className="space-y-4">
+            <Section title={`${activeVenue.label} workspace`} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-200">{activeVenue.eyebrow}</div>
+                  <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
+                  <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Interface" value={activeVenue.statusLabel} compact />
+                  <Metric label="Can submit" value={activeVenue.canSubmit} compact />
+                  <Metric label="Live submission" value={activeVenue.liveSubmission} compact />
+                  <Metric label="Signer" value={activeVenue.signer} compact />
+                </div>
+                <p className="text-xs leading-5 text-dls-secondary">
+                  Source: {activeVenue.source}. Matterhorn keeps this desk chat-first: ask in plain English, review cards, then use an external wallet/client only when a future approved handoff requires it.
+                </p>
+              </div>
+            </Section>
+
+            <Section title={`${activeVenue.label} chat starters`} icon={<BrainCircuit className="size-4" />}>
+              <div className="grid gap-2">
+                {activeVenue.prompts.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                    onClick={() => void askAgentForVenuePrompt(item.prompt)}
+                  >
+                    <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
+                    <span className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">{item.prompt}</span>
+                  </button>
+                ))}
+              </div>
+            </Section>
+
+            <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
+                  <Metric label="Execution" value={marketVenueState(venue)} compact />
+                  <Metric label="Can submit" value={marketExecutionSubmissionState} compact />
+                  <Metric label="SDK evidence" value={marketSdkValidationState} compact />
+                </div>
+                <Notice tone="info" icon={<Shield className="size-4" />} title="Preview-only boundary">
+                  {activeVenue.label} is separated from Bittensor because it has a different risk model. This desk supports read, preview, watch, sign-request evidence, and receipt review. It does not submit live market orders or accept private keys, API secrets, raw signatures, or signed payloads.
+                </Notice>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
+                    {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : `Create ${activeVenue.shortLabel} watch`}
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
+                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy sign-request examples"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
+                    {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest") ? "Copied" : `Digest ${activeVenue.shortLabel} watches`}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand("sdkValidateFixture")}>
+                    {copiedCustomerCommand === "sdkValidateFixture" ? "Copied" : "SDK fixture validation"}
+                  </Button>
+                </div>
+              </div>
+            </Section>
+          </div>
+        )}
+
+        {venue === "bittensor" && tab === "overview" && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
@@ -955,7 +1171,7 @@ export default function BittensorPanel() {
           </div>
         )}
 
-        {tab === "demo" && (
+        {venue === "bittensor" && tab === "demo" && (
           <div className="space-y-4">
             <Section title="Try in chat" icon={<BrainCircuit className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
@@ -1353,7 +1569,7 @@ export default function BittensorPanel() {
           </div>
         )}
 
-        {tab === "subnets" && (
+        {venue === "bittensor" && tab === "subnets" && (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
             <div className="space-y-3">
               <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
@@ -1391,7 +1607,7 @@ export default function BittensorPanel() {
           </div>
         )}
 
-        {tab === "wallet" && (
+        {venue === "bittensor" && tab === "wallet" && (
           <div className="space-y-4">
             <Section title="Watch Coldkey" icon={<Shield className="size-4" />}>
               <div className="space-y-3">
@@ -1459,7 +1675,7 @@ export default function BittensorPanel() {
           </div>
         )}
 
-        {tab === "actions" && (
+        {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
             <Notice tone="info" icon={<Shield className="size-4" />} title="Quote-only actions">
               Matterhorn prepares Bittensor actions for review. External Bittensor-compatible signing is required.

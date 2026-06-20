@@ -19,6 +19,14 @@ assert.equal(
 
 for (const phrase of [
   "Demo",
+  "VENUE_DESKS",
+  "Use Bittensor without learning the CLI first.",
+  "Preview Hyperliquid trades through chat, with execution off.",
+  "Analyze prediction markets and preview safely.",
+  "BTC orderbook",
+  "Find markets",
+  "Exchange preview controls",
+  "Market preview controls",
   "Readiness",
   "Try prompts",
   "Evidence",
