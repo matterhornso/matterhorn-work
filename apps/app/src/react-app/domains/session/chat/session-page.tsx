@@ -79,6 +79,12 @@ const STARTUP_SKELETON_ROWS = [
   { id: "final", titleWidth: "36%", bodyWidth: "74%" },
 ];
 const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
+const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket"] as const;
+type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
+
+function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
+  return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
+}
 
 const MATTERHORN_STARTER_TASKS = [
   {
@@ -336,7 +342,9 @@ export function SessionPage(props: SessionPageProps) {
   const artifactRailActive = activeSidePanel === "artifacts";
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
-  const walletRailActive = activeSidePanel === "wallet";
+  const bittensorRailActive = activeSidePanel === "bittensor";
+  const hyperliquidRailActive = activeSidePanel === "hyperliquid";
+  const polymarketRailActive = activeSidePanel === "polymarket";
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -518,7 +526,10 @@ export function SessionPage(props: SessionPageProps) {
     toggleCurrentSidePanel("voice");
   }, [toggleCurrentSidePanel]);
   const openWalletRailPane = useCallback(() => {
-    toggleCurrentSidePanel("wallet");
+    toggleCurrentSidePanel("bittensor");
+  }, [toggleCurrentSidePanel]);
+  const openVenueRailPane = useCallback((panel: VenueSidePanel) => {
+    toggleCurrentSidePanel(panel);
   }, [toggleCurrentSidePanel]);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
@@ -974,7 +985,7 @@ export function SessionPage(props: SessionPageProps) {
                             onClick={openWalletRailPane}
                           >
                             <WalletIcon className="size-4" />
-                            Open Crypto panel
+                            Open Bittensor workspace
                           </button>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -1070,8 +1081,13 @@ export function SessionPage(props: SessionPageProps) {
                       onSelectTarget={openTarget}
                       onClose={closeRightPane}
                     />
-                  ) : activeSidePanel === "wallet" ? (
-                    <WalletPanel store={wallet.store} gasPriceGwei={sessionWallet.gasPriceGwei} blockExplorerUrl={sessionWallet.blockExplorerUrl} />
+                  ) : activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel) ? (
+                    <WalletPanel
+                      store={wallet.store}
+                      gasPriceGwei={sessionWallet.gasPriceGwei}
+                      blockExplorerUrl={sessionWallet.blockExplorerUrl}
+                      initialVenue={isVenueSidePanel(activeSidePanel) ? activeSidePanel : "bittensor"}
+                    />
                   ) : (
                     <BrowserPanel onClose={closeRightPane} />
                   )}
@@ -1150,21 +1166,49 @@ export function SessionPage(props: SessionPageProps) {
               <Settings2 size={17} />
               <span className="text-[9px] leading-none">Tools</span>
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                walletRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
-              )}
-              onClick={openWalletRailPane}
-              title="Crypto: Bittensor, Hyperliquid, Polymarket"
-              aria-label="Crypto: Bittensor, Hyperliquid, Polymarket"
-              aria-pressed={walletRailActive}
-            >
-              <WalletIcon size={17} />
-              <span className="text-[9px] leading-none">Crypto</span>
-            </Button>
+            {([
+              {
+                panel: "bittensor" as const,
+                label: "Bittensor",
+                title: "Bittensor: TAO, subnets, validators, and staking previews",
+                active: bittensorRailActive,
+                icon: BrainCircuit,
+              },
+              {
+                panel: "hyperliquid" as const,
+                label: "Hyper",
+                title: "Hyperliquid: account, orderbook, watches, and external-signer previews",
+                active: hyperliquidRailActive,
+                icon: BarChart3,
+              },
+              {
+                panel: "polymarket" as const,
+                label: "Poly",
+                title: "Polymarket: markets, outcomes, compliance, and external-signer previews",
+                active: polymarketRailActive,
+                icon: ShieldCheck,
+              },
+            ]).map((item) => {
+              const Icon = item.icon;
+              return (
+                <Button
+                  key={item.panel}
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(
+                    "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                    item.active && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                  )}
+                  onClick={() => openVenueRailPane(item.panel)}
+                  title={item.title}
+                  aria-label={item.title}
+                  aria-pressed={item.active}
+                >
+                  <Icon size={17} />
+                  <span className="text-[9px] leading-none">{item.label}</span>
+                </Button>
+              );
+            })}
           </aside>
           </div>
         </SidebarInset>

@@ -21,6 +21,7 @@ const AgentWorkspace = lazy(() => import("./pages/AgentWorkspace"));
 const BittensorPanel = lazy(() => import("./pages/BittensorPanel"));
 
 type PanelType = "crypto" | "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | null;
+export type CryptoVenue = "bittensor" | "hyperliquid" | "polymarket";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -75,9 +76,10 @@ export type WalletPanelProps = {
   store: WalletStore;
   gasPriceGwei?: number | null;
   blockExplorerUrl?: (hash: string) => string;
+  initialVenue?: CryptoVenue;
 };
 
-export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPanelProps) {
+export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenue = "bittensor" }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
   const [activePanel, setActivePanel] = useState<PanelType>("crypto");
@@ -85,6 +87,10 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
   const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
   const securityLog = useMemo(() => getSecurityLog(5), []);
   const { prices, fetchPrices, getPrice } = useTokenPrices();
+
+  useEffect(() => {
+    setActivePanel("crypto");
+  }, [initialVenue]);
 
   const handlePortfolioOpen = useCallback(async () => {
     if (!state.address || !state.chainId) return;
@@ -135,11 +141,11 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.14)] animate-skeleton" />
-              <span className="text-sm text-dls-secondary">Loading crypto workspace...</span>
+              <span className="text-sm text-dls-secondary">Loading protocol workspace...</span>
             </div>
           </div>
         }>
-          <BittensorPanel />
+          <BittensorPanel initialVenue={initialVenue} />
         </Suspense>
         <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-xl border border-dls-border bg-dls-surface/95 px-3 py-2 text-[11px] leading-relaxed text-dls-secondary shadow-[var(--dls-card-shadow)]">
           EVM wallet not connected. Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews, and external-signer guidance still work from here.
@@ -352,7 +358,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
               </div>
             </div>
           }>
-            <BittensorPanel />
+            <BittensorPanel initialVenue={initialVenue} />
           </Suspense>
           <button
             type="button"
