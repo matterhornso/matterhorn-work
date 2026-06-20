@@ -40,6 +40,13 @@ const FORBIDDEN_ARG_RE =
 const SECRET_TEXT_RE =
   /(seed phrase|mnemonic|private key|api secret|api key|raw signature|signed payload|signed order|wallet export|passphrase|-----BEGIN|0x[a-f0-9]{40,})/i;
 
+// Heuristic for prompts that ask for clinical care — diagnosis, prescription,
+// medication/dosing, or treating a named condition or injury. These are
+// redirected to educational/safety language and a referral, never answered as
+// medical advice.
+const MEDICAL_INTENT_RE =
+  /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica)\b/i;
+
 const FIXTURE_DIR = "docs/wellness-creator-workflow";
 const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
 
@@ -328,6 +335,28 @@ const EXAMPLE_PROMPTS = [
   },
 ];
 
+// How this workflow is exposed through the existing generic Matterhorn workflow
+// surfaces — discovered and run like any other workflow, not a custom app.
+const GENERIC_SURFACES = {
+  notCustomApp: true,
+  chatFirst: true,
+  catalogWorkflowId: CATALOG_WORKFLOW_ID, // wellness_creator_workflow
+  templateRegistryId: "wellness_creator_service_workflow",
+  sharedContract: CONTRACT_DOC,
+  catalogFile: "scripts/matterhorn-workflow-catalog.mjs",
+  templateRegistryTypes: "packages/types/src/matterhorn-workflows.ts",
+  note: "Exposed through the existing generic Matterhorn workflow surfaces (catalog + template registry), discovered and run like any other workflow. Not a custom vertical app.",
+};
+
+// CLI / operator examples requested for the demo. Each is routed through the
+// same free-form router and is client-safe (educational, no live service).
+const OPERATOR_PROMPTS = [
+  "create a 4-week fat loss plan for a beginner",
+  "make a yoga mobility plan for an office worker",
+  "create a client progress check-in",
+  "package a paid 8-week coaching program",
+];
+
 // Any prompt, one workflow. A creator can ask for anything in plain chat — a
 // training plan, a diet plan, a custom strength block, a mobility routine, a
 // habit plan, a client handout — and the workflow produces a client-safe
@@ -409,6 +438,21 @@ function routeFreeformPrompt(prompt) {
       acceptsSecrets: false,
     };
   }
+  if (MEDICAL_INTENT_RE.test(raw)) {
+    return {
+      artifactType: "Educational guidance (refer to a professional)",
+      safe: true,
+      refused: false,
+      redirected: true,
+      educationalOnly: true,
+      disclaimerRequired: true,
+      guidance:
+        "General fitness and wellness education only — not medical advice, diagnosis, or treatment. For diagnosis, prescriptions, medication, injuries, or any medical condition, refer the client to a qualified healthcare professional.",
+      paymentProcessed: false,
+      emailSent: false,
+      acceptsSecrets: false,
+    };
+  }
   const text = raw.toLowerCase();
   let artifactType = "Custom wellness program artifact";
   if (/check.?in|progress|review/.test(text)) artifactType = "Client progress check-in";
@@ -459,10 +503,23 @@ function buildContract() {
     contractDoc: CONTRACT_DOC,
     catalogWorkflowId: CATALOG_WORKFLOW_ID,
     reusablePattern: REUSABLE_PATTERN,
+    genericSurfaces: GENERIC_SURFACES,
     serviceProfessionals: SERVICE_PROFESSIONALS,
     personas: PERSONAS,
     canonicalPrompts: CANONICAL_PROMPTS,
     examplePrompts: EXAMPLE_PROMPTS,
+    operatorExamples: OPERATOR_PROMPTS.map((prompt) => {
+      const routed = routeFreeformPrompt(prompt);
+      return {
+        prompt,
+        command: `node scripts/wellness-creator-workflow.mjs --route ${JSON.stringify(prompt)}`,
+        artifactType: routed.artifactType,
+        safe: routed.safe,
+        disclaimerRequired: routed.disclaimerRequired,
+        paymentProcessed: routed.paymentProcessed,
+        emailSent: routed.emailSent,
+      };
+    }),
     freeformSupport: FREEFORM_SUPPORT,
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
@@ -559,6 +616,35 @@ function runCheck() {
   const secretRouted = routeFreeformPrompt("here is my private key 0x" + "a".repeat(40));
   if (secretRouted.refused !== true || secretRouted.acceptsSecrets !== false) {
     failures.push("Free-form routing must refuse secret-shaped input.");
+  }
+  // Clinical requests are redirected to educational/safety language, never answered.
+  const medicalRouted = routeFreeformPrompt("diagnose my client's knee injury and prescribe medication");
+  if (medicalRouted.redirected !== true || medicalRouted.disclaimerRequired !== true) {
+    failures.push("Free-form routing must redirect clinical requests to educational/safety language.");
+  }
+
+  // Exposed through the existing generic Matterhorn workflow surfaces.
+  const gs = contract.genericSurfaces;
+  if (gs?.notCustomApp !== true) failures.push("genericSurfaces.notCustomApp must be true.");
+  if (gs?.catalogWorkflowId !== "wellness_creator_workflow") {
+    failures.push("genericSurfaces.catalogWorkflowId must be wellness_creator_workflow.");
+  }
+  if (gs?.templateRegistryId !== "wellness_creator_service_workflow") {
+    failures.push("genericSurfaces.templateRegistryId must be wellness_creator_service_workflow.");
+  }
+
+  // Operator examples: all four present, routed, and client-safe.
+  if (!Array.isArray(contract.operatorExamples) || contract.operatorExamples.length < 4) {
+    failures.push("operatorExamples must include the four demo prompts.");
+  }
+  for (const example of contract.operatorExamples || []) {
+    if (!example.artifactType) failures.push(`Operator example "${example.prompt}" must route to an artifact.`);
+    if (example.safe !== true || example.disclaimerRequired !== true) {
+      failures.push(`Operator example "${example.prompt}" must be safe and require a disclaimer.`);
+    }
+    if (example.paymentProcessed !== false || example.emailSent !== false) {
+      failures.push(`Operator example "${example.prompt}" must not pay or email.`);
+    }
   }
 
   // Customer-management deepening + progress check-in fixture.

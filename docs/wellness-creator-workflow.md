@@ -101,6 +101,36 @@ Beyond the seven stage prompts, the same pattern handles ad-hoc, role-specific r
 | `Create a dietician-safe meal planning template without medical claims` | General healthy-eating meal-planning template | General healthy-eating information, not a clinical or therapeutic diet. Not medical advice, diagnosis, or treatment. |
 | `Prepare a future paid program page, but do not process payment` | Draft paid program page with placeholder pricing only | Payments are planned, not live; no payment is processed and no funds move. |
 
+## Exposed Through Generic Matterhorn Workflow Surfaces
+
+**This is not a custom wellness app.** It is a chat-first Matterhorn workflow that creates artifacts, plans, packets, check-ins, and client deliverables — and it is discovered and run through the **same generic Matterhorn workflow surfaces as every other workflow**, with no bespoke UI:
+
+- **Workflow catalog:** registered as `wellness_creator_workflow` in [`scripts/matterhorn-workflow-catalog.mjs`](../scripts/matterhorn-workflow-catalog.mjs).
+- **Template registry:** registered as `wellness_creator_service_workflow` in [`packages/types/src/matterhorn-workflows.ts`](../packages/types/src/matterhorn-workflows.ts).
+- **Shared contract:** conforms to [`docs/matterhorn-workflow-contract.md`](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`).
+
+The same surfaces serve Bittensor operator playbooks, market previews, and decentralized-service planners. Wellness is simply one reusable workflow among them — proof that Matterhorn Work can help **any professional service provider operate through chat.** The helper's `--json` output carries a `genericSurfaces` block with these identifiers.
+
+### CLI / Operator Examples
+
+Any of these runs through the same workflow — no custom screens:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --route "create a 4-week fat loss plan for a beginner"
+node scripts/wellness-creator-workflow.mjs --route "make a yoga mobility plan for an office worker"
+node scripts/wellness-creator-workflow.mjs --route "create a client progress check-in"
+node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coaching program"
+```
+
+| Operator prompt | Routed artifact |
+|---|---|
+| `create a 4-week fat loss plan for a beginner` | Training program artifact |
+| `make a yoga mobility plan for an office worker` | Yoga / mobility class plan |
+| `create a client progress check-in` | Client progress check-in |
+| `package a paid 8-week coaching program` | Service packaging artifact (pricing draft only — payments planned, not live) |
+
+Each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. Clinical requests (diagnosis, prescription, treating a condition) are **redirected to educational/safety language** and a referral, never answered as medical advice.
+
 ## Any Prompt, One Workflow (Free-Form Support)
 
 The canonical and example prompts are **starting points, not a closed list.** A creator can ask for **anything** in plain chat — a training plan, a diet plan, a custom strength block, a mobility routine, a habit or recovery plan, a client handout, "whatever they want to create" — and the workflow produces a client-safe artifact with the mandatory disclaimers. This is the Web2 / real-world use case of Matterhorn Work: ordinary service professionals doing real work through chat.

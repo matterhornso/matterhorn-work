@@ -381,4 +381,91 @@ for (const phrase of ["Free-Form Prompt Tests", "Customer Management & Progress 
   assert.ok(handoff.includes(phrase), `Handoff should include: ${phrase}`);
 }
 
+// 22. Exposed through the existing generic Matterhorn workflow surfaces.
+const gs = contract.genericSurfaces;
+assert.ok(gs, "Contract should include a genericSurfaces block");
+assert.equal(gs.notCustomApp, true, "genericSurfaces.notCustomApp must be true");
+assert.equal(gs.catalogWorkflowId, "wellness_creator_workflow", "catalog id should be wellness_creator_workflow");
+assert.equal(
+  gs.templateRegistryId,
+  "wellness_creator_service_workflow",
+  "template registry id should be wellness_creator_service_workflow",
+);
+// Prove the exposure is real: the ids actually appear in the generic surfaces.
+const catalogSource = readFileSync("scripts/matterhorn-workflow-catalog.mjs", "utf8");
+assert.ok(
+  catalogSource.includes("wellness_creator_workflow"),
+  "Workflow catalog should register wellness_creator_workflow",
+);
+const typesSource = readFileSync("packages/types/src/matterhorn-workflows.ts", "utf8");
+assert.ok(
+  typesSource.includes("wellness_creator_service_workflow"),
+  "Template registry types should register wellness_creator_service_workflow",
+);
+
+// 22a. The four CLI/operator examples route to a client-safe artifact.
+const OPERATOR_PROMPTS = [
+  "create a 4-week fat loss plan for a beginner",
+  "make a yoga mobility plan for an office worker",
+  "create a client progress check-in",
+  "package a paid 8-week coaching program",
+];
+const operatorPromptText = contract.operatorExamples.map((e) => e.prompt);
+for (const prompt of OPERATOR_PROMPTS) {
+  assert.ok(operatorPromptText.includes(prompt), `Operator examples should include: ${prompt}`);
+  assert.ok(doc.includes(prompt), `Doc should include operator example: ${prompt}`);
+  assert.ok(handoff.includes(prompt), `Handoff should include operator example: ${prompt}`);
+}
+for (const example of contract.operatorExamples) {
+  assert.ok(example.artifactType, `Operator example "${example.prompt}" should route to an artifact`);
+  assert.equal(example.safe, true, `Operator example "${example.prompt}" must be safe`);
+  assert.equal(example.disclaimerRequired, true, `Operator example "${example.prompt}" must require a disclaimer`);
+  assert.equal(example.paymentProcessed, false, `Operator example "${example.prompt}" must not process payment`);
+  assert.equal(example.emailSent, false, `Operator example "${example.prompt}" must not send email`);
+}
+
+// 22b. Clinical requests are redirected to educational/safety language, not answered.
+const MEDICAL_SWEEP = [
+  "Diagnose my client's knee pain",
+  "Prescribe a supplement dose and medication for my client",
+  "Build a plan to treat my client's diabetes",
+  "Give a rehab protocol for a torn ACL",
+  "Promise this cures her thyroid condition",
+];
+for (const prompt of MEDICAL_SWEEP) {
+  const routed = routeFreeformPrompt(prompt);
+  assert.equal(routed.redirected, true, `Clinical request should be redirected: "${prompt}"`);
+  assert.equal(routed.disclaimerRequired, true, `Redirected request should require a disclaimer: "${prompt}"`);
+  assert.equal(routed.educationalOnly, true, `Redirected request should be educational only: "${prompt}"`);
+  assert.equal(routed.paymentProcessed, false, "Redirected request must not pay");
+  assert.equal(routed.emailSent, false, "Redirected request must not email");
+  assert.equal(routed.acceptsSecrets, false, "Redirected request must not accept secrets");
+  assert.ok(
+    /qualified healthcare professional/i.test(routed.guidance || ""),
+    `Redirect should refer to a professional: "${prompt}"`,
+  );
+  assert.ok(
+    !/strength program|training program|nutrition education/i.test(routed.artifactType || ""),
+    `Clinical request must not produce a normal program artifact: "${prompt}"`,
+  );
+}
+// Non-clinical prompts must NOT be redirected (no false positives).
+for (const prompt of OPERATOR_PROMPTS) {
+  assert.notEqual(routeFreeformPrompt(prompt).redirected, true, `Non-clinical prompt should not be redirected: ${prompt}`);
+}
+
+// 22c. No live-service execution is claimed in the generic-surface / operator content.
+const surfaceText = JSON.stringify({ genericSurfaces: gs, operatorExamples: contract.operatorExamples }).toLowerCase();
+for (const phrase of [
+  "storage is live", "hosting is live", "payments are live", "payment is live",
+  "email sending is live", "token gating is live", "identity verification is live",
+]) {
+  assert.equal(surfaceText.includes(phrase), false, `Generic-surface content must not claim a live service: "${phrase}"`);
+}
+
+// 22d. Doc + handoff carry the generic-surface sections.
+assert.ok(doc.includes("Exposed Through Generic Matterhorn Workflow Surfaces"), "Doc should explain generic-surface exposure");
+assert.ok(doc.includes("not a custom wellness app"), "Doc should state this is not a custom wellness app");
+assert.ok(handoff.includes("Generic-Surface & Operator-Example Tests"), "Handoff should include generic-surface QA");
+
 console.log("Wellness Creator Workflow gate passed.");
