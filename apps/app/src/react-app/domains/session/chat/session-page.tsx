@@ -990,12 +990,12 @@ export function SessionPage(props: SessionPageProps) {
                             Test customer launch hub
                           </div>
                           <h2 className="text-2xl font-semibold tracking-[-0.01em] text-dls-text sm:text-3xl">
-                            Start with a desk, then chat.
+                            Create a Matterhorn session.
                           </h2>
                           <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
-                            Matterhorn Work gives each high-risk domain its own guided surface. Pick Bittensor,
-                            Hyperliquid, Polymarket, or a business workflow; Matterhorn inserts an editable prompt
-                            and keeps safety boundaries visible.
+                            Pick a Bittensor, Hyperliquid, Polymarket, Wellness, or Services desk. Matterhorn opens the
+                            right interface, inserts an editable prompt, and keeps every safety boundary visible before
+                            anything runs.
                           </p>
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
@@ -1012,7 +1012,7 @@ export function SessionPage(props: SessionPageProps) {
                             }}
                           >
                             <Plus className="size-4" />
-                            New blank chat
+                            Create session
                           </button>
                           <button
                             type="button"
@@ -1023,7 +1023,7 @@ export function SessionPage(props: SessionPageProps) {
                             }}
                           >
                             <WalletIcon className="size-4" />
-                            Open Bittensor workspace
+                            Open Bittensor desk
                           </button>
                         </div>
                         <section className="space-y-3">
