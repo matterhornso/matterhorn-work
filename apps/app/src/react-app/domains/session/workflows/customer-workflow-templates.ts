@@ -1,3 +1,10 @@
+import {
+  MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE,
+  MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
+  type MatterhornProtocolWorkspaceId,
+  type MatterhornProtocolWorkspaceLaunchBehavior,
+} from "@matterhorn-work/types/matterhorn-workflows";
+
 export type CustomerWorkflowIconHint =
   | "bittensor"
   | "hyperliquid"
@@ -11,7 +18,7 @@ export type CustomerWorkflowTemplate = {
   name: string;
   summary: string;
   promise: string;
-  category: "bittensor" | "markets" | "wellness" | "decentralized_services" | "future";
+  category: "bittensor" | "markets" | "wellness" | "decentralized_services" | "future" | "web3";
   status: "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
   examplePrompts: string[];
   launch: {
@@ -42,6 +49,17 @@ export type CustomerWorkflowTemplate = {
     requiresExternalSigner: boolean;
     allowsRealFunds: false;
   };
+  protocolWorkspace?: {
+    id: MatterhornProtocolWorkspaceId;
+    displayName: string;
+    customerStatus: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
+    launchBehavior: MatterhornProtocolWorkspaceLaunchBehavior;
+    primaryPanelRouteId: string;
+    allowedIntents: string[];
+    supportedCardKinds: string[];
+    cliHint?: string;
+    mcpHint?: string;
+  };
 };
 
 export type CustomerWorkflowStarterCard = {
@@ -52,6 +70,10 @@ export type CustomerWorkflowStarterCard = {
   iconHint: CustomerWorkflowIconHint;
   panel?: "bittensor" | "hyperliquid" | "polymarket";
   recommendedSurface: CustomerWorkflowTemplate["launch"]["recommendedSurface"];
+  statusLabel: string;
+  safetySummary: string;
+  workspaceDisplayName?: string;
+  launchBehavior?: MatterhornProtocolWorkspaceLaunchBehavior;
 };
 
 type CustomerWorkflowTemplateResponse = {
@@ -72,7 +94,105 @@ const WELLNESS_SUFFIX =
 const SERVICES_SUFFIX =
   "Treat service hooks as planned-not-live future contracts. Do not claim live hosting, storage, email, payment, identity, custody, or provider execution.";
 
-export const FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
+const PANEL_BY_PROTOCOL_WORKSPACE: Partial<Record<MatterhornProtocolWorkspaceId, CustomerWorkflowTemplate["routing"]["opensPanel"]>> = {
+  bittensor: "bittensor",
+  hyperliquid: "hyperliquid",
+  polymarket: "polymarket",
+};
+
+const CHAT_MODE_BY_PROTOCOL_WORKSPACE: Record<MatterhornProtocolWorkspaceId, CustomerWorkflowTemplate["routing"]["chatMode"]> = {
+  bittensor: "bittensor",
+  hyperliquid: "hyperliquid",
+  polymarket: "polymarket",
+  wellness: "wellness",
+  decentralized_services: "services",
+};
+
+function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): string {
+  switch (status) {
+    case "beta_ready":
+      return "Beta-ready";
+    case "preview_only":
+      return "Preview only";
+    case "workflow_ready":
+      return "Workflow-ready";
+    case "planned_not_live":
+      return "Planned, not live";
+    case "blank":
+      return "Blank chat";
+    default:
+      return "Available";
+  }
+}
+
+function safetySummary(template: CustomerWorkflowTemplate): string {
+  if (template.routing.chatMode === "bittensor") {
+    return template.safetyBoundaries.requiresExternalSigner
+      ? "External signer required. No seed phrases, private keys, or wallet exports."
+      : "Public reads only. No secrets.";
+  }
+  if (template.routing.chatMode === "hyperliquid" || template.routing.chatMode === "polymarket") {
+    return "Can submit: No. Live submission: Off. External signer/client only.";
+  }
+  if (template.routing.chatMode === "wellness") {
+    return "Educational workflow. No medical advice or live payments/email/hosting.";
+  }
+  if (template.routing.chatMode === "services") {
+    return "Future-contract planning only. No provider execution or credentials.";
+  }
+  return "Matterhorn Work never needs secrets in starter prompts.";
+}
+
+function enrichCustomerWorkflowTemplate(template: CustomerWorkflowTemplate): CustomerWorkflowTemplate {
+  const workspaceId = MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE[template.id] as MatterhornProtocolWorkspaceId | undefined;
+  if (!workspaceId) return template;
+  const manifest = MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY[workspaceId];
+  if (!manifest) return template;
+  const opensPanel = PANEL_BY_PROTOCOL_WORKSPACE[workspaceId];
+  return {
+    ...template,
+    category: manifest.category,
+    status: manifest.customerStatus,
+    launch: {
+      ...template.launch,
+      defaultPrompt: manifest.demoPrompt || template.launch.defaultPrompt,
+      recommendedSurface:
+        manifest.launchBehavior === "opens_desk"
+          ? "protocol_desk"
+          : manifest.launchBehavior === "planned_not_live"
+            ? "future_service"
+            : "workflow_chat",
+    },
+    routing: {
+      ...template.routing,
+      chatMode: CHAT_MODE_BY_PROTOCOL_WORKSPACE[workspaceId],
+      opensPanel,
+    },
+    safetyBoundaries: {
+      ...manifest.safetyBoundaries,
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      allowsRealFunds: false,
+    },
+    protocolWorkspace: {
+      id: manifest.id,
+      displayName: manifest.displayName,
+      customerStatus: manifest.customerStatus,
+      launchBehavior: manifest.launchBehavior,
+      primaryPanelRouteId: manifest.primaryPanelRouteId,
+      allowedIntents: manifest.allowedIntents,
+      supportedCardKinds: manifest.supportedCardKinds,
+      cliHint: manifest.mcpCliHints.cli,
+      mcpHint: manifest.mcpCliHints.mcp,
+    },
+  };
+}
+
+const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "bittensor_operator",
     name: "Use Bittensor",
@@ -273,6 +393,9 @@ export const FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = 
   },
 ];
 
+export const FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] =
+  RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.map(enrichCustomerWorkflowTemplate);
+
 function isTemplate(value: unknown): value is CustomerWorkflowTemplate {
   if (!value || typeof value !== "object") return false;
   const template = value as CustomerWorkflowTemplate;
@@ -292,7 +415,7 @@ export function normalizeCustomerWorkflowTemplates(input: CustomerWorkflowTempla
   const templates = Array.isArray(input.customerTemplates)
     ? input.customerTemplates.filter(isTemplate)
     : [];
-  return templates.length ? templates : FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES;
+  return templates.length ? templates.map(enrichCustomerWorkflowTemplate) : FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES;
 }
 
 export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflowTemplate[]> {
@@ -304,17 +427,20 @@ export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflow
 
 export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate): string {
   const prompt = template.launch.defaultPrompt || template.examplePrompts[0] || template.name;
+  const intentContext = template.protocolWorkspace?.allowedIntents.length
+    ? `Allowed workspace intents: ${template.protocolWorkspace.allowedIntents.join(", ")}.`
+    : "";
   switch (template.routing.chatMode) {
     case "bittensor":
-      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX}`;
+      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
     case "hyperliquid":
-      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX}`;
+      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
-      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX}`;
+      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
     case "wellness":
-      return `${prompt}. ${WELLNESS_SUFFIX}`;
+      return `${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
     case "services":
-      return `${prompt}. ${SERVICES_SUFFIX}`;
+      return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
     default:
       return prompt;
   }
@@ -331,5 +457,9 @@ export function buildCustomerWorkflowStarterCards(
     iconHint: template.ui.iconHint,
     panel: template.routing.opensPanel,
     recommendedSurface: template.launch.recommendedSurface,
+    statusLabel: statusLabel(template.status),
+    safetySummary: safetySummary(template),
+    workspaceDisplayName: template.protocolWorkspace?.displayName,
+    launchBehavior: template.protocolWorkspace?.launchBehavior,
   }));
 }
