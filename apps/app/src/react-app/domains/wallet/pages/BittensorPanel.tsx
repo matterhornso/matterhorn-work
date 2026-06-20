@@ -26,6 +26,10 @@ import type {
   MarketExecutionChainGuide,
   MarketExecutionReadinessReport,
 } from "@matterhorn-work/types";
+import {
+  MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
+  type MatterhornProtocolWorkspaceManifest,
+} from "@matterhorn-work/types/matterhorn-workflows";
 
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
@@ -241,6 +245,33 @@ const BITTENSOR_BETA_MODE = (() => {
 type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
 type CryptoVenue = "bittensor" | "hyperliquid" | "polymarket";
 type ActionType = BittensorActionQuote["action"];
+const VENUE_PROTOCOL_MANIFESTS: Record<CryptoVenue, MatterhornProtocolWorkspaceManifest> = {
+  bittensor: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.bittensor,
+  hyperliquid: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.hyperliquid,
+  polymarket: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.polymarket,
+};
+
+function protocolStatusLabel(status: MatterhornProtocolWorkspaceManifest["customerStatus"]): string {
+  switch (status) {
+    case "beta_ready":
+      return "Beta-ready";
+    case "preview_only":
+      return "Preview only";
+    case "workflow_ready":
+      return "Workflow-ready";
+    case "planned_not_live":
+      return "Planned, not live";
+    default:
+      return "Available";
+  }
+}
+
+function protocolSignerLabel(manifest: MatterhornProtocolWorkspaceManifest): string {
+  if (manifest.safetyBoundaries.requiresExternalSigner) return "Required";
+  if (manifest.id === "hyperliquid" || manifest.id === "polymarket") return "External client";
+  return "Not required";
+}
+
 const VENUE_DESKS: Record<CryptoVenue, {
   label: string;
   shortLabel: string;
@@ -957,6 +988,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     ? "No"
     : "Unknown";
   const activeVenue = VENUE_DESKS[venue];
+  const activeManifest = VENUE_PROTOCOL_MANIFESTS[venue];
+  const activeManifestStatus = protocolStatusLabel(activeManifest.customerStatus);
+  const activeManifestCanSubmit = activeManifest.safetyBoundaries.canSubmit ? "Yes" : "No";
+  const activeManifestLiveSubmission = activeManifest.safetyBoundaries.liveExecutionEnabled ? "On" : "Off";
+  const activeManifestSigner = protocolSignerLabel(activeManifest);
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -969,7 +1005,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <div>
               <h2 className="text-base font-semibold text-dls-text">{activeVenue.workspaceTitle}</h2>
               <p className="text-xs text-dls-secondary">
-                {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeVenue.statusLabel}
+                {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeManifestStatus}
               </p>
             </div>
           </div>
@@ -1001,6 +1037,22 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               {VENUE_DESKS[item].label}
             </button>
           ))}
+        </div>
+        <div className="mb-3 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.24)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200">
+            <span>Protocol manifest</span>
+            <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.25)] px-2 py-0.5 text-[9px] text-dls-secondary">
+              {activeManifestStatus}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Metric label="Can submit" value={activeManifestCanSubmit} compact />
+            <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
+            <Metric label="External signer" value={activeManifestSigner} compact />
+          </div>
+          <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
+            Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
+          </p>
         </div>
         {venue === "bittensor" ? (
           <div className="grid grid-cols-5 gap-1 rounded-lg bg-dls-surface p-1">
