@@ -468,4 +468,91 @@ assert.ok(doc.includes("Exposed Through Generic Matterhorn Workflow Surfaces"), 
 assert.ok(doc.includes("not a custom wellness app"), "Doc should state this is not a custom wellness app");
 assert.ok(handoff.includes("Generic-Surface & Operator-Example Tests"), "Handoff should include generic-surface QA");
 
+// 23. Wellness Creator Service Workflow layer: artifact contracts, service
+//     builder intents, sample prompts, sensitive redirects, beyond-Web3.
+const ARTIFACT_IDS = [
+  "client_plan",
+  "intake_questionnaire",
+  "progress_check_in",
+  "video_lesson_script",
+  "client_tracker",
+  "offer_landing_packet",
+  "renewal_upsell_note",
+];
+assert.ok(Array.isArray(contract.artifactContracts), "Contract should include artifactContracts");
+const contractIds = contract.artifactContracts.map((c) => c.id);
+for (const id of ARTIFACT_IDS) {
+  assert.ok(contractIds.includes(id), `artifactContracts should include: ${id}`);
+  const item = contract.artifactContracts.find((c) => c.id === id);
+  assert.equal(item.status, "live_local", `Artifact contract ${id} should be live_local`);
+  assert.ok(item.disclaimer, `Artifact contract ${id} should carry a disclaimer`);
+}
+
+// Service-builder intents map to contracts and route correctly.
+const INTENT_EXPECT = {
+  "create a 4-week training plan": "client_plan",
+  "create a yoga program": "client_plan",
+  "create a dietician client packet": "client_plan",
+  "create a client check-in": "progress_check_in",
+  "package a paid program": "offer_landing_packet",
+  "create a client video script": "video_lesson_script",
+};
+assert.ok(Array.isArray(contract.serviceBuilder?.intents), "Contract should include serviceBuilder.intents");
+for (const [intent, expected] of Object.entries(INTENT_EXPECT)) {
+  const routed = routeFreeformPrompt(intent).serviceArtifactContract;
+  assert.equal(routed, expected, `Intent "${intent}" should route to ${expected} (got ${routed})`);
+}
+
+// 8-12 sample prompts, each routing to its expected contract, safe + disclaimer.
+assert.ok(contract.samplePrompts.length >= 8 && contract.samplePrompts.length <= 12, "samplePrompts should number 8-12");
+for (const sample of contract.samplePrompts) {
+  assert.ok(ARTIFACT_IDS.includes(sample.routedArtifactContract), `Sample "${sample.prompt}" should route to a known contract`);
+  assert.equal(sample.routedArtifactContract, sample.expectedArtifact, `Sample "${sample.prompt}" should route to ${sample.expectedArtifact}`);
+  assert.equal(sample.safe, true, `Sample "${sample.prompt}" must be safe`);
+  assert.equal(sample.disclaimerRequired, true, `Sample "${sample.prompt}" must require a disclaimer`);
+  assert.ok(doc.includes(sample.prompt), `Doc should include sample prompt: ${sample.prompt}`);
+}
+
+// Clinical / sensitive prompts redirect (no service artifact), incl. pregnancy + eating disorder.
+for (const clinical of [
+  "my client has knee pain, diagnose it and prescribe rehab",
+  "build a prenatal yoga plan for my pregnant client",
+  "make a meal plan for a client with an eating disorder",
+  "treat my client's diabetes with a diet",
+]) {
+  const routed = routeFreeformPrompt(clinical);
+  assert.equal(routed.redirected, true, `Sensitive prompt should redirect: "${clinical}"`);
+  assert.ok(/qualified healthcare professional/i.test(routed.guidance || ""), `Redirect should refer out: "${clinical}"`);
+  assert.notEqual(routed.serviceArtifactContract, "client_plan", "Clinical prompt must not build a normal artifact");
+}
+
+// Secret-shaped text is refused and not echoed.
+const secret = "my seed phrase is apple banana cherry tiger river stone";
+const secretRouted = routeFreeformPrompt(secret);
+assert.equal(secretRouted.refused, true, "Secret-shaped input should be refused");
+assert.equal(secretRouted.artifactType, null, "Refused routing should produce no artifact");
+assert.equal(JSON.stringify(secretRouted).includes("apple banana"), false, "Refused routing must not echo the secret");
+
+// Beyond-Web3 framing with planned-not-live future hooks.
+assert.equal(contract.matterhornBeyondWeb3?.firstWeb2Workflow, true, "Should declare the first Web2 workflow");
+for (const hook of ["storage/hosting", "payments", "email", "identity/access"]) {
+  assert.ok(contract.matterhornBeyondWeb3.plannedNotLiveServiceHooks.includes(hook), `Beyond-Web3 should list planned hook: ${hook}`);
+}
+
+// Doc carries the new sections; must not regress into self-describing pilot language.
+for (const phrase of [
+  "Service Builder & Artifact Contracts",
+  "Sample Prompts (Hermes / Customer Demos)",
+  "How This Demonstrates Matterhorn Beyond Web3",
+  "first Web2 / customer-business workflow",
+]) {
+  assert.ok(doc.includes(phrase), `Doc should include: ${phrase}`);
+}
+assert.equal(contract.isPilot, false, "Workflow must not regress to a pilot");
+assert.equal(contract.fullWorkflow, true, "Workflow must remain a full workflow");
+for (const pilotPhrase of ["this is a pilot", "still a pilot", "wellness creator pilot demonstrates"]) {
+  assert.equal(doc.toLowerCase().includes(pilotPhrase), false, `Doc must not describe itself as a pilot: ${pilotPhrase}`);
+}
+assert.ok(handoff.includes("Service-Builder & Artifact-Contract Tests"), "Handoff should include service-builder QA");
+
 console.log("Wellness Creator Workflow gate passed.");

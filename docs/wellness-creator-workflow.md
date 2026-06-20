@@ -152,6 +152,62 @@ node scripts/wellness-creator-workflow.mjs --route "Draft a vegetarian meal-plan
 
 Each returns the routed artifact type plus `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`, and `acceptsSecrets: false`. Secret-shaped input returns `refused: true` and never echoes the input.
 
+## Service Builder & Artifact Contracts
+
+The workflow is a **service builder**: a creator describes what they want and it produces one of a fixed set of client-safe **artifact contracts**. Named intents and arbitrary prompts both route into a contract; clinical prompts redirect to a professional; secret-shaped text is refused and not echoed.
+
+| Intent | Artifact contract |
+|---|---|
+| `create a 4-week training plan` | Client plan |
+| `create a yoga program` | Client plan |
+| `create a dietician client packet` | Client plan |
+| `create a client check-in` | Weekly progress check-in |
+| `package a paid program` | Offer / landing packet |
+| `create a client video script` | Video lesson script |
+| *arbitrary wellness/business prompt* | routed to the closest contract |
+
+**Artifact contracts** (all educational/general wellness only, `live_local`):
+
+1. **Client plan** — a structured training, yoga, or nutrition-education program.
+2. **Intake questionnaire** — onboarding questions (goals, experience, schedule, non-clinical context, consent).
+3. **Weekly progress check-in** — adherence, energy, wins/blockers, coach adjustments (see [`progress-check-in.md`](./wellness-creator-workflow/progress-check-in.md)).
+4. **Video lesson script** — hook, demo, coaching cues, call-to-action.
+5. **Client tracker** — a simple self-reported log/template.
+6. **Offer / landing packet** — placeholder pricing only; no payment is processed.
+7. **Renewal / up-sell note** — a renewal/up-sell draft with placeholder pricing.
+
+## Sample Prompts (Hermes / Customer Demos)
+
+Realistic prompts and the artifact each produces. Every output is educational/general wellness only with the mandatory disclaimer:
+
+| Prompt | Artifact | Summary |
+|---|---|---|
+| `create a 4-week training plan for a beginner` | Client plan | 4-week beginner program with weekly structure and progression notes. |
+| `create a yoga program for office workers with tight hips` | Client plan | General mobility-focused yoga program; educational only. |
+| `create a dietician client packet with a meal-planning template` | Client plan | General healthy-eating plan/template; not a clinical or therapeutic diet. |
+| `create an intake questionnaire for a new coaching client` | Intake questionnaire | Goals, experience, schedule, non-clinical context. |
+| `create a weekly client check-in` | Weekly progress check-in | Adherence, energy, wins/blockers, coach adjustments. |
+| `create a client video script for a kettlebell swing tutorial` | Video lesson script | Hook, demo, cues, call-to-action. |
+| `create a client habit tracker` | Client tracker | Simple self-reported tracker. |
+| `package a paid 8-week coaching program` | Offer / landing packet | Landing packet with placeholder pricing only; no payment processed. |
+| `write a renewal note for a client finishing their block` | Renewal / up-sell note | Progress recap + placeholder pricing. |
+| `build a 12-week strength program with progressions` | Client plan | Structured strength program; educational only. |
+
+**Clinical / sensitive prompts redirect** (no artifact): anything that asks to diagnose, prescribe, treat a condition/injury, or that is pregnancy- or eating-disorder-specific returns a referral to a qualified professional. **Secret-shaped text is refused** and never echoed.
+
+## How This Demonstrates Matterhorn Beyond Web3
+
+Wellness Creator is Matterhorn's **first Web2 / customer-business workflow**. A trainer, yoga instructor, dietician, or coach does real client work through the **same chat/workflow system** as the Web3 workspaces (Bittensor, Hyperliquid, Polymarket) — no crypto knowledge and no custom vertical app required.
+
+Future Matterhorn service hooks are **planned, not live**:
+
+- **Storage / hosting** — durable, creator-owned artifact hosting.
+- **Payments** — a client pays the creator.
+- **Email** — program updates / newsletters.
+- **Identity / access** — gate a premium program or community.
+
+Nothing here hosts, charges, emails, or gates access today.
+
 ## Safety Disclaimers (Mandatory)
 
 - **General educational disclaimer** (on every program, nutrition, and client artifact):
