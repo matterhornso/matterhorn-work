@@ -628,4 +628,87 @@ for (const phrase of [
 }
 assert.ok(handoff.includes("Customer Offer Builder Tests"), "Handoff should include offer-builder QA");
 
+// 25. Client Lifecycle layer.
+const EXPECTED_LIFECYCLE_STAGES = [
+  "lead_intake",
+  "service_offer",
+  "onboarding_questionnaire",
+  "weekly_program",
+  "progress_check_in",
+  "renewal_follow_up",
+  "client_handoff_packet",
+];
+const lifecycle = contract.clientLifecycle;
+assert.ok(lifecycle, "Contract should include clientLifecycle");
+assert.deepEqual(lifecycle.stages.map((s) => s.id), EXPECTED_LIFECYCLE_STAGES, "Lifecycle stages should be in order");
+for (const stage of lifecycle.stages) {
+  assert.ok(stage.deliverable, `Lifecycle stage ${stage.id} should name a deliverable`);
+}
+for (const hook of lifecycle.serviceHooks) {
+  assert.equal(hook.status, "planned_not_live", `Lifecycle hook ${hook.id} must be planned_not_live`);
+}
+for (const flagKey of ["educationalOnly", "noMedicalDiagnosis", "noTreatmentPlan", "noPaymentProcessing", "noEmailSending"]) {
+  assert.equal(lifecycle.safety[flagKey], true, `clientLifecycle.safety.${flagKey} must be true`);
+}
+
+// CLI --lifecycle <persona> --json for the three documented personas.
+const LIFECYCLE_FIXTURES = {
+  personal_trainer: "docs/wellness-creator-workflow/personal-trainer-lifecycle.md",
+  yoga_instructor: "docs/wellness-creator-workflow/yoga-instructor-lifecycle.md",
+  dietician: "docs/wellness-creator-workflow/dietician-lifecycle.md",
+};
+function runMode(modeFlag, value) {
+  const result = spawnSync(process.execPath, [HELPER_PATH, modeFlag, value, "--json"], {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+  });
+  return { status: result.status, json: result.stdout ? JSON.parse(result.stdout) : null };
+}
+for (const [persona, fixturePath] of Object.entries(LIFECYCLE_FIXTURES)) {
+  const { status, json } = runMode("--lifecycle", persona);
+  assert.equal(status, 0, `--lifecycle ${persona} should exit 0`);
+  assert.equal(json.mode, "lifecycle", `--lifecycle ${persona} should be lifecycle mode`);
+  assert.equal(json.persona, persona, `--lifecycle ${persona} should resolve the persona`);
+  assert.equal(json.stages.length, 7, `--lifecycle ${persona} should have seven stages`);
+  assert.equal(json.fixture, fixturePath, `--lifecycle ${persona} should point at its fixture`);
+  assert.ok(existsSync(fixturePath), `Lifecycle fixture should exist: ${fixturePath}`);
+  const fixture = readFileSync(fixturePath, "utf8");
+  assert.ok(fixture.includes("not medical advice, diagnosis, or treatment"), `${fixturePath} should carry the non-medical disclaimer`);
+  const lower = fixture.toLowerCase();
+  for (const forbidden of [
+    "we diagnose", "prescribe a dose", "cure your", "will cure", "guaranteed weight loss", "guaranteed results",
+    "storage is live", "hosting is live", "payments are live", "payment is live", "email sending is live", "token gating is live",
+    "private key", "seed phrase", "api secret", "wallet export",
+  ]) {
+    assert.equal(lower.includes(forbidden), false, `${fixturePath} must not contain: "${forbidden}"`);
+  }
+}
+
+// CLI --stage <stageId> --json for every stage; unknown stage rejected.
+for (const stageId of EXPECTED_LIFECYCLE_STAGES) {
+  const { status, json } = runMode("--stage", stageId);
+  assert.equal(status, 0, `--stage ${stageId} should exit 0`);
+  assert.equal(json.mode, "stage", `--stage ${stageId} should be stage mode`);
+  assert.equal(json.id, stageId, `--stage ${stageId} should return that stage`);
+  assert.ok(json.deliverable, `--stage ${stageId} should name a deliverable`);
+  assert.equal(json.educationalOnly, true, `--stage ${stageId} should be educational only`);
+}
+const badStage = spawnSync(process.execPath, [HELPER_PATH, "--stage", "not_a_stage", "--json"], { encoding: "utf8" });
+assert.notEqual(badStage.status, 0, "Unknown stage should exit non-zero");
+assert.ok(JSON.parse(badStage.stdout).error.includes("Unknown lifecycle stage"), "Unknown stage should report an error");
+const badLifecycle = spawnSync(process.execPath, [HELPER_PATH, "--lifecycle", "bogus", "--json"], { encoding: "utf8" });
+assert.notEqual(badLifecycle.status, 0, "Unknown lifecycle persona should exit non-zero");
+
+// Doc + handoff carry the lifecycle material.
+for (const phrase of [
+  "Client Lifecycle (Full Test-Customer Demo Path)",
+  "personal-trainer-lifecycle.md",
+  "yoga-instructor-lifecycle.md",
+  "dietician-lifecycle.md",
+  "--lifecycle personal_trainer --json",
+]) {
+  assert.ok(doc.includes(phrase), `Doc should include lifecycle reference: ${phrase}`);
+}
+assert.ok(handoff.includes("Client Lifecycle (Full Flow) Tests"), "Handoff should include lifecycle QA");
+
 console.log("Wellness Creator Workflow gate passed.");

@@ -279,6 +279,58 @@ function buildOfferBuilder(persona = null) {
   };
 }
 
+// ---- Wellness Creator Client Lifecycle ----
+// The complete, ordered client-delivery path a wellness creator runs through
+// chat. Every stage produces a client-safe artifact; nothing is hosted,
+// charged, emailed, or gated.
+const CLIENT_LIFECYCLE = [
+  { id: "lead_intake", name: "Lead intake", order: 1, artifactContract: "intake_questionnaire", deliverable: "Lead intake form", description: "Capture a prospective client's goals, schedule, and general non-clinical context." },
+  { id: "service_offer", name: "Service offer", order: 2, artifactContract: "offer_landing_packet", deliverable: "Offer page", description: "Present the program with placeholder pricing only; no payment is processed." },
+  { id: "onboarding_questionnaire", name: "Onboarding questionnaire", order: 3, artifactContract: "intake_questionnaire", deliverable: "Onboarding questionnaire", description: "Confirm goals, experience, equipment, and consent before the program starts." },
+  { id: "weekly_program", name: "Weekly program", order: 4, artifactContract: "client_plan", deliverable: "Weekly plan", description: "A structured, educational weekly program with progression notes." },
+  { id: "progress_check_in", name: "Progress check-in", order: 5, artifactContract: "progress_check_in", deliverable: "Weekly check-in", description: "Track adherence, energy, and wins/blockers, with coach adjustments." },
+  { id: "renewal_follow_up", name: "Renewal / follow-up", order: 6, artifactContract: "renewal_upsell_note", deliverable: "Renewal note", description: "A renewal or follow-up draft with a progress recap; pricing is a draft only." },
+  { id: "client_handoff_packet", name: "Client handoff packet", order: 7, artifactContract: null, deliverable: "Handoff packet", description: "A wrap-up packet summarizing the program, results recap, and next steps the client can take or share." },
+];
+const LIFECYCLE_STAGE_IDS = CLIENT_LIFECYCLE.map((stage) => stage.id);
+const LIFECYCLE_FIXTURES = {
+  personal_trainer: `${FIXTURE_DIR}/personal-trainer-lifecycle.md`,
+  yoga_instructor: `${FIXTURE_DIR}/yoga-instructor-lifecycle.md`,
+  dietician: `${FIXTURE_DIR}/dietician-lifecycle.md`,
+};
+
+function buildClientLifecycle(persona = null) {
+  const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
+  return {
+    title: "Wellness Creator Client Lifecycle",
+    notCustomApp: true,
+    educationalOnly: true,
+    personas: OFFER_PERSONAS,
+    persona: resolved,
+    personaLabel: resolved ? OFFER_PERSONA_LABELS[resolved] : null,
+    stages: CLIENT_LIFECYCLE,
+    serviceHooks: OFFER_SERVICE_HOOKS,
+    plannedNotLive: DELIVERY_GUARANTEES,
+    safety: OFFER_SAFETY,
+    fixtures: LIFECYCLE_FIXTURES,
+    fixture: resolved ? LIFECYCLE_FIXTURES[resolved] ?? null : null,
+    disclaimer: DISCLAIMERS.general,
+    note: "The complete client-delivery path as client-safe artifacts. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
+  };
+}
+
+function buildLifecycleStage(stageId) {
+  const stage = CLIENT_LIFECYCLE.find((item) => item.id === stageId);
+  if (!stage) return null;
+  return {
+    ...stage,
+    educationalOnly: true,
+    serviceHooks: OFFER_SERVICE_HOOKS,
+    safety: OFFER_SAFETY,
+    disclaimer: stage.id === "service_offer" || stage.id === "renewal_follow_up" ? DISCLAIMERS.noGuarantee : DISCLAIMERS.general,
+  };
+}
+
 const DEMO_CHECKLIST = [
   "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
   "Run `node scripts/wellness-creator-workflow.mjs --json` and read the full workflow contract.",
@@ -729,6 +781,7 @@ function buildContract() {
     }),
     matterhornBeyondWeb3: MATTERHORN_BEYOND_WEB3,
     offerBuilder: buildOfferBuilder(),
+    clientLifecycle: buildClientLifecycle(),
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
@@ -942,6 +995,62 @@ function runCheck() {
     }
   }
 
+  // Client Lifecycle layer: ordered stages, hooks, safety, and fixtures.
+  const lifecycle = contract.clientLifecycle;
+  if (!lifecycle) {
+    failures.push("clientLifecycle must be present in the contract.");
+  } else {
+    const expectedStages = [
+      "lead_intake",
+      "service_offer",
+      "onboarding_questionnaire",
+      "weekly_program",
+      "progress_check_in",
+      "renewal_follow_up",
+      "client_handoff_packet",
+    ];
+    const stageIds = (lifecycle.stages || []).map((stage) => stage.id);
+    if (JSON.stringify(stageIds) !== JSON.stringify(expectedStages)) {
+      failures.push(`clientLifecycle.stages must be the ordered lifecycle: ${expectedStages.join(", ")}.`);
+    }
+    const knownContracts = new Set((contract.artifactContracts || []).map((item) => item.id));
+    for (const stage of lifecycle.stages || []) {
+      if (!stage.deliverable) failures.push(`Lifecycle stage ${stage.id} must name a deliverable.`);
+      if (stage.artifactContract !== null && !knownContracts.has(stage.artifactContract)) {
+        failures.push(`Lifecycle stage ${stage.id} references unknown contract ${stage.artifactContract}.`);
+      }
+    }
+    for (const hook of lifecycle.serviceHooks || []) {
+      if (hook.status !== "planned_not_live") {
+        failures.push(`Lifecycle service hook ${hook.id} must be planned_not_live.`);
+      }
+    }
+    for (const flagKey of ["educationalOnly", "noMedicalDiagnosis", "noTreatmentPlan", "noPaymentProcessing", "noEmailSending"]) {
+      if (lifecycle.safety?.[flagKey] !== true) failures.push(`clientLifecycle.safety.${flagKey} must be true.`);
+    }
+    // Single-stage helper resolves every stage and rejects unknown stages.
+    for (const id of LIFECYCLE_STAGE_IDS) {
+      if (!buildLifecycleStage(id)) failures.push(`buildLifecycleStage(${id}) should resolve.`);
+    }
+    if (buildLifecycleStage("not_a_stage") !== null) failures.push("buildLifecycleStage should reject unknown stages.");
+    // Persona lifecycle fixtures exist, carry the disclaimer, and have no forbidden strings.
+    for (const [persona, relPath] of Object.entries(LIFECYCLE_FIXTURES)) {
+      const abs = join(repoRoot, relPath);
+      if (!existsSync(abs)) {
+        failures.push(`Lifecycle fixture missing for ${persona}: ${relPath}`);
+        continue;
+      }
+      const fixture = readFileSync(abs, "utf8");
+      if (!fixture.includes("not medical advice, diagnosis, or treatment")) {
+        failures.push(`Lifecycle fixture ${relPath} must carry the non-medical disclaimer.`);
+      }
+      for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+        const match = fixture.match(re);
+        if (match) failures.push(`Lifecycle fixture ${relPath} contains a forbidden string: "${match[0]}"`);
+      }
+    }
+  }
+
   // Exposed through the existing generic Matterhorn workflow surfaces.
   const gs = contract.genericSurfaces;
   if (gs?.notCustomApp !== true) failures.push("genericSurfaces.notCustomApp must be true.");
@@ -1038,6 +1147,33 @@ function main() {
       return;
     }
     process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "offer", ...buildOfferBuilder(persona) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--lifecycle")) {
+    const idx = args.indexOf("--lifecycle");
+    const persona = args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : null;
+    if (persona && !OFFER_PERSONAS.includes(persona)) {
+      const message = `Unknown lifecycle persona "${persona}". Expected one of: ${OFFER_PERSONAS.join(", ")}.`;
+      process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "lifecycle", ...buildClientLifecycle(persona) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--stage")) {
+    const idx = args.indexOf("--stage");
+    const stageId = args[idx + 1] ?? "";
+    const stage = buildLifecycleStage(stageId);
+    if (!stage) {
+      const message = `Unknown lifecycle stage "${stageId}". Expected one of: ${LIFECYCLE_STAGE_IDS.join(", ")}.`;
+      process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "stage", ...stage }, null, 2)}\n`);
     return;
   }
 
