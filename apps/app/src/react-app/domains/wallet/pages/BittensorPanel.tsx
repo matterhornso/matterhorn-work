@@ -290,7 +290,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   bittensor: {
     label: "Bittensor",
     shortLabel: "TAO",
-    workspaceTitle: "Bittensor workspace",
+    workspaceTitle: "Bittensor desk",
     eyebrow: "Wallet · subnets · validators",
     headline: "Use Bittensor without learning the CLI first.",
     description: "Read public SS58 wallets, understand subnets, compare validators, prepare staking previews, and create watches. Actions still require an external Bittensor-compatible signer.",
@@ -321,7 +321,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   hyperliquid: {
     label: "Hyperliquid",
     shortLabel: "HL",
-    workspaceTitle: "Hyperliquid workspace",
+    workspaceTitle: "Hyperliquid desk",
     eyebrow: "Orderbook · account · previews",
     headline: "Preview Hyperliquid trades through chat, with execution off.",
     description: "Inspect orderbooks, account exposure, funding, open-order context, watch plans, and external-signer handoffs. Matterhorn does not submit live Hyperliquid orders in this build.",
@@ -352,7 +352,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   polymarket: {
     label: "Polymarket",
     shortLabel: "PM",
-    workspaceTitle: "Polymarket workspace",
+    workspaceTitle: "Polymarket desk",
     eyebrow: "Markets · outcomes · compliance",
     headline: "Analyze prediction markets and preview safely.",
     description: "Find markets, explain outcomes as probabilities, read orderbook/liquidity context, check compliance state, and prepare external-signer previews without sending orders from Matterhorn.",

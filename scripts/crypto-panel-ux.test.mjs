@@ -20,9 +20,9 @@ assert.equal(
 // 2. Separate venue desks exist; the customer surface should not collapse into
 //    a single "Crypto workspace" entry point.
 for (const phrase of [
-  "Bittensor workspace",
-  "Hyperliquid workspace",
-  "Polymarket workspace",
+  "Bittensor desk",
+  "Hyperliquid desk",
+  "Polymarket desk",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "VENUE_PROTOCOL_MANIFESTS",
   "Protocol manifest",
