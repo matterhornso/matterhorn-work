@@ -27,6 +27,8 @@ const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provide
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
+  "Ask Matterhorn about Bittensor, markets, wellness, files, or workflows...",
+  '"composer.run_task": "Ask"',
   "Separate workspaces",
   "one Matterhorn chat.",
   "Bittensor workspace",
@@ -107,6 +109,7 @@ for (const forbidden of [
   "Create a sample spreadsheet",
   "Control your browser",
   "Your computer, but it works for you.",
+  "Describe your task...",
   "Crypto workspace",
   "Send crypto",
 ]) {
