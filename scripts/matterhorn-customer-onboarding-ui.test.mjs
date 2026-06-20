@@ -44,10 +44,10 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "New blank chat",
-  "Open Bittensor workspace",
+  "Create a Matterhorn session.",
+  "Create session",
+  "Open Bittensor desk",
   "Test customer launch hub",
-  "Start with a desk, then chat.",
   "Protocol desks",
   "Separate interfaces for TAO, perps, and prediction markets",
   "No hidden auto-send",
