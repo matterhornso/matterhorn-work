@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot, Sparkles, Activity, Shield, Zap } from "lucide-react";
+import { Copy, ExternalLink, ChevronDown, Wallet as WalletIcon, RefreshCw, BarChart3, ArrowRightLeft, Landmark, Send, Bot, Sparkles, Activity, Shield, Zap, BrainCircuit } from "lucide-react";
 import { useState, useMemo, lazy, Suspense, useCallback, useEffect } from "react";
 
 import { cn } from "@/lib/utils";
@@ -18,8 +18,9 @@ const AavePanel = lazy(() => import("./pages/AavePanel"));
 const BridgePanel = lazy(() => import("./pages/BridgePanel"));
 const TransferPanel = lazy(() => import("./pages/TransferPanel"));
 const AgentWorkspace = lazy(() => import("./pages/AgentWorkspace"));
+const BittensorPanel = lazy(() => import("./pages/BittensorPanel"));
 
-type PanelType = "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | null;
+type PanelType = "crypto" | "portfolio" | "cow" | "aave" | "bridge" | "send" | "agent" | null;
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -79,7 +80,7 @@ export type WalletPanelProps = {
 export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPanelProps) {
   const state = useWalletStore(store);
   const [expanded, setExpanded] = useState(false);
-  const [activePanel, setActivePanel] = useState<PanelType>(null);
+  const [activePanel, setActivePanel] = useState<PanelType>("crypto");
   const [isPortfolioLoading, setIsPortfolioLoading] = useState(false);
   const [portfolioData, setPortfolioData] = useState<import("./pages/PortfolioView").PortfolioData | null>(null);
   const securityLog = useMemo(() => getSecurityLog(5), []);
@@ -129,12 +130,20 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
 
   if (!state.isConnected) {
     return (
-      <div className="ow-empty-state animate-fade-in">
-        <div className="ow-empty-state-icon">
-          <WalletIcon className="size-6" />
+      <div className="relative h-full min-h-0 bg-dls-sidebar animate-fade-in">
+        <Suspense fallback={
+          <div className="flex h-full items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.14)] animate-skeleton" />
+              <span className="text-sm text-dls-secondary">Loading crypto workspace...</span>
+            </div>
+          </div>
+        }>
+          <BittensorPanel />
+        </Suspense>
+        <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-xl border border-dls-border bg-dls-surface/95 px-3 py-2 text-[11px] leading-relaxed text-dls-secondary shadow-[var(--dls-card-shadow)]">
+          EVM wallet not connected. Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews, and external-signer guidance still work from here.
         </div>
-        <div className="ow-empty-state-title">No wallet connected</div>
-        <div className="ow-empty-state-desc">Connect a wallet to see your balances, manage savings, and send crypto.</div>
       </div>
     );
   }
@@ -260,6 +269,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
 
       {/* Quick Actions — Icon grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <ActionButton icon={<BrainCircuit className="size-4" />} label="Crypto" accent="blue" onClick={() => setActivePanel("crypto")} primary />
         <ActionButton icon={<Send className="size-4" />} label="Send" accent="violet" onClick={() => setActivePanel("send")} primary />
         <ActionButton icon={<Bot className="size-4" />} label="Agent" accent="violet" onClick={() => setActivePanel("agent")} />
         <ActionButton icon={<BarChart3 className="size-4" />} label="Portfolio" accent="violet" onClick={handlePortfolioOpen} />
@@ -332,6 +342,27 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl }: WalletPan
       )}
 
       {/* Panel overlays */}
+      {activePanel === "crypto" && (
+        <div className="absolute inset-0 z-50 bg-dls-sidebar">
+          <Suspense fallback={
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.14)] animate-skeleton" />
+                <span className="text-sm text-dls-secondary">Loading crypto workspace...</span>
+              </div>
+            </div>
+          }>
+            <BittensorPanel />
+          </Suspense>
+          <button
+            type="button"
+            className="absolute top-3 right-3 rounded-lg border border-dls-border bg-dls-surface px-2 py-1.5 text-xs text-dls-secondary hover:bg-dls-hover"
+            onClick={handlePanelClose}
+          >
+            Wallet
+          </button>
+        </div>
+      )}
       {activePanel === "portfolio" && (
         <div className="absolute inset-0 z-50 bg-dls-sidebar">
           <Suspense fallback={

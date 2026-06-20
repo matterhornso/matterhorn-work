@@ -1,7 +1,17 @@
 /** @jsxImportSource react */
-import type { ReactNode } from "react";
-import { ShareIcon, UserGroupIcon } from "@heroicons/react/24/solid";
-import { PaperGrainGradient } from "@matterhorn-work/ui/react";
+import type { ComponentType, ReactNode } from "react";
+import {
+  BarChart3,
+  BrainCircuit,
+  ClipboardCheck,
+  Coins,
+  Dumbbell,
+  Eye,
+  Layers3,
+  ServerCog,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 
 import { t } from "../../../i18n";
 import {
@@ -16,73 +26,80 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
-interface BrandIconProps {
-  slug: string;
-  className?: string;
-}
-
-function BrandIcon({ slug, className }: BrandIconProps) {
-  return (
-    <img
-      className={cn("block size-4", className)}
-      src={`https://cdn.simpleicons.org/${slug}/_/777b84`}
-      alt=""
-      loading="lazy"
-    />
-  );
-}
-
 const capabilities = [
   {
-    slug: "googlesheets",
-    title: "Edit spreadsheets",
-    desc: "Create, clean, and transform CSV and Excel files.",
+    icon: BrainCircuit,
+    title: "Use Bittensor",
+    desc: "Explore subnets, compare validators, and prepare safe TAO staking previews.",
   },
   {
-    slug: "semanticweb",
-    title: "Control your browser",
-    desc: "Automate the built-in browser for repetitive web tasks.",
+    icon: BarChart3,
+    title: "Preview markets",
+    desc: "Read Hyperliquid and Polymarket data with clear no-submit boundaries.",
   },
   {
-    slug: "apple",
-    title: "Organize files",
-    desc: "Read, write, and manage files and folders.",
+    icon: Wallet,
+    title: "Connect safely",
+    desc: "Use public reads, unsigned previews, and external-signer handoffs.",
   },
   {
-    slug: "zapier",
-    title: "Automate tasks",
-    desc: "Build reusable workflows with skills and commands.",
+    icon: Dumbbell,
+    title: "Build workflows",
+    desc: "Create wellness, customer, research, and operator workflows from chat.",
   },
   {
-    slug: "medium",
-    title: "Generate content",
-    desc: "Draft documents, emails, and reports.",
+    icon: Layers3,
+    title: "Create artifacts",
+    desc: "Generate plans, reports, packets, scripts, and reusable workflow bundles.",
   },
   {
-    slug: "stripe",
-    title: "Connect to APIs",
-    desc: "Plug into external services and tools via MCP.",
+    icon: ServerCog,
+    title: "Plan services",
+    desc: "Preview hosting, storage, email, payment, and identity service contracts.",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Collect evidence",
+    desc: "Export customer-safe receipts, QA packets, and readiness reports.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Stay non-custodial",
+    desc: "Matterhorn never asks for seed phrases, private keys, or raw signatures.",
   },
 ];
 
 function ShowcasePanel() {
   return (
     <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-lg font-semibold tracking-[-0.01em] text-foreground">
-          Your computer,
-          <br />
-          but it works for you.
-        </h2>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-[-0.01em] text-foreground">
+            One chat for Web3,
+            <br />
+            workflows, and services.
+          </h2>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            Ask in plain English. Matterhorn turns it into safe reads, previews,
+            evidence, and artifacts.
+          </p>
+        </div>
+        <img
+          className="size-12 rounded-xl border border-border bg-[var(--matterhorn-blue)] p-1"
+          src="/matterhorn-logo-square.svg"
+          alt="Matterhorn Work"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {capabilities.map((cap) => (
+        {capabilities.map((cap) => {
+          const Icon = cap.icon as ComponentType<{ className?: string }>;
+          return (
           <div
             key={cap.title}
-            className="flex flex-col gap-2.5 rounded-xl border border-border p-3"
+            className="flex min-h-[118px] flex-col gap-2.5 rounded-xl border border-border bg-background/70 p-3"
           >
-            <BrandIcon className="size-4" slug={cap.slug} />
+            <Icon className="size-4 text-primary" />
             <div className="text-sm font-medium leading-tight text-foreground">
               {cap.title}
             </div>
@@ -90,29 +107,8 @@ function ShowcasePanel() {
               {cap.desc}
             </div>
           </div>
-        ))}
-        <div className="flex flex-col items-start gap-2.5 rounded-xl border border-border p-3">
-            <ShareIcon className="size-4 shrink-0 text-muted-foreground" />
-            <div className="flex flex-col gap-1.5">
-              <div className="text-sm font-medium text-foreground">
-              Team skill hubs
-              </div>
-              <div className="text-xs leading-snug text-muted-foreground">
-              Save approved skills for your organization.
-              </div>
-            </div>
-          </div>
-        <div className="flex flex-col items-start gap-2.5 rounded-xl border border-border p-3">
-          <UserGroupIcon className="size-4 shrink-0 text-muted-foreground" />
-          <div className="flex flex-col gap-1.5">
-            <div className="text-sm font-medium text-foreground">
-              Provision your team
-            </div>
-            <div className="text-xs leading-snug text-muted-foreground">
-              Manage workspaces, models, and permissions.
-            </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -167,14 +163,14 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                   Get started
                 </h2>
               </div>
-              <OnboardingStep number="1" title="Select a folder">
-                Pick any folder on your machine to create a workspace.
+              <OnboardingStep number="1" title="Create a workspace">
+                Pick a folder where Matterhorn can create artifacts, reports, and workflow files.
               </OnboardingStep>
-              <OnboardingStep number="2" title="Chat">
-                Describe what you need. Matterhorn Work handles the rest.
+              <OnboardingStep number="2" title="Ask in plain English">
+                Use Bittensor, preview markets, build customer workflows, or create artifacts.
               </OnboardingStep>
-              <OnboardingStep number="3" title="Interact">
-                Review results, approve actions, and iterate.
+              <OnboardingStep number="3" title="Review before action">
+                Inspect evidence, previews, and external-signer handoffs before anything sensitive happens.
               </OnboardingStep>
             </div>
 
@@ -188,30 +184,11 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
           </div>
         </div>
 
-        {/* ---- Right: shader outer card > white inner card ---- */}
+        {/* ---- Right: Matterhorn capability card ---- */}
         <div className="hidden lg:flex lg:w-[55%] lg:items-center lg:justify-center lg:p-6">
-          <div className="relative w-full max-w-xl overflow-hidden rounded-3xl">
-            {/* Shader background */}
-            <div className="absolute inset-0 z-0">
-              <PaperGrainGradient
-                className="size-full bg-white"
-                speed={0}
-                scale={1}
-                rotation={0}
-                offsetX={0}
-                offsetY={0}
-                softness={0.5}
-                intensity={0.5}
-                noise={0.25}
-                shape="corners"
-                frame={37706.748}
-                colors={["#0E33D9", "#FF7E2E", "#FFE340", "#000000"]}
-                colorBack="#00000000"
-              />
-            </div>
-
-            {/* Inner white card */}
-            <div className="relative z-10 m-3 rounded-2xl bg-background p-7">
+          <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] p-3 shadow-[0_24px_80px_rgba(var(--matterhorn-blue-rgb),0.18)]">
+            <div className="absolute right-0 top-0 size-40 -translate-y-1/3 translate-x-1/3 rounded-full bg-background/50 blur-3xl" />
+            <div className="relative z-10 rounded-2xl border border-border bg-background p-7">
               <ShowcasePanel />
             </div>
           </div>

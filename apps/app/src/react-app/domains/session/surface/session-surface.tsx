@@ -3,7 +3,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
-import { Check, Minimize2 } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  BrainCircuit,
+  Check,
+  Dumbbell,
+  FileText,
+  Layers3,
+  Minimize2,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
 import { abortSessionSafe } from "../../../../app/lib/opencode-session";
@@ -73,6 +84,57 @@ import {
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
 const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Matterhorn task.";
+
+const SESSION_STARTER_PROMPTS = [
+  {
+    title: "Use Bittensor",
+    description: "Find image-generation subnets and safe next steps.",
+    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Explain utility, adapter support, risks, and safe next steps.",
+    icon: BrainCircuit,
+  },
+  {
+    title: "Show my TAO",
+    description: "Read a public SS58 wallet and stake positions.",
+    prompt: "Use unified crypto chat. Show my TAO and where I am staked for this public SS58 address: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
+    icon: Wallet,
+  },
+  {
+    title: "Compare validators",
+    description: "Review subnet 14 validator candidates.",
+    prompt: "Use unified crypto chat. Compare validators on Bittensor subnet 14 with a balanced strategy. Include data freshness and missing context before staking.",
+    icon: Activity,
+  },
+  {
+    title: "Hyperliquid preview",
+    description: "Read BTC orderbook with live submission off.",
+    prompt: "Use unified crypto chat. Show Hyperliquid BTC orderbook context and explain the preview-only external-signer flow. Make clear Can submit: No and Live submission: Off.",
+    icon: BarChart3,
+  },
+  {
+    title: "Polymarket read",
+    description: "Summarize a market and compliance status.",
+    prompt: "Use unified crypto chat. Summarize a Polymarket market for this query: <topic>. Include status, outcomes, liquidity if available, compliance state, and preview availability.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Wellness workflow",
+    description: "Create a client-safe training packet.",
+    prompt: "Create a 4-week beginner strength and mobility plan for a personal trainer client, including a check-in template, safe non-medical disclaimer, and deliverable packet structure.",
+    icon: Dumbbell,
+  },
+  {
+    title: "Build a service workflow",
+    description: "Package a yoga or dietician offer.",
+    prompt: "Create a reusable workflow packet for a yoga instructor offering an 8-week program: offer page copy, onboarding questionnaire, weekly check-in artifact, client-safe disclaimers, and follow-up cadence.",
+    icon: Layers3,
+  },
+  {
+    title: "Customer evidence",
+    description: "Generate a readiness checklist.",
+    prompt: "Create a customer-safe readiness checklist for Matterhorn Work across Bittensor, Hyperliquid, Polymarket, wellness workflows, external-signer boundaries, and evidence collection.",
+    icon: FileText,
+  },
+] as const;
 
 type SessionError = {
   message: string;
@@ -1279,42 +1341,40 @@ export function SessionSurface(props: SessionSurfaceProps) {
                 />
               ) : shellConfig.starterCards ? (
                 <div className="flex flex-1 flex-col items-center justify-end px-6 pb-4">
-                  <div className="w-full max-w-[640px]">
-                    <p className="mb-3 text-xs text-dls-secondary">Try one of these:</p>
-                    <div className="flex gap-2">
+                  <div className="w-full max-w-[900px]">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-dls-text">Start with a Matterhorn workflow</p>
+                        <p className="text-xs text-dls-secondary">These insert a prompt into chat. You can edit before sending.</p>
+                      </div>
                       <button
                         type="button"
-                        className="flex flex-1 items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:bg-dls-hover"
-                        onClick={() => void typeComposerText("Create a sample CSV file with 20 rows of fake customer data (name, email, company, revenue). Then show me a summary of the data.")}
-                      >
-                        <img src="https://cdn.simpleicons.org/googlesheets" alt="" width={16} height={16} className="mt-0.5 shrink-0" />
-                        <div>
-                          <div className="text-[12px] font-medium text-dls-text">Edit a CSV</div>
-                          <div className="text-[11px] text-dls-secondary">Create a sample spreadsheet</div>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        className="flex flex-1 items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:bg-dls-hover"
-                        onClick={() => void typeComposerText("Open craigslist.org in the browser and search for couches for sale. Show me the top 5 results with prices.")}
-                      >
-                        <img src="/matterhorn-mark.svg" alt="" width={16} height={16} className="mt-0.5 shrink-0" />
-                        <div>
-                          <div className="text-[12px] font-medium text-dls-text">Browse the web</div>
-                          <div className="text-[11px] text-dls-secondary">Search Craigslist for couches</div>
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        className="flex flex-1 items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:bg-dls-hover"
+                        className="self-start rounded-full border border-dls-border bg-dls-surface px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover sm:self-auto"
                         onClick={() => props.onOpenSettingsSection?.("mcps")}
                       >
-                        <img src="https://cdn.simpleicons.org/hackthebox" alt="" width={16} height={16} className="mt-0.5 shrink-0" />
-                        <div>
-                          <div className="text-[12px] font-medium text-dls-text">Connect an extension</div>
-                          <div className="text-[11px] text-dls-secondary">Add MCPs and integrations</div>
-                        </div>
+                        Connect Web3 tools
                       </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {SESSION_STARTER_PROMPTS.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            key={item.title}
+                            type="button"
+                            className="flex min-h-[96px] items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                            onClick={() => void typeComposerText(item.prompt)}
+                          >
+                            <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                              <Icon className="size-3.5" />
+                            </span>
+                            <span>
+                              <span className="block text-[12px] font-medium text-dls-text">{item.title}</span>
+                              <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{item.description}</span>
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
