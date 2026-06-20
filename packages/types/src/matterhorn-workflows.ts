@@ -521,6 +521,13 @@ export interface MatterhornWorkflowEvidenceBundle {
   workflowId: string;
   domain: string;
   requestedOutcome: string;
+  inputPrompt: string;
+  generatedArtifactType: string;
+  safetyStatus: MatterhornWorkflowStatus;
+  liveExecutionEnabled: false;
+  acceptsCustody: false;
+  acceptsSigning: false;
+  acceptsSecrets: false;
   publicEvidence: MatterhornWorkflowEvidenceItem[];
   plannedServiceHooks: MatterhornWorkflowServiceHook[];
   safetyFlags: string[];
@@ -528,20 +535,28 @@ export interface MatterhornWorkflowEvidenceBundle {
   source: "operator" | "agent" | "customer" | "system";
   status: MatterhornWorkflowStatus;
   canExecute: false;
+  evidenceHash: string;
 }
 
-export const WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+export const WELLNESS_CREATOR_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "wellness_creator_services",
   domain: "wellness",
-  requestedOutcome: "Create a safe intake summary for a new wellness client.",
+  requestedOutcome: "Plan a safe wellness creator service package without collecting PII or secrets.",
+  inputPrompt: "Create a wellness program for my clients",
+  generatedArtifactType: "service_plan",
+  safetyStatus: "planned_not_live",
+  liveExecutionEnabled: false,
+  acceptsCustody: false,
+  acceptsSigning: false,
+  acceptsSecrets: false,
   publicEvidence: [
     {
       id: "client_goal",
       label: "Client goal",
-      value: "Improve flexibility and reduce stress",
+      value: "REDACTED",
       mimeType: "text/plain",
-      public: false,
+      public: true,
       source: "customer",
     },
     {
@@ -549,13 +564,22 @@ export const WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenc
       label: "Selected service tier",
       value: "monthly_yoga_coaching",
       mimeType: "text/plain",
-      public: false,
+      public: true,
       source: "agent",
+    },
+    {
+      id: "delivery_format",
+      label: "Delivery format",
+      value: "live_session",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
     },
   ],
   plannedServiceHooks: [
     { hook: "email", status: "planned_not_live" },
     { hook: "payments", status: "planned_not_live" },
+    { hook: "hosting", status: "planned_not_live" },
   ],
   safetyFlags: [
     "no_secrets_collected",
@@ -566,13 +590,21 @@ export const WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenc
   source: "agent",
   status: "planned_not_live",
   canExecute: false,
+  evidenceHash: "422205c6d38466073feaa2f89f272708bebd9ae2358653978380b2bc07af3b89",
 };
 
-export const CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+export const BITTENSOR_BETA_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "bittensor_operator",
-  domain: "crypto",
-  requestedOutcome: "Record the inputs and safety checks for a staking preview decision.",
+  domain: "bittensor",
+  requestedOutcome: "Record the public inputs and safety checks for a TAO staking preview.",
+  inputPrompt: "Show my Bittensor staking preview",
+  generatedArtifactType: "stake_preview",
+  safetyStatus: "external_handoff_required",
+  liveExecutionEnabled: false,
+  acceptsCustody: false,
+  acceptsSigning: false,
+  acceptsSecrets: false,
   publicEvidence: [
     {
       id: "wallet_address",
@@ -610,13 +642,125 @@ export const CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE: MatterhornWorkflowEvidence
   source: "operator",
   status: "external_handoff_required",
   canExecute: false,
+  evidenceHash: "8c7b95b985070a721f94b0be660e2aac353fd23be2328e8794cdcb790f3b0aef",
 };
 
-export const DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+export const HYPERLIQUID_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "market_read_preview",
+  domain: "hyperliquid",
+  requestedOutcome: "Generate a read-only Hyperliquid market preview without submission or signing.",
+  inputPrompt: "Preview a Hyperliquid trade",
+  generatedArtifactType: "market_preview",
+  safetyStatus: "preview_only",
+  liveExecutionEnabled: false,
+  acceptsCustody: false,
+  acceptsSigning: false,
+  acceptsSecrets: false,
+  publicEvidence: [
+    {
+      id: "venue",
+      label: "Venue",
+      value: "hyperliquid",
+      mimeType: "text/plain",
+      public: true,
+      source: "system",
+    },
+    {
+      id: "market_id",
+      label: "Market or asset identifier",
+      value: "BTC-PERP",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "wallet_address",
+      label: "Wallet address",
+      value: "0x1234...abcd",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+      verifiedAt: "2026-06-19T12:00:00Z",
+    },
+  ],
+  plannedServiceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_execution",
+    "preview_only_no_submission",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "agent",
+  status: "preview_only",
+  canExecute: false,
+  evidenceHash: "67efcb8e3739e4c752de86a07f2eb45b25dbd7096d5aa68d87df02cc2466f22f",
+};
+
+export const POLYMARKET_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
+  version: "matterhorn.workflow.evidence-bundle.v1",
+  workflowId: "market_read_preview",
+  domain: "polymarket",
+  requestedOutcome: "Generate a read-only Polymarket market preview without submission or signing.",
+  inputPrompt: "Preview a Polymarket trade",
+  generatedArtifactType: "market_preview",
+  safetyStatus: "preview_only",
+  liveExecutionEnabled: false,
+  acceptsCustody: false,
+  acceptsSigning: false,
+  acceptsSecrets: false,
+  publicEvidence: [
+    {
+      id: "venue",
+      label: "Venue",
+      value: "polymarket",
+      mimeType: "text/plain",
+      public: true,
+      source: "system",
+    },
+    {
+      id: "market_id",
+      label: "Market or asset identifier",
+      value: "will-it-rain-in-nyc-2026-07-01",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+    },
+    {
+      id: "wallet_address",
+      label: "Wallet address",
+      value: "0xabcd...1234",
+      mimeType: "text/plain",
+      public: true,
+      source: "customer",
+      verifiedAt: "2026-06-19T12:00:00Z",
+    },
+  ],
+  plannedServiceHooks: [{ hook: "polymarket", status: "preview_only" }],
+  safetyFlags: [
+    "no_secrets_collected",
+    "no_live_execution",
+    "preview_only_no_submission",
+  ],
+  createdAt: "2026-06-19T12:00:00Z",
+  source: "agent",
+  status: "preview_only",
+  canExecute: false,
+  evidenceHash: "e77a31b70aee28b0120981392e3ab69c8c1d1c5f072d74b2509e755e9a269fe2",
+};
+
+export const DECENTRALIZED_SERVICES_PLANNED_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "decentralized_services_planner",
   domain: "decentralized_services",
   requestedOutcome: "Capture the planned decentralized-service action and provider comparison.",
+  inputPrompt: "Plan a decentralized storage upload",
+  generatedArtifactType: "service_preview",
+  safetyStatus: "planned_not_live",
+  liveExecutionEnabled: false,
+  acceptsCustody: false,
+  acceptsSigning: false,
+  acceptsSecrets: false,
   publicEvidence: [
     {
       id: "capability",
@@ -656,90 +800,18 @@ export const DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE: MatterhornWorkflowEvid
   source: "agent",
   status: "planned_not_live",
   canExecute: false,
-};
-
-export const RESEARCH_SUMMARY_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
-  version: "matterhorn.workflow.evidence-bundle.v1",
-  workflowId: "research_summary",
-  domain: "research",
-  requestedOutcome: "Record the public inputs used to generate a research summary.",
-  publicEvidence: [
-    {
-      id: "topic",
-      label: "Research topic",
-      value: "Decentralized identity adoption in 2026",
-      mimeType: "text/plain",
-      public: true,
-      source: "customer",
-    },
-    {
-      id: "source_count",
-      label: "Number of public sources reviewed",
-      value: 12,
-      mimeType: "text/plain",
-      public: true,
-      source: "agent",
-    },
-  ],
-  plannedServiceHooks: [{ hook: "storage", status: "planned_not_live" }],
-  safetyFlags: [
-    "no_secrets_collected",
-    "no_live_execution",
-    "public_sources_only",
-  ],
-  createdAt: "2026-06-19T12:00:00Z",
-  source: "system",
-  status: "preview_only",
-  canExecute: false,
-};
-
-export const CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE: MatterhornWorkflowEvidenceBundle = {
-  version: "matterhorn.workflow.evidence-bundle.v1",
-  workflowId: "content_publish",
-  domain: "content",
-  requestedOutcome: "Capture the plan for publishing content without executing provider actions.",
-  publicEvidence: [
-    {
-      id: "content_title",
-      label: "Content title",
-      value: "Intro to Bittensor Staking",
-      mimeType: "text/plain",
-      public: true,
-      source: "customer",
-    },
-    {
-      id: "publish_channel",
-      label: "Publish channel",
-      value: "newsletter",
-      mimeType: "text/plain",
-      public: true,
-      source: "customer",
-    },
-  ],
-  plannedServiceHooks: [
-    { hook: "email", status: "planned_not_live" },
-    { hook: "hosting", status: "planned_not_live" },
-  ],
-  safetyFlags: [
-    "no_secrets_collected",
-    "no_live_execution",
-    "preview_before_publish",
-  ],
-  createdAt: "2026-06-19T12:00:00Z",
-  source: "agent",
-  status: "planned_not_live",
-  canExecute: false,
+  evidenceHash: "6143f1edb3a656ea372ffb046887ddf3e123dd81a8aa80c4a6b81458747767b0",
 };
 
 export const MATTERHORN_WORKFLOW_EVIDENCE_BUNDLE_FIXTURES: Record<
   string,
   MatterhornWorkflowEvidenceBundle
 > = {
-  wellness_customer_intake: WELLNESS_CUSTOMER_INTAKE_EVIDENCE_BUNDLE,
-  crypto_staking_decision: CRYPTO_STAKING_DECISION_EVIDENCE_BUNDLE,
-  decentralized_services_plan: DECENTRALIZED_SERVICES_PLAN_EVIDENCE_BUNDLE,
-  research_summary: RESEARCH_SUMMARY_EVIDENCE_BUNDLE,
-  content_publish_plan: CONTENT_PUBLISH_PLAN_EVIDENCE_BUNDLE,
+  wellness_creator_workflow: WELLNESS_CREATOR_WORKFLOW_EVIDENCE_BUNDLE,
+  bittensor_beta_workflow: BITTENSOR_BETA_WORKFLOW_EVIDENCE_BUNDLE,
+  hyperliquid_preview_workflow: HYPERLIQUID_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE,
+  polymarket_preview_workflow: POLYMARKET_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE,
+  decentralized_services_planned_workflow: DECENTRALIZED_SERVICES_PLANNED_WORKFLOW_EVIDENCE_BUNDLE,
 };
 
 export interface MatterhornWorkflowTemplateSafetyBoundary {
@@ -841,7 +913,7 @@ export const WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE: MatterhornWorkflowTempl
       public: false,
     },
   ],
-  evidenceBundleIds: ["wellness_customer_intake"],
+  evidenceBundleIds: ["wellness_creator_workflow"],
   safetyBoundaries: {
     liveExecutionEnabled: false,
     canExecute: false,
@@ -909,7 +981,7 @@ export const BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE: MatterhornWorkflowTempla
       public: true,
     },
   ],
-  evidenceBundleIds: ["crypto_staking_decision"],
+  evidenceBundleIds: ["bittensor_beta_workflow"],
   safetyBoundaries: {
     liveExecutionEnabled: false,
     canExecute: true,
@@ -973,7 +1045,7 @@ export const HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate =
       public: true,
     },
   ],
-  evidenceBundleIds: [],
+  evidenceBundleIds: ["hyperliquid_preview_workflow"],
   safetyBoundaries: {
     liveExecutionEnabled: false,
     canExecute: false,
@@ -1037,7 +1109,7 @@ export const POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = 
       public: true,
     },
   ],
-  evidenceBundleIds: [],
+  evidenceBundleIds: ["polymarket_preview_workflow"],
   safetyBoundaries: {
     liveExecutionEnabled: false,
     canExecute: false,
@@ -1101,7 +1173,7 @@ export const DECENTRALIZED_SERVICES_FUTURE_WORKFLOW_TEMPLATE: MatterhornWorkflow
       public: true,
     },
   ],
-  evidenceBundleIds: ["decentralized_services_plan"],
+  evidenceBundleIds: ["decentralized_services_planned_workflow"],
   safetyBoundaries: {
     liveExecutionEnabled: false,
     canExecute: false,
