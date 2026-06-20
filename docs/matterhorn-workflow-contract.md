@@ -163,6 +163,13 @@ interface MatterhornWorkflowEvidenceBundle {
   workflowId: string;
   domain: string;
   requestedOutcome: string;
+  inputPrompt: string;
+  generatedArtifactType: string;
+  safetyStatus: MatterhornWorkflowStatus;
+  liveExecutionEnabled: false;
+  acceptsCustody: false;
+  acceptsSigning: false;
+  acceptsSecrets: false;
   publicEvidence: MatterhornWorkflowEvidenceItem[];
   plannedServiceHooks: MatterhornWorkflowServiceHook[];
   safetyFlags: string[];
@@ -170,6 +177,7 @@ interface MatterhornWorkflowEvidenceBundle {
   source: "operator" | "agent" | "customer" | "system";
   status: MatterhornWorkflowStatus;
   canExecute: false;
+  evidenceHash: string;
 }
 ```
 
@@ -189,17 +197,17 @@ The contract ships with four fixture manifests in `packages/types/src/matterhorn
 
 ## Evidence Bundle Fixtures
 
-The contract ships with five example evidence bundles in `packages/types/src/matterhorn-workflows.ts`:
+The contract ships with five example evidence bundles in `packages/types/src/matterhorn-workflows.ts`. Every fixture is scoped to one of the built-in workflows, declares the input prompt and generated artifact type, and is public/redacted only:
 
 | Bundle ID | Workflow | Domain | Status | Purpose |
 | --- | --- | --- | --- | --- |
-| `wellness_customer_intake` | `wellness_creator_services` | wellness | `planned_not_live` | Safe intake summary with no PII in public evidence. |
-| `crypto_staking_decision` | `bittensor_operator` | crypto | `external_handoff_required` | Records public wallet address and external-signer requirement. |
-| `decentralized_services_plan` | `decentralized_services_planner` | decentralized_services | `planned_not_live` | Captures planned storage action and example fixture provider. |
-| `research_summary` | `research_summary` | research | `preview_only` | Public topic and source count for a generated summary. |
-| `content_publish_plan` | `content_publish` | content | `planned_not_live` | Plan for newsletter/content publish without live provider action. |
+| `wellness_creator_workflow` | `wellness_creator_services` | wellness | `planned_not_live` | Safe intake summary with customer PII redacted. |
+| `bittensor_beta_workflow` | `bittensor_operator` | bittensor | `external_handoff_required` | Records public wallet address and external-signer requirement. |
+| `hyperliquid_preview_workflow` | `market_read_preview` | hyperliquid | `preview_only` | Read-only Hyperliquid preview with no submission or signing. |
+| `polymarket_preview_workflow` | `market_read_preview` | polymarket | `preview_only` | Read-only Polymarket preview with no submission or signing. |
+| `decentralized_services_planned_workflow` | `decentralized_services_planner` | decentralized_services | `planned_not_live` | Captures planned storage action and example fixture provider. |
 
-All bundles set `canExecute: false` and contain no secrets or executable provider payloads.
+All bundles set `canExecute: false`, `liveExecutionEnabled: false`, `acceptsCustody: false`, `acceptsSigning: false`, and `acceptsSecrets: false`. Every `publicEvidence` item is `public: true`; sensitive values are redacted. Each bundle carries a SHA-256 `evidenceHash` over its canonical content so pilots and QA can verify integrity without handling secrets.
 
 ## Operator Evidence Export
 
@@ -207,7 +215,7 @@ Operators can list, inspect, and export workflow evidence bundles without runnin
 
 ```bash
 pnpm workflow:evidence:list
-pnpm workflow:evidence:show decentralized_services_plan
+pnpm workflow:evidence:show hyperliquid_preview_workflow
 pnpm workflow:evidence:export /tmp/evidence-bundles.json --checksum
 ```
 
@@ -226,6 +234,25 @@ Run the operator helper gate:
 ```bash
 pnpm test:matterhorn-workflow-evidence-bundles
 ```
+
+## Evidence Bundles for Customer Pilots and Hermes QA
+
+Workflow evidence bundles give customer pilots and Hermes QA a single, comparable way to prove that every vertical follows the same safety contract.
+
+**Customer pilots** can:
+
+- Compare wellness, crypto, market-preview, and decentralized-service workflows using the same bundle shape.
+- Verify that each bundle states its workflow id, input prompt, generated artifact type, safety status, and custody/signing/secrets policy up front.
+- Check the SHA-256 `evidenceHash` to confirm the bundle has not been altered.
+- Share public evidence with stakeholders without exposing PII, private keys, API secrets, raw signatures, or signed payloads.
+
+**Hermes QA** can:
+
+- Run `pnpm test:matterhorn-workflow-evidence-bundles` to confirm every fixture is public/redacted only, has a valid hash, and rejects live execution.
+- Use the evidence bundle as a regression gate: any new workflow must produce a bundle with `canExecute: false`, `liveExecutionEnabled: false`, and `acceptsSecrets: false`.
+- Tie each bundle back to its workflow manifest and template registry entry, so the safety story is consistent from contract to fixture to operator export.
+
+Because every bundle is domain-agnostic, a pilot can move from a wellness intake summary to a Bittensor staking preview to a Hyperliquid market preview without learning a new schema or trusting a new secrets model.
 
 ## Workflow Catalog
 
@@ -319,6 +346,8 @@ pnpm test:matterhorn-workflow-template-registry
 ## Safety Rules
 
 - No fixture may set `acceptsSecrets`, `acceptsPrivateKeys`, `acceptsRawSignatures`, or `acceptsApiSecrets` to `true`.
+- Evidence bundles must set `canExecute: false`, `liveExecutionEnabled: false`, `acceptsCustody: false`, `acceptsSigning: false`, and `acceptsSecrets: false`.
+- Evidence bundles must contain only `public: true` evidence items; sensitive values must be redacted, not hidden behind `public: false`.
 - Market fixtures must remain read/preview only (`status: "preview_only"`, `canExecute: false`, `liveExecutionEnabled: false`, `canSubmit: false`).
 - Service hooks must be marked `planned_not_live` when the underlying provider integration is not implemented.
 - No fixture may imply a submit route, sign route, or live provider route.

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, unlinkSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,6 +10,65 @@ const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
 const helperPath = "scripts/matterhorn-workflow-evidence-bundles.mjs";
 const helper = readFileSync(helperPath, "utf8");
 const types = readFileSync("packages/types/src/matterhorn-workflows.ts", "utf8");
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  const sorted = {};
+  for (const key of Object.keys(value).sort()) {
+    sorted[key] = canonicalJson(value[key]);
+  }
+  return sorted;
+}
+
+function computeEvidenceHash(bundle) {
+  const { evidenceHash, ...rest } = bundle;
+  return createHash("sha256").update(JSON.stringify(canonicalJson(rest))).digest("hex");
+}
+
+const helperIds = [
+  "wellness_creator_workflow",
+  "bittensor_beta_workflow",
+  "hyperliquid_preview_workflow",
+  "polymarket_preview_workflow",
+  "decentralized_services_planned_workflow",
+];
+
+const requiredBundleFields = [
+  "version",
+  "workflowId",
+  "domain",
+  "requestedOutcome",
+  "inputPrompt",
+  "generatedArtifactType",
+  "safetyStatus",
+  "liveExecutionEnabled",
+  "acceptsCustody",
+  "acceptsSigning",
+  "acceptsSecrets",
+  "publicEvidence",
+  "plannedServiceHooks",
+  "safetyFlags",
+  "createdAt",
+  "source",
+  "status",
+  "canExecute",
+  "evidenceHash",
+];
+
+const forbiddenCredentialValues = [
+  "privateKey",
+  "seedPhrase",
+  "mnemonic",
+  "apiSecret",
+  "rawSignature",
+  "signedPayload",
+  "walletExport",
+  "passphrase",
+  "password",
+  "keyfile",
+  "suri",
+];
 
 // 1. Package scripts are exposed.
 assert.equal(
@@ -43,18 +103,17 @@ for (const phrase of [
   "toPublicBundle",
   "Forbidden credential-shaped flag",
   "canExecute: false",
+  "liveExecutionEnabled: false",
+  "acceptsCustody: false",
+  "acceptsSigning: false",
+  "acceptsSecrets: false",
+  "evidenceHash",
+  "computeEvidenceHash",
 ]) {
   assert.ok(helper.includes(phrase), `helper missing phrase: ${phrase}`);
 }
 
 // 3. Helper fixture IDs match the types file registry.
-const helperIds = [
-  "wellness_customer_intake",
-  "crypto_staking_decision",
-  "decentralized_services_plan",
-  "research_summary",
-  "content_publish_plan",
-];
 for (const id of helperIds) {
   assert.ok(types.includes(id), `types registry missing bundle id: ${id}`);
   assert.ok(helper.includes(id), `helper missing bundle id: ${id}`);
@@ -71,21 +130,7 @@ assert.equal(listOutput.version, "matterhorn.workflow.evidence-bundle-operator.v
 assert.equal(listOutput.action, "list");
 assert.deepEqual(listOutput.bundleIds.sort(), [...helperIds].sort());
 
-// 5. --id returns each bundle with canExecute: false and no secrets.
-const forbiddenCredentialValues = [
-  "privateKey",
-  "seedPhrase",
-  "mnemonic",
-  "apiSecret",
-  "rawSignature",
-  "signedPayload",
-  "walletExport",
-  "passphrase",
-  "password",
-  "keyfile",
-  "suri",
-];
-
+// 5. --id returns each bundle with safety fields, public/redacted evidence, and valid hash.
 for (const id of helperIds) {
   const showResult = spawnSync(process.execPath, [helperPath, "--id", id], {
     encoding: "utf8",
@@ -96,8 +141,33 @@ for (const id of helperIds) {
   assert.equal(showOutput.version, "matterhorn.workflow.evidence-bundle-operator.v1");
   assert.equal(showOutput.action, "show");
   assert.equal(showOutput.bundleId, id);
-  assert.equal(showOutput.bundle.canExecute, false, `${id} must have canExecute: false`);
-  const json = JSON.stringify(showOutput.bundle);
+
+  const bundle = showOutput.bundle;
+  for (const field of requiredBundleFields) {
+    assert.ok(field in bundle, `${id} must include field: ${field}`);
+  }
+
+  assert.equal(bundle.canExecute, false, `${id} must have canExecute: false`);
+  assert.equal(bundle.liveExecutionEnabled, false, `${id} must have liveExecutionEnabled: false`);
+  assert.equal(bundle.acceptsCustody, false, `${id} must have acceptsCustody: false`);
+  assert.equal(bundle.acceptsSigning, false, `${id} must have acceptsSigning: false`);
+  assert.equal(bundle.acceptsSecrets, false, `${id} must have acceptsSecrets: false`);
+  assert.equal(bundle.safetyStatus, bundle.status, `${id} safetyStatus must match status`);
+
+  // Every evidence item must be public (public/redacted only).
+  assert.ok(bundle.publicEvidence.length > 0, `${id} must have at least one evidence item`);
+  for (const item of bundle.publicEvidence) {
+    assert.equal(item.public, true, `${id} evidence item ${item.id} must be public`);
+  }
+
+  // Evidence hash must match the canonical bundle content.
+  assert.equal(
+    computeEvidenceHash(bundle),
+    bundle.evidenceHash,
+    `${id} evidenceHash must match canonical SHA-256`
+  );
+
+  const json = JSON.stringify(bundle);
   for (const forbidden of forbiddenCredentialValues) {
     assert.equal(json.includes(forbidden), false, `${id} must not contain ${forbidden}`);
   }

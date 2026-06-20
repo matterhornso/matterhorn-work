@@ -181,11 +181,11 @@ for (const snippet of [
 
 // 12. Evidence bundle fixtures are safe and complete.
 const evidenceBundleIds = [
-  "wellness_customer_intake",
-  "crypto_staking_decision",
-  "decentralized_services_plan",
-  "research_summary",
-  "content_publish_plan",
+  "wellness_creator_workflow",
+  "bittensor_beta_workflow",
+  "hyperliquid_preview_workflow",
+  "polymarket_preview_workflow",
+  "decentralized_services_planned_workflow",
 ];
 
 for (const id of evidenceBundleIds) {
@@ -244,12 +244,22 @@ for (const [name, block] of Object.entries(evidenceBlocks)) {
   assert.ok(block.includes("workflowId:"), `${name} must include workflowId`);
   assert.ok(block.includes("domain:"), `${name} must include domain`);
   assert.ok(block.includes("requestedOutcome:"), `${name} must include requestedOutcome`);
+  assert.ok(block.includes("inputPrompt:"), `${name} must include inputPrompt`);
+  assert.ok(block.includes("generatedArtifactType:"), `${name} must include generatedArtifactType`);
+  assert.ok(block.includes("safetyStatus:"), `${name} must include safetyStatus`);
+  assert.ok(block.includes("liveExecutionEnabled: false"), `${name} must set liveExecutionEnabled: false`);
+  assert.ok(block.includes("acceptsCustody: false"), `${name} must set acceptsCustody: false`);
+  assert.ok(block.includes("acceptsSigning: false"), `${name} must set acceptsSigning: false`);
+  assert.ok(block.includes("acceptsSecrets: false"), `${name} must set acceptsSecrets: false`);
+  assert.ok(block.includes("evidenceHash:"), `${name} must include evidenceHash`);
   assert.ok(/publicEvidence:[\s\S]*?\{[\s\S]*?\}/.test(block), `${name} must have at least one public evidence item`);
   assert.ok(/plannedServiceHooks:[\s\S]*?\{[\s\S]*?\}/.test(block), `${name} must have at least one planned service hook`);
   assert.ok(block.includes("safetyFlags:"), `${name} must include safetyFlags`);
   assert.ok(block.includes("createdAt:"), `${name} must include createdAt`);
   assert.ok(block.includes("source:"), `${name} must include source`);
   assert.ok(block.includes("canExecute: false"), `${name} must set canExecute: false`);
+  assert.ok(block.includes("public: true"), `${name} must contain only public evidence items`);
+  assert.equal(block.includes("public: false"), false, `${name} must not contain non-public evidence items`);
   for (const forbidden of ["privateKey", "seedPhrase", "mnemonic", "apiSecret", "rawSignature", "signedPayload", "walletExport", "passphrase", "password", "keyfile", "suri"]) {
     assert.equal(block.includes(forbidden), false, `${name} must not contain credential-shaped value: ${forbidden}`);
   }
