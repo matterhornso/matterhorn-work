@@ -62,12 +62,27 @@ const GlobalSDKContext = createContext<GlobalSDKContextValue | undefined>(
   undefined,
 );
 
-function readOpenworkToken(): string {
-  if (typeof window === "undefined") return "";
+const MATTERHORN_SERVER_TOKEN_STORAGE_KEY = "matterhorn-work.server.token";
+const LEGACY_OPENWORK_SERVER_TOKEN_STORAGE_KEY = "openwork.server.token";
+
+function readMatterhornServerTokenFromEnv(): string {
+  return (
+    import.meta.env.VITE_MATTERHORN_WORK_TOKEN ??
+    import.meta.env.VITE_OPENWORK_TOKEN ??
+    ""
+  ).trim();
+}
+
+function readMatterhornServerToken(): string {
+  if (typeof window === "undefined") return readMatterhornServerTokenFromEnv();
   try {
-    return (window.localStorage.getItem("openwork.server.token") ?? "").trim();
+    return (
+      window.localStorage.getItem(MATTERHORN_SERVER_TOKEN_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_OPENWORK_SERVER_TOKEN_STORAGE_KEY) ??
+      readMatterhornServerTokenFromEnv()
+    ).trim();
   } catch {
-    return "";
+    return readMatterhornServerTokenFromEnv();
   }
 }
 
@@ -84,7 +99,7 @@ export function GlobalSDKProvider({ children }: GlobalSDKProviderProps) {
   }
   const emitter = emitterRef.current;
 
-  const token = readOpenworkToken();
+  const token = readMatterhornServerToken();
   const headers =
     token && server.url.includes("/opencode")
       ? { Authorization: `Bearer ${token}` }
