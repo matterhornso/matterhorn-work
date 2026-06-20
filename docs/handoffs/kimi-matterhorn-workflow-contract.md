@@ -361,9 +361,9 @@ pnpm test:matterhorn-workflow-catalog
 
 Pending merge.
 
-## PR #TBD: Customer Template Launch Metadata
+## PR #438: Customer Template Launch Metadata
 
-**PR:** TBD — opened from `kimi/customer-template-launch-metadata` to `dev`  
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/438  
 **Branch:** `kimi/customer-template-launch-metadata`  
 **Scope:** Adds launch, UI, and routing metadata to every customer workflow template so the UI and agents can launch templates consistently without touching runtime bridge files or wellness workflow internals.
 
@@ -396,7 +396,7 @@ Pending merge.
 - `ui.shortDescription` is `<= 90` characters.
 - All existing baseline safety boundaries remain unchanged.
 
-### Commands that pass on PR #TBD
+### Commands that pass on PR #438
 
 ```bash
 pnpm --dir packages/types build
@@ -407,7 +407,7 @@ pnpm test:matterhorn-customer-workflow-template-registry
 pnpm test:market-execution-safety-gate
 ```
 
-### CI status on PR #TBD
+### CI status on PR #438
 
 Pending merge.
 
