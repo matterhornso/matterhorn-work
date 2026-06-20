@@ -18,6 +18,7 @@ const offlineStages = [
   ["crypto.hermes_customer_qa", "Hermes crypto customer QA handoff", ["pnpm", "test:hermes-crypto-customer-qa"]],
   ["crypto.readiness_api", "Unified crypto readiness API contract", ["pnpm", "test:crypto-readiness-api"]],
   ["crypto.customer_readiness_ui", "Customer readiness UI contract", ["pnpm", "test:customer-readiness-ui"]],
+  ["crypto.customer_onboarding_ui", "Matterhorn customer onboarding UI contract", ["pnpm", "test:matterhorn-customer-onboarding-ui"]],
   ["bittensor.beta_release_gate", "Bittensor beta release gate contract", ["pnpm", "test:bittensor-beta-release-gate"]],
   ["bittensor.beta_customer_packet", "Bittensor beta release candidate packet", ["pnpm", "test:bittensor-beta-customer-packet"]],
   ["market.safety_contract", "Market shared safety contract", ["pnpm", "test:market-safety-contract"]],

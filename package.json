@@ -55,6 +55,7 @@
     "test:electron-local-tester-artifact": "node scripts/electron-local-tester-artifact.test.mjs",
     "test:desktop-beta-first-run": "node scripts/desktop-beta-first-run.test.mjs",
     "test:matterhorn-brand-assets": "node scripts/matterhorn-brand-assets.test.mjs",
+    "test:matterhorn-customer-onboarding-ui": "node scripts/matterhorn-customer-onboarding-ui.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
     "test:opencode-abstraction-copy": "node scripts/opencode-abstraction-copy.test.mjs",

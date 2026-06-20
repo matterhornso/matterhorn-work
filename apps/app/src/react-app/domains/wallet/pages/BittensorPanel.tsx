@@ -778,9 +778,9 @@ export default function BittensorPanel() {
               <BrainCircuit className="size-5 text-sky-400" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-dls-text">Bittensor</h2>
+              <h2 className="text-base font-semibold text-dls-text">Crypto workspace</h2>
               <p className="text-xs text-dls-secondary">
-                Finney mainnet · {sidecarStatus?.configured ? "sidecar ready" : "watch-only"}
+                Bittensor · Hyperliquid · Polymarket · {sidecarStatus?.configured ? "Subtensor sidecar ready" : "public reads and previews"}
               </p>
             </div>
           </div>

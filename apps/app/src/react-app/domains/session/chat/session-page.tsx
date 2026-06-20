@@ -2,7 +2,22 @@
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { FileText, Globe, Mic2, Settings2, Wallet as WalletIcon, Zap, Command } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  BrainCircuit,
+  Command,
+  Dumbbell,
+  FileText,
+  Globe,
+  Layers3,
+  Mic2,
+  Plus,
+  Settings2,
+  ShieldCheck,
+  Wallet as WalletIcon,
+  Zap,
+} from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { OPENWORK_EXTENSION_CATALOG } from "../../../../app/constants";
@@ -64,6 +79,57 @@ const STARTUP_SKELETON_ROWS = [
   { id: "final", titleWidth: "36%", bodyWidth: "74%" },
 ];
 const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
+
+const MATTERHORN_STARTER_TASKS = [
+  {
+    title: "Use Bittensor",
+    description: "Find subnets for image generation and explain how I can use them safely.",
+    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Explain what each subnet does, what Matterhorn can do today, adapter support, risks, and safe next steps.",
+    icon: BrainCircuit,
+  },
+  {
+    title: "Show my TAO",
+    description: "Read a public SS58 wallet and summarize TAO/stake exposure.",
+    prompt: "Use unified crypto chat. Show my TAO and where I am staked for this public SS58 address: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
+    icon: WalletIcon,
+  },
+  {
+    title: "Compare validators",
+    description: "Review subnet 14 validator choices with a balanced strategy.",
+    prompt: "Use unified crypto chat. Compare validators on Bittensor subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, and what context is missing before a staking preview.",
+    icon: Activity,
+  },
+  {
+    title: "Preview Hyperliquid",
+    description: "Inspect orderbook/exposure with live submission off.",
+    prompt: "Use unified crypto chat. Show Hyperliquid BTC orderbook context and explain the preview-only external-signer flow. Make clear Can submit: No and Live submission: Off.",
+    icon: BarChart3,
+  },
+  {
+    title: "Analyze Polymarket",
+    description: "Summarize a prediction market and compliance status.",
+    prompt: "Use unified crypto chat. Summarize a Polymarket market for this query: <topic>. Include market status, outcomes, liquidity/orderbook context if available, compliance state, and preview availability.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Create wellness workflow",
+    description: "Build a client-safe training plan packet.",
+    prompt: "Create a 4-week beginner strength and mobility plan for a personal trainer client, including a check-in template, safe non-medical disclaimer, and deliverable packet structure.",
+    icon: Dumbbell,
+  },
+  {
+    title: "Build any workflow",
+    description: "Turn a plain-English business request into artifacts.",
+    prompt: "Create a reusable workflow packet for a yoga instructor offering an 8-week program: offer page copy, onboarding questionnaire, weekly check-in artifact, client-safe disclaimers, and follow-up cadence.",
+    icon: Layers3,
+  },
+  {
+    title: "Create evidence",
+    description: "Generate a safe customer readiness checklist.",
+    prompt: "Create a customer-safe readiness checklist for Matterhorn Work that covers Bittensor, Hyperliquid, Polymarket, wellness workflows, external-signer boundaries, and what evidence a tester should collect.",
+    icon: FileText,
+  },
+] as const;
 
 type StatusBarOverrides = Pick<
   StatusBarProps,
@@ -882,58 +948,71 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : (
                     <div className="flex flex-1 items-center justify-center px-6 py-16">
-                      <div className="w-full max-w-md space-y-6">
+                      <div className="w-full max-w-3xl space-y-6">
                         <div className="space-y-1 text-center">
                           <h2 className="text-lg font-semibold text-dls-text">
-                            {t("session.select_or_create_session")}
+                            Start from chat, then review the evidence.
                           </h2>
-                          <p className="text-xs text-dls-secondary">Try one of these to get started:</p>
+                          <p className="mx-auto max-w-xl text-xs leading-relaxed text-dls-secondary">
+                            Create a session or choose a Matterhorn task. These prompts open the real product lanes:
+                            Bittensor, market previews, workflow artifacts, and customer-safe evidence.
+                          </p>
                         </div>
-                        <div className="space-y-2">
+                        <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
-                            onClick={() => {
-                              props.sidebar.onCreateTaskWithPrompt?.(
-                                props.selectedWorkspaceId,
-                                "Create a sample CSV file with 20 rows of fake customer data (name, email, company, revenue). Then show me a summary of the data.",
-                              );
-                            }}
+                            className="inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-medium text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff]"
+                            disabled={props.sidebar.newTaskDisabled}
+                            onClick={() => props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId)}
                           >
-                            <img src="https://cdn.simpleicons.org/googlesheets" alt="" width={20} height={20} className="mt-0.5 shrink-0" />
-                            <div>
-                              <div className="text-[13px] font-medium text-dls-text">Edit a CSV</div>
-                              <div className="mt-0.5 text-[11px] text-dls-secondary">Create a sample spreadsheet with customer data</div>
-                            </div>
+                            <Plus className="size-4" />
+                            Create blank session
                           </button>
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
-                            onClick={() => {
-                              props.sidebar.onCreateTaskWithPrompt?.(
-                                props.selectedWorkspaceId,
-                                "Open craigslist.org in the browser and search for couches for sale. Show me the top 5 results with prices.",
-                              );
-                            }}
+                            className="inline-flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                            onClick={openWalletRailPane}
                           >
-                            <img src="/matterhorn-mark.svg" alt="" width={20} height={20} className="mt-0.5 shrink-0" />
-                            <div>
-                              <div className="text-[13px] font-medium text-dls-text">Automate a browser task</div>
-                              <div className="mt-0.5 text-[11px] text-dls-secondary">Search Craigslist for couches and list the results</div>
-                            </div>
+                            <WalletIcon className="size-4" />
+                            Open Crypto panel
                           </button>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {MATTERHORN_STARTER_TASKS.map((task) => {
+                            const Icon = task.icon;
+                            return (
+                              <button
+                                key={task.title}
+                                type="button"
+                                className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                                onClick={() => {
+                                  props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
+                                }}
+                              >
+                                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                                  <Icon className="size-4" />
+                                </span>
+                                <span>
+                                  <span className="block text-[13px] font-medium text-dls-text">{task.title}</span>
+                                  <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{task.description}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
                           <button
                             type="button"
-                            className="flex w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:bg-dls-hover"
+                            className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
                             onClick={() => {
                               props.onOpenSettings?.();
                             }}
                           >
-                            <img src="https://cdn.simpleicons.org/hackthebox" alt="" width={20} height={20} className="mt-0.5 shrink-0" />
-                            <div>
-                              <div className="text-[13px] font-medium text-dls-text">Connect an extension</div>
-                              <div className="mt-0.5 text-[11px] text-dls-secondary">Add MCP servers, plugins, and integrations</div>
-                            </div>
+                            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                              <Settings2 className="size-4" />
+                            </span>
+                            <span>
+                              <span className="block text-[13px] font-medium text-dls-text">Connect Web3 tools</span>
+                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, agent tools, wallet connectors, and Matterhorn services.</span>
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -1000,13 +1079,13 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="flex w-11 shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1 py-2 text-muted-foreground mac:titlebar-no-drag">
+          <aside className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1.5 py-2 text-muted-foreground mac:titlebar-no-drag">
             {isElectronRuntime() ? (
               <Button
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                  "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                   browserRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openBrowserRailPane}
@@ -1015,6 +1094,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={browserRailActive}
               >
                 <Globe size={17} />
+                <span className="text-[9px] leading-none">Browser</span>
               </Button>
             ) : null}
             {voiceExtensionEnabled ? (
@@ -1022,7 +1102,7 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                  "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                   voiceRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openVoiceRailPane}
@@ -1031,13 +1111,14 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={voiceRailActive}
               >
                 <Mic2 size={17} />
+                <span className="text-[9px] leading-none">Voice</span>
               </Button>
             ) : null}
             <Button
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                 artifactRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openArtifactRailPane}
@@ -1047,6 +1128,7 @@ export function SessionPage(props: SessionPageProps) {
               disabled={!hasArtifactTargets}
             >
               <FileText size={17} />
+              <span className="text-[9px] leading-none">Files</span>
               {artifactTargetCount > 0 ? (
                 <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                   {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
@@ -1057,7 +1139,7 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                 extensionsRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
@@ -1066,20 +1148,22 @@ export function SessionPage(props: SessionPageProps) {
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
+              <span className="text-[9px] leading-none">Tools</span>
             </Button>
             <Button
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "rounded-xl transition-colors hover:bg-muted hover:text-foreground",
+                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                 walletRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openWalletRailPane}
-              title="Wallet"
-              aria-label="Wallet"
+              title="Crypto: Bittensor, Hyperliquid, Polymarket"
+              aria-label="Crypto: Bittensor, Hyperliquid, Polymarket"
               aria-pressed={walletRailActive}
             >
               <WalletIcon size={17} />
+              <span className="text-[9px] leading-none">Crypto</span>
             </Button>
           </aside>
           </div>

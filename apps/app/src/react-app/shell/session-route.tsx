@@ -2052,14 +2052,17 @@ export function SessionRoute() {
           ? `\n\n## Wallet Context\nConnected wallet: ${wallet.snapshot.address}\nChain ID: ${wallet.snapshot.chainId}\nETH: ${wallet.snapshot.ethBalance ?? "unknown"}\nUSDC: ${wallet.snapshot.usdcBalance ?? "unknown"}\nYou can use the wallet MCP tools to check balances, sign messages, and prepare transactions on behalf of the user.`
           : "";
 
-        // Crypto system prompt injected conditionally when the message is crypto-related
+        // Crypto system prompt injected conditionally when the message is crypto-related.
+        // Bittensor and market read/preview flows are public/external-signer-first
+        // and should not require an EVM wallet connection before the agent can
+        // see the Matterhorn crypto tools and safety rules.
         const cryptoPrompt =
-          wallet.snapshot.isConnected && shouldInjectCryptoPrompt(text)
+          shouldInjectCryptoPrompt(text)
             ? buildCryptoSystemPrompt(
-                wallet.snapshot.address,
-                wallet.snapshot.chainId,
-                wallet.snapshot.ethBalance,
-                wallet.snapshot.usdcBalance,
+                wallet.snapshot.isConnected ? wallet.snapshot.address : null,
+                wallet.snapshot.isConnected ? wallet.snapshot.chainId : null,
+                wallet.snapshot.isConnected ? wallet.snapshot.ethBalance : null,
+                wallet.snapshot.isConnected ? wallet.snapshot.usdcBalance : null,
               )
             : "";
 
