@@ -363,6 +363,7 @@ export function SessionPage(props: SessionPageProps) {
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
+  const pendingProtocolRailPanelRef = useRef<VenueSidePanel | null>(null);
 
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
@@ -429,6 +430,13 @@ export function SessionPage(props: SessionPageProps) {
   useEffect(() => {
     props.onAccessibleTargetsChange?.(accessibleTargets);
   }, [accessibleTargets, props.onAccessibleTargetsChange]);
+  useEffect(() => {
+    if (!props.selectedSessionId) return;
+    const pendingPanel = pendingProtocolRailPanelRef.current;
+    if (!pendingPanel) return;
+    pendingProtocolRailPanelRef.current = null;
+    setCurrentSidePanel(pendingPanel);
+  }, [props.selectedSessionId, setCurrentSidePanel]);
   const commitBrowserPanelWidth = useCallback(() => {
     const size = browserPanelRef.current?.getSize();
     if (size?.inPixels) setBrowserPanelWidth(Math.round(size.inPixels));
@@ -523,9 +531,34 @@ export function SessionPage(props: SessionPageProps) {
   const openWalletRailPane = useCallback(() => {
     toggleCurrentSidePanel("bittensor");
   }, [toggleCurrentSidePanel]);
-  const openVenueRailPane = useCallback((panel: VenueSidePanel) => {
-    toggleCurrentSidePanel(panel);
-  }, [toggleCurrentSidePanel]);
+  const primeProtocolRailPrompt = useCallback((panel: VenueSidePanel) => {
+    const launcher = protocolWorkflowLaunchers.find((item) => item.panel === panel);
+    if (!launcher?.prompt) return;
+    if (props.selectedSessionId && props.surface && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("matterhorn:crypto-chat-handoff", {
+        detail: {
+          prompt: launcher.prompt,
+          panel,
+          venue: panel,
+          source: "protocol-rail",
+        },
+      }));
+      return;
+    }
+    pendingProtocolRailPanelRef.current = panel;
+    if (props.sidebar.onCreateTaskWithPrompt) {
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
+      return;
+    }
+    props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
+  }, [props.selectedSessionId, props.selectedWorkspaceId, props.sidebar, props.surface, protocolWorkflowLaunchers]);
+  const openVenueRailPane = useCallback((panel: VenueSidePanel, options?: { primePrompt?: boolean }) => {
+    if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
+      pendingProtocolRailPanelRef.current = panel;
+    }
+    setCurrentSidePanel(panel);
+    if (options?.primePrompt) primeProtocolRailPrompt(panel);
+  }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
     setArtifactTarget((current) => current?.id === target.id ? null : current);
@@ -1298,7 +1331,7 @@ export function SessionPage(props: SessionPageProps) {
                     "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                     item.active && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
                   )}
-                  onClick={() => openVenueRailPane(item.panel)}
+                  onClick={() => openVenueRailPane(item.panel, { primePrompt: true })}
                   title={item.title}
                   aria-label={item.title}
                   aria-pressed={item.active}

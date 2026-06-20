@@ -132,6 +132,12 @@ assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launch
 assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail clicks should prime an editable chat prompt");
+assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
+assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
+assert.ok(sessionPage.includes('source: "protocol-rail"'), "protocol rail prompt handoffs should identify their source");
+assert.ok(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), "protocol rail prompts should insert into the active composer without auto-sending");
+assert.ok(sessionPage.includes("openVenueRailPane(item.panel, { primePrompt: true })"), "protocol rail buttons should open the desk and prime the chat composer");
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.ok(sessionPage.includes('card.id === "decentralized_services_operator"'), "right rail should expose future Services workflow launcher");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
