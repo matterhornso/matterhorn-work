@@ -1,0 +1,335 @@
+export type CustomerWorkflowIconHint =
+  | "bittensor"
+  | "hyperliquid"
+  | "polymarket"
+  | "wellness"
+  | "services"
+  | "blank";
+
+export type CustomerWorkflowTemplate = {
+  id: string;
+  name: string;
+  summary: string;
+  promise: string;
+  category: "bittensor" | "markets" | "wellness" | "decentralized_services" | "future";
+  status: "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
+  examplePrompts: string[];
+  launch: {
+    primaryCta: string;
+    secondaryCta: string;
+    defaultPrompt: string;
+    handoffContextLabel: string;
+    recommendedSurface: "protocol_desk" | "workflow_chat" | "future_service";
+  };
+  ui: {
+    iconHint: CustomerWorkflowIconHint;
+    accent: "matterhorn_blue" | "neutral" | "caution";
+    shortDescription: string;
+  };
+  routing: {
+    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "general";
+    opensPanel?: "bittensor" | "hyperliquid" | "polymarket";
+    startsSession: true;
+  };
+  safetyBoundaries: {
+    acceptsSecrets: false;
+    acceptsPrivateKeys: false;
+    acceptsApiSecrets: false;
+    acceptsRawSignatures: false;
+    canSubmit: false;
+    liveExecutionEnabled: false;
+    canExecute: boolean;
+    requiresExternalSigner: boolean;
+    allowsRealFunds: false;
+  };
+};
+
+export type CustomerWorkflowStarterCard = {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  iconHint: CustomerWorkflowIconHint;
+  panel?: "bittensor" | "hyperliquid" | "polymarket";
+  recommendedSurface: CustomerWorkflowTemplate["launch"]["recommendedSurface"];
+};
+
+type CustomerWorkflowTemplateResponse = {
+  ok?: boolean;
+  version?: string;
+  customerTemplates?: unknown[];
+};
+
+const MARKET_PREVIEW_SUFFIX =
+  "Keep this read/preview only. Make clear: Can submit: No, Live submission: Off, and Matterhorn never signs or holds keys.";
+
+const BITTENSOR_SUFFIX =
+  "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
+
+const WELLNESS_SUFFIX =
+  "Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating.";
+
+const SERVICES_SUFFIX =
+  "Treat service hooks as planned-not-live future contracts. Do not claim live hosting, storage, email, payment, identity, custody, or provider execution.";
+
+export const FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
+  {
+    id: "bittensor_operator",
+    name: "Use Bittensor",
+    summary: "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
+    promise: "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
+    category: "bittensor",
+    status: "beta_ready",
+    examplePrompts: ["Show my TAO", "Which subnet is useful for image generation?", "Compare validators on subnet 14"],
+    launch: {
+      primaryCta: "Open Bittensor panel",
+      secondaryCta: "Preview a stake handoff",
+      defaultPrompt: "Show my TAO",
+      handoffContextLabel: "Public wallet address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "bittensor",
+      accent: "matterhorn_blue",
+      shortDescription: "Read TAO balances and prepare external-signer staking handoffs.",
+    },
+    routing: { chatMode: "bittensor", opensPanel: "bittensor", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: true,
+      requiresExternalSigner: true,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "hyperliquid_trader",
+    name: "Trade on Hyperliquid",
+    summary: "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
+    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    category: "markets",
+    status: "preview_only",
+    examplePrompts: ["Preview a Hyperliquid BTC-PERP trade", "Show my Hyperliquid exposure"],
+    launch: {
+      primaryCta: "Open Hyperliquid panel",
+      secondaryCta: "Preview a trade",
+      defaultPrompt: "Preview a Hyperliquid BTC-PERP trade",
+      handoffContextLabel: "Public wallet address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "hyperliquid",
+      accent: "matterhorn_blue",
+      shortDescription: "Preview Hyperliquid trades and generate external-signer handoffs.",
+    },
+    routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "polymarket_researcher",
+    name: "Bet on Polymarket",
+    summary: "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
+    promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+    category: "markets",
+    status: "preview_only",
+    examplePrompts: ["Summarize this Polymarket market", "Preview a Polymarket trade"],
+    launch: {
+      primaryCta: "Open Polymarket panel",
+      secondaryCta: "Research markets",
+      defaultPrompt: "Summarize this Polymarket market",
+      handoffContextLabel: "Public wallet address",
+      recommendedSurface: "protocol_desk",
+    },
+    ui: {
+      iconHint: "polymarket",
+      accent: "matterhorn_blue",
+      shortDescription: "Research Polymarket markets and prepare signing handoffs.",
+    },
+    routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "wellness_creator_workflow",
+    name: "Build a Wellness Creator business workflow",
+    summary: "Design wellness programs, service packages, and client management workflows without giving medical advice.",
+    promise: "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    category: "wellness",
+    status: "workflow_ready",
+    examplePrompts: ["Create a wellness program for my clients", "Build a yoga class schedule"],
+    launch: {
+      primaryCta: "Start wellness workflow",
+      secondaryCta: "Plan a service",
+      defaultPrompt: "Create a wellness program for my clients",
+      handoffContextLabel: "Audience and goal",
+      recommendedSurface: "workflow_chat",
+    },
+    ui: {
+      iconHint: "wellness",
+      accent: "neutral",
+      shortDescription: "Design wellness programs and service packages without medical advice.",
+    },
+    routing: { chatMode: "wellness", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "decentralized_services_operator",
+    name: "Explore future decentralized services",
+    summary: "Plan future decentralized service actions across storage, hosting, email, payments, and identity.",
+    promise: "Future-contract planning only. No live provider execution.",
+    category: "decentralized_services",
+    status: "planned_not_live",
+    examplePrompts: ["Plan a decentralized storage upload", "Compare provider fixtures for hosting"],
+    launch: {
+      primaryCta: "Plan future services",
+      secondaryCta: "Compare fixtures",
+      defaultPrompt: "Plan a decentralized storage upload",
+      handoffContextLabel: "Capability and intent",
+      recommendedSurface: "future_service",
+    },
+    ui: {
+      iconHint: "services",
+      accent: "neutral",
+      shortDescription: "Plan future decentralized services across storage, hosting, email, payments, and identity.",
+    },
+    routing: { chatMode: "services", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+  {
+    id: "blank_chat_workflow",
+    name: "Blank chat",
+    summary: "Start a free-form chat session with the Matterhorn Work engine.",
+    promise: "Open-ended assistance. You choose the goal.",
+    category: "future",
+    status: "blank",
+    examplePrompts: ["What can you do?"],
+    launch: {
+      primaryCta: "Start blank chat",
+      secondaryCta: "Browse templates",
+      defaultPrompt: "What can you do?",
+      handoffContextLabel: "Goal",
+      recommendedSurface: "workflow_chat",
+    },
+    ui: {
+      iconHint: "blank",
+      accent: "neutral",
+      shortDescription: "Start a free-form chat with the Matterhorn Work engine.",
+    },
+    routing: { chatMode: "general", startsSession: true },
+    safetyBoundaries: {
+      acceptsSecrets: false,
+      acceptsPrivateKeys: false,
+      acceptsApiSecrets: false,
+      acceptsRawSignatures: false,
+      canSubmit: false,
+      liveExecutionEnabled: false,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+  },
+];
+
+function isTemplate(value: unknown): value is CustomerWorkflowTemplate {
+  if (!value || typeof value !== "object") return false;
+  const template = value as CustomerWorkflowTemplate;
+  return (
+    typeof template.id === "string" &&
+    typeof template.name === "string" &&
+    typeof template.launch?.defaultPrompt === "string" &&
+    typeof template.ui?.iconHint === "string" &&
+    typeof template.routing?.chatMode === "string" &&
+    template.safetyBoundaries?.acceptsSecrets === false &&
+    template.safetyBoundaries?.liveExecutionEnabled === false &&
+    template.safetyBoundaries?.canSubmit === false
+  );
+}
+
+export function normalizeCustomerWorkflowTemplates(input: CustomerWorkflowTemplateResponse): CustomerWorkflowTemplate[] {
+  const templates = Array.isArray(input.customerTemplates)
+    ? input.customerTemplates.filter(isTemplate)
+    : [];
+  return templates.length ? templates : FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES;
+}
+
+export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflowTemplate[]> {
+  const response = await fetch("/api/workflows/templates");
+  if (!response.ok) throw new Error(`Could not load workflow templates (${response.status})`);
+  const json = await response.json() as CustomerWorkflowTemplateResponse;
+  return normalizeCustomerWorkflowTemplates(json);
+}
+
+export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate): string {
+  const prompt = template.launch.defaultPrompt || template.examplePrompts[0] || template.name;
+  switch (template.routing.chatMode) {
+    case "bittensor":
+      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX}`;
+    case "hyperliquid":
+      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX}`;
+    case "polymarket":
+      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX}`;
+    case "wellness":
+      return `${prompt}. ${WELLNESS_SUFFIX}`;
+    case "services":
+      return `${prompt}. ${SERVICES_SUFFIX}`;
+    default:
+      return prompt;
+  }
+}
+
+export function buildCustomerWorkflowStarterCards(
+  templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
+): CustomerWorkflowStarterCard[] {
+  return templates.map((template) => ({
+    id: template.id,
+    title: template.launch.primaryCta || template.name,
+    description: template.ui.shortDescription || template.summary,
+    prompt: buildCustomerWorkflowPrompt(template),
+    iconHint: template.ui.iconHint,
+    panel: template.routing.opensPanel,
+    recommendedSurface: template.launch.recommendedSurface,
+  }));
+}

@@ -4,7 +4,6 @@ import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import {
-  Activity,
   BarChart3,
   BrainCircuit,
   Check,
@@ -13,7 +12,6 @@ import {
   Layers3,
   Minimize2,
   ShieldCheck,
-  Wallet,
 } from "lucide-react";
 
 import { createClient, unwrap } from "../../../../app/lib/opencode";
@@ -80,61 +78,24 @@ import {
   useBittensorSessionContextStore,
   type BittensorSessionContext,
 } from "./bittensor-context-store";
+import {
+  buildCustomerWorkflowStarterCards,
+  fetchCustomerWorkflowTemplates,
+  type CustomerWorkflowIconHint,
+} from "../workflows/customer-workflow-templates";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
 const DEFAULT_COMPOSER_CONTROL_TEXT = "Help me outline the next Matterhorn task.";
 
-const SESSION_STARTER_PROMPTS = [
-  {
-    title: "Use Bittensor",
-    description: "Find image-generation subnets and safe next steps.",
-    prompt: "Use unified crypto chat. Find Bittensor subnets useful for image generation. Explain utility, adapter support, risks, and safe next steps.",
-    icon: BrainCircuit,
-  },
-  {
-    title: "Show my TAO",
-    description: "Read a public SS58 wallet and stake positions.",
-    prompt: "Use unified crypto chat. Show my TAO and where I am staked for this public SS58 address: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
-    icon: Wallet,
-  },
-  {
-    title: "Compare validators",
-    description: "Review subnet 14 validator candidates.",
-    prompt: "Use unified crypto chat. Compare validators on Bittensor subnet 14 with a balanced strategy. Include data freshness and missing context before staking.",
-    icon: Activity,
-  },
-  {
-    title: "Hyperliquid preview",
-    description: "Read BTC orderbook with live submission off.",
-    prompt: "Use unified crypto chat. Show Hyperliquid BTC orderbook context and explain the preview-only external-signer flow. Make clear Can submit: No and Live submission: Off.",
-    icon: BarChart3,
-  },
-  {
-    title: "Polymarket read",
-    description: "Summarize a market and compliance status.",
-    prompt: "Use unified crypto chat. Summarize a Polymarket market for this query: <topic>. Include status, outcomes, liquidity if available, compliance state, and preview availability.",
-    icon: ShieldCheck,
-  },
-  {
-    title: "Wellness workflow",
-    description: "Create a client-safe training packet.",
-    prompt: "Create a 4-week beginner strength and mobility plan for a personal trainer client, including a check-in template, safe non-medical disclaimer, and deliverable packet structure.",
-    icon: Dumbbell,
-  },
-  {
-    title: "Build a service workflow",
-    description: "Package a yoga or dietician offer.",
-    prompt: "Create a reusable workflow packet for a yoga instructor offering an 8-week program: offer page copy, onboarding questionnaire, weekly check-in artifact, client-safe disclaimers, and follow-up cadence.",
-    icon: Layers3,
-  },
-  {
-    title: "Customer evidence",
-    description: "Generate a readiness checklist.",
-    prompt: "Create a customer-safe readiness checklist for Matterhorn Work across Bittensor, Hyperliquid, Polymarket, wellness workflows, external-signer boundaries, and evidence collection.",
-    icon: FileText,
-  },
-] as const;
+const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
+  bittensor: BrainCircuit,
+  hyperliquid: BarChart3,
+  polymarket: ShieldCheck,
+  wellness: Dumbbell,
+  services: Layers3,
+  blank: FileText,
+};
 
 type SessionError = {
   message: string;
@@ -565,6 +526,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
     queryFn: async () => (await props.client.getSessionSnapshot(props.workspaceId, props.sessionId, { limit: 140 })).item,
     staleTime: 500,
   });
+  const customerWorkflowTemplatesQuery = useQuery({
+    queryKey: ["matterhorn-customer-workflow-templates"],
+    queryFn: fetchCustomerWorkflowTemplates,
+    staleTime: 60_000,
+  });
+  const customerWorkflowStarterCards = useMemo(
+    () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data),
+    [customerWorkflowTemplatesQuery.data],
+  );
 
   const currentSnapshot = snapshotQuery.data?.session.id === props.sessionId ? snapshotQuery.data : null;
   const transcriptState = useSharedQueryState<UIMessage[]>(transcriptQueryKey, EMPTY_TRANSCRIPT);
@@ -1356,11 +1326,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       </button>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                      {SESSION_STARTER_PROMPTS.map((item) => {
-                        const Icon = item.icon;
+                      {customerWorkflowStarterCards.map((item) => {
+                        const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         return (
                           <button
-                            key={item.title}
+                            key={item.id}
                             type="button"
                             className="flex min-h-[96px] items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
                             onClick={() => void typeComposerText(item.prompt)}

@@ -87,6 +87,7 @@
     "test:matterhorn-workflow-contract": "node scripts/matterhorn-workflow-contract.test.mjs",
     "test:matterhorn-workflow-catalog": "node scripts/matterhorn-workflow-catalog.test.mjs",
     "test:matterhorn-workflow-catalog-api-mcp": "node scripts/matterhorn-workflow-catalog-api-mcp.test.mjs",
+    "test:customer-workflow-template-client": "bun test apps/app/tests/customer-workflow-templates.test.ts",
     "test:matterhorn-workflow-evidence-bundles": "node scripts/matterhorn-workflow-evidence-bundles.test.mjs",
     "test:matterhorn-workflow-template-registry": "node scripts/matterhorn-workflow-template-registry.test.mjs",
     "test:matterhorn-customer-workflow-template-registry": "node scripts/matterhorn-customer-workflow-template-registry.test.mjs",

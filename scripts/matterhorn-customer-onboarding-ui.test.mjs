@@ -15,6 +15,7 @@ const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx
 const english = read("apps/app/src/i18n/locales/en.ts");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
+const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
 const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx");
@@ -40,25 +41,28 @@ for (const phrase of [
   "New blank chat",
   "Open Bittensor workspace",
   "Choose a workspace, then ask in plain English.",
-  "Open Bittensor desk",
-  "Open Hyperliquid desk",
-  "Open Polymarket desk",
-  "Build wellness workflow",
+  "Open Bittensor panel",
+  "Open Hyperliquid panel",
+  "Open Polymarket panel",
+  "Start wellness workflow",
+  "Plan future services",
+  "Start blank chat",
   "Use Bittensor",
   "Show my TAO",
   "Compare validators",
-  "Preview Hyperliquid",
-  "Analyze Polymarket",
-  "Create wellness workflow",
-  "Build any workflow",
+  "Preview a Hyperliquid BTC-PERP trade",
+  "Summarize this Polymarket market",
+  "Create a wellness program for my clients",
+  "Plan a decentralized storage upload",
   "Connect Web3 tools",
   "Start with a Matterhorn workflow",
-  "Hyperliquid preview",
-  "Polymarket read",
-  "Wellness workflow",
-  "Customer evidence",
+  "Can submit: No",
+  "Live submission: Off",
+  "Matterhorn never signs",
+  "Do not ask for seed phrases",
+  "planned-not-live future contracts",
 ]) {
-  assert.ok(`${sessionPage}\n${sessionSurface}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+  assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
 }
 
 for (const forbidden of [
@@ -70,15 +74,15 @@ for (const forbidden of [
   "Control your browser",
   "Your computer, but it works for you.",
 ]) {
-  assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
+  assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
 }
 
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Crypto rail should mount the Bittensor/Crypto panel");
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Wallet/Crypto panel should render the selected protocol workspace");
 assert.ok(walletPanel.includes("Bittensor public reads, subnet discovery, Hyperliquid/Polymarket read previews"), "no-wallet crypto panel should explain public read flows");
-assert.ok(sessionPage.includes('panel: "bittensor"'), "right rail should expose a dedicated Bittensor workspace");
-assert.ok(sessionPage.includes('panel: "hyperliquid"'), "right rail should expose a dedicated Hyperliquid workspace");
-assert.ok(sessionPage.includes('panel: "polymarket"'), "right rail should expose a dedicated Polymarket workspace");
+assert.ok(workflowTemplates.includes('opensPanel: "bittensor"'), "right rail should expose a dedicated Bittensor workspace");
+assert.ok(workflowTemplates.includes('opensPanel: "hyperliquid"'), "right rail should expose a dedicated Hyperliquid workspace");
+assert.ok(workflowTemplates.includes('opensPanel: "polymarket"'), "right rail should expose a dedicated Polymarket workspace");
 assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
