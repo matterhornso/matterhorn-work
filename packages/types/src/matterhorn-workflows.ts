@@ -1218,6 +1218,72 @@ export const MATTERHORN_CUSTOMER_WORKFLOW_STATUSES = [
 ] as const;
 export type MatterhornCustomerWorkflowStatus = (typeof MATTERHORN_CUSTOMER_WORKFLOW_STATUSES)[number];
 
+export const MATTERHORN_CUSTOMER_WORKFLOW_RECOMMENDED_SURFACES = [
+  "protocol_desk",
+  "workflow_chat",
+  "evidence_packet",
+  "future_service",
+] as const;
+export type MatterhornCustomerWorkflowRecommendedSurface =
+  (typeof MATTERHORN_CUSTOMER_WORKFLOW_RECOMMENDED_SURFACES)[number];
+
+export const MATTERHORN_CUSTOMER_WORKFLOW_ICON_HINTS = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "services",
+  "blank",
+] as const;
+export type MatterhornCustomerWorkflowIconHint =
+  (typeof MATTERHORN_CUSTOMER_WORKFLOW_ICON_HINTS)[number];
+
+export const MATTERHORN_CUSTOMER_WORKFLOW_ACCENTS = [
+  "matterhorn_blue",
+  "neutral",
+  "caution",
+] as const;
+export type MatterhornCustomerWorkflowAccent = (typeof MATTERHORN_CUSTOMER_WORKFLOW_ACCENTS)[number];
+
+export const MATTERHORN_CUSTOMER_WORKFLOW_ROUTING_CHAT_MODES = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "services",
+  "general",
+] as const;
+export type MatterhornCustomerWorkflowRoutingChatMode =
+  (typeof MATTERHORN_CUSTOMER_WORKFLOW_ROUTING_CHAT_MODES)[number];
+
+export const MATTERHORN_CUSTOMER_WORKFLOW_OPEN_PANELS = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+] as const;
+export type MatterhornCustomerWorkflowOpenPanel =
+  (typeof MATTERHORN_CUSTOMER_WORKFLOW_OPEN_PANELS)[number];
+
+export interface MatterhornCustomerWorkflowLaunchMetadata {
+  primaryCta: string;
+  secondaryCta: string;
+  defaultPrompt: string;
+  handoffContextLabel: string;
+  recommendedSurface: MatterhornCustomerWorkflowRecommendedSurface;
+}
+
+export interface MatterhornCustomerWorkflowUiMetadata {
+  iconHint: MatterhornCustomerWorkflowIconHint;
+  accent: MatterhornCustomerWorkflowAccent;
+  shortDescription: string;
+}
+
+export interface MatterhornCustomerWorkflowRoutingMetadata {
+  chatMode: MatterhornCustomerWorkflowRoutingChatMode;
+  opensPanel?: MatterhornCustomerWorkflowOpenPanel;
+  startsSession: boolean;
+}
+
 export interface MatterhornCustomerWorkflowTemplate {
   version: "matterhorn.customer.workflow.template.v1";
   id: string;
@@ -1239,6 +1305,9 @@ export interface MatterhornCustomerWorkflowTemplate {
   };
   serviceHooks: MatterhornWorkflowServiceHook[];
   chatMode: string;
+  launch: MatterhornCustomerWorkflowLaunchMetadata;
+  ui: MatterhornCustomerWorkflowUiMetadata;
+  routing: MatterhornCustomerWorkflowRoutingMetadata;
   recommendedCommands?: {
     cli?: string[];
     mcp?: string[];
@@ -1341,6 +1410,24 @@ export const BITTENSOR_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   },
   serviceHooks: [{ hook: "bittensor", status: "live_local" }],
   chatMode: "crypto chat",
+  launch: {
+    primaryCta: "Open Bittensor panel",
+    secondaryCta: "Preview a stake handoff",
+    defaultPrompt: "Show my TAO",
+    handoffContextLabel: "Public wallet address",
+    recommendedSurface: "protocol_desk",
+  },
+  ui: {
+    iconHint: "bittensor",
+    accent: "matterhorn_blue",
+    shortDescription:
+      "Read TAO balances and prepare external-signer staking handoffs.",
+  },
+  routing: {
+    chatMode: "bittensor",
+    opensPanel: "bittensor",
+    startsSession: true,
+  },
   recommendedCommands: {
     cli: ['matterhorn-work crypto chat --message "show my TAO" --json'],
     mcp: ["matterhorn_crypto_chat"],
@@ -1434,6 +1521,24 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   },
   serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
   chatMode: "crypto chat",
+  launch: {
+    primaryCta: "Open Hyperliquid panel",
+    secondaryCta: "Preview a trade",
+    defaultPrompt: "Preview a Hyperliquid BTC-PERP trade",
+    handoffContextLabel: "Public wallet address",
+    recommendedSurface: "protocol_desk",
+  },
+  ui: {
+    iconHint: "hyperliquid",
+    accent: "matterhorn_blue",
+    shortDescription:
+      "Preview Hyperliquid trades and generate external-signer handoffs.",
+  },
+  routing: {
+    chatMode: "hyperliquid",
+    opensPanel: "hyperliquid",
+    startsSession: true,
+  },
   recommendedCommands: {
     cli: ['matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json'],
     mcp: ["matterhorn_hyperliquid_prepare_handoff"],
@@ -1521,6 +1626,24 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
   },
   serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
   chatMode: "crypto chat",
+  launch: {
+    primaryCta: "Open Polymarket panel",
+    secondaryCta: "Research markets",
+    defaultPrompt: "Summarize this Polymarket market",
+    handoffContextLabel: "Public wallet address",
+    recommendedSurface: "protocol_desk",
+  },
+  ui: {
+    iconHint: "polymarket",
+    accent: "matterhorn_blue",
+    shortDescription:
+      "Research Polymarket markets and prepare signing handoffs.",
+  },
+  routing: {
+    chatMode: "polymarket",
+    opensPanel: "polymarket",
+    startsSession: true,
+  },
   recommendedCommands: {
     cli: ['matterhorn-work crypto chat --message "preview Polymarket market" --json'],
     mcp: ["matterhorn_polymarket_prepare_handoff"],
@@ -1629,6 +1752,23 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
     { hook: "hosting", status: "planned_not_live" },
   ],
   chatMode: "workflow chat",
+  launch: {
+    primaryCta: "Start wellness workflow",
+    secondaryCta: "Plan a service",
+    defaultPrompt: "Create a wellness program for my clients",
+    handoffContextLabel: "Audience and goal",
+    recommendedSurface: "workflow_chat",
+  },
+  ui: {
+    iconHint: "wellness",
+    accent: "neutral",
+    shortDescription:
+      "Design wellness programs and service packages without medical advice.",
+  },
+  routing: {
+    chatMode: "wellness",
+    startsSession: true,
+  },
   recommendedCommands: {
     cli: [
       "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
@@ -1720,6 +1860,23 @@ export const DECENTRALIZED_SERVICES_OPERATOR_CUSTOMER_TEMPLATE: MatterhornCustom
     { hook: "identity", status: "planned_not_live" },
   ],
   chatMode: "services chat",
+  launch: {
+    primaryCta: "Plan future services",
+    secondaryCta: "Compare fixtures",
+    defaultPrompt: "Plan a decentralized storage upload",
+    handoffContextLabel: "Capability and intent",
+    recommendedSurface: "future_service",
+  },
+  ui: {
+    iconHint: "services",
+    accent: "neutral",
+    shortDescription:
+      "Plan future decentralized services across storage, hosting, email, payments, and identity.",
+  },
+  routing: {
+    chatMode: "services",
+    startsSession: true,
+  },
   recommendedCommands: {
     cli: ["matterhorn-work services capabilities --json"],
   },
@@ -1758,6 +1915,23 @@ export const BLANK_CHAT_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTe
   },
   serviceHooks: [],
   chatMode: "free chat",
+  launch: {
+    primaryCta: "Start blank chat",
+    secondaryCta: "Browse templates",
+    defaultPrompt: "What can you do?",
+    handoffContextLabel: "Goal",
+    recommendedSurface: "workflow_chat",
+  },
+  ui: {
+    iconHint: "blank",
+    accent: "neutral",
+    shortDescription:
+      "Start a free-form chat with the Matterhorn Work engine.",
+  },
+  routing: {
+    chatMode: "general",
+    startsSession: true,
+  },
 };
 
 export const MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY: Record<

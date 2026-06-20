@@ -372,6 +372,23 @@ interface MatterhornCustomerWorkflowTemplate {
   };
   serviceHooks: MatterhornWorkflowServiceHook[];
   chatMode: string;
+  launch: {
+    primaryCta: string;
+    secondaryCta: string;
+    defaultPrompt: string;
+    handoffContextLabel: string;
+    recommendedSurface: "protocol_desk" | "workflow_chat" | "evidence_packet" | "future_service";
+  };
+  ui: {
+    iconHint: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "blank";
+    accent: "matterhorn_blue" | "neutral" | "caution";
+    shortDescription: string; // max 90 chars
+  };
+  routing: {
+    chatMode: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "services" | "general";
+    opensPanel?: "bittensor" | "hyperliquid" | "polymarket";
+    startsSession: boolean;
+  };
   recommendedCommands?: {
     cli?: string[];
     mcp?: string[];
@@ -381,14 +398,14 @@ interface MatterhornCustomerWorkflowTemplate {
 
 ### Built-in customer templates
 
-| Template ID | Category | Status | Chat mode | Notes |
-| --- | --- | --- | --- | --- |
-| `bittensor_operator` | bittensor | `beta_ready` | `crypto chat` | Read-only previews + external-signer handoffs. |
-| `hyperliquid_trader` | markets | `preview_only` | `crypto chat` | Read-only Hyperliquid previews. |
-| `polymarket_researcher` | markets | `preview_only` | `crypto chat` | Read-only Polymarket previews. |
-| `wellness_creator_workflow` | wellness | `workflow_ready` | `workflow chat` | Plans services/content; hooks remain planned_not_live. |
-| `decentralized_services_operator` | decentralized_services | `planned_not_live` | `services chat` | Future-contract planning only. |
-| `blank_chat_workflow` | future | `blank` | `free chat` | Open-ended chat with baseline safety boundaries. |
+| Template ID | Category | Status | Surface | Panel | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `bittensor_operator` | bittensor | `beta_ready` | `protocol_desk` | `bittensor` | Read-only previews + external-signer handoffs. |
+| `hyperliquid_trader` | markets | `preview_only` | `protocol_desk` | `hyperliquid` | Read-only Hyperliquid previews. |
+| `polymarket_researcher` | markets | `preview_only` | `protocol_desk` | `polymarket` | Read-only Polymarket previews. |
+| `wellness_creator_workflow` | wellness | `workflow_ready` | `workflow_chat` | — | Plans services/content; hooks remain planned_not_live. |
+| `decentralized_services_operator` | decentralized_services | `planned_not_live` | `future_service` | — | Future-contract planning only. |
+| `blank_chat_workflow` | future | `blank` | `workflow_chat` | — | Open-ended chat with baseline safety boundaries. |
 
 Every customer template shares the same baseline safety boundary:
 `liveExecutionEnabled: false`, `canSubmit: false`, `allowsRealFunds: false`, and

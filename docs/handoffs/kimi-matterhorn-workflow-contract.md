@@ -361,6 +361,56 @@ pnpm test:matterhorn-workflow-catalog
 
 Pending merge.
 
+## PR #TBD: Customer Template Launch Metadata
+
+**PR:** TBD — opened from `kimi/customer-template-launch-metadata` to `dev`  
+**Branch:** `kimi/customer-template-launch-metadata`  
+**Scope:** Adds launch, UI, and routing metadata to every customer workflow template so the UI and agents can launch templates consistently without touching runtime bridge files or wellness workflow internals.
+
+### Modified files
+
+| File | What changed |
+| --- | --- |
+| `packages/types/src/matterhorn-workflows.ts` | Added `MatterhornCustomerWorkflowLaunchMetadata`, `MatterhornCustomerWorkflowUiMetadata`, `MatterhornCustomerWorkflowRoutingMetadata`, and supporting union constants. Added `launch`, `ui`, and `routing` blocks to each customer template fixture. |
+| `scripts/matterhorn-workflow-catalog.mjs` | Mirrored the new `launch`/`ui`/`routing` metadata in `CUSTOMER_TEMPLATES` so the registry CLI emits it. |
+| `scripts/matterhorn-customer-workflow-template-registry.test.mjs` | Added assertions for launch/UI/routing fields, defaultPrompt safety, preview-only wording on market templates, and wellness non-medical safety. |
+| `docs/matterhorn-workflow-contract.md` | Updated the customer registry schema and built-in template table to document launch/UI/routing fields. |
+
+### Launch metadata design
+
+| Template ID | `recommendedSurface` | `opensPanel` | `routing.chatMode` | `startsSession` |
+| --- | --- | --- | --- | --- |
+| `bittensor_operator` | `protocol_desk` | `bittensor` | `bittensor` | `true` |
+| `hyperliquid_trader` | `protocol_desk` | `hyperliquid` | `hyperliquid` | `true` |
+| `polymarket_researcher` | `protocol_desk` | `polymarket` | `polymarket` | `true` |
+| `wellness_creator_workflow` | `workflow_chat` | — | `wellness` | `true` |
+| `decentralized_services_operator` | `future_service` | — | `services` | `true` |
+| `blank_chat_workflow` | `workflow_chat` | — | `general` | `true` |
+
+### Safety rules enforced in tests
+
+- Every template has `launch.defaultPrompt` and `routing.startsSession: true`.
+- No `defaultPrompt` or `handoffContextLabel` asks for private keys, seed phrases, mnemonics, API secrets, raw signatures, signed payloads, signed orders, or wallet exports.
+- Market templates include preview-only wording (`preview`, `read-only`, `no live submission`, or `can submit: no`).
+- Wellness template includes non-medical/educational safety wording.
+- `ui.shortDescription` is `<= 90` characters.
+- All existing baseline safety boundaries remain unchanged.
+
+### Commands that pass on PR #TBD
+
+```bash
+pnpm --dir packages/types build
+pnpm test:matterhorn-workflow-contract
+pnpm test:matterhorn-workflow-catalog
+pnpm test:matterhorn-workflow-template-registry
+pnpm test:matterhorn-customer-workflow-template-registry
+pnpm test:market-execution-safety-gate
+```
+
+### CI status on PR #TBD
+
+Pending merge.
+
 ## Non-overlap observed
 
 No changes were made to:
