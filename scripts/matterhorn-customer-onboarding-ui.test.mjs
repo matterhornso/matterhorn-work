@@ -189,7 +189,7 @@ for (const phrase of [
 
 for (const phrase of [
   'id: "matterhorn-crypto"',
-  'name: "Matterhorn Crypto"',
+  'name: "Matterhorn Protocols"',
   'id: "bittensor"',
   'name: "Bittensor"',
   'id: "hyperliquid"',
@@ -198,9 +198,10 @@ for (const phrase of [
   'name: "Polymarket"',
   "read/preview-only",
   "external-signer",
-  "Open Bittensor workspace",
-  "Open Hyperliquid workspace",
-  "Open Polymarket workspace",
+  "Open Bittensor desk",
+  "Open Hyperliquid desk",
+  "Open Polymarket desk",
+  "Matterhorn protocol chat",
   'ref: "matterhorn.bittensor.rail"',
   'ref: "matterhorn.hyperliquid.rail"',
   'ref: "matterhorn.polymarket.rail"',
