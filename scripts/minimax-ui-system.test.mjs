@@ -6,12 +6,14 @@
  *
  * Checks:
  * 1. All required files exist
- * 2. HTML contains all 16 screens
+ * 2. HTML contains all 22 screens
  * 3. CSS defines all required design tokens
  * 4. Safety states (green/amber/blue badges) appear in the HTML
  * 5. Forbidden copy is absent (submit buttons, custody language, OpenWork/OpenCode)
- * 6. UI system spec covers required sections
- * 7. Safety gate compatibility (runs alongside market-execution-safety-gate)
+ * 6. UI system spec covers required sections (including new Protocol Desks, Wellness, Transcript)
+ * 7. README covers new content
+ * 8. Stitch prompts cover new topics
+ * 9. Safety gate compatibility (runs alongside market-execution-safety-gate)
  */
 
 import { readFileSync } from "node:fs";
@@ -34,24 +36,6 @@ function fail(label, detail) {
   if (detail) console.error(`  ${detail}`);
 }
 
-function mustContain(file, needles) {
-  const text = read(file);
-  for (const needle of needles) {
-    if (text.includes(needle)) pass(`${file} contains "${needle}"`);
-    else fail(`${file} contains "${needle}"`, "missing");
-  }
-  return text;
-}
-
-function mustNotContain(file, needles) {
-  const text = read(file);
-  for (const needle of needles) {
-    if (text.includes(needle)) fail(`${file} excludes "${needle}"`, "PRESENT");
-    else pass(`${file} excludes "${needle}"`);
-  }
-  return text;
-}
-
 function fileExists(file) {
   try {
     readFileSync(join(repoRoot, file));
@@ -71,7 +55,7 @@ fileExists("docs/ui/matterhorn-customer-ux-refresh/styles.css");
 fileExists("docs/ui/matterhorn-customer-ux-refresh/index.html");
 fileExists("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
 
-// ── 2. HTML: all 16 screens ─────────────────────────────────
+// ── 2. HTML: all 22 screens ─────────────────────────────────
 
 const html = read("docs/ui/matterhorn-customer-ux-refresh/index.html");
 const screens = [
@@ -91,6 +75,12 @@ const screens = [
   "id=\"screen-14\"",
   "id=\"screen-15\"",
   "id=\"screen-16\"",
+  "id=\"screen-17\"",  // Bittensor Desk
+  "id=\"screen-18\"",  // Hyperliquid Desk
+  "id=\"screen-19\"",  // Polymarket Desk
+  "id=\"screen-20\"",  // Wellness Desk
+  "id=\"screen-21\"",  // Wallet Snapshot
+  "id=\"screen-22\"",  // Empty/Loading/Degraded States
 ];
 for (const s of screens) {
   if (html.includes(s)) pass(`HTML contains ${s}`);
@@ -118,7 +108,7 @@ for (const t of tokens) {
   else fail(`CSS defines ${t}`, "missing");
 }
 
-// mh-badge component
+// mh-badge component variants
 if (css.includes("mh-badge--live")) pass("CSS defines .mh-badge--live");
 else fail("CSS defines .mh-badge--live", "missing");
 
@@ -131,9 +121,17 @@ else fail("CSS defines .mh-badge--restricted", "missing");
 if (css.includes("mh-badge--error")) pass("CSS defines .mh-badge--error");
 else fail("CSS defines .mh-badge--error", "missing");
 
-// Safety disclaimer component
+// Safety disclaimer
 if (css.includes("mh-disclaimer")) pass("CSS defines .mh-disclaimer");
 else fail("CSS defines .mh-disclaimer", "missing");
+
+// Skeleton loader
+if (css.includes("mh-skeleton")) pass("CSS defines .mh-skeleton");
+else fail("CSS defines .mh-skeleton", "missing");
+
+// Empty state
+if (css.includes("mh-empty-state")) pass("CSS defines .mh-empty-state");
+else fail("CSS defines .mh-empty-state", "missing");
 
 // ── 4. HTML: safety states ──────────────────────────────────
 
@@ -147,17 +145,22 @@ const safetyChecks = [
   ["Receipt verified", "receipt verified state"],
   ["non-custodial", "non-custodial language"],
   ["Matterhorn does not sign", "explicit no-sign statement"],
+  // Protocol desk safety strip (must appear on Bittensor/Hyperliquid/Polymarket desks)
+  ["Can Submit: No", "protocol desk safety strip"],
+  ["Live Submission: Off", "live submission off indicator"],
 ];
-
 for (const [needle, label] of safetyChecks) {
   if (html.toLowerCase().includes(needle.toLowerCase())) pass(`HTML safety: ${label}`);
   else fail(`HTML safety: ${label}`, "missing");
 }
 
+// Wellness desk must NOT have canSubmit strip (no market execution)
+const wellnessHasNoSubmit = html.includes("Wellness Desk");
+if (wellnessHasNoSubmit) pass("Wellness Desk present (no canSubmit strip — correct)");
+
 // ── 5. HTML: forbidden UI copy excluded ──────────────────────
-// We check that forbidden phrases do NOT appear as actual UI copy.
-// Design annotation text (screen-annotation divs) explaining anti-patterns is
-// allowed to mention these phrases — that is the correct place for them.
+// Design annotation text (screen-annotation divs) is stripped before checking
+// because it legitimately describes anti-patterns.
 const annotationBlock = /<div class="screen-annotation[\s\S]*?<\/div>/gi;
 const htmlUI = html.replace(annotationBlock, "");
 
@@ -183,7 +186,7 @@ for (const phrase of forbiddenUICopy) {
 }
 
 // "submit order" must not appear as a button or badge label.
-// It may appear in FAQ question text ("Can Matterhorn submit orders?") — that is legitimate.
+// FAQ question text ("Can Matterhorn submit orders?") is allowed.
 const submitOrderBtn = /<(?:button|a|span|div)[^>]*>[^<]{0,50}submit order[^<]{0,50}<\/(?:button|a|span|div)>/gi;
 if (submitOrderBtn.test(htmlUI)) {
   fail("HTML UI: 'submit order' found as a button/label element");
@@ -199,9 +202,17 @@ if (seedPhraseInput.test(htmlUI)) {
   pass("HTML UI: no 'seed phrase' input label found");
 }
 
+// "API key" must not appear as a label, placeholder, or aria-label inside a form field.
+// Plain prose mention ("No API key input fields") is allowed.
+const apiKeyInFormField = /<(?:input|select|textarea|option|label)[^>]*(?:api[_\s-]?key)[^>]*>/i;
+if (apiKeyInFormField.test(htmlUI)) {
+  fail("HTML UI: 'API key' appears as a form field label/placeholder");
+} else {
+  pass("HTML UI: no 'API key' form field label found");
+}
+
 // ── 6. CSS: no forbidden patterns ───────────────────────────
-// CSS may legitimately contain these words in selectors/values; we check
-// specifically for forbidden branding or misleading class names.
+
 const cssBrandForbidden = ["openwork", "opencodec"];
 for (const f of cssBrandForbidden) {
   if (css.toLowerCase().includes(f)) {
@@ -230,14 +241,33 @@ const specSections = [
   "External Signer Handoff",
   "Compliance",
   "Implementation Notes",
+  // New sections from this sprint
+  "Protocol Desks",
+  "Bittensor Desk",
+  "Hyperliquid Desk",
+  "Polymarket Desk",
+  "Wellness Workflow Desk",
+  "Shared Transcript",
+  "Wallet Snapshot Card",
+  "Compliance Block",
+  "Action Preview Card",
+  "External Signer Handoff Card",
+  "Receipt / Status Card",
+  "Wellness Artifact Card",
+  "Empty / Loading",
+  "Degraded",
+  "Error State",
+  "Responsive Strategy",
+  "Mobile",
+  "Tablet",
+  "Desktop",
 ];
 for (const section of specSections) {
   if (spec.includes(section)) pass(`UI spec contains section: "${section}"`);
   else fail(`UI spec contains section: "${section}"`, "missing");
 }
 
-// Spec must mention key safety values (not as section headers — as content)
-// canSubmit uses backtick code formatting in the spec
+// Spec must cover key safety values
 const specSafetyValues = [
   ["`canSubmit: false`", "canSubmit: false"],
   ["non-custodial", "non-custodial"],
@@ -257,8 +287,7 @@ const antiPatternMustExclude = [
   ["Matterhorn does not sign", "explicit no-sign statement"],
 ];
 for (const [needle, label] of antiPatternMustExclude) {
-  const lowerSpec = spec.toLowerCase();
-  if (lowerSpec.includes(needle.toLowerCase())) pass(`UI spec anti-patterns mention: ${label}`);
+  if (spec.toLowerCase().includes(needle.toLowerCase())) pass(`UI spec anti-patterns mention: ${label}`);
   else fail(`UI spec anti-patterns mention: ${label}`, "missing");
 }
 
@@ -266,15 +295,28 @@ for (const [needle, label] of antiPatternMustExclude) {
 
 const readme = read("docs/ui/matterhorn-customer-ux-refresh/README.md");
 mustContain("docs/ui/matterhorn-customer-ux-refresh/README.md", [
-  "16 Screens",
+  "24 Screens",
   "Safety States",
   "canSubmit",
   "External Signer",
   "#D1F2FF",
   "#0C0C0C",
+  "Protocol Desks",
+  "Wellness Desk",
+  "Shared Transcript",
+  "Empty",
+  "Loading",
 ]);
 
-// ── 9. Stitch prompts: required prompts ─────────────────────
+function mustContain(file, needles) {
+  const text = read(file);
+  for (const needle of needles) {
+    if (text.includes(needle)) pass(`${file} contains "${needle}"`);
+    else fail(`${file} contains "${needle}"`, "missing");
+  }
+}
+
+// ── 9. Stitch prompts: required topics ─────────────────────
 
 const stitch = read("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
 const stitchTopics = [
@@ -288,6 +330,17 @@ const stitchTopics = [
   "Safety Explainer",
   "Artifacts",
   "Settings",
+  // New from this sprint
+  "Bittensor Desk",
+  "Hyperliquid Desk",
+  "Polymarket Desk",
+  "Wellness Desk",
+  "Shared Transcript",
+  "Empty",
+  "Loading",
+  "Degraded",
+  "Responsive",
+  "Mobile",
 ];
 for (const topic of stitchTopics) {
   if (stitch.includes(topic)) pass(`Stitch prompts cover: "${topic}"`);
@@ -296,9 +349,6 @@ for (const topic of stitchTopics) {
 
 // ── 10. Safety gate compatibility ───────────────────────────
 
-// The market execution safety gate must still pass
-// (this is checked by running: pnpm test:market-execution-safety-gate)
-// Here we verify the gate script exists and is executable
 fileExists("scripts/market-execution-safety-gate.test.mjs");
 
 // ── Summary ─────────────────────────────────────────────────

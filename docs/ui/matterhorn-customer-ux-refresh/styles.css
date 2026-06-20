@@ -1806,3 +1806,204 @@ a:hover {
 .cursor-pointer { cursor: pointer; }
 .select-none { user-select: none; }
 .opacity-50 { opacity: 0.5; }
+
+
+/* ─── Loading Skeleton ─────────────────────────────────────────────────────── */
+.mh-skeleton {
+  background: var(--mh-bg-elevated);
+  border-radius: var(--radius-sm);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1.0; }
+}
+
+/* ─── Empty State ───────────────────────────────────────────────────────────── */
+.mh-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+.mh-empty-state__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--mh-bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  color: var(--mh-text-tertiary);
+}
+
+.mh-empty-state__title {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--mh-text-primary);
+  margin-bottom: var(--space-2);
+}
+
+.mh-empty-state__body {
+  font-size: var(--text-sm);
+  color: var(--mh-text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-4);
+}
+
+/* ─── Wellness Desk ─────────────────────────────────────────────────────────── */
+.mh-goal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--mh-bg-elevated);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.mh-goal-row--complete {
+  background: rgba(34, 197, 94, 0.06);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.mh-goal-row--pending {
+  opacity: 0.7;
+}
+
+.mh-goal-row__check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mh-goal-row__check--done {
+  background: rgba(34, 197, 94, 0.2);
+  color: var(--mh-green);
+}
+
+.mh-goal-row__check--pending {
+  border: 2px solid var(--mh-border);
+  color: var(--mh-text-tertiary);
+}
+
+.mh-wellness-artifact {
+  border-left: 3px solid var(--mh-blue);
+}
+
+.mh-streak-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.mh-streak-display__number {
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--mh-accent);
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.mh-streak-display__label {
+  font-size: 10px;
+  color: var(--mh-text-secondary);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mh-week-grid {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.mh-week-grid__day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mh-week-grid__day-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.mh-week-grid__day-label {
+  font-size: 10px;
+  color: var(--mh-text-tertiary);
+}
+
+/* ─── Degraded State ─────────────────────────────────────────────────────────── */
+.mh-degraded {
+  border-left: 3px solid var(--mh-amber);
+}
+
+.mh-degraded__banner {
+  background: rgba(245, 158, 11, 0.08);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+  padding: 8px 12px;
+  margin: -16px -16px 12px;
+  font-size: 11px;
+  color: var(--mh-amber);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ─── Desk Shell ─────────────────────────────────────────────────────────────── */
+.mh-desk-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--mh-bg-surface);
+  border-bottom: 1px solid var(--mh-border);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+
+.mh-desk-safety-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--mh-bg-surface);
+  border-bottom: 1px solid var(--mh-border);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+
+.mh-desk-safety-strip__label {
+  color: var(--mh-text-tertiary);
+}
+
+.mh-desk-safety-strip__value--safe {
+  color: var(--mh-green);
+  font-weight: 600;
+}
+
+.mh-desk-safety-strip__value--unsafe {
+  color: var(--mh-amber);
+  font-weight: 600;
+}

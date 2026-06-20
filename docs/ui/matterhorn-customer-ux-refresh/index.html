@@ -72,8 +72,8 @@
 
 <div class="showcase-header">
   <div class="showcase-header__title">Matterhorn Work — Customer UX Prototype</div>
-  <div class="showcase-header__meta">
-    <span>16 Screens</span><span>·</span>
+    <div class="showcase-header__meta">
+    <span>24 Screens</span><span>·</span>
     <span style="color:#22C55E">● Safety Gates Pass</span><span>·</span>
     <span>#D1F2FF accent · #0C0C0C bg</span>
   </div>
@@ -111,6 +111,18 @@
       <a class="showcase-nav__item" href="#screen-14"><span class="showcase-nav__num">14</span> Market Safety Explainer</a>
       <a class="showcase-nav__item" href="#screen-15"><span class="showcase-nav__num">15</span> Artifacts Panel</a>
       <a class="showcase-nav__item" href="#screen-16"><span class="showcase-nav__num">16</span> Settings: General</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Protocol Desks</div>
+      <a class="showcase-nav__item" href="#screen-17"><span class="showcase-nav__num">17</span> Bittensor Desk</a>
+      <a class="showcase-nav__item" href="#screen-18"><span class="showcase-nav__num">18</span> Hyperliquid Desk</a>
+      <a class="showcase-nav__item" href="#screen-19"><span class="showcase-nav__num">19</span> Polymarket Desk</a>
+      <a class="showcase-nav__item" href="#screen-20"><span class="showcase-nav__num">20</span> Wellness Desk</a>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Transcript / States</div>
+      <a class="showcase-nav__item" href="#screen-21"><span class="showcase-nav__num">21</span> Wallet Snapshot</a>
+      <a class="showcase-nav__item" href="#screen-22"><span class="showcase-nav__num">22</span> Empty / Loading / Degraded</a>
     </div>
   </nav>
 
@@ -1422,6 +1434,515 @@
         </div>
       </div>
       <div class="screen-annotation"><strong>Design notes:</strong> General settings: connected wallet address displayed prominently (monospaced), chain selector, theme (dark only for v1), font size, language, data directory. Safety gate version shown with a live badge. "Sign Out" row is visually distinct with a red accent. No account settings — wallet IS the identity.</div>
+    </div>
+
+    <!-- SCREEN 17 — Bittensor Desk -->
+    <div class="screen-block" id="screen-17">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 17 — Bittensor Desk</span>
+        <span class="screen-block__badge">Read-Only · No orderbook · Preview only</span>
+      </div>
+      <div class="screen-frame demo-screen" style="display:flex;flex-direction:column;gap:0">
+        <header class="header">
+          <div style="width:28px;height:28px;border-radius:8px;background:var(--mh-accent);display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <span style="font-size:15px;font-weight:600;color:var(--mh-text-primary)">Bittensor Desk</span>
+          <div style="flex:1"></div>
+          <span class="mh-badge mh-badge--planned" style="font-size:10px"><svg width="10" height="10" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+          <span class="mh-badge mh-badge--live" style="font-size:10px;margin-left:4px"><span class="mh-badge__dot"></span>Mainnet</span>
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);border:1px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--mh-text-secondary);margin-left:8px">◈</div>
+        </header>
+        <div style="padding:12px 16px;background:var(--mh-bg-surface);border-bottom:1px solid var(--mh-border);display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--font-mono);flex-wrap:wrap">
+          <span style="color:var(--mh-text-tertiary)">Can Submit:</span><span style="color:var(--mh-amber);font-weight:600">No</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">Live Submission:</span><span style="color:var(--mh-amber);font-weight:600">Off</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">External Signer:</span><span style="color:var(--mh-green);font-weight:600">Ready</span>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="filter-bar">
+            <button class="filter-chip active">TAO/SOL</button>
+            <button class="filter-chip">TAO/USDC</button>
+            <button class="filter-chip">Subnet Register</button>
+            <button class="filter-chip">Delegate Stake</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <!-- TAO/SOL Market Card -->
+            <div class="mh-panel" style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary)">TAO/SOL</div>
+                  <div style="font-size:11px;color:var(--mh-text-tertiary);margin-top:2px">Bittensor · Mainnet</div>
+                </div>
+                <span class="mh-badge mh-badge--planned" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:8px">
+                <span style="font-size:22px;font-weight:700;color:var(--mh-text-primary);font-family:var(--font-mono)">$18.42</span>
+                <span style="font-size:12px;color:var(--mh-green);font-family:var(--font-mono)">▲ +3.2%</span>
+              </div>
+              <div style="font-size:11px;color:var(--mh-text-secondary);line-height:1.6">
+                Subnet: 1 · Circ: 8,421,000 TAO<br>Market cap: $155.2M · 24h vol: $8.4M
+              </div>
+              <div class="mh-panel" style="background:var(--mh-bg-elevated);padding:10px">
+                <div style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Wallet Snapshot</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;font-family:var(--font-mono)">
+                  <div style="color:var(--mh-text-secondary)">TAO</div><div style="color:var(--mh-text-primary);text-align:right">0.2841 <span style="color:var(--mh-text-tertiary)">($5.23)</span></div>
+                  <div style="color:var(--mh-text-secondary)">SOL</div><div style="color:var(--mh-text-primary);text-align:right">1.832 <span style="color:var(--mh-text-tertiary)">($312)</span></div>
+                  <div style="color:var(--mh-text-secondary)">USDC</div><div style="color:var(--mh-text-primary);text-align:right">42.18</div>
+                </div>
+              </div>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="width:100%">Preview Order</button>
+            </div>
+            <!-- TAO/USDC Market Card -->
+            <div class="mh-panel" style="display:flex;flex-direction:column;gap:10px;opacity:0.5">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <div>
+                  <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary)">TAO/USDC</div>
+                  <div style="font-size:11px;color:var(--mh-text-tertiary);margin-top:2px">Bittensor · Mainnet</div>
+                </div>
+                <span class="mh-badge mh-badge--planned" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:8px">
+                <span style="font-size:22px;font-weight:700;color:var(--mh-text-primary);font-family:var(--font-mono)">$18.41</span>
+                <span style="font-size:12px;color:var(--mh-green);font-family:var(--font-mono)">▲ +3.1%</span>
+              </div>
+              <div style="font-size:11px;color:var(--mh-text-secondary);line-height:1.6">
+                Subnet: 1 · Est. 24h volume<br>No active liquidity pool detected
+              </div>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="width:100%;opacity:0.4" disabled>No data</button>
+            </div>
+          </div>
+          <!-- Delegate Stake Card -->
+          <div class="mh-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div style="font-size:13px;font-weight:600;color:var(--mh-text-primary)">Delegate Stake</div>
+              <span class="mh-badge mh-badge--planned" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+              <div style="background:var(--mh-bg-elevated);padding:10px;border-radius:6px">
+                <div style="font-size:10px;color:var(--mh-text-tertiary);margin-bottom:4px">Currently Delegated</div>
+                <div style="font-size:14px;font-weight:600;font-family:var(--font-mono);color:var(--mh-accent)">0.5000 TAO</div>
+              </div>
+              <div style="background:var(--mh-bg-elevated);padding:10px;border-radius:6px">
+                <div style="font-size:10px;color:var(--mh-text-tertiary);margin-bottom:4px">Daily Emission</div>
+                <div style="font-size:14px;font-weight:600;font-family:var(--font-mono);color:var(--mh-green)">+0.0009 TAO</div>
+              </div>
+              <div style="background:var(--mh-bg-elevated);padding:10px;border-radius:6px">
+                <div style="font-size:10px;color:var(--mh-text-tertiary);margin-bottom:4px">Delegate</div>
+                <div style="font-size:14px;font-weight:600;font-family:var(--font-mono);color:var(--mh-text-primary)">tao1…abc</div>
+              </div>
+            </div>
+            <button class="mh-btn mh-btn--secondary mh-btn--sm" style="width:100%">Preview Redelegate</button>
+          </div>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Bittensor desk — no orderbook (Bittensor has no orderbook). Context panel shows subnet data and wallet balances. All action buttons are "Preview" only. No submit, no stake transaction UI. Subnet Register market shown as a card (not a form). Delegate Stake card shows current delegation with "Preview Redelegate" CTA. The safety strip is always visible: Can Submit: No · Live Submission: Off.</div>
+    </div>
+
+    <!-- SCREEN 18 — Hyperliquid Desk (Extended) -->
+    <div class="screen-block" id="screen-18">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 18 — Hyperliquid Desk (Extended)</span>
+        <span class="screen-block__badge">Read-Only · Orderbook + Compliance Block</span>
+      </div>
+      <div class="screen-frame demo-screen" style="display:flex;flex-direction:column;gap:0">
+        <header class="header">
+          <div style="width:28px;height:28px;border-radius:8px;background:var(--mh-accent);display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <span style="font-size:15px;font-weight:600;color:var(--mh-text-primary)">Hyperliquid Desk</span>
+          <div style="flex:1"></div>
+          <span class="mh-badge mh-badge--live" style="font-size:10px"><span class="mh-badge__dot"></span>Read-Only</span>
+          <span class="mh-badge mh-badge--planned" style="font-size:10px;margin-left:4px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Base Sepolia</span>
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);border:1px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--mh-text-secondary);margin-left:8px">◈</div>
+        </header>
+        <div style="padding:12px 16px;background:var(--mh-bg-surface);border-bottom:1px solid var(--mh-border);display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--font-mono);flex-wrap:wrap">
+          <span style="color:var(--mh-text-tertiary)">Can Submit:</span><span style="color:var(--mh-amber);font-weight:600">No</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">Live Submission:</span><span style="color:var(--mh-amber);font-weight:600">Off</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">External Signer:</span><span style="color:var(--mh-green);font-weight:600">Ready</span>
+        </div>
+        <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <!-- BTC-PERP Detail -->
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:16px;font-weight:700;color:var(--mh-text-primary)">BTC-PERP</span>
+                <span style="font-size:11px;color:var(--mh-text-tertiary);background:var(--mh-bg-elevated);padding:2px 8px;border-radius:4px;font-family:var(--font-mono)">Base Sepolia</span>
+              </div>
+              <span class="mh-badge mh-badge--live" style="font-size:9px"><span class="mh-badge__dot"></span>Read-Only</span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font-size:28px;font-weight:700;font-family:var(--font-mono);color:var(--mh-text-primary)">$64,250.00</span>
+              <span style="font-size:14px;font-family:var(--font-mono);color:var(--mh-green)">▲ +2.34%</span>
+              <span style="font-size:11px;color:var(--mh-text-tertiary)">24h</span>
+            </div>
+            <div style="display:flex;gap:16px;font-size:11px;color:var(--mh-text-secondary)">
+              <span>OI: <span style="font-family:var(--font-mono);color:var(--mh-text-primary)">$12.4B</span></span>
+              <span>Funding: <span style="font-family:var(--font-mono);color:var(--mh-text-primary)">+0.0001/hr</span></span>
+              <span>Liq: <span style="font-family:var(--font-mono);color:var(--mh-red)">$51,400</span></span>
+            </div>
+            <!-- Orderbook -->
+            <div class="mh-panel" style="padding:0;overflow:hidden">
+              <div style="padding:10px 12px;border-bottom:1px solid var(--mh-border)">
+                <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Orderbook — BTC-PERP</span>
+              </div>
+              <div class="orderbook" style="padding:8px 0">
+                <div class="orderbook__bid" style="flex:1">
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:84%"></div><span class="orderbook__price">64,249</span><span class="orderbook__size">0.842</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:62%"></div><span class="orderbook__price">64,248</span><span class="orderbook__size">1.204</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:45%"></div><span class="orderbook__price">64,247</span><span class="orderbook__size">0.901</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:28%"></div><span class="orderbook__price">64,246</span><span class="orderbook__size">0.540</span></div>
+                </div>
+                <div style="width:1px;background:var(--mh-border-subtle)"></div>
+                <div class="orderbook__ask" style="flex:1">
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:35%"></div><span class="orderbook__size">0.120</span><span class="orderbook__price">64,250</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:48%"></div><span class="orderbook__size">0.340</span><span class="orderbook__price">64,251</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:55%"></div><span class="orderbook__size">0.220</span><span class="orderbook__price">64,252</span></div>
+                  <div class="orderbook__row" style="padding:2px 8px"><div class="orderbook__depth" style="width:30%"></div><span class="orderbook__size">0.410</span><span class="orderbook__price">64,253</span></div>
+                </div>
+              </div>
+              <div style="padding:6px 12px;border-top:1px solid var(--mh-border);font-size:10px;color:var(--mh-text-tertiary);display:flex;justify-content:space-between">
+                <span>Spread: $1.00 (0.0016%)</span>
+                <span>Mid: $64,249.50</span>
+              </div>
+            </div>
+          </div>
+          <!-- Right: Action Preview + Compliance Block -->
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <!-- Action Preview Card -->
+            <div class="mh-panel" style="border-left:3px solid var(--mh-green)">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Action Preview</span>
+              </div>
+              <div style="font-size:14px;font-weight:600;color:var(--mh-text-primary);margin-bottom:6px">BTC-PERP · BUY · 0.1 BTC</div>
+              <div style="font-size:13px;font-family:var(--font-mono);color:var(--mh-text-secondary);margin-bottom:10px">@ $64,250.00</div>
+              <span class="mh-badge mh-badge--live" style="margin-bottom:12px;display:inline-flex"><span class="mh-badge__dot"></span>External Signer Live</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px">
+                <div style="font-size:11px;color:var(--mh-text-secondary)">Notional</div><div style="font-size:11px;font-family:var(--font-mono);color:var(--mh-text-primary);text-align:right">$6,425.00</div>
+                <div style="font-size:11px;color:var(--mh-text-secondary)">Est. Slippage</div><div style="font-size:11px;font-family:var(--font-mono);color:var(--mh-text-primary);text-align:right">0.02%</div>
+                <div style="font-size:11px;color:var(--mh-text-secondary)">Est. Fill</div><div style="font-size:11px;font-family:var(--font-mono);color:var(--mh-text-primary);text-align:right">$64,262.80</div>
+                <div style="font-size:11px;color:var(--mh-text-secondary)">Est. Leverage</div><div style="font-size:11px;font-family:var(--font-mono);color:var(--mh-text-primary);text-align:right">4.3×</div>
+              </div>
+              <div style="font-size:11px;color:var(--mh-text-secondary);background:var(--mh-bg-elevated);padding:8px;border-radius:6px;margin-bottom:12px">🔒 Matterhorn does not sign, submit, or hold keys.</div>
+              <button class="mh-btn mh-btn--primary mh-btn--sm" style="width:100%">View External Signer Handoff →</button>
+            </div>
+            <!-- Compliance Block (shown when active) -->
+            <div class="mh-panel" style="border-left:3px solid var(--mh-amber);opacity:0.5">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <span class="mh-badge mh-badge--restricted" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M6 1L11 10H1L6 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Compliance Block</span>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--mh-text-primary);margin-bottom:6px">Jurisdiction Restricted</div>
+              <div style="font-size:11px;color:var(--mh-text-secondary);line-height:1.6;margin-bottom:10px">Market execution is not available in your region. For questions, see the Safety Explainer.</div>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="width:100%">View Safety Explainer →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Hyperliquid desk — full orderbook (read-only, depth bars). Action Preview card shows terms, green badge, safety disclaimer. Compliance Block shown as a variant below the action preview (amber left border). Both cards shown simultaneously in prototype to illustrate the card system. The orderbook spread and mid-price shown at bottom. All BTC/ETH/SOL perp markets are preview-only — no submit button. Safety strip always visible.</div>
+    </div>
+
+    <!-- SCREEN 19 — Polymarket Desk -->
+    <div class="screen-block" id="screen-19">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 19 — Polymarket Desk</span>
+        <span class="screen-block__badge">Read-Only · Binary YES/NO markets · Preview only</span>
+      </div>
+      <div class="screen-frame demo-screen" style="display:flex;flex-direction:column;gap:0">
+        <header class="header">
+          <div style="width:28px;height:28px;border-radius:8px;background:var(--mh-accent);display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <span style="font-size:15px;font-weight:600;color:var(--mh-text-primary)">Polymarket Desk</span>
+          <div style="flex:1"></div>
+          <span class="mh-badge mh-badge--planned" style="font-size:10px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+          <span class="mh-badge mh-badge--planned" style="font-size:10px;margin-left:4px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Mainnet</span>
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);border:1px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--mh-text-secondary);margin-left:8px">◈</div>
+        </header>
+        <div style="padding:12px 16px;background:var(--mh-bg-surface);border-bottom:1px solid var(--mh-border);display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--font-mono);flex-wrap:wrap">
+          <span style="color:var(--mh-text-tertiary)">Can Submit:</span><span style="color:var(--mh-amber);font-weight:600">No</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">Live Submission:</span><span style="color:var(--mh-amber);font-weight:600">Off</span>
+          <span style="color:var(--mh-border)">·</span>
+          <span style="color:var(--mh-text-tertiary)">External Signer:</span><span style="color:var(--mh-green);font-weight:600">Ready</span>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <div class="filter-bar">
+            <button class="filter-chip active">Trending</button>
+            <button class="filter-chip">Crypto</button>
+            <button class="filter-chip">Politics</button>
+            <button class="filter-chip">Tech</button>
+            <button class="filter-chip">All</button>
+          </div>
+          <!-- Market Card -->
+          <div class="mh-panel" style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between">
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:600;color:var(--mh-text-primary);margin-bottom:4px">Will an Ethereum ETF be approved by end of 2025?</div>
+                <div style="font-size:11px;color:var(--mh-text-tertiary)">Market ID: 0xabc1…def4 · Binary · Expires: 2025-12-31</div>
+              </div>
+              <span class="mh-badge mh-badge--planned" style="font-size:9px;margin-left:8px;flex-shrink:0"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v2.5l1.5 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Read-Only</span>
+            </div>
+            <!-- YES/NO bars -->
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:40px;font-size:12px;font-weight:600;color:var(--mh-green)">YES</div>
+                <div style="flex:1;height:20px;background:var(--mh-bg-elevated);border-radius:4px;position:relative;overflow:hidden">
+                  <div style="position:absolute;left:0;top:0;bottom:0;width:38%;background:rgba(34,197,94,0.2);border-radius:4px"></div>
+                  <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--mh-green)">$0.38</div>
+                </div>
+                <div style="width:60px;font-size:11px;font-family:var(--font-mono);color:var(--mh-text-secondary);text-align:right">38%</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:40px;font-size:12px;font-weight:600;color:var(--mh-red)">NO</div>
+                <div style="flex:1;height:20px;background:var(--mh-bg-elevated);border-radius:4px;position:relative;overflow:hidden">
+                  <div style="position:absolute;left:0;top:0;bottom:0;width:62%;background:rgba(239,68,68,0.2);border-radius:4px"></div>
+                  <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;font-family:var(--font-mono);color:var(--mh-red)">$0.62</div>
+                </div>
+                <div style="width:60px;font-size:11px;font-family:var(--font-mono);color:var(--mh-text-secondary);text-align:right">62%</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;font-size:11px;color:var(--mh-text-secondary)">
+              <span>Volume: <span style="font-family:var(--font-mono);color:var(--mh-text-primary)">$4.2M</span></span>
+              <span>Liquidity: <span style="font-family:var(--font-mono);color:var(--mh-text-primary)">$12.8M</span></span>
+              <span>Resolves: <span style="font-family:var(--font-mono);color:var(--mh-text-primary)">2025-12-31</span></span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="flex:1">Preview "Yes" Position</button>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="flex:1">Preview "No" Position</button>
+            </div>
+          </div>
+          <!-- SOL ETF Market -->
+          <div class="mh-panel" style="display:flex;flex-direction:column;gap:10px;opacity:0.7">
+            <div style="font-size:13px;font-weight:600;color:var(--mh-text-primary)">Will a SOL ETF be approved by end of 2025?</div>
+            <div style="display:flex;gap:12px;font-size:11px;color:var(--mh-text-secondary)">
+              <span>YES $0.12</span><span>NO $0.88</span><span>Vol: $1.1M</span><span>Resolves: 2025-12-31</span>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="flex:1">Preview "Yes"</button>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm" style="flex:1">Preview "No"</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Polymarket desk — binary YES/NO prediction markets. Market question shown verbatim. YES/NO shown as price bars (green/red) with percentage. "Position" means preview of buying shares — never direct trade execution. Fractional shares not supported in preview. Both "Preview Yes" and "Preview No" buttons shown as a pair. Volume and liquidity shown below the bars. The safety strip (Can Submit: No · Live Submission: Off) is always visible. No submit or trade confirmation UI.</div>
+    </div>
+
+    <!-- SCREEN 20 — Wellness Desk -->
+    <div class="screen-block" id="screen-20">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 20 — Wellness Desk</span>
+        <span class="screen-block__badge">No execution UI · Goals + Streak · Artifact export</span>
+      </div>
+      <div class="screen-frame demo-screen" style="display:flex;flex-direction:column;gap:0">
+        <header class="header">
+          <div style="width:28px;height:28px;border-radius:8px;background:var(--mh-accent);display:flex;align-items:center;justify-content:center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mh-bg-base)"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <span style="font-size:15px;font-weight:600;color:var(--mh-text-primary)">Wellness Desk</span>
+          <div style="flex:1"></div>
+          <div style="font-size:12px;color:var(--mh-text-secondary);font-family:var(--font-mono);margin-right:8px">Good morning</div>
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);border:1px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--mh-text-secondary)">◈</div>
+        </header>
+        <!-- No safety strip — wellness desk has no market execution -->
+        <div style="padding:24px;display:flex;flex-direction:column;gap:20px;max-width:600px">
+          <!-- Streak + Week overview -->
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
+            <div class="mh-panel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px">
+              <div style="font-size:40px;font-weight:700;color:var(--mh-accent);font-family:var(--font-mono);line-height:1">14</div>
+              <div style="font-size:11px;color:var(--mh-text-secondary);margin-top:6px;text-transform:uppercase;letter-spacing:0.06em">day streak</div>
+            </div>
+            <div class="mh-panel" style="padding:16px">
+              <div style="font-size:11px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">This Week</div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--mh-green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Mon</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--mh-green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Tue</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--mh-green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Wed</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:rgba(34,197,94,0.15);display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--mh-green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Thu</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--mh-text-tertiary)">○</div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Fri</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--mh-text-tertiary)">○</div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Sat</div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--mh-bg-elevated);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--mh-text-tertiary)">○</div>
+                  <div style="font-size:10px;color:var(--mh-text-tertiary)">Sun</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Today's Goals -->
+          <div class="mh-panel">
+            <div style="font-size:11px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px">Today's Goals · 2/3 complete</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--mh-bg-elevated);border-radius:6px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--mh-text-tertiary)"></div>
+                  <span style="font-size:13px;color:var(--mh-text-secondary)">Morning stretch routine</span>
+                </div>
+                <span style="font-size:10px;color:var(--mh-text-tertiary)">not done</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:rgba(34,197,94,0.06);border-radius:6px;border:1px solid rgba(34,197,94,0.2)">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:20px;height:20px;border-radius:50%;background:rgba(34,197,94,0.2);display:flex;align-items:center;justify-content:center"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--mh-green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+                  <span style="font-size:13px;color:var(--mh-text-primary)">Hydration: 2.5L target</span>
+                </div>
+                <span style="font-size:10px;color:var(--mh-green)">✓ complete</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:var(--mh-bg-elevated);border-radius:6px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:20px;height:20px;border-radius:50%;border:2px solid var(--mh-border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--mh-text-tertiary)"></div>
+                  <span style="font-size:13px;color:var(--mh-text-secondary)">Evening walk</span>
+                </div>
+                <span style="font-size:10px;color:var(--mh-text-tertiary)">not done</span>
+              </div>
+            </div>
+          </div>
+          <!-- Wellness Artifact -->
+          <div class="mh-panel" style="border-left:3px solid var(--mh-blue)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--mh-blue)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Wellness Artifact</span>
+            </div>
+            <div style="font-size:13px;font-weight:600;color:var(--mh-text-primary);margin-bottom:6px">Weekly wellness summary</div>
+            <div style="font-size:11px;color:var(--mh-text-secondary);margin-bottom:10px">Period: 2025-01-01 → 2025-01-07 · Goals completed: 4/5 · Streak: 14 days</div>
+            <div style="font-size:11px;font-family:var(--font-mono);color:var(--mh-text-tertiary);background:var(--mh-bg-elevated);padding:8px;border-radius:6px;margin-bottom:10px">
+              sha256: 3a4b1c…e91f<br>
+              Signed by: 0x3a…7bc · Exported: 2025-01-08 14:32 UTC
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="mh-btn mh-btn--secondary mh-btn--sm">Download</button>
+              <button class="mh-btn mh-btn--secondary mh-btn--sm">Add to Evidence Log</button>
+            </div>
+          </div>
+          <!-- CTAs -->
+          <div style="display:flex;gap:8px">
+            <button class="mh-btn mh-btn--primary mh-btn--sm">+ New Goal</button>
+            <button class="mh-btn mh-btn--ghost mh-btn--sm">Workflow Builder →</button>
+          </div>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Wellness desk — completely separate from market execution. No canSubmit safety strip. Streak counter prominently displayed (40px mono number). Today's goals with ○ pending / ✓ complete states. Wellness Artifact card (blue accent) shows SHA-256 hash, signer address, and export timestamp. Artifact can be added to the evidence log. "Workflow Builder →" links to the main workflow builder. Goals are automatable via the workflow builder (e.g., reminder triggers).</div>
+    </div>
+
+    <!-- SCREEN 21 — Shared Transcript: Wallet Snapshot -->
+    <div class="screen-block" id="screen-21">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 21 — Shared Transcript: Wallet Snapshot</span>
+        <span class="screen-block__badge">3 states: live / stale / disconnected</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:24px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <!-- Live state -->
+          <div class="mh-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Wallet Snapshot</span>
+              <span class="mh-badge mh-badge--live" style="font-size:9px"><span class="mh-badge__dot"></span>Live</span>
+            </div>
+            <div style="display:grid;gap:6px">
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">BTC</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">0.2841 <span style="color:var(--mh-text-tertiary)">($18,421)</span></span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">ETH</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">1.832 <span style="color:var(--mh-text-tertiary)">($5,847)</span></span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">USDC</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">42.18</span></div>
+            </div>
+            <div style="margin-top:10px;font-size:10px;color:var(--mh-text-tertiary);font-family:var(--font-mono)">0x3a…7bc · updated just now</div>
+          </div>
+          <!-- Stale state -->
+          <div class="mh-panel" style="border-left:3px solid var(--mh-amber)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Wallet Snapshot</span>
+              <span class="mh-badge mh-badge--restricted" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M6 1L11 10H1L6 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>Stale</span>
+            </div>
+            <div style="display:grid;gap:6px">
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">BTC</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">0.2841</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">ETH</span><span style="font-family:var(--font-mono);color:var(--mh-text-tertiary)">— stale —</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--mh-text-secondary)">USDC</span><span style="font-family:var(--font-mono);color:var(--mh-text-tertiary)">— stale —</span></div>
+            </div>
+            <div style="margin-top:10px;font-size:10px;color:var(--mh-amber);font-family:var(--font-mono)">Last updated 3 min ago · <button style="background:none;border:none;color:var(--mh-accent);cursor:pointer;font-size:10px;padding:0">Refresh</button></div>
+          </div>
+          <!-- Disconnected state -->
+          <div class="mh-panel" style="border-left:3px solid var(--mh-red)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <span style="font-size:10px;font-weight:600;color:var(--mh-text-tertiary);text-transform:uppercase;letter-spacing:0.06em">Wallet Snapshot</span>
+              <span class="mh-badge mh-badge--error" style="font-size:9px"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 4v3M6 8.5v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Disconnected</span>
+            </div>
+            <div style="font-size:12px;color:var(--mh-text-secondary);text-align:center;padding:16px 0">No wallet connected.<br>Connect to browse markets.</div>
+            <button class="mh-btn mh-btn--secondary mh-btn--sm" style="width:100%">Connect Wallet</button>
+          </div>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Three states of the Wallet Snapshot card: (1) Live — green dot, current balances, "updated just now"; (2) Stale — amber left border, some balances hidden, "Refresh" link; (3) Disconnected — red left border, prompt to connect. Stale threshold: 60s. Wallet address always shown in mono truncated form. External signer address shown below balances in live state.</div>
+    </div>
+
+    <!-- SCREEN 22 — Shared Transcript: Empty + Loading + Degraded States -->
+    <div class="screen-block" id="screen-22">
+      <div class="screen-block__label">
+        <span class="screen-block__title">Screen 22 — Empty / Loading / Degraded States</span>
+        <span class="screen-block__badge">Skeleton loaders · Degraded banners · Empty panels</span>
+      </div>
+      <div class="screen-frame demo-screen" style="padding:24px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+          <!-- Empty State -->
+          <div class="mh-panel" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;text-align:center;min-height:200px">
+            <div style="width:48px;height:48px;border-radius:50%;background:var(--mh-bg-elevated);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--mh-text-tertiary)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+            </div>
+            <div style="font-size:14px;font-weight:500;color:var(--mh-text-primary);margin-bottom:8px">No positions</div>
+            <div style="font-size:12px;color:var(--mh-text-secondary);line-height:1.6;margin-bottom:16px">Markets are available on the Hyperliquid and Polymarket desks.</div>
+            <button class="mh-btn mh-btn--secondary mh-btn--sm">Browse Markets →</button>
+          </div>
+          <!-- Loading State (Skeleton) -->
+          <div class="mh-panel" style="padding:16px;min-height:200px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <div class="mh-skeleton" style="height:16px;width:80px;border-radius:4px"></div>
+              <div class="mh-skeleton" style="height:16px;width:60px;border-radius:4px"></div>
+            </div>
+            <div class="mh-skeleton" style="height:60px;border-radius:6px"></div>
+            <div class="mh-skeleton" style="height:60px;border-radius:6px"></div>
+            <div class="mh-skeleton" style="height:60px;border-radius:6px"></div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <div class="mh-skeleton" style="height:32px;flex:1;border-radius:6px"></div>
+              <div class="mh-skeleton" style="height:32px;flex:1;border-radius:6px"></div>
+            </div>
+          </div>
+          <!-- Degraded State -->
+          <div class="mh-panel" style="border-left:3px solid var(--mh-amber)">
+            <div style="background:rgba(245,158,11,0.08);border-bottom:1px solid rgba(245,158,11,0.2);padding:8px 12px;margin:-16px -16px 12px;font-size:11px;color:var(--mh-amber);display:flex;align-items:center;gap:6px">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L11 10H1L6 1Z" stroke="var(--mh-amber)" stroke-width="1.5" stroke-linejoin="round"/></svg>
+              ⚠ Some data is unavailable
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span style="color:var(--mh-text-secondary)">BTC</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">0.2841 <span style="color:var(--mh-green);font-size:10px">live</span></span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span style="color:var(--mh-text-secondary)">SOL</span><span style="font-family:var(--font-mono);color:var(--mh-text-primary)">1.832 <span style="color:var(--mh-green);font-size:10px">live</span></span></div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px"><span style="color:var(--mh-text-secondary)">USDC</span><span style="font-family:var(--font-mono);color:var(--mh-amber)">stale <span style="color:var(--mh-text-tertiary);font-size:10px">3m ago</span></span></div>
+          </div>
+        </div>
+        <!-- Error state (full width) -->
+        <div class="mh-panel" style="border-left:3px solid var(--mh-red);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center">
+          <div style="width:48px;height:48px;border-radius:50%;background:rgba(239,68,68,0.1);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--mh-amber)" stroke-width="1.5"><path d="M12 2L22 20H2L12 2Z"/><path d="M12 9v4M12 16v1" stroke-linecap="round"/></svg>
+          </div>
+          <div style="font-size:15px;font-weight:600;color:var(--mh-text-primary);margin-bottom:8px">Unable to reach Hyperliquid</div>
+          <div style="font-size:12px;color:var(--mh-text-secondary);line-height:1.6;margin-bottom:16px;max-width:300px">Check your connection and try again.<br>If the problem persists, visit the status page.</div>
+          <button class="mh-btn mh-btn--secondary mh-btn--sm">Try Again</button>
+        </div>
+      </div>
+      <div class="screen-annotation"><strong>Design notes:</strong> Empty state: centered icon (48px, monochrome), heading in weight 500, subtext in secondary, CTA button. Loading state: mh-skeleton divs with 1.5s ease-in-out infinite pulse animation. Degraded state: amber left border, amber top banner "⚠ Some data is unavailable", affected rows show "stale" in amber. Error state: full-panel card, warning triangle in amber, "Try Again" button in secondary. No stack traces or technical error messages.</div>
     </div>
 
   </main>

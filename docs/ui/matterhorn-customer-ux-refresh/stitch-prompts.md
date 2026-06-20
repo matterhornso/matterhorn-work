@@ -202,3 +202,210 @@ Requirements:
 - NO API key input fields.
 - NO "enable live trading" toggles.
 ```
+
+
+---
+
+## Prompt 11: Bittensor Desk
+
+```
+Implement the Bittensor Desk matching docs/ui/matterhorn-customer-ux-refresh/index.html Screen 17.
+
+Requirements:
+- Dedicated desk header: "Bittensor Desk", venue badge, chain badge, wallet avatar.
+- ALWAYS VISIBLE safety strip: "Can Submit: No · Live Submission: Off · External Signer: Ready"
+  (this strip must never be hidden or collapsed).
+- Market tabs: TAO/SOL, TAO/USDC, Subnet Register, Delegate Stake.
+- Bittensor has NO ORDERBOOK — show subnet emission data and wallet balances instead.
+- Market cards show: price, 24h change, market cap, subnet number, circulating supply.
+- Wallet Snapshot card shows TAO, SOL, USDC balances and external signer address.
+- "Preview Order" button — previews the action, does NOT submit.
+- Subnet Register card shows validator slot cost, registration preview.
+- Delegate Stake card shows: currently delegated amount, daily emission, delegate address.
+  "Preview Redelegate" button — previews redelegation, does NOT submit.
+- All action buttons are "Preview" only. NO submit, NO stake transaction UI.
+- Brand: Matterhorn logo only. No OpenWork/OpenCode copy.
+```
+
+---
+
+## Prompt 12: Hyperliquid Desk (Extended)
+
+```
+Implement the Hyperliquid Desk matching docs/ui/matterhorn-customer-ux-refresh/index.html Screen 18.
+
+Requirements:
+- ALWAYS VISIBLE safety strip: "Can Submit: No · Live Submission: Off · External Signer: Ready"
+- Market tabs: BTC-PERP, ETH-PERP, SOL-PERP, All Markets →.
+- Per market: price, 24h change, OI, funding rate, est. liquidation price.
+- Read-only orderbook: bid/ask depth bars (green bids, red asks). Spread and mid price shown.
+  The orderbook is NOT clickable — no order placement affordance.
+- Action Preview card: shows terms, green "External Signer Live" badge, risk estimates.
+  ONE CTA: "View External Signer Handoff →" (green button).
+- Compliance Block card (amber): shown when jurisdiction restricted. Shows amber badge, reason,
+  "View Safety Explainer →" button. Replaces the action preview card when active.
+- Both cards shown together to illustrate the card system.
+- No submit, confirm, or execute buttons anywhere.
+- Hyperliquid is for perpetuals only (no spot). Spot prices shown as reference data.
+- Brand: Matterhorn logo only.
+```
+
+---
+
+## Prompt 13: Polymarket Desk
+
+```
+Implement the Polymarket Desk matching docs/ui/matterhorn-customer-ux-refresh/index.html Screen 19.
+
+Requirements:
+- ALWAYS VISIBLE safety strip: "Can Submit: No · Live Submission: Off · External Signer: Ready"
+- Category filter chips: Trending, Crypto, Politics, Tech, All.
+- Market card shows the question verbatim (exact wording from Polymarket API — no paraphrasing).
+- Binary YES/NO displayed as price bars: green bar for YES price, red bar for NO price.
+  Bar width proportional to the probability.
+- YES price and NO price shown in monospace font. Percentage label shown next to each bar.
+- Below bars: volume, total liquidity, resolution date.
+- TWO "Preview" buttons: "Preview 'Yes' Position" and "Preview 'No' Position" (side by side).
+  "Position" = preview of buying shares. NOT a direct trade execution.
+- No fractional share previews — show integer share counts.
+- Blue "Planned — Not Live" badge on each market card.
+- No submit, no trade confirmation.
+- Brand: Matterhorn logo only. No OpenWork/OpenCode copy.
+```
+
+---
+
+## Prompt 14: Wellness Desk
+
+```
+Implement the Wellness Desk matching docs/ui/matterhorn-customer-ux-refresh/index.html Screen 20.
+
+Requirements:
+- No market execution safety strip — the wellness desk does not conduct market execution.
+- Streak counter: large mono number (40px, accent color), "day streak" label.
+- Today's Goals section:
+  - Each goal row: checkbox (○ pending / ◉ complete), goal name, status label.
+  - Complete goals shown with green check + "✓ complete" label.
+  - Pending goals shown with empty circle + "not done" label in muted color.
+- Weekly overview: 7-day grid (Mon–Sun). Each day: circle with checkmark (green fill) for complete,
+  empty circle for pending/missed.
+- Wellness Artifact card (blue left border): shows period, goals completed count, SHA-256 hash,
+  signer address, export timestamp. "Download" and "Add to Evidence Log" buttons.
+- "+ New Goal" primary button, "Workflow Builder →" ghost button linking to the workflow builder.
+- Goals can be automated via the workflow builder (e.g., reminder triggers, not market execution).
+- Brand: Matterhorn logo only. No OpenWork/OpenCode copy.
+```
+
+---
+
+## Prompt 15: Shared Transcript — Card System
+
+```
+Implement the shared card components matching docs/ui/matterhorn-product-ui-system.md §11.
+
+Seven card types must be consistent across all desks (Bittensor, Hyperliquid, Polymarket, Wellness):
+
+1. WalletSnapshotCard
+   States: live (green dot), stale (amber border, "Refresh" link), disconnected (red border, "Connect Wallet" CTA).
+   Always shows truncated wallet address in monospace.
+
+2. OrderbookContextCard (Hyperliquid only)
+   Read-only bid/ask depth bars. Spread and mid price. NOT clickable.
+
+3. ComplianceBlockCard
+   Amber badge, reason text, "View Safety Explainer →" button.
+   Replaces ActionPreviewCard when jurisdiction restricted.
+
+4. ActionPreviewCard
+   Shows terms, green "External Signer Live" badge, risk estimates.
+   ONE CTA: "View External Signer Handoff →" (green button).
+   NEVER contains submit/confirm/execute buttons.
+
+5. ExternalSignerHandoffCard
+   Public order terms, Preview SHA256, Handoff SHA256, expiry countdown (30 min).
+   "Sign with your wallet →" (green) and "Copy Handoff" (secondary).
+   Footer: "Matterhorn never receives your signature."
+
+6. ReceiptStatusCard
+   States: verified (green), review-needed (amber), rejected (red).
+   Shows order ID, market, side, size, hash matches (✓).
+
+7. WellnessArtifactCard (Wellness desk only)
+   Blue accent border, SHA-256 hash, signer address, export timestamp.
+   "Download" and "Add to Evidence Log" buttons.
+
+All cards: use CSS custom properties, font-mono for data, no hardcoded hex values.
+Brand: Matterhorn logo only.
+```
+
+---
+
+## Prompt 16: Empty / Loading / Degraded / Error States
+
+```
+Implement the empty, loading, degraded, and error state components matching
+docs/ui/matterhorn-product-ui-system.md §12.
+
+1. Empty State (mh-empty-state):
+   - Centered 48px monochrome icon (circle with line — "no data" symbol).
+   - Heading in weight 500.
+   - Subtext in secondary color, line-height 1.6.
+   - Optional CTA button in secondary style.
+   - NO illustrations or decorative imagery.
+
+2. Loading State (mh-skeleton):
+   - A div with class mh-skeleton: background var(--mh-bg-elevated), border-radius 4px.
+   - Animation: skeleton-pulse, 1.5s ease-in-out infinite, opacity 0.5 → 1.0.
+   - Used to replace market cards, table rows, and content panels during loading.
+   - NO spinner or loading text in main content area.
+
+3. Degraded State:
+   - Amber left border (3px solid var(--mh-amber)) on the affected card.
+   - Thin amber banner at the top of the card: "⚠ Some data is unavailable".
+   - Stale data shown in amber text with a timestamp of when it was last updated.
+   - "Refresh" link available on stale rows.
+   - UI remains fully interactive for non-degraded content.
+
+4. Error State:
+   - Full-panel card, centered layout.
+   - Warning triangle icon (amber) — 48px circle with amber background rgba(239,68,68,0.1).
+   - Heading in weight 600.
+   - Body: "Check your connection and try again." + optional status page link.
+   - "Try Again" button in secondary style.
+   - NO stack traces, no technical error messages.
+   - For wallet disconnection: "Wallet disconnected" heading + "Reconnect Wallet" button.
+
+Design tokens: all colors via CSS custom properties. Brand: Matterhorn logo only.
+```
+
+---
+
+## Prompt 17: Responsive Layout — Mobile / Tablet
+
+```
+Implement responsive layout variants matching docs/ui/matterhorn-product-ui-system.md §13.
+
+Mobile (< 640px):
+- Top bar: hamburger menu, desk name, wallet avatar.
+- Safety strip always visible (sticky, condensed: "Can: No · Live: Off").
+- Market card grid: single column, full width.
+- Context panel: slides up from bottom as a sheet (80vh, draggable handle).
+  No swipe-to-dismiss on safety-critical panels (action preview, handoff).
+- Portfolio table: horizontal scroll with sticky first column.
+- Bottom tab bar: 4 icons — Markets, Home, Activity, Settings. Min 44×44px touch targets.
+- Font sizes scale down 1 step (--text-base → 14px, --text-sm → 12px).
+- No hover states — all interactions are tap.
+
+Tablet (640px – 1199px):
+- Sidebar collapses to icon rail (64px wide).
+- Context panel becomes a 380px slide-over from the right.
+- Main content: 2-column market card grid.
+- Top bar shows: hamburger, desk name, safety badge, wallet avatar.
+
+Desktop (≥ 1200px):
+- Sidebar 240px, main content fills remaining, context panel 380px.
+- CSS Grid for main layout shell.
+- Context panel: position sticky on desktop, position fixed on mobile/tablet.
+
+Design tokens: all via CSS custom properties. Brand: Matterhorn logo only.
+```

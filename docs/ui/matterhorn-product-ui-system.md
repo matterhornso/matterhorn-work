@@ -419,3 +419,543 @@ Mobile is out of scope for v1.
 - Handoff hashes are SHA-256 of deterministic serializations — no entropy source needed.
 - Receipt import is read-only HTTP POST — no persistent connection to venue APIs.
 - The evidence log is a local file export — no server-side storage of execution metadata.
+
+
+---
+
+## 9. Protocol Desks
+
+Each protocol desk is a dedicated view scoped to a single venue. Desks are top-level nav items. Every desk follows the shared transcript/card system (§11) for all execution-related interactions.
+
+### 9.1 Desk Shell
+
+Every desk has a consistent header and layout:
+
+```
+┌─ [Logo]  Bittensor Desk          [Safety Badge] [Chain: Mainnet] [◈ Wallet] ─┐
+│                                                                              │
+│  Can Submit: No    Live Submission: Off    External Signer: Ready            │
+│                                                                              │
+│  ┌─ Market Selector ─────────────────────┐  ┌─ Context Panel ────────────┐  │
+│  │ [TAO/SOL] [TAO/USDC] [+ Add Market] │  │  Wallet Snapshot           │  │
+│  └───────────────────────────────────────┘  │  Orderbook Depth           │  │
+│                                             │  Compliance Block          │  │
+│  [Market Card Grid or Transcript View]      │  Action Preview            │  │
+│                                             │  External Signer Handoff   │  │
+│                                             └────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Mandatory safety strip** (always visible at the top of every desk):
+
+```
+Can Submit: No    Live Submission: Off    External Signer: [Ready / Connecting / Unavailable]
+```
+
+This strip must never be hidden, collapsed, or disabled. It is the user's primary safety signal.
+
+### 9.2 Bittensor Desk
+
+**Venue:** Bittensor (mainnet + testnet)
+**Scope:** Tao token markets, subnet markets, delegate staking
+**Safety mode default:** `read_only`
+
+#### Markets
+
+| Market | Type | Safety |
+|---|---|---|
+| TAO/SOL | Spot | `read_only` — preview only |
+| TAO/USDC | Spot | `read_only` — preview only |
+| Subnet Register | Validator slot | `read_only` — preview only |
+| Delegate Stake | Staking | `read_only` — preview only |
+
+#### Desk Layout
+
+```
+┌─ Bittensor Desk ─────────────────────── [Read-Only] [Mainnet] [◈ wallet] ────┐
+│  Can Submit: No  ·  Live Submission: Off  ·  External Signer: Ready         │
+│                                                                              │
+│  [TAO/SOL] [TAO/USDC] [Subnet Register] [Delegate Stake]                    │
+│                                                                              │
+│  ┌─ TAO/USDC ──────────────────────────────────────────────────────────┐   │
+│  │ $18.42  ▲ +3.2%  (24h)                    [Blue Badge: Read-Only]      │   │
+│  │                                                                          │   │
+│  │  Bittensor subnet: 1  ·  circulating: 8,421,000  ·  market cap: $155M  │   │
+│  │                                                                          │   │
+│  │  ┌─ Wallet Snapshot ────────────────────────────────────────────────┐ │   │
+│  │  │  TAO Balance:    0.2841  ($5.23)                                   │ │   │
+│  │  │  SOL Balance:    1.832  ($312.40)                                  │ │   │
+│  │  │  Delegated:      0.5000 TAO  → tao1…abc                           │ │   │
+│  │  └─────────────────────────────────────────────────────────────────────┘ │   │
+│  │                                                                          │   │
+│  │  [Preview Order]                                                         │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key constraints
+
+- **No order book** — Bittensor does not have an orderbook. The context panel shows subnet emission data, Tao price, and wallet balances instead.
+- **Subnet validator slots** shown as market cards (not forms). Click → transcript card showing slot, cost, registration preview.
+- **Delegate staking** shown as a card with current delegate, amount, and a "Preview Redelegate" action.
+- **All actions are preview-only.** No submit, no staking transaction UI.
+
+### 9.3 Hyperliquid Desk
+
+**Venue:** Hyperliquid (mainnet + Base Sepolia testnet)
+**Scope:** Perpetual futures, spot (read-only market data)
+**Safety mode default:** `read_only`
+
+#### Markets
+
+| Market | Type | Safety |
+|---|---|---|
+| BTC-PERP | Perpetual | `read_only` — preview only |
+| ETH-PERP | Perpetual | `read_only` — preview only |
+| SOL-PERP | Perpetual | `read_only` — preview only |
+| All Markets (browser) | Browse | `read_only` |
+
+#### Desk Layout
+
+```
+┌─ Hyperliquid Desk ───────────────────── [Read-Only] [Base Sepolia] [◈ wallet] ┐
+│  Can Submit: No  ·  Live Submission: Off  ·  External Signer: Ready           │
+│                                                                                │
+│  [BTC-PERP] [ETH-PERP] [SOL-PERP] [All Markets →]                             │
+│                                                                                │
+│  ┌─ BTC-PERP · Base Sepolia ─────────────────────────────────────────────┐   │
+│  │ $64,250.00  ▲ +2.34% 24h    OI: $12.4B  ·  Funding: +0.0001/hr        │   │
+│  │                                                                         │   │
+│  │  ┌─ Orderbook ────────────────────────┐  ┌─ Action Preview ───────┐  │   │
+│  │  │  Bids           Price      Asks     │  │  BTC-PERP · BUY        │  │   │
+│  │  │  0.842          64,249    0.120     │  │  Size: 0.1 BTC         │  │   │
+│  │  │  1.204          64,248    0.340     │  │  Price: $64,250.00    │  │   │
+│  │  │  0.901          64,247    0.220     │  │  Est. slip: 0.02%     │  │   │
+│  │  │                        …             │  │                         │  │   │
+│  │  └─────────────────────────────────────┘  │  [View Handoff →]      │  │   │
+│  │                                          └─────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key constraints
+
+- **Perpetuals only** (no spot trading). Spot prices shown as reference data.
+- **Orderbook is read-only** — depth chart visualization instead of a traditional order book table.
+- **Leverage control** — preview shows estimated leverage, not a live margin calculator.
+- **Perp position PnL** calculated from mark price, displayed in the portfolio view.
+
+### 9.4 Polymarket Desk
+
+**Venue:** Polymarket (mainnet)
+**Scope:** Prediction markets / conditional markets
+**Safety mode default:** `read_only`
+
+#### Markets
+
+| Market | Type | Safety |
+|---|---|---|
+| [Ethereum ETF approval] | Binary market | `read_only` — preview only |
+| [SOL ETF approval] | Binary market | `read_only` — preview only |
+| [Generic Yes/No] | Binary market | `read_only` — preview only |
+
+#### Desk Layout
+
+```
+┌─ Polymarket Desk ────────────────────────────── [Read-Only] [Mainnet] [◈] ┐
+│  Can Submit: No  ·  Live Submission: Off  ·  External Signer: Ready       │
+│                                                                             │
+│  [Trending] [Crypto] [Politics] [Tech] [All]                                │
+│                                                                             │
+│  ┌─ Will an Ethereum ETF be approved by end of 2025? ─────────────────┐  │
+│  │                                                                         │  │
+│  │  YES  $0.38  ████████████░░░░░░░░░░  38% liquidity owned             │  │
+│  │  NO   $0.62  ████████████████████░  62%                              │  │
+│  │                                                                         │  │
+│  │  Volume: $4.2M  ·  Liquidity: $12.8M  ·  Expiry: 2025-12-31          │  │
+│  │                                                                         │  │
+│  │  [Preview "Yes" Position]  [Preview "No" Position]                    │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Key constraints
+
+- **Binary outcomes only** — YES/NO positions. No AMM liquidity provision UI.
+- **"Position"** means "preview of buying YES or NO shares" — never a direct trade execution.
+- **Outcome resolution** shown in portfolio/evidence view when the market closes.
+- **Fractional shares** not supported in preview — previews show integer share counts.
+- **Market questions** displayed verbatim as the market title — no paraphrasing.
+
+---
+
+## 10. Wellness Workflow Desk
+
+A dedicated desk for wellness tracking and goal management workflows. This desk operates entirely outside of market execution. It is completely separate from the protocol desks and does not share the `canSubmit` safety strip (no market execution occurs here).
+
+### 10.1 Desk Overview
+
+```
+┌─ Wellness Desk ──────────────────────────────────────────────── [◈ wallet] ┐
+│                                                                              │
+│  Good morning. Your streak: 14 days  ·  This week: 3/5 goals complete     │
+│                                                                              │
+│  ┌─ Today's Goals ──────────────────────────────────────────────────────┐  │
+│  │  ○ Morning stretch routine       (not done)                            │  │
+│  │  ◉ Hydration: 2.5L target        ✓ complete                           │  │
+│  │  ○ Evening walk                   (not done)                            │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌─ Weekly Overview ────────────────────────────────────────────────────┐  │
+│  │  Mon ✓   Tue ✓   Wed ✓   Thu ✓   Fri ○   Sat ○   Sun ○               │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  ┌─ Wellness Artifact ──────────────────────────────────────────────────┐  │
+│  │  [Icon] Weekly wellness summary exported.                              │  │
+│  │  Hash: sha256:3a4b…e91f  ·  Exported: 2025-01-08  ·  [Download]      │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+│                                                                              │
+│  [+ New Goal]  [Workflow Builder →]                                         │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 Design Rules
+
+- **No execution strip** — the wellness desk has no `canSubmit` strip because no market execution occurs.
+- **Streak counter** — shown as a prominent mono number in the desk header.
+- **Goal states** — `○` pending, `◉` complete, `⊘` missed. Color-coded by completion rate.
+- **Wellness artifacts** — exportable as signed JSON, hash logged for tamper-evidence.
+- **Workflow integration** — goals can be automated via the workflow builder (e.g., "remind me to stretch every weekday 9am").
+
+---
+
+## 11. Shared Transcript / Card System
+
+Every execution context across all desks uses one of these shared card types. They are the vocabulary of the transcript system.
+
+### 11.1 Wallet Snapshot Card
+
+Shown at the top of every context panel. Displays current wallet balances relevant to the active market.
+
+```
+┌─ Wallet Snapshot ────────────────────────────────────────────
+│  Asset        Balance      USD Value
+│  TAO          0.2841       $5.23
+│  SOL          1.832        $312.40
+│  USDC         42.18        $42.18
+│
+│  External signer address: 0x3a…7bc
+└──────────────────────────────────────────────────────────────
+```
+
+States: `live` (balances current), `stale` (>60s old — amber border, "Refresh"), `disconnected` (no wallet — prompt to connect).
+
+### 11.2 Orderbook / Context Card
+
+Read-only context for Hyperliquid. Shows market depth without any order placement affordance.
+
+```
+┌─ Orderbook — BTC-PERP ────────────────────────────────────────
+│  Bids                Price       Asks
+│  ████░░░░░ 0.842    64,249.00   0.120
+│  █████░░░░ 1.204    64,248.00   0.340
+│  ███░░░░░░ 0.901    64,247.00   0.220
+│
+│  Spread: $1.00 (0.0016%)  ·  Mid: $64,249.50
+└──────────────────────────────────────────────────────────────
+```
+
+Depth bars are visual only — they are not clickable. No "place order" affordance.
+
+### 11.3 Compliance Block
+
+Shown when the current market or jurisdiction prevents execution. Replaces the action preview card entirely when active.
+
+```
+┌─ ⚠ Compliance Block ─────────────────────────────────────────
+│  [Amber Badge] Jurisdiction Restricted
+│
+│  Market execution is not available in your region.
+│  For questions, see the Safety Explainer.
+│
+│  [View Safety Explainer →]
+└──────────────────────────────────────────────────────────────
+```
+
+The compliance block must always show the amber safety badge and never attempt to bypass the restriction.
+
+### 11.4 Action Preview Card
+
+The central card for every market desk. Shows the action being previewed, its terms, and the safety badge.
+
+```
+┌─ Action Preview ─────────────────────────────────────────────
+│  BTC-PERP · BUY · 0.1 BTC · $64,250.00
+│  [Green Badge] External Signer Live
+│
+│  Notional: $6,425.00
+│  Est. Slippage: 0.02%
+│  Est. Fill: $64,262.80
+│  Est. Liquidation: $51,400.00
+│  Est. Leverage: 4.3×
+│
+│  🔒 Matterhorn does not sign, submit, or hold keys.
+│
+│  [View External Signer Handoff →]
+└──────────────────────────────────────────────────────────────
+```
+
+Never contains: Submit, Confirm, Execute, Place Order buttons.
+
+### 11.5 External Signer Handoff Card
+
+```
+┌─ External Signer Handoff ────────────────────────────────────
+│  [Green Badge] External Signer Live
+│
+│  Order Terms (public):
+│    Asset:  BTC-PERP
+│    Side:   BUY
+│    Size:   0.1 BTC
+│    Price:  $64,250.00
+│    Type:   GTC Limit
+│
+│  Preview SHA256:   a3f8…c12d
+│  Handoff SHA256:   7b4e…9f82
+│  Expires:          30 minutes
+│
+│  [Sign with your wallet →]   [Copy Handoff]
+│
+│  Sign using Hyperliquid's official client or SDK.
+│  Matterhorn never receives your signature.
+└──────────────────────────────────────────────────────────────
+```
+
+### 11.6 Receipt / Status Card
+
+```
+┌─ Execution Receipt ──────────────────────────────────────────
+│  [Green Badge] Verified — Order Filled
+│
+│  Order ID: example-order-123
+│  Asset: BTC-PERP  Side: BUY  Size: 0.1 BTC
+│  Status: Filled
+│
+│  Preview Hash:  a3f8…c12d  ✓ Matched
+│  Handoff Hash:  7b4e…9f82  ✓ Matched
+│
+│  [Download Receipt]  [Add to Evidence Log]
+└──────────────────────────────────────────────────────────────
+```
+
+States: `verified` (green), `review-needed` (amber — no order ID found), `rejected` (red — hash mismatch).
+
+### 11.7 Wellness Artifact Card
+
+```
+┌─ Wellness Artifact ──────────────────────────────────────────
+│  Weekly wellness summary
+│  Period: 2025-01-01 → 2025-01-07  ·  Goals completed: 4/5
+│
+│  sha256: 3a4b…e91f
+│  Signed by: 0x3a…7bc  ·  Exported: 2025-01-08 14:32 UTC
+│
+│  [Download]  [Add to Evidence Log]
+└──────────────────────────────────────────────────────────────
+```
+
+---
+
+## 12. Empty / Loading / Degraded / Error States
+
+Every view must handle these four states gracefully. Never show a blank white screen or an unhandled exception.
+
+### 12.1 Empty State
+
+Shown when there is no data for the current context (e.g., no positions, no markets matching filter, no workflow runs).
+
+```
+┌─ Positions ────────────────────────────────────────────────────
+│  [mh-panel, empty-state]
+│
+│  ┌─ No positions ───────────────────────────────────────────┐
+│  │                                                            │
+│  │   [Icon: empty circle]                                    │
+│  │   No open positions                                       │
+│  │                                                            │
+│  │   Markets are available on the Hyperliquid and            │
+│  │   Polymarket desks.                                       │
+│  │                                                            │
+│  │   [Browse Markets →]                                      │
+│  └──────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────
+```
+
+Design: centered icon (monochrome, 48px), heading in `--text-base` weight 500, subtext in `--mh-text-secondary`, optional CTA button in accent. No illustrations or decorative imagery.
+
+### 12.2 Loading State
+
+Shown while data is being fetched.
+
+```
+┌─ Market Detail ───────────────────────────────────────────────
+│  [Skeleton loader — 3 rows of 3 market cards]
+│
+│  ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+│  │  ████████████  ████████████  ████████████                │
+│  └──────────────────────────────────────────────────────────┘
+│  ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+│  │  ████████████  ████████████  ████████████                │
+│  └──────────────────────────────────────────────────────────┘
+│  ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+│  │  ████████████  ████████████  ████████████                │
+│  └──────────────────────────────────────────────────────────┘
+│
+│  [skeleton class: mh-skeleton-row, animated pulse 1.5s ease-in-out]
+```
+
+Implementation: use `mh-skeleton` class — a `div` with `background: var(--mh-bg-elevated)` and `border-radius: 4px`. Pulse animation: `opacity: 0.5 → 1.0` over 1.5s, `ease-in-out`, infinite. No spinner or loading text in the main content area.
+
+### 12.3 Degraded State
+
+Shown when some data loaded but a non-critical source failed (e.g., wallet balance stale, one venue's data missing).
+
+```
+┌─ Bittensor Desk ───────────────────────────────────────────────
+│  ⚠ Some data is unavailable
+│
+│  ┌─ Wallet Snapshot ──────────────────────────────────────────┐
+│  │  TAO: 0.2841  (live)                                      │
+│  │  SOL: 1.832  (live)                                       │
+│  │  USDC: [amber] stale — last updated 3 min ago             │
+│  └────────────────────────────────────────────────────────────┘
+│
+│  ┌─ TAO/USDC ─────────────────────────────────────────────────┐
+│  │  $18.42  ▲ +3.2%  (24h)    [Blue Badge: Read-Only]        │
+│  │  Bittensor subnet: 1  ·  circulating: 8,421,000            │
+│  └────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────
+```
+
+Design: degraded panel gets an amber left border. A thin amber banner at the top of the affected card: "⚠ Some data is unavailable". The rest of the UI remains fully interactive.
+
+### 12.4 Error State
+
+Shown when a critical failure occurred (network error, wallet disconnected, venue unreachable).
+
+```
+┌─ Hyperliquid Desk ─────────────────────────────────────────────
+│
+│  ┌─ Error ────────────────────────────────────────────────────┐
+│  │                                                           │
+│  │   [Icon: warning triangle — amber]                         │
+│  │   Unable to reach Hyperliquid                              │
+│  │                                                           │
+│  │   Check your connection and try again.                    │
+│  │   If the problem persists, visit the status page.         │
+│  │                                                           │
+│  │   [Try Again]                                             │
+│  │                                                           │
+│  └───────────────────────────────────────────────────────────┘
+│
+└──────────────────────────────────────────────────────────────
+```
+
+Design: full-panel error card (centered). Warning icon in `--mh-amber`. Heading in `--text-lg` weight 600. Body in `--mh-text-secondary`. "Try Again" button in secondary style. Do not show technical error messages or stack traces.
+
+For wallet disconnection:
+
+```
+┌─ Wallet Disconnected ───────────────────────────────────────────
+│
+│   [Icon: wallet-off]
+│   Wallet disconnected
+│
+│   Reconnect to continue browsing markets.
+│
+│   [Reconnect Wallet]
+│
+└──────────────────────────────────────────────────────────────
+```
+
+---
+
+## 13. Responsive Strategy (Updated)
+
+### 13.1 Breakpoints
+
+| Breakpoint | Width | Layout |
+|---|---|---|
+| Mobile | `< 640px` | Single column. Sidebar becomes bottom tab bar. Context panel slides up as a sheet. |
+| Tablet | `640px – 1199px` | Sidebar collapses to icon rail (64px). Context panel becomes a slide-over (480px wide). |
+| Desktop | `≥ 1200px` | Full layout. Sidebar 240px. Context panel 380px. Main area fills remaining space. |
+| Wide | `≥ 1600px` | Context panel grows to 480px. Market card grid goes to 3 columns. |
+
+### 13.2 Mobile (< 640px)
+
+```
+┌────────────────────────┐
+│ [≡]  Bittensor  [◈]   │  ← topbar: hamburger + desk name + wallet
+├────────────────────────┤
+│                        │
+│  [Safety Strip]        │  ← sticky, condensed: "Can: No · Live: Off"
+│                        │
+│  [Market Card Stack]   │  ← single column, full width
+│                        │
+│  [Context Panel]       │  ← slides up from bottom as a sheet
+│  (draggable handle)    │     80% viewport height
+│                        │
+├────────────────────────┤
+│ [◈] [≡] [◎] [⚙]       │  ← bottom tab bar: Markets · Home · Activity · Settings
+└────────────────────────┘
+```
+
+- Safety strip always visible, never below the fold.
+- Context panel is a bottom sheet with a drag handle (no swipe-to-dismiss on safety-critical panels).
+- Portfolio table scrolls horizontally with sticky first column.
+- No hover states — all interactions are tap.
+
+### 13.3 Tablet (640px – 1199px)
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ [≡]  Matterhorn Work  ·  Bittensor  ·  [Safety Badge]  [◈]  │
+├────┬──────────────────────────────────────────────────────────┤
+│    │  Safety Strip                                           │
+│ 🏠 │─────────────────────────────────────────────────────────  │
+│    │                                                          │
+│ 📊 │  [Market Cards — 2 column grid]                          │
+│    │  [Context Panel — 380px slide-over from right]           │
+│ ⚙  │                                                          │
+└────┴──────────────────────────────────────────────────────────┘
+   ↑
+ Icon rail (64px wide)
+```
+
+### 13.4 Desktop (≥ 1200px)
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│ Logo  Markets  Workflows  Wellness  ····  Safety Badge  [◈]  │ ← header
+├──────────┬───────────────────────────────────┬───────────────┤
+│          │                                   │               │
+│ Sidebar  │   Main Content Area               │ Context Panel │
+│ 240px    │   (fills remaining)               │ 380px         │
+│          │                                   │               │
+│  Nav     │   Market grid / desk view /        │ Wallet snap   │
+│  items   │   portfolio table / workflow       │ Order preview │
+│          │                                   │ Handoff card  │
+│          │                                   │               │
+└──────────┴───────────────────────────────────┴───────────────┘
+```
+
+### 13.5 Implementation Notes
+
+- CSS Grid for main layout shell. Flexbox for component internals.
+- Context panel uses `position: sticky` on desktop. On mobile/tablet, it is `position: fixed` with a sheet animation.
+- The safety strip (`Can Submit: No · Live Submission: Off`) must never be hidden regardless of viewport.
+- Touch targets minimum 44×44px on mobile and tablet.
+- Font sizes scale down by 1 step on mobile (`--text-base` → 14px, `--text-sm` → 12px).
