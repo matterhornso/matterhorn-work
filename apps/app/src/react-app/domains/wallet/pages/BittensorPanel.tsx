@@ -183,6 +183,53 @@ const CUSTOMER_DEMO_PROMPTS = [
     prompt: "Use unified crypto chat. Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
 ] as const;
+// Beta-tester "Try in chat" quick prompts. Each inserts a ready-to-review
+// prompt into the composer (it does not auto-send). Copy is preview/read-only
+// and never asks for secrets.
+const BETA_TRY_PROMPTS = [
+  {
+    id: "beta-show-tao",
+    label: "show my TAO",
+    mode: "bittensor",
+    prompt:
+      "Use Bittensor chat mode. Show my TAO for the public SS58 address in context. If none is set, ask once for a public coldkey address only. Never ask for seed phrases, private keys, or wallet exports.",
+  },
+  {
+    id: "beta-image-subnets",
+    label: "find Bittensor subnets for image generation",
+    mode: "crypto",
+    prompt:
+      "Use unified crypto chat. Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
+  },
+  {
+    id: "beta-validators-14",
+    label: "compare validators on subnet 14",
+    mode: "bittensor",
+    prompt:
+      "Use Bittensor chat mode. Compare validators on subnet 14 using public metagraph context. Explain stake, trust, and emissions in beginner language. Any staking action requires an external Bittensor-compatible signer; Matterhorn cannot sign or broadcast.",
+  },
+  {
+    id: "beta-stake-1-tao",
+    label: "prepare staking 1 TAO",
+    mode: "bittensor",
+    prompt:
+      "Use Bittensor chat mode. Prepare a preview for staking 1 TAO: show netuid, validator hotkey, expected alpha, fee, slippage, and warnings. Make clear this is a preview only and must be signed in an external Bittensor-compatible signer. Never ask for seed phrases or private keys.",
+  },
+  {
+    id: "beta-hl-orderbook",
+    label: "show Hyperliquid BTC orderbook",
+    mode: "crypto",
+    prompt:
+      "Use unified crypto chat. Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+  },
+  {
+    id: "beta-pm-summary",
+    label: "summarize a Polymarket market",
+    mode: "crypto",
+    prompt:
+      "Use unified crypto chat. Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
+  },
+] as const;
 const BITTENSOR_BETA_MODE = (() => {
   const flag = typeof import.meta.env?.VITE_MATTERHORN_BITTENSOR_BETA === "string"
     ? import.meta.env.VITE_MATTERHORN_BITTENSOR_BETA.trim().toLowerCase()
@@ -699,6 +746,15 @@ export default function BittensorPanel() {
     }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
   };
 
+  // Insert a beta "Try in chat" prompt into the composer (never auto-sends).
+  const askAgentBetaTryPrompt = async (item: (typeof BETA_TRY_PROMPTS)[number]) => {
+    await sendToChat(item.prompt, {
+      ss58Address: watchAddress.trim() || undefined,
+      wallet,
+      sourcePrompt: item.id,
+    }, { mode: item.mode, source: "crypto-beta-try" });
+  };
+
   const askAgentAboutQuote = async () => {
     if (!quote) return;
     const prompt = `Use Bittensor chat mode. Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
@@ -901,6 +957,68 @@ export default function BittensorPanel() {
 
         {tab === "demo" && (
           <div className="space-y-4">
+            <Section title="Try in chat" icon={<BrainCircuit className="size-4" />}>
+              <p className="text-[11px] leading-5 text-dls-secondary">
+                Tap a prompt to drop it into the chat composer. Nothing sends automatically — review it, then press send. Public reads work without connecting an EVM wallet.
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {BETA_TRY_PROMPTS.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant="outline"
+                    size="sm"
+                    className="h-auto min-w-0 justify-start whitespace-normal break-words py-2 text-left text-xs"
+                    onClick={() => void askAgentBetaTryPrompt(item)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+            </Section>
+
+            <Section title="Safety status" icon={<Shield className="size-4" />}>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Bittensor</p>
+                  <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
+                    Most complete beta flow. External signer required for actions; Matterhorn never holds keys.
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Hyperliquid</p>
+                  <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
+                    Preview only, live submission off. Can submit: No.
+                  </p>
+                </div>
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Polymarket</p>
+                  <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
+                    Preview only, compliance checks required. Can submit: No.
+                  </p>
+                </div>
+                <p className="break-words text-[11px] leading-5 text-dls-secondary">
+                  Matterhorn does not custody keys, sign silently, or submit live market trades.
+                </p>
+              </div>
+            </Section>
+
+            <Section title="Evidence / QA" icon={<Database className="size-4" />}>
+              <div className="grid grid-cols-1 gap-2">
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Customer crypto smoke</p>
+                  <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm smoke:customer-ready-crypto</code>
+                </div>
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Bittensor beta packet</p>
+                  <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm beta:bittensor:packet</code>
+                </div>
+                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                  <p className="text-xs font-semibold text-dls-text">Market SDK validation evidence</p>
+                  <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">matterhorn-work crypto sdk-validate-public --mode fixture</code>
+                </div>
+              </div>
+            </Section>
+
             <Section title="Readiness" icon={<Shield className="size-4" />}>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">

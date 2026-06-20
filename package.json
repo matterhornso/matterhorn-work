@@ -141,6 +141,7 @@
     "test:hermes-crypto-customer-qa": "node scripts/hermes-crypto-customer-qa.test.mjs",
     "test:wellness-creator-pilot": "node scripts/wellness-creator-pilot.test.mjs",
     "test:wellness-creator-workflow": "node scripts/wellness-creator-workflow.test.mjs",
+    "test:crypto-panel-ux": "node scripts/crypto-panel-ux.test.mjs",
     "test:customer-crypto-ci-workflow": "node scripts/customer-crypto-ci-workflow.test.mjs"
   },
   "devDependencies": {
