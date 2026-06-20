@@ -754,6 +754,23 @@ const server = createServer(async (req, res) => {
         category: "bittensor",
         status: "beta_ready",
         examplePrompts: ["Show my TAO"],
+        launch: {
+          primaryCta: "Open Bittensor panel",
+          secondaryCta: "Preview a stake handoff",
+          defaultPrompt: "Show my TAO",
+          handoffContextLabel: "Public wallet address",
+          recommendedSurface: "protocol_desk",
+        },
+        ui: {
+          iconHint: "bittensor",
+          accent: "matterhorn_blue",
+          shortDescription: "Read TAO balances and prepare external-signer staking handoffs.",
+        },
+        routing: {
+          chatMode: "bittensor",
+          opensPanel: "bittensor",
+          startsSession: true,
+        },
         safetyBoundaries: {
           acceptsSecrets: false,
           acceptsPrivateKeys: false,
@@ -1571,6 +1588,10 @@ try {
   assert.equal(customerTemplates.safety.liveExecutionEnabled, false);
   assert.equal(customerTemplates.safety.canSubmit, false);
   assert.equal(customerTemplates.customerTemplates[0].id, "bittensor_operator");
+  assert.equal(customerTemplates.customerTemplates[0].launch.primaryCta, "Open Bittensor panel");
+  assert.equal(customerTemplates.customerTemplates[0].ui.iconHint, "bittensor");
+  assert.equal(customerTemplates.customerTemplates[0].routing.chatMode, "bittensor");
+  assert.equal(customerTemplates.customerTemplates[0].routing.startsSession, true);
   assert.equal(customerTemplates.customerTemplates[0].safetyBoundaries.acceptsSecrets, false);
   assert.equal(customerTemplates.customerTemplates[0].safetyBoundaries.liveExecutionEnabled, false);
 
