@@ -59,6 +59,7 @@ assert.ok(panel.includes("askAgentBetaTryPrompt"), "Try-in-chat buttons should c
 assert.ok(panel.includes('source: "crypto-beta-try"'), "Beta prompts should route through the crypto handoff source");
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff") || panel.includes('mode: item.mode'), "Beta prompts should use the insert handoff event");
 assert.ok(panel.includes("Nothing sends automatically"), "Panel should tell testers prompts are not auto-sent");
+assert.ok(panel.includes("Right-rail command groups stay single-column"), "Protocol rail command groups should avoid cramped multi-column controls");
 
 // 6. Safety status: the three venue lines + the custody/no-live-trade statement.
 for (const phrase of [

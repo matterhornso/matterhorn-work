@@ -1352,7 +1352,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Work server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the evidence commands below for a terminal check.
                   </Notice>
                 ) : null}
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {/* Right-rail command groups stay single-column; viewport breakpoints are too wide for this side panel. */}
+                <div className="grid grid-cols-1 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading}>
                     {readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
@@ -1374,7 +1375,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <p className="text-xs leading-5 text-dls-secondary">
                   First-run tester path: build an unsigned local DMG/ZIP, run the desktop beta doctor, then capture install, launch, readiness, and safety evidence before a customer session.
                 </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2">
                   <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
                     <p className="text-xs font-semibold text-dls-text">Bittensor: Beta-ready</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Read, preview, watches, receipts, and external-signer handoff.</p>
@@ -1388,7 +1389,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Wellness and decentralized services do not run live payments, email, storage, or access control.</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("desktopInstallGuide")}>
                     {copiedCustomerCommand === "desktopInstallGuide" ? "Copied" : "Open install guide"}
                   </Button>
@@ -1421,7 +1422,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {marketExecutionNextAction ? (
                   <p className="text-xs leading-5 text-sky-200">Next: {marketExecutionNextAction}</p>
                 ) : null}
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionReadiness} disabled={marketExecutionReadinessLoading}>
                     {marketExecutionReadinessLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
@@ -1448,7 +1449,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <p className="text-xs leading-5 text-dls-secondary">
                   Testnet-only path: preview -&gt; external sign request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
                 </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2">
                   {[
                     ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
                     ["External sign request", "Create public metadata for an operator-owned testnet signer only."],
@@ -1461,7 +1462,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                <div className="grid grid-cols-1 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketExecutionChain} disabled={marketExecutionChainLoading}>
                     {marketExecutionChainLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
@@ -1496,7 +1497,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <p className="text-xs leading-5 text-dls-secondary">
                   Official SDK validation is public/redacted evidence only. Fixture mode runs in CI; operator-owned testnet mode validates Hyperliquid testnet and Polygon Amoy artifacts without sending keys, API secrets, raw signatures, signed payloads, wallet exports, or live orders to Matterhorn.
                 </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+                <div className="grid grid-cols-1 gap-2">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={loadMarketSdkValidation} disabled={marketSdkValidationLoading}>
                     {marketSdkValidationLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
                     Refresh
