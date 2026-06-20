@@ -592,9 +592,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           id: "readiness_api",
           label: "Readiness API",
           status: "fail",
-          summary: err instanceof Error ? err.message : "Failed to load Bittensor readiness.",
+          summary: err instanceof Error
+            ? `Local Matterhorn API unavailable for /api/bittensor/readiness: ${err.message}`
+            : "Local Matterhorn API unavailable for /api/bittensor/readiness.",
         }],
-        warnings: ["Readiness check could not run from the app."],
+        warnings: ["This is a local server/auth availability check, not a Bittensor wallet or subnet failure."],
+        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh readiness."],
       });
     } finally {
       setReadinessLoading(false);
@@ -615,9 +618,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           id: "crypto_readiness_api",
           label: "Protocol readiness API",
           status: "fail",
-          summary: err instanceof Error ? err.message : "Failed to load protocol readiness.",
+          summary: err instanceof Error
+            ? `Local Matterhorn API unavailable for /api/crypto/readiness: ${err.message}`
+            : "Local Matterhorn API unavailable for /api/crypto/readiness.",
         }],
-        warnings: ["Protocol readiness could not run from the app."],
+        warnings: ["This blocks live customer evidence collection until the local server/auth token is healthy, but it is not a protocol or wallet failure."],
+        nextActions: ["Run pnpm smoke:customer-ready-crypto or restart Matterhorn Work, then refresh this panel."],
       });
     } finally {
       setCryptoReadinessLoading(false);
@@ -641,9 +647,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         controls: [{
           id: "market_execution_readiness_api",
           status: "fail",
-          summary: err instanceof Error ? err.message : "Failed to load market execution readiness.",
+          summary: err instanceof Error
+            ? `Local Matterhorn API unavailable for /api/crypto/market-execution-readiness: ${err.message}`
+            : "Local Matterhorn API unavailable for /api/crypto/market-execution-readiness.",
         }],
-        nextActions: ["Refresh market execution readiness before previewing market execution flows."],
+        nextActions: ["Restart or reconnect the Matterhorn Work local server, then refresh market execution readiness before customer demos."],
         safety: {
           nonCustodial: true,
           liveSubmissionEnabled: false,
@@ -947,6 +955,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const cryptoReadinessWarnings = cryptoReadinessChecks.filter((check) => check.status === "warning" || check.status === "skip");
   const cryptoReadinessBlocker = cryptoReadiness?.blockers?.find(Boolean) ?? null;
   const cryptoReadinessNextAction = cryptoReadiness?.nextActions?.find(Boolean) ?? null;
+  const localReadinessApiUnavailable = [...readinessChecks, ...cryptoReadinessChecks].some((check) =>
+    check.id === "readiness_api" || check.id === "crypto_readiness_api",
+  );
   const cryptoReadinessState = cryptoReadiness
     ? cryptoReadiness.ready === true && cryptoReadinessFailures.length === 0
       ? "Ready"
@@ -1335,6 +1346,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 )}
                 {cryptoReadinessNextAction || readinessNextAction ? (
                   <p className="text-xs leading-5 text-sky-200">Next: {cryptoReadinessNextAction ?? readinessNextAction}</p>
+                ) : null}
+                {localReadinessApiUnavailable ? (
+                  <Notice tone="info" icon={<Shield className="size-4" />} title="Local API check">
+                    The protocol desks are installed, but the desktop panel cannot reach the local readiness API yet. This usually means the Matterhorn Work server/auth token is still starting or stale; restart or reconnect, then refresh. You can still copy the evidence commands below for a terminal check.
+                  </Notice>
                 ) : null}
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={refreshBittensor} disabled={readinessLoading || cryptoReadinessLoading || marketExecutionReadinessLoading || marketSdkValidationLoading}>

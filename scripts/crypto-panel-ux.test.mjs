@@ -68,6 +68,10 @@ for (const phrase of [
   "Preview only, compliance checks required.",
   "Matterhorn does not custody keys, sign silently, or submit live market trades.",
   "Public reads work without connecting an EVM wallet.",
+  "Local Matterhorn API unavailable for /api/crypto/readiness",
+  "This blocks live customer evidence collection until the local server/auth token is healthy",
+  "Local API check",
+  "You can still copy the evidence commands below for a terminal check.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel safety copy should include: ${phrase}`);
 }
