@@ -555,4 +555,77 @@ for (const pilotPhrase of ["this is a pilot", "still a pilot", "wellness creator
 }
 assert.ok(handoff.includes("Service-Builder & Artifact-Contract Tests"), "Handoff should include service-builder QA");
 
+// 24. Customer Offer Builder layer.
+const offer = contract.offerBuilder;
+assert.ok(offer, "Contract should include offerBuilder");
+for (const persona of ["personal_trainer", "yoga_instructor", "dietician", "hybrid_coach"]) {
+  assert.ok(offer.personas.includes(persona), `offerBuilder.personas should include ${persona}`);
+}
+for (const id of ["starter_4_week", "transformation_8_week", "group_cohort", "corporate_wellness", "habit_reset"]) {
+  assert.ok(offer.offerTypes.some((o) => o.id === id), `offerBuilder.offerTypes should include ${id}`);
+}
+for (const id of ["offer_page", "client_intake", "weekly_plan", "video_script", "progress_tracker", "check_in_note", "renewal_offer"]) {
+  assert.ok(offer.deliverables.some((d) => d.id === id), `offerBuilder.deliverables should include ${id}`);
+}
+for (const hook of offer.serviceHooks) {
+  assert.equal(hook.status, "planned_not_live", `offerBuilder hook ${hook.id} must be planned_not_live`);
+}
+for (const flagKey of ["educationalOnly", "noMedicalDiagnosis", "noTreatmentPlan", "noPaymentProcessing", "noEmailSending"]) {
+  assert.equal(offer.safety[flagKey], true, `offerBuilder.safety.${flagKey} must be true`);
+}
+
+// CLI --offer <persona> --json for the three documented personas.
+function runOffer(persona) {
+  const result = spawnSync(process.execPath, [HELPER_PATH, "--offer", persona, "--json"], {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+  });
+  return { status: result.status, json: result.stdout ? JSON.parse(result.stdout) : null };
+}
+const OFFER_FIXTURES = {
+  personal_trainer: "docs/wellness-creator-workflow/personal-trainer-offer.md",
+  dietician: "docs/wellness-creator-workflow/dietician-client-packet.md",
+  yoga_instructor: "docs/wellness-creator-workflow/yoga-instructor-program.md",
+};
+for (const [persona, fixturePath] of Object.entries(OFFER_FIXTURES)) {
+  const { status, json } = runOffer(persona);
+  assert.equal(status, 0, `--offer ${persona} should exit 0`);
+  assert.equal(json.mode, "offer", `--offer ${persona} should be offer mode`);
+  assert.equal(json.persona, persona, `--offer ${persona} should resolve the persona`);
+  assert.equal(json.offerTypes.length, 5, `--offer ${persona} should have five offer types`);
+  assert.equal(json.deliverables.length, 7, `--offer ${persona} should have seven deliverables`);
+  for (const hook of json.serviceHooks) {
+    assert.equal(hook.status, "planned_not_live", `--offer ${persona} hook ${hook.id} must be planned_not_live`);
+  }
+  assert.equal(json.fixture, fixturePath, `--offer ${persona} should point at its fixture`);
+  // Fixture exists, carries the disclaimer, and has no live/medical/secret claims.
+  assert.ok(existsSync(fixturePath), `Offer fixture should exist: ${fixturePath}`);
+  const fixture = readFileSync(fixturePath, "utf8");
+  assert.ok(fixture.includes("not medical advice, diagnosis, or treatment"), `${fixturePath} should carry the non-medical disclaimer`);
+  const lower = fixture.toLowerCase();
+  for (const forbidden of [
+    "we diagnose", "prescribe a dose", "cure your", "will cure", "guaranteed weight loss", "guaranteed results",
+    "storage is live", "hosting is live", "payments are live", "payment is live", "email sending is live", "token gating is live",
+    "private key", "seed phrase", "api secret", "wallet export",
+  ]) {
+    assert.equal(lower.includes(forbidden), false, `${fixturePath} must not contain: "${forbidden}"`);
+  }
+}
+// Invalid persona is rejected.
+const badOffer = spawnSync(process.execPath, [HELPER_PATH, "--offer", "bogus", "--json"], { encoding: "utf8" });
+assert.notEqual(badOffer.status, 0, "Unknown offer persona should exit non-zero");
+assert.ok(JSON.parse(badOffer.stdout).error.includes("Unknown offer persona"), "Unknown persona should report an error");
+
+// Doc + handoff carry the offer-builder material.
+for (const phrase of [
+  "Customer Offer Builder",
+  "personal-trainer-offer.md",
+  "dietician-client-packet.md",
+  "yoga-instructor-program.md",
+  "planned_not_live",
+]) {
+  assert.ok(doc.includes(phrase), `Doc should include offer-builder reference: ${phrase}`);
+}
+assert.ok(handoff.includes("Customer Offer Builder Tests"), "Handoff should include offer-builder QA");
+
 console.log("Wellness Creator Workflow gate passed.");
