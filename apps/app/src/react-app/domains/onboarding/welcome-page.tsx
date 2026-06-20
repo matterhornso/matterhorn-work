@@ -10,7 +10,6 @@ import {
   Layers3,
   ServerCog,
   ShieldCheck,
-  Wallet,
 } from "lucide-react";
 
 import { t } from "../../../i18n";
@@ -29,33 +28,28 @@ import { cn } from "@/lib/utils";
 const capabilities = [
   {
     icon: BrainCircuit,
-    title: "Use Bittensor",
-    desc: "Explore subnets, compare validators, and prepare safe TAO staking previews.",
+    title: "Bittensor workspace",
+    desc: "Explore subnets, inspect TAO wallets, compare validators, and prepare safe staking previews.",
   },
   {
     icon: BarChart3,
-    title: "Preview markets",
-    desc: "Read Hyperliquid and Polymarket data with clear no-submit boundaries.",
+    title: "Hyperliquid desk",
+    desc: "Read account, orderbook, funding, and preview data with live submission clearly off.",
   },
   {
-    icon: Wallet,
-    title: "Connect safely",
-    desc: "Use public reads, unsigned previews, and external-signer handoffs.",
+    icon: Eye,
+    title: "Polymarket desk",
+    desc: "Summarize prediction markets, outcomes, liquidity, receipts, and compliance status.",
   },
   {
     icon: Dumbbell,
-    title: "Build workflows",
-    desc: "Create wellness, customer, research, and operator workflows from chat.",
+    title: "Wellness builder",
+    desc: "Create training, yoga, dietician, check-in, and customer-management workflows.",
   },
   {
     icon: Layers3,
     title: "Create artifacts",
     desc: "Generate plans, reports, packets, scripts, and reusable workflow bundles.",
-  },
-  {
-    icon: ServerCog,
-    title: "Plan services",
-    desc: "Preview hosting, storage, email, payment, and identity service contracts.",
   },
   {
     icon: ClipboardCheck,
@@ -67,6 +61,11 @@ const capabilities = [
     title: "Stay non-custodial",
     desc: "Matterhorn never asks for seed phrases, private keys, or raw signatures.",
   },
+  {
+    icon: ServerCog,
+    title: "Future services",
+    desc: "Preview hosting, storage, email, payment, and identity contracts before providers go live.",
+  },
 ];
 
 function ShowcasePanel() {
@@ -75,13 +74,13 @@ function ShowcasePanel() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold tracking-[-0.01em] text-foreground">
-            One chat for Web3,
+            Separate workspaces,
             <br />
-            workflows, and services.
+            one Matterhorn chat.
           </h2>
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Ask in plain English. Matterhorn turns it into safe reads, previews,
-            evidence, and artifacts.
+            Pick Bittensor, Hyperliquid, Polymarket, or a workflow builder,
+            then ask in plain English.
           </p>
         </div>
         <img
@@ -163,14 +162,14 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                   Get started
                 </h2>
               </div>
-              <OnboardingStep number="1" title="Create a workspace">
-                Pick a folder where Matterhorn can create artifacts, reports, and workflow files.
+              <OnboardingStep number="1" title="Create your workspace">
+                Pick a folder where Matterhorn can save chats, artifacts, receipts, and workflow files.
               </OnboardingStep>
-              <OnboardingStep number="2" title="Ask in plain English">
-                Use Bittensor, preview markets, build customer workflows, or create artifacts.
+              <OnboardingStep number="2" title="Choose a product lane">
+                Open Bittensor, Hyperliquid, Polymarket, wellness workflows, or a blank chat.
               </OnboardingStep>
               <OnboardingStep number="3" title="Review before action">
-                Inspect evidence, previews, and external-signer handoffs before anything sensitive happens.
+                Inspect evidence, preview-only actions, and external-signer handoffs before anything sensitive happens.
               </OnboardingStep>
             </div>
 
