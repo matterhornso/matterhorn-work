@@ -89,6 +89,13 @@ export function getMcpServerName(entry: McpDirectoryInfo): string {
     .replace(/^-|-$/g, "") || "mcp";
 }
 
+const CUSTOMER_HIDDEN_EXTENSION_IDS = new Set(["computer-use"]);
+
+export function isCustomerFacingMatterhornExtension(entry: McpDirectoryInfo): boolean {
+  const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
+  return !CUSTOMER_HIDDEN_EXTENSION_IDS.has(id);
+}
+
 export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
   {
     get name() { return t("mcp.quick_connect_notion_title"); },
@@ -175,4 +182,6 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
   ...BUILT_IN_OPENWORK_EXTENSION_MANIFESTS.map(extensionManifestToDirectoryInfo),
 ];
 
-export const OPENWORK_EXTENSION_CATALOG = MCP_QUICK_CONNECT.filter((entry) => entry.kind === "extension");
+export const OPENWORK_EXTENSION_CATALOG = MCP_QUICK_CONNECT.filter(
+  (entry) => entry.kind === "extension" && isCustomerFacingMatterhornExtension(entry),
+);

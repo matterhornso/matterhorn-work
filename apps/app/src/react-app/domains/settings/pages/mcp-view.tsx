@@ -22,7 +22,12 @@ import {
   Zap,
 } from "lucide-react";
 
-import { isBuiltInMatterhornExtension, getMcpServerName, type McpDirectoryInfo } from "../../../../app/constants";
+import {
+  isBuiltInMatterhornExtension,
+  getMcpServerName,
+  isCustomerFacingMatterhornExtension,
+  type McpDirectoryInfo,
+} from "../../../../app/constants";
 import { evaluateEnablement, defaultMcpEnablement } from "../../../../app/enablement";
 import type { EnablementResult } from "../../../../app/extensions";
 import type { CloudImportedPlugin } from "../../../../app/cloud/import-state";
@@ -417,11 +422,12 @@ export function McpView(props: McpViewProps) {
   const connectedCount = props.mcpServers.filter(
     (entry) => resolveStatus(entry) === "connected",
   ).length;
-  const hiddenCount = quickConnectList.filter((entry) => isMatterhornExtensionHidden(entry)).length +
+  const customerQuickConnectList = quickConnectList.filter((entry) => isCustomerFacingMatterhornExtension(entry));
+  const hiddenCount = customerQuickConnectList.filter((entry) => isMatterhornExtensionHidden(entry)).length +
     (props.installedSkills ?? []).filter((skill) => isMatterhornExtensionHidden(getSkillHiddenId(skill))).length +
     (props.installedPlugins ?? []).filter((plugin) => isMatterhornExtensionHidden(`plugin:${plugin.pluginId}`)).length;
   const policyHiddenBuiltInCount = props.builtInExtensionsDisabled
-    ? quickConnectList.filter((entry) => isBuiltInMatterhornExtension(entry) && !isMatterhornExtensionHidden(entry)).length
+    ? customerQuickConnectList.filter((entry) => isBuiltInMatterhornExtension(entry) && !isMatterhornExtensionHidden(entry)).length
     : 0;
   const hiddenOrPolicyCount = hiddenCount + policyHiddenBuiltInCount;
 
@@ -531,7 +537,7 @@ export function McpView(props: McpViewProps) {
 
       <McpQuickConnectSection
         entries={
-          quickConnectList.filter((entry) => {
+          customerQuickConnectList.filter((entry) => {
             if (!showHidden && (isMatterhornExtensionHidden(entry) || (props.builtInExtensionsDisabled && isBuiltInMatterhornExtension(entry)))) return false;
             if (filter === "skill") return false;
             if (filter === "mcp" && (entry.kind ?? "mcp") !== "mcp" && entry.kind !== "ui-control") return false;
