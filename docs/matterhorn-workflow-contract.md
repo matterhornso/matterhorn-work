@@ -343,6 +343,72 @@ Run the template registry gate:
 pnpm test:matterhorn-workflow-template-registry
 ```
 
+## Customer Workflow Template Registry
+
+For chat-first goal selection, the contract also includes a customer-facing
+`MatterhornCustomerWorkflowTemplate` registry
+(`MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY`). These templates are
+optimized for copy-paste prompts and safe onboarding:
+
+```ts
+interface MatterhornCustomerWorkflowTemplate {
+  version: "matterhorn.customer.workflow.template.v1";
+  id: string;
+  name: string;
+  summary: string;
+  promise: string;
+  category: MatterhornWorkflowCategory;
+  examplePrompts: string[];
+  expectedArtifacts: MatterhornWorkflowArtifact[];
+  requiredContext: MatterhornWorkflowInputPrompt[];
+  optionalContext: MatterhornWorkflowInputPrompt[];
+  status: "beta_ready" | "preview_only" | "planned_not_live" | "workflow_ready" | "blank";
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  forbiddenInputs: string[];
+  handoffReceiptSupport: {
+    supported: boolean;
+    types?: string[];
+    description?: string;
+  };
+  serviceHooks: MatterhornWorkflowServiceHook[];
+  chatMode: string;
+  recommendedCommands?: {
+    cli?: string[];
+    mcp?: string[];
+  };
+}
+```
+
+### Built-in customer templates
+
+| Template ID | Category | Status | Chat mode | Notes |
+| --- | --- | --- | --- | --- |
+| `bittensor_operator` | bittensor | `beta_ready` | `crypto chat` | Read-only previews + external-signer handoffs. |
+| `hyperliquid_trader` | markets | `preview_only` | `crypto chat` | Read-only Hyperliquid previews. |
+| `polymarket_researcher` | markets | `preview_only` | `crypto chat` | Read-only Polymarket previews. |
+| `wellness_creator_workflow` | wellness | `workflow_ready` | `workflow chat` | Plans services/content; hooks remain planned_not_live. |
+| `decentralized_services_operator` | decentralized_services | `planned_not_live` | `services chat` | Future-contract planning only. |
+| `blank_chat_workflow` | future | `blank` | `free chat` | Open-ended chat with baseline safety boundaries. |
+
+Every customer template shares the same baseline safety boundary:
+`liveExecutionEnabled: false`, `canSubmit: false`, `allowsRealFunds: false`, and
+all secret-acceptance flags set to `false`. Bittensor is the only customer
+template that sets `canExecute: true`, and only for preparing external-signer
+handoffs.
+
+Operators and agents can inspect the customer template registry without
+starting the app:
+
+```bash
+node scripts/matterhorn-workflow-template-registry.mjs --json
+node scripts/matterhorn-workflow-template-registry.mjs --category markets --json
+node scripts/matterhorn-workflow-template-registry.mjs --customer-template bittensor_operator --json
+pnpm test:matterhorn-customer-workflow-template-registry
+```
+
+The registry emits `matterhorn.customer.workflow.template.v1`; it is catalog-only
+and rejects credential-shaped flags.
+
 ## Safety Rules
 
 - No fixture may set `acceptsSecrets`, `acceptsPrivateKeys`, `acceptsRawSignatures`, or `acceptsApiSecrets` to `true`.

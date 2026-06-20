@@ -75,6 +75,21 @@ assert.equal(catalog.counts.byCategory.bittensor, 1);
 assert.equal(catalog.counts.byCategory.markets, 1);
 assert.equal(catalog.counts.byCategory.decentralized_services, 1);
 
+assert.ok(Array.isArray(catalog.customerTemplates), "catalog should include customerTemplates");
+assert.equal(catalog.customerTemplates.length, 6, "catalog should include six customer templates");
+const customerIds = catalog.customerTemplates.map((template) => template.id);
+assert.deepEqual(
+  customerIds.sort(),
+  [
+    "bittensor_operator",
+    "blank_chat_workflow",
+    "decentralized_services_operator",
+    "hyperliquid_trader",
+    "polymarket_researcher",
+    "wellness_creator_workflow",
+  ].sort(),
+);
+
 for (const workflow of catalog.workflows) {
   assert.equal(workflow.safety.acceptsSecrets, false, `${workflow.workflowId} must reject secrets`);
   assert.equal(workflow.safety.acceptsPrivateKeys, false, `${workflow.workflowId} must reject private keys`);
@@ -84,6 +99,26 @@ for (const workflow of catalog.workflows) {
   assert.equal(workflow.safety.liveExecutionEnabled, false, `${workflow.workflowId} must not enable live execution`);
   assert.ok(Array.isArray(workflow.serviceHooks), `${workflow.workflowId} should include service hooks`);
   assert.ok(Array.isArray(workflow.generatedArtifacts), `${workflow.workflowId} should include artifact names`);
+}
+
+for (const template of catalog.customerTemplates) {
+  assert.equal(
+    template.safetyBoundaries.liveExecutionEnabled,
+    false,
+    `${template.id} must not enable live execution`,
+  );
+  assert.equal(template.safetyBoundaries.canSubmit, false, `${template.id} must not submit`);
+  assert.equal(template.safetyBoundaries.acceptsSecrets, false, `${template.id} must not accept secrets`);
+  assert.equal(template.safetyBoundaries.acceptsPrivateKeys, false, `${template.id} must not accept private keys`);
+  assert.equal(template.safetyBoundaries.acceptsApiSecrets, false, `${template.id} must not accept API secrets`);
+  assert.equal(
+    template.safetyBoundaries.acceptsRawSignatures,
+    false,
+    `${template.id} must not accept raw signatures`,
+  );
+  assert.equal(template.safetyBoundaries.allowsRealFunds, false, `${template.id} must not allow real funds`);
+  assert.ok(Array.isArray(template.serviceHooks), `${template.id} should include service hooks`);
+  assert.ok(Array.isArray(template.expectedArtifacts), `${template.id} should include expected artifacts`);
 }
 
 const wellness = catalog.workflows.find((workflow) => workflow.workflowId === "wellness_creator_workflow");

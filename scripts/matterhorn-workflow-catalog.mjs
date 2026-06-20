@@ -216,6 +216,292 @@ const WORKFLOWS = [
   },
 ];
 
+const CUSTOMER_TEMPLATES = [
+  {
+    id: "bittensor_operator",
+    name: "Use Bittensor",
+    summary:
+      "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
+    promise:
+      "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
+    category: "bittensor",
+    examplePrompts: [
+      "Show my TAO",
+      "Which subnet is useful for image generation?",
+      "Compare validators on subnet 14",
+      "Prepare staking 1 TAO",
+    ],
+    expectedArtifacts: [
+      { id: "balance_card", name: "TAO Balance Card", mimeType: "application/json", public: true },
+      { id: "subnet_comparison", name: "Subnet Comparison", mimeType: "text/markdown", public: true },
+      { id: "stake_preview", name: "Stake Preview", mimeType: "application/json", public: true },
+      { id: "external_signer_handoff", name: "External Signer Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key or seed phrase.",
+      },
+    ],
+    optionalContext: [
+      { id: "subnet", label: "Subnet ID", required: false, type: "number" },
+      { id: "stake_amount", label: "Stake amount to preview", required: false, type: "number" },
+    ],
+    status: "beta_ready",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: true,
+      requiresExternalSigner: true,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "seed phrase", "mnemonic", "raw signature", "signed payload", "wallet export"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["external_signer_handoff", "stake_preview_receipt"],
+      description: "Produces an external-signer handoff and a public stake preview receipt.",
+    },
+    serviceHooks: [{ hook: "bittensor", status: "live_local" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "show my TAO" --json'],
+      mcp: ["matterhorn_crypto_chat"],
+    },
+  },
+  {
+    id: "hyperliquid_trader",
+    name: "Trade on Hyperliquid",
+    summary:
+      "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
+    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    category: "markets",
+    examplePrompts: [
+      "Preview a Hyperliquid BTC-PERP trade",
+      "Show my Hyperliquid exposure",
+      "Generate a Hyperliquid signing handoff",
+    ],
+    expectedArtifacts: [
+      { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key.",
+      },
+    ],
+    optionalContext: [
+      { id: "market", label: "Market or asset", required: false, type: "text" },
+      { id: "side", label: "Side", required: false, type: "select", options: ["buy", "sell", "long", "short"] },
+      { id: "size", label: "Order size", required: false, type: "number" },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "raw signature", "signed payload", "signed order"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["market_preview", "signing_handoff"],
+      description: "Produces a read-only market preview and an external-signer handoff.",
+    },
+    serviceHooks: [{ hook: "hyperliquid", status: "preview_only" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json'],
+      mcp: ["matterhorn_hyperliquid_prepare_handoff"],
+    },
+  },
+  {
+    id: "polymarket_researcher",
+    name: "Bet on Polymarket",
+    summary:
+      "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
+    promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+    category: "markets",
+    examplePrompts: [
+      "Summarize this Polymarket market",
+      "Preview a Polymarket trade",
+      "Show my Polymarket positions",
+    ],
+    expectedArtifacts: [
+      { id: "market_preview", name: "Market Preview", mimeType: "application/json", public: true },
+      { id: "signing_handoff", name: "Signing Handoff", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "wallet_address",
+        label: "Public wallet address",
+        required: true,
+        type: "text",
+        helpText: "Only the public address. Never provide a private key.",
+      },
+    ],
+    optionalContext: [
+      { id: "market_id", label: "Market ID", required: false, type: "text" },
+      { id: "outcome", label: "Outcome", required: false, type: "select", options: ["yes", "no"] },
+    ],
+    status: "preview_only",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "raw signature", "signed payload", "signed order"],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["market_preview", "signing_handoff"],
+      description: "Produces a read-only market preview and an external-signer handoff.",
+    },
+    serviceHooks: [{ hook: "polymarket", status: "preview_only" }],
+    chatMode: "crypto chat",
+    recommendedCommands: {
+      cli: ['matterhorn-work crypto chat --message "preview Polymarket market" --json'],
+      mcp: ["matterhorn_polymarket_prepare_handoff"],
+    },
+  },
+  {
+    id: "wellness_creator_workflow",
+    name: "Build a Wellness Creator business workflow",
+    summary:
+      "Design wellness programs, service packages, and client management workflows without giving medical advice.",
+    promise:
+      "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    category: "wellness",
+    examplePrompts: [
+      "Create a wellness program for my clients",
+      "Design a nutrition plan",
+      "Build a yoga class schedule",
+      "Package my training services",
+    ],
+    expectedArtifacts: [
+      { id: "program_design_plan", name: "Program Design Plan", mimeType: "text/markdown", public: true },
+      { id: "weekly_schedule", name: "Weekly Schedule", mimeType: "text/markdown", public: true },
+      { id: "pricing_package_draft", name: "Pricing Package Draft", mimeType: "text/markdown", public: true },
+      { id: "service_plan", name: "Service Plan", mimeType: "application/json", public: true },
+    ],
+    requiredContext: [
+      { id: "audience", label: "Who is the program for?", required: true, type: "text" },
+      { id: "goal", label: "What is the primary goal?", required: true, type: "text" },
+    ],
+    optionalContext: [
+      { id: "duration_weeks", label: "Program duration in weeks", required: false, type: "number" },
+      { id: "equipment", label: "Available equipment", required: false, type: "text" },
+    ],
+    status: "workflow_ready",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: [
+      "medical diagnosis",
+      "prescription advice",
+      "protected health information beyond redacted goals",
+    ],
+    handoffReceiptSupport: {
+      supported: true,
+      types: ["service_plan", "content_calendar"],
+      description: "Produces a public/redacted service plan and workflow evidence bundle.",
+    },
+    serviceHooks: [
+      { hook: "email", status: "planned_not_live" },
+      { hook: "payments", status: "planned_not_live" },
+      { hook: "hosting", status: "planned_not_live" },
+    ],
+    chatMode: "workflow chat",
+    recommendedCommands: {
+      cli: ["matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json"],
+    },
+  },
+  {
+    id: "decentralized_services_operator",
+    name: "Explore future decentralized services",
+    summary:
+      "Plan future decentralized service actions across storage, hosting, email, payments, and identity.",
+    promise: "Future-contract planning only. No live provider execution.",
+    category: "decentralized_services",
+    examplePrompts: [
+      "Plan a decentralized storage upload",
+      "Preview a future email campaign",
+      "Compare provider fixtures for hosting",
+      "Plan identity-gated access for a resource",
+    ],
+    expectedArtifacts: [
+      { id: "service_preview", name: "Service Preview", mimeType: "application/json", public: true },
+      { id: "provider_comparison", name: "Provider Comparison", mimeType: "text/markdown", public: true },
+    ],
+    requiredContext: [
+      {
+        id: "capability",
+        label: "Which decentralized service?",
+        required: true,
+        type: "select",
+        options: ["hosting", "storage", "email", "payments", "identity"],
+      },
+      { id: "intent_description", label: "Describe what you want to do", required: true, type: "text" },
+    ],
+    optionalContext: [
+      { id: "provider_preference", label: "Preferred provider fixture", required: false, type: "text" },
+    ],
+    status: "planned_not_live",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: ["private key", "API secret", "payment credential", "email password", "hosting credential"],
+    handoffReceiptSupport: {
+      supported: false,
+      description: "Future contract; handoffs are not yet implemented.",
+    },
+    serviceHooks: [
+      { hook: "hosting", status: "planned_not_live" },
+      { hook: "storage", status: "planned_not_live" },
+      { hook: "email", status: "planned_not_live" },
+      { hook: "payments", status: "planned_not_live" },
+      { hook: "identity", status: "planned_not_live" },
+    ],
+    chatMode: "services chat",
+    recommendedCommands: {
+      cli: ["matterhorn-work services capabilities --json"],
+    },
+  },
+  {
+    id: "blank_chat_workflow",
+    name: "Blank chat",
+    summary: "Start a free-form chat session with the Matterhorn Work engine.",
+    promise: "Open-ended assistance. You choose the goal.",
+    category: "future",
+    examplePrompts: ["What can you do?", "Help me think through a problem", "Draft an email"],
+    expectedArtifacts: [],
+    requiredContext: [],
+    optionalContext: [],
+    status: "blank",
+    safetyBoundaries: {
+      ...COMMON_SAFETY,
+      canExecute: false,
+      requiresExternalSigner: false,
+      allowsRealFunds: false,
+    },
+    forbiddenInputs: [],
+    handoffReceiptSupport: { supported: false },
+    serviceHooks: [],
+    chatMode: "free chat",
+  },
+];
+
 function parseArgs(argv) {
   const args = argv.slice(2);
   const value = (name, fallback = "") => {
@@ -230,6 +516,8 @@ function parseArgs(argv) {
     help: args.includes("--help") || args.includes("-h"),
     includePrompts: args.includes("--include-prompts"),
     promptPack: args.includes("--prompt-pack"),
+    customerTemplates: args.includes("--customer-templates"),
+    customerTemplate: value("--customer-template", "").trim(),
     workflow: value("--workflow", value("--workflow-id", "")).trim(),
     category: value("--category", "").trim(),
     status: value("--status", "").trim(),
@@ -262,12 +550,72 @@ function filterWorkflows(config) {
   return workflows;
 }
 
+function filterCustomerTemplates(config) {
+  let templates = CUSTOMER_TEMPLATES;
+  if (config.customerTemplate) {
+    templates = templates.filter((template) => template.id === config.customerTemplate);
+    if (templates.length === 0) throw new Error(`Unknown customer workflow template: ${config.customerTemplate}`);
+  }
+  if (config.category) {
+    templates = templates.filter((template) => template.category === config.category);
+    if (templates.length === 0) throw new Error(`No customer workflow templates found for category: ${config.category}`);
+  }
+  if (config.status) {
+    templates = templates.filter((template) => template.status === config.status);
+    if (templates.length === 0) throw new Error(`No customer workflow templates found for status: ${config.status}`);
+  }
+  return templates;
+}
+
 function redactForDefaultOutput(workflow, includePrompts) {
   if (includePrompts) return workflow;
   return {
     ...workflow,
     canonicalPrompts: workflow.canonicalPrompts.slice(0, 3),
     promptCount: workflow.canonicalPrompts.length,
+  };
+}
+
+function buildCustomerTemplatesCatalog(config) {
+  const templates = filterCustomerTemplates(config);
+  return {
+    ok: true,
+    version: "matterhorn.customer.workflow.template.v1",
+    status: "catalog_only",
+    generatedAt: new Date(0).toISOString(),
+    summary:
+      "Customer-facing Matterhorn Work workflow templates for chat-first goal selection.",
+    commands: {
+      customerTemplates: "node scripts/matterhorn-workflow-catalog.mjs --customer-templates --json",
+      customerTemplateFilter:
+        "node scripts/matterhorn-workflow-catalog.mjs --customer-template bittensor_operator --json",
+      registryGate: "pnpm test:matterhorn-workflow-template-registry",
+      catalogGate: "pnpm test:matterhorn-workflow-catalog",
+    },
+    safety: {
+      ...COMMON_SAFETY,
+      catalogOnly: true,
+      noProviderExecution: true,
+      noCustody: true,
+      noLiveMarketSubmit: true,
+      plannedServicesOnly: true,
+    },
+    counts: {
+      total: templates.length,
+      byCategory: templates.reduce((acc, template) => {
+        acc[template.category] = (acc[template.category] ?? 0) + 1;
+        return acc;
+      }, {}),
+      byStatus: templates.reduce((acc, template) => {
+        acc[template.status] = (acc[template.status] ?? 0) + 1;
+        return acc;
+      }, {}),
+    },
+    customerTemplates: templates,
+    references: [
+      "docs/matterhorn-workflow-contract.md",
+      "packages/types/src/matterhorn-workflows.ts",
+    ],
   };
 }
 
@@ -286,6 +634,7 @@ function buildCatalog(config) {
       catalog: "matterhorn-work workflows catalog --json",
       workflowFilter: "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
       categoryFilter: "matterhorn-work workflows catalog --category wellness --json",
+      customerTemplates: "node scripts/matterhorn-workflow-catalog.mjs --customer-templates --json",
       contractGate: "pnpm test:matterhorn-workflow-contract",
       catalogGate: "pnpm test:matterhorn-workflow-catalog",
     },
@@ -309,6 +658,7 @@ function buildCatalog(config) {
       }, {}),
     },
     workflows,
+    customerTemplates: filterCustomerTemplates(config),
     references: [
       "docs/matterhorn-workflow-contract.md",
       "docs/wellness-creator-workflow.md",
@@ -392,6 +742,23 @@ function printPromptPackText(promptPack) {
   }
 }
 
+function printCustomerTemplatesText(catalog) {
+  process.stdout.write(`${catalog.summary}\n\n`);
+  process.stdout.write("Safety: customer template catalog only; no custody; no provider execution; no market submission.\n\n");
+  for (const template of catalog.customerTemplates) {
+    process.stdout.write(`${template.name} (${template.id})\n`);
+    process.stdout.write(`  Category: ${template.category}\n`);
+    process.stdout.write(`  Status: ${template.status}\n`);
+    process.stdout.write(`  Promise: ${template.promise}\n`);
+    process.stdout.write(`  Chat mode: ${template.chatMode}\n`);
+    process.stdout.write(`  Example prompts:\n`);
+    for (const prompt of template.examplePrompts.slice(0, 3)) {
+      process.stdout.write(`    - ${prompt}\n`);
+    }
+    process.stdout.write("\n");
+  }
+}
+
 function printHelp() {
   process.stdout.write([
     "Matterhorn Work workflow catalog",
@@ -401,6 +768,8 @@ function printHelp() {
     "  node scripts/matterhorn-workflow-catalog.mjs --prompt-pack --workflow wellness_creator_workflow --json",
     "  node scripts/matterhorn-workflow-catalog.mjs --workflow wellness_creator_workflow --json",
     "  node scripts/matterhorn-workflow-catalog.mjs --category wellness --json",
+    "  node scripts/matterhorn-workflow-catalog.mjs --customer-templates --json",
+    "  node scripts/matterhorn-workflow-catalog.mjs --customer-template bittensor_operator --json",
     "  matterhorn-work workflows catalog --json",
     "  matterhorn-work workflows prompts --workflow wellness_creator_workflow --json",
     "",
@@ -415,11 +784,18 @@ try {
     printHelp();
   } else {
     assertNoForbiddenArgs(config.args);
-    const catalog = config.promptPack ? buildPromptPack(config) : buildCatalog(config);
+    let catalog;
+    if (config.customerTemplates || config.customerTemplate) {
+      catalog = buildCustomerTemplatesCatalog(config);
+    } else {
+      catalog = config.promptPack ? buildPromptPack(config) : buildCatalog(config);
+    }
     if (config.json) {
       process.stdout.write(`${JSON.stringify(catalog, null, 2)}\n`);
     } else if (config.promptPack) {
       printPromptPackText(catalog);
+    } else if (config.customerTemplates || config.customerTemplate) {
+      printCustomerTemplatesText(catalog);
     } else {
       printText(catalog);
     }

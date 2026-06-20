@@ -292,6 +292,75 @@ All GitHub checks on PR #423 passed:
 - `customer-crypto-gates` — SUCCESS
 - `i18n-audit` — SUCCESS
 
+## PR #436: Customer Workflow Template Registry
+
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/436  
+**Branch:** `kimi/customer-workflow-template-registry`  
+**Scope:** Customer-facing workflow template registry for chat-first goal selection. Extends the generic workflow contract with copy-paste prompts, promises, expected artifacts, forbidden inputs, handoff/receipt support, and service hook metadata.
+
+### New files
+
+| File | What it contains |
+| --- | --- |
+| `scripts/matterhorn-workflow-template-registry.mjs` | Thin CLI entry point that emits the canonical customer template catalog from `matterhorn-workflow-catalog.mjs`. |
+| `scripts/matterhorn-customer-workflow-template-registry.test.mjs` | Runtime gate for the customer template registry: envelope shape, safety boundaries, filtering, and credential-flag rejection. |
+
+### Modified files
+
+| File | What changed |
+| --- | --- |
+| `packages/types/src/matterhorn-workflows.ts` | Added `MatterhornCustomerWorkflowTemplate`, `MatterhornCustomerWorkflowStatus`, six customer template fixtures, and `MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY`. Added `serviceHooks` to existing `MatterhornWorkflowTemplate` interface. |
+| `scripts/matterhorn-workflow-catalog.mjs` | Added `CUSTOMER_TEMPLATES` with six customer-facing templates, `--customer-templates` / `--customer-template` filtering, and `serviceHooks` on each template. |
+| `scripts/matterhorn-workflow-catalog.test.mjs` | Extended to assert `customerTemplates` array and per-template safety boundaries. |
+| `docs/matterhorn-workflow-contract.md` | Added Customer Workflow Template Registry section with schema, built-in template table, and CLI commands. |
+| `package.json` | Added `test:matterhorn-customer-workflow-template-registry` script. |
+
+### Customer template fixture summary
+
+| Template ID | Category | Status | `canExecute` | Notes |
+| --- | --- | --- | --- | --- |
+| `bittensor_operator` | bittensor | `beta_ready` | `true` | External-signer handoffs only; no custody. |
+| `hyperliquid_trader` | markets | `preview_only` | `false` | Read-only previews. |
+| `polymarket_researcher` | markets | `preview_only` | `false` | Read-only previews. |
+| `wellness_creator_workflow` | wellness | `workflow_ready` | `false` | Service planning; hooks remain planned_not_live. |
+| `decentralized_services_operator` | decentralized_services | `planned_not_live` | `false` | Future-contract planning only. |
+| `blank_chat_workflow` | future | `blank` | `false` | Open-ended chat baseline. |
+
+Every customer template sets `liveExecutionEnabled: false`, `canSubmit: false`, `allowsRealFunds: false`, and all secret acceptance flags to `false`. Bittensor is the only template with `canExecute: true`, and it requires an external signer.
+
+### Test assertions
+
+`scripts/matterhorn-customer-workflow-template-registry.test.mjs` verifies:
+
+- Required customer template types and the typed registry exist.
+- The registry script emits `matterhorn.customer.workflow.template.v1` with `catalog_only` status and safety flags.
+- All six expected customer template IDs are present in order.
+- Every template has example prompts, expected artifacts, required/optional context, forbidden inputs, service hooks, and safety boundaries.
+- Baseline safety boundaries reject secrets, private keys, API secrets, raw signatures, real funds, live execution, and submission.
+- Bittensor is `beta_ready`, `canExecute: true`, and requires an external signer with a `live_local` bittensor hook.
+- Market templates are `preview_only`, non-executing, and have `preview_only` service hooks.
+- Wellness and decentralized-services templates are non-executing and all service hooks are `planned_not_live`.
+- Blank chat template has no artifacts, context, or service hooks.
+- `--category` and `--customer-template` filters work.
+- Credential-shaped flags such as `--private-key` are rejected.
+
+`scripts/matterhorn-workflow-catalog.test.mjs` additionally verifies that the main catalog JSON includes `customerTemplates` with six entries and the same safety baseline.
+
+### Commands that pass on PR #436
+
+```bash
+pnpm --dir packages/types build
+pnpm test:market-execution-safety-gate
+pnpm test:matterhorn-workflow-contract
+pnpm test:matterhorn-workflow-template-registry
+pnpm test:matterhorn-customer-workflow-template-registry
+pnpm test:matterhorn-workflow-catalog
+```
+
+### CI status on PR #436
+
+Pending merge.
+
 ## Non-overlap observed
 
 No changes were made to:
