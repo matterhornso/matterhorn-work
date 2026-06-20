@@ -411,9 +411,9 @@ pnpm test:market-execution-safety-gate
 
 Pending merge.
 
-## PR #TBD: Protocol Workspace Manifest Integration Layer
+## PR #445: Protocol Workspace Manifest Integration Layer
 
-**PR:** TBD — opened from `kimi/protocol-workspace-manifest` to `dev`  
+**PR:** https://github.com/matterhornso/matterhorn-work/pull/445  
 **Branch:** `kimi/protocol-workspace-manifest`  
 **Scope:** Typed protocol workspace manifest registry that maps customer workflow templates to workspaces, so CLI/MCP/runtime agents can launch them consistently without touching app UI.
 
@@ -445,7 +445,7 @@ Pending merge.
 - Decentralized services are future-contract only.
 - Every workspace keeps `liveExecutionEnabled: false`, `canSubmit: false`, and all secret-acceptance flags `false`.
 
-### Commands that pass on PR #TBD
+### Commands that pass on PR #445
 
 ```bash
 pnpm --dir packages/types build
@@ -456,7 +456,7 @@ pnpm test:matterhorn-workflow-catalog
 pnpm test:market-execution-safety-gate
 ```
 
-### CI status on PR #TBD
+### CI status on PR #445
 
 Pending merge.
 
