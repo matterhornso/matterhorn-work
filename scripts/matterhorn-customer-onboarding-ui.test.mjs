@@ -20,6 +20,8 @@ const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
 const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx");
 const extensions = read("apps/app/src/app/extensions.ts");
+const constants = read("apps/app/src/app/constants.ts");
+const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
@@ -164,5 +166,21 @@ const computerUseIndex = extensions.indexOf('id: "computer-use"');
 assert.ok(computerUseIndex >= 0, "Computer Use manifest should still exist for legacy/internal compatibility");
 const computerUseTail = extensions.slice(computerUseIndex, computerUseIndex + 3200);
 assert.ok(computerUseTail.includes("defaultHidden: true"), "Computer Use should be hidden from the default customer catalog");
+assert.ok(
+  constants.includes("CUSTOMER_HIDDEN_EXTENSION_IDS") &&
+    constants.includes('"computer-use"') &&
+    constants.includes("isCustomerFacingMatterhornExtension"),
+  "Computer Use should be excluded from customer-facing extension catalogs",
+);
+assert.ok(
+  constants.includes("OPENWORK_EXTENSION_CATALOG = MCP_QUICK_CONNECT.filter") &&
+    constants.includes("isCustomerFacingMatterhornExtension(entry)"),
+  "Composer extension catalog should only expose customer-facing extensions",
+);
+assert.ok(
+  settingsRoute.includes("customerQuickConnectList") &&
+    settingsRoute.includes("isCustomerFacingMatterhornExtension(entry)"),
+  "Settings extension grid should filter customer-hidden entries before rendering",
+);
 
 console.log("Matterhorn customer onboarding UI static check passed.");
