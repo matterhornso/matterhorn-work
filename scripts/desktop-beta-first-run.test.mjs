@@ -86,6 +86,7 @@ for (const phrase of [
   "MATTERHORN_WORK_ELECTRON_USERDATA",
   "MATTERHORN_WORK_DESKTOP_BOOTSTRAP_PATH",
   ".config\", \"matterhorn-work\", \"desktop-bootstrap.json",
+  'error?.code === "ENOENT"',
   "if (response.status === 404) return null",
 ]) {
   assert.ok(desktopMain.includes(phrase), `desktop startup should include ${phrase}`);

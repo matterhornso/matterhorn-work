@@ -1376,6 +1376,13 @@ async function getDesktopBootstrapConfig() {
     const raw = await readFile(configPath, "utf8");
     return normalizeDesktopBootstrapConfig(JSON.parse(raw));
   } catch (error) {
+    if (error?.code === "ENOENT") {
+      return {
+        baseUrl: DEFAULT_DEN_BASE_URL,
+        apiBaseUrl: null,
+        requireSignin: DEFAULT_DESKTOP_REQUIRE_SIGNIN,
+      };
+    }
     console.warn("[desktop-bootstrap] falling back to defaults", {
       path: configPath,
       error: error instanceof Error ? error.message : String(error),
