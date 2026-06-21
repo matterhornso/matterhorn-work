@@ -16,6 +16,7 @@ const english = read("apps/app/src/i18n/locales/en.ts");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
+const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
 const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx");
@@ -53,6 +54,16 @@ for (const phrase of [
   "No hidden auto-send",
   "Business workflows",
   "Use the same chat engine for real-world customer work",
+  "Monday beta demos",
+  "Five guided runs for the first 10 test customers",
+  "Public/redacted only",
+  "Customers:",
+  "Expected:",
+  "mondayBetaDemoCards",
+  "source: \"monday-beta-demo\"",
+  "demo.evidenceCommand",
+  "demo.artifactSummary",
+  "openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: \"monday-beta-demo\" })",
   "Open Bittensor panel",
   "Open Hyperliquid panel",
   "Open Polymarket panel",
@@ -78,6 +89,7 @@ for (const phrase of [
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
   "enrichCustomerWorkflowTemplate",
+  "buildCustomerBetaDemoStarterCards",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
@@ -88,6 +100,21 @@ for (const phrase of [
   "Future-contract planning only. No provider execution or credentials.",
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+}
+
+for (const phrase of [
+  "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
+  "CustomerBetaDemoStarterCard",
+  "Bittensor TAO staking preview",
+  "Hyperliquid order preview",
+  "Polymarket market research and preview",
+  "Wellness client program packet",
+  "Decentralized services future plan",
+  "node scripts/customer-demo-evidence-pack.mjs --scenario",
+  "Demo-ready",
+  "buildCustomerWorkflowPromptFromText",
+]) {
+  assert.ok(`${sessionPage}\n${workflowTemplates}\n${workflowTypes}`.includes(phrase), `Monday beta demo UI should use typed scenario registry: ${phrase}`);
 }
 
 for (const phrase of [
@@ -138,7 +165,7 @@ assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and e
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail clicks should prime an editable chat prompt");
 assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
 assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
-assert.ok(sessionPage.includes('source: "protocol-rail"'), "protocol rail prompt handoffs should identify their source");
+assert.ok(sessionPage.includes('options?.source ?? "protocol-rail"'), "protocol rail prompt handoffs should default to the protocol-rail source");
 assert.ok(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), "protocol rail prompts should insert into the active composer without auto-sending");
 assert.ok(sessionPage.includes("openVenueRailPane(item.panel, { primePrompt: true })"), "protocol rail buttons should open the desk and prime the chat composer");
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");

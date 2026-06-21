@@ -72,6 +72,7 @@ import { useControlAction, type MatterhornControlAction } from "../../../shell/c
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
 import { cn } from "@/lib/utils";
 import {
+  buildCustomerBetaDemoStarterCards,
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
   type CustomerWorkflowIconHint,
@@ -321,6 +322,10 @@ export function SessionPage(props: SessionPageProps) {
     () => buildCustomerWorkflowStarterCards(customerWorkflowTemplatesQuery.data),
     [customerWorkflowTemplatesQuery.data],
   );
+  const mondayBetaDemoCards = useMemo(
+    () => buildCustomerBetaDemoStarterCards(customerWorkflowTemplatesQuery.data),
+    [customerWorkflowTemplatesQuery.data],
+  );
   const customerWorkflowLaunchers = useMemo(
     () => customerWorkflowStarterCards.filter((card) => card.id !== "blank_chat_workflow"),
     [customerWorkflowStarterCards],
@@ -528,33 +533,38 @@ export function SessionPage(props: SessionPageProps) {
   const openVoiceRailPane = useCallback(() => {
     toggleCurrentSidePanel("voice");
   }, [toggleCurrentSidePanel]);
-  const primeProtocolRailPrompt = useCallback((panel: VenueSidePanel) => {
+  const primeProtocolRailPrompt = useCallback((
+    panel: VenueSidePanel,
+    options?: { prompt?: string; source?: string },
+  ) => {
     const launcher = protocolWorkflowLaunchers.find((item) => item.panel === panel);
-    if (!launcher?.prompt) return;
+    const prompt = options?.prompt ?? launcher?.prompt;
+    if (!prompt) return;
+    const source = options?.source ?? "protocol-rail";
     if (props.selectedSessionId && props.surface && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("matterhorn:crypto-chat-handoff", {
         detail: {
-          prompt: launcher.prompt,
+          prompt,
           panel,
           venue: panel,
-          source: "protocol-rail",
+          source,
         },
       }));
       return;
     }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
-      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, launcher.prompt);
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt);
       return;
     }
     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
   }, [props.selectedSessionId, props.selectedWorkspaceId, props.sidebar, props.surface, protocolWorkflowLaunchers]);
-  const openVenueRailPane = useCallback((panel: VenueSidePanel, options?: { primePrompt?: boolean }) => {
+  const openVenueRailPane = useCallback((panel: VenueSidePanel, options?: { primePrompt?: boolean; prompt?: string; source?: string }) => {
     if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
       pendingProtocolRailPanelRef.current = panel;
     }
     setCurrentSidePanel(panel);
-    if (options?.primePrompt) primeProtocolRailPrompt(panel);
+    if (options?.primePrompt) primeProtocolRailPrompt(panel, options);
   }, [primeProtocolRailPrompt, props.selectedSessionId, props.surface, setCurrentSidePanel]);
   const removeAccessibleTarget = useCallback((target: OpenTarget) => {
     setHiddenAccessibleTargetIds((current) => new Set(current).add(target.id));
@@ -1066,6 +1076,63 @@ export function SessionPage(props: SessionPageProps) {
                                     </span>
                                     <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
                                     <span className="mt-3 block text-[10px] leading-relaxed text-dls-secondary/90">{launcher.safetySummary}</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                        <section className="space-y-3">
+                          <div className="flex items-end justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold text-dls-text">Monday beta demos</h3>
+                              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                                Five guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
+                              </p>
+                            </div>
+                            <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                              Public/redacted only
+                            </span>
+                          </div>
+                          <div className="grid gap-2 lg:grid-cols-2">
+                            {mondayBetaDemoCards.map((demo) => {
+                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
+                              return (
+                                <button
+                                  key={demo.id}
+                                  type="button"
+                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-2xl border border-dls-border bg-dls-card p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                                  onClick={() => {
+                                    if (demo.panel) {
+                                      openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
+                                      return;
+                                    }
+                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
+                                  }}
+                                >
+                                  <span className="flex w-full items-start gap-3">
+                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                                      <Icon className="size-4" />
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                      <span className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
+                                        <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.22)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-primary">
+                                          {demo.statusLabel}
+                                        </span>
+                                      </span>
+                                      <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
+                                    </span>
+                                  </span>
+                                  <span className="mt-3 block text-[11px] leading-5 text-dls-secondary">
+                                    <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
+                                  </span>
+                                  <span className="mt-2 block text-[11px] leading-5 text-dls-secondary">
+                                    <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
+                                  </span>
+                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{demo.safetySummary}</span>
+                                  <span className="mt-3 block max-w-full truncate rounded-lg border border-dls-border bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
+                                    {demo.evidenceCommand}
                                   </span>
                                 </button>
                               );

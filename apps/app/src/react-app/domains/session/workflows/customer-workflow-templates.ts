@@ -1,6 +1,8 @@
 import {
   MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE,
   MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
+  MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS,
+  type CustomerBetaDemoScenario,
   type MatterhornProtocolWorkspaceId,
   type MatterhornProtocolWorkspaceLaunchBehavior,
 } from "@matterhorn-work/types/matterhorn-workflows";
@@ -76,6 +78,21 @@ export type CustomerWorkflowStarterCard = {
   launchBehavior?: MatterhornProtocolWorkspaceLaunchBehavior;
 };
 
+export type CustomerBetaDemoStarterCard = {
+  id: string;
+  title: string;
+  persona: string;
+  customers: string;
+  prompt: string;
+  iconHint: CustomerWorkflowIconHint;
+  panel?: "bittensor" | "hyperliquid" | "polymarket";
+  statusLabel: string;
+  safetySummary: string;
+  artifactSummary: string;
+  evidenceCommand: string;
+  mapsToCustomerTemplateId: string;
+};
+
 type CustomerWorkflowTemplateResponse = {
   ok?: boolean;
   version?: string;
@@ -125,6 +142,19 @@ function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): st
   }
 }
 
+function demoStatusLabel(status: CustomerBetaDemoScenario["status"]): string {
+  switch (status) {
+    case "demo_ready":
+      return "Demo-ready";
+    case "preview_only":
+      return "Preview only";
+    case "planned_not_live":
+      return "Planned, not live";
+    default:
+      return "Available";
+  }
+}
+
 function safetySummary(template: CustomerWorkflowTemplate): string {
   if (template.routing.chatMode === "bittensor") {
     return template.safetyBoundaries.requiresExternalSigner
@@ -141,6 +171,26 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
     return "Future-contract planning only. No provider execution or credentials.";
   }
   return "Matterhorn Work never needs secrets in starter prompts.";
+}
+
+function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate, prompt: string): string {
+  const intentContext = template.protocolWorkspace?.allowedIntents.length
+    ? `Allowed workspace intents: ${template.protocolWorkspace.allowedIntents.join(", ")}.`
+    : "";
+  switch (template.routing.chatMode) {
+    case "bittensor":
+      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
+    case "hyperliquid":
+      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+    case "polymarket":
+      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+    case "wellness":
+      return `${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
+    case "services":
+      return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
+    default:
+      return prompt;
+  }
 }
 
 function enrichCustomerWorkflowTemplate(template: CustomerWorkflowTemplate): CustomerWorkflowTemplate {
@@ -427,23 +477,7 @@ export async function fetchCustomerWorkflowTemplates(): Promise<CustomerWorkflow
 
 export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate): string {
   const prompt = template.launch.defaultPrompt || template.examplePrompts[0] || template.name;
-  const intentContext = template.protocolWorkspace?.allowedIntents.length
-    ? `Allowed workspace intents: ${template.protocolWorkspace.allowedIntents.join(", ")}.`
-    : "";
-  switch (template.routing.chatMode) {
-    case "bittensor":
-      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
-    case "hyperliquid":
-      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
-    case "polymarket":
-      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
-    case "wellness":
-      return `${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
-    case "services":
-      return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
-    default:
-      return prompt;
-  }
+  return buildCustomerWorkflowPromptFromText(template, prompt);
 }
 
 export function buildCustomerWorkflowStarterCards(
@@ -462,4 +496,36 @@ export function buildCustomerWorkflowStarterCards(
     workspaceDisplayName: template.protocolWorkspace?.displayName,
     launchBehavior: template.protocolWorkspace?.launchBehavior,
   }));
+}
+
+export function buildCustomerBetaDemoStarterCards(
+  templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
+): CustomerBetaDemoStarterCard[] {
+  const templatesById = new Map(templates.map((template) => [template.id, template]));
+  return Object.values(MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS).map((scenario) => {
+    const template =
+      templatesById.get(scenario.mapsToCustomerTemplateId) ??
+      FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((item) => item.id === scenario.mapsToCustomerTemplateId) ??
+      FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((item) => item.id === "blank_chat_workflow")!;
+
+    const artifactNames = scenario.expectedArtifacts
+      .slice(0, 3)
+      .map((artifact) => artifact.name)
+      .join(", ");
+
+    return {
+      id: scenario.id,
+      title: scenario.displayName,
+      persona: scenario.targetCustomerPersona,
+      customers: scenario.assignedBetaCustomers.join(", "),
+      prompt: buildCustomerWorkflowPromptFromText(template, scenario.entryPrompt),
+      iconHint: template.ui.iconHint,
+      panel: template.routing.opensPanel,
+      statusLabel: demoStatusLabel(scenario.status),
+      safetySummary: safetySummary(template),
+      artifactSummary: artifactNames,
+      evidenceCommand: `node scripts/customer-demo-evidence-pack.mjs --scenario ${scenario.id} --output-dir ./tmp/monday-beta-evidence`,
+      mapsToCustomerTemplateId: scenario.mapsToCustomerTemplateId,
+    };
+  });
 }
