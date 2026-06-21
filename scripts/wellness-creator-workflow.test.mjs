@@ -711,4 +711,78 @@ for (const phrase of [
 }
 assert.ok(handoff.includes("Client Lifecycle (Full Flow) Tests"), "Handoff should include lifecycle QA");
 
+// 26. Customer Demo Pack: seven reusable client artifacts.
+const demoPack = contract.customerDemoPack;
+assert.ok(demoPack, "Contract should include customerDemoPack");
+const DEMO_PACK_EXPECTED = {
+  service_offer_page: { contract: "offer_landing_packet", fixture: "docs/wellness-creator-workflow/demo-pack/service-offer-page.md" },
+  onboarding_questionnaire: { contract: "intake_questionnaire", fixture: "docs/wellness-creator-workflow/demo-pack/onboarding-questionnaire.md" },
+  four_week_program: { contract: "client_plan", fixture: "docs/wellness-creator-workflow/demo-pack/4-week-program.md" },
+  weekly_check_in_form: { contract: "progress_check_in", fixture: "docs/wellness-creator-workflow/demo-pack/weekly-check-in-form.md" },
+  progress_summary: { contract: "progress_check_in", fixture: "docs/wellness-creator-workflow/demo-pack/progress-summary.md" },
+  renewal_follow_up: { contract: "renewal_upsell_note", fixture: "docs/wellness-creator-workflow/demo-pack/renewal-follow-up.md" },
+  client_handoff_packet: { contract: null, fixture: "docs/wellness-creator-workflow/demo-pack/client-handoff-packet.md" },
+};
+const demoIds = demoPack.deliverables.map((d) => d.id);
+for (const id of Object.keys(DEMO_PACK_EXPECTED)) {
+  assert.ok(demoIds.includes(id), `Demo pack should include deliverable: ${id}`);
+}
+for (const hook of demoPack.serviceHooks) {
+  assert.equal(hook.status, "planned_not_live", `Demo pack hook ${hook.id} must be planned_not_live`);
+}
+for (const flagKey of ["educationalOnly", "noMedicalDiagnosis", "noTreatmentPlan", "noPaymentProcessing", "noEmailSending"]) {
+  assert.equal(demoPack.safety[flagKey], true, `customerDemoPack.safety.${flagKey} must be true`);
+}
+
+const DEMO_FORBIDDEN = [
+  "we diagnose", "prescribe a dose", "cure your", "will cure", "guaranteed weight loss", "guaranteed results",
+  "storage is live", "hosting is live", "payments are live", "payment is live", "email sending is live", "token gating is live",
+  "private key", "seed phrase", "api secret", "wallet export",
+];
+for (const deliverable of demoPack.deliverables) {
+  const expected = DEMO_PACK_EXPECTED[deliverable.id];
+  assert.ok(expected, `Unexpected demo-pack deliverable: ${deliverable.id}`);
+  assert.equal(deliverable.fixture, expected.fixture, `Demo pack ${deliverable.id} fixture path should be stable`);
+  // Example prompt routes to the deliverable's artifact contract (where set).
+  if (expected.contract) {
+    assert.equal(
+      routeFreeformPrompt(deliverable.examplePrompt).serviceArtifactContract,
+      expected.contract,
+      `Demo pack "${deliverable.examplePrompt}" should route to ${expected.contract}`,
+    );
+  }
+  // Fixture exists, carries the disclaimer, and has no forbidden strings.
+  assert.ok(existsSync(deliverable.fixture), `Demo pack fixture should exist: ${deliverable.fixture}`);
+  const fixture = readFileSync(deliverable.fixture, "utf8");
+  assert.ok(fixture.includes("not medical advice, diagnosis, or treatment"), `${deliverable.fixture} should carry the non-medical disclaimer`);
+  const lower = fixture.toLowerCase();
+  for (const forbidden of DEMO_FORBIDDEN) {
+    assert.equal(lower.includes(forbidden), false, `${deliverable.fixture} must not contain: "${forbidden}"`);
+  }
+}
+
+// CLI --demo-pack [persona] --json.
+const demoCli = spawnSync(process.execPath, [HELPER_PATH, "--demo-pack", "--json"], { encoding: "utf8", maxBuffer: 5 * 1024 * 1024 });
+assert.equal(demoCli.status, 0, "--demo-pack should exit 0");
+const demoCliJson = JSON.parse(demoCli.stdout);
+assert.equal(demoCliJson.mode, "demo-pack", "--demo-pack should be demo-pack mode");
+assert.equal(demoCliJson.deliverables.length, 7, "--demo-pack should expose seven deliverables");
+const demoPersona = spawnSync(process.execPath, [HELPER_PATH, "--demo-pack", "dietician", "--json"], { encoding: "utf8" });
+assert.equal(JSON.parse(demoPersona.stdout).persona, "dietician", "--demo-pack dietician should resolve the persona");
+const demoBad = spawnSync(process.execPath, [HELPER_PATH, "--demo-pack", "bogus", "--json"], { encoding: "utf8" });
+assert.notEqual(demoBad.status, 0, "--demo-pack with unknown persona should exit non-zero");
+
+// Doc + handoff carry the demo-pack material.
+for (const phrase of [
+  "Customer Demo Pack (Test-Customer Ready)",
+  "demo-pack/service-offer-page.md",
+  "demo-pack/onboarding-questionnaire.md",
+  "demo-pack/client-handoff-packet.md",
+  "--demo-pack --json",
+]) {
+  assert.ok(doc.includes(phrase), `Doc should include demo-pack reference: ${phrase}`);
+}
+assert.ok(handoff.includes("Customer Demo Pack QA (Black-Box Reviewer)"), "Handoff should include demo-pack QA");
+assert.ok(handoff.includes("Red-line failure examples"), "Handoff should include red-line failure examples");
+
 console.log("Wellness Creator Workflow gate passed.");

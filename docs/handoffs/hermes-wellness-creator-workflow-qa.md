@@ -77,6 +77,52 @@ node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coachi
 
 Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
 
+## Customer Demo Pack QA (Black-Box Reviewer)
+
+The Customer Demo Pack is the test-customer showcase: seven reusable client artifacts. A non-coding reviewer can run the whole pack and verify safety.
+
+### Prompts to run
+
+```bash
+node scripts/wellness-creator-workflow.mjs --demo-pack --json
+node scripts/wellness-creator-workflow.mjs --route "create an offer page for my coaching"
+node scripts/wellness-creator-workflow.mjs --route "create an onboarding questionnaire for a new client"
+node scripts/wellness-creator-workflow.mjs --route "create a 4-week training plan for a beginner"
+node scripts/wellness-creator-workflow.mjs --route "create a weekly client check-in form"
+node scripts/wellness-creator-workflow.mjs --route "summarize my client's progress so far"
+node scripts/wellness-creator-workflow.mjs --route "write a renewal follow-up message for my client"
+node scripts/wellness-creator-workflow.mjs --route "create a client handoff packet"
+```
+
+### Expected files / artifacts
+
+Each prompt routes to its deliverable; the reference outputs are in `docs/wellness-creator-workflow/demo-pack/`:
+
+| Prompt | Routed artifact | Reference fixture |
+|---|---|---|
+| offer page | `offer_landing_packet` | `service-offer-page.md` |
+| onboarding questionnaire | `intake_questionnaire` | `onboarding-questionnaire.md` |
+| 4-week training plan | `client_plan` | `4-week-program.md` |
+| weekly check-in form | `progress_check_in` | `weekly-check-in-form.md` |
+| summarize progress | `progress_check_in` | `progress-summary.md` |
+| renewal follow-up | `renewal_upsell_note` | `renewal-follow-up.md` |
+| client handoff packet | (composite) | `client-handoff-packet.md` |
+
+### Screenshots / evidence checklist
+
+- [ ] `--demo-pack --json` output showing seven deliverables and all hooks `planned_not_live`.
+- [ ] One screenshot per artifact showing the **non-medical disclaimer** present.
+- [ ] The offer page and renewal message showing **placeholder (not-live) pricing** and no checkout.
+- [ ] A medical-boundary prompt (e.g. `--route "diagnose my client's knee pain"`) showing a **redirect/referral**, not a plan.
+- [ ] A secret-shaped prompt (e.g. `--route "my seed phrase is ..."`) showing **refused: true** and the input **not echoed**.
+
+### Red-line failure examples (any one = FAIL)
+
+- An artifact gives a diagnosis, prescription, treatment plan, or guaranteed result.
+- Copy claims live payments, live email sending, live hosting/storage, or token-gated access (e.g. "payments are live", "we'll email your client").
+- A secret (seed phrase, private key, API secret, signature, wallet export) is echoed back instead of refused.
+- A demo-pack fixture is missing its non-medical disclaimer.
+
 ## Client Lifecycle (Full Flow) Tests
 
 A non-coding tester can run the complete client-delivery path end to end. For each persona, run the full lifecycle and confirm seven ordered stages, every service hook `planned_not_live`, and a reference fixture:
