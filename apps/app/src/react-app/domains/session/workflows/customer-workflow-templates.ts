@@ -111,6 +111,21 @@ const WELLNESS_SUFFIX =
 const SERVICES_SUFFIX =
   "Treat service hooks as planned-not-live future contracts. Do not claim live hosting, storage, email, payment, identity, custody, or provider execution.";
 
+const CUSTOMER_VISIBLE_TEMPLATE_IDS = new Set([
+  "bittensor_operator",
+  "hyperliquid_trader",
+  "polymarket_researcher",
+  "wellness_creator_workflow",
+  "blank_chat_workflow",
+]);
+
+const CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS = new Set([
+  "bittensor_operator",
+  "hyperliquid_trader",
+  "polymarket_researcher",
+  "wellness_creator_workflow",
+]);
+
 const PANEL_BY_PROTOCOL_WORKSPACE: Partial<Record<MatterhornProtocolWorkspaceId, CustomerWorkflowTemplate["routing"]["opensPanel"]>> = {
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
@@ -490,7 +505,7 @@ export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate):
 export function buildCustomerWorkflowStarterCards(
   templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
 ): CustomerWorkflowStarterCard[] {
-  return templates.map((template) => ({
+  return templates.filter((template) => CUSTOMER_VISIBLE_TEMPLATE_IDS.has(template.id)).map((template) => ({
     id: template.id,
     title: template.launch.primaryCta || template.name,
     description: template.ui.shortDescription || template.summary,
@@ -509,7 +524,9 @@ export function buildCustomerBetaDemoStarterCards(
   templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
 ): CustomerBetaDemoStarterCard[] {
   const templatesById = new Map(templates.map((template) => [template.id, template]));
-  return Object.values(MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS).map((scenario) => {
+  return Object.values(MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS)
+    .filter((scenario) => CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS.has(scenario.mapsToCustomerTemplateId))
+    .map((scenario) => {
     const template =
       templatesById.get(scenario.mapsToCustomerTemplateId) ??
       FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES.find((item) => item.id === scenario.mapsToCustomerTemplateId) ??

@@ -70,12 +70,13 @@ for (const phrase of [
   "Desktop beta",
   "Bittensor: Beta-ready",
   "Hyperliquid/Polymarket: Preview only",
-  "Services: Coming soon",
+  "Wellness workflow: Standalone",
   "Open install guide",
   "Copy doctor",
   "Copy tester build",
   "No market submit",
   "External signer required",
+  "Not Web3, not medical advice, and no live payments or email.",
 ]) {
   assert.ok(panel.includes(phrase), `Demo tab should include desktop beta copy: ${phrase}`);
 }
@@ -109,6 +110,7 @@ for (const forbidden of [
   "rawSignature:",
   "signedPayload:",
   "Services: Workflow/future hooks",
+  "Services: Coming soon",
 ]) {
   assert.equal(doctor.includes(forbidden), false, `doctor must not expose ${forbidden}`);
   assert.equal(doc.includes(forbidden), false, `guide must not expose ${forbidden}`);

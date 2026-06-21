@@ -62,7 +62,7 @@ for (const phrase of [
   "Business workflows",
   "Use the same chat engine for real-world customer work",
   "Monday beta demos",
-  "Five guided runs for the first 10 test customers",
+  "Guided runs for the first 10 test customers",
   "Public/redacted only",
   "Customers:",
   "Expected:",
@@ -75,7 +75,6 @@ for (const phrase of [
   "Open Hyperliquid panel",
   "Open Polymarket panel",
   "Start wellness workflow",
-  "Plan future services",
   "Start blank chat",
   "Use Bittensor",
   "Show my TAO",
@@ -83,16 +82,13 @@ for (const phrase of [
   "Preview a Hyperliquid BTC-PERP trade",
   "Summarize this Polymarket market",
   "Create a wellness program for my clients",
-  "Plan a decentralized storage upload",
-  "Connect Web3 tools",
+  "Connect extensions",
   "Start with a Matterhorn workflow",
   "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
-  "Services: planned hosting, storage, email, payments, and identity workflows",
   "Can submit: No",
   "Live submission: Off",
   "Matterhorn never signs",
   "Do not ask for seed phrases",
-  "planned-not-live future contracts",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
   "enrichCustomerWorkflowTemplate",
@@ -101,12 +97,12 @@ for (const phrase of [
   "Beta-ready",
   "Preview only",
   "Workflow-ready",
-  "Coming soon",
   "Planned, not live",
   "starterStatusLabel",
   "Can submit: No. Live submission: Off. External signer/client only.",
   "Educational workflow. No medical advice or live payments/email/hosting.",
-  "Future-contract planning only. No provider execution or credentials.",
+  "CUSTOMER_VISIBLE_TEMPLATE_IDS",
+  "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
 }
@@ -141,7 +137,6 @@ for (const phrase of [
   "Hyperliquid order preview",
   "Polymarket market research and preview",
   "Wellness client program packet",
-  "Decentralized services future plan",
   "node scripts/customer-demo-evidence-pack.mjs --scenario",
   "Demo-ready",
   "buildCustomerWorkflowPromptFromText",
@@ -177,7 +172,7 @@ for (const forbidden of [
 
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
-assert.ok(walletPanel.includes("Protocol desks still support Bittensor public reads, subnet discovery, Hyperliquid previews, Polymarket previews"), "no-wallet protocol panel should explain public read flows");
+assert.equal(walletPanel.includes("EVM wallet not connected"), false, "no-wallet protocol panel should not block content with a bottom overlay");
 assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel, { primePrompt: true })"), "protocol launchers should open a dedicated desk and prime an editable prompt draft");
 assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel, { primePrompt: true })"), "Bittensor top launcher should open the Bittensor desk and prime an editable prompt draft");
 assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
@@ -201,8 +196,11 @@ assert.ok(sessionPage.includes('options?.source ?? "protocol-rail"'), "protocol 
 assert.ok(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), "protocol rail prompts should insert into the active composer without auto-sending");
 assert.ok(sessionPage.includes("openVenueRailPane(item.panel, { primePrompt: true })"), "protocol rail buttons should open the desk and prime the chat composer");
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
-assert.ok(sessionPage.includes('card.id === "decentralized_services_operator"'), "right rail should expose future Services workflow launcher");
+assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
+assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
+assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
+assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
 
 for (const phrase of [
   "matterhorn-work.server.token",

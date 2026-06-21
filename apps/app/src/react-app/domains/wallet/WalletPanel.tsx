@@ -136,7 +136,7 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
 
   if (!state.isConnected) {
     return (
-      <div className="relative h-full min-h-0 bg-dls-sidebar animate-fade-in">
+      <div className="h-full min-h-0 bg-dls-sidebar animate-fade-in">
         <Suspense fallback={
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-3">
@@ -147,9 +147,6 @@ export function WalletPanel({ store, gasPriceGwei, blockExplorerUrl, initialVenu
         }>
           <BittensorPanel initialVenue={initialVenue} />
         </Suspense>
-        <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-xl border border-dls-border bg-dls-surface/95 px-3 py-2 text-[11px] leading-relaxed text-dls-secondary shadow-[var(--dls-card-shadow)]">
-          EVM wallet not connected. Protocol desks still support Bittensor public reads, subnet discovery, Hyperliquid previews, Polymarket previews, and external-signer guidance.
-        </div>
       </div>
     );
   }
