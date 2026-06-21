@@ -1,16 +1,15 @@
 /** @jsxImportSource react */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Cloud, MessageCircleMore, Settings } from "lucide-react";
+import { BookOpen, MessageCircleMore, Settings } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { t } from "@/i18n";
-import { buildDenAuthUrl, readDenBootstrapConfig } from "@/app/lib/den";
 import { usePlatform } from "../../../kernel/platform";
-import { useDenAuth } from "../../cloud/den-auth-provider";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { useShellConfig } from "../../../shell/shell-config";
+import { BetaAuthMenu } from "../../auth";
 import type { MatterhornServerStatus } from "../../../../app/lib/matterhorn-server";
 
 const DOCS_URL = "https://openworklabs.com/docs";
@@ -136,7 +135,6 @@ export type StatusBarProps = {
 
 export function StatusBar(props: StatusBarProps) {
   const platform = usePlatform();
-  const denAuth = useDenAuth();
   const { config: shellConfig } = useShellConfig();
   const docsButtonRef = useRef<HTMLButtonElement>(null);
   const feedbackButtonRef = useRef<HTMLButtonElement>(null);
@@ -199,26 +197,8 @@ export function StatusBar(props: StatusBarProps) {
         />
 
         <div className="flex items-center gap-1">
-          {shellConfig.cloudSignin && !denAuth.isSignedIn && denAuth.status !== "checking" ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={(
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => {
-                      const baseUrl = readDenBootstrapConfig().baseUrl;
-                      platform.openLink(buildDenAuthUrl(baseUrl, "sign-in"));
-                    }}
-                    aria-label={t("den.signin_title")}
-                  >
-                    <Cloud className="size-3.5" />
-                    <span>{t("den.signin_button")}</span>
-                  </Button>
-                )}
-              />
-              <TooltipContent>{t("den.signin_title")}</TooltipContent>
-            </Tooltip>
+          {shellConfig.cloudSignin ? (
+            <BetaAuthMenu compact={false} />
           ) : null}
           {shellConfig.docsButton ? (
             <Button
