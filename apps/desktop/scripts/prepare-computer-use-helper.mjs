@@ -11,6 +11,7 @@ const iconPath = resolve(desktopRoot, "resources", "icons", "icon.icns");
 const productName = "HandsFreeComputerUse";
 const helperExecutableName = "ComputerUse";
 const helperAppName = "Matterhorn Work Automation Helper.app";
+const legacyHelperAppName = "OpenWork Computer Use.app";
 const bundleIdentifier = "com.differentai.openwork.computer-use";
 
 const readArg = (name) => {
@@ -26,6 +27,7 @@ const hasFlag = (name) => process.argv.slice(2).includes(name);
 const outDir = resolve(readArg("--outdir") ?? join(desktopRoot, "resources", "helpers"));
 const force = hasFlag("--force") || process.env.MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD === "1" || process.env.OPENWORK_COMPUTER_USE_FORCE_BUILD === "1";
 const appPath = join(outDir, helperAppName);
+const legacyAppPath = join(outDir, legacyHelperAppName);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -94,6 +96,8 @@ if (process.platform !== "darwin") {
   process.stdout.write(JSON.stringify({ ok: true, skipped: true, reason: "computer-use-helper-is-macos-only" }, null, 2) + "\n");
   process.exit(0);
 }
+
+rmSync(legacyAppPath, { recursive: true, force: true });
 
 if (!force && existsSync(join(appPath, "Contents", "MacOS", helperExecutableName))) {
   process.stdout.write(JSON.stringify({ ok: true, skipped: true, appPath }, null, 2) + "\n");

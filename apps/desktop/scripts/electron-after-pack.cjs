@@ -195,6 +195,23 @@ function signComputerUseHelper(context) {
   }
 }
 
+function copyComputerUseHelper(context) {
+  if (context.electronPlatformName !== "darwin") return;
+  const appPath = resolveMacAppPath(context);
+  if (!appPath) return;
+
+  const sourcePath = path.resolve(__dirname, "..", "resources", "helpers", computerUseHelperAppName);
+  if (!fs.existsSync(sourcePath)) {
+    throw new Error(`Matterhorn Work automation helper source is missing: ${sourcePath}`);
+  }
+
+  const helpersDir = path.join(appPath, "Contents", "Resources", "helpers");
+  const targetPath = path.join(helpersDir, computerUseHelperAppName);
+  fs.mkdirSync(helpersDir, { recursive: true });
+  fs.rmSync(targetPath, { recursive: true, force: true });
+  fs.cpSync(sourcePath, targetPath, { recursive: true });
+}
+
 function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
   const targetPath = path.join(sidecarsDir, targetName);
   if (!fs.existsSync(targetPath)) {
@@ -212,12 +229,19 @@ function copyExecutableTargetToAlias(sidecarsDir, targetName, aliasName) {
 
 async function afterPack(context) {
   await repairPackagedAppAsar(context);
+  copyComputerUseHelper(context);
 
   const triple = targetTriple(context.electronPlatformName, context.arch);
-  if (!triple) return;
+  if (!triple) {
+    signComputerUseHelper(context);
+    return;
+  }
 
   const sidecarsDir = resolveSidecarsDir(context);
-  if (!sidecarsDir || !fs.existsSync(sidecarsDir)) return;
+  if (!sidecarsDir || !fs.existsSync(sidecarsDir)) {
+    signComputerUseHelper(context);
+    return;
+  }
 
   const isWindows = context.electronPlatformName === "win32";
   const executableSuffix = isWindows ? ".exe" : "";
