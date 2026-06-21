@@ -14,7 +14,7 @@
  * 7. Safety gate compatibility (runs alongside market-execution-safety-gate)
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const repoRoot = process.cwd();
@@ -427,7 +427,79 @@ for (const phrase of punchForbiddenCopy) {
   }
 }
 
-// ── 11. Stitch prompts: required prompts ─────────────────────
+// ── 11. Visual QA Results ────────────────────────────────────────
+
+fileExists("docs/ui/monday-beta-visual-qa-results.md");
+
+const qa = read("docs/ui/monday-beta-visual-qa-results.md");
+
+// Must cover all required sections
+const qaSections = [
+  "P0-01",
+  "P0-02",
+  "P0-03",
+  "P0-04",
+  "P0-05",
+  "P0-06",
+  "P0-07",
+  "P0-08",
+  "P0-09",
+  "P0-10",
+  "P1",
+  "P2",
+  "Screenshot Reference",
+  "Sign-off",
+];
+for (const section of qaSections) {
+  if (qa.includes(section)) pass(`QA doc covers: "${section}"`);
+  else fail(`QA doc covers: "${section}"`, "missing");
+}
+
+// Must reference the screenshot directory
+if (qa.includes("docs/ui/screenshots/")) {
+  pass("QA doc references screenshot directory: docs/ui/screenshots/");
+} else {
+  fail("QA doc references screenshot directory: docs/ui/screenshots/", "missing");
+}
+
+// Screenshot directory must exist with PNG files
+const screenshotDir = join(repoRoot, "docs/ui/screenshots");
+const screenshotFiles = (() => {
+  try {
+    return readdirSync(screenshotDir).filter((f) => f.endsWith(".png"));
+  } catch {
+    return [];
+  }
+})();
+if (screenshotFiles.length > 0) {
+  pass(`Screenshot directory has ${screenshotFiles.length} PNG files`);
+} else {
+  fail(`Screenshot directory has ${screenshotFiles.length} PNG files`, "directory empty or missing");
+}
+
+// Must cover all key desktop screenshots
+const keyScreenshots = [
+  "welcome--desktop.png",
+  "bittensor-desk--desktop.png",
+  "hyperliquid-desk--desktop.png",
+  "polymarket-desk--desktop.png",
+  "wellness-desk--desktop.png",
+  "chat-composer--desktop.png",
+  "error-states--desktop.png",
+  "external-signer-handoff--desktop.png",
+  "safety-strip-blue--desktop.png",
+];
+for (const ss of keyScreenshots) {
+  if (screenshotFiles.includes(ss)) pass(`Screenshot present: ${ss}`);
+  else fail(`Screenshot present: ${ss}`, "missing");
+}
+
+// Forbidden phrases in the QA doc appear only as FAIL/VERIFY descriptions
+// (e.g. "❌ FAIL — 'Beta-Ready' text found"). These are fix documentation,
+// not actual app copy. No additional forbidden-copy scan needed here — the
+// QA doc is a checklist, not a UI surface.
+
+// ── 12. Stitch prompts: required prompts ─────────────────────
 
 const stitch = read("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
 const stitchTopics = [
