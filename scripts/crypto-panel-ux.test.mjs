@@ -179,8 +179,11 @@ for (const forbidden of [
 // metrics, and protocol panels scroll vertically.
 for (const phrase of [
   "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
-  "sm:grid-cols-3",
+  "grid-cols-1 gap-1 rounded-2xl bg-dls-surface p-1.5 sm:grid-cols-3",
+  "grid-cols-[repeat(auto-fit,minmax(132px,1fr))]",
   "break-words font-mono",
+  "text-[15px]",
+  "text-base font-semibold",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include resilient protocol layout treatment: ${phrase}`);
 }
