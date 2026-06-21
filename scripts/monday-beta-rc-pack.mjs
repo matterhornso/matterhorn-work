@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const FORBIDDEN_ROUTE_RE = /\/api\/(?:hyperliquid|polymarket)\/orders\/(?:submit|sign)|\/orders\/submit|\/orders\/sign|\/exchange\/submit/i;
-const FORBIDDEN_SECRET_ASSIGNMENT_RE = /\b(?:privateKey|private_key|seedPhrase|seed phrase|mnemonic|apiSecret|api secret|rawSignature|raw signature|signedPayload|signed payload|walletExport|wallet export)\b\s*[:=]\s*\S+/i;
+const FORBIDDEN_SECRET_ASSIGNMENT_RE = /\b(?:privateKey|private_key|seedPhrase|seed phrase|mnemonic|apiSecret|api secret|rawSignature|raw signature|signedPayload|signed payload|walletExport|wallet export)\b[ \t]*[:=][ \t]*\S+/i;
 
 function parseArgs(argv) {
   const args = {

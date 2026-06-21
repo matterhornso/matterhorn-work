@@ -60,6 +60,9 @@ for (const forbidden of [
   assert.equal(script.includes(forbidden), false, `RC pack must not include forbidden surface ${forbidden}`);
 }
 
+assert.ok(script.includes("[ \\t]*[:=][ \\t]*\\S+"), "Secret assignment detector should not cross line breaks");
+assert.equal(script.includes("\\s*[:=]\\s*\\S+"), false, "Secret assignment detector must not treat a newline after '=' as a secret value");
+
 const result = spawnSync("node", [
   "scripts/monday-beta-rc-pack.mjs",
   "--output-dir",
