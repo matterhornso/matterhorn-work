@@ -434,7 +434,7 @@ Pending merge.
 | `bittensor` | `beta_ready` | `opens_desk` | `/workspaces/bittensor` | preview stake / prepare handoff |
 | `hyperliquid` | `preview_only` | `opens_desk` | `/workspaces/hyperliquid` | preview trade / show exposure |
 | `polymarket` | `preview_only` | `opens_desk` | `/workspaces/polymarket` | research market / preview trade |
-| `wellness` | `workflow_ready` | `starts_chat` | `/workspaces/wellness` | plan program / build schedule |
+| `wellness` | `planned_not_live` | `planned_not_live` | `/workspaces/wellness` | plan program / build schedule |
 | `decentralized_services` | `planned_not_live` | `planned_not_live` | `/workspaces/decentralized-services` | plan storage / compare fixtures |
 
 ### Safety rules

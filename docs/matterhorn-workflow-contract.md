@@ -472,7 +472,7 @@ unmapped):
 | `bittensor_operator` | `bittensor` | `beta_ready` | `opens_desk` | `/workspaces/bittensor` |
 | `hyperliquid_trader` | `hyperliquid` | `preview_only` | `opens_desk` | `/workspaces/hyperliquid` |
 | `polymarket_researcher` | `polymarket` | `preview_only` | `opens_desk` | `/workspaces/polymarket` |
-| `wellness_creator_workflow` | `wellness` | `workflow_ready` | `starts_chat` | `/workspaces/wellness` |
+| `wellness_creator_workflow` | `wellness` | `planned_not_live` | `planned_not_live` | `/workspaces/wellness` |
 | `decentralized_services_operator` | `decentralized_services` | `planned_not_live` | `planned_not_live` | `/workspaces/decentralized-services` |
 
 The mapping is exported as `MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE`.
@@ -481,7 +481,7 @@ The mapping is exported as `MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE`.
 
 - Bittensor is `beta_ready`, may execute safe read/preview handoffs, and requires an external signer.
 - Hyperliquid and Polymarket are `preview_only`, non-executing, and never submit or take custody.
-- Wellness is `workflow_ready`, educational, and non-medical.
+- Wellness is `planned_not_live`, educational, and non-medical.
 - Decentralized services are `planned_not_live` future contracts.
 - Every workspace keeps `liveExecutionEnabled: false`, `canSubmit: false`, and all secret-acceptance flags `false`.
 
