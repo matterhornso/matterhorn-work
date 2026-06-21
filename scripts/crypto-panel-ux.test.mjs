@@ -31,6 +31,9 @@ for (const phrase of [
   "Use Bittensor without learning the CLI first.",
   "Preview Hyperliquid trades through chat, with execution off.",
   "Analyze prediction markets and preview safely.",
+  "Preview Actions",
+  "Matterhorn prepares Bittensor action previews for review.",
+  "Prepare Preview",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose a dedicated venue desk: ${phrase}`);
 }
