@@ -333,7 +333,101 @@ for (const phrase of handoffForbidden) {
   }
 }
 
-// ── 10. Stitch prompts: required prompts ─────────────────────
+// ── 10. Monday Beta Implementation Punch List ─────────────────
+
+fileExists("docs/ui/monday-beta-implementation-punch-list.md");
+
+const punch = read("docs/ui/monday-beta-implementation-punch-list.md");
+
+// Must cover P0, P1, P2 sections
+for (const tier of ["P0", "P1", "P2"]) {
+  if (punch.includes(`## ${tier}`)) pass(`Punch list covers: ${tier}`);
+  else fail(`Punch list covers: ${tier}`, "missing");
+}
+
+// Must cover all required screen areas
+const punchScreens = [
+  ["Bittensor", "Bittensor Desk"],
+  ["Hyperliquid", "Hyperliquid Desk"],
+  ["Polymarket", "Polymarket Desk"],
+  ["Wellness", "Wellness"],
+  ["Services", "Services"],
+  ["Mobile", "Mobile"],
+  ["Error", "Error"],
+];
+for (const [needle, label] of punchScreens) {
+  if (punch.includes(needle)) pass(`Punch list covers: "${label}"`);
+  else fail(`Punch list covers: "${label}"`, "missing");
+}
+
+// Key P0 items must be present
+const p0Items = [
+  "Safety Strip",
+  "green",
+  "Planned — Preview Only",
+  "Ask in chat",
+  "Matterhorn",
+  "Stop generating",
+  "Coming soon",
+  "canSubmit",
+  "Access token",
+];
+for (const item of p0Items) {
+  if (punch.includes(item)) pass(`Punch list covers P0 concern: "${item}"`);
+  else fail(`Punch list covers P0 concern: "${item}"`, "missing");
+}
+
+// Codex first batch section must exist
+if (punch.includes("Codex First Implementation Batch")) {
+  pass("Punch list contains: Codex First Implementation Batch");
+} else {
+  fail("Punch list contains: Codex First Implementation Batch", "missing");
+}
+
+// QA screenshot inventory section must exist
+if (punch.includes("QA Screenshot Inventory")) {
+  pass("Punch list contains: QA Screenshot Inventory");
+} else {
+  fail("Punch list contains: QA Screenshot Inventory", "missing");
+}
+
+// Forbidden claims checklist must exist
+if (punch.includes("Forbidden Claims Checklist")) {
+  pass("Punch list contains: Forbidden Claims Checklist");
+} else {
+  fail("Punch list contains: Forbidden Claims Checklist", "missing");
+}
+
+// Strip forbidden claims table rows (not the entire section — the checklist ITEMS
+// in P0/P1/P2 legitimately reference these phrases as "remove this" fixes).
+// Strip all markdown table rows (| col | col |\n) including header and separator rows.
+const punchForbiddenTable = /\|.*\|\s*\n/gi;
+const punchForScan = punch.replace(punchForbiddenTable, "");
+
+// Strip P0/P1 sections that may describe forbidden patterns (e.g. "green badge")
+// ##[^\S\n] requires exactly ONE non-newline whitespace after ##
+// (prevents blank-line \n matching before next ##[^\S\n]+ ##).
+// Then ## matches the next heading's ##, not a ### subheading.
+const p0Section = /(?:##[^\S\n]P0[\s\S]*?(?=##[^\S\n](?:P1|P2|Codex|QA)|\Z))/gi;
+const p1Section = /(?:##[^\S\n]P1[\s\S]*?(?=##[^\S\n](?:P0|P2|Codex|QA)|\Z))/gi;
+const punchScanContent = punchForScan
+  .replace(p0Section, "")
+  .replace(p1Section, "");
+
+const punchForbiddenCopy = [
+  "your funds are safe with matterhorn",
+  "matterhorn holds your assets",
+  "openwork",
+];
+for (const phrase of punchForbiddenCopy) {
+  if (punchScanContent.toLowerCase().includes(phrase)) {
+    fail(`Punch list copy excludes: "${phrase}"`, "PRESENT");
+  } else {
+    pass(`Punch list copy excludes: "${phrase}"`);
+  }
+}
+
+// ── 11. Stitch prompts: required prompts ─────────────────────
 
 const stitch = read("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
 const stitchTopics = [
