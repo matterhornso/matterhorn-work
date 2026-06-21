@@ -7,6 +7,7 @@ import { isWebDeployment } from "../../app/lib/matterhorn-deployment";
 import { hydrateMatterhornServerSettingsFromEnv } from "../../app/lib/matterhorn-server";
 import { isDesktopRuntime } from "../../app/utils";
 import { DenAuthProvider } from "../domains/cloud/den-auth-provider";
+import { BetaAuthProvider } from "../domains/auth";
 import { DesktopConfigProvider } from "../domains/cloud/desktop-config-provider";
 import { RestrictionNoticeProvider } from "../domains/cloud/restriction-notice-provider";
 import { StatusToastsProvider } from "../domains/shell-feedback/status-toasts";
@@ -73,15 +74,17 @@ export function AppProviders({ children }: AppProvidersProps) {
           <ArchitectureMismatchGate>
             <DesktopRuntimeBoot />
             <DenAuthProvider>
-              <DesktopConfigProvider>
-                <RestrictionNoticeProvider>
-                  <LocalProvider>
-                    <StatusToastsProvider>
-                      <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
-                    </StatusToastsProvider>
-                  </LocalProvider>
-                </RestrictionNoticeProvider>
-              </DesktopConfigProvider>
+              <BetaAuthProvider>
+                <DesktopConfigProvider>
+                  <RestrictionNoticeProvider>
+                    <LocalProvider>
+                      <StatusToastsProvider>
+                        <ReloadCoordinatorProvider>{children}</ReloadCoordinatorProvider>
+                      </StatusToastsProvider>
+                    </LocalProvider>
+                  </RestrictionNoticeProvider>
+                </DesktopConfigProvider>
+              </BetaAuthProvider>
             </DenAuthProvider>
           </ArchitectureMismatchGate>
         </ServerProvider>

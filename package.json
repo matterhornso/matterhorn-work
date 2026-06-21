@@ -97,6 +97,7 @@
     "test:customer-demo-scenarios": "node scripts/customer-demo-scenarios.test.mjs",
     "test:customer-demo-evidence-pack": "node scripts/customer-demo-evidence-pack.test.mjs",
     "test:monday-beta-launch-readiness": "node scripts/monday-beta-launch-readiness.test.mjs",
+    "test:beta-auth": "node scripts/beta-auth.test.mjs",
     "workflow:evidence:list": "node scripts/matterhorn-workflow-evidence-bundles.mjs --list",
     "workflow:evidence:show": "node scripts/matterhorn-workflow-evidence-bundles.mjs --id",
     "workflow:evidence:export": "node scripts/matterhorn-workflow-evidence-bundles.mjs --export",
