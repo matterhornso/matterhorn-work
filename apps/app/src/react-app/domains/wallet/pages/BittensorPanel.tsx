@@ -302,8 +302,8 @@ const VENUE_DESKS: Record<CryptoVenue, {
     headline: "Use Bittensor without learning the CLI first.",
     description: "Read public SS58 wallets, understand subnets, compare validators, prepare staking previews, and create watches. Actions still require an external Bittensor-compatible signer.",
     statusLabel: "Beta-ready",
-    canSubmit: "External signer",
-    liveSubmission: "External signing required",
+    canSubmit: "Unsigned preview only",
+    liveSubmission: "External signer only",
     signer: "External Bittensor signer required",
     source: "Subtensor sidecar, TAO.app, or fallback data",
     prompts: [
@@ -1037,6 +1037,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const activeManifestCanSubmit = activeManifest.safetyBoundaries.canSubmit ? "Yes" : "No";
   const activeManifestLiveSubmission = activeManifest.safetyBoundaries.liveExecutionEnabled ? "On" : "Off";
   const activeManifestSigner = protocolSignerLabel(activeManifest);
+  const activeSafetyBadge = venue === "bittensor" ? "Read/preview + external signer" : "Preview Only";
+  const activeSafetyCopy = venue === "bittensor"
+    ? "Safety strip: Bittensor supports public SS58/coldkey reads, subnet discovery, watches, receipts, and unsigned previews. Any action must be reviewed and signed in an external Bittensor-compatible signer; never paste seed phrases, private keys, mnemonics, or wallet exports."
+    : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
@@ -1084,9 +1088,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         </div>
         <div className="mb-3 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.24)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200">
+            <span>Safety strip</span>
             <span>Protocol manifest</span>
             <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.25)] px-2 py-0.5 text-[9px] text-dls-secondary">
-              {activeManifestStatus}
+              {activeSafetyBadge}
             </span>
           </div>
           <div className="mt-2 grid grid-cols-3 gap-2">
@@ -1095,7 +1100,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Metric label="External signer" value={activeManifestSigner} compact />
           </div>
           <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
-            Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
+            {activeSafetyCopy}
+          </p>
+          <p className="mt-2 break-words text-[11px] leading-5 text-dls-secondary">
+            Status: {activeManifestStatus}. Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
           </p>
         </div>
         {venue === "bittensor" ? (
@@ -1176,14 +1184,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="SDK evidence" value={marketSdkValidationState} compact />
                 </div>
                 <Notice tone="info" icon={<Shield className="size-4" />} title="Preview-only boundary">
-                  {activeVenue.label} is separated from Bittensor because it has a different risk model. This desk supports read, preview, watch, sign-request evidence, and receipt review. It does not submit live market orders or accept private keys, API secrets, raw signatures, or signed payloads.
+                  {activeVenue.label} is separated from Bittensor because it has a different risk model. This desk supports read, preview, watch, external-signer request evidence, and receipt review. It does not submit live market orders or accept private keys, API secrets, raw signatures, signed payloads, or wallet exports.
                 </Notice>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate")}>
                     {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchCreate" : "polymarketWatchCreate") ? "Copied" : `Create ${activeVenue.shortLabel} watch`}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy sign-request examples"}
+                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Copy external-signer examples"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyCustomerDemoCommand(venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest")}>
                     {copiedCustomerCommand === (venue === "hyperliquid" ? "hyperliquidWatchDigest" : "polymarketWatchDigest") ? "Copied" : `Digest ${activeVenue.shortLabel} watches`}
@@ -1291,7 +1299,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue === "bittensor" && tab === "demo" && (
           <div className="space-y-4">
-            <Section title="Try in chat" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Ask in Chat ->" icon={<BrainCircuit className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
                 Tap a prompt to drop it into the chat composer. Nothing sends automatically — review it, then press send. Public reads work without connecting an EVM wallet.
               </p>
@@ -1456,7 +1464,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
                   </div>
                   <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Services: Workflow/future hooks</p>
+                    <p className="text-xs font-semibold text-dls-text">Services: Coming soon</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Wellness and decentralized services do not run live payments, email, storage, or access control.</p>
                   </div>
                 </div>
@@ -1518,12 +1526,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Can submit" value={marketExecutionChainSubmitState} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Testnet-only path: preview -&gt; external sign request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
+                  Testnet-only path: preview -&gt; external-signer request -&gt; redacted artifact validation -&gt; public receipt import. Each step is public/redacted and hash-bound before it can become customer evidence.
                 </p>
                 <div className="grid grid-cols-1 gap-2">
                   {[
                     ["Preview / handoff", "Build a no-submit plan with Can submit: No and Live submission: Off."],
-                    ["External sign request", "Create public metadata for an operator-owned testnet signer only."],
+                    ["External-signer request", "Create public metadata for an operator-owned testnet signer only."],
                     ["Validate artifact", "Accept public/redacted metadata; reject raw signatures, signed payloads, secrets, and hash mismatches."],
                     ["Receipt import", "Attach public status or transaction evidence without private execution material."],
                   ].map(([label, description]) => (
@@ -1545,7 +1553,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     {copiedCustomerCommand === "executionChainApi" ? "Copied" : "Chain API"}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainSignRequest")}>
-                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Sign request"}
+                    {copiedCustomerCommand === "executionChainSignRequest" ? "Copied" : "Signer request"}
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => void copyCustomerDemoCommand("executionChainArtifact")}>
                     {copiedCustomerCommand === "executionChainArtifact" ? "Copied" : "Validate artifact"}
@@ -1592,7 +1600,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title="Try prompts" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Ask in Chat ->" icon={<BrainCircuit className="size-4" />}>
               <div className="grid gap-2">
                 {customerDemoPrompts.map((item) => (
                   <button

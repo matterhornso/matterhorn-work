@@ -142,6 +142,13 @@ function statusLabel(status: CustomerWorkflowTemplate["status"] | undefined): st
   }
 }
 
+function starterStatusLabel(template: CustomerWorkflowTemplate): string {
+  if (template.routing.chatMode === "services" && template.status === "planned_not_live") {
+    return "Coming soon";
+  }
+  return statusLabel(template.status);
+}
+
 function demoStatusLabel(status: CustomerBetaDemoScenario["status"]): string {
   switch (status) {
     case "demo_ready":
@@ -491,7 +498,7 @@ export function buildCustomerWorkflowStarterCards(
     iconHint: template.ui.iconHint,
     panel: template.routing.opensPanel,
     recommendedSurface: template.launch.recommendedSurface,
-    statusLabel: statusLabel(template.status),
+    statusLabel: starterStatusLabel(template),
     safetySummary: safetySummary(template),
     workspaceDisplayName: template.protocolWorkspace?.displayName,
     launchBehavior: template.protocolWorkspace?.launchBehavior,
