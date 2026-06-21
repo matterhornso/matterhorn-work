@@ -16,6 +16,7 @@ const english = read("apps/app/src/i18n/locales/en.ts");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
+const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.tsx");
 const modelSelect = read("apps/app/src/components/model-select.tsx");
 const remoteWorkspaceFields = read("apps/app/src/react-app/domains/workspace/remote-workspace-fields.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
@@ -218,6 +219,17 @@ for (const phrase of [
 assert.ok(cryptoPrompt.includes("matterhorn_crypto_chat"), "crypto prompt should route to unified crypto chat first");
 assert.ok(cryptoPrompt.includes("Public-read and preview flows do\n * not require an EVM wallet connection."), "crypto prompt should document no-wallet public reads");
 assert.equal(cryptoPrompt.includes("hl_submitOrder"), false, "prompt should not advertise old Hyperliquid submit tool");
+
+for (const phrase of [
+  "https://github.com/matterhornso/matterhorn-work/tree/dev/docs",
+  "PROFILE_SETTINGS_LABEL",
+  "Profile & Settings",
+  "Open profile and settings from the status bar",
+  "visible profile and settings button",
+]) {
+  assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
+}
+assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");
 assert.ok(sessionRoute.includes("shouldInjectCryptoPrompt(text)"), "crypto prompt injection should still be keyword-gated");
