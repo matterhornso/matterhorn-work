@@ -17,6 +17,7 @@ const rootPackage = JSON.parse(read("package.json"));
 const doctor = read("scripts/desktop-beta-first-run-doctor.mjs");
 const doc = read("docs/desktop-beta-first-run.md");
 const panel = read("apps/app/src/react-app/domains/wallet/pages/BittensorPanel.tsx");
+const desktopMain = read("apps/desktop/electron/main.mjs");
 const workflow = read(".github/workflows/ci-tests.yml");
 
 assert.equal(
@@ -80,6 +81,24 @@ for (const phrase of [
 }
 
 assert.ok(workflow.includes("pnpm test:desktop-beta-first-run"), "CI should run the desktop beta first-run gate");
+
+for (const phrase of [
+  "MATTERHORN_WORK_ELECTRON_USERDATA",
+  "MATTERHORN_WORK_DESKTOP_BOOTSTRAP_PATH",
+  ".config\", \"matterhorn-work\", \"desktop-bootstrap.json",
+  "if (response.status === 404) return null",
+]) {
+  assert.ok(desktopMain.includes(phrase), `desktop startup should include ${phrase}`);
+}
+
+assert.ok(
+  desktopMain.indexOf("MATTERHORN_WORK_ELECTRON_USERDATA") < desktopMain.indexOf("OPENWORK_ELECTRON_USERDATA"),
+  "Matterhorn user-data override should be preferred over legacy OpenWork override",
+);
+assert.ok(
+  desktopMain.indexOf("MATTERHORN_WORK_DESKTOP_BOOTSTRAP_PATH") < desktopMain.indexOf("OPENWORK_DESKTOP_BOOTSTRAP_PATH"),
+  "Matterhorn bootstrap override should be preferred over legacy OpenWork override",
+);
 
 for (const forbidden of [
   "/api/hyperliquid/orders/submit",
