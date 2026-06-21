@@ -59,6 +59,8 @@ import { WorkspaceIcon } from "../../../design-system/workspace-icon";
 
 export function getSettingsTabIcon(tab: SettingsTab) {
   switch (tab) {
+    case "overview":
+      return Sparkles;
     case "ai":
       return Zap;
     case "preferences":
@@ -102,6 +104,8 @@ export function getSettingsTabIcon(tab: SettingsTab) {
 
 export function getSettingsTabLabel(tab: SettingsTab) {
   switch (tab) {
+    case "overview":
+      return "Overview";
     case "ai":
       return "AI Providers";
     case "preferences":
@@ -147,6 +151,8 @@ export function getSettingsTabLabel(tab: SettingsTab) {
 
 export function getSettingsTabDescription(tab: SettingsTab) {
   switch (tab) {
+    case "overview":
+      return "Profile, appearance, safety, protocols, and diagnostics";
     case "ai":
       return "Connect services that provide AI models";
     case "preferences":
@@ -195,7 +201,7 @@ export function getWorkspaceSettingsTabs(): SettingsTab[] {
 }
 
 export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
-  const tabs: SettingsTab[] = ["ai", "shell", "appearance", "environment", "updates", "recovery"];
+  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "environment", "updates", "recovery"];
   if (developerMode) tabs.push("debug");
   return tabs;
 }
