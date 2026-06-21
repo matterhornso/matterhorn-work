@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Static gate for the beta-tester protocol workspace panel UX.
-// Verifies the venue desks, "Try in chat" prompts, "Safety status" card, and "Evidence / QA"
+// Verifies the venue desks, "Ask in Chat ->" prompts, safety strip/card, and "Evidence / QA"
 // card exist; that prompt buttons insert (not auto-send) via the handoff event;
 // and that no copy claims live market submission or asks for secrets.
 import assert from "node:assert/strict";
@@ -37,11 +37,11 @@ for (const phrase of [
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
 // 3. The beta-tester sections exist.
-for (const section of ["Try in chat", "Monday beta scenarios", "Safety status", "Evidence / QA"]) {
+for (const section of ["Ask in Chat ->", "Monday beta scenarios", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 
-// 4. The six "Try in chat" prompt button labels exist.
+// 4. The six ask-in-chat prompt button labels exist.
 for (const label of [
   "show my TAO",
   "find Bittensor subnets for image generation",
@@ -111,9 +111,14 @@ for (const phrase of [
 // 8. Market desk copy must show the preview-only treatment.
 for (const phrase of [
   "Preview Only",
+  "Safety strip",
+  "Read/preview + external signer",
+  "external-signer request",
   "Can submit",
   "Live submission",
   "External signer/client required",
+  "Copy external-signer examples",
+  "Signer request",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include market preview-only copy: ${phrase}`);
 }
@@ -126,6 +131,12 @@ for (const forbidden of [
   "submit live order",
   "/api/hyperliquid/orders/submit",
   "/api/polymarket/orders/submit",
+  'title="Try in chat"',
+  'title="Try prompts"',
+  "Copy sign-request examples",
+  ">Sign request<",
+  "External sign request",
+  "Services: Workflow/future hooks",
 ]) {
   assert.equal(panel.includes(forbidden), false, `Panel must not claim live submission: ${forbidden}`);
 }

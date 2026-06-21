@@ -69,7 +69,7 @@ for (const phrase of [
   "Desktop beta",
   "Bittensor: Beta-ready",
   "Hyperliquid/Polymarket: Preview only",
-  "Services: Workflow/future hooks",
+  "Services: Coming soon",
   "Open install guide",
   "Copy doctor",
   "Copy tester build",
@@ -88,6 +88,7 @@ for (const forbidden of [
   "apiSecret:",
   "rawSignature:",
   "signedPayload:",
+  "Services: Workflow/future hooks",
 ]) {
   assert.equal(doctor.includes(forbidden), false, `doctor must not expose ${forbidden}`);
   assert.equal(doc.includes(forbidden), false, `guide must not expose ${forbidden}`);
