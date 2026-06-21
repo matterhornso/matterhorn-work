@@ -2228,3 +2228,430 @@ export const MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE: Record<
   wellness_creator_workflow: "wellness",
   decentralized_services_operator: "decentralized_services",
 };
+
+// -----------------------------------------------------------------------------
+// Monday Beta Customer Demo Scenario Registry
+// -----------------------------------------------------------------------------
+// Typed demo scenarios for the 10-customer Monday beta. Each scenario maps to
+// an existing workflow manifest and customer workflow template, defines a safe
+// entry prompt, expected artifacts, readiness commands, and pass/fail criteria.
+// -----------------------------------------------------------------------------
+
+export const MONDAY_BETA_CUSTOMER_DEMO_STATUSES = [
+  "demo_ready",
+  "preview_only",
+  "planned_not_live",
+] as const;
+export type MondayBetaCustomerDemoStatus = (typeof MONDAY_BETA_CUSTOMER_DEMO_STATUSES)[number];
+
+export interface CustomerBetaDemoPassFailCriteria {
+  pass: string[];
+  fail: string[];
+}
+
+export interface CustomerBetaDemoScenario {
+  version: "matterhorn.customer.beta.demo.scenario.v1";
+  id: string;
+  displayName: string;
+  targetCustomerPersona: string;
+  assignedBetaCustomers: string[];
+  entryPrompt: string;
+  expectedArtifacts: MatterhornWorkflowArtifact[];
+  readinessCommands: string[];
+  safetyBoundaries: MatterhornWorkflowTemplateSafetyBoundary;
+  forbiddenClaims: string[];
+  forbiddenInputs: string[];
+  passFailCriteria: CustomerBetaDemoPassFailCriteria;
+  evidenceOutputPath: string;
+  status: MondayBetaCustomerDemoStatus;
+  mapsToWorkflowId: string;
+  mapsToCustomerTemplateId: string;
+}
+
+export const BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario = {
+  version: "matterhorn.customer.beta.demo.scenario.v1",
+  id: "bittensor_tao_staking_preview",
+  displayName: "Bittensor TAO staking preview",
+  targetCustomerPersona: "TAO operator or delegator participating in the Monday beta",
+  assignedBetaCustomers: ["Alpha Node DAO", "TensorVault Labs"],
+  entryPrompt: "Show my TAO, compare validators on subnet 1, and prepare an unsigned 1 TAO staking preview",
+  expectedArtifacts: [
+    {
+      id: "balance_card",
+      name: "TAO Balance Card",
+      mimeType: "application/json",
+      public: true,
+      description: "Public TAO balance and stake overview.",
+    },
+    {
+      id: "subnet_comparison",
+      name: "Subnet Comparison",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Validator and subnet comparison for research.",
+    },
+    {
+      id: "stake_preview",
+      name: "Stake Preview",
+      mimeType: "application/json",
+      public: true,
+      description: "Non-binding stake preview with estimated returns.",
+    },
+    {
+      id: "external_signer_handoff",
+      name: "External Signer Handoff",
+      mimeType: "application/json",
+      public: true,
+      description: "Handoff payload for an external wallet or signer.",
+    },
+  ],
+  readinessCommands: [
+    'matterhorn-work crypto chat --message "show my TAO" --json',
+    "matterhorn-work bittensor handoff --wallet-address $WALLET --subnet 1 --amount 1 --json",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: true,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+  },
+  forbiddenClaims: [
+    "Matterhorn can stake without your external signer",
+    "Matterhorn holds your private key",
+    "Matterhorn submits transactions",
+    "Matterhorn can move your TAO",
+  ],
+  forbiddenInputs: [
+    "private key",
+    "seed phrase",
+    "mnemonic",
+    "raw signature",
+    "signed payload",
+    "wallet export",
+  ],
+  passFailCriteria: {
+    pass: [
+      "Balance card shows public TAO balance without asking for secrets",
+      "Subnet comparison lists validators and emissions without secrets",
+      "Stake preview is unsigned and non-binding",
+      "External signer handoff is produced and contains no signing material",
+    ],
+    fail: [
+      "Requests a private key or seed phrase",
+      "Produces a signed transaction",
+      "Submits to the Bittensor network",
+      "Claims Matterhorn can stake without external signer",
+    ],
+  },
+  evidenceOutputPath: "docs/evidence/monday-beta/bittensor/{customer}-scenario-evidence.json",
+  status: "demo_ready",
+  mapsToWorkflowId: "bittensor_operator",
+  mapsToCustomerTemplateId: "bittensor_operator",
+};
+
+export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario = {
+  version: "matterhorn.customer.beta.demo.scenario.v1",
+  id: "hyperliquid_order_preview",
+  displayName: "Hyperliquid order preview",
+  targetCustomerPersona: "Crypto trader reviewing Hyperliquid markets during the Monday beta",
+  assignedBetaCustomers: ["Arbor Trading", "PerpPrime Capital"],
+  entryPrompt: "Preview a Hyperliquid BTC-PERP long without signing or submitting anything",
+  expectedArtifacts: [
+    {
+      id: "market_preview",
+      name: "Market Preview",
+      mimeType: "application/json",
+      public: true,
+      description: "Read-only market preview with sizing and price estimates.",
+    },
+    {
+      id: "signing_handoff",
+      name: "Signing Handoff",
+      mimeType: "application/json",
+      public: true,
+      description: "External-signer handoff for the user or wallet to sign.",
+    },
+  ],
+  readinessCommands: [
+    'matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP long" --json',
+    "matterhorn-work hyperliquid handoff --market BTC-PERP --side long --size 0.1 --json",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  forbiddenClaims: [
+    "Matterhorn can submit Hyperliquid orders",
+    "Matterhorn stores API secrets",
+    "Matterhorn signs orders",
+    "Matterhorn can trade on your behalf",
+  ],
+  forbiddenInputs: [
+    "private key",
+    "API secret",
+    "raw signature",
+    "signed payload",
+    "signed order",
+    "wallet export",
+  ],
+  passFailCriteria: {
+    pass: [
+      "Orderbook and account context are read-only",
+      "Preview shows sizing and price estimates without binding execution",
+      "External signer handoff is produced and contains no signing material",
+    ],
+    fail: [
+      "Requests an API secret or private key",
+      "Submits an order to Hyperliquid",
+      "Produces a signed order or signature",
+      "Claims Matterhorn can trade without external signer",
+    ],
+  },
+  evidenceOutputPath: "docs/evidence/monday-beta/hyperliquid/{customer}-scenario-evidence.json",
+  status: "preview_only",
+  mapsToWorkflowId: "market_read_preview",
+  mapsToCustomerTemplateId: "hyperliquid_trader",
+};
+
+export const POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO: CustomerBetaDemoScenario = {
+  version: "matterhorn.customer.beta.demo.scenario.v1",
+  id: "polymarket_market_research",
+  displayName: "Polymarket market research and preview",
+  targetCustomerPersona: "Prediction market researcher participating in the Monday beta",
+  assignedBetaCustomers: ["Forecast Collective", "EdgeBet Research"],
+  entryPrompt: "Summarize this Polymarket market and preview a yes position without signing or submitting",
+  expectedArtifacts: [
+    {
+      id: "market_preview",
+      name: "Market Preview",
+      mimeType: "application/json",
+      public: true,
+      description: "Read-only market preview with odds and outcome analysis.",
+    },
+    {
+      id: "signing_handoff",
+      name: "Signing Handoff",
+      mimeType: "application/json",
+      public: true,
+      description: "External-signer handoff for the user or wallet to sign.",
+    },
+  ],
+  readinessCommands: [
+    'matterhorn-work crypto chat --message "summarize Polymarket market" --json',
+    "matterhorn-work polymarket handoff --market-id will-it-rain-in-nyc-2026-07-01 --outcome yes --size 10 --json",
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  forbiddenClaims: [
+    "Matterhorn can place Polymarket trades",
+    "Matterhorn stores private keys",
+    "Matterhorn submits signed transactions",
+    "Matterhorn can trade on your behalf",
+  ],
+  forbiddenInputs: [
+    "private key",
+    "API secret",
+    "raw signature",
+    "signed payload",
+    "signed order",
+    "wallet export",
+  ],
+  passFailCriteria: {
+    pass: [
+      "Market summary includes odds, liquidity, and outcome analysis",
+      "Compliance block is shown before any handoff",
+      "External signer handoff is produced and contains no signing material",
+    ],
+    fail: [
+      "Requests a private key or API secret",
+      "Places a live Polymarket trade",
+      "Produces a signed transaction or signature",
+      "Claims Matterhorn can trade without external signer",
+    ],
+  },
+  evidenceOutputPath: "docs/evidence/monday-beta/polymarket/{customer}-scenario-evidence.json",
+  status: "preview_only",
+  mapsToWorkflowId: "market_read_preview",
+  mapsToCustomerTemplateId: "polymarket_researcher",
+};
+
+export const WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO: CustomerBetaDemoScenario = {
+  version: "matterhorn.customer.beta.demo.scenario.v1",
+  id: "wellness_client_program_packet",
+  displayName: "Wellness client program packet",
+  targetCustomerPersona: "Wellness creator or coach running the Monday beta",
+  assignedBetaCustomers: ["Summit Wellness Co", "FitPath Studio"],
+  entryPrompt: "Create a 6-week strength program packet for busy professionals with a weekly check-in workflow",
+  expectedArtifacts: [
+    {
+      id: "program_design_plan",
+      name: "Program Design Plan",
+      mimeType: "text/markdown",
+      public: true,
+      description: "High-level program design with safety disclaimers.",
+    },
+    {
+      id: "weekly_schedule",
+      name: "Weekly Schedule",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Weekly session and content schedule.",
+    },
+    {
+      id: "pricing_package_draft",
+      name: "Pricing Package Draft",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Draft pricing and packaging options.",
+    },
+    {
+      id: "service_plan",
+      name: "Service Plan",
+      mimeType: "application/json",
+      public: true,
+      description: "Public/redacted service plan for the workflow registry.",
+    },
+  ],
+  readinessCommands: [
+    "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",
+    'matterhorn-work wellness program --audience "busy professionals" --goal "strength" --duration 6 --json',
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  forbiddenClaims: [
+    "Matterhorn gives medical advice",
+    "Matterhorn stores protected health information",
+    "Matterhorn diagnoses conditions",
+    "Matterhorn replaces a licensed medical professional",
+  ],
+  forbiddenInputs: [
+    "medical diagnosis",
+    "prescription advice",
+    "protected health information beyond redacted goals",
+    "full medical history",
+  ],
+  passFailCriteria: {
+    pass: [
+      "Program packet includes safety disclaimers and non-medical framing",
+      "Check-in workflow is generated without collecting PII",
+      "No protected health information is stored in public evidence",
+    ],
+    fail: [
+      "Provides a medical diagnosis or prescription advice",
+      "Requests protected health information beyond redacted goals",
+      "Claims to replace a licensed medical professional",
+    ],
+  },
+  evidenceOutputPath: "docs/evidence/monday-beta/wellness/{customer}-scenario-evidence.json",
+  status: "planned_not_live",
+  mapsToWorkflowId: "wellness_creator_services",
+  mapsToCustomerTemplateId: "wellness_creator_workflow",
+};
+
+export const DECENTRALIZED_SERVICES_FUTURE_PLAN_DEMO_SCENARIO: CustomerBetaDemoScenario = {
+  version: "matterhorn.customer.beta.demo.scenario.v1",
+  id: "decentralized_services_future_plan",
+  displayName: "Decentralized services future plan",
+  targetCustomerPersona: "Builder or operator planning future decentralized service actions during the Monday beta",
+  assignedBetaCustomers: ["OpenResearch DAO", "StackSafe Labs"],
+  entryPrompt: "Plan a decentralized storage and email workflow for my research group",
+  expectedArtifacts: [
+    {
+      id: "service_preview",
+      name: "Service Preview",
+      mimeType: "application/json",
+      public: true,
+      description: "Planned service action and provider comparison.",
+    },
+    {
+      id: "provider_comparison",
+      name: "Provider Comparison",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Comparison of example provider fixtures.",
+    },
+  ],
+  readinessCommands: [
+    "matterhorn-work services capabilities --json",
+    'matterhorn-work services plan --capability storage --intent "Pin a public research dataset" --json',
+  ],
+  safetyBoundaries: {
+    liveExecutionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsSecrets: false,
+    acceptsPrivateKeys: false,
+    acceptsRawSignatures: false,
+    acceptsApiSecrets: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+  },
+  forbiddenClaims: [
+    "Matterhorn executes live provider actions",
+    "Matterhorn stores provider credentials",
+    "Matterhorn provisions hosting today",
+    "Matterhorn sends emails or processes payments now",
+  ],
+  forbiddenInputs: [
+    "private key",
+    "API secret",
+    "payment credential",
+    "email password",
+    "hosting credential",
+    "identity secret",
+  ],
+  passFailCriteria: {
+    pass: [
+      "Service preview is a future contract with no live provider calls",
+      "Provider comparison uses example fixtures without real credentials",
+      "No hosting, storage, email, payment, or identity secrets are requested",
+    ],
+    fail: [
+      "Requests provider credentials or secrets",
+      "Makes a live provider call",
+      "Claims the service is live or will execute today",
+    ],
+  },
+  evidenceOutputPath: "docs/evidence/monday-beta/services/{customer}-scenario-evidence.json",
+  status: "planned_not_live",
+  mapsToWorkflowId: "decentralized_services_planner",
+  mapsToCustomerTemplateId: "decentralized_services_operator",
+};
+
+export const MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS: Record<string, CustomerBetaDemoScenario> = {
+  bittensor_tao_staking_preview: BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO,
+  hyperliquid_order_preview: HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO,
+  polymarket_market_research: POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO,
+  wellness_client_program_packet: WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO,
+  decentralized_services_future_plan: DECENTRALIZED_SERVICES_FUTURE_PLAN_DEMO_SCENARIO,
+};
