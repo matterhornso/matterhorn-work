@@ -56,7 +56,7 @@ Registry constants:
 | `bittensor` | `beta_ready` | `opens_desk` | `/workspaces/bittensor` | Show my TAO |
 | `hyperliquid` | `preview_only` | `opens_desk` | `/workspaces/hyperliquid` | Preview a Hyperliquid BTC-PERP trade |
 | `polymarket` | `preview_only` | `opens_desk` | `/workspaces/polymarket` | Summarize this Polymarket market |
-| `wellness` | `workflow_ready` | `starts_chat` | `/workspaces/wellness` | Create a wellness program for my clients |
+| `wellness` | `planned_not_live` | `planned_not_live` | `/workspaces/wellness` | Create a wellness program for my clients |
 | `decentralized_services` | `planned_not_live` | `planned_not_live` | `/workspaces/decentralized-services` | Plan a decentralized storage upload |
 
 ### Mapping from customer templates

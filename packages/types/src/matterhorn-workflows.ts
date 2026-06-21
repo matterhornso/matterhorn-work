@@ -2138,7 +2138,7 @@ export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceMa
   id: "wellness",
   displayName: "Wellness Creator",
   category: "wellness",
-  customerStatus: "workflow_ready",
+  customerStatus: "planned_not_live",
   allowedIntents: [
     "plan program",
     "design nutrition plan",
@@ -2167,7 +2167,7 @@ export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceMa
     "receipt_card",
   ],
   demoPrompt: "Create a wellness program for my clients",
-  launchBehavior: "starts_chat",
+  launchBehavior: "planned_not_live",
 };
 
 export const DECENTRALIZED_SERVICES_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
