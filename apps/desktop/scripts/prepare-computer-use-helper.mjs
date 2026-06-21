@@ -10,7 +10,7 @@ const packagePath = resolve(repoRoot, "packages", "handsfree", "native", "HandsF
 const iconPath = resolve(desktopRoot, "resources", "icons", "icon.icns");
 const productName = "HandsFreeComputerUse";
 const helperExecutableName = "ComputerUse";
-const helperAppName = "OpenWork Computer Use.app";
+const helperAppName = "Matterhorn Work Automation Helper.app";
 const bundleIdentifier = "com.differentai.openwork.computer-use";
 
 const readArg = (name) => {
@@ -24,7 +24,7 @@ const readArg = (name) => {
 
 const hasFlag = (name) => process.argv.slice(2).includes(name);
 const outDir = resolve(readArg("--outdir") ?? join(desktopRoot, "resources", "helpers"));
-const force = hasFlag("--force") || process.env.OPENWORK_COMPUTER_USE_FORCE_BUILD === "1";
+const force = hasFlag("--force") || process.env.MATTERHORN_WORK_AUTOMATION_HELPER_FORCE_BUILD === "1" || process.env.OPENWORK_COMPUTER_USE_FORCE_BUILD === "1";
 const appPath = join(outDir, helperAppName);
 
 function run(command, args, options = {}) {
@@ -49,7 +49,7 @@ function signHelperApp() {
   });
   if (result.error) {
     if (result.error.code === "ENOENT") {
-      throw new Error("codesign is required to prepare the Computer Use helper app");
+      throw new Error("codesign is required to prepare the Matterhorn Work automation helper app");
     }
     throw result.error;
   }
@@ -66,7 +66,7 @@ function infoPlist() {
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Matterhorn Computer Use</string>
+  <string>Matterhorn Work Automation Helper</string>
   <key>CFBundleExecutable</key>
   <string>${helperExecutableName}</string>
   <key>CFBundleIdentifier</key>
@@ -76,7 +76,7 @@ function infoPlist() {
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Matterhorn Computer Use</string>
+  <string>Matterhorn Work Automation Helper</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

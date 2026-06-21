@@ -1,7 +1,7 @@
-# OpenWork Computer Use
+# Matterhorn Work Automation Helper
 
-Native macOS computer-use runtime for OpenWork.
-Packaged OpenWork builds wrap this runtime in a bundled `Computer Use.app`
+Native macOS automation runtime for Matterhorn Work.
+Packaged Matterhorn builds wrap this runtime in a bundled automation helper app
 helper so macOS Accessibility and Screen Recording permissions belong to the
 helper app instead of a transient Node or Swift process.
 
@@ -14,7 +14,7 @@ This package focuses on the reusable control layer:
 - Background activation using per-process event taps plus AppKit and center-click primers.
 - Non-UI orchestration modules from the original Electron prototype: realtime tool schemas/instructions and the GPT computer-use loop.
 
-Computer Use renders a lightweight second cursor overlay from the helper app so
+The automation helper renders a lightweight second cursor overlay from the helper app so
 users can see where the agent is acting. The overlay is visual only: strict mode
 does not move the real system cursor. Actual control uses the same
 non-interrupting mechanism described in Bridge-style background computer use: AX

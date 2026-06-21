@@ -283,7 +283,7 @@ export function createConnectionsStore(options: {
       if (!fallbackOnError) {
         throw error instanceof Error
           ? error
-          : new Error("Computer Use helper app is unavailable. Restart Matterhorn or reinstall the app.");
+          : new Error("Matterhorn desktop automation helper is unavailable. Restart Matterhorn or reinstall the app.");
       }
       // Fall through to the published package command in the manifest/catalog.
     }

@@ -16,7 +16,7 @@ export type EnablementContext = {
   connectedProviders?: Set<string>;
   /** Set of environment variable keys that are configured. */
   configuredEnvKeys?: Set<string>;
-  /** Permission results from the Computer Use --check binary. */
+  /** Permission results from the hidden desktop automation helper --check binary. */
   permissions?: { accessibility?: boolean; screenRecording?: boolean };
   /** Toggle state reader — returns true if the extension toggle is on. */
   isToggleEnabled?: (ref: string) => boolean;

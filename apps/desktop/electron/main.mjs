@@ -41,14 +41,14 @@ const APP_NAME = isDevMode ? "Matterhorn - Dev" : "Matterhorn";
 const APP_IDENTIFIER = isDevMode ? DEV_APP_IDENTIFIER : TAURI_APP_IDENTIFIER;
 const RELEASE_DOWNLOAD_BASE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest/download";
 const RELEASE_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/releases/latest";
-const DOCS_PAGE_URL = "https://openworklabs.com/docs";
+const DOCS_PAGE_URL = "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";
 const BROWSER_PLUGIN = "opencode-chrome-devtools";
-const COMPUTER_USE_HELPER_APP_NAME = "OpenWork Computer Use.app";
+const COMPUTER_USE_HELPER_APP_NAME = "Matterhorn Work Automation Helper.app";
 const COMPUTER_USE_HELPER_EXECUTABLE = "ComputerUse";
 
 function computerUseHelperExecutablePath() {
   const appPath = computerUseHelperAppPath();
-  const explicitBinary = process.env.OPENWORK_COMPUTER_USE_BINARY?.trim();
+  const explicitBinary = process.env.MATTERHORN_WORK_AUTOMATION_HELPER_BINARY?.trim() || process.env.OPENWORK_COMPUTER_USE_BINARY?.trim();
   const candidates = [
     explicitBinary,
     appPath ? path.join(appPath, "Contents", "MacOS", COMPUTER_USE_HELPER_EXECUTABLE) : null,
@@ -58,7 +58,7 @@ function computerUseHelperExecutablePath() {
 }
 
 function computerUseHelperAppPath() {
-  const explicitApp = process.env.OPENWORK_COMPUTER_USE_APP?.trim();
+  const explicitApp = process.env.MATTERHORN_WORK_AUTOMATION_HELPER_APP?.trim() || process.env.OPENWORK_COMPUTER_USE_APP?.trim();
   const candidates = [
     explicitApp,
     process.resourcesPath ? path.join(process.resourcesPath, "helpers", COMPUTER_USE_HELPER_APP_NAME) : null,
@@ -73,7 +73,7 @@ function getComputerUseMcpCommand() {
   if (helperExecutable) return [helperExecutable, "mcp"];
 
   if (app.isPackaged) {
-    throw new Error("OpenWork Computer Use is missing from this OpenWork build.");
+    throw new Error("Matterhorn Work automation helper is missing from this Matterhorn build.");
   }
 
   if (process.env.OPENWORK_DEV_MODE === "1") {
@@ -89,7 +89,7 @@ function getComputerUseMcpCommand() {
 
 function resolveComputerUseExecutable() {
   // 1. Explicit env override.
-  const explicit = process.env.OPENWORK_COMPUTER_USE_BINARY?.trim();
+  const explicit = process.env.MATTERHORN_WORK_AUTOMATION_HELPER_BINARY?.trim() || process.env.OPENWORK_COMPUTER_USE_BINARY?.trim();
   if (explicit && existsSync(explicit)) return explicit;
 
   // 2. .app bundle (packaged builds + pnpm dev).

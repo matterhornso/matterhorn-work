@@ -3,7 +3,7 @@ const { existsSync, mkdtempSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 
-const computerUseHelperAppName = "OpenWork Computer Use.app";
+const computerUseHelperAppName = "Matterhorn Work Automation Helper.app";
 
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
@@ -27,7 +27,7 @@ function computerUseHelperPath(appPath) {
 function verifyComputerUseHelper(appPath, requireDistributionSignature) {
   const helperPath = computerUseHelperPath(appPath);
   if (!existsSync(helperPath)) {
-    throw new Error(`Computer Use helper app is missing from packaged app: ${helperPath}`);
+    throw new Error(`Matterhorn Work automation helper app is missing from packaged app: ${helperPath}`);
   }
 
   run("codesign", ["--verify", "--deep", "--strict", "--verbose=2", helperPath]);
@@ -36,10 +36,10 @@ function verifyComputerUseHelper(appPath, requireDistributionSignature) {
   const result = spawnSync("codesign", ["--display", "--verbose=4", helperPath], { encoding: "utf8" });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`codesign --display failed for Computer Use helper with status ${result.status}`);
+    throw new Error(`codesign --display failed for Matterhorn Work automation helper with status ${result.status}`);
   }
   if (result.stderr.includes("Signature=adhoc")) {
-    throw new Error("Computer Use helper app is ad-hoc signed; notarized builds require a Developer ID signature.");
+    throw new Error("Matterhorn Work automation helper app is ad-hoc signed; notarized builds require a Developer ID signature.");
   }
 }
 
