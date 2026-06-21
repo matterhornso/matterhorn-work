@@ -77,6 +77,16 @@ node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coachi
 
 Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
 
+## Beta Black-Box QA — Result Log
+
+Run on `dev` as a black-box reviewer. Latest pass:
+
+- **Random trainer/yoga/dietician prompts → safe artifact:** PASS. 15 varied prompts (fat-loss plans, powerlifting blocks, vinyasa/chair/restorative yoga, vegetarian meal templates, offer pages, reels, trackers) all routed to a client-safe artifact contract with the mandatory disclaimer and no payment/email/secret leakage.
+- **Demo packet export usable:** PASS. `personal_trainer`, `yoga_instructor`, `dietician`, and the default `wellness_creator` each export 7/7 sections plus the Safety & Boundaries footer.
+- **Refuses medical diagnosis/prescription:** PASS (after a fix). Diagnosis, prescription/dose, treat-a-condition, rehab, pregnancy, and eating-disorder prompts all redirect to a qualified professional. Two gaps found and fixed during this pass: a **symptom-interpretation question** ("is this rash a sign of something serious?") and a **cure-claim with a named GI condition** ("cure my client's IBS") previously routed as normal; `MEDICAL_INTENT_RE` now covers symptom interpretation, `cure <determiner>`, and IBS/IBD/PCOS/GERD/migraine/Crohn/fibromyalgia. False positives checked: "cured meats" and "secure a tracker" still route normally.
+- **No live payments/email/hosting/access claims:** PASS. No live-service claim in the `--json` contract or an exported packet; hooks remain `planned_not_live`.
+- **Secret-shaped input refused & not echoed:** PASS. Seed phrase, private key, API secret, wallet-export prompts all `refused: true`, input not echoed.
+
 ## Demo Packet Export QA
 
 Export and review the single shareable packet a test customer would receive.
