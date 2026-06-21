@@ -77,6 +77,31 @@ node scripts/wellness-creator-workflow.mjs --route "package a paid 8-week coachi
 
 Expected: each returns `safe: true`, `disclaimerRequired: true`, `paymentProcessed: false`, `emailSent: false`. The paid-program example is a pricing draft only — payments are planned, not live.
 
+## Demo Packet Export QA
+
+Export and review the single shareable packet a test customer would receive.
+
+### Export commands
+
+```bash
+node scripts/wellness-creator-workflow.mjs --demo-pack-export personal_trainer --output /tmp/matterhorn-wellness-trainer.md --json
+node scripts/wellness-creator-workflow.mjs --demo-pack-export yoga_instructor --output /tmp/matterhorn-wellness-yoga.md --json
+node scripts/wellness-creator-workflow.mjs --demo-pack-export dietician --output /tmp/matterhorn-wellness-dietician.md --json
+node scripts/wellness-creator-workflow.mjs --demo-pack-export --output /tmp/matterhorn-wellness-default.md --json   # default persona: wellness_creator
+```
+
+### Expected
+
+- Each command exits 0 and reports `{ "persona": ..., "deliverables": [7 ids], "output": <path>, "bytes": > 0 }`.
+- The written file is one markdown packet titled **"Wellness Creator Demo Packet — <persona>"**, containing all seven sections (service offer page, onboarding questionnaire, 4-week program, weekly check-in, progress summary, renewal/follow-up, client handoff packet), ending with a **"Safety & Boundaries"** footer.
+- An unknown persona (e.g. `--demo-pack-export gym_bro`) exits non-zero with an error.
+
+### Review checklist
+
+- [ ] Every section is present and readable.
+- [ ] The safety footer states: educational only; not medical advice; no diagnosis/prescription/treatment/guaranteed outcomes; payments/email/hosting/access planned, not live.
+- [ ] No live-service claim, no diagnosis/prescription/treatment, and no secret material anywhere in the packet.
+
 ## Customer Demo Pack QA (Black-Box Reviewer)
 
 The Customer Demo Pack is the test-customer showcase: seven reusable client artifacts. A non-coding reviewer can run the whole pack and verify safety.

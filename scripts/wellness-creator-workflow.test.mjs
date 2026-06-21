@@ -5,8 +5,10 @@
 // email/identity claims; no secret-taking examples; and every canonical prompt
 // produces a safe expected artifact.
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join as joinPath } from "node:path";
 import { routeFreeformPrompt } from "./wellness-creator-workflow.mjs";
 
 const DOC_PATH = "docs/wellness-creator-workflow.md";
@@ -784,5 +786,62 @@ for (const phrase of [
 }
 assert.ok(handoff.includes("Customer Demo Pack QA (Black-Box Reviewer)"), "Handoff should include demo-pack QA");
 assert.ok(handoff.includes("Red-line failure examples"), "Handoff should include red-line failure examples");
+
+// 27. Demo Packet Export: single shareable packet per persona, written to disk.
+assert.ok(contract.demoPacketExport, "Contract should include demoPacketExport metadata");
+assert.equal(contract.demoPacketExport.defaultPersona, "wellness_creator", "Export default persona should be wellness_creator");
+for (const persona of ["personal_trainer", "yoga_instructor", "dietician", "wellness_creator"]) {
+  assert.ok(contract.demoPacketExport.personas.includes(persona), `Export should support persona: ${persona}`);
+}
+
+const exportTmp = mkdtempSync(joinPath(tmpdir(), "wellness-export-"));
+function runExport(extraArgs) {
+  const result = spawnSync(process.execPath, [HELPER_PATH, "--demo-pack-export", ...extraArgs], {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+  });
+  return { status: result.status, stdout: result.stdout };
+}
+for (const persona of ["personal_trainer", "yoga_instructor", "dietician", "wellness_creator"]) {
+  const outPath = joinPath(exportTmp, `${persona}.md`);
+  const { status, stdout } = runExport([persona, "--output", outPath, "--json"]);
+  assert.equal(status, 0, `--demo-pack-export ${persona} should exit 0`);
+  const json = JSON.parse(stdout);
+  assert.equal(json.mode, "demo-pack-export", "Should report demo-pack-export mode");
+  assert.equal(json.ok, true, "Export should report ok");
+  assert.equal(json.persona, persona, `Export should resolve persona ${persona}`);
+  assert.equal(json.output, outPath, "Export should report the output path");
+  assert.equal(json.deliverables.length, 7, "Export should stitch seven deliverables");
+  // The written packet exists and is well-formed.
+  assert.ok(existsSync(outPath), `Exported packet should exist: ${outPath}`);
+  const packet = readFileSync(outPath, "utf8");
+  assert.ok(packet.includes("# Wellness Creator Demo Packet"), "Packet should have the demo-packet header");
+  assert.ok(packet.includes("## Safety & Boundaries"), "Packet should carry the safety footer");
+  assert.ok(packet.includes("not medical advice, diagnosis, or treatment"), "Packet safety footer should state non-medical boundary");
+  assert.ok(packet.includes("planned, not live"), "Packet should state planned-not-live hooks");
+  for (const name of ["# Service offer page", "# New client onboarding questionnaire", "# 4-week program", "# Weekly check-in form", "# Progress summary", "# Renewal / follow-up message", "# Client handoff packet"]) {
+    assert.ok(packet.includes(name), `Packet should include section: ${name}`);
+  }
+  // No medical/live/secret strings anywhere in the stitched packet.
+  const lower = packet.toLowerCase();
+  for (const forbidden of [
+    "we diagnose", "prescribe a dose", "cure your", "will cure", "guaranteed weight loss", "guaranteed results",
+    "storage is live", "hosting is live", "payments are live", "payment is live", "email sending is live", "token gating is live",
+    "private key", "seed phrase", "api secret", "wallet export",
+  ]) {
+    assert.equal(lower.includes(forbidden), false, `Exported packet must not contain: "${forbidden}"`);
+  }
+}
+// Default persona (no persona arg) resolves to wellness_creator; unknown rejected.
+const defaultExport = runExport(["--json"]);
+assert.equal(JSON.parse(defaultExport.stdout).persona, "wellness_creator", "No-persona export should default to wellness_creator");
+const badExport = runExport(["bogus", "--json"]);
+assert.notEqual(badExport.status, 0, "Unknown export persona should exit non-zero");
+
+// Doc + handoff carry the export material.
+for (const phrase of ["--demo-pack-export", "Demo Packet Export"]) {
+  assert.ok(doc.includes(phrase), `Doc should include export reference: ${phrase}`);
+}
+assert.ok(handoff.includes("Demo Packet Export QA"), "Handoff should include export QA");
 
 console.log("Wellness Creator Workflow gate passed.");
