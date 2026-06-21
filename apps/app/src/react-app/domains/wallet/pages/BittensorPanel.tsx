@@ -1091,8 +1091,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-dls-sidebar via-dls-sidebar to-dls-canvas animate-fade-in">
-      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-5">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-dls-sidebar via-dls-sidebar to-dls-canvas text-[15px] animate-fade-in">
+      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="flex size-10 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-blue-rgb),0.18)] shadow-[0_0_28px_rgba(var(--matterhorn-blue-rgb),0.14)]">
@@ -1116,7 +1116,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Refresh
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl bg-dls-surface p-1.5">
+        <div className="mb-3 grid grid-cols-1 gap-1 rounded-2xl bg-dls-surface p-1.5 sm:grid-cols-3">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
@@ -1142,7 +1142,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               {activeSafetyBadge}
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
             <Metric label="Can submit" value={activeManifestCanSubmit} compact />
             <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
             <Metric label="External signer" value={activeManifestSigner} compact />
@@ -1155,7 +1155,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           </p>
         </div>
         {venue === "bittensor" ? (
-          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-dls-surface p-1 sm:grid-cols-5">
+          <div className="grid grid-cols-1 gap-1 rounded-2xl bg-dls-surface p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1179,7 +1179,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-5 pb-8">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 pb-8 sm:p-5">
         {venue === "bittensor" && error && (
           <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor provider">
             {error}
@@ -1195,7 +1195,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Interface" value={activeVenue.statusLabel} compact />
                   <Metric label="Can submit" value={activeVenue.canSubmit} compact />
                   <Metric label="Live submission" value={activeVenue.liveSubmission} compact />
@@ -1225,7 +1225,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
                   <Metric label="Execution" value={marketVenueState(venue)} compact />
                   <Metric label="Can submit" value={marketExecutionSubmissionState} compact />
@@ -1262,7 +1262,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Interface" value={activeVenue.statusLabel} compact />
                   <Metric label="Signing" value={activeVenue.signer} compact />
                   <Metric label="Wallet input" value="Public SS58" compact />
@@ -1273,7 +1273,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 </p>
               </div>
             </Section>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
               <Metric label="Favorites" value={String(favorites.length)} />
               <Metric label="Source" value={subnets.some((s) => s.source === "tao.app") ? "Live" : "Fallback"} />
@@ -2002,9 +2002,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dls-border bg-dls-card/90 p-4 shadow-[var(--dls-card-shadow)]">
-      <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-dls-text">
-        <span className="flex size-7 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-sky-300">{icon}</span>
+    <div className="rounded-2xl border border-dls-border bg-dls-card/90 p-4 shadow-[var(--dls-card-shadow)] sm:p-5">
+      <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
+        <span className="flex size-8 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-blue-rgb),0.16)] text-sky-300">{icon}</span>
         {title}
       </div>
       {children}
@@ -2014,9 +2014,9 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("min-w-0 rounded-xl border border-dls-border bg-dls-surface p-3", compact && "p-2.5")}>
-      <div className="text-[10px] font-medium uppercase tracking-wider text-dls-secondary">{label}</div>
-      <div className={cn("mt-1 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-[13px]" : "text-lg")}>{value}</div>
+    <div className={cn("min-w-0 rounded-xl border border-dls-border bg-dls-surface p-3.5", compact && "p-3")}>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-dls-secondary">{label}</div>
+      <div className={cn("mt-1.5 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-sm" : "text-xl")}>{value}</div>
     </div>
   );
 }
