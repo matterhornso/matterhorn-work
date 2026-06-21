@@ -163,13 +163,13 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 </h2>
               </div>
               <OnboardingStep number="1" title="Create your workspace">
-                Pick a folder where Matterhorn can save chats, artifacts, receipts, and workflow files.
+                Pick a folder where Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.
               </OnboardingStep>
               <OnboardingStep number="2" title="Choose a product lane">
                 Open Bittensor, Hyperliquid, Polymarket, wellness workflows, or a blank chat.
               </OnboardingStep>
               <OnboardingStep number="3" title="Review before action">
-                Inspect evidence, preview-only actions, and external-signer handoffs before anything sensitive happens.
+                Inspect evidence, preview-only actions, and external-signer handoffs. Matterhorn never holds your keys.
               </OnboardingStep>
             </div>
 
