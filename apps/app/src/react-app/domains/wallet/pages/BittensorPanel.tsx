@@ -1113,7 +1113,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               { key: "demo" as const, label: "Demo" },
               { key: "subnets" as const, label: "Subnets" },
               { key: "wallet" as const, label: "Wallet" },
-              { key: "actions" as const, label: "Actions" },
+              { key: "actions" as const, label: "Preview Actions" },
             ].map((item) => (
             <button
               key={item.key}
@@ -1848,9 +1848,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
             <Notice tone="info" icon={<Shield className="size-4" />} title="Quote-only actions">
-              Matterhorn prepares Bittensor actions for review. External Bittensor-compatible signing is required.
+              Matterhorn prepares Bittensor action previews for review. External Bittensor-compatible signing is required.
             </Notice>
-            <Section title="Prepare Action" icon={<ArrowUpDown className="size-4" />}>
+            <Section title="Prepare Preview" icon={<ArrowUpDown className="size-4" />}>
               <div className="space-y-3">
                 <div className="grid grid-cols-4 gap-1 rounded-lg bg-dls-surface p-1">
                   {(["stake", "unstake", "transfer", "compare"] as ActionType[]).map((item) => (
