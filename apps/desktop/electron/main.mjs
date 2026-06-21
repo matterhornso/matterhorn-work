@@ -168,8 +168,9 @@ async function openComputerUseSetupApp() {
 // so in-place migration is a no-op for almost every file. Dev mode uses the
 // separate dev identifier so it can run beside the production app.
 //
-// Override via OPENWORK_ELECTRON_USERDATA so dogfooders can isolate their
-// Electron install from the real Tauri app.
+// Override via MATTERHORN_WORK_ELECTRON_USERDATA so dogfooders can isolate their
+// Electron install from the real app. Keep OPENWORK_ELECTRON_USERDATA as a
+// compatibility fallback for older local scripts.
 app.setName(APP_NAME);
 app.setAppUserModelId(APP_IDENTIFIER);
 if (app.isPackaged) {
@@ -177,7 +178,9 @@ if (app.isPackaged) {
     app.setAsDefaultProtocolClient(scheme);
   }
 }
-const userDataOverride = process.env.OPENWORK_ELECTRON_USERDATA?.trim();
+const userDataOverride =
+  process.env.MATTERHORN_WORK_ELECTRON_USERDATA?.trim() ||
+  process.env.OPENWORK_ELECTRON_USERDATA?.trim();
 if (userDataOverride) {
   app.setPath("userData", userDataOverride);
 } else {
@@ -307,6 +310,7 @@ async function resolveCorrectArchitectureDownloadUrl(arch) {
     const response = await fetch(manifestUrl, {
       headers: { Accept: "text/yaml, text/plain, */*" },
     });
+    if (response.status === 404) return null;
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const selected = selectDownloadFile(parseUpdaterManifestFiles(await response.text()), arch);
     if (!selected?.url) return null;
@@ -1200,10 +1204,15 @@ function flushPendingDeepLinks() {
 }
 
 function desktopBootstrapPath() {
+  if (process.env.MATTERHORN_WORK_DESKTOP_BOOTSTRAP_PATH?.trim()) {
+    return process.env.MATTERHORN_WORK_DESKTOP_BOOTSTRAP_PATH.trim();
+  }
   if (process.env.OPENWORK_DESKTOP_BOOTSTRAP_PATH?.trim()) {
     return process.env.OPENWORK_DESKTOP_BOOTSTRAP_PATH.trim();
   }
-  return path.join(os.homedir(), ".config", "openwork", "desktop-bootstrap.json");
+  const matterhornPath = path.join(os.homedir(), ".config", "matterhorn-work", "desktop-bootstrap.json");
+  const legacyPath = path.join(os.homedir(), ".config", "openwork", "desktop-bootstrap.json");
+  return existsSync(legacyPath) && !existsSync(matterhornPath) ? legacyPath : matterhornPath;
 }
 
 function workspaceStatePath() {
