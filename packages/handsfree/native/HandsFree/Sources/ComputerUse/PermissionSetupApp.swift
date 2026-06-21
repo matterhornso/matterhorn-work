@@ -66,7 +66,7 @@ private final class PermissionSetupWindow: NSWindow {
             backing: .buffered,
             defer: false
         )
-        title = "OpenWork Computer Use"
+        title = "Matterhorn Work Automation Helper"
         titleVisibility = .hidden
         titlebarAppearsTransparent = true
         isMovableByWindowBackground = true
@@ -121,11 +121,11 @@ final class PermissionSetupViewController: NSViewController {
         iconView.widthAnchor.constraint(equalToConstant: 52).isActive = true
         iconView.heightAnchor.constraint(equalToConstant: 52).isActive = true
 
-        let titleField = textField("Computer Use Setup", size: 20, weight: .semibold)
+        let titleField = textField("Automation Helper Setup", size: 20, weight: .semibold)
         titleField.alignment = .center
 
         let subtitleField = wrappingField(
-            "Grant two permissions so agents can see and control apps in the background.",
+            "Grant two permissions so Matterhorn can automate apps in the background when you explicitly enable it.",
             size: 13
         )
         subtitleField.textColor = .secondaryLabelColor
@@ -589,5 +589,4 @@ final class DraggableAppIconView: NSImageView, NSDraggingSource {
         .copy
     }
 }
-
 

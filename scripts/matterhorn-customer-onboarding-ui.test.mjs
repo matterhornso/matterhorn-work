@@ -279,14 +279,20 @@ for (const phrase of [
 }
 
 const computerUseIndex = extensions.indexOf('id: "computer-use"');
-assert.ok(computerUseIndex >= 0, "Computer Use manifest should still exist for legacy/internal compatibility");
+assert.ok(computerUseIndex >= 0, "Desktop automation manifest should still exist for legacy/internal compatibility");
 const computerUseTail = extensions.slice(computerUseIndex, computerUseIndex + 3200);
-assert.ok(computerUseTail.includes("defaultHidden: true"), "Computer Use should be hidden from the default customer catalog");
+assert.ok(computerUseTail.includes("defaultHidden: true"), "Desktop automation should be hidden from the default customer catalog");
+assert.ok(
+  computerUseTail.includes('name: "Desktop Automation Helper"') &&
+    !computerUseTail.includes('name: "Computer Use"') &&
+    !computerUseTail.includes("OpenWork Computer Use"),
+  "Hidden automation manifest should use Matterhorn desktop automation copy",
+);
 assert.ok(
   constants.includes("CUSTOMER_HIDDEN_EXTENSION_IDS") &&
     constants.includes('"computer-use"') &&
     constants.includes("isCustomerFacingMatterhornExtension"),
-  "Computer Use should be excluded from customer-facing extension catalogs",
+  "Desktop automation should be excluded from customer-facing extension catalogs",
 );
 assert.ok(
   constants.includes("OPENWORK_EXTENSION_CATALOG = MCP_QUICK_CONNECT.filter") &&

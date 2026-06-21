@@ -83,7 +83,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   // Spawn --check → fresh TCC read. Works whether or not the GUI is open.
   const verify = useCallback(async () => {
     if (!hasDesktopBridge()) {
-      setError("Computer Use setup requires the Matterhorn Work desktop app on macOS.");
+      setError("Desktop automation setup requires the Matterhorn Work desktop app on macOS.");
       return;
     }
     setBusy(true);
@@ -128,7 +128,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
   return (
     <Card variant="outline" size="sm">
       <CardHeader>
-        <CardTitle>Computer Use setup</CardTitle>
+        <CardTitle>Desktop automation helper setup</CardTitle>
         <CardDescription>
           Connect the local MCP server and grant the macOS permissions it needs to control apps.
         </CardDescription>
@@ -149,8 +149,8 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
 
         {/* Step 1 — MCP */}
         <SetupRow
-          title="1. Connect Computer Use MCP"
-          description="Adds the local Computer Use server to this workspace so Composer can use the computer-control tools."
+          title="1. Connect the automation MCP"
+          description="Adds the local desktop automation server to this workspace so Matterhorn can use macOS automation tools when explicitly enabled."
           complete={props.connected}
         >
           <Button
@@ -168,7 +168,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
         {/* Step 2 — Permissions */}
         <SetupRow
           title="2. Grant macOS permissions"
-          description="Opens the Matterhorn Computer Use helper. Grant both permissions there, then click Verify below."
+          description="Opens the Matterhorn desktop automation helper. Grant both permissions there, then click Verify below."
           complete={allGranted}
         >
           <div className="flex w-full min-w-0 flex-col gap-3">
@@ -199,7 +199,7 @@ export function ComputerUseConfig(props: ComputerUseConfigProps) {
         <div className="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <p className="text-xs text-muted-foreground">
             {allGranted
-              ? "Permissions verified. Try a Composer prompt that uses Computer Use."
+              ? "Permissions verified. Try a Composer prompt that uses desktop automation."
               : "After granting permissions in the helper, click Verify."}
           </p>
           <div className="flex w-full flex-col gap-2 xl:w-auto xl:flex-row">

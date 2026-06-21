@@ -281,15 +281,15 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
   {
     schemaVersion: 1,
     id: "computer-use",
-    name: "Computer Use",
-    description: "Control macOS apps through semantic accessibility refs, screenshots, background-safe clicks, keyboard input, and strict mode.",
+    name: "Desktop Automation Helper",
+    description: "Internal macOS automation bridge for semantic accessibility refs, screenshots, background-safe clicks, keyboard input, and strict mode.",
     preview: true,
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/matterhorn-mark.svg" },
-    composer: { prompt: "Use Computer Use to " },
+    composer: { prompt: "Use the Matterhorn desktop automation helper to " },
     setup: {
-      instructions: "Computer Use runs as a local MCP server backed by a macOS accessibility runtime. Grant Accessibility and Screen Recording permissions when macOS asks, then connect the MCP server in this workspace.",
-      primaryCta: "Connect Computer Use MCP",
+      instructions: "The Matterhorn desktop automation helper runs as a local MCP server backed by a macOS accessibility runtime. Grant Accessibility and Screen Recording permissions when macOS asks, then connect the MCP server in this workspace.",
+      primaryCta: "Connect automation helper",
       secondaryCta: "Check macOS permissions",
       testActionRef: "openwork.computerUse.healthCheck",
     },
@@ -297,7 +297,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
       {
         type: "mcp",
         id: "computer-use-mcp",
-        label: "Computer Use MCP",
+        label: "Desktop automation MCP",
         mcpServerName: "computer-use",
         command: ["npx", "-y", "@matterhorn-work/handsfree", "mcp"],
         localCommandRef: "openwork.computerUseMcp",
@@ -314,8 +314,8 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     contributions: [
       { type: "setup-instructions", ref: "openwork.computerUse.setup", location: "settings-detail" },
       { type: "native-capability", ref: "openwork.computerUse.axPermissions", label: "Accessibility and Screen Recording" },
-      { type: "test-action", ref: "openwork.computerUse.healthCheck", label: "Verify Computer Use MCP" },
-      { type: "composer-prompt", prompt: "Use Computer Use to ", location: "composer" },
+      { type: "test-action", ref: "openwork.computerUse.healthCheck", label: "Verify desktop automation helper" },
+      { type: "composer-prompt", prompt: "Use the Matterhorn desktop automation helper to ", location: "composer" },
     ],
     enablement: [
       { type: "mcp-connected", ref: "computer-use", label: "MCP server connected" },

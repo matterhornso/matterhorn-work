@@ -53,7 +53,7 @@ mac:
     - from: resources/helpers
       to: helpers
       filter:
-        - "OpenWork Computer Use.app/**"
+        - "Matterhorn Work Automation Helper.app/**"
   target:
     - dmg
     - zip
