@@ -70,6 +70,7 @@ fileExists("docs/ui/matterhorn-customer-ux-refresh/README.md");
 fileExists("docs/ui/matterhorn-customer-ux-refresh/styles.css");
 fileExists("docs/ui/matterhorn-customer-ux-refresh/index.html");
 fileExists("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
+fileExists("docs/handoffs/minimax-monday-beta-ux-readiness.md");
 
 // ── 2. HTML: all 16 screens ─────────────────────────────────
 
@@ -274,7 +275,65 @@ mustContain("docs/ui/matterhorn-customer-ux-refresh/README.md", [
   "#0C0C0C",
 ]);
 
-// ── 9. Stitch prompts: required prompts ─────────────────────
+// ── 9. Monday Beta UX Readiness Handoff ─────────────────────
+
+const handoff = read("docs/handoffs/minimax-monday-beta-ux-readiness.md");
+const handoffScreens = [
+  "Screen 1 — Welcome",
+  "Screen 2 — Create Workspace Modal",
+  "Screen 3 — Empty Session Launch Hub",
+  "Screen 4 — Bittensor Desk",
+  "Screen 5 — Hyperliquid Desk",
+  "Screen 6 — Polymarket Desk",
+  "Screen 7 — Wellness Workflow Entry",
+  "Screen 8 — Services Planned-Not-Live Entry",
+  "Screen 9 — Chat Composer and Transcript Cards",
+  "Screen 10 — Error",
+];
+for (const s of handoffScreens) {
+  if (handoff.includes(s)) pass(`Handoff covers: "${s}"`);
+  else fail(`Handoff covers: "${s}"`, "missing");
+}
+
+const handoffStitchTopics = [
+  "Protocol Desk Layout",
+  "Chat Transcript Card Polish",
+  "Welcome",
+  "Right Rail Protocol Navigation",
+  "Mobile Responsive Protocol Desk",
+];
+for (const t of handoffStitchTopics) {
+  if (handoff.includes(t)) pass(`Handoff Stitch prompts cover: "${t}"`);
+  else fail(`Handoff Stitch prompts cover: "${t}"`, "missing");
+}
+
+// Strip "Forbidden Claims" subsections, Stitch Prompt sections, and document preamble
+// before checking — those are all instructions describing what NOT to do,
+// not actual UI copy.  Strip the entire "## Stitch Prompts" block (from that
+// heading to end of file) and the document preamble (Brand rules paragraph).
+const stitchBlock = /(?:## Stitch Prompts)[\s\S]*/gi;
+const docPreamble = /(?:Brand rules apply[\s\S]*?customer-facing surface\.)/gi;
+const forbiddenClaims = /### Forbidden Claims[\s\S]*?(?=### [^F]|\n## [A-Z]|\Z)/gi;
+const handoffForScan = handoff
+  .replace(stitchBlock, "")
+  .replace(docPreamble, "")
+  .replace(forbiddenClaims, "");
+
+const handoffForbidden = [
+  "your funds are safe with matterhorn",
+  "matterhorn holds your assets",
+  "openwork",
+  "opencodec",
+];
+for (const phrase of handoffForbidden) {
+  if (handoffForScan.toLowerCase().includes(phrase)) {
+    fail(`Handoff copy excludes: "${phrase}"`, "PRESENT in non-forbidden-section");
+  } else {
+    pass(`Handoff copy excludes: "${phrase}"`);
+  }
+}
+
+// ── 10. Stitch prompts: required prompts ─────────────────────
 
 const stitch = read("docs/ui/matterhorn-customer-ux-refresh/stitch-prompts.md");
 const stitchTopics = [
