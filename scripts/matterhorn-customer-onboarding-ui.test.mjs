@@ -31,6 +31,8 @@ const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provide
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
   "Ask Matterhorn about Bittensor, markets, wellness, files, or workflows...",
+  "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
+  "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
   '"composer.stop": "Stop generating"',
