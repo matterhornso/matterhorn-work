@@ -331,6 +331,40 @@ function buildLifecycleStage(stageId) {
   };
 }
 
+// ---- Wellness Creator Customer Demo Pack ----
+// A reusable, test-customer-ready set of seven client artifacts a personal
+// trainer, yoga instructor, or dietician can generate and share. Artifact-first
+// and offline: nothing is hosted, charged, emailed, or gated.
+const DEMO_PACK_DIR = `${FIXTURE_DIR}/demo-pack`;
+const DEMO_PACK_DELIVERABLES = [
+  { id: "service_offer_page", name: "Service offer page", artifactContract: "offer_landing_packet", fixture: `${DEMO_PACK_DIR}/service-offer-page.md`, examplePrompt: "create an offer page for my coaching" },
+  { id: "onboarding_questionnaire", name: "New client onboarding questionnaire", artifactContract: "intake_questionnaire", fixture: `${DEMO_PACK_DIR}/onboarding-questionnaire.md`, examplePrompt: "create an onboarding questionnaire for a new client" },
+  { id: "four_week_program", name: "4-week program", artifactContract: "client_plan", fixture: `${DEMO_PACK_DIR}/4-week-program.md`, examplePrompt: "create a 4-week training plan for a beginner" },
+  { id: "weekly_check_in_form", name: "Weekly check-in form", artifactContract: "progress_check_in", fixture: `${DEMO_PACK_DIR}/weekly-check-in-form.md`, examplePrompt: "create a weekly client check-in form" },
+  { id: "progress_summary", name: "Progress summary", artifactContract: "progress_check_in", fixture: `${DEMO_PACK_DIR}/progress-summary.md`, examplePrompt: "summarize my client's progress so far" },
+  { id: "renewal_follow_up", name: "Renewal / follow-up message", artifactContract: "renewal_upsell_note", fixture: `${DEMO_PACK_DIR}/renewal-follow-up.md`, examplePrompt: "write a renewal follow-up message for my client" },
+  { id: "client_handoff_packet", name: "Client handoff packet", artifactContract: null, fixture: `${DEMO_PACK_DIR}/client-handoff-packet.md`, examplePrompt: "create a client handoff packet" },
+];
+
+function buildCustomerDemoPack(persona = null) {
+  const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
+  return {
+    title: "Wellness Creator Customer Demo Pack",
+    notCustomApp: true,
+    educationalOnly: true,
+    personas: OFFER_PERSONAS,
+    persona: resolved,
+    personaLabel: resolved ? OFFER_PERSONA_LABELS[resolved] : null,
+    deliverables: DEMO_PACK_DELIVERABLES,
+    serviceHooks: OFFER_SERVICE_HOOKS,
+    plannedNotLive: DELIVERY_GUARANTEES,
+    safety: OFFER_SAFETY,
+    disclaimer: DISCLAIMERS.general,
+    routesArbitraryPrompts: true,
+    note: "A reusable test-customer demo pack: seven client-ready artifacts a personal trainer, yoga instructor, or dietician can generate and share through chat. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
+  };
+}
+
 const DEMO_CHECKLIST = [
   "Setup: open Matterhorn Work as a normal user; no wallet, key, or payment account is needed.",
   "Run `node scripts/wellness-creator-workflow.mjs --json` and read the full workflow contract.",
@@ -648,11 +682,12 @@ const MATTERHORN_BEYOND_WEB3 = {
 
 // Map any normal wellness/business prompt to one of the artifact contracts.
 function routeServiceArtifactId(text) {
+  // Renewal/up-sell takes precedence over a generic "follow-up" check-in.
+  if (/renewal|renew\b|up-?sell|win-?back|retention|retain/.test(text)) return "renewal_upsell_note";
   if (/check.?in|\bprogress\b|weekly review|follow.?up/.test(text)) return "progress_check_in";
   if (/intake|questionnaire|onboard|screening|new client form/.test(text)) return "intake_questionnaire";
   if (/video|script|lesson|reel|tutorial|youtube|tiktok/.test(text)) return "video_lesson_script";
   if (/tracker|log\b|spreadsheet|journal|tracking sheet/.test(text)) return "client_tracker";
-  if (/renewal|renew\b|up-?sell|win-?back|retention|retain/.test(text)) return "renewal_upsell_note";
   if (/paid|pricing|offer|landing|sales page|package a|sell /.test(text)) return "offer_landing_packet";
   return "client_plan";
 }
@@ -782,6 +817,7 @@ function buildContract() {
     matterhornBeyondWeb3: MATTERHORN_BEYOND_WEB3,
     offerBuilder: buildOfferBuilder(),
     clientLifecycle: buildClientLifecycle(),
+    customerDemoPack: buildCustomerDemoPack(),
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
@@ -1051,6 +1087,59 @@ function runCheck() {
     }
   }
 
+  // Customer Demo Pack: seven reusable client artifacts.
+  const demoPack = contract.customerDemoPack;
+  if (!demoPack) {
+    failures.push("customerDemoPack must be present in the contract.");
+  } else {
+    const expectedDeliverables = [
+      "service_offer_page",
+      "onboarding_questionnaire",
+      "four_week_program",
+      "weekly_check_in_form",
+      "progress_summary",
+      "renewal_follow_up",
+      "client_handoff_packet",
+    ];
+    const ids = (demoPack.deliverables || []).map((d) => d.id);
+    for (const id of expectedDeliverables) {
+      if (!ids.includes(id)) failures.push(`customerDemoPack missing deliverable: ${id}`);
+    }
+    for (const hook of demoPack.serviceHooks || []) {
+      if (hook.status !== "planned_not_live") failures.push(`Demo pack hook ${hook.id} must be planned_not_live.`);
+    }
+    for (const flagKey of ["educationalOnly", "noMedicalDiagnosis", "noTreatmentPlan", "noPaymentProcessing", "noEmailSending"]) {
+      if (demoPack.safety?.[flagKey] !== true) failures.push(`customerDemoPack.safety.${flagKey} must be true.`);
+    }
+    const knownContracts = new Set((contract.artifactContracts || []).map((item) => item.id));
+    for (const deliverable of demoPack.deliverables || []) {
+      // The example prompt routes to the deliverable's artifact contract.
+      if (deliverable.artifactContract) {
+        if (!knownContracts.has(deliverable.artifactContract)) {
+          failures.push(`Demo pack deliverable ${deliverable.id} references unknown contract ${deliverable.artifactContract}.`);
+        }
+        const routed = routeFreeformPrompt(deliverable.examplePrompt).serviceArtifactContract;
+        if (routed !== deliverable.artifactContract) {
+          failures.push(`Demo pack "${deliverable.examplePrompt}" should route to ${deliverable.artifactContract} (got ${routed}).`);
+        }
+      }
+      // The fixture exists, carries the disclaimer, and has no forbidden strings.
+      const abs = join(repoRoot, deliverable.fixture);
+      if (!existsSync(abs)) {
+        failures.push(`Demo pack fixture missing: ${deliverable.fixture}`);
+        continue;
+      }
+      const fixture = readFileSync(abs, "utf8");
+      if (!fixture.includes("not medical advice, diagnosis, or treatment")) {
+        failures.push(`Demo pack fixture ${deliverable.fixture} must carry the non-medical disclaimer.`);
+      }
+      for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+        const match = fixture.match(re);
+        if (match) failures.push(`Demo pack fixture ${deliverable.fixture} contains a forbidden string: "${match[0]}"`);
+      }
+    }
+  }
+
   // Exposed through the existing generic Matterhorn workflow surfaces.
   const gs = contract.genericSurfaces;
   if (gs?.notCustomApp !== true) failures.push("genericSurfaces.notCustomApp must be true.");
@@ -1147,6 +1236,19 @@ function main() {
       return;
     }
     process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "offer", ...buildOfferBuilder(persona) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--demo-pack")) {
+    const idx = args.indexOf("--demo-pack");
+    const persona = args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : null;
+    if (persona && !OFFER_PERSONAS.includes(persona)) {
+      const message = `Unknown demo-pack persona "${persona}". Expected one of: ${OFFER_PERSONAS.join(", ")}.`;
+      process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "demo-pack", ...buildCustomerDemoPack(persona) }, null, 2)}\n`);
     return;
   }
 

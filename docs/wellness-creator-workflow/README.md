@@ -6,4 +6,8 @@ Reproducible reference artifacts for the [Wellness Creator Workflow](../wellness
 |---|---|
 | Customer management | [`progress-check-in.md`](./progress-check-in.md) — weekly client progress check-in |
 
+## Customer Demo Pack
+
+The test-customer showcase set lives in [`demo-pack/`](./demo-pack/) — seven reusable, client-ready artifacts (service offer page, onboarding questionnaire, 4-week program, weekly check-in form, progress summary, renewal/follow-up message, client handoff packet). Inspect with `node scripts/wellness-creator-workflow.mjs --demo-pack --json`.
+
 > All content here is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.

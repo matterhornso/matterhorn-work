@@ -195,6 +195,29 @@ Realistic prompts and the artifact each produces. Every output is educational/ge
 
 **Clinical / sensitive prompts redirect** (no artifact): anything that asks to diagnose, prescribe, treat a condition/injury, or that is pregnancy- or eating-disorder-specific returns a referral to a qualified professional. **Secret-shaped text is refused** and never echoed.
 
+## Customer Demo Pack (Test-Customer Ready)
+
+The **Wellness Creator Customer Demo Pack** is the showcase set: seven reusable, client-ready artifacts a personal trainer, yoga instructor, or dietician can generate and share through chat. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline — nothing is hosted, charged, emailed, or gated.
+
+| # | Deliverable | Fixture | Example prompt → artifact |
+|---|---|---|---|
+| 1 | Service offer page | [`service-offer-page.md`](./wellness-creator-workflow/demo-pack/service-offer-page.md) | "create an offer page for my coaching" → offer page |
+| 2 | New client onboarding questionnaire | [`onboarding-questionnaire.md`](./wellness-creator-workflow/demo-pack/onboarding-questionnaire.md) | "create an onboarding questionnaire" → intake |
+| 3 | 4-week program | [`4-week-program.md`](./wellness-creator-workflow/demo-pack/4-week-program.md) | "create a 4-week training plan" → client plan |
+| 4 | Weekly check-in form | [`weekly-check-in-form.md`](./wellness-creator-workflow/demo-pack/weekly-check-in-form.md) | "create a weekly check-in form" → check-in |
+| 5 | Progress summary | [`progress-summary.md`](./wellness-creator-workflow/demo-pack/progress-summary.md) | "summarize my client's progress" → progress |
+| 6 | Renewal / follow-up message | [`renewal-follow-up.md`](./wellness-creator-workflow/demo-pack/renewal-follow-up.md) | "write a renewal follow-up message" → renewal |
+| 7 | Client handoff packet | [`client-handoff-packet.md`](./wellness-creator-workflow/demo-pack/client-handoff-packet.md) | "create a client handoff packet" → handoff |
+
+Inspect the pack (optionally per persona):
+
+```bash
+node scripts/wellness-creator-workflow.mjs --demo-pack --json
+node scripts/wellness-creator-workflow.mjs --demo-pack personal_trainer --json
+```
+
+The workflow **accepts arbitrary creator prompts** and routes each into the right artifact type (see "Any Prompt, One Workflow"). Every deliverable is educational/general wellness only — no diagnosis, prescription, treatment, or guaranteed outcomes — and every service hook (storage/hosting, payments, email, identity/access) is `planned_not_live`. Secret-shaped input is refused and not echoed.
+
 ## Client Lifecycle (Full Test-Customer Demo Path)
 
 The **Client Lifecycle** is the complete, ordered client-delivery path a wellness creator runs through chat — a test customer can walk the whole flow end to end. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline: nothing is hosted, charged, emailed, or gated.
