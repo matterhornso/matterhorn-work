@@ -36,8 +36,8 @@ for (const phrase of [
 }
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
-// 3. The three beta-tester sections exist.
-for (const section of ["Try in chat", "Safety status", "Evidence / QA"]) {
+// 3. The beta-tester sections exist.
+for (const section of ["Try in chat", "Monday beta scenarios", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 
@@ -60,6 +60,24 @@ assert.ok(panel.includes('source: "crypto-beta-try"'), "Beta prompts should rout
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff") || panel.includes('mode: item.mode'), "Beta prompts should use the insert handoff event");
 assert.ok(panel.includes("Nothing sends automatically"), "Panel should tell testers prompts are not auto-sent");
 assert.ok(panel.includes("Right-rail command groups stay single-column"), "Protocol rail command groups should avoid cramped multi-column controls");
+
+// 5b. Monday beta customer scenarios are sourced from the shared registry and
+//     support prompt insertion plus evidence command copy.
+for (const phrase of [
+  "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
+  "MONDAY_BETA_DEMO_SCENARIOS",
+  "Use these five guided scripts for the first 10 customer demos",
+  "askAgentForMondayBetaScenario",
+  'source: "monday-beta-panel"',
+  "copyMondayBetaScenarioCommand",
+  "node scripts/customer-demo-evidence-pack.mjs --scenario",
+  "Insert demo prompt",
+  "Copy evidence command",
+  "assignedBetaCustomers",
+  "expectedArtifacts",
+]) {
+  assert.ok(panel.includes(phrase), `Panel should expose Monday beta scenario workflow: ${phrase}`);
+}
 
 // 6. Safety status: the three venue lines + the custody/no-live-trade statement.
 for (const phrase of [

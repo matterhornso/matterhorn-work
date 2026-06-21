@@ -28,6 +28,8 @@ import type {
 } from "@matterhorn-work/types";
 import {
   MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY,
+  MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS,
+  type CustomerBetaDemoScenario,
   type MatterhornProtocolWorkspaceManifest,
 } from "@matterhorn-work/types/matterhorn-workflows";
 
@@ -236,6 +238,7 @@ const BETA_TRY_PROMPTS = [
       "Use Polymarket chat mode. Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
   },
 ] as const;
+const MONDAY_BETA_DEMO_SCENARIOS = Object.values(MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS);
 const BITTENSOR_BETA_MODE = (() => {
   const flag = typeof import.meta.env?.VITE_MATTERHORN_BITTENSOR_BETA === "string"
     ? import.meta.env.VITE_MATTERHORN_BITTENSOR_BETA.trim().toLowerCase()
@@ -271,6 +274,10 @@ function protocolSignerLabel(manifest: MatterhornProtocolWorkspaceManifest): str
   if (manifest.safetyBoundaries.requiresExternalSigner) return "Required";
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") return "External client";
   return "Not required";
+}
+
+function mondayBetaScenarioMode(scenario: CustomerBetaDemoScenario): "bittensor" | "crypto" {
+  return scenario.mapsToCustomerTemplateId === "bittensor_operator" ? "bittensor" : "crypto";
 }
 
 const VENUE_DESKS: Record<CryptoVenue, {
@@ -861,6 +868,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     window.setTimeout(() => setCopiedCustomerCommand(null), 2000);
   };
 
+  const copyMondayBetaScenarioCommand = async (scenarioId: string) => {
+    const command = `node scripts/customer-demo-evidence-pack.mjs --scenario ${scenarioId} --output-dir ./tmp/monday-beta-evidence`;
+    await navigator.clipboard?.writeText(command);
+    setCopiedCustomerCommand(`monday-beta:${scenarioId}`);
+    window.setTimeout(() => setCopiedCustomerCommand(null), 2000);
+  };
+
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
     const prompt = `Use Bittensor chat mode. Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
     await sendToChat(prompt, { netuid: subnet.netuid, subnet });
@@ -909,6 +923,24 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       wallet,
       sourcePrompt: item.id,
     }, { mode: item.mode, source: "crypto-beta-try" });
+  };
+
+  const askAgentForMondayBetaScenario = async (scenario: CustomerBetaDemoScenario) => {
+    const prompt = [
+      "Use Matterhorn Monday beta demo mode.",
+      scenario.entryPrompt,
+      "Keep all outputs public/redacted and customer-safe.",
+      "Do not ask for seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, live market submission, or real funds.",
+    ].join(" ");
+    await sendToChat(prompt, {
+      scenarioId: scenario.id,
+      betaCustomers: scenario.assignedBetaCustomers,
+      expectedArtifacts: scenario.expectedArtifacts.map((artifact) => artifact.name),
+      evidenceCommand: `node scripts/customer-demo-evidence-pack.mjs --scenario ${scenario.id} --output-dir ./tmp/monday-beta-evidence`,
+      safetyBoundaries: scenario.safetyBoundaries,
+      ss58Address: watchAddress.trim() || undefined,
+      wallet,
+    }, { mode: mondayBetaScenarioMode(scenario), source: "monday-beta-panel" });
   };
 
   const askAgentForVenuePrompt = async (prompt: string) => {
@@ -1275,6 +1307,44 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     {item.label}
                   </Button>
                 ))}
+              </div>
+            </Section>
+
+            <Section title="Monday beta scenarios" icon={<Star className="size-4" />}>
+              <p className="text-[11px] leading-5 text-dls-secondary">
+                Use these five guided scripts for the first 10 customer demos. Each prompt is editable and each evidence command is fixture/offline unless you supply public inputs.
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
+                  const copied = copiedCustomerCommand === `monday-beta:${scenario.id}`;
+                  return (
+                    <div key={scenario.id} className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-dls-text">{scenario.displayName}</p>
+                          <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{scenario.targetCustomerPersona}</p>
+                        </div>
+                        <span className="rounded-full border border-dls-border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                          {scenario.status === "demo_ready" ? "Demo-ready" : scenario.status === "preview_only" ? "Preview only" : "Planned, not live"}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-[11px] leading-5 text-dls-secondary">
+                        <span className="font-medium text-dls-text">Customers:</span> {scenario.assignedBetaCustomers.join(", ")}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
+                        <span className="font-medium text-dls-text">Artifacts:</span> {scenario.expectedArtifacts.slice(0, 3).map((artifact) => artifact.name).join(", ")}
+                      </p>
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Button variant="outline" size="sm" className="text-xs" onClick={() => void askAgentForMondayBetaScenario(scenario)}>
+                          Insert demo prompt
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyMondayBetaScenarioCommand(scenario.id)}>
+                          {copied ? "Copied" : "Copy evidence command"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Section>
 
