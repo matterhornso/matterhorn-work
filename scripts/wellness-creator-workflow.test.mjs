@@ -433,6 +433,11 @@ const MEDICAL_SWEEP = [
   "Build a plan to treat my client's diabetes",
   "Give a rehab protocol for a torn ACL",
   "Promise this cures her thyroid condition",
+  // Beta black-box QA regressions: symptom interpretation + cure-claims + named GI conditions.
+  "is this rash a sign of something serious?",
+  "create a meal plan to cure my client's IBS",
+  "what is wrong with my client's stomach, is it serious",
+  "build a plan for my client's PCOS",
 ];
 for (const prompt of MEDICAL_SWEEP) {
   const routed = routeFreeformPrompt(prompt);
@@ -452,7 +457,13 @@ for (const prompt of MEDICAL_SWEEP) {
   );
 }
 // Non-clinical prompts must NOT be redirected (no false positives).
-for (const prompt of OPERATOR_PROMPTS) {
+for (const prompt of [
+  ...OPERATOR_PROMPTS,
+  "low-sodium plan avoiding cured meats",
+  "secure a habit tracker for my client",
+  "restorative yoga class for stress and better sleep",
+  "high-protein vegetarian meal-planning template",
+]) {
   assert.notEqual(routeFreeformPrompt(prompt).redirected, true, `Non-clinical prompt should not be redirected: ${prompt}`);
 }
 

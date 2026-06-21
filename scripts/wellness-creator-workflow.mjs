@@ -41,11 +41,12 @@ const SECRET_TEXT_RE =
   /(seed phrase|mnemonic|private key|api secret|api key|raw signature|signed payload|signed order|wallet export|passphrase|-----BEGIN|0x[a-f0-9]{40,})/i;
 
 // Heuristic for prompts that ask for clinical care — diagnosis, prescription,
-// medication/dosing, treating a named condition or injury, or pregnancy- and
-// eating-disorder-specific work. These are redirected to educational/safety
-// language and a referral, never answered as medical advice.
+// medication/dosing, treating or curing a named condition or injury, symptom
+// interpretation, or pregnancy- and eating-disorder-specific work. These are
+// redirected to educational/safety language and a referral, never answered as
+// medical advice.
 const MEDICAL_INTENT_RE =
-  /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica)\b|\b(pregnan\w*|prenatal|ante[- ]?natal|post[- ]?natal|postpartum)\b|\b(eating disorder|disordered eating|anorexi\w*|bulimi\w*|binge[- ]?eating)\b/i;
+  /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain|ibs|ibd|pcos|reflux|gerd|migraine|fibromyalgia|crohn)\b|\bcure[sd]?\b\s+(?:my|the|this|that|your|his|her|their|a|an)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica|ibs|ibd|pcos|gerd|migraine|fibromyalgia|crohn)\b|\b(pregnan\w*|prenatal|ante[- ]?natal|post[- ]?natal|postpartum)\b|\b(eating disorder|disordered eating|anorexi\w*|bulimi\w*|binge[- ]?eating)\b|\bsign of\b|something serious|what(?:'s| is| are) wrong with|is (?:this|that|it) (?:normal|serious|an? infection)|should (?:i|we|they) be worried|\b(rash|lump|mole|swelling|numbness|chest pain|shortness of breath|fainting|dizziness|infected|infection)\b/i;
 
 const FIXTURE_DIR = "docs/wellness-creator-workflow";
 const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
