@@ -109,6 +109,11 @@ const CUSTOMER_DEMO_COMMANDS = {
   polymarketWatchCheck: "matterhorn-work polymarket watch check --json",
   polymarketWatchDigest: "matterhorn-work polymarket watch digest --json",
   polymarketWatchAct: "matterhorn-work polymarket watch act --watch-file <public-polymarket-watch.json> --alert-index 0 --json",
+  mondayBetaQuickSmoke: "pnpm smoke:customer-ready-crypto && pnpm test:market-execution-safety-gate",
+  mondayBetaUiGate: "pnpm test:matterhorn-customer-onboarding-ui && pnpm test:crypto-panel-ux && pnpm test:customer-readiness-ui",
+  mondayBetaAppTypecheck: "pnpm --filter @matterhorn-work/app typecheck",
+  mondayBetaDesktopProof: "pnpm electron:tester-artifact -- --output-dir \"$HOME/Desktop/matterhorn-work-beta-$(git rev-parse --short=8 HEAD)\" --json && pnpm desktop:beta-doctor -- --artifact-dir \"$HOME/Desktop/matterhorn-work-beta-$(git rev-parse --short=8 HEAD)\" --strict --json",
+  mondayBetaWellnessProof: "pnpm test:wellness-creator-workflow && node scripts/wellness-creator-workflow.mjs --check",
   smoke: "pnpm smoke:customer-ready-crypto",
   signArtifactRoutes: "pnpm test:market-sign-artifact-routes",
   livePublicQa: "matterhorn-work crypto live-public-qa --output-dir /tmp/matterhorn-live-public-qa --fixture --strict --json",
@@ -129,6 +134,49 @@ const CUSTOMER_DEMO_COMMANDS = {
     "--strict",
   ].join(" "),
 } as const;
+const MONDAY_BETA_LAUNCH_CHECKLIST = [
+  {
+    id: "beta-app-ui",
+    title: "App opens with first-class desks",
+    owner: "Operator",
+    commandKey: "mondayBetaUiGate",
+    proof: "Bittensor, Hyperliquid, Polymarket, Wellness, and Services are visible as separate customer paths; desktop automation is not a default beta task.",
+  },
+  {
+    id: "beta-safety-smoke",
+    title: "Crypto safety smoke is green",
+    owner: "Operator",
+    commandKey: "mondayBetaQuickSmoke",
+    proof: "Bittensor stays non-custodial; Hyperliquid and Polymarket remain Can submit: No, Live submission: Off.",
+  },
+  {
+    id: "beta-app-typecheck",
+    title: "Production app typecheck passes",
+    owner: "Engineer",
+    commandKey: "mondayBetaAppTypecheck",
+    proof: "The React app compiles before a tester build is cut.",
+  },
+  {
+    id: "beta-desktop-build",
+    title: "Mac tester build and doctor pass",
+    owner: "Engineer",
+    commandKey: "mondayBetaDesktopProof",
+    proof: "Unsigned local DMG/ZIP evidence and desktop doctor output are captured before sending the app to a customer.",
+  },
+  {
+    id: "beta-wellness-proof",
+    title: "Wellness workflow remains safe",
+    owner: "Operator",
+    commandKey: "mondayBetaWellnessProof",
+    proof: "Wellness artifacts stay educational, non-medical, and do not claim live payments, email, hosting, storage, or token-gated access.",
+  },
+] as const satisfies ReadonlyArray<{
+  id: string;
+  title: string;
+  owner: string;
+  commandKey: keyof typeof CUSTOMER_DEMO_COMMANDS;
+  proof: string;
+}>;
 const CUSTOMER_DEMO_PROMPTS = [
   {
     id: "bittensor-image-subnets",
@@ -1354,6 +1402,41 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   );
                 })}
               </div>
+            </Section>
+
+            <Section title="Monday beta launch checklist" icon={<Shield className="size-4" />}>
+              <p className="text-[11px] leading-5 text-dls-secondary">
+                Run this launch-room checklist before each Monday beta customer call. Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.
+              </p>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {MONDAY_BETA_LAUNCH_CHECKLIST.map((item) => {
+                  const copied = copiedCustomerCommand === item.commandKey;
+                  return (
+                    <div key={item.id} className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-dls-text">{item.title}</p>
+                          <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.proof}</p>
+                        </div>
+                        <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.28)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                          {item.owner}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-auto w-full justify-start whitespace-normal break-words text-left text-xs text-dls-secondary"
+                        onClick={() => void copyCustomerDemoCommand(item.commandKey)}
+                      >
+                        {copied ? "Copied" : "Copy launch check"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+              <Notice tone="info" icon={<Shield className="size-4" />} title="Monday beta promise">
+                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Wellness is a workflow showcase, not medical care. Services are planned hooks, not live provider execution.
+              </Notice>
             </Section>
 
             <Section title="Safety status" icon={<Shield className="size-4" />}>

@@ -19,6 +19,14 @@ assert.equal(
 
 for (const phrase of [
   "Demo",
+  "Monday beta launch checklist",
+  "Run this launch-room checklist before each Monday beta customer call.",
+  "App opens with first-class desks",
+  "Crypto safety smoke is green",
+  "Mac tester build and doctor pass",
+  "Wellness workflow remains safe",
+  "Copy launch check",
+  "Monday beta promise",
   "VENUE_DESKS",
   "Use Bittensor without learning the CLI first.",
   "Preview Hyperliquid trades through chat, with execution off.",
