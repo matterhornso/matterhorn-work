@@ -7,8 +7,6 @@ import {
   Coins,
   Dumbbell,
   Eye,
-  Layers3,
-  ServerCog,
   ShieldCheck,
 } from "lucide-react";
 
@@ -47,7 +45,7 @@ const capabilities = [
     desc: "Create training, yoga, dietician, check-in, and customer-management workflows.",
   },
   {
-    icon: Layers3,
+    icon: Coins,
     title: "Create artifacts",
     desc: "Generate plans, reports, packets, scripts, and reusable workflow bundles.",
   },
@@ -60,11 +58,6 @@ const capabilities = [
     icon: ShieldCheck,
     title: "Stay non-custodial",
     desc: "Matterhorn never asks for seed phrases, private keys, or raw signatures.",
-  },
-  {
-    icon: ServerCog,
-    title: "Future services",
-    desc: "Preview hosting, storage, email, payment, and identity contracts before providers go live.",
   },
 ];
 

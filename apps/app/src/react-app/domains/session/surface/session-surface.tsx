@@ -9,7 +9,6 @@ import {
   Check,
   Dumbbell,
   FileText,
-  Layers3,
   Minimize2,
   ShieldCheck,
 } from "lucide-react";
@@ -93,7 +92,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
   wellness: Dumbbell,
-  services: Layers3,
+  services: FileText,
   blank: FileText,
 };
 
@@ -1320,33 +1319,33 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   <div className="w-full max-w-[900px]">
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-xs text-dls-secondary">These insert a prompt into chat. You can edit before sending.</p>
+                        <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
+                        <p className="text-sm text-dls-secondary">Pick a focused workspace or start a blank chat. You can edit every prompt before sending.</p>
                       </div>
                       <button
                         type="button"
-                        className="self-start rounded-full border border-dls-border bg-dls-surface px-3 py-1.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover sm:self-auto"
+                        className="self-start rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-blue-rgb),0.18)] sm:self-auto"
                         onClick={() => props.onOpenSettingsSection?.("mcps")}
                       >
-                        Connect Web3 tools
+                        Connect extensions
                       </button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         return (
                           <button
                             key={item.id}
                             type="button"
-                            className="flex min-h-[96px] items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                            className="flex min-h-[132px] min-w-0 items-start gap-3 rounded-2xl border border-dls-border bg-dls-surface p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.5)] hover:bg-dls-hover"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                              <Icon className="size-3.5" />
+                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary">
+                              <Icon className="size-[18px]" />
                             </span>
-                            <span>
-                              <span className="block text-[12px] font-medium text-dls-text">{item.title}</span>
-                              <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{item.description}</span>
+                            <span className="min-w-0">
+                              <span className="block text-[15px] font-semibold leading-snug text-dls-text">{item.title}</span>
+                              <span className="mt-1.5 block text-[13px] leading-relaxed text-dls-secondary">{item.description}</span>
                             </span>
                           </button>
                         );

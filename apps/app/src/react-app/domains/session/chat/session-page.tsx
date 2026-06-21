@@ -9,8 +9,8 @@ import {
   Dumbbell,
   FileText,
   Globe,
-  Layers3,
   Mic2,
+  PanelRightClose,
   Plus,
   Settings2,
   ShieldCheck,
@@ -96,7 +96,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   hyperliquid: BarChart3,
   polymarket: ShieldCheck,
   wellness: Dumbbell,
-  services: Layers3,
+  services: FileText,
   blank: FileText,
 };
 
@@ -308,6 +308,7 @@ export function SessionPage(props: SessionPageProps) {
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
+  const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -335,7 +336,7 @@ export function SessionPage(props: SessionPageProps) {
     [customerWorkflowStarterCards],
   );
   const businessWorkflowLaunchers = useMemo(
-    () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow" || card.id === "decentralized_services_operator"),
+    () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow"),
     [customerWorkflowStarterCards],
   );
   const blankWorkflowLauncher = useMemo(
@@ -344,10 +345,6 @@ export function SessionPage(props: SessionPageProps) {
   );
   const wellnessRailLauncher = useMemo(
     () => customerWorkflowStarterCards.find((card) => card.id === "wellness_creator_workflow") ?? null,
-    [customerWorkflowStarterCards],
-  );
-  const servicesRailLauncher = useMemo(
-    () => customerWorkflowStarterCards.find((card) => card.id === "decentralized_services_operator") ?? null,
     [customerWorkflowStarterCards],
   );
 
@@ -1003,7 +1000,7 @@ export function SessionPage(props: SessionPageProps) {
                             Create a Matterhorn session.
                           </h2>
                           <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
-                            Pick a Bittensor, Hyperliquid, Polymarket, Wellness, or Services desk. Matterhorn opens the
+                            Pick Bittensor, Hyperliquid, Polymarket, Wellness, or blank chat. Matterhorn opens the
                             right interface, inserts an editable prompt, and keeps every safety boundary visible before
                             anything runs.
                           </p>
@@ -1087,7 +1084,7 @@ export function SessionPage(props: SessionPageProps) {
                             <div>
                               <h3 className="text-sm font-semibold text-dls-text">Monday beta demos</h3>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Five guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
+                                Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
                               </p>
                             </div>
                             <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
@@ -1143,7 +1140,7 @@ export function SessionPage(props: SessionPageProps) {
                           <div>
                             <h3 className="text-sm font-semibold text-dls-text">Business workflows</h3>
                             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                              Use the same chat engine for real-world customer work: wellness creator services now, decentralized service planning next.
+                              Use the same chat engine for real-world customer work. Wellness stays separate from Web3 and markets.
                             </p>
                           </div>
                           <div className="grid gap-2 md:grid-cols-2">
@@ -1211,8 +1208,8 @@ export function SessionPage(props: SessionPageProps) {
                               <Settings2 className="size-4" />
                             </span>
                             <span>
-                              <span className="block text-[13px] font-medium text-dls-text">Connect Web3 tools</span>
-                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, agent tools, wallet connectors, and Matterhorn services.</span>
+                              <span className="block text-[13px] font-medium text-dls-text">Connect extensions</span>
+                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, agent tools, and wallet connectors.</span>
                             </span>
                           </button>
                         </section>
@@ -1245,9 +1242,9 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${activeSidePanel === "extensions" ? Math.max(browserPanelDefaultWidth, 480) : browserPanelDefaultWidth}px`}
-                  minSize={activeSidePanel === "extensions" ? "420px" : "320px"}
-                  maxSize="70%"
+                  defaultSize={`${activeSidePanel === "extensions" ? Math.max(browserPanelDefaultWidth, 480) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 560) : browserPanelDefaultWidth}px`}
+                  minSize={activeSidePanel === "extensions" ? "420px" : protocolSidePanelOpen ? "500px" : "320px"}
+                  maxSize={protocolSidePanelOpen ? "78%" : "70%"}
                   className="min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   {activeSidePanel === "extensions" && props.settingsSlot ? (
@@ -1286,6 +1283,19 @@ export function SessionPage(props: SessionPageProps) {
             ) : null}
           </ResizablePanelGroup>
           <aside className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1.5 py-2 text-muted-foreground mac:titlebar-no-drag">
+            {sidePanelOpen ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                onClick={closeRightPane}
+                title="Back to chat"
+                aria-label="Back to chat"
+              >
+                <PanelRightClose size={17} />
+                <span className="text-[9px] leading-none">Chat</span>
+              </Button>
+            ) : null}
             {isElectronRuntime() ? (
               <Button
                 variant="ghost"
@@ -1354,7 +1364,7 @@ export function SessionPage(props: SessionPageProps) {
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
-              <span className="text-[9px] leading-none">Tools</span>
+              <span className="text-[9px] leading-none">Ext</span>
             </Button>
             {([
               {
@@ -1406,13 +1416,6 @@ export function SessionPage(props: SessionPageProps) {
                 title: "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
                 icon: Dumbbell,
                 launcher: wellnessRailLauncher,
-              },
-              {
-                id: "decentralized_services_operator",
-                label: "Services",
-                title: "Services: planned hosting, storage, email, payments, and identity workflows",
-                icon: Layers3,
-                launcher: servicesRailLauncher,
               },
             ]).map((item) => {
               const Icon = item.icon;

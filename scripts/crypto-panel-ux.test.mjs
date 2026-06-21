@@ -93,7 +93,7 @@ for (const phrase of [
   "Production app typecheck passes",
   "Mac tester build and doctor pass",
   "Wellness workflow remains safe",
-  "Bittensor, Hyperliquid, Polymarket, Wellness, and Services are visible as separate customer paths",
+  "Bittensor, Hyperliquid, Polymarket, and Wellness are visible as separate customer paths",
   "desktop automation is not a default beta task.",
   "pnpm test:matterhorn-customer-onboarding-ui && pnpm test:crypto-panel-ux && pnpm test:customer-readiness-ui",
   "pnpm smoke:customer-ready-crypto && pnpm test:market-execution-safety-gate",
@@ -104,8 +104,9 @@ for (const phrase of [
   "Copy launch check",
   "Monday beta promise",
   "Bittensor is the most mature beta path.",
-  "Wellness is a workflow showcase, not medical care.",
-  "Services are planned hooks, not live provider execution.",
+  "Wellness is a standalone workflow surface, not Web3 and not medical care.",
+  "Wellness workflow: Standalone",
+  "Not Web3, not medical advice, and no live payments or email.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose Monday beta launch checklist copy: ${phrase}`);
 }
@@ -168,8 +169,20 @@ for (const forbidden of [
   ">Sign request<",
   "External sign request",
   "Services: Workflow/future hooks",
+  "Services are planned hooks, not live provider execution.",
+  "Services: Coming soon",
 ]) {
   assert.equal(panel.includes(forbidden), false, `Panel must not claim live submission: ${forbidden}`);
+}
+
+// 9b. Customer-reported layout fixes: no bottom wallet overlay, wider mobile-safe
+// metrics, and protocol panels scroll vertically.
+for (const phrase of [
+  "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
+  "sm:grid-cols-3",
+  "break-words font-mono",
+]) {
+  assert.ok(panel.includes(phrase), `Panel should include resilient protocol layout treatment: ${phrase}`);
 }
 
 // 10. No copy asks for secrets.

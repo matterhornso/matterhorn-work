@@ -140,7 +140,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "App opens with first-class desks",
     owner: "Operator",
     commandKey: "mondayBetaUiGate",
-    proof: "Bittensor, Hyperliquid, Polymarket, Wellness, and Services are visible as separate customer paths; desktop automation is not a default beta task.",
+    proof: "Bittensor, Hyperliquid, Polymarket, and Wellness are visible as separate customer paths; desktop automation is not a default beta task.",
   },
   {
     id: "beta-safety-smoke",
@@ -1091,16 +1091,16 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-dls-sidebar animate-fade-in">
-      <div className="border-b border-dls-border p-4">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-dls-sidebar via-dls-sidebar to-dls-canvas animate-fade-in">
+      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-sky-500/10">
+            <div className="flex size-10 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-blue-rgb),0.18)] shadow-[0_0_28px_rgba(var(--matterhorn-blue-rgb),0.14)]">
               <BrainCircuit className="size-5 text-sky-400" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-dls-text">{activeVenue.workspaceTitle}</h2>
-              <p className="text-xs text-dls-secondary">
+              <h2 className="text-lg font-semibold tracking-[-0.01em] text-dls-text">{activeVenue.workspaceTitle}</h2>
+              <p className="text-[12px] leading-5 text-dls-secondary">
                 {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeManifestStatus}
               </p>
             </div>
@@ -1116,14 +1116,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Refresh
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-3 gap-1 rounded-lg bg-dls-surface p-1">
+        <div className="mb-3 grid grid-cols-3 gap-1 rounded-2xl bg-dls-surface p-1.5">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
               type="button"
               className={cn(
-                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                venue === item ? "bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:text-dls-text",
+                "rounded-xl px-2 py-2 text-xs font-semibold transition-colors",
+                venue === item ? "bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)] shadow-[0_10px_30px_rgba(var(--matterhorn-blue-rgb),0.16)]" : "text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
               )}
               onClick={() => {
                 setVenue(item);
@@ -1134,7 +1134,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.24)] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] p-3">
+        <div className="mb-3 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200">
             <span>Safety strip</span>
             <span>Protocol manifest</span>
@@ -1142,7 +1142,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               {activeSafetyBadge}
             </span>
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Metric label="Can submit" value={activeManifestCanSubmit} compact />
             <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
             <Metric label="External signer" value={activeManifestSigner} compact />
@@ -1155,7 +1155,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           </p>
         </div>
         {venue === "bittensor" ? (
-          <div className="grid grid-cols-5 gap-1 rounded-lg bg-dls-surface p-1">
+          <div className="grid grid-cols-2 gap-1 rounded-2xl bg-dls-surface p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1167,7 +1167,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               key={item.key}
               type="button"
               className={cn(
-                "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                "rounded-xl px-2 py-2 text-xs font-medium transition-colors",
                 tab === item.key ? "bg-sky-500 text-white" : "text-dls-secondary hover:text-dls-text",
               )}
               onClick={() => setTab(item.key)}
@@ -1179,7 +1179,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         ) : null}
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-5 pb-8">
         {venue === "bittensor" && error && (
           <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor provider">
             {error}
@@ -1435,7 +1435,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 })}
               </div>
               <Notice tone="info" icon={<Shield className="size-4" />} title="Monday beta promise">
-                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Wellness is a workflow showcase, not medical care. Services are planned hooks, not live provider execution.
+                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Wellness is a standalone workflow surface, not Web3 and not medical care.
               </Notice>
             </Section>
 
@@ -1547,8 +1547,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
                   </div>
                   <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Services: Coming soon</p>
-                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Wellness and decentralized services do not run live payments, email, storage, or access control.</p>
+                    <p className="text-xs font-semibold text-dls-text">Wellness workflow: Standalone</p>
+                    <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Client-safe plans and packets. Not Web3, not medical advice, and no live payments or email.</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
@@ -2002,9 +2002,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dls-border bg-dls-sidebar p-4">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-dls-text">
-        <span className="text-sky-400">{icon}</span>
+    <div className="rounded-2xl border border-dls-border bg-dls-card/90 p-4 shadow-[var(--dls-card-shadow)]">
+      <div className="mb-3 flex items-center gap-2 text-[15px] font-semibold tracking-[-0.01em] text-dls-text">
+        <span className="flex size-7 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-sky-300">{icon}</span>
         {title}
       </div>
       {children}
@@ -2014,9 +2014,9 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-xl border border-dls-border bg-dls-surface p-3", compact && "p-2.5")}>
+    <div className={cn("min-w-0 rounded-xl border border-dls-border bg-dls-surface p-3", compact && "p-2.5")}>
       <div className="text-[10px] font-medium uppercase tracking-wider text-dls-secondary">{label}</div>
-      <div className={cn("mt-1 truncate font-mono font-semibold text-dls-text", compact ? "text-sm" : "text-lg")}>{value}</div>
+      <div className={cn("mt-1 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-[13px]" : "text-lg")}>{value}</div>
     </div>
   );
 }
