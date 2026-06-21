@@ -1,8 +1,8 @@
 export type ThemeMode = "light" | "dark" | "system";
 export type ResolvedThemeMode = "light" | "dark";
 
-const THEME_PREF_KEY = "openwork.react.settings.theme-mode";
-const LEGACY_THEME_PREF_KEYS = ["openwork.themePref"];
+const THEME_PREF_KEY = "matterhorn-work.react.settings.theme-mode";
+const LEGACY_THEME_PREF_KEYS = ["openwork.react.settings.theme-mode", "openwork.themePref"];
 
 const mediaQuery = "(prefers-color-scheme: dark)";
 const listeners = new Set<() => void>();
