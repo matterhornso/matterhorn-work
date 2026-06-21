@@ -12,7 +12,8 @@ import { useShellConfig } from "../../../shell/shell-config";
 import { BetaAuthMenu } from "../../auth";
 import type { MatterhornServerStatus } from "../../../../app/lib/matterhorn-server";
 
-const DOCS_URL = "https://openworklabs.com/docs";
+const DOCS_URL = "https://github.com/matterhornso/matterhorn-work/tree/dev/docs";
+const PROFILE_SETTINGS_LABEL = "Profile & Settings";
 const STATUS_BAR_BOOT_STARTED_AT = Date.now();
 const STATUS_BAR_INITIALIZING_MS = 15_000;
 
@@ -175,8 +176,8 @@ export function StatusBar(props: StatusBarProps) {
 
   const settingsControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "status.settings.open",
-    label: props.settingsOpen ? "Go back from settings" : "Open settings from the status bar",
-    description: "Use the visible settings button in the status bar.",
+    label: props.settingsOpen ? "Go back from settings" : "Open profile and settings from the status bar",
+    description: "Use the visible profile and settings button in the status bar.",
     sideEffect: "navigation",
     disabled: props.showSettingsButton === false,
     targetRef: settingsButtonRef,
@@ -238,15 +239,17 @@ export function StatusBar(props: StatusBarProps) {
                     ref={settingsButtonRef}
                     className="text-muted-foreground gap-2"
                     variant="ghost"
-                    size="icon-xs"
+                    size="xs"
                     onClick={props.onOpenSettings}
-                    aria-label={props.settingsOpen ? t("status.back") : t("status.settings")}
+                    title={props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}
+                    aria-label={props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}
                   >
                     <Settings className="size-3.5" />
+                    <span>{props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}</span>
                   </Button>
                 )}
               />
-              <TooltipContent>{t("status.settings")}</TooltipContent>
+              <TooltipContent>{props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}</TooltipContent>
             </Tooltip>
           ) : null}
         </div>
