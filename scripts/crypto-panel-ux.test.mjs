@@ -40,7 +40,7 @@ for (const phrase of [
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
 // 3. The beta-tester sections exist.
-for (const section of ["Ask in Chat ->", "Monday beta scenarios", "Safety status", "Evidence / QA"]) {
+for (const section of ["Ask in Chat ->", "Monday beta scenarios", "Monday beta launch checklist", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 
@@ -80,6 +80,34 @@ for (const phrase of [
   "expectedArtifacts",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose Monday beta scenario workflow: ${phrase}`);
+}
+
+// 5c. Monday beta launch checklist gives operators a single proof path before
+//     each customer call.
+for (const phrase of [
+  "MONDAY_BETA_LAUNCH_CHECKLIST",
+  "Run this launch-room checklist before each Monday beta customer call.",
+  "Every command is local, public/redacted, and evidence-oriented; none signs, submits, custodies, or broadcasts.",
+  "App opens with first-class desks",
+  "Crypto safety smoke is green",
+  "Production app typecheck passes",
+  "Mac tester build and doctor pass",
+  "Wellness workflow remains safe",
+  "Bittensor, Hyperliquid, Polymarket, Wellness, and Services are visible as separate customer paths",
+  "desktop automation is not a default beta task.",
+  "pnpm test:matterhorn-customer-onboarding-ui && pnpm test:crypto-panel-ux && pnpm test:customer-readiness-ui",
+  "pnpm smoke:customer-ready-crypto && pnpm test:market-execution-safety-gate",
+  "pnpm --filter @matterhorn-work/app typecheck",
+  "pnpm electron:tester-artifact",
+  "pnpm desktop:beta-doctor",
+  "pnpm test:wellness-creator-workflow && node scripts/wellness-creator-workflow.mjs --check",
+  "Copy launch check",
+  "Monday beta promise",
+  "Bittensor is the most mature beta path.",
+  "Wellness is a workflow showcase, not medical care.",
+  "Services are planned hooks, not live provider execution.",
+]) {
+  assert.ok(panel.includes(phrase), `Panel should expose Monday beta launch checklist copy: ${phrase}`);
 }
 
 // 6. Safety status: the three venue lines + the custody/no-live-trade statement.
