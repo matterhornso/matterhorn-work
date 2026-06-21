@@ -45,7 +45,39 @@ for (const id of expectedIds) {
 
 // 3b. Every non-blank customer template maps to exactly one protocol workspace manifest.
 const workspaceRegistryBlock = types.slice(types.indexOf("MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY"));
-const mappingBlock = types.slice(types.indexOf("MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE"));
+
+function extractBlock(text, marker) {
+  const start = text.indexOf(marker);
+  if (start < 0) return "";
+  const braceStart = text.indexOf("{", start);
+  if (braceStart < 0) return "";
+  let depth = 0;
+  let inString = false;
+  let stringChar = "";
+  for (let i = braceStart; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (ch === stringChar) inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    if (depth === 0) return text.slice(braceStart, i + 1);
+  }
+  return "";
+}
+
+const mappingBlock = extractBlock(types, "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE");
+assert.ok(mappingBlock, "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE block must be extractable");
 const mappedTemplateIds = [
   "bittensor_operator",
   "hyperliquid_trader",
