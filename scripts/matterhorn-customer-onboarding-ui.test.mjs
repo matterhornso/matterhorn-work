@@ -15,6 +15,8 @@ const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx
 const english = read("apps/app/src/i18n/locales/en.ts");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
+const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
+const modelSelect = read("apps/app/src/components/model-select.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
@@ -29,7 +31,9 @@ const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provide
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
   "Ask Matterhorn about Bittensor, markets, wellness, files, or workflows...",
+  '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
+  '"composer.stop": "Stop generating"',
   "Separate workspaces",
   "one Matterhorn chat.",
   "Bittensor workspace",
@@ -102,6 +106,22 @@ for (const phrase of [
   "Future-contract planning only. No provider execution or credentials.",
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+}
+
+for (const phrase of [
+  'displayLabel={t("composer.assistant_identity")}',
+  "Stop generating (cancels current run)",
+  "displayLabel?: string",
+  "const triggerLabel = displayLabel ?? selectedModelLabel",
+  "Change model (${selectedModelLabel})",
+  'aria-label={tooltipLabel}',
+  'aria-label={`${t("composer.assistant_identity")} ${label}`}',
+  'font-medium text-dls-text">{t("composer.assistant_identity")}',
+]) {
+  assert.ok(
+    `${composer}\n${modelSelect}\n${sessionSurface}`.includes(phrase),
+    `chat chrome should show Matterhorn identity while keeping model controls technical: ${phrase}`,
+  );
 }
 
 for (const phrase of [

@@ -259,7 +259,12 @@ function assistantFallbackText(messages: UIMessage[], baseline: number) {
 
 function AssistantWaitingCard({ label = t("session.assistant_thinking"), collapseLayout = false }: { label?: string; collapseLayout?: boolean }) {
   const content = (
-    <div className="flex justify-start" role="status" aria-live="polite">
+    <div
+      className="flex justify-start"
+      role="status"
+      aria-live="polite"
+      aria-label={`${t("composer.assistant_identity")} ${label}`}
+    >
       <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
         <div style={{ width: 20, height: 20, borderRadius: "50%", overflow: "hidden" }}>
           <PaperGrainGradient
@@ -273,6 +278,7 @@ function AssistantWaitingCard({ label = t("session.assistant_thinking"), collaps
             style={{ backgroundColor: "#818cf8", width: "100%", height: "100%", borderRadius: "50%" }}
           />
         </div>
+        <span className="font-medium text-dls-text">{t("composer.assistant_identity")}</span>
         <span>{label}</span>
       </div>
     </div>

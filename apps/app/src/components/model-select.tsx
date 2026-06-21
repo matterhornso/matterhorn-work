@@ -144,6 +144,7 @@ interface ModelSelectProps {
   onOpenChange: (open: boolean) => void;
   onChange: (model: ModelRef) => void;
   disabled?: boolean;
+  displayLabel?: string;
 }
 
 export function ModelSelect({
@@ -152,6 +153,7 @@ export function ModelSelect({
   onOpenChange,
   onChange,
   disabled = false,
+  displayLabel,
 }: ModelSelectProps) {
   const [search, setSearch] = React.useState("");
   const searchInputRef = React.useRef<HTMLInputElement>(null);
@@ -184,6 +186,11 @@ export function ModelSelect({
       modelID: option.modelID,
     }),
   );
+  const selectedModelLabel = selectedOption?.title ?? value.modelID ?? "Select model";
+  const triggerLabel = displayLabel ?? selectedModelLabel;
+  const tooltipLabel = displayLabel
+    ? `Change model (${selectedModelLabel})`
+    : "Change model";
 
   // Filter out models the user has hidden via the "Available models" tab.
   // Re-read localStorage when the popover opens so changes from the
@@ -224,19 +231,19 @@ export function ModelSelect({
             <PopoverTrigger
               type="button"
               disabled={disabled}
-              aria-label="Change model"
+              aria-label={tooltipLabel}
               aria-keyshortcuts="Meta+Alt+/"
               className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12 disabled:pointer-events-none disabled:opacity-60"
             />
           }
         >
           <span className="max-w-48 truncate">
-            {selectedOption?.title ?? value.modelID ?? "Select model"}
+            {triggerLabel}
           </span>
           <ChevronDown className="h-3 w-3" />
         </TooltipTrigger>
         <TooltipContent>
-          Change model
+          {tooltipLabel}
         </TooltipContent>
       </Tooltip>
       <PopoverContent

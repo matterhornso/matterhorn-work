@@ -1369,8 +1369,8 @@ export function ReactSessionComposer(props: ComposerProps) {
               </div>
 
               {/*
-                Single action button that toggles between Stop and Run task.
-                When busy with no draft: Stop (cancels current run).
+                Single action button that toggles between Stop generating and Run task.
+                When busy with no draft: Stop generating (cancels current run).
                 When busy with a draft: Run task (queues a follow-up).
                 When idle: Run task.
               */}
@@ -1482,6 +1482,7 @@ export function ReactSessionComposer(props: ComposerProps) {
               onOpenChange={props.onModelPickerOpenChange}
               onChange={props.onModelChange}
               disabled={props.busy}
+              displayLabel={t("composer.assistant_identity")}
             />
             {props.modelUnavailable ? (
               <span className="text-xs font-medium text-red-10">Model no longer available</span>
