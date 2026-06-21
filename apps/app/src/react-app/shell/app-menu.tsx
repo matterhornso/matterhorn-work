@@ -12,7 +12,7 @@ export function AppMenuProvider({ children }: { children: ReactNode }) {
   const toggleSidebar = useUiStateStore((state) => state.toggleSidebar);
 
   useEffect(() => {
-    const openSettings = () => navigate("/settings/general");
+    const openSettings = () => navigate("/settings/overview");
 
     window.addEventListener(NATIVE_MENU_OPEN_SETTINGS_EVENT, openSettings);
     window.addEventListener(NATIVE_MENU_TOGGLE_SIDEBAR_EVENT, toggleSidebar);

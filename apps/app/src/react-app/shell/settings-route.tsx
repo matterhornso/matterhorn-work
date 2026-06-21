@@ -37,6 +37,7 @@ import { createProviderAuthStore, useProviderAuthStoreSnapshot } from "../domain
 import ProviderAuthModal from "../domains/connections/provider-auth/provider-auth-modal";
 import ConnectionsModals from "../domains/connections/modals";
 import { AiSettingsView } from "../domains/settings/pages/ai-view";
+import { SettingsOverviewView } from "../domains/settings/pages/overview-view";
 // Side-effect imports: register extension config components into the registry.
 import "../domains/settings/openai-image-gen-config";
 import "../domains/settings/ollama-config";
@@ -349,11 +350,13 @@ function parseSettingsPath(pathname: string): {
     .replace(/^\/settings\/?/, "")
     .replace(/^\/+|\/+$/g, "");
   if (!trimmed) {
-    return { tab: "general", redirectPath: "general" };
+    return { tab: "overview", redirectPath: "overview" };
   }
 
   const [head, tail] = trimmed.split("/");
   switch (head) {
+    case "overview":
+      return { tab: head, redirectPath: null };
     case "general":
     case "ai":
     case "preferences":
@@ -1981,6 +1984,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
 
   const settingsView = (() => {
     switch (route.tab) {
+      case "overview":
+        return <SettingsOverviewView onSelectTab={(tab) => navigateSettingsPath(tab)} />;
       case "general":
         return (
           <GeneralSettingsView

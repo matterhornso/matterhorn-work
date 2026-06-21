@@ -173,6 +173,7 @@ export type EngineRuntime = "direct";
 export type OnboardingStep = "welcome" | "local" | "server" | "connecting";
 
 export type SettingsTab =
+  | "overview"
   | "general"
   | "ai"
   | "preferences"
