@@ -80,7 +80,7 @@ export function RemoteWorkspaceFields({
         </label>
 
         <label className="grid gap-2">
-          <span className={inputLabelClass}>Access token</span>
+          <span className={inputLabelClass}>Access Token</span>
           <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface p-1.5">
             <input
               type={tokenVisible ? "text" : "password"}
@@ -100,7 +100,7 @@ export function RemoteWorkspaceFields({
             </button>
           </div>
           <span className={inputHintClass}>
-            Add a token only if the worker requires one.
+            Paste a collaborator or owner access token only if this Matterhorn worker requires one.
           </span>
         </label>
 

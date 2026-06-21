@@ -17,6 +17,7 @@ const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-pa
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
 const modelSelect = read("apps/app/src/components/model-select.tsx");
+const remoteWorkspaceFields = read("apps/app/src/react-app/domains/workspace/remote-workspace-fields.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
@@ -108,6 +109,13 @@ for (const phrase of [
   "Future-contract planning only. No provider execution or credentials.",
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+}
+
+for (const phrase of [
+  "Access Token",
+  "Paste a collaborator or owner access token only if this Matterhorn worker requires one.",
+]) {
+  assert.ok(remoteWorkspaceFields.includes(phrase), `remote workspace setup should use safer Matterhorn access-token copy: ${phrase}`);
 }
 
 for (const phrase of [
