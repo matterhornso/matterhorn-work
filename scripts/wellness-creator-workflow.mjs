@@ -23,9 +23,9 @@
  * It never accepts secrets, never gives medical advice, and never moves funds.
  */
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 
 const args = process.argv.slice(2);
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -363,6 +363,54 @@ function buildCustomerDemoPack(persona = null) {
     routesArbitraryPrompts: true,
     note: "A reusable test-customer demo pack: seven client-ready artifacts a personal trainer, yoga instructor, or dietician can generate and share through chat. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
   };
+}
+
+// ---- Wellness Creator Demo Packet Export ----
+// Stitch the seven demo-pack artifacts into one shareable, customer-facing
+// markdown packet. Personas include a generic "wellness_creator" default.
+const EXPORT_PERSONAS = ["personal_trainer", "yoga_instructor", "dietician", "wellness_creator"];
+const EXPORT_PERSONA_LABELS = {
+  personal_trainer: "Personal trainer",
+  yoga_instructor: "Yoga instructor",
+  dietician: "Dietician",
+  wellness_creator: "Wellness creator",
+};
+
+// The safety footer appended to every exported packet.
+const PACKET_SAFETY_FOOTER = [
+  "## Safety & Boundaries",
+  "",
+  "- This packet is for **general fitness and wellness education only**. It is **not medical advice, diagnosis, or treatment**.",
+  "- It contains **no diagnosis, no prescription, no treatment plan, and no guaranteed outcomes**. Results vary between individuals.",
+  "- For any medical condition, injury, pregnancy, eating concern, or medication question, consult a **qualified healthcare professional**.",
+  "- Payments, email, hosting/storage, and identity/access are **planned, not live** Matterhorn service hooks. Nothing here is charged, emailed, hosted, or gated automatically.",
+  "- This workflow never asks for or stores any wallet secrets or credentials of any kind.",
+].join("\n");
+
+// Build the stitched markdown packet for a persona (no file I/O).
+function buildDemoPacketExport(persona = "wellness_creator") {
+  const resolved = EXPORT_PERSONAS.includes(persona) ? persona : "wellness_creator";
+  const label = EXPORT_PERSONA_LABELS[resolved];
+  const sections = [];
+  const includedDeliverables = [];
+  for (const deliverable of DEMO_PACK_DELIVERABLES) {
+    const abs = join(repoRoot, deliverable.fixture);
+    let body = `*(reference artifact not found: ${deliverable.fixture})*`;
+    if (existsSync(abs)) {
+      body = readFileSync(abs, "utf8").trim();
+      includedDeliverables.push(deliverable.id);
+    }
+    sections.push(`---\n\n# ${deliverable.name}\n\n${body}`);
+  }
+  const header = [
+    `# Wellness Creator Demo Packet — ${label}`,
+    "",
+    `*A single, shareable customer-facing packet stitched from the Wellness Creator Customer Demo Pack. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*`,
+    "",
+    "This packet bundles seven client-ready artifacts: service offer page, onboarding questionnaire, 4-week program, weekly check-in, progress summary, renewal/follow-up message, and client handoff packet.",
+  ].join("\n");
+  const markdown = `${header}\n\n${sections.join("\n\n")}\n\n---\n\n${PACKET_SAFETY_FOOTER}\n`;
+  return { persona: resolved, personaLabel: label, deliverables: includedDeliverables, markdown };
 }
 
 const DEMO_CHECKLIST = [
@@ -818,6 +866,13 @@ function buildContract() {
     offerBuilder: buildOfferBuilder(),
     clientLifecycle: buildClientLifecycle(),
     customerDemoPack: buildCustomerDemoPack(),
+    demoPacketExport: {
+      personas: EXPORT_PERSONAS,
+      defaultPersona: "wellness_creator",
+      command: "node scripts/wellness-creator-workflow.mjs --demo-pack-export <persona> --output <path> --json",
+      stitchesDeliverables: DEMO_PACK_DELIVERABLES.map((deliverable) => deliverable.id),
+      safetyFooter: true,
+    },
     customerManagement: CUSTOMER_MANAGEMENT,
     stages: STAGES,
     promptArtifacts: PROMPT_ARTIFACTS,
@@ -1140,6 +1195,35 @@ function runCheck() {
     }
   }
 
+  // Demo Packet Export: stitched, shareable packet per persona.
+  const exportMeta = contract.demoPacketExport;
+  if (!exportMeta || !Array.isArray(exportMeta.personas) || exportMeta.defaultPersona !== "wellness_creator") {
+    failures.push("demoPacketExport must declare personas with a wellness_creator default.");
+  }
+  for (const persona of EXPORT_PERSONAS) {
+    const packet = buildDemoPacketExport(persona);
+    if (packet.persona !== persona) failures.push(`Demo packet export should resolve persona ${persona}.`);
+    if (packet.deliverables.length !== DEMO_PACK_DELIVERABLES.length) {
+      failures.push(`Demo packet export for ${persona} should stitch all ${DEMO_PACK_DELIVERABLES.length} deliverables.`);
+    }
+    for (const marker of [
+      "Wellness Creator Demo Packet",
+      "Safety & Boundaries",
+      "not medical advice, diagnosis, or treatment",
+      "planned, not live",
+    ]) {
+      if (!packet.markdown.includes(marker)) failures.push(`Demo packet export for ${persona} missing: "${marker}"`);
+    }
+    for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+      const match = packet.markdown.match(re);
+      if (match) failures.push(`Demo packet export for ${persona} contains a forbidden string: "${match[0]}"`);
+    }
+  }
+  // Unknown export persona falls back to the wellness_creator default.
+  if (buildDemoPacketExport("not_a_persona").persona !== "wellness_creator") {
+    failures.push("Demo packet export should fall back to wellness_creator for unknown personas.");
+  }
+
   // Exposed through the existing generic Matterhorn workflow surfaces.
   const gs = contract.genericSurfaces;
   if (gs?.notCustomApp !== true) failures.push("genericSurfaces.notCustomApp must be true.");
@@ -1249,6 +1333,50 @@ function main() {
       return;
     }
     process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "demo-pack", ...buildCustomerDemoPack(persona) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--demo-pack-export")) {
+    const idx = args.indexOf("--demo-pack-export");
+    const persona = args[idx + 1] && !args[idx + 1].startsWith("--") ? args[idx + 1] : "wellness_creator";
+    if (!EXPORT_PERSONAS.includes(persona)) {
+      const message = `Unknown demo-pack-export persona "${persona}". Expected one of: ${EXPORT_PERSONAS.join(", ")}.`;
+      process.stdout.write(`${JSON.stringify({ ok: false, error: message }, null, 2)}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    const outIdx = args.indexOf("--output");
+    const outputPath = outIdx >= 0 && args[outIdx + 1] && !args[outIdx + 1].startsWith("--") ? args[outIdx + 1] : null;
+    const packet = buildDemoPacketExport(persona);
+    let written = null;
+    if (outputPath) {
+      try {
+        mkdirSync(dirname(resolve(outputPath)), { recursive: true });
+        writeFileSync(resolve(outputPath), packet.markdown, "utf8");
+        written = outputPath;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stdout.write(`${JSON.stringify({ ok: false, error: `Failed to write packet: ${message}` }, null, 2)}\n`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+    if (wantJson) {
+      process.stdout.write(`${JSON.stringify({
+        version: VERSION,
+        mode: "demo-pack-export",
+        ok: true,
+        persona: packet.persona,
+        personaLabel: packet.personaLabel,
+        deliverables: packet.deliverables,
+        output: written,
+        bytes: Buffer.byteLength(packet.markdown, "utf8"),
+      }, null, 2)}\n`);
+    } else if (written) {
+      process.stdout.write(`Wrote Wellness demo packet for ${packet.personaLabel} to ${written}\n`);
+    } else {
+      process.stdout.write(`${packet.markdown}\n`);
+    }
     return;
   }
 

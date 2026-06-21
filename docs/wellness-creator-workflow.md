@@ -218,6 +218,18 @@ node scripts/wellness-creator-workflow.mjs --demo-pack personal_trainer --json
 
 The workflow **accepts arbitrary creator prompts** and routes each into the right artifact type (see "Any Prompt, One Workflow"). Every deliverable is educational/general wellness only — no diagnosis, prescription, treatment, or guaranteed outcomes — and every service hook (storage/hosting, payments, email, identity/access) is `planned_not_live`. Secret-shaped input is refused and not echoed.
 
+## Demo Packet Export (Single Shareable File)
+
+Stitch the seven demo-pack artifacts into **one** customer-facing markdown packet a test customer can read end to end:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --demo-pack-export personal_trainer --output /tmp/matterhorn-wellness-demo.md --json
+```
+
+- **Personas:** `personal_trainer`, `yoga_instructor`, `dietician`, and a generic `wellness_creator` (the default when no persona is given).
+- `--output <path>` writes the packet (creating parent directories); with `--json` it reports `{ persona, deliverables, output, bytes }`. Without `--output` it prints the packet to stdout.
+- Every packet ends with a **Safety & Boundaries footer**: educational only, not medical advice, no diagnosis/prescription/treatment/guaranteed outcomes, and payments/email/hosting/access `planned, not live`.
+
 ## Client Lifecycle (Full Test-Customer Demo Path)
 
 The **Client Lifecycle** is the complete, ordered client-delivery path a wellness creator runs through chat — a test customer can walk the whole flow end to end. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline: nothing is hosted, charged, emailed, or gated.
