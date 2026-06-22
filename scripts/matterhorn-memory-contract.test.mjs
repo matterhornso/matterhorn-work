@@ -213,7 +213,7 @@ for (const invariant of [
 }
 
 // 7. Runtime validators reject forbidden secrets.
-const memory = await import(join(repoRoot, "packages/types/dist/index.js"));
+const memory = await import(join(repoRoot, "packages/types/src/memory.ts"));
 
 function makeRecord(overrides = {}) {
   return {
