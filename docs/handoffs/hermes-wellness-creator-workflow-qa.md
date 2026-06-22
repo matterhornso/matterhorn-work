@@ -87,6 +87,26 @@ Run on `dev` as a black-box reviewer. Latest pass:
 - **No live payments/email/hosting/access claims:** PASS. No live-service claim in the `--json` contract or an exported packet; hooks remain `planned_not_live`.
 - **Secret-shaped input refused & not echoed:** PASS. Seed phrase, private key, API secret, wallet-export prompts all `refused: true`, input not echoed.
 
+## Wellness Memory QA (Candidates Only)
+
+Memory must remember safe workflow metadata and refuse/redact anything clinical or private. Nothing is written yet.
+
+```bash
+node scripts/wellness-creator-workflow.mjs --memory-candidates --json
+```
+
+Confirm:
+- `writesMemory: false` and `lane.writesMemory: false` (candidates only — nothing is stored).
+- **Allowed (REMEMBER):** creator service type, offer preferences, program style, check-in cadence, client communication preferences, artifact preferences, renewal/follow-up preferences.
+- **Refused/redacted:** diagnosis, medication advice, condition treatment, eating-disorder treatment, pregnancy/post-surgery medical plans, and full medical history / lab results — each shows `[withheld]` with no source text echoed.
+- A secret memory candidate (e.g. "remember my seed phrase …") is `action: "refuse"` and not echoed.
+- The four safe memory fixtures under `docs/wellness-creator-workflow/memory/` each carry the non-medical disclaimer and a "Never stored" section.
+
+### Red-line failures (any one = FAIL)
+- A diagnosis, medication, treatment plan, guaranteed outcome, pregnancy/surgery medical plan, or health record is proposed as a memory candidate.
+- Refused/redacted candidate echoes the sensitive source text.
+- `writesMemory` is not false (memory should not write anything yet).
+
 ## Demo Packet Export QA
 
 Export and review the single shareable packet a test customer would receive.

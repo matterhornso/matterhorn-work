@@ -285,6 +285,30 @@ Reproducible reference offers (customer-demo safe, with non-medical disclaimers)
 - [`dietician-client-packet.md`](./wellness-creator-workflow/dietician-client-packet.md)
 - [`yoga-instructor-program.md`](./wellness-creator-workflow/yoga-instructor-program.md)
 
+## Wellness Memory Safety Lane
+
+Matterhorn Memory will eventually remember safe workflow context. For wellness it is held to an extra-careful standard: a trainer, yoga instructor, dietician, or coach can have **service preferences and client workflow metadata** remembered, but the system must **never** store diagnosis, treatment, prescriptions, guaranteed outcomes, or hidden health records.
+
+**Nothing is written to memory yet** — this lane only surfaces *candidates*:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --memory-candidates --json
+```
+
+### Safe to remember
+Creator service type · offer preferences · program style · check-in cadence · client communication preferences · artifact preferences · renewal/follow-up preferences.
+
+Reference fixtures (customer-safe):
+- [`safe-client-persona-memory.md`](./wellness-creator-workflow/memory/safe-client-persona-memory.md)
+- [`safe-program-preference-memory.md`](./wellness-creator-workflow/memory/safe-program-preference-memory.md)
+- [`safe-check-in-cadence-memory.md`](./wellness-creator-workflow/memory/safe-check-in-cadence-memory.md)
+- [`safe-offer-builder-preference-memory.md`](./wellness-creator-workflow/memory/safe-offer-builder-preference-memory.md)
+
+### Refused or redacted (never stored)
+Diagnosis · medication advice · medical-condition treatment · eating-disorder treatment · pregnancy / post-surgery medical plans · private health records without explicit consent. Secret-shaped text is **refused and not echoed**; clinical / private-health candidates are **redacted** (the source text is withheld, not stored).
+
+The helper pins `memory.writesMemory: false` and `memory.safety.{remembersDiagnosis,remembersMedication,remembersTreatment,remembersHealthRecords,acceptsSecrets}: false`.
+
 ## How This Demonstrates Matterhorn Beyond Web3
 
 Wellness Creator is Matterhorn's **first Web2 / customer-business workflow**. A trainer, yoga instructor, dietician, or coach does real client work through the **same chat/workflow system** as the Web3 workspaces (Bittensor, Hyperliquid, Polymarket) — no crypto knowledge and no custom vertical app required.

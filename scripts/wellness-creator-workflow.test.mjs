@@ -855,4 +855,84 @@ for (const phrase of ["--demo-pack-export", "Demo Packet Export"]) {
 }
 assert.ok(handoff.includes("Demo Packet Export QA"), "Handoff should include export QA");
 
+// 28. Wellness Memory safety lane.
+const memory = contract.memory;
+assert.ok(memory, "Contract should include the memory lane");
+assert.equal(memory.writesMemory, false, "memory.writesMemory must be false (candidates only)");
+for (const id of [
+  "creator_service_type",
+  "offer_preferences",
+  "program_style",
+  "check_in_cadence",
+  "client_communication_preferences",
+  "artifact_preferences",
+  "renewal_follow_up_preferences",
+]) {
+  assert.ok(memory.allowedCategories.some((c) => c.id === id), `memory.allowedCategories should include ${id}`);
+}
+for (const id of [
+  "diagnosis",
+  "medication_advice",
+  "medical_condition_treatment",
+  "eating_disorder_treatment",
+  "pregnancy_post_surgery_medical_plan",
+  "private_health_records_without_consent",
+]) {
+  assert.ok(memory.forbiddenCategories.some((c) => c.id === id), `memory.forbiddenCategories should include ${id}`);
+}
+for (const flagKey of ["writesMemory", "remembersDiagnosis", "remembersMedication", "remembersTreatment", "remembersHealthRecords", "acceptsSecrets"]) {
+  assert.equal(memory.safety[flagKey], false, `memory.safety.${flagKey} must be false`);
+}
+
+// --memory-candidates emits candidates without writing memory; unsafe withheld.
+const memCli = spawnSync(process.execPath, [HELPER_PATH, "--memory-candidates", "--json"], {
+  encoding: "utf8",
+  maxBuffer: 5 * 1024 * 1024,
+});
+assert.equal(memCli.status, 0, "--memory-candidates should exit 0");
+const memJson = JSON.parse(memCli.stdout);
+assert.equal(memJson.mode, "memory-candidates", "should report memory-candidates mode");
+assert.equal(memJson.writesMemory, false, "--memory-candidates must not write memory");
+const allowed = memJson.candidates.filter((c) => c.allowed);
+const blocked = memJson.candidates.filter((c) => !c.allowed);
+assert.ok(allowed.length >= 4, "should propose at least four safe candidates");
+assert.ok(blocked.length >= 5, "should refuse/redact the unsafe candidates");
+for (const item of allowed) {
+  assert.ok(item.category, "allowed candidate should carry a category");
+  assert.ok(memory.allowedCategories.some((c) => c.id === item.category), `allowed candidate category should be known: ${item.category}`);
+}
+for (const item of blocked) {
+  assert.equal(item.input, "[withheld]", "refused/redacted candidate must not echo source text");
+  assert.ok(["refuse", "redact"].includes(item.action), "blocked candidate should be refuse or redact");
+}
+// Refused/redacted candidates must not echo their specific source text. Scan the
+// candidates array for source-specific tokens (the generic category reason may
+// name categories like "pregnancy/surgery"; that is descriptive, not a leak).
+const candidatesOut = JSON.stringify(memJson.candidates).toLowerCase();
+for (const forbidden of ["metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "seed phrase", "apple banana"]) {
+  assert.equal(candidatesOut.includes(forbidden), false, `--memory-candidates must not echo source text: "${forbidden}"`);
+}
+
+// Safe memory fixtures exist, carry the disclaimer, and have no forbidden strings.
+const MEMORY_FIXTURE_PATHS = [
+  "docs/wellness-creator-workflow/memory/safe-client-persona-memory.md",
+  "docs/wellness-creator-workflow/memory/safe-program-preference-memory.md",
+  "docs/wellness-creator-workflow/memory/safe-check-in-cadence-memory.md",
+  "docs/wellness-creator-workflow/memory/safe-offer-builder-preference-memory.md",
+];
+for (const fixturePath of MEMORY_FIXTURE_PATHS) {
+  assert.ok(existsSync(fixturePath), `Memory fixture should exist: ${fixturePath}`);
+  const fixture = readFileSync(fixturePath, "utf8");
+  assert.ok(fixture.includes("not medical advice, diagnosis, or treatment"), `${fixturePath} should carry the non-medical disclaimer`);
+  const lower = fixture.toLowerCase();
+  for (const forbidden of ["we diagnose", "prescribe a dose", "cure your", "guaranteed results", "private key", "seed phrase", "api secret", "wallet export"]) {
+    assert.equal(lower.includes(forbidden), false, `${fixturePath} must not contain: "${forbidden}"`);
+  }
+}
+
+// Doc + handoff carry the memory lane.
+assert.ok(doc.includes("Wellness Memory Safety Lane"), "Doc should include the memory safety lane");
+assert.ok(doc.includes("--memory-candidates"), "Doc should show the memory-candidates command");
+assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include memory QA");
+
 console.log("Wellness Creator Workflow gate passed.");
