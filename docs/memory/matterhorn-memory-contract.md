@@ -110,6 +110,73 @@ Returned when a record is rejected at ingest time:
 }
 ```
 
+### `MatterhornMemoryContextPacket`
+
+A context packet is what the chat layer receives when retrieving relevant memory. It is always user-visible and contains only records that passed safety validation.
+
+```ts
+{
+  version: "matterhorn.memory.context-packet.v1";
+  taskId?: string;
+  sessionId?: string;
+  workspaceId?: string;
+  query: string;
+  records: MatterhornMemoryRecord[];
+  omittedRecords: number;
+  safetySummary: string;
+  visibleToUser: true;
+  generatedAt: string;
+}
+```
+
+### `MatterhornMemorySuggestion`
+
+A memory suggestion is a proposed record presented to the user for explicit confirmation. Suggestions never auto-capture and are forbidden if secret material is detected.
+
+```ts
+{
+  version: "matterhorn.memory.suggestion.v1";
+  proposedRecord: MatterhornMemoryRecord;
+  reason: string;
+  captureMode: "user_confirmed_only";
+  canAutoCapture: false;
+  requiresExplicitConsent: true;
+  forbiddenIfSecretDetected: true;
+}
+```
+
+### `MatterhornMemoryUsePolicy`
+
+The use policy governs how memory may be injected into chat, UI, and export flows. It defaults to visible, consent-based memory only.
+
+```ts
+{
+  hiddenMemoryAllowed: false;
+  userVisibleMemoryChipsRequired: true;
+  autoCaptureAllowed: false;
+  secretCaptureAllowed: false;
+  wellnessClinicalCaptureRequiresExplicitConsent: true;
+  marketSubmissionMemoryAllowed: false;
+}
+```
+
+### `MatterhornMemoryExportManifest`
+
+An export manifest describes a memory bundle that has left the device. It must never claim to include secrets, raw signatures, signed payloads, or wallet exports.
+
+```ts
+{
+  version: "matterhorn.memory.export-manifest.v1";
+  exportedAt: string;
+  recordCount: number;
+  sha256: string;
+  includesSecrets: false;
+  includesRawSignatures: false;
+  includesSignedPayloads: false;
+  includesWalletExports: false;
+}
+```
+
 ## Safety Policy
 
 `DEFAULT_MATTERHORN_MEMORY_SAFETY_POLICY` is the conservative baseline:
@@ -137,6 +204,10 @@ The contract enforces these invariants at validation time:
 - **No live market submission.** Market memories (Hyperliquid, Polymarket) may remember read-only facts, watchlists, receipts, and handoff metadata, but never `canSubmit`, `liveSubmissionEnabled`, sign/submit routes, or signer material. Matterhorn remains an external signer assistant.
 - **Bittensor is public-address / external-signer only.** Bittensor memories may store SS58 addresses, coldkey names, hotkey addresses, netuid, and validator names. They must never hold private keys, seed phrases, mnemonics, or wallet exports.
 - **Wellness is educational and opt-in.** Wellness/health/clinical memories require `user_confirmed` provenance. Medical/clinical records (diagnosis, treatment plan, prescription, guaranteed outcome) must also be tagged `opt-in`. The system defaults to educational, non-clinical memory only.
+- **Context packets are always visible.** A `MatterhornMemoryContextPacket` must have `visibleToUser: true` and only include records that pass `validateMemorySafety`.
+- **Suggestions require explicit consent.** A `MatterhornMemorySuggestion` must use `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, and `forbiddenIfSecretDetected: true`.
+- **Use policy keeps memory visible and consent-based.** `MatterhornMemoryUsePolicy` defaults to `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, and `marketSubmissionMemoryAllowed: false`.
+- **Export manifests are secret-free.** A `MatterhornMemoryExportManifest` must declare `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, and `includesWalletExports: false`.
 
 ## Validation Functions
 
@@ -146,7 +217,11 @@ Runtime validators exported from `packages/types/src/memory.ts`:
 - `validateBittensorMemoryIsNonCustodial(record)` – SS58/coldkey/hotkey only
 - `validateMarketMemoryDoesNotEnableLiveSubmission(record)` – no live-submission flags
 - `validateWellnessMemoryIsEducationalAndOptIn(record)` – user-confirmed + opt-in for clinical
-- `validateMemorySafety(record)` – runs all validators together
+- `validateMemorySafety(record)` – runs all record validators together
+- `validateMemoryContextPacket(packet)` – context packets are user-visible and contain only safe records
+- `validateMemorySuggestion(suggestion)` – suggestions require explicit consent and cannot auto-capture
+- `validateMemoryUsePolicy(policy)` – use policy must keep memory visible and consent-based
+- `validateMemoryExportManifest(manifest)` – export manifest must not claim secret material
 - `redactForbiddenMemorySecrets(record)` – returns a redaction decision
 
 ## Usage Example
