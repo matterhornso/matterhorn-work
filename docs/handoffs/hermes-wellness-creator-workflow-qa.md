@@ -107,6 +107,51 @@ Confirm:
 - Refused/redacted candidate echoes the sensitive source text.
 - `writesMemory` is not false (memory should not write anything yet).
 
+## Wellness Memory QA — Evidence Pack
+
+Black-box proof that wellness memory candidates are **useful but safe**. Non-writing and opt-in only.
+
+### Exact commands
+
+```bash
+pnpm test:wellness-creator-workflow
+node scripts/wellness-creator-workflow.mjs --memory-qa --json
+node scripts/wellness-creator-workflow.mjs --memory-candidates --json
+node scripts/wellness-creator-workflow.mjs --check
+```
+
+### Expected outputs (`--memory-qa --json`)
+
+- `mode: "memory-qa"`, `writesMemory: false`, and `notMedicalAdvice` stating this is general wellness education, not medical advice.
+- `safeCandidatesByPersona` for **personal_trainer**, **yoga_instructor**, and **dietician** — every item `allowed: true`, `optIn: true`, with a `category`.
+- `refusedClinicalExamples` (diagnosis, prescription, treatment, eating-disorder, pregnancy/post-surgery, medical history) — all `allowed: false`, `input: "[withheld]"`.
+- `refusedSecretExamples` (seed phrase, private key, API secret, wallet export) — all `allowed: false`, `action: "refuse"`, `input: "[withheld]"`.
+- `evidenceSummary`: `allSafeAllowed`, `allClinicalRefused`, `allSecretRefused`, `noLiveServiceClaims` all `true`; `anySourceEchoed` and `writesMemory` both `false`.
+- `optInRequirements` (≥3) and `rerunCommands` present.
+
+### Screenshots / evidence expectations
+
+- [ ] `--memory-qa --json` output (or a screenshot) showing the evidence summary all-green.
+- [ ] One safe candidate per persona, each with its category and `optIn: true`.
+- [ ] A clinical example and a secret example, each shown as `[withheld]` (no source text).
+- [ ] `--check` passing and `pnpm test:wellness-creator-workflow` green.
+
+### Issue severity rubric
+
+- **P0 (blocker):** a diagnosis/medication/treatment/health-record is proposed as a candidate; a secret is echoed; or memory writes to disk.
+- **P1 (high):** a safe candidate is wrongly refused, or opt-in is missing/false; a clinical/secret example is allowed.
+- **P2 (medium):** mis-categorized safe candidate, or evidence-summary flag wrong while behavior is safe.
+- **P3 (low):** wording/labeling/cosmetic.
+
+### Customer-safe sign-off checklist
+
+- [ ] Safe candidates for all three personas are allowed and opt-in.
+- [ ] Every clinical example is refused/redacted and withheld.
+- [ ] Every secret-shaped example is refused and not echoed.
+- [ ] No live payments / email / hosting / access claims anywhere in the output.
+- [ ] `writesMemory: false` — nothing is stored; candidates are proposals only.
+- [ ] `--check` and `pnpm test:wellness-creator-workflow` are green.
+
 ## Demo Packet Export QA
 
 Export and review the single shareable packet a test customer would receive.

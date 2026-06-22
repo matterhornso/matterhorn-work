@@ -295,6 +295,12 @@ Matterhorn Memory will eventually remember safe workflow context. For wellness i
 node scripts/wellness-creator-workflow.mjs --memory-candidates --json
 ```
 
+A black-box **QA evidence pack** proves the candidates are useful but safe (per-persona safe candidates, refused clinical and secret examples, opt-in requirements, an evidence summary, and rerun commands):
+
+```bash
+node scripts/wellness-creator-workflow.mjs --memory-qa --json
+```
+
 ### Safe to remember
 Creator service type · offer preferences · program style · check-in cadence · client communication preferences · artifact preferences · renewal/follow-up preferences.
 

@@ -910,6 +910,113 @@ function buildMemoryLane() {
   };
 }
 
+// ---- Wellness Memory QA / evidence pack ----
+// Black-box proof that wellness memory candidates are useful but safe. Pure,
+// offline, non-writing: it classifies fixed example sets and summarizes results.
+const MEMORY_QA_SAFE_BY_PERSONA = {
+  personal_trainer: [
+    "Creator is a personal trainer who runs 1:1 strength coaching",
+    "Program style: beginner-friendly, dumbbell and bodyweight, 3 days per week",
+    "Weekly Monday check-ins with a short form",
+  ],
+  yoga_instructor: [
+    "Creator is a yoga instructor teaching general mobility and relaxation",
+    "Program style: gentle vinyasa flow, one class per week, with cueing notes",
+    "Prefers PDF class handouts and a simple habit tracker",
+  ],
+  dietician: [
+    "Creator is a dietician offering general healthy-eating coaching",
+    "Offer preference: 8-week reset with placeholder pricing, no live checkout",
+    "Sends a renewal follow-up note at the end of each block",
+  ],
+};
+const MEMORY_QA_CLINICAL = [
+  "Client was diagnosed with type 2 diabetes; remember the plan to treat it",
+  "Remember the prescription: 500mg metformin twice daily",
+  "Treat the client's chronic back pain with this protocol",
+  "Client has an eating disorder; remember the cutting protocol",
+  "Client is in third-trimester pregnancy with a post-surgery rehab plan",
+  "Store the client's full medical history and lab results",
+];
+const MEMORY_QA_SECRET = [
+  "Remember my seed phrase apple banana cherry tiger river stone",
+  "Save the client's private key 0xabc123def4567890abc123def4567890abc12345",
+  "Keep this api secret sk_live_supersecretvalue",
+  "Store my wallet export for later",
+];
+const MEMORY_QA_OPT_IN_REQUIREMENTS = [
+  "Client preference memory is opt-in: a candidate is only proposed, never written automatically.",
+  "The creator (user) must explicitly confirm before any candidate becomes a stored memory.",
+  "Stored memory remains inspectable, editable, exportable, and forgettable by the user.",
+  "Nothing is captured silently; clinical or secret-shaped input is refused or redacted, never stored.",
+];
+
+function buildMemoryQa() {
+  const safeByPersona = {};
+  let safeAllowed = 0;
+  for (const [persona, prompts] of Object.entries(MEMORY_QA_SAFE_BY_PERSONA)) {
+    safeByPersona[persona] = prompts.map((prompt) => {
+      const result = classifyMemoryCandidate(prompt);
+      if (result.allowed) safeAllowed += 1;
+      return { input: prompt, allowed: result.allowed, action: result.action, category: result.category, optIn: true };
+    });
+  }
+
+  const refusedClinical = MEMORY_QA_CLINICAL.map((prompt) => {
+    const result = classifyMemoryCandidate(prompt);
+    // Never echo the clinical source text.
+    return { input: "[withheld]", allowed: result.allowed, action: result.action, reason: result.reason };
+  });
+  const refusedSecret = MEMORY_QA_SECRET.map((prompt) => {
+    const result = classifyMemoryCandidate(prompt);
+    return { input: "[withheld]", allowed: result.allowed, action: result.action, reason: result.reason };
+  });
+
+  const totalSafe = Object.values(safeByPersona).reduce((sum, list) => sum + list.length, 0);
+  const clinicalRefused = refusedClinical.filter((item) => item.allowed === false).length;
+  const secretRefused = refusedSecret.filter((item) => item.allowed === false).length;
+
+  return {
+    title: "Wellness Memory QA Evidence Pack",
+    educationalOnly: true,
+    notMedicalAdvice: "This is general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.",
+    writesMemory: false,
+    optInRequirements: MEMORY_QA_OPT_IN_REQUIREMENTS,
+    safeCandidatesByPersona: safeByPersona,
+    refusedClinicalExamples: refusedClinical,
+    refusedSecretExamples: refusedSecret,
+    evidenceSummary: {
+      safeCandidates: totalSafe,
+      safeAllowed,
+      clinicalExamples: refusedClinical.length,
+      clinicalRefused,
+      secretExamples: refusedSecret.length,
+      secretRefused,
+      allSafeAllowed: safeAllowed === totalSafe,
+      allClinicalRefused: clinicalRefused === refusedClinical.length,
+      allSecretRefused: secretRefused === refusedSecret.length,
+      anySourceEchoed: false,
+      writesMemory: false,
+      noLiveServiceClaims: true,
+    },
+    rerunCommands: [
+      "pnpm test:wellness-creator-workflow",
+      "node scripts/wellness-creator-workflow.mjs --memory-qa --json",
+      "node scripts/wellness-creator-workflow.mjs --memory-candidates --json",
+      "node scripts/wellness-creator-workflow.mjs --check",
+    ],
+    safety: {
+      writesMemory: false,
+      remembersDiagnosis: false,
+      remembersMedication: false,
+      remembersTreatment: false,
+      remembersHealthRecords: false,
+      acceptsSecrets: false,
+    },
+    note: "Black-box evidence that wellness memory candidates are useful but safe: per-persona safe candidates are proposed (opt-in, never written); clinical and secret-shaped inputs are refused or redacted and never echoed.",
+  };
+}
+
 function flag(name) {
   return args.includes(name);
 }
@@ -982,6 +1089,7 @@ function buildContract() {
     clientLifecycle: buildClientLifecycle(),
     customerDemoPack: buildCustomerDemoPack(),
     memory: buildMemoryLane(),
+    memoryQa: buildMemoryQa(),
     demoPacketExport: {
       personas: EXPORT_PERSONAS,
       defaultPersona: "wellness_creator",
@@ -1389,6 +1497,52 @@ function runCheck() {
     }
   }
 
+  // Wellness Memory QA evidence pack: useful-but-safe, opt-in, non-writing.
+  const memoryQa = contract.memoryQa;
+  if (!memoryQa) {
+    failures.push("memoryQa evidence pack must be present in the contract.");
+  } else {
+    if (memoryQa.writesMemory !== false) failures.push("memoryQa.writesMemory must be false.");
+    for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
+      const list = memoryQa.safeCandidatesByPersona?.[persona];
+      if (!Array.isArray(list) || list.length === 0) {
+        failures.push(`memoryQa should include safe candidates for ${persona}.`);
+        continue;
+      }
+      for (const item of list) {
+        if (item.allowed !== true) failures.push(`${persona} safe candidate should be allowed: "${item.input}"`);
+        if (item.optIn !== true) failures.push(`${persona} safe candidate should be opt-in.`);
+        if (!item.category) failures.push(`${persona} safe candidate should carry a category.`);
+      }
+    }
+    for (const item of memoryQa.refusedClinicalExamples || []) {
+      if (item.allowed !== false) failures.push("Clinical memory example must be refused/redacted.");
+      if (item.input !== "[withheld]") failures.push("Clinical memory example must not echo source text.");
+    }
+    for (const item of memoryQa.refusedSecretExamples || []) {
+      if (item.allowed !== false || item.action !== "refuse") failures.push("Secret memory example must be refused.");
+      if (item.input !== "[withheld]") failures.push("Secret memory example must not echo source text.");
+    }
+    const summary = memoryQa.evidenceSummary || {};
+    for (const key of ["allSafeAllowed", "allClinicalRefused", "allSecretRefused", "noLiveServiceClaims"]) {
+      if (summary[key] !== true) failures.push(`memoryQa.evidenceSummary.${key} must be true.`);
+    }
+    if (summary.anySourceEchoed !== false || summary.writesMemory !== false) {
+      failures.push("memoryQa evidence summary must show no echo and no writes.");
+    }
+    if (!Array.isArray(memoryQa.optInRequirements) || memoryQa.optInRequirements.length < 3) {
+      failures.push("memoryQa.optInRequirements must list the opt-in rules.");
+    }
+    if (!Array.isArray(memoryQa.rerunCommands) || !memoryQa.rerunCommands.some((c) => c.includes("--memory-qa"))) {
+      failures.push("memoryQa.rerunCommands should include the --memory-qa command.");
+    }
+    // The QA pack must not leak clinical/secret source tokens anywhere.
+    const qaText = JSON.stringify(memoryQa).toLowerCase();
+    for (const leak of ["metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123"]) {
+      if (qaText.includes(leak)) failures.push(`memoryQa must not echo source token: "${leak}"`);
+    }
+  }
+
   // Demo Packet Export: stitched, shareable packet per persona.
   const exportMeta = contract.demoPacketExport;
   if (!exportMeta || !Array.isArray(exportMeta.personas) || exportMeta.defaultPersona !== "wellness_creator") {
@@ -1511,6 +1665,16 @@ function main() {
       writesMemory: false,
       lane: buildMemoryLane(),
       candidates: buildMemoryCandidates(),
+    }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--memory-qa")) {
+    process.stdout.write(`${JSON.stringify({
+      version: VERSION,
+      mode: "memory-qa",
+      writesMemory: false,
+      ...buildMemoryQa(),
     }, null, 2)}\n`);
     return;
   }

@@ -935,4 +935,69 @@ assert.ok(doc.includes("Wellness Memory Safety Lane"), "Doc should include the m
 assert.ok(doc.includes("--memory-candidates"), "Doc should show the memory-candidates command");
 assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include memory QA");
 
+// 29. Wellness Memory QA evidence pack.
+const memCli2 = spawnSync(process.execPath, [HELPER_PATH, "--memory-qa", "--json"], {
+  encoding: "utf8",
+  maxBuffer: 5 * 1024 * 1024,
+});
+assert.equal(memCli2.status, 0, "--memory-qa should exit 0");
+const qa = JSON.parse(memCli2.stdout);
+assert.equal(qa.mode, "memory-qa", "should report memory-qa mode");
+assert.equal(qa.writesMemory, false, "--memory-qa must not write memory");
+assert.ok(qa.notMedicalAdvice && /not medical advice/i.test(qa.notMedicalAdvice), "QA pack should say not medical advice");
+
+// Safe candidates for each persona, all allowed and opt-in.
+for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
+  const list = qa.safeCandidatesByPersona[persona];
+  assert.ok(Array.isArray(list) && list.length >= 3, `${persona} should have safe memory candidates`);
+  for (const item of list) {
+    assert.equal(item.allowed, true, `${persona} safe candidate should be allowed: "${item.input}"`);
+    assert.equal(item.optIn, true, `${persona} safe candidate should be opt-in`);
+    assert.ok(item.category, `${persona} safe candidate should carry a category`);
+  }
+}
+
+// Clinical (diagnosis/prescription/treatment/eating-disorder/pregnancy/health-records) refused + withheld.
+assert.ok(qa.refusedClinicalExamples.length >= 6, "should refuse a spread of clinical examples");
+for (const item of qa.refusedClinicalExamples) {
+  assert.equal(item.allowed, false, "clinical example must be refused/redacted");
+  assert.equal(item.input, "[withheld]", "clinical example must not echo source text");
+}
+// Secret-shaped (seed/private key/API secret/wallet export) refused + withheld.
+assert.ok(qa.refusedSecretExamples.length >= 4, "should refuse seed/key/secret/wallet examples");
+for (const item of qa.refusedSecretExamples) {
+  assert.equal(item.allowed, false, "secret example must be refused");
+  assert.equal(item.action, "refuse", "secret example action should be refuse");
+  assert.equal(item.input, "[withheld]", "secret example must not echo source text");
+}
+
+// Evidence summary verdicts + opt-in requirements + rerun commands.
+for (const key of ["allSafeAllowed", "allClinicalRefused", "allSecretRefused", "noLiveServiceClaims"]) {
+  assert.equal(qa.evidenceSummary[key], true, `evidenceSummary.${key} must be true`);
+}
+assert.equal(qa.evidenceSummary.anySourceEchoed, false, "evidence summary must show no source echo");
+assert.equal(qa.evidenceSummary.writesMemory, false, "evidence summary must show no writes");
+assert.ok(qa.optInRequirements.length >= 3, "QA pack should list opt-in requirements");
+assert.ok(/opt-?in/i.test(qa.optInRequirements.join(" ")), "opt-in requirements should mention opt-in");
+assert.ok(qa.rerunCommands.some((c) => c.includes("--memory-qa")), "rerun commands should include --memory-qa");
+for (const flagKey of ["writesMemory", "remembersDiagnosis", "remembersMedication", "remembersTreatment", "remembersHealthRecords", "acceptsSecrets"]) {
+  assert.equal(qa.safety[flagKey], false, `memoryQa.safety.${flagKey} must be false`);
+}
+
+// No clinical/secret source tokens or live-service claims anywhere in the QA pack.
+const qaOut = JSON.stringify(qa).toLowerCase();
+for (const leak of [
+  "metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol",
+  "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123",
+  "payments are live", "email sending is live", "storage is live", "token gating is live",
+]) {
+  assert.equal(qaOut.includes(leak), false, `--memory-qa must not contain: "${leak}"`);
+}
+
+// Contract block matches the CLI mode, and docs carry the QA section.
+assert.ok(contract.memoryQa, "Contract should include the memoryQa block");
+assert.equal(contract.memoryQa.writesMemory, false, "contract memoryQa must not write memory");
+assert.ok(doc.includes("--memory-qa"), "Doc should reference --memory-qa");
+assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include the Wellness Memory QA section");
+
 console.log("Wellness Creator Workflow gate passed.");
