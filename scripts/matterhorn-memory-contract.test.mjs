@@ -30,6 +30,10 @@ for (const token of [
   "MatterhornMemoryRedactionResult",
   "MatterhornMemorySafetyPolicy",
   "MatterhornMemoryStore",
+  "MatterhornMemoryContextPacket",
+  "MatterhornMemorySuggestion",
+  "MatterhornMemoryUsePolicy",
+  "MatterhornMemoryExportManifest",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -42,6 +46,10 @@ for (const token of [
   "DEFAULT_MATTERHORN_MEMORY_SAFETY_POLICY",
   "FORBIDDEN_MEMORY_SECRET_FIELD_NAMES",
   "FORBIDDEN_MEMORY_SECRET_PATTERNS",
+  "MATTERHORN_MEMORY_CONTEXT_PACKET_VERSION",
+  "MATTERHORN_MEMORY_SUGGESTION_VERSION",
+  "DEFAULT_MATTERHORN_MEMORY_USE_POLICY",
+  "MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -112,6 +120,73 @@ for (const field of ["source", "sourceId", "capturedAt", "capturedBy", "confiden
   assert.ok(
     memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
     `MatterhornMemoryProvenance must include ${field}`,
+  );
+}
+
+// 5a. Context packet shape includes every required field.
+for (const field of [
+  "version",
+  "taskId",
+  "sessionId",
+  "workspaceId",
+  "query",
+  "records",
+  "omittedRecords",
+  "safetySummary",
+  "visibleToUser",
+  "generatedAt",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemoryContextPacket must include ${field}`,
+  );
+}
+
+// 5b. Suggestion shape includes every required field.
+for (const field of [
+  "version",
+  "proposedRecord",
+  "reason",
+  "captureMode",
+  "canAutoCapture",
+  "requiresExplicitConsent",
+  "forbiddenIfSecretDetected",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemorySuggestion must include ${field}`,
+  );
+}
+
+// 5c. Use policy shape includes every required field.
+for (const field of [
+  "hiddenMemoryAllowed",
+  "userVisibleMemoryChipsRequired",
+  "autoCaptureAllowed",
+  "secretCaptureAllowed",
+  "wellnessClinicalCaptureRequiresExplicitConsent",
+  "marketSubmissionMemoryAllowed",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemoryUsePolicy must include ${field}`,
+  );
+}
+
+// 5d. Export manifest shape includes every required field.
+for (const field of [
+  "version",
+  "exportedAt",
+  "recordCount",
+  "sha256",
+  "includesSecrets",
+  "includesRawSignatures",
+  "includesSignedPayloads",
+  "includesWalletExports",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemoryExportManifest must include ${field}`,
   );
 }
 
@@ -299,7 +374,190 @@ assert.equal(
   "wellness memory with guaranteed outcome without opt-in must be rejected",
 );
 
-// 11. Combined safety gate catches all violations.
+// 11. Context packets must be visible to user and contain only safe records.
+const validContextPacket = {
+  version: "matterhorn.memory.context-packet.v1",
+  taskId: "task-1",
+  sessionId: "session-1",
+  workspaceId: "ws-1",
+  query: "show my TAO wallet",
+  records: [validBittensor, validMarket],
+  omittedRecords: 0,
+  safetySummary: "Only public, non-custodial memories included.",
+  visibleToUser: true,
+  generatedAt: new Date().toISOString(),
+};
+assert.ok(
+  memory.validateMemoryContextPacket(validContextPacket).ok,
+  "valid context packet should pass",
+);
+
+const hiddenContextPacket = {
+  ...validContextPacket,
+  visibleToUser: false,
+};
+assert.equal(
+  memory.validateMemoryContextPacket(hiddenContextPacket).ok,
+  false,
+  "context packet must be visible to user",
+);
+
+const unsafeContextPacket = {
+  ...validContextPacket,
+  records: [custodialBittensor],
+};
+assert.equal(
+  memory.validateMemoryContextPacket(unsafeContextPacket).ok,
+  false,
+  "context packet must reject unsafe records",
+);
+
+// 12. Memory suggestions cannot auto-capture and require explicit consent.
+const validSuggestion = {
+  version: "matterhorn.memory.suggestion.v1",
+  proposedRecord: validBittensor,
+  reason: "User mentioned this address for TAO lookups",
+  captureMode: "user_confirmed_only",
+  canAutoCapture: false,
+  requiresExplicitConsent: true,
+  forbiddenIfSecretDetected: true,
+};
+assert.ok(
+  memory.validateMemorySuggestion(validSuggestion).ok,
+  "valid suggestion should pass",
+);
+
+const autoCaptureSuggestion = {
+  ...validSuggestion,
+  canAutoCapture: true,
+};
+assert.equal(
+  memory.validateMemorySuggestion(autoCaptureSuggestion).ok,
+  false,
+  "suggestion must not allow auto-capture",
+);
+
+const secretSuggestion = {
+  ...validSuggestion,
+  proposedRecord: custodialBittensor,
+};
+assert.equal(
+  memory.validateMemorySuggestion(secretSuggestion).ok,
+  false,
+  "suggestion containing secret material must be rejected",
+);
+
+// 13. Use policies cannot enable hidden memory, auto-capture, or secret capture.
+const validUsePolicy = {
+  hiddenMemoryAllowed: false,
+  userVisibleMemoryChipsRequired: true,
+  autoCaptureAllowed: false,
+  secretCaptureAllowed: false,
+  wellnessClinicalCaptureRequiresExplicitConsent: true,
+  marketSubmissionMemoryAllowed: false,
+};
+assert.ok(
+  memory.validateMemoryUsePolicy(validUsePolicy).ok,
+  "valid use policy should pass",
+);
+
+const hiddenMemoryPolicy = {
+  ...validUsePolicy,
+  hiddenMemoryAllowed: true,
+};
+assert.equal(
+  memory.validateMemoryUsePolicy(hiddenMemoryPolicy).ok,
+  false,
+  "use policy must not allow hidden memory",
+);
+
+const autoCapturePolicy = {
+  ...validUsePolicy,
+  autoCaptureAllowed: true,
+};
+assert.equal(
+  memory.validateMemoryUsePolicy(autoCapturePolicy).ok,
+  false,
+  "use policy must not allow auto-capture",
+);
+
+const secretCapturePolicy = {
+  ...validUsePolicy,
+  secretCaptureAllowed: true,
+};
+assert.equal(
+  memory.validateMemoryUsePolicy(secretCapturePolicy).ok,
+  false,
+  "use policy must not allow secret capture",
+);
+
+const marketSubmissionPolicy = {
+  ...validUsePolicy,
+  marketSubmissionMemoryAllowed: true,
+};
+assert.equal(
+  memory.validateMemoryUsePolicy(marketSubmissionPolicy).ok,
+  false,
+  "use policy must not allow market submission memory",
+);
+
+// 14. Export manifests cannot claim secrets, signatures, payloads, or wallet exports.
+const validExportManifest = {
+  version: "matterhorn.memory.export-manifest.v1",
+  exportedAt: new Date().toISOString(),
+  recordCount: 2,
+  sha256: "abc123...",
+  includesSecrets: false,
+  includesRawSignatures: false,
+  includesSignedPayloads: false,
+  includesWalletExports: false,
+};
+assert.ok(
+  memory.validateMemoryExportManifest(validExportManifest).ok,
+  "valid export manifest should pass",
+);
+
+const secretsExportManifest = {
+  ...validExportManifest,
+  includesSecrets: true,
+};
+assert.equal(
+  memory.validateMemoryExportManifest(secretsExportManifest).ok,
+  false,
+  "export manifest must not claim to include secrets",
+);
+
+const signaturesExportManifest = {
+  ...validExportManifest,
+  includesRawSignatures: true,
+};
+assert.equal(
+  memory.validateMemoryExportManifest(signaturesExportManifest).ok,
+  false,
+  "export manifest must not claim to include raw signatures",
+);
+
+const payloadsExportManifest = {
+  ...validExportManifest,
+  includesSignedPayloads: true,
+};
+assert.equal(
+  memory.validateMemoryExportManifest(payloadsExportManifest).ok,
+  false,
+  "export manifest must not claim to include signed payloads",
+);
+
+const walletExportsManifest = {
+  ...validExportManifest,
+  includesWalletExports: true,
+};
+assert.equal(
+  memory.validateMemoryExportManifest(walletExportsManifest).ok,
+  false,
+  "export manifest must not claim to include wallet exports",
+);
+
+// 15. Combined safety gate catches all violations.
 assert.equal(memory.validateMemorySafety(custodialBittensor).ok, false);
 assert.equal(memory.validateMemorySafety(liveSubmissionMarket).ok, false);
 assert.equal(memory.validateMemorySafety(clinicalWithoutConsent).ok, false);
@@ -308,7 +566,7 @@ assert.ok(memory.validateMemorySafety(validBittensor).ok);
 assert.ok(memory.validateMemorySafety(validMarket).ok);
 assert.ok(memory.validateMemorySafety(validWellness).ok);
 
-// 12. Docs cover the contract, safety invariants, and ownership.
+// 16. Docs cover the contract, safety invariants, and ownership.
 const memoryDocLower = memoryDoc.toLowerCase();
 for (const phrase of [
   "Matterhorn Memory",
@@ -319,6 +577,10 @@ for (const phrase of [
   "MatterhornMemorySensitivity",
   "MatterhornMemoryProvenance",
   "MatterhornMemoryRedactionResult",
+  "MatterhornMemoryContextPacket",
+  "MatterhornMemorySuggestion",
+  "MatterhornMemoryUsePolicy",
+  "MatterhornMemoryExportManifest",
   "forbidden_secret",
   "canHoldPrivateKeys: false",
   "canHoldBearerTokens: false",
@@ -326,6 +588,10 @@ for (const phrase of [
   "marketLiveSubmissionEnabled: false",
   "bittensorCustodialEnabled: false",
   "wellnessOptInRequired: true",
+  "hiddenMemoryAllowed: false",
+  "autoCaptureAllowed: false",
+  "userVisibleMemoryChipsRequired: true",
+  "includesSecrets: false",
   "seed phrases",
   "private keys",
   "API secrets",
@@ -338,6 +604,8 @@ for (const phrase of [
   "opt-in",
   "SS58",
   "external signer",
+  "context packet",
+  "memory suggestion",
 ]) {
   assert.ok(
     memoryDocLower.includes(phrase.toLowerCase()),

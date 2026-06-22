@@ -364,3 +364,222 @@ export interface MatterhornMemoryStore {
   records: MatterhornMemoryRecord[];
   policy: MatterhornMemorySafetyPolicy;
 }
+
+export const MATTERHORN_MEMORY_CONTEXT_PACKET_VERSION = "matterhorn.memory.context-packet.v1";
+
+export interface MatterhornMemoryContextPacket {
+  version: "matterhorn.memory.context-packet.v1";
+  taskId?: string;
+  sessionId?: string;
+  workspaceId?: string;
+  query: string;
+  records: MatterhornMemoryRecord[];
+  omittedRecords: number;
+  safetySummary: string;
+  visibleToUser: true;
+  generatedAt: string;
+}
+
+export const MATTERHORN_MEMORY_SUGGESTION_VERSION = "matterhorn.memory.suggestion.v1";
+
+export interface MatterhornMemorySuggestion {
+  version: "matterhorn.memory.suggestion.v1";
+  proposedRecord: MatterhornMemoryRecord;
+  reason: string;
+  captureMode: "user_confirmed_only";
+  canAutoCapture: false;
+  requiresExplicitConsent: true;
+  forbiddenIfSecretDetected: true;
+}
+
+export const MATTERHORN_MEMORY_USE_POLICY_DEFAULTS = {
+  hiddenMemoryAllowed: false,
+  userVisibleMemoryChipsRequired: true,
+  autoCaptureAllowed: false,
+  secretCaptureAllowed: false,
+  wellnessClinicalCaptureRequiresExplicitConsent: true,
+  marketSubmissionMemoryAllowed: false,
+} as const;
+
+export interface MatterhornMemoryUsePolicy {
+  hiddenMemoryAllowed: false;
+  userVisibleMemoryChipsRequired: true;
+  autoCaptureAllowed: false;
+  secretCaptureAllowed: false;
+  wellnessClinicalCaptureRequiresExplicitConsent: true;
+  marketSubmissionMemoryAllowed: false;
+}
+
+export const DEFAULT_MATTERHORN_MEMORY_USE_POLICY: MatterhornMemoryUsePolicy = {
+  hiddenMemoryAllowed: false,
+  userVisibleMemoryChipsRequired: true,
+  autoCaptureAllowed: false,
+  secretCaptureAllowed: false,
+  wellnessClinicalCaptureRequiresExplicitConsent: true,
+  marketSubmissionMemoryAllowed: false,
+};
+
+export const MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION = "matterhorn.memory.export-manifest.v1";
+
+export interface MatterhornMemoryExportManifest {
+  version: "matterhorn.memory.export-manifest.v1";
+  exportedAt: string;
+  recordCount: number;
+  sha256: string;
+  includesSecrets: false;
+  includesRawSignatures: false;
+  includesSignedPayloads: false;
+  includesWalletExports: false;
+}
+
+export function validateMemoryContextPacket(
+  packet: MatterhornMemoryContextPacket,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (packet.version !== MATTERHORN_MEMORY_CONTEXT_PACKET_VERSION) {
+    errors.push(`context packet version must be ${MATTERHORN_MEMORY_CONTEXT_PACKET_VERSION}`);
+  }
+
+  if (typeof packet.query !== "string" || packet.query.length === 0) {
+    errors.push("context packet query must be a non-empty string");
+  }
+
+  if (!Array.isArray(packet.records)) {
+    errors.push("context packet records must be an array");
+  } else {
+    for (const record of packet.records) {
+      const result = validateMemorySafety(record);
+      if (!result.ok) {
+        errors.push(`context packet contains unsafe record ${record.id}: ${result.errors.join("; ")}`);
+      }
+    }
+  }
+
+  if (typeof packet.omittedRecords !== "number" || packet.omittedRecords < 0) {
+    errors.push("context packet omittedRecords must be a non-negative number");
+  }
+
+  if (typeof packet.safetySummary !== "string" || packet.safetySummary.length === 0) {
+    errors.push("context packet safetySummary must be a non-empty string");
+  }
+
+  if (packet.visibleToUser !== true) {
+    errors.push("context packet must be visible to user (visibleToUser: true)");
+  }
+
+  if (typeof packet.generatedAt !== "string" || packet.generatedAt.length === 0) {
+    errors.push("context packet generatedAt must be a non-empty string");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateMemorySuggestion(
+  suggestion: MatterhornMemorySuggestion,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (suggestion.version !== MATTERHORN_MEMORY_SUGGESTION_VERSION) {
+    errors.push(`suggestion version must be ${MATTERHORN_MEMORY_SUGGESTION_VERSION}`);
+  }
+
+  if (suggestion.captureMode !== "user_confirmed_only") {
+    errors.push("suggestion captureMode must be user_confirmed_only");
+  }
+
+  if (suggestion.canAutoCapture !== false) {
+    errors.push("suggestion canAutoCapture must be false");
+  }
+
+  if (suggestion.requiresExplicitConsent !== true) {
+    errors.push("suggestion requiresExplicitConsent must be true");
+  }
+
+  if (suggestion.forbiddenIfSecretDetected !== true) {
+    errors.push("suggestion forbiddenIfSecretDetected must be true");
+  }
+
+  const recordResult = validateMemorySafety(suggestion.proposedRecord);
+  if (!recordResult.ok) {
+    errors.push(`suggested record is unsafe: ${recordResult.errors.join("; ")}`);
+  }
+
+  if (isForbiddenMemorySecretBody(suggestion.proposedRecord.body)) {
+    errors.push("suggested record body contains forbidden secret material");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateMemoryUsePolicy(
+  policy: MatterhornMemoryUsePolicy,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (policy.hiddenMemoryAllowed !== false) {
+    errors.push("use policy hiddenMemoryAllowed must be false");
+  }
+
+  if (policy.userVisibleMemoryChipsRequired !== true) {
+    errors.push("use policy userVisibleMemoryChipsRequired must be true");
+  }
+
+  if (policy.autoCaptureAllowed !== false) {
+    errors.push("use policy autoCaptureAllowed must be false");
+  }
+
+  if (policy.secretCaptureAllowed !== false) {
+    errors.push("use policy secretCaptureAllowed must be false");
+  }
+
+  if (policy.wellnessClinicalCaptureRequiresExplicitConsent !== true) {
+    errors.push("use policy wellnessClinicalCaptureRequiresExplicitConsent must be true");
+  }
+
+  if (policy.marketSubmissionMemoryAllowed !== false) {
+    errors.push("use policy marketSubmissionMemoryAllowed must be false");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateMemoryExportManifest(
+  manifest: MatterhornMemoryExportManifest,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (manifest.version !== MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION) {
+    errors.push(`export manifest version must be ${MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION}`);
+  }
+
+  if (typeof manifest.exportedAt !== "string" || manifest.exportedAt.length === 0) {
+    errors.push("export manifest exportedAt must be a non-empty string");
+  }
+
+  if (typeof manifest.recordCount !== "number" || manifest.recordCount < 0) {
+    errors.push("export manifest recordCount must be a non-negative number");
+  }
+
+  if (typeof manifest.sha256 !== "string" || manifest.sha256.length === 0) {
+    errors.push("export manifest sha256 must be a non-empty string");
+  }
+
+  if (manifest.includesSecrets !== false) {
+    errors.push("export manifest must not include secrets (includesSecrets: false)");
+  }
+
+  if (manifest.includesRawSignatures !== false) {
+    errors.push("export manifest must not include raw signatures (includesRawSignatures: false)");
+  }
+
+  if (manifest.includesSignedPayloads !== false) {
+    errors.push("export manifest must not include signed payloads (includesSignedPayloads: false)");
+  }
+
+  if (manifest.includesWalletExports !== false) {
+    errors.push("export manifest must not include wallet exports (includesWalletExports: false)");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
