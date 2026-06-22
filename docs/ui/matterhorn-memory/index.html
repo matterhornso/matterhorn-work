@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matterhorn Memory UI — Design Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SHOWCASE HEADER
+     ═══════════════════════════════════════════════════════════ -->
+<header class="showcase-header">
+  <div class="showcase-header__title">Matterhorn Memory UI — Design Prototype</div>
+  <div class="showcase-header__right">
+    <span class="showcase-header__meta">Matterhorn · v0.14</span>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <svg class="theme-toggle__sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="theme-toggle__moon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <span id="themeLabel">Dark</span>
+    </button>
+  </div>
+</header>
+
+<div class="showcase-grid">
+  <!-- ═══════════════════════════════════════════════════════════
+       NAV
+       ═══════════════════════════════════════════════════════════ -->
+  <nav class="showcase-nav">
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Overview</div>
+      <div class="showcase-nav__link is-active" onclick="showScreen('screen-1')">
+        <span class="showcase-nav__dot showcase-nav__dot--blue"></span>Memory Overview
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-10')">
+        <span class="showcase-nav__dot"></span>Chat Memory Chips
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Protocol Memories</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-2')">
+        <span class="showcase-nav__dot showcase-nav__dot--pink"></span>Bittensor
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-3')">
+        <span class="showcase-nav__dot showcase-nav__dot--blue"></span>Hyperliquid
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-4')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>Polymarket
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Features</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-5')">
+        <span class="showcase-nav__dot showcase-nav__dot--green"></span>Wellness Memories
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-6')">
+        <span class="showcase-nav__dot"></span>Watchlists
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-7')">
+        <span class="showcase-nav__dot"></span>Receipts &amp; Evidence
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-8')">
+        <span class="showcase-nav__dot"></span>Sources &amp; Provenance
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Privacy</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-9')">
+        <span class="showcase-nav__dot showcase-nav__dot--amber"></span>Forget Center
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Responsive</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-11')">
+        <span class="showcase-nav__dot"></span>Mobile Memory
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">States</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-12')">
+        <span class="showcase-nav__dot"></span>Empty / Loading
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-13')">
+        <span class="showcase-nav__dot showcase-nav__dot--amber"></span>Secret / Disabled
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 1 — MEMORY OVERVIEW
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-1">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 01</span>
+      <span class="screen-block__label">Memory Overview — App Shell</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+      <span class="screen-block__theme">Dark</span>
+    </div>
+
+    <div class="memory-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--mm-border)">
+
+      <!-- Sidebar -->
+      <div class="memory-sidebar">
+        <div class="memory-sidebar__header">
+          <span class="memory-sidebar__title">Memory</span>
+          <span class="memory-sidebar__count">127 items</span>
+        </div>
+        <div class="memory-nav">
+          <div class="memory-nav__item is-active">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Overview
+            <span class="memory-nav__badge">127</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Bittensor
+            <span class="memory-nav__badge">14</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Hyperliquid
+            <span class="memory-nav__badge">23</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Polymarket
+            <span class="memory-nav__badge">9</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            Wellness
+            <span class="memory-nav__badge">31</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Watchlists
+            <span class="memory-nav__badge">8</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Receipts
+            <span class="memory-nav__badge">12</span>
+          </div>
+          <div class="memory-nav__item">
+            <svg class="memory-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Sources
+            <span class="memory-nav__badge">30</span>
+          </div>
+        </div>
+        <div class="memory-sidebar__footer">
+          <div class="memory-sidebar__privacy-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Privacy &amp; Forget Center
+          </div>
+        </div>
+      </div>
+
+      <!-- Main -->
+      <div class="memory-main">
+        <div class="memory-main__header">
+          <div class="memory-main__title-row">
+            <h1 class="memory-main__title">Memory Overview</h1>
+            <span class="showcase-nav__badge mm-badge" style="font-size:11px;padding:2px 8px;border-radius:9999px;background:var(--mm-accent-dim);color:var(--mm-accent)">127 items</span>
+          </div>
+          <div class="memory-main__actions">
+            <div class="memory-main__search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input placeholder="Search memories…">
+            </div>
+            <button class="mm-btn mm-btn--primary">+ New Memory</button>
+          </div>
+        </div>
+
+        <div class="memory-content" style="padding:20px 24px">
+
+          <!-- Chat chip bar (inline on overview) -->
+          <div class="mm-chip-bar">
+            <span class="mm-chip-bar__label">Using 3 memories</span>
+            <span class="mm-chip mm-chip--active">BTC wallet behavior <span class="mm-chip__count">×1</span></span>
+            <span class="mm-chip mm-chip--active">Funding rate alert prefs <span class="mm-chip__count">×1</span></span>
+            <span class="mm-chip mm-chip--active">Polymarket markets tracked <span class="mm-chip__count">×1</span></span>
+            <span class="mm-chip">Remember this</span>
+            <span class="mm-chip mm-chip--forget">Forget related</span>
+          </div>
+
+          <div class="memory-content__section">
+            <div class="memory-content__section-title">
+              Recent Memories
+              <span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--mm-text-tertiary)">Updated today</span>
+            </div>
+
+            <div class="mm-grid">
+
+              <!-- Card 1: Fact type -->
+              <div class="mm-card">
+                <div class="mm-card__header">
+                  <div class="mm-card__title">BTC funding rate above +0.0001/hr on Hyperliquid BTC-PERP</div>
+                  <span class="mm-card__scope-badge mm-card__scope-badge--workspace">Workspace</span>
+                </div>
+                <div class="mm-card__meta">
+                  <span class="mm-badge mm-badge--type">Fact</span>
+                  <span class="mm-badge mm-badge--sensitivity">Personal</span>
+                  <span class="mm-source">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    Hyperliquid market data
+                  </span>
+                  <span class="mm-confidence">
+                    <span class="mm-confidence__bar">
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment is-filled"></span>
+                    </span>
+                    92%
+                  </span>
+                </div>
+                <div class="mm-card__why">
+                  <div class="mm-card__why-label">Why remembered?</div>
+                  <div class="mm-card__why-text">You set a funding rate alert. Matterhorn saved the threshold to trigger future notifications.</div>
+                </div>
+                <div class="mm-card__timestamp">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Updated 2 hours ago
+                </div>
+                <div class="mm-card__actions">
+                  <button class="mm-btn mm-btn--primary">Use</button>
+                  <button class="mm-btn">Edit</button>
+                  <button class="mm-btn">Export</button>
+                  <button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button>
+                </div>
+              </div>
+
+              <!-- Card 2: Preference type -->
+              <div class="mm-card">
+                <div class="mm-card__header">
+                  <div class="mm-card__title">I prefer short-term funding rate monitoring alerts</div>
+                  <span class="mm-card__scope-badge">Session</span>
+                </div>
+                <div class="mm-card__meta">
+                  <span class="mm-badge mm-badge--type-preference">Preference</span>
+                  <span class="mm-badge mm-badge--sensitivity-personal">Personal</span>
+                  <span class="mm-source">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Chat conversation
+                  </span>
+                  <span class="mm-confidence">
+                    <span class="mm-confidence__bar">
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment"></span>
+                    </span>
+                    78%
+                  </span>
+                </div>
+                <div class="mm-card__why">
+                  <div class="mm-card__why-label">Why remembered?</div>
+                  <div class="mm-card__why-text">You explicitly told Matterhorn your alert preference during a chat about Hyperliquid.</div>
+                </div>
+                <div class="mm-card__timestamp">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Updated yesterday
+                </div>
+                <div class="mm-card__actions">
+                  <button class="mm-btn mm-btn--primary">Use</button>
+                  <button class="mm-btn">Edit</button>
+                  <button class="mm-btn">Export</button>
+                  <button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button>
+                </div>
+              </div>
+
+              <!-- Card 3: Protocol type -->
+              <div class="mm-card">
+                <div class="mm-card__header">
+                  <div class="mm-card__title">Polymarket markets tracked: BTC-PERP funding, ETH-PERP funding, SOL-PERP volume spike</div>
+                  <span class="mm-card__scope-badge mm-card__scope-badge--workspace">Workspace</span>
+                </div>
+                <div class="mm-card__meta">
+                  <span class="mm-badge mm-badge--type-protocol">Protocol</span>
+                  <span class="mm-badge mm-badge--sensitivity">Personal</span>
+                  <span class="mm-source">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    Polymarket market browse
+                  </span>
+                  <span class="mm-confidence">
+                    <span class="mm-confidence__bar">
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment is-filled"></span>
+                      <span class="mm-confidence__segment is-filled"></span>
+                    </span>
+                    95%
+                  </span>
+                </div>
+                <div class="mm-card__why">
+                  <div class="mm-card__why-label">Why remembered?</div>
+                  <div class="mm-card__why-text">You bookmarked these three Polymarket questions for ongoing monitoring.</div>
+                </div>
+                <div class="mm-card__timestamp">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Updated 3 days ago
+                </div>
+                <div class="mm-card__actions">
+                  <button class="mm-btn mm-btn--primary">Use</button>
+                  <button class="mm-btn">Edit</button>
+                  <button class="mm-btn">Export</button>
+                  <button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 2 — BITTENSOR MEMORIES
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-2">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 02</span>
+      <span class="screen-block__label">Bittensor Protocol Memories</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:520px;overflow-y:auto">
+      <div class="mm-protocol-header" style="margin-bottom:20px">
+        <div class="mm-protocol-icon mm-protocol-icon--btc" style="background:rgba(241,91,181,0.15);color:#F472B6;font-family:var(--font-mono)">⊗</div>
+        <div class="mm-protocol-info">
+          <div class="mm-protocol-name">Bittensor</div>
+          <div class="mm-protocol-desc">Validator behavior, stake preferences, subnet performance</div>
+        </div>
+        <div class="mm-protocol-stats">
+          <div class="mm-stat"><div class="mm-stat__value">14</div><div class="mm-stat__label">Memories</div></div>
+          <div class="mm-stat"><div class="mm-stat__value">8</div><div class="mm-stat__label">Validators</div></div>
+          <div class="mm-stat"><div class="mm-stat__value">92%</div><div class="mm-stat__label">Confidence</div></div>
+        </div>
+      </div>
+
+      <div class="mm-grid">
+        <div class="mm-card">
+          <div class="mm-card__header">
+            <div class="mm-card__title">Validator set on subnet 1 (Public Good) — stake distribution preferences</div>
+            <span class="mm-card__scope-badge mm-card__scope-badge--workspace">Workspace</span>
+          </div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-protocol">Protocol</span>
+            <span class="mm-badge mm-badge--sensitivity">Personal</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Bittensor blockchain state</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>94%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You reviewed the validator list and selected your top 5. Matterhorn recorded your selection criteria.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 1 day ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+        <div class="mm-card">
+          <div class="mm-card__header">
+            <div class="mm-card__title">Staking behavior: prefer auto-compounding for passive subnet positions</div>
+            <span class="mm-card__scope-badge">Session</span>
+          </div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-preference">Preference</span>
+            <span class="mm-badge mm-badge--sensitivity-high">High</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat conversation</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment"></span></span>68%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You asked about compounding strategies. Matterhorn saved your stated preference for future recommendations.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 2 days ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+        <div class="mm-card">
+          <div class="mm-card__header">
+            <div class="mm-card__title">Subnet 1 incentive mechanism: Yuma Consensus, delegation mechanics</div>
+            <span class="mm-card__scope-badge">Global</span>
+          </div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-fact">Fact</span>
+            <span class="mm-badge mm-badge--sensitivity">Personal</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Bittensor documentation</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>99%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You read the Bittensor documentation and asked a clarifying question. The fact was retained as context.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 5 days ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 3 — HYPERLIQUID MEMORIES
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-3">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 03</span>
+      <span class="screen-block__label">Hyperliquid Protocol Memories</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:480px;overflow-y:auto">
+      <div class="mm-protocol-header" style="margin-bottom:20px">
+        <div class="mm-protocol-icon mm-protocol-icon--hyp">H</div>
+        <div class="mm-protocol-info">
+          <div class="mm-protocol-name">Hyperliquid</div>
+          <div class="mm-protocol-desc">Perpetual positions, margin behavior, funding rate patterns</div>
+        </div>
+        <div class="mm-protocol-stats">
+          <div class="mm-stat"><div class="mm-stat__value">23</div><div class="mm-stat__label">Memories</div></div>
+          <div class="mm-stat"><div class="mm-stat__value">3</div><div class="mm-stat__label">Positions</div></div>
+        </div>
+      </div>
+      <div class="mm-grid">
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">BTC-PERP position: long 0.1 BTC, entry $64,250, funding rate preference tracked</div><span class="mm-card__scope-badge mm-card__scope-badge--workspace">Workspace</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-protocol">Protocol</span>
+            <span class="mm-badge mm-badge--sensitivity-high">High</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Hyperliquid exchange data</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>96%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">External signer received order terms for BTC-PERP. Matterhorn recorded the preview for audit trail.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 4 hours ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">Margin preference: conservative — max 10× leverage on BTC, 5× on alts</div><span class="mm-card__scope-badge">Session</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-preference">Preference</span>
+            <span class="mm-badge mm-badge--sensitivity-high">High</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat conversation</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment"></span></span>74%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You set a risk ceiling during onboarding. Matterhorn uses this to warn before dangerous previews.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 6 days ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 4 — POLYMARKET MEMORIES
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-4">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 04</span>
+      <span class="screen-block__label">Polymarket Protocol Memories</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:440px;overflow-y:auto">
+      <div class="mm-protocol-header" style="margin-bottom:20px">
+        <div class="mm-protocol-icon mm-protocol-icon--poly">P</div>
+        <div class="mm-protocol-info">
+          <div class="mm-protocol-name">Polymarket</div>
+          <div class="mm-protocol-desc">Tracked markets, prediction questions, market resolution criteria</div>
+        </div>
+        <div class="mm-protocol-stats">
+          <div class="mm-stat"><div class="mm-stat__value">9</div><div class="mm-stat__label">Memories</div></div>
+          <div class="mm-stat"><div class="mm-stat__value">4</div><div class="mm-stat__label">Tracked</div></div>
+        </div>
+      </div>
+      <div class="mm-grid">
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">"Will BTC be above $70,000 by end of Q2 2025?" — $500 invested, market resolving Aug 2025</div><span class="mm-card__scope-badge">Session</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-protocol">Protocol</span>
+            <span class="mm-badge mm-badge--sensitivity-high">High</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Polymarket question data</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>91%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You clicked into this market. Matterhorn recorded it as a tracked prediction interest.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 12 hours ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">Polymarket is a non-custodial prediction market. Orders placed via AMM. Resolution managed byUMA oracle.</div><span class="mm-card__scope-badge">Global</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-fact">Fact</span>
+            <span class="mm-badge mm-badge--sensitivity">Personal</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Polymarket documentation</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>99%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You asked what Polymarket is. Matterhorn saved the answer as a fact to avoid re-explaining.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 1 week ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 5 — WELLNESS MEMORIES
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-5">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 05</span>
+      <span class="screen-block__label">Wellness Memories</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:500px;overflow-y:auto">
+      <div class="mm-protocol-header" style="margin-bottom:20px">
+        <div class="mm-protocol-icon" style="background:var(--mm-type-wellness-dim);color:var(--mm-type-wellness)">♥</div>
+        <div class="mm-protocol-info">
+          <div class="mm-protocol-name">Wellness</div>
+          <div class="mm-protocol-desc">Goals, streaks, health preferences — private, never shared</div>
+        </div>
+        <div class="mm-protocol-stats">
+          <div class="mm-stat"><div class="mm-stat__value">31</div><div class="mm-stat__label">Memories</div></div>
+          <div class="mm-stat"><div class="mm-stat__value">7d</div><div class="mm-stat__label">Streak</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--mm-sens-high-dim);border:1px solid rgba(245,158,11,0.25);border-radius:8px;margin-bottom:16px;font-size:13px;color:var(--mm-sens-high)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Wellness memories are stored locally on your device. No wellness data is sent to external servers.
+      </div>
+
+      <div class="mm-grid">
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">Daily standup goal: 10-minute morning review of all active positions</div><span class="mm-card__scope-badge mm-card__scope-badge--workspace">Workspace</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-wellness">Wellness</span>
+            <span class="mm-badge mm-badge--sensitivity-restricted">Restricted</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Wellness workflow</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>88%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You set this as a recurring daily goal. Matterhorn schedules it and reminds you at your preferred time.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated today</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+        <div class="mm-card">
+          <div class="mm-card__header"><div class="mm-card__title">Risk review preference: check max leverage before preview generation</div><span class="mm-card__scope-badge">Session</span></div>
+          <div class="mm-card__meta">
+            <span class="mm-badge mm-badge--type-wellness">Wellness</span>
+            <span class="mm-badge mm-badge--sensitivity-restricted">Restricted</span>
+            <span class="mm-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat conversation</span>
+            <span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment"></span></span>72%</span>
+          </div>
+          <div class="mm-card__why"><div class="mm-card__why-label">Why remembered?</div><div class="mm-card__why-text">You asked to always see leverage warnings before any preview. This is enforced before every preview generation.</div></div>
+          <div class="mm-card__timestamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Updated 3 days ago</div>
+          <div class="mm-card__actions"><button class="mm-btn mm-btn--primary">Use</button><button class="mm-btn">Edit</button><button class="mm-btn">Export</button><button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 6 — WATCHLISTS
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-6">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 06</span>
+      <span class="screen-block__label">Watchlists</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:440px;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:17px;font-weight:600;color:var(--mm-text-primary)">Watchlists</div>
+        <button class="mm-btn mm-btn--primary">+ New Watchlist</button>
+      </div>
+      <div class="mm-grid">
+        <div class="mm-watchlist-item">
+          <div style="flex:1">
+            <div class="mm-watchlist-item__symbol">BTC-PERP</div>
+            <div class="mm-watchlist-item__venue">Hyperliquid · Base Sepolia</div>
+          </div>
+          <div class="mm-watchlist-item__reason">Funding rate alert set: above +0.0001/hr</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mm-badge mm-badge--type-protocol" style="font-size:10px;padding:2px 6px">Protocol</span>
+            <button class="mm-btn mm-btn--ghost" style="padding:4px 8px;font-size:11px">Edit</button>
+          </div>
+        </div>
+        <div class="mm-watchlist-item">
+          <div style="flex:1">
+            <div class="mm-watchlist-item__symbol">Will BTC &gt; $70k by Aug 2025?</div>
+            <div class="mm-watchlist-item__venue">Polymarket</div>
+          </div>
+          <div class="mm-watchlist-item__reason">Tracking market resolution</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mm-badge mm-badge--type-protocol" style="font-size:10px;padding:2px 6px">Protocol</span>
+            <button class="mm-btn mm-btn--ghost" style="padding:4px 8px;font-size:11px">Edit</button>
+          </div>
+        </div>
+        <div class="mm-watchlist-item">
+          <div style="flex:1">
+            <div class="mm-watchlist-item__symbol">Validator: TAO::1234</div>
+            <div class="mm-watchlist-item__venue">Bittensor · Subnet 1</div>
+          </div>
+          <div class="mm-watchlist-item__reason">Stake monitoring active</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mm-badge mm-badge--type-protocol" style="font-size:10px;padding:2px 6px">Protocol</span>
+            <button class="mm-btn mm-btn--ghost" style="padding:4px 8px;font-size:11px">Edit</button>
+          </div>
+        </div>
+        <div class="mm-watchlist-item">
+          <div style="flex:1">
+            <div class="mm-watchlist-item__symbol">TAO-PERP</div>
+            <div class="mm-watchlist-item__venue">Hyperliquid · Base Sepolia</div>
+          </div>
+          <div class="mm-watchlist-item__reason">Added manually from chat</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="mm-badge mm-badge--type-preference" style="font-size:10px;padding:2px 6px">Preference</span>
+            <button class="mm-btn mm-btn--ghost" style="padding:4px 8px;font-size:11px">Edit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 7 — RECEIPTS AND EVIDENCE
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-7">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 07</span>
+      <span class="screen-block__label">Receipts and Evidence</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:500px;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:17px;font-weight:600;color:var(--mm-text-primary)">Receipts and Evidence</div>
+        <button class="mm-btn">Export All</button>
+      </div>
+      <div style="font-size:13px;color:var(--mm-text-secondary);margin-bottom:16px;line-height:1.6">
+        All external signer transactions generate a receipt with a SHA-256 fingerprint. These receipts are stored locally and can be exported as evidence of what was — and was not — signed.
+      </div>
+      <div class="mm-grid">
+        <div class="mm-receipt-card">
+          <div class="mm-receipt-card__verified-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Verified
+          </div>
+          <div class="mm-receipt-card__title">BTC-PERP · BUY 0.1 · $64,250</div>
+          <div class="mm-receipt-card__meta">Order ID: 0xf3a8…2c1d · Hyperliquid · Base Sepolia</div>
+          <div class="mm-receipt-card__meta" style="margin-bottom:12px">Signed: Jun 18, 2026 14:23 UTC · External signer</div>
+          <div class="mm-receipt-card__sha">SHA-256: a3f2b8c1d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a</div>
+          <div class="mm-card__actions"><button class="mm-btn">View</button><button class="mm-btn">Download</button><button class="mm-btn mm-btn--ghost">Copy SHA</button></div>
+        </div>
+        <div class="mm-receipt-card">
+          <div class="mm-receipt-card__verified-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Verified
+          </div>
+          <div class="mm-receipt-card__title">Staking · Delegate 100 TAO · Subnet 1</div>
+          <div class="mm-receipt-card__meta">Order ID: 0x7b2a…9e3f · Bittensor · Mainnet</div>
+          <div class="mm-receipt-card__meta" style="margin-bottom:12px">Signed: Jun 17, 2026 09:11 UTC · External signer</div>
+          <div class="mm-receipt-card__sha">SHA-256: b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c</div>
+          <div class="mm-card__actions"><button class="mm-btn">View</button><button class="mm-btn">Download</button><button class="mm-btn mm-btn--ghost">Copy SHA</button></div>
+        </div>
+        <div class="mm-receipt-card">
+          <div class="mm-receipt-card__verified-badge" style="background:var(--mm-amber-dim);color:var(--mm-amber);border-color:rgba(245,158,11,0.3)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Pending
+          </div>
+          <div class="mm-receipt-card__title">BTC-PERP · Preview — not submitted</div>
+          <div class="mm-receipt-card__meta">Preview ID: 0x9c1d…3f8b · Hyperliquid · Base Sepolia</div>
+          <div class="mm-receipt-card__meta" style="margin-bottom:12px">Preview generated: Jun 21, 2026 10:45 UTC · Matterhorn never signed</div>
+          <div class="mm-receipt-card__sha">SHA-256: c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d</div>
+          <div class="mm-card__actions"><button class="mm-btn">View</button><button class="mm-btn mm-btn--ghost">Export Preview</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 8 — SOURCES AND PROVENANCE
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-8">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 08</span>
+      <span class="screen-block__label">Sources and Provenance</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:500px;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-size:17px;font-weight:600;color:var(--mm-text-primary)">Sources and Provenance</div>
+        <div style="font-size:13px;color:var(--mm-text-secondary)">Every memory traces back to its origin</div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:8px">Memory Source Attribution</div>
+        <div style="background:var(--mm-bg-elevated);border:1px solid var(--mm-border);border-radius:8px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr;padding:10px 16px;font-size:12px;font-weight:600;color:var(--mm-text-tertiary);border-bottom:1px solid var(--mm-border);text-transform:uppercase;letter-spacing:0.05em">
+            <span>Memory</span><span>Type</span><span>Source</span><span>Confidence</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr;padding:10px 16px;align-items:center;border-bottom:1px solid var(--mm-border-subtle);font-size:13px">
+            <span style="color:var(--mm-text-primary);font-weight:500">BTC funding rate alert</span>
+            <span><span class="mm-badge mm-badge--type-protocol" style="font-size:10px;padding:2px 6px">Protocol</span></span>
+            <span style="color:var(--mm-text-secondary)">Hyperliquid exchange data · 14:22 UTC</span>
+            <span><span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>92%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr;padding:10px 16px;align-items:center;border-bottom:1px solid var(--mm-border-subtle);font-size:13px">
+            <span style="color:var(--mm-text-primary);font-weight:500">Leverage preference</span>
+            <span><span class="mm-badge mm-badge--type-preference" style="font-size:10px;padding:2px 6px">Preference</span></span>
+            <span style="color:var(--mm-text-secondary)">Chat conversation · Session #41 · Jun 18</span>
+            <span><span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment"></span></span>74%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr;padding:10px 16px;align-items:center;font-size:13px">
+            <span style="color:var(--mm-text-primary);font-weight:500">Polymarket BTC &gt; $70k</span>
+            <span><span class="mm-badge mm-badge--type-protocol" style="font-size:10px;padding:2px 6px">Protocol</span></span>
+            <span style="color:var(--mm-text-secondary)">Polymarket market browse · 10:11 UTC</span>
+            <span><span class="mm-confidence"><span class="mm-confidence__bar"><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span><span class="mm-confidence__segment is-filled"></span></span>91%</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:8px">Source Legend</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span class="mm-source" style="cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>On-chain data</span>
+          <span class="mm-source" style="cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat conversation</span>
+          <span class="mm-source" style="cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Documentation</span>
+          <span class="mm-source" style="cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Polymarket data</span>
+          <span class="mm-source" style="cursor:default"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>Wellness workflow</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 9 — PRIVACY / FORGET CENTER
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-9">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 09</span>
+      <span class="screen-block__label">Privacy / Forget Center</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:580px;overflow-y:auto">
+
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--mm-green-dim);border:1px solid rgba(34,197,94,0.25);border-radius:8px;margin-bottom:20px;font-size:13px;color:var(--mm-green)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        All memories are stored locally. Nothing is sent to external servers unless you explicitly share it.
+      </div>
+
+      <div class="mm-privacy-panel" style="margin-bottom:20px">
+        <div class="mm-privacy-panel__header">
+          <div class="mm-privacy-panel__title">Memory Controls</div>
+          <div class="mm-privacy-panel__subtitle">Manage what Matterhorn remembers and how it uses that information</div>
+        </div>
+
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Memory enabled</div>
+            <div class="mm-privacy-row__desc">Matterhorn can learn from your conversations and activity</div>
+          </div>
+          <div class="mm-toggle is-on"><div class="mm-toggle__thumb"></div></div>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Remember Wellness data</div>
+            <div class="mm-privacy-row__desc">Store goal progress, streaks, and health preferences locally</div>
+          </div>
+          <div class="mm-toggle is-on"><div class="mm-toggle__thumb"></div></div>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Remember workspace activity</div>
+            <div class="mm-privacy-row__desc">Record protocol desk interactions and market data browsing</div>
+          </div>
+          <div class="mm-toggle is-on"><div class="mm-toggle__thumb"></div></div>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Remember chat preferences</div>
+            <div class="mm-privacy-row__desc">Save explicit preferences expressed during conversations</div>
+          </div>
+          <div class="mm-toggle is-on"><div class="mm-toggle__thumb"></div></div>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Cross-session memory</div>
+            <div class="mm-privacy-row__desc">Recall memories from previous sessions</div>
+          </div>
+          <div class="mm-toggle"><div class="mm-toggle__thumb"></div></div>
+        </div>
+      </div>
+
+      <div class="mm-privacy-panel">
+        <div class="mm-privacy-panel__header">
+          <div class="mm-privacy-panel__title">Forget Memories</div>
+          <div class="mm-privacy-panel__subtitle">Permanently remove memories. This cannot be undone.</div>
+        </div>
+
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Forget all protocol memories</div>
+            <div class="mm-privacy-row__desc">Remove all Bittensor, Hyperliquid, and Polymarket memories</div>
+          </div>
+          <button class="mm-btn mm-btn--danger">Forget All Protocol</button>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Forget all wellness memories</div>
+            <div class="mm-privacy-row__desc">Remove all wellness goals, streaks, and health preferences</div>
+          </div>
+          <button class="mm-btn mm-btn--danger">Forget All Wellness</button>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Forget everything</div>
+            <div class="mm-privacy-row__desc">Clear all memories. Matterhorn starts fresh.</div>
+          </div>
+          <button class="mm-btn mm-btn--danger" style="background:var(--mm-red-dim);border-color:rgba(239,68,68,0.4)">Forget Everything</button>
+        </div>
+        <div class="mm-privacy-row">
+          <div>
+            <div class="mm-privacy-row__label">Export memories before forgetting</div>
+            <div class="mm-privacy-row__desc">Download a JSON export of all current memories</div>
+          </div>
+          <button class="mm-btn">Export All</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 10 — CHAT MEMORY CHIPS
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-10">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 10</span>
+      <span class="screen-block__label">Chat Memory Chips</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="background:var(--mm-bg-base);border:1px solid var(--mm-border);border-radius:12px;padding:24px;height:440px;overflow-y:auto">
+
+      <div style="font-size:14px;font-weight:600;color:var(--mm-text-primary);margin-bottom:16px">Chip Variants</div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:10px">Active chips (memories in use)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span class="mm-chip-bar__label" style="font-size:12px;color:var(--mm-text-tertiary)">Using 3 memories</span>
+          <span class="mm-chip mm-chip--active">BTC wallet behavior <span class="mm-chip__count">×1</span></span>
+          <span class="mm-chip mm-chip--active">Funding rate alert prefs <span class="mm-chip__count">×1</span></span>
+          <span class="mm-chip mm-chip--active">Polymarket markets tracked <span class="mm-chip__count">×1</span></span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:10px">Available chips (for reference)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span class="mm-chip mm-chip--active">Active memory</span>
+          <span class="mm-chip">Inactive memory</span>
+          <span class="mm-chip mm-chip--forget">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Forget related
+          </span>
+          <span class="mm-chip mm-chip--active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Restricted memory
+          </span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:10px">Chip bar in chat context</div>
+        <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:16px">
+          <div style="font-size:13px;color:var(--mm-text-primary);margin-bottom:8px;font-weight:500">BTC-PERP funding rate alert</div>
+          <div style="font-size:12px;color:var(--mm-text-secondary);margin-bottom:12px;line-height:1.5">
+            "Based on your saved alert preference for BTC-PERP funding rates above +0.0001/hr on Hyperliquid, I'll set up a monitoring check. Do you want me to also track the OI change rate?"
+          </div>
+          <div class="mm-chip-bar" style="margin-bottom:0;padding:10px 12px">
+            <span class="mm-chip-bar__label" style="font-size:11px">Using 1 memory</span>
+            <span class="mm-chip mm-chip--active">BTC funding rate prefs</span>
+            <span class="mm-chip">Remember this</span>
+            <span class="mm-chip mm-chip--forget">Forget related</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:10px">Button labels in chip bar</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="mm-btn mm-btn--primary" style="font-size:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Remember this</button>
+          <button class="mm-btn" style="font-size:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Remember this</button>
+          <button class="mm-btn mm-btn--danger" style="font-size:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Do not remember</button>
+          <button class="mm-btn mm-btn--danger" style="font-size:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Forget related memories</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 11 — MOBILE MEMORY
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-11">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 11</span>
+      <span class="screen-block__label">Mobile Memory Screen</span>
+      <span class="screen-block__viewport">390 × 844</span>
+    </div>
+    <div style="display:flex;gap:16px;align-items:flex-start">
+
+      <!-- Dark mobile -->
+      <div style="width:220px;flex-shrink:0">
+        <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;overflow:hidden;width:220px">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--mm-border);display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:14px;font-weight:600;color:var(--mm-text-primary)">Memory</span>
+            <span style="font-size:11px;color:var(--mm-text-tertiary)">127 items</span>
+          </div>
+          <div style="padding:12px 12px">
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+              <div style="flex:1;background:var(--mm-bg-elevated);border:1px solid var(--mm-border);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--mm-text-tertiary)">Search…</div>
+              <button style="background:var(--mm-accent-dim);border:1px solid rgba(209,242,255,0.3);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--mm-accent)">+</button>
+            </div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:6px">Recent</div>
+            <div class="mm-card" style="padding:10px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:var(--mm-text-primary);margin-bottom:6px;line-height:1.3">BTC funding rate alert on Hyperliquid</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+                <span class="mm-badge mm-badge--type-protocol" style="font-size:9px;padding:1px 5px">Protocol</span>
+                <span class="mm-badge mm-badge--sensitivity" style="font-size:9px;padding:1px 5px">Personal</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px;flex:1">Use</button>
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px">Edit</button>
+                <button class="mm-btn mm-btn--ghost" style="font-size:10px;padding:3px 6px;color:var(--mm-red)">✕</button>
+              </div>
+            </div>
+            <div class="mm-card" style="padding:10px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:var(--mm-text-primary);margin-bottom:6px;line-height:1.3">Leverage preference: conservative, 10× max BTC</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+                <span class="mm-badge mm-badge--type-preference" style="font-size:9px;padding:1px 5px">Preference</span>
+                <span class="mm-badge mm-badge--sensitivity-high" style="font-size:9px;padding:1px 5px">High</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px;flex:1">Use</button>
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px">Edit</button>
+                <button class="mm-btn mm-btn--ghost" style="font-size:10px;padding:3px 6px;color:var(--mm-red)">✕</button>
+              </div>
+            </div>
+            <div class="mm-card" style="padding:10px">
+              <div style="font-size:12px;font-weight:600;color:var(--mm-text-primary);margin-bottom:6px;line-height:1.3">Polymarket BTC &gt; $70k market tracked</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+                <span class="mm-badge mm-badge--type-protocol" style="font-size:9px;padding:1px 5px">Protocol</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px;flex:1">Use</button>
+                <button class="mm-btn" style="font-size:10px;padding:3px 8px">Edit</button>
+                <button class="mm-btn mm-btn--ghost" style="font-size:10px;padding:3px 6px;color:var(--mm-red)">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Light mobile -->
+      <div style="width:220px;flex-shrink:0" data-theme="light">
+        <div style="background:#fff;border:1px solid #d0d0d0;border-radius:12px;overflow:hidden;width:220px">
+          <div style="padding:12px 16px;border-bottom:1px solid #d0d0d0;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:14px;font-weight:600;color:#111">Memory</span>
+            <span style="font-size:11px;color:#999">127 items</span>
+          </div>
+          <div style="padding:12px 12px">
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+              <div style="flex:1;background:#ebebeb;border:1px solid #d0d0d0;border-radius:6px;padding:6px 10px;font-size:11px;color:#999">Search…</div>
+              <button style="background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.2);border-radius:6px;padding:6px 10px;font-size:11px;color:#2563eb">+</button>
+            </div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#999;margin-bottom:6px">Recent</div>
+            <div style="background:#fff;border:1px solid #d0d0d0;border-radius:8px;padding:10px;margin-bottom:8px">
+              <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:6px;line-height:1.3">BTC funding rate alert on Hyperliquid</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+                <span style="font-size:9px;padding:1px 5px;border-radius:9999px;background:rgba(37,99,235,0.08);color:#2563eb;border:1px solid rgba(37,99,235,0.15)">Protocol</span>
+                <span style="font-size:9px;padding:1px 5px;border-radius:9999px;background:rgba(37,99,235,0.08);color:#2563eb;border:1px solid rgba(37,99,235,0.15)">Personal</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button style="font-size:10px;padding:3px 8px;flex:1;background:#ebebeb;border:1px solid #d0d0d0;border-radius:6px;color:#666">Use</button>
+                <button style="font-size:10px;padding:3px 8px;background:#ebebeb;border:1px solid #d0d0d0;border-radius:6px;color:#666">Edit</button>
+                <button style="font-size:10px;padding:3px 6px;background:none;border:none;color:#dc2626;cursor:pointer">✕</button>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #d0d0d0;border-radius:8px;padding:10px">
+              <div style="font-size:12px;font-weight:600;color:#111;margin-bottom:6px;line-height:1.3">Leverage preference: conservative, 10× max BTC</div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+                <span style="font-size:9px;padding:1px 5px;border-radius:9999px;background:rgba(147,51,234,0.08);color:#9333ea;border:1px solid rgba(147,51,234,0.15)">Preference</span>
+                <span style="font-size:9px;padding:1px 5px;border-radius:9999px;background:rgba(217,119,6,0.08);color:#d97706;border:1px solid rgba(217,119,6,0.15)">High</span>
+              </div>
+              <div style="display:flex;gap:4px">
+                <button style="font-size:10px;padding:3px 8px;flex:1;background:#ebebeb;border:1px solid #d0d0d0;border-radius:6px;color:#666">Use</button>
+                <button style="font-size:10px;padding:3px 8px;background:#ebebeb;border:1px solid #d0d0d0;border-radius:6px;color:#666">Edit</button>
+                <button style="font-size:10px;padding:3px 6px;background:none;border:none;color:#dc2626;cursor:pointer">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 12 — EMPTY / LOADING STATES
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-12">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 12</span>
+      <span class="screen-block__label">Empty State and Loading State</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+      <!-- Empty state -->
+      <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:12px">Empty State — No Memories</div>
+        <div class="mm-empty">
+          <svg class="mm-empty__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <div class="mm-empty__title">No memories yet</div>
+          <div class="mm-empty__body">Matterhorn starts with a clean slate. Memories are created as you interact with markets, workflows, and chat.</div>
+          <div class="mm-empty__action"><button class="mm-btn mm-btn--primary">Start Using Matterhorn</button></div>
+        </div>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:12px">Loading State — Skeleton Cards</div>
+        <div class="mm-grid" style="gap:12px">
+          <div class="mm-skeleton-card">
+            <div class="mm-skeleton-line" style="height:14px;width:80%;margin-bottom:10px"></div>
+            <div style="display:flex;gap:6px;margin-bottom:12px">
+              <div class="mm-skeleton-line mm-skeleton-chip" style="height:20px;width:60px"></div>
+              <div class="mm-skeleton-line mm-skeleton-chip" style="height:20px;width:70px"></div>
+            </div>
+            <div class="mm-skeleton-line" style="height:36px;width:100%;margin-bottom:12px"></div>
+            <div class="mm-skeleton-line" style="height:12px;width:50%;margin-bottom:10px"></div>
+            <div style="display:flex;gap:6px">
+              <div class="mm-skeleton-line" style="height:28px;width:60px"></div>
+              <div class="mm-skeleton-line" style="height:28px;width:50px"></div>
+              <div class="mm-skeleton-line" style="height:28px;width:50px"></div>
+            </div>
+          </div>
+          <div class="mm-skeleton-card">
+            <div class="mm-skeleton-line" style="height:14px;width:75%;margin-bottom:10px"></div>
+            <div style="display:flex;gap:6px;margin-bottom:12px">
+              <div class="mm-skeleton-line mm-skeleton-chip" style="height:20px;width:55px"></div>
+              <div class="mm-skeleton-line mm-skeleton-chip" style="height:20px;width:65px"></div>
+            </div>
+            <div class="mm-skeleton-line" style="height:36px;width:100%;margin-bottom:12px"></div>
+            <div class="mm-skeleton-line" style="height:12px;width:45%;margin-bottom:10px"></div>
+            <div style="display:flex;gap:6px">
+              <div class="mm-skeleton-line" style="height:28px;width:60px"></div>
+              <div class="mm-skeleton-line" style="height:28px;width:50px"></div>
+              <div class="mm-skeleton-line" style="height:28px;width:50px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       SCREEN 13 — SECRET-BLOCKED / MEMORY DISABLED
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-13">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 13</span>
+      <span class="screen-block__label">Secret-Blocked and Memory Disabled States</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+      <!-- Secret-blocked -->
+      <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:12px">Secret-Blocked State — Restricted Memory</div>
+        <div style="padding:16px">
+          <div class="mm-secret-block" style="margin-bottom:16px">
+            <svg class="mm-secret-block__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div>
+              <div class="mm-secret-block__title">Restricted memory</div>
+              <div class="mm-secret-block__body">This memory contains sensitive information. Authenticate to view it.</div>
+            </div>
+            <div class="mm-secret-block__action"><button class="mm-btn mm-btn--primary">Authenticate</button></div>
+          </div>
+          <div class="mm-card is-secret">
+            <div class="mm-card__header">
+              <div class="mm-card__title">Your wallet backup or exchange credential store</div>
+            </div>
+            <div class="mm-card__meta">
+              <span class="mm-badge mm-badge--sensitivity-restricted">Restricted</span>
+            </div>
+            <div class="mm-card__actions">
+              <button class="mm-btn mm-btn--primary">Use</button>
+              <button class="mm-btn">Edit</button>
+              <button class="mm-btn mm-btn--ghost" style="margin-left:auto;color:var(--mm-red)">Forget</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory disabled -->
+      <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:12px">Memory Disabled State</div>
+        <div style="padding:16px">
+          <div class="mm-disabled">
+            <svg class="mm-disabled__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <div class="mm-disabled__title">Memory is disabled</div>
+            <div class="mm-disabled__body">Matterhorn is not learning from your activity. Enable memory in Privacy settings to let Matterhorn remember your preferences and context.</div>
+            <button class="mm-btn mm-btn--primary">Enable Memory</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Source unavailable -->
+      <div style="background:var(--mm-bg-surface);border:1px solid var(--mm-border);border-radius:12px;padding:24px;grid-column:1/-1">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--mm-text-tertiary);margin-bottom:12px">Source Unavailable State</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div class="mm-source-unavailable" style="flex:1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Source data no longer available. Memory was created from data that has since been removed.
+          </div>
+          <div class="mm-source-unavailable" style="flex:1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            On-chain data unavailable. This memory was based on historical blockchain state.
+          </div>
+          <div class="mm-source-unavailable" style="flex:1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat session archived. The conversation this memory came from is no longer accessible.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- end showcase-grid -->
+
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.screen-block').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.showcase-nav__link').forEach(el => el.classList.remove('is-active'));
+  document.getElementById(id).style.display = 'block';
+  document.querySelectorAll('.showcase-nav__link').forEach(el => {
+    if (el.getAttribute('onclick')?.includes(id)) el.classList.add('is-active');
+  });
+}
+function toggleTheme() {
+  const html = document.documentElement;
+  const label = document.getElementById('themeLabel');
+  if (html.getAttribute('data-theme') === 'light') {
+    html.removeAttribute('data-theme');
+    label.textContent = 'Dark';
+  } else {
+    html.setAttribute('data-theme', 'light');
+    label.textContent = 'Light';
+  }
+}
+// Show only screen 1 on load
+document.querySelectorAll('.screen-block').forEach(el => {
+  if (el.id !== 'screen-1') el.style.display = 'none';
+});
+</script>
+
+</body>
+</html>

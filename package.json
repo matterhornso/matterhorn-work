@@ -59,6 +59,7 @@
     "test:matterhorn-brand-assets": "node scripts/matterhorn-brand-assets.test.mjs",
     "test:matterhorn-customer-onboarding-ui": "node scripts/matterhorn-customer-onboarding-ui.test.mjs",
     "test:matterhorn-theme-readability": "node scripts/matterhorn-theme-readability.test.mjs",
+    "test:minimax-memory-ui": "node scripts/minimax-memory-ui.test.mjs",
     "test:minimax-ui-system": "node scripts/minimax-ui-system.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
