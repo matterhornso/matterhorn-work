@@ -621,6 +621,66 @@ const server = createServer(async (req, res) => {
       },
     });
   }
+  const memoryRecord = {
+    id: "mem_1",
+    kind: "protocol_address",
+    scope: "workspace",
+    title: "Public TAO wallet",
+    summary: "Public SS58 address used for Bittensor wallet reads.",
+    body: { ss58Address: "5FLSigC9H8Qgje3jK5oz3t4tfY6WjA3ff4FJNqFoU4tQbUjP" },
+    tags: ["bittensor", "wallet"],
+    links: [],
+    provenance: {
+      source: "user_confirmed",
+      capturedAt: "2026-06-22T00:00:00.000Z",
+      capturedBy: "user",
+      confidence: 1,
+      reasonRemembered: "User asked Matterhorn to remember this public address.",
+    },
+    sensitivity: "public",
+    createdAt: "2026-06-22T00:00:00.000Z",
+    updatedAt: "2026-06-22T00:00:00.000Z",
+    canUseInChat: true,
+    canExport: true,
+    canDelete: true,
+  };
+  if (req.method === "GET" && url.pathname === "/api/memory/search") {
+    assert.equal(url.searchParams.get("q"), "tao");
+    assert.equal(url.searchParams.get("scope"), "workspace");
+    assert.equal(url.searchParams.get("tags"), "bittensor,wallet");
+    return json(res, 200, { success: true, records: [memoryRecord], count: 1 });
+  }
+  if (req.method === "GET" && url.pathname === "/api/memory/entities") {
+    assert.equal(url.searchParams.get("kind"), "protocol_address");
+    assert.equal(url.searchParams.get("limit"), "5");
+    return json(res, 200, { success: true, records: [memoryRecord], count: 1 });
+  }
+  if (req.method === "GET" && url.pathname === "/api/memory/entities/mem_1") {
+    return json(res, 200, { success: true, record: memoryRecord });
+  }
+  if (req.method === "POST" && url.pathname === "/api/memory/capture") {
+    assert.equal(body.record.id, "mem_2");
+    return json(res, 200, { success: true, record: body.record, redactions: [] });
+  }
+  if (req.method === "PATCH" && url.pathname === "/api/memory/entities/mem_1") {
+    assert.equal(body.patch.summary, "Updated public wallet summary.");
+    return json(res, 200, { success: true, record: { ...memoryRecord, ...body.patch } });
+  }
+  if (req.method === "POST" && url.pathname === "/api/memory/forget") {
+    assert.equal(body.id, "mem_1");
+    assert.equal(body.reason, "No longer needed.");
+    return json(res, 200, { success: true, id: "mem_1", forgotten: true });
+  }
+  if (req.method === "POST" && url.pathname === "/api/memory/export") {
+    assert.equal(body.outputDir, "/tmp/matterhorn-memory-export");
+    return json(res, 200, {
+      success: true,
+      export: {
+        outputDir: "/tmp/matterhorn-memory-export",
+        files: ["matterhorn-memory-export.json", "matterhorn-memory-export.sha256"],
+      },
+    });
+  }
   if (req.method === "GET" && url.pathname === "/api/services/capabilities") {
     assert.equal(url.searchParams.get("capability"), "storage");
     return json(res, 200, {
@@ -1081,6 +1141,13 @@ try {
     "matterhorn_list_approvals",
     "matterhorn_crypto_chat",
     "matterhorn_crypto_readiness",
+    "matterhorn_memory_search",
+    "matterhorn_memory_list",
+    "matterhorn_memory_get",
+    "matterhorn_memory_capture",
+    "matterhorn_memory_update",
+    "matterhorn_memory_forget",
+    "matterhorn_memory_export",
     "matterhorn_services_get_capabilities",
     "matterhorn_services_chat_plan",
     "matterhorn_workflows_catalog",
@@ -1137,6 +1204,9 @@ try {
   const descriptionFor = (name) => listed.result.tools.find((tool) => tool.name === name)?.description || "";
   assert.match(descriptionFor("matterhorn_crypto_chat"), /Default first Matterhorn Work tool/i);
   assert.match(descriptionFor("matterhorn_crypto_readiness"), /customer-readiness report/i);
+  assert.match(descriptionFor("matterhorn_memory_search"), /explicit Matterhorn Memory records/i);
+  assert.match(descriptionFor("matterhorn_memory_capture"), /user has chosen to remember/i);
+  assert.match(descriptionFor("matterhorn_memory_forget"), /Forget one explicit Matterhorn Memory record/i);
   assert.match(descriptionFor("matterhorn_services_get_capabilities"), /future decentralized service capability contracts/i);
   assert.match(descriptionFor("matterhorn_services_chat_plan"), /Plan a future decentralized service workflow/i);
   assert.match(descriptionFor("matterhorn_workflows_catalog"), /catalog-only Matterhorn Work workflow registry/i);
@@ -1538,6 +1608,68 @@ try {
   assert.equal(cryptoReadiness.ready, true);
   assert.equal(cryptoReadiness.report.safety.liveSubmissionEnabled, false);
   assert.equal(cryptoReadiness.report.safety.canSubmit, false);
+
+  const memorySearch = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_search",
+    arguments: { query: "tao", scope: "workspace", tags: ["bittensor", "wallet"] },
+  }));
+  assert.equal(memorySearch.success, true);
+  assert.equal(memorySearch.records[0].id, "mem_1");
+
+  const memoryList = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_list",
+    arguments: { kind: "protocol_address", limit: 5 },
+  }));
+  assert.equal(memoryList.count, 1);
+
+  const memoryGet = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_get",
+    arguments: { id: "mem_1" },
+  }));
+  assert.equal(memoryGet.record.title, "Public TAO wallet");
+
+  const memoryRecordToCapture = {
+    ...memoryGet.record,
+    id: "mem_2",
+    title: "Second public TAO wallet",
+    body: { ss58Address: "5GrwvaEF5zXb26Fz9rcQpDWS8K3s82vNJZyDjY41iSeQy1wW" },
+  };
+  const memoryCapture = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_capture",
+    arguments: { record: memoryRecordToCapture },
+  }));
+  assert.equal(memoryCapture.record.id, "mem_2");
+
+  const memoryUpdate = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_update",
+    arguments: { id: "mem_1", patch: { summary: "Updated public wallet summary." } },
+  }));
+  assert.equal(memoryUpdate.record.summary, "Updated public wallet summary.");
+
+  const memoryForget = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_forget",
+    arguments: { id: "mem_1", reason: "No longer needed." },
+  }));
+  assert.equal(memoryForget.forgotten, true);
+
+  const memoryExport = parseToolResult(await mcp.ask("tools/call", {
+    name: "matterhorn_memory_export",
+    arguments: { outputDir: "/tmp/matterhorn-memory-export" },
+  }));
+  assert.deepEqual(memoryExport.export.files, ["matterhorn-memory-export.json", "matterhorn-memory-export.sha256"]);
+
+  const badMemoryCapture = await mcp.ask("tools/call", {
+    name: "matterhorn_memory_capture",
+    arguments: {
+      record: {
+        ...memoryRecordToCapture,
+        id: "mem_bad",
+        body: { privateKey: "not-allowed" },
+      },
+    },
+  });
+  assert.ok(badMemoryCapture.error, "secret-shaped memory capture should fail before calling the server");
+  assert.match(badMemoryCapture.error.message, /forbidden credential-shaped field/i);
 
   const servicesCapabilities = parseToolResult(await mcp.ask("tools/call", {
     name: "matterhorn_services_get_capabilities",

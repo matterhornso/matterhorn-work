@@ -81,6 +81,13 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_close_file_session` — close a file session
 - `matterhorn_list_approvals` — list pending host approval requests
 - `matterhorn_reply_approval` — allow or deny an approval request
+- `matterhorn_memory_search` — search explicit Matterhorn Memory records visible to the configured client token
+- `matterhorn_memory_list` — list explicit Matterhorn Memory records with kind, scope, tag, and limit filters
+- `matterhorn_memory_get` — read one explicit Matterhorn Memory record by id
+- `matterhorn_memory_capture` — capture one user-confirmed memory record through the server safety validators
+- `matterhorn_memory_update` — update one explicit memory record by id
+- `matterhorn_memory_forget` — forget one explicit memory record by id and record the deletion reason
+- `matterhorn_memory_export` — export explicit memory records into a local evidence bundle path on the Matterhorn server
 - `matterhorn_services_get_capabilities` — read future decentralized service capability contracts for hosting, storage, email, payments, and identity/access; discovery only, no live provider execution
 - `matterhorn_services_chat_plan` — plan future hosting, storage, email, payments, or identity/access workflows from ordinary chat; planning only, no live provider execution
 - `matterhorn_workflows_catalog` — read the catalog-only registry for wellness creator, Bittensor, market read/preview, decentralized service, and future workflows; discovery only, no provider execution
@@ -119,6 +126,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 ## Safety
 
 - No seed phrases, mnemonics, private keys, or wallet exports are accepted by any tool schema.
+- Memory tools do not auto-capture hidden context. `matterhorn_memory_capture` is for explicit, user-confirmed records only, and the server rejects credential-shaped or unsafe memory content before writing.
 - Approval tools require the host token separately from the normal client token.
 - Write tools go through Matterhorn Work file-session APIs and existing approval policy.
 - Bittensor actions remain non-custodial and rely on the existing unsigned-preview/external-signing flow.
