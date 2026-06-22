@@ -396,6 +396,91 @@ const tools = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "matterhorn_memory_search",
+    description: "Search explicit Matterhorn Memory records visible to the configured client token. User-controlled memory only; no hidden capture.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Optional search text." },
+        kind: { type: "string", description: "Optional memory kind filter." },
+        scope: { type: "string", enum: ["user", "workspace", "project", "session"], description: "Optional memory scope filter." },
+        tags: { type: "array", items: { type: "string" }, description: "Optional tag filters." },
+        limit: { type: "number", description: "Optional result limit." },
+        includeDeleted: { type: "boolean", description: "When true, include forgotten/tombstoned records where the server supports it." },
+      },
+    },
+  },
+  {
+    name: "matterhorn_memory_list",
+    description: "List explicit Matterhorn Memory records with optional kind, scope, tag, and limit filters.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        kind: { type: "string", description: "Optional memory kind filter." },
+        scope: { type: "string", enum: ["user", "workspace", "project", "session"], description: "Optional memory scope filter." },
+        tags: { type: "array", items: { type: "string" }, description: "Optional tag filters." },
+        limit: { type: "number", description: "Optional result limit." },
+        includeDeleted: { type: "boolean", description: "When true, include forgotten/tombstoned records where the server supports it." },
+      },
+    },
+  },
+  {
+    name: "matterhorn_memory_get",
+    description: "Read one explicit Matterhorn Memory record by id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Memory record id." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "matterhorn_memory_capture",
+    description: "Capture one explicit Matterhorn Memory record after the user has chosen to remember it. The server rejects forbidden credential-shaped content.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        record: { type: "object", description: "MatterhornMemoryRecord object to capture." },
+      },
+      required: ["record"],
+    },
+  },
+  {
+    name: "matterhorn_memory_update",
+    description: "Update one explicit Matterhorn Memory record by id. The server validates the patch before writing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Memory record id." },
+        patch: { type: "object", description: "Partial MatterhornMemoryRecord patch." },
+      },
+      required: ["id", "patch"],
+    },
+  },
+  {
+    name: "matterhorn_memory_forget",
+    description: "Forget one explicit Matterhorn Memory record by id and record a public reason.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Memory record id." },
+        reason: { type: "string", description: "Optional public deletion reason." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "matterhorn_memory_export",
+    description: "Export explicit Matterhorn Memory records through the server into a local evidence bundle path.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        outputDir: { type: "string", description: "Optional server-side export directory." },
+      },
+    },
+  },
+  {
     name: "matterhorn_services_get_capabilities",
     description: "Read Matterhorn Work future decentralized service capability contracts for hosting, storage, email, payments, and identity/access. Discovery only: no live provider execution, custody, signing, submission, or secrets.",
     inputSchema: {
@@ -1313,6 +1398,46 @@ async function callServer(path, { method = "GET", auth = "client", body = null, 
   } finally {
     clearTimeout(timer);
   }
+}
+
+const MEMORY_FORBIDDEN_INPUT_KEY_RE = /(seed|mnemonic|private|secret|password|passphrase|keyfile|suri|walletExport|wallet_export|authorization|api[_-]?key|token|rawSignature|raw_signature|signedPayload|signed_payload|signedAction|signed_action|wallet[_-]?export)/i;
+const MEMORY_FORBIDDEN_INPUT_TEXT_RE = /(seed\s*phrase|private\s*key|mnemonic|api\s*secret|raw\s*signature|signed\s*(payload|order|action)|wallet\s*export|bearer\s+token|exchange\s*secret)/i;
+
+function assertMemoryMcpNoForbiddenInput(value, label = "Matterhorn memory MCP input", path = []) {
+  if (value === null || value === undefined) return;
+  if (typeof value === "string") {
+    if (MEMORY_FORBIDDEN_INPUT_TEXT_RE.test(value)) {
+      throw new Error(`${label} contains forbidden credential-shaped text at ${path.join(".") || "input"}`);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertMemoryMcpNoForbiddenInput(child, label, [...path, String(index)]));
+    return;
+  }
+  if (typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (MEMORY_FORBIDDEN_INPUT_KEY_RE.test(key)) {
+      throw new Error(`${label} contains forbidden credential-shaped field: ${[...path, key].join(".")}`);
+    }
+    assertMemoryMcpNoForbiddenInput(child, label, [...path, key]);
+  }
+}
+
+function normalizeMemoryMcpTags(tags) {
+  if (!Array.isArray(tags)) return undefined;
+  return tags.map((tag) => String(tag).trim()).filter(Boolean).join(",");
+}
+
+function memoryMcpQuery(args = {}) {
+  return {
+    q: args.query ?? args.q,
+    kind: args.kind,
+    scope: args.scope,
+    tags: normalizeMemoryMcpTags(args.tags),
+    limit: args.limit,
+    includeDeleted: args.includeDeleted === true ? "true" : undefined,
+  };
 }
 
 function doctorRank(status) {
@@ -3422,6 +3547,27 @@ async function handleTool(name, args = {}) {
       return callServer("/api/crypto/chat/execute", { method: "POST", body: args });
     case "matterhorn_crypto_readiness":
       return callServer("/api/crypto/readiness");
+    case "matterhorn_memory_search":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer("/api/memory/search", { query: memoryMcpQuery(args) });
+    case "matterhorn_memory_list":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer("/api/memory/entities", { query: memoryMcpQuery(args) });
+    case "matterhorn_memory_get":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`);
+    case "matterhorn_memory_capture":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer("/api/memory/capture", { method: "POST", body: { record: args.record } });
+    case "matterhorn_memory_update":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`, { method: "PATCH", body: { patch: args.patch } });
+    case "matterhorn_memory_forget":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer("/api/memory/forget", { method: "POST", body: { id: args.id, reason: args.reason } });
+    case "matterhorn_memory_export":
+      assertMemoryMcpNoForbiddenInput(args);
+      return callServer("/api/memory/export", { method: "POST", body: { outputDir: args.outputDir } });
     case "matterhorn_services_get_capabilities":
       return callServer("/api/services/capabilities", { query: { capability: args.capability } });
     case "matterhorn_services_chat_plan":
