@@ -155,7 +155,8 @@
     "test:wellness-creator-pilot": "node scripts/wellness-creator-pilot.test.mjs",
     "test:wellness-creator-workflow": "node scripts/wellness-creator-workflow.test.mjs",
     "test:crypto-panel-ux": "node scripts/crypto-panel-ux.test.mjs",
-    "test:customer-crypto-ci-workflow": "node scripts/customer-crypto-ci-workflow.test.mjs"
+    "test:customer-crypto-ci-workflow": "node scripts/customer-crypto-ci-workflow.test.mjs",
+    "test:matterhorn-memory-vault": "pnpm --filter @matterhorn-work/memory-vault build && node scripts/matterhorn-memory-vault.test.mjs"
   },
   "devDependencies": {
     "playwright": "^1.60.0",
