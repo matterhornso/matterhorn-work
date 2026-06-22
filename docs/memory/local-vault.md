@@ -53,9 +53,69 @@ The package exposes:
 
 The API is designed so later API, CLI, MCP, and app UI layers can build against it without knowing the storage backend.
 
+## Server Routes
+
+The Matterhorn Work server exposes the vault through explicit, client-token-protected routes. These routes do not auto-capture chat. A caller must provide a full memory record or an explicit record id.
+
+```text
+GET    /api/memory/search?q=<text>&kind=<kind>&scope=<scope>&tags=a,b&limit=20
+GET    /api/memory/entities
+GET    /api/memory/entities/:id
+POST   /api/memory/capture
+PATCH  /api/memory/entities/:id
+DELETE /api/memory/entities/:id
+POST   /api/memory/forget
+POST   /api/memory/export
+```
+
+`MATTERHORN_WORK_MEMORY_ROOT` controls the vault root. `OPENWORK_MEMORY_ROOT` is accepted as a legacy fallback. If neither is set, the server uses:
+
+```text
+~/.matterhorn-work/memory
+```
+
+Every write path runs the shared memory safety contract and the local vault safety checks before touching disk.
+
+## CLI
+
+Agents and operators can use the same server-backed surface through the Matterhorn Work CLI:
+
+```bash
+matterhorn-work memory search --query "bittensor wallet" --json
+matterhorn-work memory list --kind protocol_address --json
+matterhorn-work memory get <memory-id> --json
+matterhorn-work memory capture \
+  --id mem_public_tao_wallet \
+  --kind protocol_address \
+  --scope workspace \
+  --title "Main TAO wallet" \
+  --summary "Public SS58 address label for read-only TAO workflows." \
+  --body-json '{"ss58Address":"5...","netuid":14}' \
+  --tags bittensor,tao \
+  --source user_confirmed \
+  --sensitivity public \
+  --json
+matterhorn-work memory update <memory-id> --patch-json '{"summary":"Updated label."}' --json
+matterhorn-work memory forget <memory-id> --reason "User requested deletion." --json
+matterhorn-work memory export --output-dir /tmp/matterhorn-memory-export --json
+```
+
+The CLI requires the normal local server auth flags or environment:
+
+```bash
+matterhorn-work memory search \
+  --openwork-url http://127.0.0.1:8787 \
+  --token "$MATTERHORN_WORK_TOKEN" \
+  --query "TAO" \
+  --json
+```
+
+The command rejects credential-shaped flags such as `--private-key`, `--seed-phrase`, `--api-secret`, `--raw-signature`, `--signed-payload`, and `--wallet-export`. Body JSON is still validated by the server and vault, so secret-shaped nested fields are rejected before writing.
+
 ## Verification
 
 ```bash
+pnpm test:matterhorn-memory-api-cli
 pnpm test:matterhorn-memory-vault
 pnpm --dir packages/types build
 pnpm test:matterhorn-memory-contract
