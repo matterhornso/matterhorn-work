@@ -48,6 +48,12 @@ const SECRET_TEXT_RE =
 const MEDICAL_INTENT_RE =
   /\b(diagnos\w*|prescrib\w*|prescription|medication|dosage)\b|\bdose\b|\b(cure\w*|treat\w*|heal\b|healing\b|rehab\w*)\b[^.?!]*\b(condition|disease|illness|injury|injuries|diabetes|hypertension|thyroid|cancer|asthma|arthritis|depression|anxiety|fracture|sprain|tear|torn|ligament|acl|chronic pain|back pain|knee pain|joint pain|pain|ibs|ibd|pcos|reflux|gerd|migraine|fibromyalgia|crohn)\b|\bcure[sd]?\b\s+(?:my|the|this|that|your|his|her|their|a|an)\b|\b(diabetes|hypertension|thyroid|cancer|herniated|sciatica|ibs|ibd|pcos|gerd|migraine|fibromyalgia|crohn)\b|\b(pregnan\w*|prenatal|ante[- ]?natal|post[- ]?natal|postpartum)\b|\b(eating disorder|disordered eating|anorexi\w*|bulimi\w*|binge[- ]?eating)\b|\bsign of\b|something serious|what(?:'s| is| are) wrong with|is (?:this|that|it) (?:normal|serious|an? infection)|should (?:i|we|they) be worried|\b(rash|lump|mole|swelling|numbness|chest pain|shortness of breath|fainting|dizziness|infected|infection)\b/i;
 
+// Heuristic for memory candidates that must be redacted (never remembered):
+// medication/dosing details, surgery/post-op plans, and private health records.
+// Combined with MEDICAL_INTENT_RE (diagnosis/condition/pregnancy/eating disorder).
+const MEMORY_REDACT_RE =
+  /\b(\d+\s?(?:mg|mcg|ml|iu))\b|\b(once|twice|three times)\s+(?:a\s+)?(?:day|daily)\b|daily dose|\bmeds?\b|metformin|insulin|statin|antidepressant|\b(medical|health)\s+(?:record|records|history)\b|lab result|blood test|\bphi\b|\bhipaa\b|\bsurgery\b|post[- ]?op\b|post[- ]?surgery|without (?:explicit )?consent/i;
+
 const FIXTURE_DIR = "docs/wellness-creator-workflow";
 const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
 
@@ -796,6 +802,114 @@ function routeFreeformPrompt(prompt) {
   };
 }
 
+// ---- Wellness Memory safety lane ----
+// What Matterhorn Memory may safely remember for a wellness creator, and what it
+// must never store. Candidates only — nothing is written to memory here.
+const MEMORY_DIR = `${FIXTURE_DIR}/memory`;
+const MEMORY_ALLOWED_CATEGORIES = [
+  { id: "creator_service_type", label: "Creator service type", example: "Personal trainer running 1:1 strength coaching." },
+  { id: "offer_preferences", label: "Offer preferences", example: "Prefers 8-week transformation offers; pricing kept as a draft, no live checkout." },
+  { id: "program_style", label: "Program style", example: "Beginner-friendly, dumbbell + bodyweight, 3 days/week." },
+  { id: "check_in_cadence", label: "Check-in cadence", example: "Weekly Monday check-ins." },
+  { id: "client_communication_preferences", label: "Client communication preferences", example: "Short WhatsApp summaries; no long emails." },
+  { id: "artifact_preferences", label: "Artifact preferences", example: "Likes PDF handouts and a habit tracker." },
+  { id: "renewal_follow_up_preferences", label: "Renewal / follow-up preferences", example: "Sends a renewal note at the end of each block." },
+];
+const MEMORY_FORBIDDEN_CATEGORIES = [
+  { id: "diagnosis", label: "Diagnosis", action: "redact" },
+  { id: "medication_advice", label: "Medication advice / dosing", action: "redact" },
+  { id: "medical_condition_treatment", label: "Medical condition treatment", action: "redact" },
+  { id: "eating_disorder_treatment", label: "Eating-disorder treatment", action: "redact" },
+  { id: "pregnancy_post_surgery_medical_plan", label: "Pregnancy / post-surgery medical plans", action: "redact" },
+  { id: "private_health_records_without_consent", label: "Private health records without explicit consent", action: "redact" },
+];
+const MEMORY_FIXTURES = {
+  safe_client_persona: `${MEMORY_DIR}/safe-client-persona-memory.md`,
+  safe_program_preference: `${MEMORY_DIR}/safe-program-preference-memory.md`,
+  safe_check_in_cadence: `${MEMORY_DIR}/safe-check-in-cadence-memory.md`,
+  safe_offer_builder_preference: `${MEMORY_DIR}/safe-offer-builder-preference-memory.md`,
+};
+
+// Map a safe candidate to its memory category (best effort).
+function memoryCategoryFor(text) {
+  const t = text.toLowerCase();
+  if (/renewal|renew\b|up-?sell|win-?back|retention|follow.?up/.test(t)) return "renewal_follow_up_preferences";
+  if (/check.?in|cadence|weekly|monthly|monday|frequency/.test(t)) return "check_in_cadence";
+  if (/whatsapp|email|sms|message|summaries|summary|communicat|notify/.test(t)) return "client_communication_preferences";
+  if (/offer|pricing|package|paid|checkout|landing/.test(t)) return "offer_preferences";
+  if (/pdf|handout|tracker|template|artifact|\bformat\b/.test(t)) return "artifact_preferences";
+  if (/beginner|dumbbell|bodyweight|days\/week|split|vinyasa|flow|style|mobility|strength program/.test(t)) return "program_style";
+  if (/personal trainer|yoga instructor|dietician|coach|service type|1:1|group class/.test(t)) return "creator_service_type";
+  return "creator_service_type";
+}
+
+// Classify a memory candidate. Safe candidates are proposed (not written);
+// secrets are refused and never echoed; clinical/health content is redacted.
+function classifyMemoryCandidate(text) {
+  const raw = String(text ?? "");
+  if (SECRET_TEXT_RE.test(raw)) {
+    return { allowed: false, action: "refuse", reason: "Looks like a secret; refused and not echoed.", category: null };
+  }
+  if (MEDICAL_INTENT_RE.test(raw) || MEMORY_REDACT_RE.test(raw)) {
+    return {
+      allowed: false,
+      action: "redact",
+      reason: "Clinical or private-health content (diagnosis, medication, treatment, pregnancy/surgery, or health records). Not stored.",
+      category: null,
+    };
+  }
+  return { allowed: true, action: "remember_candidate", category: memoryCategoryFor(raw), candidate: raw };
+}
+
+// Built-in example candidates for `--memory-candidates` (safe + must-refuse).
+const MEMORY_CANDIDATE_EXAMPLES = [
+  "Creator is a personal trainer who runs 1:1 strength coaching",
+  "Prefers 8-week transformation offers with placeholder pricing, no live checkout",
+  "Program style: beginner-friendly, dumbbell and bodyweight, 3 days per week",
+  "Weekly Monday check-ins",
+  "Client prefers short WhatsApp summaries, not long emails",
+  "Likes PDF handouts and a simple habit tracker",
+  "Sends a renewal follow-up note at the end of each block",
+  "Client was diagnosed with type 2 diabetes; remember the plan to treat it",
+  "Remember the client takes 500mg metformin twice daily",
+  "Client is in third-trimester pregnancy with a post-surgery rehab plan",
+  "Client has an eating disorder; remember the cutting protocol",
+  "Store the client's full medical history and lab results",
+];
+
+function buildMemoryCandidates() {
+  return MEMORY_CANDIDATE_EXAMPLES.map((candidate) => {
+    const result = classifyMemoryCandidate(candidate);
+    // Never echo refused/redacted source text.
+    if (!result.allowed) {
+      return { input: "[withheld]", allowed: false, action: result.action, reason: result.reason };
+    }
+    return { input: candidate, allowed: true, action: result.action, category: result.category };
+  });
+}
+
+function buildMemoryLane() {
+  return {
+    title: "Wellness Memory Safety Lane",
+    status: "candidates_only",
+    writesMemory: false,
+    educationalOnly: true,
+    allowedCategories: MEMORY_ALLOWED_CATEGORIES,
+    forbiddenCategories: MEMORY_FORBIDDEN_CATEGORIES,
+    fixtures: MEMORY_FIXTURES,
+    candidatesCommand: "node scripts/wellness-creator-workflow.mjs --memory-candidates --json",
+    safety: {
+      writesMemory: false,
+      remembersDiagnosis: false,
+      remembersMedication: false,
+      remembersTreatment: false,
+      remembersHealthRecords: false,
+      acceptsSecrets: false,
+    },
+    note: "Matterhorn Memory may remember service preferences and client workflow metadata only. It never stores diagnosis, medication advice, treatment, eating-disorder care, pregnancy/post-surgery medical plans, or private health records. Secrets are refused and not echoed. Nothing is written to memory yet — these are candidates only.",
+  };
+}
+
 function flag(name) {
   return args.includes(name);
 }
@@ -867,6 +981,7 @@ function buildContract() {
     offerBuilder: buildOfferBuilder(),
     clientLifecycle: buildClientLifecycle(),
     customerDemoPack: buildCustomerDemoPack(),
+    memory: buildMemoryLane(),
     demoPacketExport: {
       personas: EXPORT_PERSONAS,
       defaultPersona: "wellness_creator",
@@ -1196,6 +1311,84 @@ function runCheck() {
     }
   }
 
+  // Wellness Memory safety lane: candidates only, never writes, redacts clinical.
+  const memory = contract.memory;
+  if (!memory) {
+    failures.push("memory lane must be present in the contract.");
+  } else {
+    if (memory.writesMemory !== false) failures.push("memory.writesMemory must be false (candidates only).");
+    for (const id of [
+      "creator_service_type",
+      "offer_preferences",
+      "program_style",
+      "check_in_cadence",
+      "client_communication_preferences",
+      "artifact_preferences",
+      "renewal_follow_up_preferences",
+    ]) {
+      if (!(memory.allowedCategories || []).some((category) => category.id === id)) {
+        failures.push(`memory.allowedCategories should include ${id}.`);
+      }
+    }
+    for (const id of [
+      "diagnosis",
+      "medication_advice",
+      "medical_condition_treatment",
+      "eating_disorder_treatment",
+      "pregnancy_post_surgery_medical_plan",
+      "private_health_records_without_consent",
+    ]) {
+      if (!(memory.forbiddenCategories || []).some((category) => category.id === id)) {
+        failures.push(`memory.forbiddenCategories should include ${id}.`);
+      }
+    }
+    for (const flagKey of ["writesMemory", "remembersDiagnosis", "remembersMedication", "remembersTreatment", "remembersHealthRecords", "acceptsSecrets"]) {
+      if (memory.safety?.[flagKey] !== false) failures.push(`memory.safety.${flagKey} must be false.`);
+    }
+    // The classifier remembers safe candidates and refuses/redacts unsafe ones.
+    for (const safe of [
+      "Weekly Monday check-ins",
+      "Prefers 8-week transformation offers with placeholder pricing",
+      "Personal trainer running 1:1 strength coaching",
+    ]) {
+      if (classifyMemoryCandidate(safe).allowed !== true) failures.push(`Safe memory candidate should be allowed: "${safe}"`);
+    }
+    for (const unsafe of [
+      "Client was diagnosed with type 2 diabetes; plan to treat it",
+      "Remember the client takes 500mg metformin twice daily",
+      "Client is in third-trimester pregnancy with a post-surgery rehab plan",
+      "Client has an eating disorder; remember the cutting protocol",
+      "Store the client's full medical history and lab results",
+    ]) {
+      if (classifyMemoryCandidate(unsafe).allowed !== false) failures.push(`Unsafe memory candidate must be refused/redacted: "${unsafe}"`);
+    }
+    // A secret memory candidate is refused and never echoed.
+    const secretMem = classifyMemoryCandidate("remember my seed phrase apple banana cherry tiger river");
+    if (secretMem.allowed !== false || secretMem.action !== "refuse") failures.push("Secret memory candidate must be refused.");
+    // The --memory-candidates output must not echo refused/redacted source text.
+    for (const item of buildMemoryCandidates()) {
+      if (item.allowed === false && item.input !== "[withheld]") {
+        failures.push("Refused/redacted memory candidate must not echo its source text.");
+      }
+    }
+    // Memory fixtures exist, carry the disclaimer, and have no forbidden strings.
+    for (const [key, relPath] of Object.entries(MEMORY_FIXTURES)) {
+      const abs = join(repoRoot, relPath);
+      if (!existsSync(abs)) {
+        failures.push(`Memory fixture missing for ${key}: ${relPath}`);
+        continue;
+      }
+      const fixture = readFileSync(abs, "utf8");
+      if (!fixture.includes("not medical advice, diagnosis, or treatment")) {
+        failures.push(`Memory fixture ${relPath} must carry the non-medical disclaimer.`);
+      }
+      for (const re of [...FORBIDDEN_CLAIM_RES, ...FORBIDDEN_LIVE_RES, SECRET_TEXT_RE]) {
+        const match = fixture.match(re);
+        if (match) failures.push(`Memory fixture ${relPath} contains a forbidden string: "${match[0]}"`);
+      }
+    }
+  }
+
   // Demo Packet Export: stitched, shareable packet per persona.
   const exportMeta = contract.demoPacketExport;
   if (!exportMeta || !Array.isArray(exportMeta.personas) || exportMeta.defaultPersona !== "wellness_creator") {
@@ -1308,6 +1501,17 @@ function main() {
     const idx = args.indexOf("--route");
     const prompt = args[idx + 1] ?? "";
     process.stdout.write(`${JSON.stringify({ version: VERSION, mode: "route", ...routeFreeformPrompt(prompt) }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--memory-candidates")) {
+    process.stdout.write(`${JSON.stringify({
+      version: VERSION,
+      mode: "memory-candidates",
+      writesMemory: false,
+      lane: buildMemoryLane(),
+      candidates: buildMemoryCandidates(),
+    }, null, 2)}\n`);
     return;
   }
 
