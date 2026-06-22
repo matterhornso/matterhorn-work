@@ -1,0 +1,405 @@
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { createHash } from "node:crypto"
+import path from "node:path"
+import {
+  type MatterhornMemoryKind,
+  type MatterhornMemoryRecord,
+  redactForbiddenMemorySecrets,
+  validateMemorySafety,
+} from "@matterhorn-work/types"
+
+export const MATTERHORN_MEMORY_VAULT_VERSION = "matterhorn.memory.vault.v1" as const
+export const MATTERHORN_MEMORY_INDEX_VERSION = "matterhorn.memory.index.v1" as const
+
+export interface MatterhornMemoryVaultOptions {
+  rootDir: string
+}
+
+export interface MatterhornMemorySearchOptions {
+  query?: string
+  kind?: MatterhornMemoryKind
+  scope?: MatterhornMemoryRecord["scope"]
+  tags?: string[]
+  includeDeleted?: boolean
+  limit?: number
+}
+
+export interface MatterhornMemoryCaptureResult {
+  record: MatterhornMemoryRecord
+  markdownPath: string
+}
+
+export interface MatterhornMemoryForgetResult {
+  id: string
+  forgotten: boolean
+  reason: string
+}
+
+export interface MatterhornMemoryExportResult {
+  version: typeof MATTERHORN_MEMORY_VAULT_VERSION
+  outputDir: string
+  manifestPath: string
+  recordsPath: string
+  sha256Path: string
+  recordCount: number
+  sha256: string
+}
+
+interface MatterhornMemoryIndexEntry {
+  record: MatterhornMemoryRecord
+  markdownPath: string
+  deleted: boolean
+}
+
+interface MatterhornMemoryIndex {
+  version: typeof MATTERHORN_MEMORY_INDEX_VERSION
+  updatedAt: string
+  entries: Record<string, MatterhornMemoryIndexEntry>
+}
+
+type MemoryLogAction = "capture" | "update" | "forget" | "export"
+
+export class MatterhornMemoryVault {
+  readonly rootDir: string
+  readonly indexPath: string
+  readonly logPath: string
+
+  constructor(options: MatterhornMemoryVaultOptions) {
+    this.rootDir = options.rootDir
+    this.indexPath = path.join(this.rootDir, "memory-index.json")
+    this.logPath = path.join(this.rootDir, "memory-log.jsonl")
+  }
+
+  async initialize(): Promise<void> {
+    await mkdir(this.rootDir, { recursive: true })
+    await Promise.all(
+      [
+        "People",
+        "Projects",
+        "Protocols/Bittensor",
+        "Protocols/Hyperliquid",
+        "Protocols/Polymarket",
+        "Wellness",
+        "Workflows",
+        "Watchlists",
+        "Receipts",
+        "Decisions",
+        "Sources",
+      ].map((dir) => mkdir(path.join(this.rootDir, dir), { recursive: true })),
+    )
+
+    try {
+      await readFile(this.indexPath, "utf8")
+    } catch {
+      await this.writeIndex(emptyIndex())
+    }
+  }
+
+  close(): void {
+    // The portable vault keeps no open handles.
+  }
+
+  async captureRecord(record: MatterhornMemoryRecord): Promise<MatterhornMemoryCaptureResult> {
+    await this.initialize()
+    this.assertSafe(record)
+
+    const markdownPath = this.markdownPathForRecord(record)
+    await mkdir(path.dirname(markdownPath), { recursive: true })
+    await writeFile(markdownPath, renderMemoryMarkdown(record), "utf8")
+
+    const index = await this.readIndex()
+    index.entries[record.id] = { record, markdownPath, deleted: false }
+    await this.writeIndex(index)
+    await this.appendLog("capture", record.id, { markdownPath })
+    return { record, markdownPath }
+  }
+
+  async getRecord(id: string): Promise<MatterhornMemoryRecord | null> {
+    await this.initialize()
+    const entry = (await this.readIndex()).entries[id]
+    return entry && !entry.deleted ? entry.record : null
+  }
+
+  async listRecords(options: Omit<MatterhornMemorySearchOptions, "query"> = {}): Promise<MatterhornMemoryRecord[]> {
+    return this.searchRecords(options)
+  }
+
+  async searchRecords(options: MatterhornMemorySearchOptions = {}): Promise<MatterhornMemoryRecord[]> {
+    await this.initialize()
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 200))
+    const query = options.query?.trim().toLowerCase()
+    const tokens = query?.split(/\s+/).filter(Boolean) ?? []
+    const records = Object.values((await this.readIndex()).entries)
+      .filter((entry) => (options.includeDeleted ? true : !entry.deleted))
+      .map((entry) => entry.record)
+      .filter((record) => (options.kind ? record.kind === options.kind : true))
+      .filter((record) => (options.scope ? record.scope === options.scope : true))
+      .filter((record) => {
+        if (!options.tags?.length) return true
+        const recordTags = new Set(record.tags.map((tag) => tag.toLowerCase()))
+        return options.tags.every((tag) => recordTags.has(tag.toLowerCase()))
+      })
+      .filter((record) => {
+        if (!tokens.length) return true
+        const haystack = [
+          record.title,
+          record.summary,
+          record.kind,
+          record.scope,
+          record.sensitivity,
+          record.tags.join(" "),
+          JSON.stringify(record.body),
+          record.provenance.reasonRemembered,
+        ]
+          .join(" ")
+          .toLowerCase()
+        return tokens.every((token) => haystack.includes(token))
+      })
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+
+    return records.slice(0, limit)
+  }
+
+  async updateRecord(
+    id: string,
+    patch: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>,
+  ): Promise<MatterhornMemoryRecord> {
+    await this.initialize()
+    const index = await this.readIndex()
+    const existing = index.entries[id]
+    if (!existing || existing.deleted) {
+      throw new Error(`Memory record not found: ${id}`)
+    }
+
+    const next: MatterhornMemoryRecord = {
+      ...existing.record,
+      ...patch,
+      id: existing.record.id,
+      createdAt: existing.record.createdAt,
+      updatedAt: patch.updatedAt ?? new Date().toISOString(),
+      body: patch.body ?? existing.record.body,
+      links: patch.links ?? existing.record.links,
+      tags: patch.tags ?? existing.record.tags,
+      provenance: patch.provenance ?? existing.record.provenance,
+    }
+    this.assertSafe(next)
+
+    const markdownPath = this.markdownPathForRecord(next)
+    if (markdownPath !== existing.markdownPath) {
+      await rm(existing.markdownPath, { force: true })
+    }
+    await mkdir(path.dirname(markdownPath), { recursive: true })
+    await writeFile(markdownPath, renderMemoryMarkdown(next), "utf8")
+    index.entries[id] = { record: next, markdownPath, deleted: false }
+    await this.writeIndex(index)
+    await this.appendLog("update", id, { markdownPath })
+    return next
+  }
+
+  async forgetRecord(id: string, reason = "User requested deletion."): Promise<MatterhornMemoryForgetResult> {
+    await this.initialize()
+    const index = await this.readIndex()
+    const entry = index.entries[id]
+    if (!entry) {
+      return { id, forgotten: false, reason: "Memory record was not found." }
+    }
+
+    await rm(entry.markdownPath, { force: true })
+    entry.deleted = true
+    await this.writeIndex(index)
+    await this.appendLog("forget", id, { reason })
+    return { id, forgotten: true, reason }
+  }
+
+  async exportBundle(outputDir: string): Promise<MatterhornMemoryExportResult> {
+    await this.initialize()
+    await mkdir(outputDir, { recursive: true })
+    const records = (await this.listRecords({ limit: 500 })).filter((record) => record.canExport)
+    const manifest = {
+      version: MATTERHORN_MEMORY_VAULT_VERSION,
+      exportedAt: new Date().toISOString(),
+      recordCount: records.length,
+      safety: {
+        publicOrUserApprovedOnly: true,
+        includesSecrets: false,
+        includesRawSignatures: false,
+        includesSignedPayloads: false,
+        includesWalletExports: false,
+      },
+    }
+
+    const manifestPath = path.join(outputDir, "matterhorn-memory-export-manifest.json")
+    const recordsPath = path.join(outputDir, "matterhorn-memory-records.json")
+    const sha256Path = path.join(outputDir, "matterhorn-memory-export.sha256")
+
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8")
+    await writeFile(recordsPath, `${JSON.stringify(records, null, 2)}\n`, "utf8")
+    const sha256 = sha256Hex(await readFile(recordsPath, "utf8"))
+    await writeFile(sha256Path, `${sha256}  matterhorn-memory-records.json\n`, "utf8")
+    await this.appendLog("export", "memory-export", { outputDir, recordCount: records.length, sha256 })
+
+    return {
+      version: MATTERHORN_MEMORY_VAULT_VERSION,
+      outputDir,
+      manifestPath,
+      recordsPath,
+      sha256Path,
+      recordCount: records.length,
+      sha256,
+    }
+  }
+
+  private assertSafe(record: MatterhornMemoryRecord): void {
+    const redaction = redactForbiddenMemorySecrets(record)
+    if (redaction.redacted) {
+      throw new Error(redaction.reason)
+    }
+    const validation = validateMemorySafety(record)
+    if (!validation.ok) {
+      throw new Error(`Memory record failed safety validation: ${validation.errors.join("; ")}`)
+    }
+    if (record.sensitivity === "forbidden_secret") {
+      throw new Error("forbidden_secret records cannot be written to the Matterhorn memory vault")
+    }
+  }
+
+  private markdownPathForRecord(record: MatterhornMemoryRecord): string {
+    return path.join(this.rootDir, folderForRecord(record), `${record.id}-${slugify(record.title)}.md`)
+  }
+
+  private async readIndex(): Promise<MatterhornMemoryIndex> {
+    try {
+      const parsed = JSON.parse(await readFile(this.indexPath, "utf8")) as MatterhornMemoryIndex
+      return parsed.version === MATTERHORN_MEMORY_INDEX_VERSION ? parsed : emptyIndex()
+    } catch {
+      return emptyIndex()
+    }
+  }
+
+  private async writeIndex(index: MatterhornMemoryIndex): Promise<void> {
+    index.updatedAt = new Date().toISOString()
+    await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8")
+  }
+
+  private async appendLog(action: MemoryLogAction, id: string, details: Record<string, unknown>): Promise<void> {
+    await writeFile(
+      this.logPath,
+      `${JSON.stringify({
+        version: MATTERHORN_MEMORY_VAULT_VERSION,
+        action,
+        id,
+        at: new Date().toISOString(),
+        details,
+      })}\n`,
+      { encoding: "utf8", flag: "a" },
+    )
+  }
+}
+
+export function createMatterhornMemoryVault(rootDir: string): MatterhornMemoryVault {
+  return new MatterhornMemoryVault({ rootDir })
+}
+
+export function renderMemoryMarkdown(record: MatterhornMemoryRecord): string {
+  const frontmatter = {
+    id: record.id,
+    kind: record.kind,
+    scope: record.scope,
+    sensitivity: record.sensitivity,
+    source: record.provenance.source,
+    confidence: record.provenance.confidence,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    tags: record.tags,
+    canUseInChat: record.canUseInChat,
+    canExport: record.canExport,
+    canDelete: record.canDelete,
+  }
+
+  return [
+    "---",
+    toYaml(frontmatter),
+    "---",
+    "",
+    `# ${record.title}`,
+    "",
+    record.summary,
+    "",
+    "## Why Remembered",
+    "",
+    record.provenance.reasonRemembered,
+    "",
+    "## Body",
+    "",
+    "```json",
+    JSON.stringify(record.body, null, 2),
+    "```",
+    "",
+    "## Links",
+    "",
+    ...(record.links.length
+      ? record.links.map((link) => `- [${link.title ?? link.rel}](${link.href})`)
+      : ["- None"]),
+    "",
+  ].join("\n")
+}
+
+function emptyIndex(): MatterhornMemoryIndex {
+  return {
+    version: MATTERHORN_MEMORY_INDEX_VERSION,
+    updatedAt: new Date().toISOString(),
+    entries: {},
+  }
+}
+
+function folderForRecord(record: MatterhornMemoryRecord): string {
+  const tags = record.tags.map((tag) => tag.toLowerCase())
+  if (tags.includes("bittensor")) return "Protocols/Bittensor"
+  if (tags.includes("hyperliquid")) return "Protocols/Hyperliquid"
+  if (tags.includes("polymarket")) return "Protocols/Polymarket"
+  if (tags.includes("wellness") || record.kind === "client_profile") return "Wellness"
+
+  switch (record.kind) {
+    case "watchlist":
+      return "Watchlists"
+    case "receipt":
+      return "Receipts"
+    case "workflow_artifact":
+      return "Workflows"
+    case "decision":
+      return "Decisions"
+    case "connector_preference":
+    case "mcp_tool_preference":
+      return "Sources"
+    default:
+      return "Projects"
+  }
+}
+
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex")
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80)
+  return slug || "memory"
+}
+
+function toYaml(value: Record<string, unknown>): string {
+  return Object.entries(value)
+    .map(([key, item]) => {
+      if (Array.isArray(item)) {
+        if (item.length === 0) return `${key}: []`
+        return [`${key}:`, ...item.map((entry) => `  - ${String(entry)}`)].join("\n")
+      }
+      if (typeof item === "string") {
+        return `${key}: ${JSON.stringify(item)}`
+      }
+      return `${key}: ${String(item)}`
+    })
+    .join("\n")
+}
