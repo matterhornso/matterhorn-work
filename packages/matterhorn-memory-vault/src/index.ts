@@ -6,7 +6,7 @@ import {
   type MatterhornMemoryRecord,
   redactForbiddenMemorySecrets,
   validateMemorySafety,
-} from "@matterhorn-work/types"
+} from "@matterhorn-work/types/memory"
 
 export const MATTERHORN_MEMORY_VAULT_VERSION = "matterhorn.memory.vault.v1" as const
 export const MATTERHORN_MEMORY_INDEX_VERSION = "matterhorn.memory.index.v1" as const

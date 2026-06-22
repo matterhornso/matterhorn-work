@@ -3742,6 +3742,7 @@ function printHelp(): void {
     "  matterhorn-work sessions status <session-id> --workspace-id <id>",
     "  matterhorn-work sessions snapshot <session-id> --workspace-id <id> [options]",
     "  matterhorn-work sessions events <session-id> --workspace-id <id> [options]",
+    "  matterhorn-work memory search|list|get|capture|update|forget|export [options]",
     "  matterhorn-work bittensor chat --message <text> [options]",
     "  matterhorn-work bittensor capabilities [options]",
     "  matterhorn-work bittensor capability --netuid <n> [options]",
@@ -3819,6 +3820,7 @@ function printHelp(): void {
     "  approvals reply <id>     Approve or deny a request",
     "  files                   Manage file sessions and batch file sync",
     "  sessions                Manage chat sessions and read progress events",
+    "  memory                  Manage explicit, user-controlled Matterhorn Memory records",
     "  bittensor               Run Bittensor chat/readiness workflows",
     "  hyperliquid             Run Hyperliquid read/preview workflows",
     "  polymarket              Run Polymarket read/preview workflows",
@@ -8784,6 +8786,218 @@ async function runWorkflows(args: ParsedArgs) {
   }
 }
 
+function assertNoMemorySecrets(args: ParsedArgs): void {
+  const forbiddenFlags = [
+    "api-secret",
+    "apiSecret",
+    "api-key",
+    "apiKey",
+    "private-key",
+    "privateKey",
+    "seed",
+    "seed-phrase",
+    "seedPhrase",
+    "mnemonic",
+    "raw-signature",
+    "rawSignature",
+    "signature",
+    "signed-payload",
+    "signedPayload",
+    "wallet-export",
+    "walletExport",
+    "exchange-secret",
+    "exchangeSecret",
+  ];
+  for (const key of forbiddenFlags) {
+    if (args.flags.has(key)) {
+      throw new Error(
+        `Matterhorn memory ${key} is not accepted by Matterhorn Work CLI. Memory records cannot store seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or exchange secrets.`,
+      );
+    }
+  }
+}
+
+function readJsonObjectFlag(args: ParsedArgs, jsonFlag: string, fileFlag: string, label: string): Record<string, unknown> {
+  const inline = readFlag(args.flags, jsonFlag);
+  const file = readFlag(args.flags, fileFlag);
+  if (!inline && !file) {
+    throw new Error(`${label} requires --${jsonFlag} or --${fileFlag}`);
+  }
+  const raw = inline ?? readFileSync(resolve(String(file)), "utf8");
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error(`${label} must be a JSON object`);
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`Could not parse ${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function readMemoryId(args: ParsedArgs, fallbackIndex = 2): string {
+  const id = readFlag(args.flags, "id") ?? args.positionals[fallbackIndex] ?? "";
+  const trimmed = id.trim();
+  if (!trimmed) {
+    throw new Error("memory id is required");
+  }
+  return trimmed;
+}
+
+function buildMemoryRecordFromCli(args: ParsedArgs): Record<string, unknown> {
+  const now = new Date().toISOString();
+  const id = readFlag(args.flags, "id") ?? randomUUID();
+  const title = readFlag(args.flags, "title") ?? "";
+  const summary = readFlag(args.flags, "summary") ?? "";
+  if (!title.trim()) throw new Error("title is required for memory capture");
+  if (!summary.trim()) throw new Error("summary is required for memory capture");
+
+  const body = readJsonObjectFlag(args, "body-json", "body-file", "memory body");
+  const links = readFlag(args.flags, "links-json")
+    ? readJsonObjectFlag(args, "links-json", "links-file", "memory links")
+    : readFlag(args.flags, "links-file")
+      ? readJsonObjectFlag(args, "links-json", "links-file", "memory links")
+      : {};
+  const linkItems = Array.isArray((links as { items?: unknown }).items)
+    ? (links as { items: unknown[] }).items
+    : [];
+
+  return {
+    id,
+    kind: readFlag(args.flags, "kind") ?? "project_fact",
+    scope: readFlag(args.flags, "scope") ?? "workspace",
+    title: title.trim(),
+    summary: summary.trim(),
+    body,
+    tags: parseList(readFlag(args.flags, "tags")),
+    links: linkItems,
+    provenance: {
+      source: readFlag(args.flags, "source") ?? "manual_entry",
+      sourceId: readFlag(args.flags, "source-id"),
+      capturedAt: now,
+      capturedBy: readFlag(args.flags, "captured-by") ?? "user",
+      confidence: readNumber(args.flags, "confidence", 0.9),
+      reasonRemembered:
+        readFlag(args.flags, "reason") ??
+        "User explicitly captured this memory through the Matterhorn Work CLI.",
+    },
+    sensitivity: readFlag(args.flags, "sensitivity") ?? "private",
+    createdAt: now,
+    updatedAt: now,
+    expiresAt: readFlag(args.flags, "expires-at"),
+    canUseInChat: !readBool(args.flags, "no-use-in-chat", false),
+    canExport: !readBool(args.flags, "no-export", false),
+    canDelete: !readBool(args.flags, "no-delete", false),
+  };
+}
+
+async function runMemory(args: ParsedArgs) {
+  const outputJson = readBool(args.flags, "json", false);
+  const subcommand = args.positionals[1] ?? "search";
+  const { openworkUrl, token } = readOpenworkClientAuth(args);
+  const baseUrl = openworkUrl.replace(/\/$/, "");
+  const jsonHeaders = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+  const getHeaders = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  try {
+    assertNoMemorySecrets(args);
+
+    if (subcommand === "search" || subcommand === "find") {
+      const url = new URL(`${baseUrl}/api/memory/search`);
+      const query = readFlag(args.flags, "query") ?? readFlag(args.flags, "q") ?? args.positionals.slice(2).join(" ").trim();
+      if (query) url.searchParams.set("q", query);
+      for (const key of ["kind", "scope", "tags", "limit"]) {
+        const value = readFlag(args.flags, key);
+        if (value !== undefined && value.trim()) url.searchParams.set(key, value.trim());
+      }
+      if (readBool(args.flags, "include-deleted", false)) url.searchParams.set("includeDeleted", "true");
+      outputResult(await fetchJson(url.toString(), { headers: getHeaders }), outputJson);
+      return;
+    }
+
+    if (subcommand === "list" || subcommand === "ls") {
+      const url = new URL(`${baseUrl}/api/memory/entities`);
+      for (const key of ["kind", "scope", "tags", "limit"]) {
+        const value = readFlag(args.flags, key);
+        if (value !== undefined && value.trim()) url.searchParams.set(key, value.trim());
+      }
+      if (readBool(args.flags, "include-deleted", false)) url.searchParams.set("includeDeleted", "true");
+      outputResult(await fetchJson(url.toString(), { headers: getHeaders }), outputJson);
+      return;
+    }
+
+    if (subcommand === "get" || subcommand === "show") {
+      const id = readMemoryId(args);
+      outputResult(await fetchJson(`${baseUrl}/api/memory/entities/${encodeURIComponent(id)}`, { headers: getHeaders }), outputJson);
+      return;
+    }
+
+    if (subcommand === "capture" || subcommand === "remember" || subcommand === "add") {
+      const record = buildMemoryRecordFromCli(args);
+      outputResult(
+        await fetchJson(`${baseUrl}/api/memory/capture`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({ record }),
+        }),
+        outputJson,
+      );
+      return;
+    }
+
+    if (subcommand === "update" || subcommand === "patch") {
+      const id = readMemoryId(args);
+      const patch = readJsonObjectFlag(args, "patch-json", "patch-file", "memory patch");
+      outputResult(
+        await fetchJson(`${baseUrl}/api/memory/entities/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: jsonHeaders,
+          body: JSON.stringify({ patch }),
+        }),
+        outputJson,
+      );
+      return;
+    }
+
+    if (subcommand === "forget" || subcommand === "delete" || subcommand === "remove" || subcommand === "rm") {
+      const id = readMemoryId(args);
+      const reason = readFlag(args.flags, "reason") ?? "User requested deletion from the Matterhorn Work CLI.";
+      outputResult(
+        await fetchJson(`${baseUrl}/api/memory/forget`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify({ id, reason }),
+        }),
+        outputJson,
+      );
+      return;
+    }
+
+    if (subcommand === "export" || subcommand === "bundle") {
+      const outputDir = readFlag(args.flags, "output-dir") ?? readFlag(args.flags, "out");
+      outputResult(
+        await fetchJson(`${baseUrl}/api/memory/export`, {
+          method: "POST",
+          headers: jsonHeaders,
+          body: JSON.stringify(outputDir ? { outputDir } : {}),
+        }),
+        outputJson,
+      );
+      return;
+    }
+
+    throw new Error("memory requires search, list, get, capture, update, forget, or export");
+  } catch (error) {
+    outputError(error, outputJson);
+    process.exitCode = 1;
+  }
+}
+
 async function runSessions(args: ParsedArgs) {
   const outputJson = readBool(args.flags, "json", false);
   const subcommand = args.positionals[1] ?? "";
@@ -11905,6 +12119,10 @@ async function main() {
   }
   if (command === "sessions" || command === "session") {
     await runSessions(args);
+    return;
+  }
+  if (command === "memory" || command === "memories" || command === "remember") {
+    await runMemory(args);
     return;
   }
   if (command === "bittensor" || command === "tao") {

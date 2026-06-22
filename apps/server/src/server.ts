@@ -184,6 +184,8 @@ import {
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
 } from "./tools/market-execution-readiness.js";
+import { createMatterhornMemoryVault } from "@matterhorn-work/memory-vault";
+import type { MatterhornMemoryRecord } from "@matterhorn-work/types/memory";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -957,6 +959,50 @@ function jsonResponse(data: unknown, status = 200) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function resolveMatterhornMemoryRoot(): string {
+  return (
+    process.env.MATTERHORN_WORK_MEMORY_ROOT?.trim() ||
+    process.env.OPENWORK_MEMORY_ROOT?.trim() ||
+    join(homedir(), ".matterhorn-work", "memory")
+  );
+}
+
+function coerceMemoryRecord(value: unknown): MatterhornMemoryRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_memory_record", "memory record body must be an object");
+  }
+  return value as MatterhornMemoryRecord;
+}
+
+function normalizeMemoryTags(value: string | null): string[] | undefined {
+  if (!value) return undefined;
+  const tags = value
+    .split(/[,;]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  return tags.length ? tags : undefined;
+}
+
+function normalizeMemoryLimit(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) {
+    throw new ApiError(400, "invalid_memory_limit", "limit must be a positive number");
+  }
+  return Math.min(Math.floor(limit), 200);
+}
+
+function memoryApiError(error: unknown): ApiError {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/not found/i.test(message)) {
+    return new ApiError(404, "memory_not_found", message);
+  }
+  if (/forbidden secret|safety validation|forbidden_secret|live submission|private key|seed phrase|signed payload|raw signature|wallet export|api secret/i.test(message)) {
+    return new ApiError(400, "memory_safety_rejected", message);
+  }
+  return new ApiError(400, "memory_request_failed", message);
 }
 
 type SessionStreamEventInput = {
@@ -1824,6 +1870,7 @@ function createRoutes(
   const routes: Route[] = [];
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
+  const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
 
   const serializeFileSession = (session: {
     id: string;
@@ -4448,6 +4495,109 @@ function createRoutes(
         "invalid_customer_workflow_template_filter",
         error instanceof Error ? error.message : "Could not build Matterhorn customer workflow template catalog",
       );
+    }
+  });
+
+  addRoute(routes, "GET", "/api/memory/search", "client", async (ctx) => {
+    try {
+      const records = await memoryVault.searchRecords({
+        query: ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? undefined,
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
+        tags: normalizeMemoryTags(ctx.url.searchParams.get("tags")),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      return jsonResponse({ success: true, records, count: records.length });
+    } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/api/memory/entities", "client", async (ctx) => {
+    try {
+      const records = await memoryVault.listRecords({
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: ctx.url.searchParams.get("scope") as MatterhornMemoryRecord["scope"] | null ?? undefined,
+        tags: normalizeMemoryTags(ctx.url.searchParams.get("tags")),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      return jsonResponse({ success: true, records, count: records.length });
+    } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/api/memory/entities/:id", "client", async (ctx) => {
+    const record = await memoryVault.getRecord(ctx.params.id);
+    if (!record) {
+      throw new ApiError(404, "memory_not_found", "Memory record not found");
+    }
+    return jsonResponse({ success: true, record });
+  });
+
+  addRoute(routes, "POST", "/api/memory/capture", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const record = coerceMemoryRecord(body.record ?? body);
+      const result = await memoryVault.captureRecord(record);
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/api/memory/entities/:id", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : body as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      const record = await memoryVault.updateRecord(ctx.params.id, patch);
+      return jsonResponse({ success: true, record });
+    } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/api/memory/entities/:id", "client", async (ctx) => {
+    try {
+      const result = await memoryVault.forgetRecord(ctx.params.id, "Deleted through Matterhorn Work memory API.");
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/memory/forget", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const id = typeof body.id === "string" ? body.id.trim() : "";
+      if (!id) {
+        throw new ApiError(400, "invalid_memory_id", "id is required");
+      }
+      const reason = typeof body.reason === "string" && body.reason.trim()
+        ? body.reason.trim()
+        : "User requested memory deletion.";
+      const result = await memoryVault.forgetRecord(id, reason);
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/memory/export", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const outputDir = typeof body.outputDir === "string" && body.outputDir.trim()
+        ? body.outputDir.trim()
+        : join(memoryVault.rootDir, "Exports", `memory-export-${Date.now()}`);
+      const result = await memoryVault.exportBundle(outputDir);
+      return jsonResponse({ success: true, export: result });
+    } catch (error) {
+      throw memoryApiError(error);
     }
   });
 

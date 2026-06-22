@@ -37,6 +37,11 @@
       "types": "./src/matterhorn-workflows.ts",
       "development": "./src/matterhorn-workflows.ts",
       "default": "./src/matterhorn-workflows.ts"
+    },
+    "./memory": {
+      "types": "./src/memory.ts",
+      "development": "./src/memory.ts",
+      "default": "./src/memory.ts"
     }
   },
   "files": [
