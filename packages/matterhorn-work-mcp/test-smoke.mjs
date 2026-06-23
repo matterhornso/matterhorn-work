@@ -645,33 +645,40 @@ const server = createServer(async (req, res) => {
     canDelete: true,
   };
   if (req.method === "GET" && url.pathname === "/api/memory/search") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(url.searchParams.get("q"), "tao");
     assert.equal(url.searchParams.get("scope"), "workspace");
     assert.equal(url.searchParams.get("tags"), "bittensor,wallet");
     return json(res, 200, { success: true, records: [memoryRecord], count: 1 });
   }
   if (req.method === "GET" && url.pathname === "/api/memory/entities") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(url.searchParams.get("kind"), "protocol_address");
     assert.equal(url.searchParams.get("limit"), "5");
     return json(res, 200, { success: true, records: [memoryRecord], count: 1 });
   }
   if (req.method === "GET" && url.pathname === "/api/memory/entities/mem_1") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     return json(res, 200, { success: true, record: memoryRecord });
   }
   if (req.method === "POST" && url.pathname === "/api/memory/capture") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(body.record.id, "mem_2");
     return json(res, 200, { success: true, record: body.record, redactions: [] });
   }
   if (req.method === "PATCH" && url.pathname === "/api/memory/entities/mem_1") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(body.patch.summary, "Updated public wallet summary.");
     return json(res, 200, { success: true, record: { ...memoryRecord, ...body.patch } });
   }
   if (req.method === "POST" && url.pathname === "/api/memory/forget") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(body.id, "mem_1");
     assert.equal(body.reason, "No longer needed.");
     return json(res, 200, { success: true, id: "mem_1", forgotten: true });
   }
   if (req.method === "POST" && url.pathname === "/api/memory/export") {
+    assert.equal(url.searchParams.get("surface"), "mcp");
     assert.equal(body.outputDir, "/tmp/matterhorn-memory-export");
     return json(res, 200, {
       success: true,

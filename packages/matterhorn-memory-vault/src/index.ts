@@ -2,9 +2,12 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import path from "node:path"
 import {
+  MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
   type MatterhornMemoryKind,
   type MatterhornMemoryRecord,
+  detectMemoryDeskFromRecord,
   redactForbiddenMemorySecrets,
+  validateMemoryRecordAgainstDeskPolicy,
   validateMemorySafety,
 } from "@matterhorn-work/types/memory"
 
@@ -214,7 +217,7 @@ export class MatterhornMemoryVault {
   async exportBundle(outputDir: string): Promise<MatterhornMemoryExportResult> {
     await this.initialize()
     await mkdir(outputDir, { recursive: true })
-    const records = (await this.listRecords({ limit: 500 })).filter((record) => record.canExport)
+    const records = (await this.listRecords({ limit: 500 })).filter((record) => recordCanExportByDeskPolicy(record))
     const manifest = {
       version: MATTERHORN_MEMORY_VAULT_VERSION,
       exportedAt: new Date().toISOString(),
@@ -261,6 +264,7 @@ export class MatterhornMemoryVault {
     if (record.sensitivity === "forbidden_secret") {
       throw new Error("forbidden_secret records cannot be written to the Matterhorn memory vault")
     }
+    assertMemoryDeskPolicy(record)
   }
 
   private markdownPathForRecord(record: MatterhornMemoryRecord): string {
@@ -294,6 +298,28 @@ export class MatterhornMemoryVault {
       { encoding: "utf8", flag: "a" },
     )
   }
+}
+
+function assertMemoryDeskPolicy(record: MatterhornMemoryRecord): void {
+  const desk = detectMemoryDeskFromRecord(record)
+  const policy = MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk]
+  const validation = validateMemoryRecordAgainstDeskPolicy(record, desk)
+  if (!validation.ok) {
+    throw new Error(`Memory record failed desk policy validation: ${validation.errors.join("; ")}`)
+  }
+  if (record.canUseInChat && !policy.canUseInChat) {
+    throw new Error(`Memory record enables chat use but ${desk} policy forbids chat use`)
+  }
+  if (record.canExport && !policy.canExport) {
+    throw new Error(`Memory record enables export but ${desk} policy forbids export`)
+  }
+}
+
+function recordCanExportByDeskPolicy(record: MatterhornMemoryRecord): boolean {
+  const desk = detectMemoryDeskFromRecord(record)
+  const policy = MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk]
+  const validation = validateMemoryRecordAgainstDeskPolicy(record, desk)
+  return record.canExport && policy.canExport && validation.ok && record.sensitivity !== "forbidden_secret"
 }
 
 export function createMatterhornMemoryVault(rootDir: string): MatterhornMemoryVault {

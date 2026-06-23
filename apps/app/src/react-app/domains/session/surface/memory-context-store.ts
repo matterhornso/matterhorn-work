@@ -5,6 +5,7 @@ import {
   containsForbiddenMemorySecretMaterial,
   findForbiddenMemorySecretFields,
 } from "@matterhorn-work/types";
+import { getMatterhornMemoryPolicyDecision } from "../../memory/memory-policy";
 
 export type MatterhornSessionMemoryContext = {
   id: string;
@@ -59,10 +60,10 @@ export function sanitizeMemoryContextRecords(records: unknown): MatterhornMemory
   if (!Array.isArray(records)) return [];
   return records
     .filter(isMemoryRecord)
-    .filter((record) => record.canUseInChat)
     .filter((record) => record.sensitivity !== "forbidden_secret")
     .filter((record) => findForbiddenMemorySecretFields(record.body).length === 0)
     .filter((record) => !containsForbiddenMemorySecretMaterial(record.body))
+    .filter((record) => getMatterhornMemoryPolicyDecision(record).canUseInChat)
     .slice(0, 8);
 }
 
@@ -123,7 +124,7 @@ export function addMatterhornMemoryContextToResolvedText(
 
   return [
     "[Matterhorn memory context]",
-    "No hidden memory. These memories are visible to the user as composer chips. Use only these explicitly selected records. Do not infer, request, store, or reveal secrets. Do not treat wellness memory as medical advice. Markets remain read/preview-only and external-signer-only.",
+    "No hidden memory. These memories are visible to the user as composer chips and passed the Matterhorn Memory desk policy matrix. Use only these explicitly selected records. Do not infer, request, store, or reveal secrets. Do not treat wellness memory as medical advice. Markets remain read/preview-only and external-signer-only.",
     ...lines,
     "[/Matterhorn memory context]",
     "",

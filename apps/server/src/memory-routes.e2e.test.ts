@@ -138,10 +138,38 @@ describe("Matterhorn memory API routes", () => {
     expect(captured.payload.record.id).toBe("mem_route_tao_wallet");
     expect(captured.payload.markdownPath).toContain("Protocols/Bittensor");
 
+    const marketCapture = await jsonFetch(base, "/api/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_route_hyperliquid_watch",
+          kind: "watchlist",
+          title: "Hyperliquid BTC watch",
+          summary: "Watch BTC funding and price movement without enabling execution.",
+          body: { market: "BTC", watch: "funding and price movement" },
+          tags: ["hyperliquid", "watchlist"],
+          canExport: false,
+        }),
+      }),
+    });
+    expect(marketCapture.response.status).toBe(200);
+
     const search = await jsonFetch(base, "/api/memory/search?q=TAO&tags=bittensor&limit=5");
     expect(search.response.status).toBe(200);
     expect(search.payload.count).toBe(1);
     expect(search.payload.records[0].title).toBe("Main TAO wallet");
+
+    const marketSearch = await jsonFetch(base, "/api/memory/search?tags=hyperliquid&limit=5");
+    expect(marketSearch.response.status).toBe(200);
+    expect(marketSearch.payload.count).toBe(1);
+
+    const marketMcpSearch = await jsonFetch(base, "/api/memory/search?tags=hyperliquid&surface=mcp&limit=5");
+    expect(marketMcpSearch.response.status).toBe(200);
+    expect(marketMcpSearch.payload.count).toBe(0);
+
+    const marketMcpGet = await jsonFetch(base, "/api/memory/entities/mem_route_hyperliquid_watch?surface=mcp");
+    expect(marketMcpGet.response.status).toBe(403);
+    expect(marketMcpGet.payload.code).toBe("memory_policy_blocks_mcp_api");
 
     const fetched = await jsonFetch(base, "/api/memory/entities/mem_route_tao_wallet");
     expect(fetched.response.status).toBe(200);
@@ -181,6 +209,26 @@ describe("Matterhorn memory API routes", () => {
         record: record({
           id: "mem_route_secret_rejected",
           body: { privateKey: "0xabc" },
+        }),
+      }),
+    });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload.code).toBe("memory_safety_rejected");
+  });
+
+  test("rejects records that violate desk policy flags", async () => {
+    const { base } = await boot();
+    const rejected = await jsonFetch(base, "/api/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_route_market_export_rejected",
+          kind: "watchlist",
+          title: "Hyperliquid export violation",
+          summary: "This market memory tries to enable export.",
+          body: { market: "BTC" },
+          tags: ["hyperliquid"],
+          canExport: true,
         }),
       }),
     });
