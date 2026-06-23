@@ -301,7 +301,7 @@ A black-box **QA evidence pack** proves the candidates are useful but safe (per-
 node scripts/wellness-creator-workflow.mjs --memory-qa --json
 ```
 
-A **contract adapter** converts safe candidates into `MatterhornMemorySuggestion`-shaped fixtures (the merged shape in `packages/types/src/memory.ts`) — **suggestions only, never writes**. Each proposed record is `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`, with `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, and `requiresExplicitConsent: true`. Clinical and secret-shaped inputs are refused/redacted and never become records:
+A **contract adapter** converts safe candidates into `MatterhornMemorySuggestion`-shaped fixtures (the merged shape in `packages/types/src/memory.ts`) — **suggestions only, never writes**. It covers six wellness preference types: **client preference, program preference, check-in cadence, equipment constraints, communication preference, and dietary preference** (the last only when **non-clinical and user-confirmed** — clinical/therapeutic diets are refused/redacted). Each proposed record is `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`, with `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, and `requiresExplicitConsent: true`. Clinical and secret-shaped inputs are refused/redacted and never become records:
 
 ```bash
 node scripts/wellness-creator-workflow.mjs --memory-suggestions --json
