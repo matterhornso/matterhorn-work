@@ -357,3 +357,254 @@ Verify the following do NOT exist in any Memory UI surface:
 - Any passive-voice "Matterhorn remembers everything you do" messaging
 
 If any of these are found, file a P0 and fix immediately.
+
+---
+
+## Sprint 6: Memory Producer V1
+
+### 18. Producer Bell Icon
+
+Add a bell icon to the app header for pending memory suggestions.
+
+**Behavior:**
+- Shows an unread badge when safe memory suggestions are waiting for review.
+- Opens the suggestion inbox when clicked.
+- Never saves memory by itself.
+- Badge count only reflects suggestions that the user can review.
+- Wellness suggestions stay hidden unless the user has enabled wellness memory suggestions.
+
+**States:**
+- Empty: no badge, neutral icon.
+- Has suggestions: badge with count, accessible label "Memory suggestions waiting".
+- Loading: subtle skeleton badge, no spinner.
+- Error: amber badge and tooltip explaining that suggestions could not be loaded.
+
+---
+
+### 19. Suggestion Inbox Slide-Over Panel
+
+Design a right-side panel titled "Memory suggestions".
+
+**Layout:**
+- Header with title, count, close button, and privacy shortcut.
+- Intro line: "Review what Matterhorn thinks may be useful later. Nothing is saved until you confirm."
+- Scrollable stack of suggestion cards.
+- Footer with a link to Memory Privacy settings.
+
+**Rules:**
+- The panel must not block the main chat.
+- Escape closes the panel.
+- Focus is trapped while the panel is open.
+- Empty state explains that Matterhorn has not found anything useful to suggest yet.
+
+---
+
+### 20. Suggestion Card
+
+Each card must show the suggestion clearly enough for the user to accept, edit, or reject.
+
+**Required content:**
+- Title.
+- Body.
+- Type badge.
+- Sensitivity badge.
+- Source chip.
+- Confidence bar.
+- "Why suggested" explanation in plain English.
+- Suggested scope.
+- Timestamp.
+
+**Actions:**
+- Confirm.
+- Edit.
+- Dismiss.
+
+**Safety copy:**
+- "Nothing is saved until you confirm."
+- "Matterhorn never stores seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports."
+
+---
+
+### 21. Inline Edit Mode
+
+When the user clicks Edit, keep the card in place and switch title/body fields to editable controls.
+
+**Behavior:**
+- Save changes.
+- Cancel.
+- Preserve the original "Why suggested" explanation.
+- Re-run forbidden-content validation before saving.
+- Show inline validation errors for secret-shaped or clinical content.
+
+**NO HIDDEN SAVE:**
+- Do not save on blur.
+- Do not save on typing.
+- Do not save on panel close.
+- Only save on explicit "Save changes".
+
+---
+
+### 22. Producer Privacy Controls
+
+Add privacy controls to the suggestion inbox and Memory settings.
+
+**Required controls:**
+- Enable/disable memory suggestions globally.
+- Enable/disable suggestions by source.
+- Enable/disable protocol-address suggestions.
+- Enable/disable receipt suggestions.
+- Enable/disable wellness suggestions.
+
+**Wellness default:**
+- Wellness suggestions are off by default.
+- Wellness suggestions are restricted and local-first.
+- The UI must explain that wellness memory is optional and user-confirmed.
+
+---
+
+### 23. Empty/Error States
+
+Design complete empty, loading, and error states for the producer flow.
+
+**Empty state:**
+- Title: "No suggestions right now"
+- Body: "Matterhorn will suggest memories only when they may help future work. Nothing is saved automatically."
+
+**Error state:**
+- Title: "Suggestions unavailable"
+- Body: "Memory suggestions could not be loaded. Existing memories are unaffected."
+- Action: Retry.
+
+**Blocked state:**
+- Title: "Suggestion blocked"
+- Body: "This candidate looked like a secret, credential, signed payload, or restricted wellness data, so Matterhorn refused to save it."
+
+---
+
+### 24. Anti-Patterns Checklist — Producer
+
+The producer UI must never include:
+
+- Auto-save claims.
+- Hidden memory writes.
+- Seed phrase fields.
+- Private key fields.
+- API secret fields.
+- Raw signature fields.
+- Signed payload fields.
+- Wallet export fields.
+- Medical diagnosis memories without explicit opt-in and review.
+- Any button that says "Remember everything".
+- Any suggestion that bypasses Confirm.
+
+---
+
+## Sprint 7: Customer UX Overhaul
+
+### 25. Desk-First Navigation Sidebar
+
+Replace internal-category navigation with a customer-facing desk model.
+
+```text
+Desk
+  Bittensor
+  Hyperliquid
+  Polymarket
+  Wellness
+Memory
+Tools
+Settings
+```
+
+**Rules:**
+- Do not show Services as a primary customer nav item.
+- Each desk has its own icon and color accent.
+- The selected desk must be visually obvious.
+- Mobile uses a bottom tab or compact drawer, not a trapped right rail.
+
+---
+
+### 26. Desk Surfaces
+
+Create first-class desk surfaces instead of a generic crypto workspace.
+
+**Bittensor desk:**
+- Wallet, subnets, validators, watches, receipts, unsigned staking previews.
+- SS58/coldkey/hotkey language.
+- External signer required for actions.
+
+**Hyperliquid desk:**
+- Read-only account/orderbook/preview.
+- Can submit: No.
+- Live submission: Off.
+- External signer/client required.
+
+**Polymarket desk:**
+- Market discovery, outcome context, compliance state, preview.
+- Can submit: No.
+- Live submission: Off.
+- Compliance-blocked previews must not show executable price, size, or share fields.
+
+**Wellness desk:**
+- Plain workflow surface, not Web3.
+- Training, yoga, dietician, client workflow, progress check-in, offer builder.
+- Educational only, non-medical, no live payments/email/hosting/access claims.
+
+---
+
+### 27. Semantic Color Token System
+
+Use semantic tokens instead of one global accent.
+
+**Required namespaces:**
+- `--brand-*`
+- `--action-*`
+- `--status-*`
+- `--desk-*`
+- `--nav-*`
+
+**Desk accents:**
+- Bittensor: energetic pink.
+- Hyperliquid: electric blue.
+- Polymarket: violet.
+- Wellness: warm rose.
+- Memory: cyan.
+
+**Matterhorn brand:**
+- Keep `#0C0C0C` and `#D1F2FF` for primary brand moments, primary buttons, and selected states.
+- Use brighter supporting colors for protocols, alerts, and workflow categories.
+
+---
+
+### 28. Responsive Behavior
+
+Every desk and memory screen must work at desktop, tablet, and mobile sizes.
+
+**Desktop:**
+- Left navigation, central chat/workspace, optional right context panel.
+
+**Tablet:**
+- Collapsible side panels.
+- Cards use two columns only when width allows.
+
+**Mobile:**
+- One-column content.
+- Bottom navigation or drawer.
+- No horizontal overflow.
+- Composer remains reachable.
+- Right rail never traps content off-screen.
+
+---
+
+### 29. Anti-Patterns Checklist
+
+The customer UX must not include:
+
+- Services as a top-level customer desk.
+- Computer Use as a customer-facing default.
+- OpenWork or OpenCode copy on customer-facing screens.
+- Buttons implying live market submission.
+- Buttons implying Matterhorn signs or holds custody.
+- Credential entry fields.
+- Hidden memory saves.
+- Wellness copy that implies diagnosis, treatment, prescription, or guaranteed outcomes.
