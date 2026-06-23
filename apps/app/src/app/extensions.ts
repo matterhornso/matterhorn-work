@@ -207,6 +207,33 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
   },
   {
     schemaVersion: 1,
+    id: "matterhorn-memory",
+    name: "Matterhorn Memory",
+    description: "Explicit user-controlled memory for preferences, public protocol context, receipts, watchlists, and workflow artifacts.",
+    source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
+    icon: { src: "/matterhorn-mark.svg" },
+    composer: { prompt: "Use Matterhorn Memory context to " },
+    setup: {
+      instructions: "No hidden memory. Matterhorn Memory is visible and opt-in. Use it to save confirmed public or private context, review sources, forget records, export evidence, and apply selected memories to chat. It never auto-captures hidden memory and never stores seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+      primaryCta: "Open Memory",
+    },
+    resources: [
+      { type: "tool", id: "matterhorn-memory-search", label: "Search Matterhorn Memory", path: "/api/memory/search", required: true },
+      { type: "tool", id: "matterhorn-memory-capture", label: "Explicitly remember context", path: "/api/memory/capture", required: true },
+      { type: "tool", id: "matterhorn-memory-export", label: "Export public-safe memory bundle", path: "/api/memory/export", required: true },
+      { type: "mcp", id: "matterhorn-memory-mcp", label: "Matterhorn Memory MCP tools", mcpServerName: "matterhorn-work", required: false },
+    ],
+    contributions: [
+      { type: "session-side-panel", ref: "matterhorn.memory.panel", label: "Memory", location: "session-right-pane" },
+      { type: "session-rail-item", ref: "matterhorn.memory.rail", label: "Memory", location: "session-rail" },
+      { type: "server-route", ref: "GET /api/memory/search", location: "server" },
+      { type: "server-route", ref: "POST /api/memory/capture", location: "server" },
+      { type: "composer-prompt", prompt: "Use Matterhorn Memory context to ", location: "composer" },
+    ],
+    defaultEnabled: true,
+  },
+  {
+    schemaVersion: 1,
     id: "bittensor",
     name: "Bittensor",
     description: "Explain subnets, read public SS58 wallets, compare validators, prepare unsigned TAO staking previews, and create watches.",

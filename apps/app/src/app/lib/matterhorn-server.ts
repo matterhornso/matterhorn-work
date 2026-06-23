@@ -1,4 +1,8 @@
 import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
+import type {
+  MatterhornMemoryExportManifest,
+  MatterhornMemoryRecord,
+} from "@matterhorn-work/types";
 import { desktopFetch } from "./desktop";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
@@ -105,6 +109,40 @@ export type MatterhornWorkspaceList = {
   items: MatterhornWorkspaceInfo[];
   workspaces?: WorkspaceInfo[];
   activeId?: string | null;
+};
+
+export type MatterhornMemorySearchOptions = {
+  query?: string;
+  kind?: MatterhornMemoryRecord["kind"];
+  scope?: MatterhornMemoryRecord["scope"];
+  tags?: string[];
+  limit?: number;
+};
+
+export type MatterhornMemoryListResponse = {
+  success: boolean;
+  records: MatterhornMemoryRecord[];
+  count: number;
+};
+
+export type MatterhornMemoryCaptureResponse = {
+  success: boolean;
+  record: MatterhornMemoryRecord;
+  markdownPath?: string;
+};
+
+export type MatterhornMemoryForgetResponse = {
+  success: boolean;
+  forgotten: boolean;
+  id: string;
+};
+
+export type MatterhornMemoryExportResponse = {
+  success: boolean;
+  export: MatterhornMemoryExportManifest & {
+    outputDir?: string;
+    manifestPath?: string;
+  };
 };
 
 export type MatterhornSessionMessage = {
@@ -1430,6 +1468,62 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         method: "DELETE",
         timeoutMs: timeouts.config,
+      }),
+
+    searchMemory: (options?: MatterhornMemorySearchOptions) => {
+      const params = new URLSearchParams();
+      if (options?.query?.trim()) params.set("q", options.query.trim());
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.scope) params.set("scope", options.scope);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(baseUrl, `/api/memory/search${suffix}`, {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      });
+    },
+
+    listMemory: (options?: Omit<MatterhornMemorySearchOptions, "query">) => {
+      const params = new URLSearchParams();
+      if (options?.kind) params.set("kind", options.kind);
+      if (options?.scope) params.set("scope", options.scope);
+      if (options?.tags?.length) params.set("tags", options.tags.filter(Boolean).join(","));
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemoryListResponse>(baseUrl, `/api/memory/entities${suffix}`, {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      });
+    },
+
+    captureMemory: (record: MatterhornMemoryRecord) =>
+      requestJson<MatterhornMemoryCaptureResponse>(baseUrl, "/api/memory/capture", {
+        token,
+        hostToken,
+        method: "POST",
+        body: { record },
+        timeoutMs: timeouts.config,
+      }),
+
+    forgetMemory: (id: string, reason?: string) =>
+      requestJson<MatterhornMemoryForgetResponse>(baseUrl, "/api/memory/forget", {
+        token,
+        hostToken,
+        method: "POST",
+        body: { id, reason: reason ?? "User forgot this memory from the Matterhorn Memory panel." },
+        timeoutMs: timeouts.config,
+      }),
+
+    exportMemory: (outputDir?: string) =>
+      requestJson<MatterhornMemoryExportResponse>(baseUrl, "/api/memory/export", {
+        token,
+        hostToken,
+        method: "POST",
+        body: outputDir ? { outputDir } : {},
+        timeoutMs: timeouts.workspaceExport,
       }),
 
     createVoiceRealtimeSession: (payload?: { model?: string }) =>

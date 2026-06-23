@@ -7,6 +7,7 @@ import {
   BarChart3,
   BrainCircuit,
   Check,
+  Database,
   Dumbbell,
   FileText,
   Minimize2,
@@ -77,6 +78,14 @@ import {
   useBittensorSessionContextStore,
   type BittensorSessionContext,
 } from "./bittensor-context-store";
+import {
+  addMatterhornMemoryContextToResolvedText,
+  describeMatterhornMemoryContext,
+  getMatterhornSessionMemoryContext,
+  readMatterhornMemoryContextFromEventDetail,
+  useMatterhornSessionMemoryContextStore,
+  type MatterhornSessionMemoryContext,
+} from "./memory-context-store";
 import {
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
@@ -468,6 +477,44 @@ function BittensorContextStrip(props: { context: BittensorSessionContext; onClea
   );
 }
 
+function MemoryContextStrip(props: { context: MatterhornSessionMemoryContext; onClear: () => void; onRemove: (recordId: string) => void }) {
+  return (
+    <div className="border-b border-dls-border bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-4 py-2">
+      <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-dls-text">
+            <Database size={13} />
+            <span>Using memories</span>
+            <span className="rounded-full border border-dls-border bg-dls-surface px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-dls-secondary">Visible to user</span>
+          </div>
+          <div className="truncate text-dls-secondary">{describeMatterhornMemoryContext(props.context)}</div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {props.context.records.slice(0, 6).map((record) => (
+              <button
+                key={record.id}
+                type="button"
+                className="rounded-full border border-dls-border bg-dls-surface px-2 py-1 text-[11px] text-dls-text transition-colors hover:border-red-500/40 hover:text-red-200"
+                onClick={() => props.onRemove(record.id)}
+                title={`${record.title} · ${record.provenance.source} · click to remove`}
+              >
+                {record.title}
+                <span className="ml-1 text-dls-secondary">x</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-dls-border px-2 py-1 font-medium text-dls-secondary transition-colors hover:border-primary/35 hover:text-primary"
+          onClick={props.onClear}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }) {
   if (!attachment.previewUrl) return;
   URL.revokeObjectURL(attachment.previewUrl);
@@ -492,6 +539,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const bittensorContext = useBittensorSessionContextStore((state) => getBittensorSessionContext(state, props.sessionId));
   const setBittensorContext = useBittensorSessionContextStore((state) => state.setContext);
   const clearBittensorContext = useBittensorSessionContextStore((state) => state.clearContext);
+  const memoryContext = useMatterhornSessionMemoryContextStore((state) => getMatterhornSessionMemoryContext(state, props.sessionId));
+  const setMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.setContext);
+  const clearMemoryContext = useMatterhornSessionMemoryContextStore((state) => state.clearContext);
   const [notice, setNotice] = useState<ReactComposerNotice | null>(null);
   const [error, setError] = useState<SessionError | null>(null);
   const [sending, setSending] = useState(false);
@@ -836,13 +886,16 @@ export function SessionSurface(props: SessionSurfaceProps) {
     setAwaitingAssistantBaseline(renderedMessages.length);
     setNoVisibleAssistantOutputBaseline(null);
     try {
-      const resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
+      let resolvedText = addBittensorContextToResolvedText(text, bittensorContext);
+      resolvedText = addMatterhornMemoryContextToResolvedText(resolvedText, memoryContext);
       const nextDraft = buildDraft(text, attachments, { resolvedText });
       if (resolvedText !== text) {
-        recordInspectorEvent("bittensor.context.resolved_text_attached", {
+        recordInspectorEvent("session.context.resolved_text_attached", {
           workspaceId: props.workspaceId,
           sessionId: props.sessionId,
-          contextId: bittensorContext?.id,
+          bittensorContextId: bittensorContext?.id,
+          memoryContextId: memoryContext?.id,
+          memoryRecordCount: memoryContext?.records.length ?? 0,
         });
       }
       await props.onSendDraft(nextDraft);
@@ -859,7 +912,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [attachments, bittensorContext, buildDraft, clearComposerSession, draft, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
@@ -988,6 +1041,63 @@ export function SessionSurface(props: SessionSurfaceProps) {
     window.addEventListener("matterhorn:bittensor-context-updated", handleBittensorContextUpdated);
     return () => window.removeEventListener("matterhorn:bittensor-context-updated", handleBittensorContextUpdated);
   }, [props.sessionId, props.workspaceId, setBittensorContext]);
+
+  useEffect(() => {
+    const handleMemoryContextUpdated = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const context = readMatterhornMemoryContextFromEventDetail(event.detail);
+      if (!context) return;
+      setMemoryContext(props.sessionId, context);
+      setNotice({
+        title: "Memory context ready",
+        description: `${context.records.length} visible memor${context.records.length === 1 ? "y" : "ies"} attached to this session.`,
+        tone: "info",
+      });
+      recordInspectorEvent("memory.context.updated", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        contextId: context.id,
+        recordCount: context.records.length,
+      });
+    };
+    window.addEventListener("matterhorn:memory-context-updated", handleMemoryContextUpdated);
+    return () => window.removeEventListener("matterhorn:memory-context-updated", handleMemoryContextUpdated);
+  }, [props.sessionId, props.workspaceId, setMemoryContext]);
+
+  useEffect(() => {
+    const handleMemoryChatHandoff = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (!detail || typeof detail !== "object" || Array.isArray(detail)) return;
+      const incomingContext = readMatterhornMemoryContextFromEventDetail(detail);
+      if (incomingContext) {
+        setMemoryContext(props.sessionId, incomingContext);
+      }
+      const record = detail as { prompt?: unknown; text?: unknown; message?: unknown };
+      const text =
+        typeof record.prompt === "string" ? record.prompt :
+        typeof record.text === "string" ? record.text :
+        typeof record.message === "string" ? record.message :
+        "";
+      if (!text.trim()) return;
+      const resolvedText = addMatterhornMemoryContextToResolvedText(text, incomingContext ?? memoryContext);
+      void typeComposerText(text);
+      props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
+      setNotice({
+        title: "Memory prompt ready",
+        description: "Review or send it from the chat composer.",
+        tone: "info",
+      });
+      recordInspectorEvent("memory.chat_handoff.applied", {
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        length: text.length,
+        contextId: incomingContext?.id ?? memoryContext?.id,
+      });
+    };
+    window.addEventListener("matterhorn:memory-chat-handoff", handleMemoryChatHandoff);
+    return () => window.removeEventListener("matterhorn:memory-chat-handoff", handleMemoryChatHandoff);
+  }, [attachments, buildDraft, memoryContext, props.onDraftChange, props.sessionId, props.workspaceId, setMemoryContext, typeComposerText]);
 
   useEffect(() => {
     const handleCryptoChatHandoff = (event: Event) => {
@@ -1246,7 +1356,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(sessionReadTranscriptControlAction);
 
   const hasTodoContent = (props.todos ?? []).some((todo) => todo.content.trim());
-  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || bittensorContext);
+  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || bittensorContext || memoryContext);
 
   return (
     <DevProfiler id="SessionSurface">
@@ -1496,6 +1606,27 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onClear={() => {
                       clearBittensorContext(props.sessionId);
                       setNotice({ title: "Bittensor context cleared", tone: "info" });
+                    }}
+                  />
+                ) : null}
+                {memoryContext ? (
+                  <MemoryContextStrip
+                    context={memoryContext}
+                    onClear={() => {
+                      clearMemoryContext(props.sessionId);
+                      setNotice({ title: "Memory context cleared", tone: "info" });
+                    }}
+                    onRemove={(recordId) => {
+                      const nextRecords = memoryContext.records.filter((record) => record.id !== recordId);
+                      if (!nextRecords.length) {
+                        clearMemoryContext(props.sessionId);
+                      } else {
+                        setMemoryContext(props.sessionId, {
+                          ...memoryContext,
+                          records: nextRecords,
+                          updatedAt: new Date().toISOString(),
+                        });
+                      }
                     }}
                   />
                 ) : null}

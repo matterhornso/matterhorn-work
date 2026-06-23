@@ -6,6 +6,7 @@ import { usePanelRef } from "react-resizable-panels";
 import {
   BarChart3,
   BrainCircuit,
+  Database,
   Dumbbell,
   FileText,
   Globe,
@@ -62,6 +63,7 @@ import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
 import { WalletPanel } from "../../wallet/WalletPanel";
+import { MemoryPanel } from "../../memory/memory-panel";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
@@ -305,6 +307,7 @@ export function SessionPage(props: SessionPageProps) {
   const artifactRailActive = activeSidePanel === "artifacts";
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
+  const memoryRailActive = activeSidePanel === "memory";
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
@@ -529,6 +532,9 @@ export function SessionPage(props: SessionPageProps) {
   }, [toggleCurrentSidePanel]);
   const openVoiceRailPane = useCallback(() => {
     toggleCurrentSidePanel("voice");
+  }, [toggleCurrentSidePanel]);
+  const openMemoryRailPane = useCallback(() => {
+    toggleCurrentSidePanel("memory");
   }, [toggleCurrentSidePanel]);
   const primeProtocolRailPrompt = useCallback((
     panel: VenueSidePanel,
@@ -1242,9 +1248,9 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${activeSidePanel === "extensions" ? Math.max(browserPanelDefaultWidth, 480) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 560) : browserPanelDefaultWidth}px`}
-                  minSize={activeSidePanel === "extensions" ? "420px" : protocolSidePanelOpen ? "500px" : "320px"}
-                  maxSize={protocolSidePanelOpen ? "78%" : "70%"}
+                  defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 480) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 560) : browserPanelDefaultWidth}px`}
+                  minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "420px" : protocolSidePanelOpen ? "500px" : "320px"}
+                  maxSize={protocolSidePanelOpen || activeSidePanel === "memory" ? "78%" : "70%"}
                   className="min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   {activeSidePanel === "extensions" && props.settingsSlot ? (
@@ -1255,6 +1261,13 @@ export function SessionPage(props: SessionPageProps) {
                     <VoicePanel
                       client={props.matterhornServerClient}
                       sessionId={props.selectedSessionId}
+                      onClose={closeRightPane}
+                    />
+                  ) : activeSidePanel === "memory" ? (
+                    <MemoryPanel
+                      client={props.matterhornServerClient}
+                      sessionId={props.selectedSessionId}
+                      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
                       onClose={closeRightPane}
                     />
                   ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
@@ -1365,6 +1378,21 @@ export function SessionPage(props: SessionPageProps) {
             >
               <Settings2 size={17} />
               <span className="text-[9px] leading-none">Ext</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(
+                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                memoryRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+              )}
+              onClick={openMemoryRailPane}
+              title="Memory: review remembered context, use selected memories in chat, forget records, and export evidence"
+              aria-label="Memory: review remembered context, use selected memories in chat, forget records, and export evidence"
+              aria-pressed={memoryRailActive}
+            >
+              <Database size={17} />
+              <span className="text-[9px] leading-none">Memory</span>
             </Button>
             {([
               {
