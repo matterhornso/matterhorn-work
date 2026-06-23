@@ -1028,6 +1028,12 @@ for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
   );
 }
 
+// All six requested preference categories are converted.
+const sugCategories = new Set(sug.suggestions.map((s) => s.proposedRecord.body.category));
+for (const category of ["client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference"]) {
+  assert.ok(sugCategories.has(category), `suggestions should cover category: ${category}`);
+}
+
 // Every suggestion is opt-in / user-confirmed only and contract-shaped.
 const ALLOWED_KINDS = ["user_preference", "project_fact", "protocol_address", "watchlist", "receipt", "workflow_artifact", "decision", "client_profile", "connector_preference", "mcp_tool_preference"];
 assert.ok(sug.suggestions.length >= 9, "should propose at least nine safe suggestions");
@@ -1056,7 +1062,7 @@ for (const item of sug.refused) {
 // No clinical/secret source tokens or live-service claims anywhere.
 const sugOut = JSON.stringify(sug).toLowerCase();
 for (const leak of [
-  "metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol",
+  "metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "fodmap", " ibs",
   "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123",
   "payments are live", "email sending is live", "storage is live", "token gating is live",
 ]) {

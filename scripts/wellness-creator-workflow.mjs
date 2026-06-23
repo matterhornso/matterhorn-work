@@ -1029,12 +1029,12 @@ const MEMORY_PROVENANCE_SOURCE = "user_confirmed";
 // Fixed, deterministic timestamp so fixtures/tests are stable.
 const MEMORY_STAMP = "2026-01-01T00:00:00.000Z";
 
-function memorySuggestionFor(persona, candidate, index) {
+function memorySuggestionFor(persona, candidate, index, categoryOverride) {
   const result = classifyMemoryCandidate(candidate);
   if (!result.allowed) {
     return { ok: false, refused: { allowed: false, action: result.action, reason: result.reason, input: "[withheld]" } };
   }
-  const category = result.category;
+  const category = categoryOverride ?? result.category;
   const personaLabel = OFFER_PERSONA_LABELS[persona] ?? persona;
   const record = {
     id: `wellness-${persona}-${category}-${index}`,
@@ -1071,21 +1071,48 @@ function memorySuggestionFor(persona, candidate, index) {
   return { ok: true, suggestion };
 }
 
+// The wellness preference types this adapter converts into suggestions. Each
+// entry carries an explicit category so coverage is guaranteed across personas.
+const MEMORY_SUGGESTION_CATEGORIES = [
+  "client_preference",
+  "program_preference",
+  "check_in_cadence",
+  "equipment_constraints",
+  "communication_preference",
+  "dietary_preference",
+];
+const MEMORY_SUGGESTION_CANDIDATES = [
+  { persona: "personal_trainer", category: "client_preference", text: "Client prefers training early mornings before work" },
+  { persona: "personal_trainer", category: "program_preference", text: "Program preference: full-body strength, 3 days per week" },
+  { persona: "personal_trainer", category: "equipment_constraints", text: "Equipment constraints: dumbbells and a bench only, trains at home" },
+  { persona: "personal_trainer", category: "check_in_cadence", text: "Weekly Monday check-ins with a short form" },
+  { persona: "yoga_instructor", category: "program_preference", text: "Program preference: gentle vinyasa flow, one class per week" },
+  { persona: "yoga_instructor", category: "communication_preference", text: "Prefers short WhatsApp summaries, not long emails" },
+  { persona: "yoga_instructor", category: "equipment_constraints", text: "Equipment constraints: mat and blocks only, small home space" },
+  { persona: "dietician", category: "dietary_preference", text: "General healthy-eating preference: vegetarian, dislikes spicy food" },
+  { persona: "dietician", category: "client_preference", text: "Client prefers simple meal templates over calorie counting" },
+  { persona: "dietician", category: "check_in_cadence", text: "Fortnightly check-ins by message" },
+];
+// A clinical dietary request must be refused (dietary preference is allowed only
+// when non-clinical and user-confirmed).
+const MEMORY_SUGGESTION_REFUSE_EXAMPLES = [
+  "Put the client on a low-FODMAP plan to treat their IBS",
+];
+
 function buildMemorySuggestions() {
   const suggestions = [];
   const refused = [];
-  for (const [persona, prompts] of Object.entries(MEMORY_QA_SAFE_BY_PERSONA)) {
-    prompts.forEach((prompt, index) => {
-      const built = memorySuggestionFor(persona, prompt, index);
-      if (built.ok) suggestions.push(built.suggestion);
-      else refused.push(built.refused);
-    });
-  }
-  // Clinical + secret examples must never become suggestions.
-  for (const prompt of [...MEMORY_QA_CLINICAL, ...MEMORY_QA_SECRET]) {
+  MEMORY_SUGGESTION_CANDIDATES.forEach((entry, index) => {
+    const built = memorySuggestionFor(entry.persona, entry.text, index, entry.category);
+    if (built.ok) suggestions.push(built.suggestion);
+    else refused.push(built.refused);
+  });
+  // Clinical (incl. clinical-dietary) + secret examples must never become suggestions.
+  for (const prompt of [...MEMORY_SUGGESTION_REFUSE_EXAMPLES, ...MEMORY_QA_CLINICAL, ...MEMORY_QA_SECRET]) {
     const result = classifyMemoryCandidate(prompt);
     refused.push({ allowed: false, action: result.action, reason: result.reason, input: "[withheld]" });
   }
+  const categoriesCovered = [...new Set(suggestions.map((s) => s.proposedRecord.body.category))];
   return {
     title: "Wellness Memory Contract Adapter",
     suggestionVersion: MEMORY_SUGGESTION_VERSION,
@@ -1093,7 +1120,9 @@ function buildMemorySuggestions() {
     writesMemory: false,
     educationalOnly: true,
     notMedicalAdvice: "This is general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.",
-    personas: Object.keys(MEMORY_QA_SAFE_BY_PERSONA),
+    personas: [...new Set(MEMORY_SUGGESTION_CANDIDATES.map((c) => c.persona))],
+    categoriesCovered,
+    dietaryPreferenceRule: "Dietary preference is converted only when non-clinical and user-confirmed; clinical/therapeutic diets are refused/redacted.",
     suggestions,
     refused,
     evidenceSummary: {
@@ -1649,6 +1678,11 @@ function runCheck() {
         failures.push(`memorySuggestions should include a suggestion for ${persona}.`);
       }
     }
+    // The six requested preference types must all be converted.
+    const coveredCategories = new Set((suggestionsBlock.suggestions || []).map((s) => s.proposedRecord?.body?.category));
+    for (const category of ["client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference"]) {
+      if (!coveredCategories.has(category)) failures.push(`memorySuggestions must cover category: ${category}.`);
+    }
     const ALLOWED_KINDS = ["user_preference", "project_fact", "protocol_address", "watchlist", "receipt", "workflow_artifact", "decision", "client_profile", "connector_preference", "mcp_tool_preference"];
     const ALLOWED_SCOPES = ["user", "workspace", "project", "session"];
     const ALLOWED_SENSITIVITIES = ["public", "private", "restricted", "forbidden_secret"];
@@ -1689,7 +1723,7 @@ function runCheck() {
     if (sum.writesMemory !== false) failures.push("memorySuggestions.evidenceSummary.writesMemory must be false.");
     // No clinical/secret source tokens or live-service claims anywhere in the adapter output.
     const sgText = JSON.stringify(suggestionsBlock).toLowerCase();
-    for (const leak of ["metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123", "payments are live", "email sending is live", "storage is live", "token gating is live"]) {
+    for (const leak of ["metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "fodmap", "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123", "payments are live", "email sending is live", "storage is live", "token gating is live"]) {
       if (sgText.includes(leak)) failures.push(`memorySuggestions must not contain: "${leak}"`);
     }
   }
