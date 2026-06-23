@@ -190,6 +190,8 @@ import {
   detectMemoryDeskFromRecord,
   validateMemoryRecordAgainstDeskPolicy,
   type MatterhornMemoryRecord,
+  type MatterhornMemorySuggestion,
+  type MatterhornMemorySuggestionUserAction,
 } from "@matterhorn-work/types/memory";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -979,6 +981,19 @@ function coerceMemoryRecord(value: unknown): MatterhornMemoryRecord {
     throw new ApiError(400, "invalid_memory_record", "memory record body must be an object");
   }
   return value as MatterhornMemoryRecord;
+}
+
+function coerceMemorySuggestion(value: unknown): MatterhornMemorySuggestion {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_memory_suggestion", "memory suggestion body must be an object");
+  }
+  return value as MatterhornMemorySuggestion;
+}
+
+function coerceMemorySuggestionAction(value: unknown): MatterhornMemorySuggestionUserAction | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (value === "confirm" || value === "edit" || value === "dismiss") return value;
+  throw new ApiError(400, "invalid_memory_suggestion_action", "memory suggestion action must be confirm, edit, or dismiss");
 }
 
 function normalizeMemoryTags(value: string | null): string[] | undefined {
@@ -4585,6 +4600,30 @@ function createRoutes(
       const result = await memoryVault.captureRecord(record);
       return jsonResponse({ success: true, ...result });
     } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/memory/suggestions/resolve", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const suggestion = coerceMemorySuggestion(body.suggestion ?? body);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const effectiveAction = action ?? suggestion.userAction;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface({ ...suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+      }
+      const result = await memoryVault.resolveSuggestion(suggestion, {
+        action,
+        patch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
     }
   });
