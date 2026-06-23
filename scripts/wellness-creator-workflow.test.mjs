@@ -1028,10 +1028,37 @@ for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
   );
 }
 
-// All six requested preference categories are converted.
+// All requested preference categories are converted (original + product slice).
 const sugCategories = new Set(sug.suggestions.map((s) => s.proposedRecord.body.category));
-for (const category of ["client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference"]) {
+for (const category of [
+  "client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference",
+  "client_communication_style", "preferred_program_length", "preferred_format", "offer_builder_preference", "export_format_preference",
+]) {
   assert.ok(sugCategories.has(category), `suggestions should cover category: ${category}`);
+}
+
+// Adapter-level safety attributes: opt-in, educational, restricted, never clinical/auto-saved/hidden.
+for (const key of ["optInOnly", "educationalOnly", "restrictedByDefault", "neverClinical", "neverAutoSaved", "noHiddenCapture"]) {
+  assert.equal(sug.safetyAttributes[key], true, `safetyAttributes.${key} must be true`);
+}
+
+// Every suggestion is restricted-by-default, educational, opt-in, non-clinical, never auto-saved.
+for (const s of sug.suggestions) {
+  assert.equal(s.proposedRecord.sensitivity, "restricted", "suggestion sensitivity must be restricted by default");
+  const b = s.proposedRecord.body;
+  assert.equal(b.optIn, true, "suggestion body.optIn must be true");
+  assert.equal(b.educationalOnly, true, "suggestion body.educationalOnly must be true");
+  assert.equal(b.restrictedByDefault, true, "suggestion body.restrictedByDefault must be true");
+  assert.equal(b.clinical, false, "suggestion body.clinical must be false");
+  assert.equal(b.autoSaved, false, "suggestion body.autoSaved must be false");
+}
+
+// New clinical/medical refusal cases are never converted to a suggestion: no
+// suggestion summary/body may contain clinical tokens, and they appear only as
+// withheld refusals.
+const suggestionsText = JSON.stringify(sug.suggestions).toLowerCase();
+for (const clinicalToken of ["symptom", "lab result", "blood test", "prescription", "medication", "rehab", "medical record", "diagnosis", "torn ligament"]) {
+  assert.equal(suggestionsText.includes(clinicalToken), false, `clinical token must not appear in suggestions: "${clinicalToken}"`);
 }
 
 // Every suggestion is opt-in / user-confirmed only and contract-shaped.
@@ -1063,6 +1090,7 @@ for (const item of sug.refused) {
 const sugOut = JSON.stringify(sug).toLowerCase();
 for (const leak of [
   "metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "fodmap", " ibs",
+  "symptom", "torn ligament", "blood test",
   "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123",
   "payments are live", "email sending is live", "storage is live", "token gating is live",
 ]) {
