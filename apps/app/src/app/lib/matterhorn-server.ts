@@ -2,6 +2,7 @@ import type { Message, Part, Session, Todo } from "@opencode-ai/sdk/v2/client";
 import type {
   MatterhornMemoryExportManifest,
   MatterhornMemoryRecord,
+  MatterhornMemorySuggestion,
 } from "@matterhorn-work/types";
 import { desktopFetch } from "./desktop";
 import { isDesktopRuntime } from "../utils";
@@ -129,6 +130,17 @@ export type MatterhornMemoryCaptureResponse = {
   success: boolean;
   record: MatterhornMemoryRecord;
   markdownPath?: string;
+};
+
+export type MatterhornMemorySuggestionResolveResponse = {
+  success: boolean;
+  suggestion: MatterhornMemorySuggestion;
+  saved: boolean;
+  dismissed: boolean;
+  reason: string;
+  record?: MatterhornMemoryRecord;
+  markdownPath?: string;
+  policyWarnings: string[];
 };
 
 export type MatterhornMemoryForgetResponse = {
@@ -1505,6 +1517,20 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         method: "POST",
         body: { record },
+        timeoutMs: timeouts.config,
+      }),
+
+    resolveMemorySuggestion: (payload: {
+      suggestion: MatterhornMemorySuggestion;
+      action?: MatterhornMemorySuggestion["userAction"];
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemorySuggestionResolveResponse>(baseUrl, "/api/memory/suggestions/resolve", {
+        token,
+        hostToken,
+        method: "POST",
+        body: payload,
         timeoutMs: timeouts.config,
       }),
 

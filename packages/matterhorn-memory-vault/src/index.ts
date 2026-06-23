@@ -3,10 +3,14 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import {
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+  type MatterhornMemorySuggestion,
   type MatterhornMemoryKind,
   type MatterhornMemoryRecord,
+  canMemorySuggestionBecomeSavedMemory,
   detectMemoryDeskFromRecord,
   redactForbiddenMemorySecrets,
+  sanitizeMemorySuggestionForDisplay,
+  validateMemorySuggestionAgainstDeskPolicy,
   validateMemoryRecordAgainstDeskPolicy,
   validateMemorySafety,
 } from "@matterhorn-work/types/memory"
@@ -48,6 +52,22 @@ export interface MatterhornMemoryExportResult {
   sha256: string
 }
 
+export interface MatterhornMemorySuggestionResolveOptions {
+  action?: MatterhornMemorySuggestion["userAction"]
+  patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+  reason?: string
+}
+
+export interface MatterhornMemorySuggestionResolveResult {
+  suggestion: MatterhornMemorySuggestion
+  saved: boolean
+  dismissed: boolean
+  reason: string
+  record?: MatterhornMemoryRecord
+  markdownPath?: string
+  policyWarnings: string[]
+}
+
 interface MatterhornMemoryIndexEntry {
   record: MatterhornMemoryRecord
   markdownPath: string
@@ -60,7 +80,7 @@ interface MatterhornMemoryIndex {
   entries: Record<string, MatterhornMemoryIndexEntry>
 }
 
-type MemoryLogAction = "capture" | "update" | "forget" | "export"
+type MemoryLogAction = "capture" | "update" | "forget" | "export" | "suggestion_dismiss" | "suggestion_reject"
 
 export class MatterhornMemoryVault {
   readonly rootDir: string
@@ -115,6 +135,51 @@ export class MatterhornMemoryVault {
     await this.writeIndex(index)
     await this.appendLog("capture", record.id, { markdownPath })
     return { record, markdownPath }
+  }
+
+  async resolveSuggestion(
+    suggestion: MatterhornMemorySuggestion,
+    options: MatterhornMemorySuggestionResolveOptions = {},
+  ): Promise<MatterhornMemorySuggestionResolveResult> {
+    await this.initialize()
+    const resolved = sanitizeMemorySuggestionForDisplay(applySuggestionResolution(suggestion, options))
+    const warnings = resolved.policyWarnings ?? []
+
+    if (resolved.userAction === "dismiss") {
+      await this.appendLog("suggestion_dismiss", resolved.id, {
+        reason: options.reason ?? "User dismissed this memory suggestion.",
+        useCase: resolved.useCase,
+        desk: resolved.desk,
+      })
+      return {
+        suggestion: resolved,
+        saved: false,
+        dismissed: true,
+        reason: options.reason ?? "Suggestion dismissed. No memory was written.",
+        policyWarnings: warnings,
+      }
+    }
+
+    const validation = validateMemorySuggestionAgainstDeskPolicy(resolved)
+    if (!validation.ok || !canMemorySuggestionBecomeSavedMemory(resolved)) {
+      await this.appendLog("suggestion_reject", resolved.id, {
+        reason: validation.errors.join("; ") || "Suggestion cannot become saved memory.",
+        useCase: resolved.useCase,
+        desk: resolved.desk,
+      })
+      throw new Error(`Memory suggestion cannot be saved: ${validation.errors.join("; ") || "explicit confirmation and safe policy approval are required"}`)
+    }
+
+    const captured = await this.captureRecord(resolved.proposedRecord)
+    return {
+      suggestion: resolved,
+      saved: true,
+      dismissed: false,
+      reason: options.reason ?? "User confirmed this memory suggestion.",
+      record: captured.record,
+      markdownPath: captured.markdownPath,
+      policyWarnings: warnings,
+    }
   }
 
   async getRecord(id: string): Promise<MatterhornMemoryRecord | null> {
@@ -297,6 +362,39 @@ export class MatterhornMemoryVault {
       })}\n`,
       { encoding: "utf8", flag: "a" },
     )
+  }
+}
+
+function applySuggestionResolution(
+  suggestion: MatterhornMemorySuggestion,
+  options: MatterhornMemorySuggestionResolveOptions,
+): MatterhornMemorySuggestion {
+  const userAction = options.action ?? suggestion.userAction
+  const patch = options.patch
+  if (!patch) {
+    return { ...suggestion, userAction }
+  }
+
+  const {
+    id: _ignoredId,
+    createdAt: _ignoredCreatedAt,
+    ...safePatch
+  } = patch as Partial<MatterhornMemoryRecord> & { id?: string; createdAt?: string }
+
+  return {
+    ...suggestion,
+    userAction,
+    proposedRecord: {
+      ...suggestion.proposedRecord,
+      ...safePatch,
+      id: suggestion.proposedRecord.id,
+      createdAt: suggestion.proposedRecord.createdAt,
+      updatedAt: safePatch.updatedAt ?? new Date().toISOString(),
+      body: safePatch.body ?? suggestion.proposedRecord.body,
+      links: safePatch.links ?? suggestion.proposedRecord.links,
+      tags: safePatch.tags ?? suggestion.proposedRecord.tags,
+      provenance: safePatch.provenance ?? suggestion.proposedRecord.provenance,
+    },
   }
 }
 

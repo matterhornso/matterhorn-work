@@ -95,6 +95,30 @@ function record(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function suggestion(overrides: Record<string, unknown> = {}) {
+  return {
+    version: "matterhorn.memory.suggestion.v1",
+    id: overrides.id ?? "suggestion_route_tao_wallet",
+    proposedRecord: overrides.proposedRecord ?? record({
+      id: "mem_route_suggestion_tao_wallet",
+      title: "Suggested TAO wallet",
+      summary: "Public SS58 address suggested from chat context.",
+    }),
+    reason: overrides.reason ?? "The user asked to reuse this public Bittensor address.",
+    source: overrides.source ?? "chat_capture",
+    confidence: overrides.confidence ?? 0.9,
+    desk: overrides.desk ?? "bittensor",
+    useCase: overrides.useCase ?? "bittensor_wallet_label",
+    userAction: overrides.userAction ?? "dismiss",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+    policyDecision: overrides.policyDecision,
+    policyWarnings: overrides.policyWarnings,
+  };
+}
+
 async function jsonFetch(base: string, path: string, init: RequestInit = {}) {
   const response = await fetch(`${base}${path}`, {
     ...init,
@@ -163,6 +187,25 @@ describe("Matterhorn memory API routes", () => {
     expect(marketSearch.response.status).toBe(200);
     expect(marketSearch.payload.count).toBe(1);
 
+    const dismissedSuggestion = await jsonFetch(base, "/api/memory/suggestions/resolve", {
+      method: "POST",
+      body: JSON.stringify({ suggestion: suggestion(), action: "dismiss" }),
+    });
+    expect(dismissedSuggestion.response.status).toBe(200);
+    expect(dismissedSuggestion.payload.saved).toBe(false);
+    expect(dismissedSuggestion.payload.dismissed).toBe(true);
+
+    const dismissedGet = await jsonFetch(base, "/api/memory/entities/mem_route_suggestion_tao_wallet");
+    expect(dismissedGet.response.status).toBe(404);
+
+    const confirmedSuggestion = await jsonFetch(base, "/api/memory/suggestions/resolve", {
+      method: "POST",
+      body: JSON.stringify({ suggestion: suggestion({ userAction: "confirm" }), action: "confirm" }),
+    });
+    expect(confirmedSuggestion.response.status).toBe(200);
+    expect(confirmedSuggestion.payload.saved).toBe(true);
+    expect(confirmedSuggestion.payload.record.id).toBe("mem_route_suggestion_tao_wallet");
+
     const marketMcpSearch = await jsonFetch(base, "/api/memory/search?tags=hyperliquid&surface=mcp&limit=5");
     expect(marketMcpSearch.response.status).toBe(200);
     expect(marketMcpSearch.payload.count).toBe(0);
@@ -187,7 +230,7 @@ describe("Matterhorn memory API routes", () => {
       body: JSON.stringify({ outputDir: join(dir, "memory-export") }),
     });
     expect(exported.response.status).toBe(200);
-    expect(exported.payload.export.recordCount).toBe(1);
+    expect(exported.payload.export.recordCount).toBe(2);
     expect(exported.payload.export.sha256).toHaveLength(64);
 
     const forgotten = await jsonFetch(base, "/api/memory/forget", {
@@ -214,6 +257,23 @@ describe("Matterhorn memory API routes", () => {
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.payload.code).toBe("memory_safety_rejected");
+
+    const rejectedSuggestion = await jsonFetch(base, "/api/memory/suggestions/resolve", {
+      method: "POST",
+      body: JSON.stringify({
+        suggestion: suggestion({
+          id: "suggestion_route_secret_rejected",
+          userAction: "confirm",
+          proposedRecord: record({
+            id: "mem_route_secret_suggestion_rejected",
+            body: { privateKey: "0xabc" },
+          }),
+        }),
+        action: "confirm",
+      }),
+    });
+    expect(rejectedSuggestion.response.status).toBe(400);
+    expect(rejectedSuggestion.payload.code).toBe("memory_safety_rejected");
   });
 
   test("rejects records that violate desk policy flags", async () => {

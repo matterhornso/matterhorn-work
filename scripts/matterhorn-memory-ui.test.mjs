@@ -48,6 +48,7 @@ for (const expected of [
   "searchMemory",
   "listMemory",
   "captureMemory",
+  "resolveMemorySuggestion",
   "forgetMemory",
   "exportMemory",
   "MatterhornMemoryRecord",
@@ -96,6 +97,11 @@ for (const expected of [
 
 for (const expected of [
   "Remember this",
+  "Memory suggestions",
+  "nothing is saved unless you confirm",
+  "matterhorn:memory-suggestions-updated",
+  "matterhorn:memory-suggestion",
+  "resolveMemorySuggestion",
   "I confirm this is safe to remember",
   "This looks like secret material",
   "Use in chat",

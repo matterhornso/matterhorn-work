@@ -39,6 +39,31 @@ function record(overrides = {}) {
   }
 }
 
+function suggestion(overrides = {}) {
+  const proposedRecord = overrides.proposedRecord ?? record({
+    id: "mem_suggestion_tao_wallet",
+    title: "Remember TAO wallet label",
+    summary: "Public SS58 address label suggested from chat context.",
+  })
+  return {
+    version: "matterhorn.memory.suggestion.v1",
+    id: overrides.id ?? "suggestion_tao_wallet_label",
+    proposedRecord,
+    reason: overrides.reason ?? "The user repeatedly asked to use this public TAO address for Bittensor reads.",
+    source: overrides.source ?? "chat_capture",
+    confidence: overrides.confidence ?? 0.88,
+    desk: overrides.desk ?? "bittensor",
+    useCase: overrides.useCase ?? "bittensor_wallet_label",
+    userAction: overrides.userAction ?? "dismiss",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+    policyDecision: overrides.policyDecision,
+    policyWarnings: overrides.policyWarnings,
+  }
+}
+
 const rootDir = await mkdtemp(path.join(os.tmpdir(), "matterhorn-memory-vault-"))
 const exportDir = path.join(rootDir, "export")
 const vault = createMatterhornMemoryVault(rootDir)
@@ -65,6 +90,17 @@ try {
 
   const searchByTag = await vault.searchRecords({ tags: ["bittensor"], limit: 10 })
   assert.equal(searchByTag.length, 1)
+
+  const dismissedSuggestion = await vault.resolveSuggestion(suggestion(), { action: "dismiss" })
+  assert.equal(dismissedSuggestion.saved, false)
+  assert.equal(dismissedSuggestion.dismissed, true)
+  assert.equal(await vault.getRecord("mem_suggestion_tao_wallet"), null)
+
+  const confirmedSuggestion = await vault.resolveSuggestion(suggestion({ userAction: "confirm" }), { action: "confirm" })
+  assert.equal(confirmedSuggestion.saved, true)
+  assert.equal(confirmedSuggestion.dismissed, false)
+  assert.equal(confirmedSuggestion.record?.id, "mem_suggestion_tao_wallet")
+  assert.equal((await vault.searchRecords({ query: "suggested", limit: 10 })).length, 1)
 
   const updated = await vault.updateRecord("mem_test_bittensor_wallet", {
     summary: "Updated public SS58 label for read-only TAO workflows.",
@@ -99,19 +135,40 @@ try {
     /live submission|submitorder/i,
   )
 
+  await assert.rejects(
+    () =>
+      vault.resolveSuggestion(
+        suggestion({
+          id: "suggestion_secret_rejected",
+          userAction: "confirm",
+          proposedRecord: record({
+            id: "mem_secret_suggestion_rejected",
+            body: { privateKey: "0xabc" },
+          }),
+        }),
+        { action: "confirm" },
+      ),
+    /cannot be saved|forbidden secret/i,
+  )
+
   const exported = await vault.exportBundle(exportDir)
   assert.equal(exported.version, MATTERHORN_MEMORY_VAULT_VERSION)
-  assert.equal(exported.recordCount, 1)
+  assert.equal(exported.recordCount, 2)
   assert.equal(exported.sha256.length, 64)
   assert.match(await readFile(exported.sha256Path, "utf8"), /matterhorn-memory-records\.json/)
 
   const forgotten = await vault.forgetRecord("mem_test_bittensor_wallet", "test forget")
   assert.equal(forgotten.forgotten, true)
   assert.equal(await vault.getRecord("mem_test_bittensor_wallet"), null)
+  const forgottenSuggestion = await vault.forgetRecord("mem_suggestion_tao_wallet", "test suggestion forget")
+  assert.equal(forgottenSuggestion.forgotten, true)
+  assert.equal(await vault.getRecord("mem_suggestion_tao_wallet"), null)
   assert.equal((await vault.searchRecords({ query: "TAO", limit: 10 })).length, 0)
 
   const log = await readFile(path.join(rootDir, "memory-log.jsonl"), "utf8")
   assert.match(log, /"action":"capture"/)
+  assert.match(log, /"action":"suggestion_dismiss"/)
+  assert.match(log, /"action":"suggestion_reject"/)
   assert.match(log, /"action":"update"/)
   assert.match(log, /"action":"export"/)
   assert.match(log, /"action":"forget"/)
