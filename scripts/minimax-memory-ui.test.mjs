@@ -617,6 +617,82 @@ for (const s of stitchItems) {
   }
 }
 
+// ── 11. Implementation QA spec ───────────────────────────────
+
+const qa = read("docs/ui/matterhorn-memory/implementation-qa.md");
+pass("docs/ui/matterhorn-memory/implementation-qa.md exists");
+
+const qaSections = [
+  "Hard Rules",
+  "Forbidden Language",
+  "Layout",
+  "Memory Overview",
+  "Memory Cards",
+  "Privacy",
+  "Forget",
+  "Chat Memory Chips",
+  "Empty",
+  "Blocked",
+  "Error States",
+  "Bittensor",
+  "Hyperliquid",
+  "Polymarket",
+  "Wellness",
+  "Receipts",
+  "Sources",
+  "Watchlists",
+  "Accessibility",
+  "Screenshot QA",
+  "Dark",
+  "Light Theme",
+  "Network",
+  "Wellness is local-only",
+  "No hidden memory",
+  "Every memory has source",
+  "Every memory has sensitivity",
+  "Every memory has forget",
+];
+for (const s of qaSections) {
+  if (qa.toLowerCase().includes(s.toLowerCase())) {
+    pass(`QA spec section: "${s}"`);
+  } else {
+    fail(`QA spec section: "${s}"`, "missing");
+  }
+}
+
+// QA spec must not contain forbidden copy
+const qaForbidden = ["seed phrase", "private key", "api secret", "openwork", "opencodec"];
+for (const p of qaForbidden) {
+  if (qa.toLowerCase().includes(p)) {
+    fail(`QA spec excludes: "${p}"`, "PRESENT in non-instructional content");
+  } else {
+    pass(`QA spec excludes: "${p}"`);
+  }
+}
+
+// QA spec must document wellness local-only
+const wellnessChecks = [
+  "No wellness data is sent to any external server",
+  "Wellness excluded from export",
+  "Wellness excluded from receipts",
+  "Restricted badge",
+  "never signed",
+];
+for (const w of wellnessChecks) {
+  if (qa.includes(w)) pass(`QA wellness check: "${w}"`);
+  else fail(`QA wellness check: "${w}"`, "missing");
+}
+
+// QA spec must have screenshot checklist
+const screenshotItems = ["Desktop", "Tablet", "Mobile", "Screenshots"];
+for (const s of screenshotItems) {
+  if (qa.toLowerCase().includes(s.toLowerCase())) {
+    pass(`QA screenshot section: "${s}"`);
+  } else {
+    fail(`QA screenshot section: "${s}"`, "missing");
+  }
+}
+
 // ── Summary ───────────────────────────────────────────────────
 
 console.log("");
