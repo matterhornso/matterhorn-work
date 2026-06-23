@@ -1000,4 +1000,73 @@ assert.equal(contract.memoryQa.writesMemory, false, "contract memoryQa must not 
 assert.ok(doc.includes("--memory-qa"), "Doc should reference --memory-qa");
 assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include the Wellness Memory QA section");
 
+// 30. Wellness Memory contract adapter (suggestions only).
+const sugCli = spawnSync(process.execPath, [HELPER_PATH, "--memory-suggestions", "--json"], {
+  encoding: "utf8",
+  maxBuffer: 5 * 1024 * 1024,
+});
+assert.equal(sugCli.status, 0, "--memory-suggestions should exit 0");
+const sug = JSON.parse(sugCli.stdout);
+assert.equal(sug.mode, "memory-suggestions", "should report memory-suggestions mode");
+assert.equal(sug.writesMemory, false, "--memory-suggestions must not write memory");
+
+// Tie the adapter to the merged contract shape (read packages/types read-only).
+const memorySrc = readFileSync("packages/types/src/memory.ts", "utf8");
+const contractVersionMatch = memorySrc.match(/MATTERHORN_MEMORY_SUGGESTION_VERSION\s*=\s*"([^"]+)"/);
+assert.ok(contractVersionMatch, "memory.ts should define the suggestion version");
+assert.equal(sug.suggestionVersion, contractVersionMatch[1], "adapter suggestion version must match the contract");
+// The kind/scope/sensitivity/source we emit must exist in the contract enums.
+for (const token of ['"client_profile"', '"user"', '"private"', '"user_confirmed"']) {
+  assert.ok(memorySrc.includes(token), `memory.ts should define ${token}`);
+}
+
+// Persona examples present.
+for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
+  assert.ok(
+    sug.suggestions.some((s) => s.proposedRecord.tags.includes(persona)),
+    `suggestions should include a ${persona} example`,
+  );
+}
+
+// Every suggestion is opt-in / user-confirmed only and contract-shaped.
+const ALLOWED_KINDS = ["user_preference", "project_fact", "protocol_address", "watchlist", "receipt", "workflow_artifact", "decision", "client_profile", "connector_preference", "mcp_tool_preference"];
+assert.ok(sug.suggestions.length >= 9, "should propose at least nine safe suggestions");
+for (const s of sug.suggestions) {
+  assert.equal(s.version, sug.suggestionVersion, "suggestion version should match");
+  assert.equal(s.captureMode, "user_confirmed_only", "suggestion captureMode must be user_confirmed_only");
+  assert.equal(s.canAutoCapture, false, "suggestion must not auto-capture");
+  assert.equal(s.requiresExplicitConsent, true, "suggestion must require explicit consent");
+  assert.equal(s.forbiddenIfSecretDetected, true, "suggestion must forbid on secret detection");
+  const r = s.proposedRecord;
+  for (const field of ["id", "kind", "scope", "title", "summary", "body", "tags", "links", "provenance", "sensitivity", "createdAt", "updatedAt"]) {
+    assert.ok(field in r, `proposedRecord must include ${field}`);
+  }
+  assert.ok(ALLOWED_KINDS.includes(r.kind), `record.kind must be a contract kind: ${r.kind}`);
+  assert.equal(r.provenance.source, "user_confirmed", "record provenance must be user_confirmed");
+  assert.ok(r.tags.includes("opt-in") && r.tags.includes("wellness"), "record tags must include wellness + opt-in");
+}
+
+// Clinical and secret inputs are refused/redacted and never become records.
+assert.ok(sug.refused.length >= 6, "should refuse clinical + secret examples");
+for (const item of sug.refused) {
+  assert.equal(item.allowed, false, "refused item must not be allowed");
+  assert.equal(item.input, "[withheld]", "refused item must be withheld");
+}
+
+// No clinical/secret source tokens or live-service claims anywhere.
+const sugOut = JSON.stringify(sug).toLowerCase();
+for (const leak of [
+  "metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol",
+  "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123",
+  "payments are live", "email sending is live", "storage is live", "token gating is live",
+]) {
+  assert.equal(sugOut.includes(leak), false, `--memory-suggestions must not contain: "${leak}"`);
+}
+
+// Contract block + docs carry the adapter.
+assert.ok(contract.memorySuggestions, "Contract should include memorySuggestions");
+assert.equal(contract.memorySuggestions.writesMemory, false, "contract memorySuggestions must not write");
+assert.ok(doc.includes("--memory-suggestions"), "Doc should reference --memory-suggestions");
+assert.ok(handoff.includes("--memory-suggestions"), "Handoff should reference --memory-suggestions");
+
 console.log("Wellness Creator Workflow gate passed.");
