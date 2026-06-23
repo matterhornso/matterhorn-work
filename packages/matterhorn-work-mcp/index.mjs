@@ -1431,6 +1431,7 @@ function normalizeMemoryMcpTags(tags) {
 
 function memoryMcpQuery(args = {}) {
   return {
+    surface: "mcp",
     q: args.query ?? args.q,
     kind: args.kind,
     scope: args.scope,
@@ -1438,6 +1439,10 @@ function memoryMcpQuery(args = {}) {
     limit: args.limit,
     includeDeleted: args.includeDeleted === true ? "true" : undefined,
   };
+}
+
+function memoryMcpSurfaceQuery() {
+  return { surface: "mcp" };
 }
 
 function doctorRank(status) {
@@ -3555,19 +3560,19 @@ async function handleTool(name, args = {}) {
       return callServer("/api/memory/entities", { query: memoryMcpQuery(args) });
     case "matterhorn_memory_get":
       assertMemoryMcpNoForbiddenInput(args);
-      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`);
+      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`, { query: memoryMcpSurfaceQuery() });
     case "matterhorn_memory_capture":
       assertMemoryMcpNoForbiddenInput(args);
-      return callServer("/api/memory/capture", { method: "POST", body: { record: args.record } });
+      return callServer("/api/memory/capture", { method: "POST", query: memoryMcpSurfaceQuery(), body: { record: args.record } });
     case "matterhorn_memory_update":
       assertMemoryMcpNoForbiddenInput(args);
-      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`, { method: "PATCH", body: { patch: args.patch } });
+      return callServer(`/api/memory/entities/${encodeURIComponent(args.id)}`, { method: "PATCH", query: memoryMcpSurfaceQuery(), body: { patch: args.patch } });
     case "matterhorn_memory_forget":
       assertMemoryMcpNoForbiddenInput(args);
-      return callServer("/api/memory/forget", { method: "POST", body: { id: args.id, reason: args.reason } });
+      return callServer("/api/memory/forget", { method: "POST", query: memoryMcpSurfaceQuery(), body: { id: args.id, reason: args.reason } });
     case "matterhorn_memory_export":
       assertMemoryMcpNoForbiddenInput(args);
-      return callServer("/api/memory/export", { method: "POST", body: { outputDir: args.outputDir } });
+      return callServer("/api/memory/export", { method: "POST", query: memoryMcpSurfaceQuery(), body: { outputDir: args.outputDir } });
     case "matterhorn_services_get_capabilities":
       return callServer("/api/services/capabilities", { query: { capability: args.capability } });
     case "matterhorn_services_chat_plan":

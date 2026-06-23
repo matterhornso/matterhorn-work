@@ -12,6 +12,7 @@ const serverClient = read("apps/app/src/app/lib/matterhorn-server.ts")
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx")
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx")
 const memoryPanel = read("apps/app/src/react-app/domains/memory/memory-panel.tsx")
+const memoryPolicy = read("apps/app/src/react-app/domains/memory/memory-policy.ts")
 const memoryStore = read("apps/app/src/react-app/domains/session/surface/memory-context-store.ts")
 
 assert.equal(
@@ -73,10 +74,24 @@ for (const expected of [
   "sanitizeMemoryContextRecords",
   "findForbiddenMemorySecretFields",
   "containsForbiddenMemorySecretMaterial",
+  "getMatterhornMemoryPolicyDecision",
   "hidden memory",
   "Do not infer, request, store, or reveal secrets",
+  "desk policy matrix",
 ]) {
   assert.match(memoryStore, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory context safety: ${expected}`)
+}
+
+for (const expected of [
+  "MATTERHORN_MEMORY_DESK_POLICY_MATRIX",
+  "detectMemoryDeskFromRecord",
+  "validateMemoryRecordAgainstDeskPolicy",
+  "canUseInChat",
+  "canExport",
+  "canSendToMcpApi",
+  "applyMatterhornMemoryDeskPolicyDefaults",
+]) {
+  assert.match(memoryPolicy, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory policy helper: ${expected}`)
 }
 
 for (const expected of [
@@ -87,6 +102,10 @@ for (const expected of [
   "Forget",
   "Export evidence",
   "No hidden memory",
+  "Desk policy",
+  "MCP/API",
+  "Wellness becomes restricted by default",
+  "market memories cannot be exported or shared with MCP/API",
   "seed phrases",
   "private keys",
   "raw signatures",

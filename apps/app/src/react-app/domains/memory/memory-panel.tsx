@@ -26,6 +26,10 @@ import {
 } from "@matterhorn-work/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  applyMatterhornMemoryDeskPolicyDefaults,
+  getMatterhornMemoryPolicyDecision,
+} from "./memory-policy";
 
 const SELECTABLE_SENSITIVITIES = MATTERHORN_MEMORY_SENSITIVITIES.filter(
   (sensitivity) => sensitivity !== "forbidden_secret",
@@ -90,7 +94,7 @@ function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sess
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
-  return {
+  const record: MatterhornMemoryRecord = {
     id: `mem_ui_${idSeed || Date.now().toString(36)}`,
     kind: draft.kind,
     scope: draft.scope,
@@ -117,6 +121,7 @@ function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sess
     canExport: draft.sensitivity !== "restricted",
     canDelete: true,
   };
+  return applyMatterhornMemoryDeskPolicyDefaults(record);
 }
 
 function useMemoryRecords(client: MatterhornServerClient | null) {
@@ -170,7 +175,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   };
 
   const toggleSelectedRecord = (record: MatterhornMemoryRecord) => {
-    if (!record.canUseInChat || record.sensitivity === "forbidden_secret") return;
+    if (!getMatterhornMemoryPolicyDecision(record).canUseInChat) return;
     setSelectedRecords((current) => {
       if (current.some((item) => item.id === record.id)) {
         return current.filter((item) => item.id !== record.id);
@@ -243,7 +248,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
     setCaptureBusy(true);
     setCaptureError(null);
     try {
-      const response = await props.client.captureMemory(buildMemoryRecord(draft, props.workspaceId, props.sessionId));
+      const nextRecord = buildMemoryRecord(draft, props.workspaceId, props.sessionId);
+      const policyDecision = getMatterhornMemoryPolicyDecision(nextRecord);
+      if (policyDecision.blockedReasons.length > 0) {
+        setCaptureError(`Desk policy blocked this memory: ${policyDecision.blockedReasons.join("; ")}`);
+        return;
+      }
+      const response = await props.client.captureMemory(nextRecord);
       setRecords((current) => [response.record, ...current.filter((item) => item.id !== response.record.id)]);
       setDraft(INITIAL_DRAFT);
     } catch (nextError) {
@@ -330,6 +341,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : null}
           {records.map((record) => {
+            const policyDecision = getMatterhornMemoryPolicyDecision(record);
             const selected = visibleSelectedRecords.some((item) => item.id === record.id);
             return (
               <article key={record.id} className="rounded-2xl border border-dls-border bg-dls-card p-3.5">
@@ -340,6 +352,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(record.sensitivity))}>
                         {record.sensitivity}
                       </span>
+                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        {policyDecision.deskLabel}
+                      </span>
                     </div>
                     <p className="mt-1 text-xs leading-5 text-dls-secondary">{record.summary}</p>
                   </div>
@@ -349,7 +364,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{record.scope}</span>
                   <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{record.provenance.source}</span>
                   <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
+                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
+                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
                 </div>
+                {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
+                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                    <div className="font-semibold">Desk policy</div>
+                    {[...policyDecision.blockedReasons, ...policyDecision.warnings].slice(0, 4).join(" ")}
+                  </div>
+                ) : null}
                 {record.tags.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {record.tags.slice(0, 8).map((tag) => (
@@ -361,8 +384,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   <Button
                     variant={selected ? "default" : "outline"}
                     size="sm"
-                    disabled={!record.canUseInChat || record.sensitivity === "forbidden_secret"}
+                    disabled={!policyDecision.canUseInChat}
                     onClick={() => toggleSelectedRecord(record)}
+                    title={policyDecision.canUseInChat ? "Use this visible memory in chat" : `Chat use blocked: ${policyDecision.blockedReasons.join("; ") || policyDecision.warnings.join("; ")}`}
                   >
                     <Eye className="mr-2 size-3.5" />
                     {selected ? "Selected" : "Use in chat"}
@@ -393,6 +417,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           </div>
           <div className="mt-3 grid gap-2">
+            <div className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+              Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Wellness becomes restricted by default; market memories cannot be exported or shared with MCP/API.
+            </div>
             <input
               value={draft.title}
               onChange={(event) => updateDraft("title", event.target.value)}
@@ -465,7 +492,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Export only public-safe memory bundle metadata. Restricted memories and forbidden-secret records stay out.
+                Export only policy-approved public-safe memory bundle metadata. Restricted, market, wellness, and forbidden-secret records stay out.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>

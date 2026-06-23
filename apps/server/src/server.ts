@@ -185,7 +185,12 @@ import {
   buildMarketSdkValidationResponse,
 } from "./tools/market-execution-readiness.js";
 import { createMatterhornMemoryVault } from "@matterhorn-work/memory-vault";
-import type { MatterhornMemoryRecord } from "@matterhorn-work/types/memory";
+import {
+  MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+  detectMemoryDeskFromRecord,
+  validateMemoryRecordAgainstDeskPolicy,
+  type MatterhornMemoryRecord,
+} from "@matterhorn-work/types/memory";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
@@ -999,10 +1004,42 @@ function memoryApiError(error: unknown): ApiError {
   if (/not found/i.test(message)) {
     return new ApiError(404, "memory_not_found", message);
   }
-  if (/forbidden secret|safety validation|forbidden_secret|live submission|private key|seed phrase|signed payload|raw signature|wallet export|api secret/i.test(message)) {
+  if (/forbidden secret|safety validation|desk policy|policy forbids|less restrictive|not allowed for desk|forbidden_secret|live submission|private key|seed phrase|signed payload|raw signature|wallet export|api secret/i.test(message)) {
     return new ApiError(400, "memory_safety_rejected", message);
   }
   return new ApiError(400, "memory_request_failed", message);
+}
+
+function memorySurface(value: URL): "client" | "mcp" {
+  return value.searchParams.get("surface") === "mcp" ? "mcp" : "client";
+}
+
+function canSendMemoryRecordToMcpApi(record: MatterhornMemoryRecord): boolean {
+  const desk = detectMemoryDeskFromRecord(record);
+  const policy = MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk];
+  const validation = validateMemoryRecordAgainstDeskPolicy(record, desk);
+  return policy.canSendToMcpApi && validation.ok && record.sensitivity !== "forbidden_secret";
+}
+
+function filterMemoryRecordsForSurface(
+  records: MatterhornMemoryRecord[],
+  surface: "client" | "mcp",
+): MatterhornMemoryRecord[] {
+  if (surface !== "mcp") return records;
+  return records.filter(canSendMemoryRecordToMcpApi);
+}
+
+function assertMemoryRecordAllowedForSurface(
+  record: MatterhornMemoryRecord,
+  surface: "client" | "mcp",
+): void {
+  if (surface !== "mcp" || canSendMemoryRecordToMcpApi(record)) return;
+  const desk = detectMemoryDeskFromRecord(record);
+  throw new ApiError(
+    403,
+    "memory_policy_blocks_mcp_api",
+    `Matterhorn Memory ${desk} policy blocks this record from MCP/API sharing.`,
+  );
 }
 
 type SessionStreamEventInput = {
@@ -4508,7 +4545,8 @@ function createRoutes(
         limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
         includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
       });
-      return jsonResponse({ success: true, records, count: records.length });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
     } catch (error) {
       throw memoryApiError(error);
     }
@@ -4523,7 +4561,8 @@ function createRoutes(
         limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
         includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
       });
-      return jsonResponse({ success: true, records, count: records.length });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
     } catch (error) {
       throw memoryApiError(error);
     }
@@ -4534,6 +4573,7 @@ function createRoutes(
     if (!record) {
       throw new ApiError(404, "memory_not_found", "Memory record not found");
     }
+    assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
     return jsonResponse({ success: true, record });
   });
 
@@ -4541,6 +4581,7 @@ function createRoutes(
     try {
       const body = await readJsonBody(ctx.request);
       const record = coerceMemoryRecord(body.record ?? body);
+      assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
       const result = await memoryVault.captureRecord(record);
       return jsonResponse({ success: true, ...result });
     } catch (error) {
@@ -4554,6 +4595,10 @@ function createRoutes(
       const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
         ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
         : body as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      const existingRecord = await memoryVault.getRecord(ctx.params.id);
+      if (existingRecord) {
+        assertMemoryRecordAllowedForSurface({ ...existingRecord, ...patch } as MatterhornMemoryRecord, memorySurface(ctx.url));
+      }
       const record = await memoryVault.updateRecord(ctx.params.id, patch);
       return jsonResponse({ success: true, record });
     } catch (error) {
