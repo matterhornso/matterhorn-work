@@ -157,6 +157,18 @@ Confirm:
 - Every suggestion: `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, `forbiddenIfSecretDetected: true`.
 - Clinical and secret examples appear only under `refused` as `[withheld]` — never as records, never echoed.
 
+### Safe Memory Suggestion — Product Behavior (Black-Box)
+
+End-to-end behavior a non-coding reviewer can walk:
+
+1. **User asks for a wellness plan** (e.g. `--route "create a 4-week training plan"`) → a usable, educational artifact with the disclaimer.
+2. **App suggests safe memory** (`--memory-suggestions --json`) → suggestions for client communication style, preferred program length, preferred workout/yoga/nutrition format, check-in cadence, offer-builder preference, and export format preference. Each is `kind: client_profile`, `sensitivity: restricted`, tagged `wellness`+`opt-in`+`educational`, with body `optIn:true, educationalOnly:true, restrictedByDefault:true, clinical:false, autoSaved:false`.
+3. **User can decline** → every suggestion is `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`. Nothing is stored unless the user confirms.
+4. **App does not remember medical info** → symptoms, diagnosis, prescriptions, treatment, conditions, lab results, medication, injury rehab, and "remember my medical records" are all refused/redacted (`[withheld]`, never echoed). Dietary preference is converted only when non-clinical.
+5. **App never claims live services** → no live payments, email, hosting, or access anywhere in the output.
+
+Verdict checks: `writesMemory: false`; `safetyAttributes` all true (optInOnly, educationalOnly, restrictedByDefault, neverClinical, neverAutoSaved, noHiddenCapture); refusals withheld; no clinical/secret source tokens leaked.
+
 ### Customer-safe sign-off checklist
 
 - [ ] Safe candidates for all three personas are allowed and opt-in.

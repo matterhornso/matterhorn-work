@@ -52,7 +52,7 @@ const MEDICAL_INTENT_RE =
 // medication/dosing details, surgery/post-op plans, and private health records.
 // Combined with MEDICAL_INTENT_RE (diagnosis/condition/pregnancy/eating disorder).
 const MEMORY_REDACT_RE =
-  /\b(\d+\s?(?:mg|mcg|ml|iu))\b|\b(once|twice|three times)\s+(?:a\s+)?(?:day|daily)\b|daily dose|\bmeds?\b|metformin|insulin|statin|antidepressant|\b(medical|health)\s+(?:record|records|history)\b|lab result|blood test|\bphi\b|\bhipaa\b|\bsurgery\b|post[- ]?op\b|post[- ]?surgery|without (?:explicit )?consent/i;
+  /\b(\d+\s?(?:mg|mcg|ml|iu))\b|\b(once|twice|three times)\s+(?:a\s+)?(?:day|daily)\b|daily dose|\bmeds?\b|metformin|insulin|statin|antidepressant|\b(medical|health)\s+(?:record|records|history)\b|lab result|blood test|\bphi\b|\bhipaa\b|\bsymptoms?\b|\bsurgery\b|post[- ]?op\b|post[- ]?surgery|without (?:explicit )?consent/i;
 
 const FIXTURE_DIR = "docs/wellness-creator-workflow";
 const PROGRESS_CHECKIN_FIXTURE = "progress-check-in.md";
@@ -1024,7 +1024,7 @@ function buildMemoryQa() {
 const MEMORY_SUGGESTION_VERSION = "matterhorn.memory.suggestion.v1";
 const MEMORY_RECORD_KIND = "client_profile";
 const MEMORY_RECORD_SCOPE = "user";
-const MEMORY_RECORD_SENSITIVITY = "private";
+const MEMORY_RECORD_SENSITIVITY = "restricted";
 const MEMORY_PROVENANCE_SOURCE = "user_confirmed";
 // Fixed, deterministic timestamp so fixtures/tests are stable.
 const MEMORY_STAMP = "2026-01-01T00:00:00.000Z";
@@ -1042,8 +1042,8 @@ function memorySuggestionFor(persona, candidate, index, categoryOverride) {
     scope: MEMORY_RECORD_SCOPE,
     title: `${personaLabel} — ${category.replace(/_/g, " ")}`,
     summary: candidate,
-    body: { persona, category, preference: candidate },
-    tags: ["wellness", "opt-in", persona, category],
+    body: { persona, category, preference: candidate, optIn: true, educationalOnly: true, restrictedByDefault: true, clinical: false, autoSaved: false },
+    tags: ["wellness", "opt-in", "educational", "restricted", persona, category],
     links: [],
     provenance: {
       source: MEMORY_PROVENANCE_SOURCE,
@@ -1074,12 +1074,19 @@ function memorySuggestionFor(persona, candidate, index, categoryOverride) {
 // The wellness preference types this adapter converts into suggestions. Each
 // entry carries an explicit category so coverage is guaranteed across personas.
 const MEMORY_SUGGESTION_CATEGORIES = [
+  // Original coverage (#509).
   "client_preference",
   "program_preference",
   "check_in_cadence",
   "equipment_constraints",
   "communication_preference",
   "dietary_preference",
+  // Product behavior coverage (this slice).
+  "client_communication_style",
+  "preferred_program_length",
+  "preferred_format",
+  "offer_builder_preference",
+  "export_format_preference",
 ];
 const MEMORY_SUGGESTION_CANDIDATES = [
   { persona: "personal_trainer", category: "client_preference", text: "Client prefers training early mornings before work" },
@@ -1092,11 +1099,29 @@ const MEMORY_SUGGESTION_CANDIDATES = [
   { persona: "dietician", category: "dietary_preference", text: "General healthy-eating preference: vegetarian, dislikes spicy food" },
   { persona: "dietician", category: "client_preference", text: "Client prefers simple meal templates over calorie counting" },
   { persona: "dietician", category: "check_in_cadence", text: "Fortnightly check-ins by message" },
+  // Product-behavior categories.
+  { persona: "personal_trainer", category: "client_communication_style", text: "Communication style: brief, encouraging check-in messages" },
+  { persona: "personal_trainer", category: "preferred_program_length", text: "Preferred program length: 8-week blocks" },
+  { persona: "personal_trainer", category: "preferred_format", text: "Preferred workout format: full-body sessions" },
+  { persona: "yoga_instructor", category: "preferred_format", text: "Preferred yoga format: gentle flow with breathwork" },
+  { persona: "yoga_instructor", category: "client_communication_style", text: "Communication style: short weekly recap message" },
+  { persona: "dietician", category: "preferred_format", text: "Preferred nutrition format: simple meal templates, no calorie counting" },
+  { persona: "dietician", category: "offer_builder_preference", text: "Offer-builder preference: 8-week reset with placeholder pricing only" },
+  { persona: "dietician", category: "preferred_program_length", text: "Preferred program length: 4-week starter" },
+  { persona: "personal_trainer", category: "export_format_preference", text: "Export format preference: PDF client packet" },
+  { persona: "yoga_instructor", category: "export_format_preference", text: "Export format preference: shareable markdown handout" },
 ];
-// A clinical dietary request must be refused (dietary preference is allowed only
-// when non-clinical and user-confirmed).
+// Requests that must be refused/redirected: clinical/medical or private-record
+// memory. Dietary preference is allowed only when non-clinical and user-confirmed.
 const MEMORY_SUGGESTION_REFUSE_EXAMPLES = [
   "Put the client on a low-FODMAP plan to treat their IBS",
+  "Remember the client's symptoms and what they might mean",
+  "Remember the diagnosis the doctor gave the client",
+  "Remember the client's prescription and medication",
+  "Remember the treatment plan for their condition",
+  "Save the client's lab results and blood test",
+  "Remember the injury rehab protocol for their torn ligament",
+  "Remember my private medical records",
 ];
 
 function buildMemorySuggestions() {
@@ -1122,6 +1147,14 @@ function buildMemorySuggestions() {
     notMedicalAdvice: "This is general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.",
     personas: [...new Set(MEMORY_SUGGESTION_CANDIDATES.map((c) => c.persona))],
     categoriesCovered,
+    safetyAttributes: {
+      optInOnly: true,
+      educationalOnly: true,
+      restrictedByDefault: true,
+      neverClinical: true,
+      neverAutoSaved: true,
+      noHiddenCapture: true,
+    },
     dietaryPreferenceRule: "Dietary preference is converted only when non-clinical and user-confirmed; clinical/therapeutic diets are refused/redacted.",
     suggestions,
     refused,
@@ -1678,10 +1711,18 @@ function runCheck() {
         failures.push(`memorySuggestions should include a suggestion for ${persona}.`);
       }
     }
-    // The six requested preference types must all be converted.
+    // All requested preference types must be converted (original + product slice).
     const coveredCategories = new Set((suggestionsBlock.suggestions || []).map((s) => s.proposedRecord?.body?.category));
-    for (const category of ["client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference"]) {
+    for (const category of [
+      "client_preference", "program_preference", "check_in_cadence", "equipment_constraints", "communication_preference", "dietary_preference",
+      "client_communication_style", "preferred_program_length", "preferred_format", "offer_builder_preference", "export_format_preference",
+    ]) {
       if (!coveredCategories.has(category)) failures.push(`memorySuggestions must cover category: ${category}.`);
+    }
+    // Adapter-level safety attributes (opt-in, educational, restricted, no auto-save/hidden capture).
+    const attrs = suggestionsBlock.safetyAttributes || {};
+    for (const key of ["optInOnly", "educationalOnly", "restrictedByDefault", "neverClinical", "neverAutoSaved", "noHiddenCapture"]) {
+      if (attrs[key] !== true) failures.push(`memorySuggestions.safetyAttributes.${key} must be true.`);
     }
     const ALLOWED_KINDS = ["user_preference", "project_fact", "protocol_address", "watchlist", "receipt", "workflow_artifact", "decision", "client_profile", "connector_preference", "mcp_tool_preference"];
     const ALLOWED_SCOPES = ["user", "workspace", "project", "session"];
@@ -1709,6 +1750,13 @@ function runCheck() {
       if (!Array.isArray(r.tags) || !r.tags.includes("opt-in") || !r.tags.includes("wellness")) {
         failures.push("proposedRecord.tags must include 'wellness' and 'opt-in'.");
       }
+      if (r.sensitivity !== "restricted") failures.push("proposedRecord.sensitivity must be restricted by default.");
+      // Per-suggestion safety: opt-in, educational, restricted, non-clinical, never auto-saved.
+      for (const key of ["optIn", "educationalOnly", "restrictedByDefault"]) {
+        if (r.body?.[key] !== true) failures.push(`proposedRecord.body.${key} must be true.`);
+      }
+      if (r.body?.clinical !== false) failures.push("proposedRecord.body.clinical must be false.");
+      if (r.body?.autoSaved !== false) failures.push("proposedRecord.body.autoSaved must be false.");
       [r.canUseInChat, r.canExport, r.canDelete].forEach((value, idx) => {
         if (typeof value !== "boolean") failures.push(`proposedRecord boolean capability ${idx} must be present.`);
       });
