@@ -34,6 +34,8 @@ for (const token of [
   "MatterhornMemorySuggestion",
   "MatterhornMemoryUsePolicy",
   "MatterhornMemoryExportManifest",
+  "MatterhornMemoryDesk",
+  "MatterhornMemoryDeskPolicy",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -50,6 +52,8 @@ for (const token of [
   "MATTERHORN_MEMORY_SUGGESTION_VERSION",
   "DEFAULT_MATTERHORN_MEMORY_USE_POLICY",
   "MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION",
+  "MATTERHORN_MEMORY_DESKS",
+  "MATTERHORN_MEMORY_DESK_POLICY_MATRIX",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -88,6 +92,17 @@ for (const source of [
 
 for (const sensitivity of ["public", "private", "restricted", "forbidden_secret"]) {
   assert.ok(memorySource.includes(`"${sensitivity}"`), `sensitivity ${sensitivity} must be defined`);
+}
+
+for (const desk of [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "decentralized_services",
+  "generic_workspace",
+]) {
+  assert.ok(memorySource.includes(`"${desk}"`), `desk ${desk} must be defined`);
 }
 
 // 4. Record shape includes every required field.
@@ -187,6 +202,22 @@ for (const field of [
   assert.ok(
     memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
     `MatterhornMemoryExportManifest must include ${field}`,
+  );
+}
+
+// 5e. Desk policy shape includes every required field.
+for (const field of [
+  "desk",
+  "allowedKinds",
+  "defaultSensitivity",
+  "canUseInChat",
+  "canExport",
+  "canSendToMcpApi",
+  "forbiddenCases",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemoryDeskPolicy must include ${field}`,
   );
 }
 
@@ -324,6 +355,7 @@ assert.equal(
 const validWellness = makeRecord({
   kind: "user_preference",
   tags: ["wellness", "opt-in"],
+  sensitivity: "restricted",
   body: { interest: "sleep education" },
   provenance: {
     source: "user_confirmed",
@@ -566,7 +598,120 @@ assert.ok(memory.validateMemorySafety(validBittensor).ok);
 assert.ok(memory.validateMemorySafety(validMarket).ok);
 assert.ok(memory.validateMemorySafety(validWellness).ok);
 
-// 16. Docs cover the contract, safety invariants, and ownership.
+// 16. Desk policy matrix enforces per-desk rules.
+for (const desk of memory.MATTERHORN_MEMORY_DESKS) {
+  const policy = memory.MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk];
+  assert.ok(policy, `policy matrix must define ${desk}`);
+  assert.ok(memory.validateMemoryDeskPolicy(policy).ok, `${desk} policy must be valid`);
+}
+
+// Policy booleans match desk semantics.
+const bittensorPolicy = memory.MATTERHORN_MEMORY_DESK_POLICY_MATRIX.bittensor;
+assert.equal(bittensorPolicy.canUseInChat, true, "bittensor memory may be used in chat");
+assert.equal(bittensorPolicy.canExport, true, "bittensor memory may be exported");
+assert.equal(bittensorPolicy.canSendToMcpApi, true, "bittensor memory may be sent to MCP/API tools");
+
+for (const desk of ["hyperliquid", "polymarket", "wellness", "decentralized_services", "generic_workspace"]) {
+  const policy = memory.MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk];
+  assert.equal(policy.canExport, false, `${desk} memory must not be exportable`);
+  assert.equal(policy.canSendToMcpApi, false, `${desk} memory must not be sent to MCP/API tools`);
+}
+
+assert.ok(
+  memory.validateMemoryRecordAgainstDeskPolicy(validBittensor, "bittensor").ok,
+  "valid Bittensor record should match bittensor desk policy",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(custodialBittensor, "bittensor").ok,
+  false,
+  "bittensor desk must reject custodial record",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "workflow_artifact", tags: ["bittensor"] }),
+    "bittensor",
+  ).ok,
+  false,
+  "bittensor desk must reject disallowed kind",
+);
+
+assert.ok(
+  memory.validateMemoryRecordAgainstDeskPolicy(validMarket, "hyperliquid").ok,
+  "valid market record should match hyperliquid desk policy",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(liveSubmissionMarket, "polymarket").ok,
+  false,
+  "polymarket desk must reject live submission memory",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "protocol_address", tags: ["hyperliquid"] }),
+    "hyperliquid",
+  ).ok,
+  false,
+  "hyperliquid desk must reject protocol_address kind",
+);
+
+assert.ok(
+  memory.validateMemoryRecordAgainstDeskPolicy(validWellness, "wellness").ok,
+  "valid wellness record should match wellness desk policy",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(clinicalWithoutConsent, "wellness").ok,
+  false,
+  "wellness desk must reject clinical record without consent",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "watchlist", tags: ["wellness", "opt-in"], sensitivity: "public" }),
+    "wellness",
+  ).ok,
+  false,
+  "wellness desk must reject less restrictive sensitivity than default",
+);
+
+assert.ok(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "project_fact", tags: ["decentralized_services"], sensitivity: "private" }),
+    "decentralized_services",
+  ).ok,
+  "valid decentralized_services record should match desk policy",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "protocol_address", tags: ["decentralized_services"], sensitivity: "private" }),
+    "decentralized_services",
+  ).ok,
+  false,
+  "decentralized_services desk must reject disallowed kind",
+);
+
+assert.ok(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "project_fact", tags: ["workspace"], sensitivity: "private" }),
+    "generic_workspace",
+  ).ok,
+  "valid generic_workspace record should match desk policy",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "user_preference", tags: ["bittensor"], sensitivity: "private" }),
+    "generic_workspace",
+  ).ok,
+  false,
+  "generic_workspace desk must reject silently included protocol data",
+);
+assert.equal(
+  memory.validateMemoryRecordAgainstDeskPolicy(
+    makeRecord({ kind: "user_preference", tags: ["clinical"], sensitivity: "private" }),
+    "generic_workspace",
+  ).ok,
+  false,
+  "generic_workspace desk must reject silently included medical data",
+);
+
+// 17. Docs cover the contract, safety invariants, and ownership.
 const memoryDocLower = memoryDoc.toLowerCase();
 for (const phrase of [
   "Matterhorn Memory",
@@ -581,6 +726,9 @@ for (const phrase of [
   "MatterhornMemorySuggestion",
   "MatterhornMemoryUsePolicy",
   "MatterhornMemoryExportManifest",
+  "MatterhornMemoryDesk",
+  "MatterhornMemoryDeskPolicy",
+  "MATTERHORN_MEMORY_DESK_POLICY_MATRIX",
   "forbidden_secret",
   "canHoldPrivateKeys: false",
   "canHoldBearerTokens: false",
@@ -606,6 +754,17 @@ for (const phrase of [
   "external signer",
   "context packet",
   "memory suggestion",
+  "policy matrix",
+  "desk policy",
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "decentralized_services",
+  "generic_workspace",
+  "canUseInChat",
+  "canSendToMcpApi",
+  "forbiddenCases",
 ]) {
   assert.ok(
     memoryDocLower.includes(phrase.toLowerCase()),

@@ -583,3 +583,241 @@ export function validateMemoryExportManifest(
 
   return { ok: errors.length === 0, errors };
 }
+
+export const MATTERHORN_MEMORY_DESKS = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "decentralized_services",
+  "generic_workspace",
+] as const;
+export type MatterhornMemoryDesk = (typeof MATTERHORN_MEMORY_DESKS)[number];
+
+export interface MatterhornMemoryDeskPolicy {
+  desk: MatterhornMemoryDesk;
+  allowedKinds: MatterhornMemoryKind[];
+  defaultSensitivity: MatterhornMemorySensitivity;
+  canUseInChat: boolean;
+  canExport: boolean;
+  canSendToMcpApi: boolean;
+  forbiddenCases: string[];
+}
+
+export const MATTERHORN_MEMORY_DESK_POLICY_MATRIX: Record<
+  MatterhornMemoryDesk,
+  MatterhornMemoryDeskPolicy
+> = {
+  bittensor: {
+    desk: "bittensor",
+    allowedKinds: ["protocol_address", "watchlist", "user_preference", "decision"],
+    defaultSensitivity: "public",
+    canUseInChat: true,
+    canExport: true,
+    canSendToMcpApi: true,
+    forbiddenCases: [
+      "private keys",
+      "seed phrases",
+      "mnemonics",
+      "raw signatures",
+      "signed payloads",
+      "wallet exports",
+      "custodial key material",
+    ],
+  },
+  hyperliquid: {
+    desk: "hyperliquid",
+    allowedKinds: ["watchlist", "user_preference", "decision", "receipt"],
+    defaultSensitivity: "public",
+    canUseInChat: true,
+    canExport: false,
+    canSendToMcpApi: false,
+    forbiddenCases: [
+      "API secrets",
+      "private keys",
+      "raw signatures",
+      "signed payloads",
+      "live submission flags",
+      "wallet exports",
+    ],
+  },
+  polymarket: {
+    desk: "polymarket",
+    allowedKinds: ["watchlist", "user_preference", "decision", "receipt"],
+    defaultSensitivity: "public",
+    canUseInChat: true,
+    canExport: false,
+    canSendToMcpApi: false,
+    forbiddenCases: [
+      "API secrets",
+      "private keys",
+      "raw signatures",
+      "signed payloads",
+      "live submission flags",
+      "wallet exports",
+    ],
+  },
+  wellness: {
+    desk: "wellness",
+    allowedKinds: ["user_preference", "client_profile", "decision"],
+    defaultSensitivity: "restricted",
+    canUseInChat: true,
+    canExport: false,
+    canSendToMcpApi: false,
+    forbiddenCases: [
+      "clinical records",
+      "diagnosis",
+      "treatment plans",
+      "prescriptions",
+      "guaranteed outcomes",
+      "medical records without explicit opt-in",
+      "auto-capture",
+    ],
+  },
+  decentralized_services: {
+    desk: "decentralized_services",
+    allowedKinds: ["project_fact", "user_preference", "connector_preference", "decision", "receipt"],
+    defaultSensitivity: "private",
+    canUseInChat: true,
+    canExport: false,
+    canSendToMcpApi: false,
+    forbiddenCases: [
+      "API secrets",
+      "private keys",
+      "raw signatures",
+      "signed payloads",
+      "wallet exports",
+    ],
+  },
+  generic_workspace: {
+    desk: "generic_workspace",
+    allowedKinds: ["user_preference", "project_fact", "workflow_artifact", "decision"],
+    defaultSensitivity: "private",
+    canUseInChat: true,
+    canExport: false,
+    canSendToMcpApi: false,
+    forbiddenCases: [
+      "protocol wallet data",
+      "private keys",
+      "seed phrases",
+      "medical/clinical records",
+      "API secrets",
+      "raw signatures",
+      "signed payloads",
+    ],
+  },
+};
+
+export function detectMemoryDeskFromRecord(record: MatterhornMemoryRecord): MatterhornMemoryDesk {
+  const tags = record.tags.map((t) => t.toLowerCase());
+  if (tags.includes("bittensor")) return "bittensor";
+  if (tags.includes("hyperliquid")) return "hyperliquid";
+  if (tags.includes("polymarket")) return "polymarket";
+  if (tags.includes("wellness") || tags.includes("health") || tags.includes("clinical")) {
+    return "wellness";
+  }
+  if (tags.includes("decentralized_services") || tags.includes("decentralized service")) {
+    return "decentralized_services";
+  }
+  return "generic_workspace";
+}
+
+export function validateMemoryDeskPolicy(
+  policy: MatterhornMemoryDeskPolicy,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (!MATTERHORN_MEMORY_DESKS.includes(policy.desk as MatterhornMemoryDesk)) {
+    errors.push(`desk must be one of ${MATTERHORN_MEMORY_DESKS.join(", ")}`);
+  }
+
+  if (!Array.isArray(policy.allowedKinds) || policy.allowedKinds.length === 0) {
+    errors.push("allowedKinds must be a non-empty array");
+  } else {
+    for (const kind of policy.allowedKinds) {
+      if (!MATTERHORN_MEMORY_KINDS.includes(kind as MatterhornMemoryKind)) {
+        errors.push(`allowedKinds contains invalid kind: ${kind}`);
+      }
+    }
+  }
+
+  if (!MATTERHORN_MEMORY_SENSITIVITIES.includes(policy.defaultSensitivity as MatterhornMemorySensitivity)) {
+    errors.push(`defaultSensitivity must be one of ${MATTERHORN_MEMORY_SENSITIVITIES.join(", ")}`);
+  }
+
+  if (typeof policy.canUseInChat !== "boolean") {
+    errors.push("canUseInChat must be a boolean");
+  }
+
+  if (typeof policy.canExport !== "boolean") {
+    errors.push("canExport must be a boolean");
+  }
+
+  if (typeof policy.canSendToMcpApi !== "boolean") {
+    errors.push("canSendToMcpApi must be a boolean");
+  }
+
+  if (!Array.isArray(policy.forbiddenCases) || policy.forbiddenCases.length === 0) {
+    errors.push("forbiddenCases must be a non-empty array");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function validateMemoryRecordAgainstDeskPolicy(
+  record: MatterhornMemoryRecord,
+  desk: MatterhornMemoryDesk,
+  matrix: Record<MatterhornMemoryDesk, MatterhornMemoryDeskPolicy> = MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+  const policy = matrix[desk];
+
+  if (!policy) {
+    errors.push(`no policy defined for desk ${desk}`);
+    return { ok: false, errors };
+  }
+
+  if (!policy.allowedKinds.includes(record.kind)) {
+    errors.push(`kind ${record.kind} is not allowed for desk ${desk}`);
+  }
+
+  // Desk-specific forbidden secret checks reuse existing validators.
+  const bittensorResult = validateBittensorMemoryIsNonCustodial(record);
+  if (desk === "bittensor" && !bittensorResult.ok) {
+    errors.push(...bittensorResult.errors);
+  }
+
+  const marketResult = validateMarketMemoryDoesNotEnableLiveSubmission(record);
+  if ((desk === "hyperliquid" || desk === "polymarket") && !marketResult.ok) {
+    errors.push(...marketResult.errors);
+  }
+
+  const wellnessResult = validateWellnessMemoryIsEducationalAndOptIn(record);
+  if (desk === "wellness" && !wellnessResult.ok) {
+    errors.push(...wellnessResult.errors);
+  }
+
+  if (desk === "generic_workspace") {
+    const forbiddenTags = ["bittensor", "hyperliquid", "polymarket", "wellness", "clinical", "wallet"];
+    if (record.tags.some((tag) => forbiddenTags.includes(tag.toLowerCase()))) {
+      errors.push(
+        "generic_workspace memory must not silently include protocol, wallet, or medical data",
+      );
+    }
+  }
+
+  // Sensitivity should not be less restrictive than the desk default, except public desks.
+  const sensitivityRank: Record<MatterhornMemorySensitivity, number> = {
+    public: 0,
+    private: 1,
+    restricted: 2,
+    forbidden_secret: 3,
+  };
+  if (sensitivityRank[record.sensitivity] < sensitivityRank[policy.defaultSensitivity]) {
+    errors.push(
+      `sensitivity ${record.sensitivity} is less restrictive than desk ${desk} default ${policy.defaultSensitivity}`,
+    );
+  }
+
+  return { ok: errors.length === 0, errors };
+}
