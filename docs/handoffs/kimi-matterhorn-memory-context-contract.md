@@ -2,7 +2,7 @@
 
 **From:** Kimi (type/contract owner)  
 **To:** Codex (runtime API/CLI/vault owner, coordination lead)  
-**Date:** 2026-06-24  
+**Date:** 2026-06-25  
 **Subject:** Matterhorn Memory contract layer is ready for runtime integration
 
 ## What Was Built
@@ -37,6 +37,19 @@ I completed and extended the Matterhorn Memory **type/contract layer** in `packa
 - `validateMemorySuggestionAgainstDeskPolicy(suggestion)`
 - `sanitizeMemorySuggestionForDisplay(suggestion)`
 - `canMemorySuggestionBecomeSavedMemory(suggestion)`
+
+### Memory Producers V1
+
+Producer helpers for chat, workflow, and connector layers to create safe suggestions:
+
+- `createWellnessMemorySuggestion(useCase, id, title, body, reason, overrides?)`
+  - Wellness use cases: `wellness_client_preference`, `wellness_program_format_preference`, `wellness_offer_builder_preference`, `workflow_artifact_preference`
+  - Defaults to `restricted` sensitivity and `opt-in` tag
+- `createBittensorMemorySuggestion(useCase, id, title, body, reason, overrides?)`
+  - Bittensor use cases: `bittensor_wallet_label`, `bittensor_subnet_watch_preference`, `bittensor_validator_watch_preference`, `bittensor_receipt_context`
+  - Defaults to `public` sensitivity and `bittensor` tag
+
+Both helpers enforce the suggestion safety contract and target the correct desk policy.
 
 ### Memory Policy Matrix
 
@@ -78,7 +91,8 @@ I completed and extended the Matterhorn Memory **type/contract layer** in `packa
 - **#497** `feat: add Matterhorn memory contract` – base record model, merged.
 - **#499** `feat: extend Matterhorn memory context contract` – context/suggestion/use-policy/export-manifest, merged.
 - **#505** `feat: add Matterhorn memory policy matrix` – desk policy matrix, merged.
-- **#511** `feat: add Matterhorn memory suggestion contract` – full suggestion contract, **open**.
+- **#511** `feat: add Matterhorn memory suggestion contract` – full suggestion contract, merged.
+- **#514** `feat: add Matterhorn memory producer suggestion fixtures` – Memory Producers V1 fixtures and tests, **open**.
 
 ## Verification
 
@@ -103,12 +117,13 @@ All three pass.
 - Desk policy matrix gates allowed kinds and minimum sensitivity per product desk
 - Suggestions never become saved memory without explicit `confirm` or `edit`
 - Secret-shaped suggestion content is rejected and redacted before display
+- Producer suggestions default to the correct desk sensitivity (`public` for Bittensor, `restricted` for Wellness) and never auto-capture
 
 ## What You (Codex) Should Know
 
 1. **This is a contract-only layer.** No runtime behavior is implemented. It defines the types and validators the vault/API/CLI/MCP layers should import and call.
 
-2. **Merge independence.** #511 can merge independently of Codex's production policy enforcement work. It only touches types, a script test, and docs.
+2. **Merge independence.** #514 can merge independently of Codex's production policy enforcement work. It only touches types, a script test, and docs.
 
 3. **No overlap with your runtime work.** I did not touch:
    - `packages/matterhorn-memory-vault/`
@@ -123,6 +138,7 @@ All three pass.
    - Call `redactForbiddenMemorySecrets(record)` to decide whether to propose or reject ingest.
    - Use `MatterhornMemoryContextPacket` as the return shape for chat-context queries.
    - Use `MatterhornMemorySuggestion` for "Remember this?" proposals.
+   - Use `createWellnessMemorySuggestion` and `createBittensorMemorySuggestion` in producer/chat layers to generate safe suggestions.
    - Enforce `MatterhornMemoryUsePolicy` defaults in the API/MCP layer.
    - Use `MatterhornMemoryExportManifest` when exporting memory bundles.
 
@@ -135,7 +151,7 @@ All three pass.
 
 ## Next Steps
 
-- Review and merge #511 when ready.
+- Review and merge #514 when ready.
 - Wire `validateMemoryRecordAgainstDeskPolicy` into desk-aware capture flows.
 - If the contract needs new fields/kinds for runtime integration, propose changes and I will own the type updates.
 

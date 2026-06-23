@@ -158,13 +158,36 @@ Use cases:
 
 - `bittensor_wallet_label`
 - `bittensor_subnet_watch_preference`
+- `bittensor_validator_watch_preference`
+- `bittensor_receipt_context`
 - `hyperliquid_watched_market`
 - `polymarket_watched_market`
 - `wellness_client_preference`
+- `wellness_program_format_preference`
+- `wellness_offer_builder_preference`
 - `mcp_tool_preference`
 - `workflow_artifact_preference`
 
 A suggestion only becomes saved memory when `userAction` is `confirm` or `edit`, all safety validators pass, no secret material is detected, and the policy decision is not `reject`.
+
+### Memory Producers V1
+
+Producer helpers make it easy for chat, workflow, and connector layers to create safe suggestions.
+
+- `createWellnessMemorySuggestion(useCase, id, title, body, reason, overrides?)`
+  - Produces wellness suggestions with default `restricted` sensitivity and `opt-in` tag.
+  - Use cases: `wellness_client_preference`, `wellness_program_format_preference`, `wellness_offer_builder_preference`, `workflow_artifact_preference`.
+- `createBittensorMemorySuggestion(useCase, id, title, body, reason, overrides?)`
+  - Produces Bittensor suggestions with default `public` sensitivity and `bittensor` tag.
+  - Use cases: `bittensor_wallet_label`, `bittensor_subnet_watch_preference`, `bittensor_validator_watch_preference`, `bittensor_receipt_context`.
+
+Both helpers set:
+
+- `version: "matterhorn.memory.suggestion.v1"`
+- `captureMode: "user_confirmed_only"`
+- `canAutoCapture: false`
+- `requiresExplicitConsent: true`
+- `forbiddenIfSecretDetected: true`
 
 ### `MatterhornMemoryUsePolicy`
 
