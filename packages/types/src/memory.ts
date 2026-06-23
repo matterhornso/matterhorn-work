@@ -393,9 +393,13 @@ export type MatterhornMemorySuggestionUserAction =
 export const MATTERHORN_MEMORY_SUGGESTION_USE_CASES = [
   "bittensor_wallet_label",
   "bittensor_subnet_watch_preference",
+  "bittensor_validator_watch_preference",
+  "bittensor_receipt_context",
   "hyperliquid_watched_market",
   "polymarket_watched_market",
   "wellness_client_preference",
+  "wellness_program_format_preference",
+  "wellness_offer_builder_preference",
   "mcp_tool_preference",
   "workflow_artifact_preference",
 ] as const;
@@ -652,6 +656,130 @@ export function canMemorySuggestionBecomeSavedMemory(
   return true;
 }
 
+function makeBaseMemorySuggestion(
+  id: string,
+  proposedRecord: MatterhornMemoryRecord,
+  reason: string,
+  source: MatterhornMemorySource,
+  desk: MatterhornMemoryDesk,
+  useCase: MatterhornMemorySuggestionUseCase,
+  overrides: Partial<MatterhornMemorySuggestion> = {},
+): MatterhornMemorySuggestion {
+  return {
+    version: MATTERHORN_MEMORY_SUGGESTION_VERSION,
+    id,
+    proposedRecord,
+    reason,
+    source,
+    confidence: 0.9,
+    desk,
+    useCase,
+    userAction: "confirm",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+    ...overrides,
+  };
+}
+
+export function createWellnessMemorySuggestion(
+  useCase:
+    | "wellness_client_preference"
+    | "wellness_program_format_preference"
+    | "wellness_offer_builder_preference"
+    | "workflow_artifact_preference",
+  id: string,
+  title: string,
+  body: Record<string, unknown>,
+  reason: string,
+  overrides: Partial<MatterhornMemorySuggestion> = {},
+): MatterhornMemorySuggestion {
+  const record: MatterhornMemoryRecord = {
+    id: `rec-${id}`,
+    kind: useCase === "workflow_artifact_preference" ? "workflow_artifact" : "user_preference",
+    scope: "user",
+    title,
+    summary: reason,
+    body,
+    tags: ["wellness", "opt-in"],
+    links: [],
+    provenance: {
+      source: "chat_capture",
+      capturedAt: new Date().toISOString(),
+      capturedBy: "agent",
+      confidence: 0.9,
+      reasonRemembered: reason,
+    },
+    sensitivity: "restricted",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    canUseInChat: true,
+    canExport: false,
+    canDelete: true,
+  };
+
+  return makeBaseMemorySuggestion(
+    id,
+    record,
+    reason,
+    "chat_capture",
+    "wellness",
+    useCase,
+    overrides,
+  );
+}
+
+export function createBittensorMemorySuggestion(
+  useCase:
+    | "bittensor_wallet_label"
+    | "bittensor_subnet_watch_preference"
+    | "bittensor_validator_watch_preference"
+    | "bittensor_receipt_context",
+  id: string,
+  title: string,
+  body: Record<string, unknown>,
+  reason: string,
+  overrides: Partial<MatterhornMemorySuggestion> = {},
+): MatterhornMemorySuggestion {
+  const kind: MatterhornMemoryKind =
+    useCase === "bittensor_receipt_context" ? "receipt" : "protocol_address";
+
+  const record: MatterhornMemoryRecord = {
+    id: `rec-${id}`,
+    kind,
+    scope: "user",
+    title,
+    summary: reason,
+    body,
+    tags: ["bittensor"],
+    links: [],
+    provenance: {
+      source: "chat_capture",
+      capturedAt: new Date().toISOString(),
+      capturedBy: "agent",
+      confidence: 0.9,
+      reasonRemembered: reason,
+    },
+    sensitivity: "public",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    canUseInChat: true,
+    canExport: true,
+    canDelete: true,
+  };
+
+  return makeBaseMemorySuggestion(
+    id,
+    record,
+    reason,
+    "chat_capture",
+    "bittensor",
+    useCase,
+    overrides,
+  );
+}
+
 export function validateMemoryUsePolicy(
   policy: MatterhornMemoryUsePolicy,
 ): MatterhornMemoryValidationResult {
@@ -750,7 +878,7 @@ export const MATTERHORN_MEMORY_DESK_POLICY_MATRIX: Record<
 > = {
   bittensor: {
     desk: "bittensor",
-    allowedKinds: ["protocol_address", "watchlist", "user_preference", "decision"],
+    allowedKinds: ["protocol_address", "watchlist", "user_preference", "decision", "receipt"],
     defaultSensitivity: "public",
     canUseInChat: true,
     canExport: true,
@@ -799,7 +927,7 @@ export const MATTERHORN_MEMORY_DESK_POLICY_MATRIX: Record<
   },
   wellness: {
     desk: "wellness",
-    allowedKinds: ["user_preference", "client_profile", "decision"],
+    allowedKinds: ["user_preference", "client_profile", "decision", "workflow_artifact"],
     defaultSensitivity: "restricted",
     canUseInChat: true,
     canExport: false,

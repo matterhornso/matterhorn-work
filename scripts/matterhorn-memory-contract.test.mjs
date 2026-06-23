@@ -114,9 +114,13 @@ for (const action of ["confirm", "edit", "dismiss"]) {
 for (const useCase of [
   "bittensor_wallet_label",
   "bittensor_subnet_watch_preference",
+  "bittensor_validator_watch_preference",
+  "bittensor_receipt_context",
   "hyperliquid_watched_market",
   "polymarket_watched_market",
   "wellness_client_preference",
+  "wellness_program_format_preference",
+  "wellness_offer_builder_preference",
   "mcp_tool_preference",
   "workflow_artifact_preference",
 ]) {
@@ -881,7 +885,223 @@ assert.equal(
   "generic_workspace desk must reject silently included medical data",
 );
 
-// 17. Docs cover the contract, safety invariants, and ownership.
+// 17. Memory Producers V1 fixtures and per-producer safety.
+const wellnessClientPreference = memory.createWellnessMemorySuggestion(
+  "wellness_client_preference",
+  "sugg-wellness-client-1",
+  "Preferred coaching format",
+  { format: "async text", timezone: "UTC" },
+  "User prefers async text coaching",
+);
+assert.ok(
+  memory.validateMemorySuggestion(wellnessClientPreference).ok,
+  "wellness client preference suggestion should be valid",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessClientPreference).ok,
+  "wellness client preference suggestion should pass desk policy",
+);
+assert.equal(
+  wellnessClientPreference.proposedRecord.sensitivity,
+  "restricted",
+  "wellness suggestion default sensitivity must be restricted",
+);
+assert.ok(
+  wellnessClientPreference.proposedRecord.tags.includes("opt-in"),
+  "wellness suggestion must be opt-in",
+);
+
+const wellnessProgramFormat = memory.createWellnessMemorySuggestion(
+  "wellness_program_format_preference",
+  "sugg-wellness-program-1",
+  "Program format preference",
+  { format: "education-first", clinical: false },
+  "User prefers education-first wellness content",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessProgramFormat).ok,
+  "wellness program format suggestion should pass desk policy",
+);
+
+const wellnessOfferBuilder = memory.createWellnessMemorySuggestion(
+  "wellness_offer_builder_preference",
+  "sugg-wellness-offer-1",
+  "Offer builder preference",
+  { offerType: "sleep hygiene guide" },
+  "User selected an offer preference",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessOfferBuilder).ok,
+  "wellness offer builder suggestion should pass desk policy",
+);
+
+const wellnessWorkflowArtifact = memory.createWellnessMemorySuggestion(
+  "workflow_artifact_preference",
+  "sugg-wellness-artifact-1",
+  "Wellness worksheet preference",
+  { artifactId: "sleep-worksheet-1" },
+  "User referenced a wellness worksheet",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessWorkflowArtifact).ok,
+  "wellness workflow artifact suggestion should pass desk policy",
+);
+
+const bittensorWalletLabel = memory.createBittensorMemorySuggestion(
+  "bittensor_wallet_label",
+  "sugg-bittensor-wallet-1",
+  "TAO wallet label",
+  { ss58Address: "5abc...", coldkey: "my-coldkey", hotkey: "5xyz..." },
+  "User labeled a TAO wallet",
+);
+assert.ok(
+  memory.validateMemorySuggestion(bittensorWalletLabel).ok,
+  "bittensor wallet label suggestion should be valid",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorWalletLabel).ok,
+  "bittensor wallet label suggestion should pass desk policy",
+);
+assert.equal(
+  bittensorWalletLabel.proposedRecord.sensitivity,
+  "public",
+  "bittensor suggestion default sensitivity must be public",
+);
+assert.ok(
+  bittensorWalletLabel.proposedRecord.tags.includes("bittensor"),
+  "bittensor suggestion must be tagged bittensor",
+);
+
+const bittensorWatchedSubnet = memory.createBittensorMemorySuggestion(
+  "bittensor_subnet_watch_preference",
+  "sugg-bittensor-subnet-1",
+  "Watched subnet",
+  { netuid: 1, subnetName: "Root" },
+  "User wants to watch subnet 1",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorWatchedSubnet).ok,
+  "bittensor subnet watch suggestion should pass desk policy",
+);
+
+const bittensorValidatorWatch = memory.createBittensorMemorySuggestion(
+  "bittensor_validator_watch_preference",
+  "sugg-bittensor-validator-1",
+  "Validator watch preference",
+  { validatorName: "My Validator", ss58Address: "5val..." },
+  "User wants to follow a validator",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorValidatorWatch).ok,
+  "bittensor validator watch suggestion should pass desk policy",
+);
+
+const bittensorReceiptContext = memory.createBittensorMemorySuggestion(
+  "bittensor_receipt_context",
+  "sugg-bittensor-receipt-1",
+  "TAO receipt context",
+  { txHash: "0xabc...", netuid: 1, status: "success" },
+  "User shared a TAO receipt",
+);
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorReceiptContext).ok,
+  "bittensor receipt context suggestion should pass desk policy",
+);
+
+// Producer suggestions reject forbidden material.
+for (const body of [
+  { seedPhrase: "abandon abandon" },
+  { privateKey: "0x123" },
+  { mnemonic: "word word word" },
+  { apiSecret: "sk-abc" },
+  { rawSignature: "0xdeadbeef" },
+  { signedPayload: "payload" },
+  { walletExport: "export" },
+]) {
+  const badBittensor = memory.createBittensorMemorySuggestion(
+    "bittensor_wallet_label",
+    "sugg-bad",
+    "Bad suggestion",
+    body,
+    "Contains secret material",
+  );
+  assert.equal(
+    memory.validateMemorySuggestion(badBittensor).ok,
+    false,
+    `bittensor suggestion with ${JSON.stringify(body)} must be rejected`,
+  );
+
+  const badWellness = memory.createWellnessMemorySuggestion(
+    "wellness_client_preference",
+    "sugg-bad",
+    "Bad suggestion",
+    body,
+    "Contains secret material",
+  );
+  assert.equal(
+    memory.validateMemorySuggestion(badWellness).ok,
+    false,
+    `wellness suggestion with ${JSON.stringify(body)} must be rejected`,
+  );
+}
+
+// Producer suggestions never auto-capture and require explicit confirm/edit.
+const unconfirmedBittensor = memory.createBittensorMemorySuggestion(
+  "bittensor_wallet_label",
+  "sugg-unconfirmed",
+  "Unconfirmed wallet label",
+  { ss58Address: "5abc..." },
+  "User mentioned a wallet",
+  { userAction: "dismiss" },
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(unconfirmedBittensor),
+  false,
+  "dismissed bittensor suggestion must not become saved memory",
+);
+
+const unconfirmedWellness = memory.createWellnessMemorySuggestion(
+  "wellness_client_preference",
+  "sugg-unconfirmed",
+  "Unconfirmed preference",
+  { format: "async text" },
+  "User mentioned a preference",
+  { userAction: "dismiss" },
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(unconfirmedWellness),
+  false,
+  "dismissed wellness suggestion must not become saved memory",
+);
+
+// Producer suggestions enforce desk policy defaults.
+const bittensorWithPrivateKey = memory.createBittensorMemorySuggestion(
+  "bittensor_wallet_label",
+  "sugg-custodial",
+  "Custodial wallet label",
+  { ss58Address: "5abc...", privateKey: "0x123" },
+  "User shared wallet details",
+);
+assert.equal(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorWithPrivateKey).ok,
+  false,
+  "bittensor producer suggestion with private key must fail desk policy",
+);
+
+const wellnessClinical = memory.createWellnessMemorySuggestion(
+  "wellness_client_preference",
+  "sugg-clinical",
+  "Clinical preference",
+  { diagnosis: "example" },
+  "User mentioned a diagnosis",
+);
+assert.equal(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessClinical).ok,
+  false,
+  "wellness producer suggestion with clinical data must fail desk policy",
+);
+
+// 18. Docs cover the contract, safety invariants, and ownership.
 const memoryDocLower = memoryDoc.toLowerCase();
 for (const phrase of [
   "Matterhorn Memory",
@@ -936,9 +1156,16 @@ for (const phrase of [
   "canSendToMcpApi",
   "forbiddenCases",
   "bittensor_wallet_label",
+  "bittensor_validator_watch_preference",
+  "bittensor_receipt_context",
   "hyperliquid_watched_market",
   "wellness_client_preference",
+  "wellness_program_format_preference",
+  "wellness_offer_builder_preference",
   "userAction",
+  "createWellnessMemorySuggestion",
+  "createBittensorMemorySuggestion",
+  "Memory Producers V1",
   "sanitizeMemorySuggestionForDisplay",
   "canMemorySuggestionBecomeSavedMemory",
   "validateMemorySuggestionAgainstDeskPolicy",
