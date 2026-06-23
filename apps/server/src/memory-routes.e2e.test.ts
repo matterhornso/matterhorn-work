@@ -150,6 +150,89 @@ afterEach(async () => {
 });
 
 describe("Matterhorn memory API routes", () => {
+  test("plans Bittensor and Wellness suggestions without writing memory", async () => {
+    const { base } = await boot();
+
+    const planned = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Show TAO for 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture and compare validators on subnet 14.",
+          sourceId: "memory-route-test",
+        },
+      }),
+    });
+    expect(planned.response.status).toBe(200);
+    expect(planned.payload.success).toBe(true);
+    expect(planned.payload.writesMemory).toBe(false);
+    expect(planned.payload.safety.captureMode).toBe("user_confirmed_only");
+    expect(planned.payload.safety.canAutoCapture).toBe(false);
+    expect(planned.payload.count).toBeGreaterThanOrEqual(2);
+    expect(planned.payload.suggestions.map((item: { useCase: string }) => item.useCase)).toContain("bittensor_wallet_label");
+    expect(planned.payload.suggestions.map((item: { useCase: string }) => item.useCase)).toContain("bittensor_subnet_watch_preference");
+
+    const safetyBoilerplate = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Use Bittensor chat for 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+        },
+      }),
+    });
+    expect(safetyBoilerplate.response.status).toBe(200);
+    expect(safetyBoilerplate.payload.count).toBeGreaterThanOrEqual(1);
+
+    const beforeConfirm = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
+    expect(beforeConfirm.response.status).toBe(200);
+    expect(beforeConfirm.payload.count).toBe(0);
+
+    const confirmed = await jsonFetch(base, "/api/memory/suggestions/resolve", {
+      method: "POST",
+      body: JSON.stringify({ suggestion: planned.payload.suggestions[0], action: "confirm" }),
+    });
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload.saved).toBe(true);
+
+    const afterConfirm = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
+    expect(afterConfirm.response.status).toBe(200);
+    expect(afterConfirm.payload.count).toBe(1);
+
+    const wellness = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "wellness",
+          prompt: "Create a safe trainer onboarding workflow for a new client.",
+          templateId: "wellness_creator_workflow",
+        },
+      }),
+    });
+    expect(wellness.response.status).toBe(200);
+    expect(wellness.payload.writesMemory).toBe(false);
+    expect(wellness.payload.count).toBe(1);
+    expect(wellness.payload.suggestions[0].desk).toBe("wellness");
+    expect(wellness.payload.suggestions[0].proposedRecord.sensitivity).toBe("restricted");
+    expect(wellness.payload.suggestions[0].canAutoCapture).toBe(false);
+  });
+
+  test("rejects secret-shaped suggestion planning input", async () => {
+    const { base } = await boot();
+
+    const rejected = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "remember my seed phrase alpha beta gamma delta",
+        },
+      }),
+    });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload.code).toBe("memory_suggestion_secret_rejected");
+  });
+
   test("capture, search, update, export, and forget records", async () => {
     const { base, dir } = await boot();
 

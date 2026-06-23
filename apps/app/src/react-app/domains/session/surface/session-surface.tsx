@@ -86,6 +86,7 @@ import {
   useMatterhornSessionMemoryContextStore,
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
+import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import {
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
@@ -1117,6 +1118,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
       if (incomingContext) {
         setBittensorContext(props.sessionId, incomingContext);
       }
+      dispatchMatterhornMemorySuggestions({
+        desk: isGenericCryptoHandoff
+          ? (typeof (detail as { venue?: unknown; panel?: unknown }).venue === "string"
+              ? (detail as { venue: string }).venue
+              : typeof (detail as { panel?: unknown }).panel === "string"
+                ? (detail as { panel: string }).panel
+                : "generic_workspace")
+          : "bittensor",
+        prompt: text,
+        source: "chat_capture",
+        sourceId: isGenericCryptoHandoff ? "crypto-chat-handoff" : "bittensor-chat-handoff",
+        workspaceId: props.workspaceId,
+        sessionId: props.sessionId,
+        ss58Address: incomingContext?.ss58Address,
+        netuid: incomingContext?.netuid,
+        validatorHotkey: incomingContext?.validatorHotkey,
+      });
       const resolvedText = isGenericCryptoHandoff ? text : addBittensorContextToResolvedText(text, mergedContext);
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));

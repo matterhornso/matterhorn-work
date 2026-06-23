@@ -13,7 +13,10 @@ const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-pa
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx")
 const memoryPanel = read("apps/app/src/react-app/domains/memory/memory-panel.tsx")
 const memoryPolicy = read("apps/app/src/react-app/domains/memory/memory-policy.ts")
+const memoryProducer = read("apps/app/src/react-app/domains/memory/memory-suggestion-producers.ts")
 const memoryStore = read("apps/app/src/react-app/domains/session/surface/memory-context-store.ts")
+const memorySuggestionTool = read("apps/server/src/tools/memory-suggestions.ts")
+const server = read("apps/server/src/server.ts")
 
 assert.equal(
   pkg.scripts?.["test:matterhorn-memory-ui"],
@@ -48,6 +51,7 @@ for (const expected of [
   "searchMemory",
   "listMemory",
   "captureMemory",
+  "planMemorySuggestions",
   "resolveMemorySuggestion",
   "forgetMemory",
   "exportMemory",
@@ -96,6 +100,51 @@ for (const expected of [
 }
 
 for (const expected of [
+  "buildMatterhornMemorySuggestions",
+  "dispatchMatterhornMemorySuggestions",
+  "bittensor_wallet_label",
+  "bittensor_subnet_watch_preference",
+  "wellness_client_preference",
+  "user_confirmed_only",
+  "canAutoCapture: false",
+  "requiresExplicitConsent: true",
+  "forbiddenIfSecretDetected: true",
+  "containsForbiddenMemorySecretMaterial",
+  "validateMemorySuggestionAgainstDeskPolicy",
+  "matterhorn:memory-suggestions-updated",
+]) {
+  assert.match(memoryProducer, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory suggestion producer contract: ${expected}`)
+}
+
+for (const expected of [
+  "planMatterhornMemorySuggestions",
+  "hasForbiddenMatterhornMemorySuggestionInput",
+  "writesMemory: false",
+  "rejectedSecretInput",
+  "bittensor_wallet_label",
+  "wellness_client_preference",
+  "validateMemorySuggestionAgainstDeskPolicy",
+]) {
+  assert.match(memorySuggestionTool, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing server memory suggestion planner contract: ${expected}`)
+}
+
+for (const expected of [
+  "/api/memory/suggestions/plan",
+  "memory_suggestion_secret_rejected",
+  "planMatterhornMemorySuggestions",
+]) {
+  assert.match(server, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory suggestion planning route: ${expected}`)
+}
+
+for (const expected of [
+  "dispatchMatterhornMemorySuggestions",
+  "bittensor-chat-handoff",
+  "wellness-rail-launcher",
+]) {
+  assert.match(`${sessionSurface}\n${sessionPage}`, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory producer wiring: ${expected}`)
+}
+
+for (const expected of [
   "Remember this",
   "Memory suggestions",
   "nothing is saved unless you confirm",
@@ -126,8 +175,10 @@ for (const forbidden of [
   "hiddenMemoryAllowed: true",
   "canHoldPrivateKeys: true",
   "canHoldSeedPhrases: true",
+  "canAutoCapture: true",
+  "writesMemory: true",
 ]) {
-  assert.doesNotMatch(`${memoryPanel}\n${memoryStore}\n${extensions}`, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `forbidden unsafe memory claim found: ${forbidden}`)
+  assert.doesNotMatch(`${memoryPanel}\n${memoryStore}\n${extensions}\n${memoryProducer}\n${memorySuggestionTool}`, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `forbidden unsafe memory claim found: ${forbidden}`)
 }
 
 console.log("Matterhorn Memory production UI gate passed.")

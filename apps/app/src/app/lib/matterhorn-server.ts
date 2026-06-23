@@ -132,6 +132,34 @@ export type MatterhornMemoryCaptureResponse = {
   markdownPath?: string;
 };
 
+export type MatterhornMemorySuggestionPlanInput = {
+  desk?: string;
+  prompt?: string;
+  message?: string;
+  source?: string;
+  sourceId?: string;
+  workspaceId?: string | null;
+  sessionId?: string | null;
+  ss58Address?: string | null;
+  netuid?: number | null;
+  validatorHotkey?: string | null;
+  templateId?: string | null;
+};
+
+export type MatterhornMemorySuggestionPlanResponse = {
+  success: boolean;
+  suggestions: MatterhornMemorySuggestion[];
+  count: number;
+  writesMemory: false;
+  safety: {
+    captureMode: "user_confirmed_only";
+    canAutoCapture: false;
+    requiresExplicitConsent: true;
+    rejectedSecretInput: boolean;
+  };
+  warnings: string[];
+};
+
 export type MatterhornMemorySuggestionResolveResponse = {
   success: boolean;
   suggestion: MatterhornMemorySuggestion;
@@ -1517,6 +1545,15 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         method: "POST",
         body: { record },
+        timeoutMs: timeouts.config,
+      }),
+
+    planMemorySuggestions: (input: MatterhornMemorySuggestionPlanInput) =>
+      requestJson<MatterhornMemorySuggestionPlanResponse>(baseUrl, "/api/memory/suggestions/plan", {
+        token,
+        hostToken,
+        method: "POST",
+        body: { input },
         timeoutMs: timeouts.config,
       }),
 
