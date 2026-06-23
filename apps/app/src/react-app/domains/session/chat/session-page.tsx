@@ -64,6 +64,7 @@ import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget 
 import { VoicePanel } from "../voice/voice-panel";
 import { WalletPanel } from "../../wallet/WalletPanel";
 import { MemoryPanel } from "../../memory/memory-panel";
+import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
@@ -1454,6 +1455,17 @@ export function SessionPage(props: SessionPageProps) {
                   size="icon-sm"
                   className="h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => {
+                    if (item.launcher) {
+                      dispatchMatterhornMemorySuggestions({
+                        desk: "wellness",
+                        prompt: item.launcher.prompt,
+                        source: "workflow_output",
+                        sourceId: "wellness-rail-launcher",
+                        workspaceId: props.selectedWorkspaceId,
+                        sessionId: props.selectedSessionId,
+                        templateId: item.id,
+                      });
+                    }
                     if (item.launcher && props.sidebar.onCreateTaskWithPrompt) {
                       props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt);
                       return;

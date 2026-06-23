@@ -180,6 +180,11 @@ import {
   findForbiddenMatterhornWorkflowQueryKey,
 } from "./tools/matterhorn-workflows.js";
 import {
+  hasForbiddenMatterhornMemorySuggestionInput,
+  planMatterhornMemorySuggestions,
+  type MatterhornMemorySuggestionPlanInput,
+} from "./tools/memory-suggestions.js";
+import {
   buildMarketExecutionChainResponse,
   buildMarketExecutionReadinessResponse,
   buildMarketSdkValidationResponse,
@@ -4600,6 +4605,27 @@ function createRoutes(
       const result = await memoryVault.captureRecord(record);
       return jsonResponse({ success: true, ...result });
     } catch (error) {
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/memory/suggestions/plan", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      if (hasForbiddenMatterhornMemorySuggestionInput(input)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be planned from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(input);
+      return jsonResponse({ success: true, ...plan });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
     }
   });
