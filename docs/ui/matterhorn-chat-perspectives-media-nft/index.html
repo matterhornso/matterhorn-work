@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matterhorn Perspectives & Media Studio — Design Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     SHOWCASE HEADER
+     ═══════════════════════════════════════════════════ -->
+<header class="showcase-header">
+  <div class="showcase-header__title">Matterhorn Perspectives &amp; Media Studio — Design Prototype</div>
+  <div class="showcase-header__right">
+    <span class="showcase-header__meta">Matterhorn · v0.14</span>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <svg class="theme-toggle__sun" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="theme-toggle__moon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      <span id="themeLabel">Dark</span>
+    </button>
+  </div>
+</header>
+
+<div class="showcase-grid">
+  <!-- ═══════════════════════════════════════════════════
+       NAV
+       ═══════════════════════════════════════════════════ -->
+  <nav class="showcase-nav">
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Chat Perspectives</div>
+      <div class="showcase-nav__link is-active" onclick="showScreen('screen-1')">
+        <span class="showcase-nav__dot showcase-nav__dot--blue"></span>Chat Home / USP
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-2')">
+        <span class="showcase-nav__dot"></span>Single-Output Mode
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-3')">
+        <span class="showcase-nav__dot"></span>Multi-Output Mode
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Example Prompts</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-4')">
+        <span class="showcase-nav__dot showcase-nav__dot--pink"></span>Bittensor: Stake TAO
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-5')">
+        <span class="showcase-nav__dot showcase-nav__dot--blue"></span>Hyperliquid Preview
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-6')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>Polymarket Compliance
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-7')">
+        <span class="showcase-nav__dot showcase-nav__dot--green"></span>Wellness — Medical Boundary
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Media Studio</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-8')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>Media Studio Home
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-9')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>Video Generation
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-10')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>Audio Generation
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-11')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>NFT Metadata Preview
+      </div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-12')">
+        <span class="showcase-nav__dot showcase-nav__dot--purple"></span>External Wallet Handoff
+      </div>
+    </div>
+    <div class="showcase-nav__section">
+      <div class="showcase-nav__label">Responsive</div>
+      <div class="showcase-nav__link" onclick="showScreen('screen-13')">
+        <span class="showcase-nav__dot"></span>Mobile Layout
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 1 — CHAT HOME WITH PERSPECTIVES USP
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-1">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 01</span>
+      <span class="screen-block__label">Chat Home — Matterhorn Perspectives USP</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+
+      <!-- Sidebar -->
+      <div class="cp-sidebar">
+        <div class="cp-sidebar__logo">
+          <span class="cp-sidebar__logo-text">Matterhorn Work</span>
+        </div>
+        <div class="cp-nav">
+          <div class="cp-nav__item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat
+          </div>
+          <div class="cp-nav__item cp-nav__item--active">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            Perspectives
+          </div>
+          <div class="cp-nav__item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Memory
+          </div>
+          <div class="cp-nav__sep"></div>
+          <div class="cp-nav__label">Desks</div>
+          <div class="cp-nav__item"><span class="cp-nav__dot cp-nav__dot--pink"></span>Bittensor</div>
+          <div class="cp-nav__item"><span class="cp-nav__dot cp-nav__dot--blue"></span>Hyperliquid</div>
+          <div class="cp-nav__item"><span class="cp-nav__dot cp-nav__dot--purple"></span>Polymarket</div>
+          <div class="cp-nav__item"><span class="cp-nav__dot cp-nav__dot--green"></span>Wellness</div>
+          <div class="cp-nav__item"><span class="cp-nav__dot cp-nav__dot--purple"></span>Media Studio</div>
+        </div>
+      </div>
+
+      <!-- Main: USP Panel -->
+      <div class="cp-main">
+        <div class="cp-usp">
+          <div class="cp-usp__badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            New in Matterhorn Work
+          </div>
+          <h1 class="cp-usp__title">See the whole picture before you act.</h1>
+          <p class="cp-usp__subtitle">Matterhorn Perspectives gives you three viewpoints on every question — conservative, balanced, and opportunity-forward — with visible memory, safety rails, and action receipts built in.</p>
+
+          <div class="cp-pill-row">
+            <div class="cp-pill cp-pill--amber">⚠ Risk-first</div>
+            <div class="cp-pill cp-pill--slate">💬 Balanced</div>
+            <div class="cp-pill cp-pill--green">🌱 Opportunity</div>
+          </div>
+
+          <div class="cp-features">
+            <div class="cp-feature">
+              <div class="cp-feature__icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              </div>
+              <div class="cp-feature__title">One intent. Three lenses.</div>
+              <div class="cp-feature__desc">Ask once. See Non-optimistic, Neutral, and Optimistic viewpoints side by side.</div>
+            </div>
+            <div class="cp-feature">
+              <div class="cp-feature__icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div class="cp-feature__title">Safety never weakened.</div>
+              <div class="cp-feature__desc">Non-custodial, external signer, visible receipts. Optimistic doesn't mean reckless.</div>
+            </div>
+            <div class="cp-feature">
+              <div class="cp-feature__icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="cp-feature__title">Every action has a receipt.</div>
+              <div class="cp-feature__desc">Signed or unsigned, Matterhorn records what was — and was not — submitted.</div>
+            </div>
+            <div class="cp-feature">
+              <div class="cp-feature__icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+              </div>
+              <div class="cp-feature__title">Memory you control.</div>
+              <div class="cp-feature__desc">See what Matterhorn remembers. Edit, export, or forget at any time.</div>
+            </div>
+          </div>
+
+          <div class="cp-start">
+            <button class="cp-btn cp-btn--primary">Try it — ask a question</button>
+            <button class="cp-btn">See example: Bittensor staking</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 2 — SINGLE-OUTPUT MODE
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-2">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 02</span>
+      <span class="screen-block__label">Single-Output Mode — Neutral</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+
+      <!-- Safety Strip -->
+      <div class="cp-safety-strip cp-safety-strip--blue">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Non-custodial
+        <span class="cp-safety-strip__dot">·</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        3 memories active
+        <span class="cp-safety-strip__dot">·</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Hyperliquid · External signer
+      </div>
+
+      <div class="cp-sidebar">
+        <div class="cp-sidebar__logo"><span class="cp-sidebar__logo-text">Matterhorn Work</span></div>
+        <div class="cp-nav">
+          <div class="cp-nav__item cp-nav__item--active"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Chat</div>
+          <div class="cp-nav__item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg> Perspectives</div>
+        </div>
+      </div>
+
+      <div class="cp-main">
+        <!-- Mode Toggle -->
+        <div class="cp-mode-toggle">
+          <div class="cp-mode-toggle__options">
+            <button class="cp-mode-btn cp-mode-btn--nonopt">○ Non-optimistic</button>
+            <button class="cp-mode-btn cp-mode-btn--neutral is-active">● Neutral</button>
+            <button class="cp-mode-btn cp-mode-btn--opt">○ Optimistic</button>
+          </div>
+          <button class="cp-mode-compare">Compare modes ↗</button>
+        </div>
+
+        <!-- Memory Chip Bar -->
+        <div class="cp-chip-bar">
+          <span class="cp-chip-bar__label">Using 3 memories</span>
+          <span class="cp-chip cp-chip--active">BTC wallet behavior <span class="cp-chip__count">×1</span></span>
+          <span class="cp-chip cp-chip--active">Funding rate alert prefs <span class="cp-chip__count">×1</span></span>
+          <span class="cp-chip cp-chip--active">Margin ceiling <span class="cp-chip__count">×1</span></span>
+        </div>
+
+        <!-- Response Card -->
+        <div class="cp-response-card cp-response-card--neutral">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--neutral">💬 Neutral</span>
+            <span class="cp-response-card__mode-label">Balanced view</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p><strong>Hyperliquid BTC-PERP position:</strong> long 0.1 BTC, entry $64,250.</p>
+            <p><strong>Current funding rate:</strong> +$14/day (long pays short). This is above your alert threshold of +$0.0001/hr.</p>
+            <p><strong>Key metrics:</strong></p>
+            <ul>
+              <li>Leverage: 3× (within your 10× ceiling)</li>
+              <li>Margin used: 33% of available</li>
+              <li>Position type: isolated margin — risk contained to this position</li>
+            </ul>
+            <p>This is factual information. It is not financial advice. The external signer will show a preview before any order is submitted.</p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Sources: Hyperliquid API · Memory</div>
+            <div class="cp-response-card__actions">
+              <button class="cp-btn cp-btn--primary">Use this</button>
+              <button class="cp-btn">Compare</button>
+              <button class="cp-btn">↗ Workflow</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <div class="cp-composer">
+          <div class="cp-composer__mode">
+            <button class="cp-composer__mode-btn">Neutral ▾</button>
+          </div>
+          <textarea class="cp-composer__input" placeholder="Ask about your positions, Bittensor, Polymarket, Wellness…">Should I place this Hyperliquid trade?</textarea>
+          <div class="cp-composer__bar">
+            <span class="cp-composer__safety">🔒 3 memories · ⚠ Preview only</span>
+            <div class="cp-composer__actions">
+              <button class="cp-btn cp-btn--ghost">📎</button>
+              <button class="cp-btn cp-btn--ghost">🎬</button>
+              <button class="cp-btn cp-btn--primary">⏎</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 3 — MULTI-OUTPUT MODE
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-3">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 03</span>
+      <span class="screen-block__label">Multi-Output Mode — All Three Perspectives</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+      <div class="cp-safety-strip cp-safety-strip--blue">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Non-custodial · 3 memories active · External signer
+      </div>
+
+      <div class="cp-main" style="padding:16px">
+        <div class="cp-multi-row">
+          <!-- Non-optimistic -->
+          <div class="cp-response-card cp-response-card--nonopt">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--nonopt">⚠ Non-optimistic</span>
+              <span class="cp-response-card__mode-label">Risk-first</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p><strong>Before evaluating any position, consider:</strong></p>
+              <ul>
+                <li>Funding rate of +$14/day means you pay ~$420/month</li>
+                <li>At 3× leverage, a 1% adverse move = 3% PnL swing</li>
+                <li>Isolated margin means this position can be liquidated independently</li>
+                <li>External signer will show preview — review every parameter before signing</li>
+              </ul>
+              <p class="cp-response-card__safety-note">⚠ Preview only. No order submitted without external signer confirmation.</p>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">HL API · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button></div>
+            </div>
+          </div>
+
+          <!-- Neutral -->
+          <div class="cp-response-card cp-response-card--neutral">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--neutral">💬 Neutral</span>
+              <span class="cp-response-card__mode-label">Balanced</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p>BTC-PERP: long 0.1 @ $64,250.</p>
+              <p>Funding: +$14/day. Leverage: 3×. Margin used: 33%.</p>
+              <p>Isolated margin — risk contained to this position. External signer required.</p>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">HL API · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optimistic full-width -->
+        <div class="cp-response-card cp-response-card--opt" style="margin-top:12px">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--opt">🌱 Optimistic</span>
+            <span class="cp-response-card__mode-label">Opportunity-forward</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p><strong>Your Hyperliquid position is well-managed:</strong></p>
+            <ul>
+              <li>3× leverage is conservative — you're well within your 10× ceiling</li>
+              <li>Isolated margin protects your other funds from this position</li>
+              <li>Positive funding rate means long holders are earning, not paying</li>
+              <li>Your $64,250 entry is within your known range — you've done the research</li>
+            </ul>
+            <p>Review in your external wallet. You're in control.</p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">HL API · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button><button class="cp-btn cp-btn--nft">🎬 Media</button></div>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <div class="cp-composer" style="margin-top:12px">
+          <div class="cp-composer__mode"><button class="cp-composer__mode-btn">All 3 ▾</button></div>
+          <textarea class="cp-composer__input" placeholder="Ask anything…"></textarea>
+          <div class="cp-composer__bar">
+            <span class="cp-composer__safety">🔒 Non-custodial · 3 memories</span>
+            <div class="cp-composer__actions">
+              <button class="cp-btn cp-btn--ghost">📎</button><button class="cp-btn cp-btn--primary">⏎</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 4 — BITTENSOR: SHOULD I STAKE 1 TAO?
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-4">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 04</span>
+      <span class="screen-block__label">Bittensor: "Should I stake 1 TAO?" — All Three Modes</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+      <div class="cp-safety-strip cp-safety-strip--blue">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Non-custodial · Bittensor · External signer required for staking
+      </div>
+      <div class="cp-main" style="padding:16px;overflow-y:auto">
+        <div class="cp-query-banner">"Should I stake 1 TAO?"</div>
+
+        <div class="cp-multi-row">
+          <div class="cp-response-card cp-response-card--nonopt">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--nonopt">⚠ Non-optimistic</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p><strong>Before staking 1 TAO:</strong></p>
+              <ul>
+                <li>Unbonding period is ~7 days — TAO is locked during this time</li>
+                <li>If your validator misbehaves, you may receive reduced rewards or a slash</li>
+                <li>Bittensor subnet incentives change — today's yield ≠ tomorrow's</li>
+                <li>Delegation does NOT give Matterhorn custody — you retain full wallet control</li>
+                <li>Is this your disposable TAO, not core holdings?</li>
+              </ul>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">Bittensor docs · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button></div>
+            </div>
+          </div>
+
+          <div class="cp-response-card cp-response-card--neutral">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--neutral">💬 Neutral</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p>Staking 1 TAO involves:</p>
+              <ul>
+                <li>Delegating to a validator — earning depends on subnet demand</li>
+                <li>7-day unbonding period before transfer</li>
+                <li>No automatic compounding — you must re-stake or set a reminder</li>
+                <li>Validator and network performance affect yields</li>
+              </ul>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">Bittensor docs · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cp-response-card cp-response-card--opt" style="margin-top:12px">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--opt">🌱 Optimistic</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p><strong>Staking 1 TAO could be a great first step into Bittensor:</strong></p>
+            <ul>
+              <li>You're participating in decentralized AI infrastructure — powerful positioning</li>
+              <li>Delegation keeps you in full control — Matterhorn doesn't hold keys</li>
+              <li>You've researched validator performance — that's the key to maximizing yield</li>
+              <li>Your risk ceiling is respected — external signer will preview before any stake tx</li>
+            </ul>
+            <p><a href="#">Explore validator options →</a> · <a href="#">Set a reminder to check yields in 7 days →</a></p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Bittensor docs · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button><button class="cp-btn">Compare</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 5 — HYPERLIQUID PREVIEW
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-5">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 05</span>
+      <span class="screen-block__label">Hyperliquid Preview — Safety Preserved in All Modes</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+      <div class="cp-safety-strip cp-safety-strip--amber">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        ⚠ Preview — external signer required before any order
+      </div>
+      <div class="cp-main" style="padding:16px;overflow-y:auto">
+        <div class="cp-query-banner">"Should I place this Hyperliquid trade?"</div>
+
+        <div class="cp-multi-row">
+          <div class="cp-response-card cp-response-card--nonopt">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--nonopt">⚠ Non-optimistic</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p><strong>External signer required — Matterhorn will not place this for you.</strong></p>
+              <p>Before signing:</p>
+              <ul>
+                <li>Review exact parameters: long 0.1 BTC, entry $64,250, 3× leverage</li>
+                <li>Confirm this is within your 10× BTC ceiling</li>
+                <li>Check funding: +$14/day long pays short</li>
+                <li>Liquidation price: [shown in external signer]</li>
+              </ul>
+              <p class="cp-response-card__safety-note">⚠ Matterhorn only generates a preview. Your wallet confirms. Matterhorn never submits orders.</p>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">HL API · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+            </div>
+          </div>
+
+          <div class="cp-response-card cp-response-card--opt">
+            <div class="cp-response-card__header">
+              <span class="cp-response-card__badge cp-response-card__badge--opt">🌱 Optimistic</span>
+            </div>
+            <div class="cp-response-card__body">
+              <p><strong>Your Hyperliquid setup is disciplined:</strong></p>
+              <ul>
+                <li>Long at $64,250 with 3× leverage — conservative and measured</li>
+                <li>You've set your own 10× ceiling — and you're well within it</li>
+                <li>Funding rate positive — long holders earn</li>
+                <li>External signer = YOU in control at every step</li>
+              </ul>
+              <p>[Preview and sign in external wallet →]</p>
+            </div>
+            <div class="cp-response-card__footer">
+              <div class="cp-response-card__sources">HL API · Memory</div>
+              <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 6 — POLYMARKET COMPLIANCE
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-6">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 06</span>
+      <span class="screen-block__label">Polymarket — Compliance Note in All Modes</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+      <div class="cp-safety-strip cp-safety-strip--blue">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+        Polymarket · Display only · Matterhorn does not place Polymarket trades
+      </div>
+      <div class="cp-main" style="padding:16px;overflow-y:auto">
+        <div class="cp-query-banner">"Summarize this Polymarket market: Will BTC be above $70k by Aug 2025?"</div>
+
+        <div class="cp-response-card cp-response-card--neutral">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--neutral">💬 Neutral</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p><strong>Market:</strong> Will BTC be above $70,000 by Aug 2025?</p>
+            <ul>
+              <li>Current price: ~62¢ (62% likelihood per market participants)</li>
+              <li>Your position: $500 YES</li>
+              <li>Resolution: Aug 31, 2025, 8PM UTC via UMA oracle</li>
+            </ul>
+            <p><strong>Important:</strong> This is information, not financial advice. Prediction markets reflect sentiment, not probability. Markets can resolve unexpectedly. Polymarket is non-custodial. Matterhorn reads the market. [External signer →]</p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Polymarket API · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+          </div>
+        </div>
+
+        <div class="cp-response-card cp-response-card--opt" style="margin-top:12px">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--opt">🌱 Optimistic</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p><strong>You've positioned yourself well:</strong></p>
+            <ul>
+              <li>Your $500 YES on BTC > $70k — you're aligned with current market conviction</li>
+              <li>62¢ reflects real conviction from global participants</li>
+              <li>If BTC breaks $70k: ~$620 return at resolution</li>
+              <li>You're tracking actively — better than passive watching</li>
+            </ul>
+            <p>[Set a reminder for Aug 1 →] · [📊 More BTC markets →]</p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Polymarket API · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 7 — WELLNESS MEDICAL BOUNDARY
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-7">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 07</span>
+      <span class="screen-block__label">Wellness — Medical Boundary Preserved in All Modes</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="cp-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--cp-border)">
+      <div class="cp-safety-strip cp-safety-strip--pink">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        Wellness · Educational only · Not medical advice · Local storage
+      </div>
+      <div class="cp-main" style="padding:16px;overflow-y:auto">
+        <div class="cp-query-banner">"Create a 4-week plan for a yoga client."</div>
+
+        <div class="cp-response-card cp-response-card--nonopt">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--nonopt">⚠ Non-optimistic</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p class="cp-response-card__safety-note" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:8px;border-radius:6px;color:var(--cp-nonopt)">
+              ⚠ Educational wellness content only. Not medical advice, diagnosis, prescription, or treatment.
+            </p>
+            <p><strong>Before providing any plan:</strong></p>
+            <ul>
+              <li>Confirm client has no injuries, pregnancy, or chronic conditions requiring specialist input</li>
+              <li>Yoga instruction can be contraindicated for specific conditions — refer to physician if uncertain</li>
+              <li>This is a general yoga teaching plan — not personalized medical advice</li>
+              <li>Matterhorn does not diagnose, prescribe, or treat</li>
+            </ul>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Wellness workflow · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+          </div>
+        </div>
+
+        <div class="cp-response-card cp-response-card--opt" style="margin-top:12px">
+          <div class="cp-response-card__header">
+            <span class="cp-response-card__badge cp-response-card__badge--opt">🌱 Optimistic</span>
+          </div>
+          <div class="cp-response-card__body">
+            <p class="cp-response-card__safety-note" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:8px;border-radius:6px;color:var(--cp-nonopt)">
+              ⚠ Educational wellness content only. Not medical advice.
+            </p>
+            <p><strong>Your client is in for a transformative 4 weeks:</strong></p>
+            <ul>
+              <li>Weeks 1-2 build the foundation — strength, flexibility, breath awareness</li>
+              <li>Weeks 3-4 bring the reward — flowing sequences, newfound confidence</li>
+              <li>As they improve, they'll carry this beyond the mat into daily life</li>
+              <li>Your role is powerful: keep it safe, supportive, and client-led</li>
+            </ul>
+            <p>[Export as client handout →] · [Create wellness memory →]</p>
+          </div>
+          <div class="cp-response-card__footer">
+            <div class="cp-response-card__sources">Wellness workflow · Memory</div>
+            <div class="cp-response-card__actions"><button class="cp-btn cp-btn--primary">Use this</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 8 — MEDIA STUDIO HOME
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-8">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 08</span>
+      <span class="screen-block__label">Media Studio Home</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="ms-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--ms-border);background:var(--ms-bg)">
+
+      <div class="ms-header">
+        <div class="ms-header__title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Media Studio
+        </div>
+        <span class="ms-header__note">Matterhorn generates content. You control your wallet.</span>
+      </div>
+
+      <div class="ms-body">
+        <div class="ms-hero">
+          <p class="ms-hero__tagline">Generate audio and video. Prepare it as an NFT collectible.</p>
+          <p class="ms-hero__safety">🔒 Non-custodial · No keys stored · External wallet required for minting</p>
+          <div class="ms-hero__actions">
+            <button class="ms-btn ms-btn--primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Generate Video
+            </button>
+            <button class="ms-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              Generate Audio
+            </button>
+            <button class="ms-btn ms-btn--ghost">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Import Media
+            </button>
+          </div>
+        </div>
+
+        <div class="ms-sections">
+          <div class="ms-section">
+            <div class="ms-section__title">Recent Generations</div>
+            <div class="ms-recent-item">
+              <span class="ms-recent-item__icon">🎬</span>
+              <div class="ms-recent-item__info">
+                <div class="ms-recent-item__name">Launch video v1 — Wellness program intro</div>
+                <div class="ms-recent-item__meta">ERC-721 draft · 30s · Jun 22</div>
+              </div>
+              <button class="ms-btn ms-btn--ghost" style="font-size:12px">Edit</button>
+            </div>
+            <div class="ms-recent-item">
+              <span class="ms-recent-item__icon">🔊</span>
+              <div class="ms-recent-item__info">
+                <div class="ms-recent-item__name">Podcast intro — Yoga brand</div>
+                <div class="ms-recent-item__meta">Local only · 60s · Jun 20</div>
+              </div>
+              <button class="ms-btn ms-btn--ghost" style="font-size:12px">→</button>
+            </div>
+          </div>
+
+          <div class="ms-section">
+            <div class="ms-section__title">Pending NFT Handoffs</div>
+            <div class="ms-recent-item">
+              <span class="ms-recent-item__icon">🔗</span>
+              <div class="ms-recent-item__info">
+                <div class="ms-recent-item__name">Wellness launch collectible — ERC-721</div>
+                <div class="ms-recent-item__meta">Draft · awaiting wallet</div>
+              </div>
+              <button class="ms-btn" style="font-size:12px">Complete →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 9 — VIDEO GENERATION
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-9">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 09</span>
+      <span class="screen-block__label">Video Generation</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="ms-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--ms-border);background:var(--ms-bg)">
+      <div class="ms-header">
+        <div class="ms-header__title">← Media Studio</div>
+        <span class="ms-header__note">Generate Video</span>
+      </div>
+      <div class="ms-body" style="padding:20px">
+        <div class="ms-form">
+          <label class="ms-form__label">Describe the video you want to create</label>
+          <textarea class="ms-form__textarea" rows="4">A professional wellness instructor introducing a 4-week yoga program. Warm natural lighting. Accessible poses shown throughout. Ends with a clear call to action encouraging viewers to start their journey.</textarea>
+
+          <div class="ms-form__row">
+            <div class="ms-form__field">
+              <label class="ms-form__label">Style</label>
+              <button class="ms-select">Cinematic ▾</button>
+            </div>
+            <div class="ms-form__field">
+              <label class="ms-form__label">Duration</label>
+              <button class="ms-select">30s ▾</button>
+            </div>
+            <div class="ms-form__field">
+              <label class="ms-form__label">Voice</label>
+              <button class="ms-select">Calm, warm ▾</button>
+            </div>
+          </div>
+
+          <div class="ms-form__safety">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Generated content must be original. Do not use copyrighted music, characters, or footage. Publicly shared content is permanent on IPFS.
+          </div>
+
+          <div class="ms-style-presets">
+            <button class="ms-preset">Professional</button>
+            <button class="ms-preset is-active">Cinematic</button>
+            <button class="ms-preset">Creative</button>
+            <button class="ms-preset">Minimal</button>
+          </div>
+
+          <button class="ms-btn ms-btn--primary">Generate Preview</button>
+
+          <div class="ms-progress">
+            <div class="ms-progress__bar"><div class="ms-progress__fill" style="width:60%"></div></div>
+            <span class="ms-progress__label">Generating… 60%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 10 — AUDIO GENERATION
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-10">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 10</span>
+      <span class="screen-block__label">Audio Generation</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="ms-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--ms-border);background:var(--ms-bg)">
+      <div class="ms-header">
+        <div class="ms-header__title">← Media Studio</div>
+        <span class="ms-header__note">Generate Audio</span>
+      </div>
+      <div class="ms-body" style="padding:20px">
+        <div class="ms-form">
+          <label class="ms-form__label">Describe the audio</label>
+          <textarea class="ms-form__textarea" rows="4">A calm podcast intro for a wellness brand. 60 seconds. Warm music bed underneath. Friendly female voice. Ends with: "Start your journey today — find your flow."</textarea>
+
+          <div class="ms-form__row">
+            <div class="ms-form__field">
+              <label class="ms-form__label">Type</label>
+              <button class="ms-select">Narration ▾</button>
+            </div>
+            <div class="ms-form__field">
+              <label class="ms-form__label">Duration</label>
+              <button class="ms-select">60s ▾</button>
+            </div>
+            <div class="ms-form__field">
+              <label class="ms-form__label">Voice</label>
+              <button class="ms-select">Warm female ▾</button>
+            </div>
+          </div>
+
+          <div class="ms-form__safety">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Copyright and permanence warnings apply. IPFS uploads are permanent.
+          </div>
+
+          <button class="ms-btn ms-btn--primary">Generate Preview</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 11 — NFT METADATA PREVIEW
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-11">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 11</span>
+      <span class="screen-block__label">NFT Metadata Preview — ERC-721</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="ms-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--ms-border);background:var(--ms-bg)">
+      <div class="ms-header">
+        <div class="ms-header__title">← Back</div>
+        <span class="ms-header__note">NFT Metadata Preview</span>
+      </div>
+      <div class="ms-body" style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+
+        <!-- Collectible Preview -->
+        <div class="ms-card">
+          <div class="ms-card__preview">
+            <div class="ms-card__thumb">[Video thumbnail — 30s]</div>
+            <div class="ms-card__overlay">🎬</div>
+          </div>
+          <div class="ms-card__info">
+            <div class="ms-card__name">4-Week Yoga Launch — Intro Video</div>
+            <div class="ms-card__type">🎬 Video NFT · Single collectible</div>
+          </div>
+        </div>
+
+        <!-- NFT Config + Metadata -->
+        <div class="ms-nft-config">
+          <div class="ms-nft-section">
+            <div class="ms-nft-section__title">NFT Mode</div>
+            <label class="ms-nft-radio"><input type="radio" name="nft-mode"> Not an NFT (save locally)</label>
+            <label class="ms-nft-radio"><input type="radio" name="nft-mode" checked> Prepare ERC-721 (single)</label>
+            <label class="ms-nft-radio"><input type="radio" name="nft-mode"> Prepare ERC-1155 (edition)</label>
+          </div>
+
+          <div class="ms-nft-section">
+            <div class="ms-nft-section__title">Storage</div>
+            <label class="ms-nft-radio"><input type="radio" name="storage"> Local preview only</label>
+            <label class="ms-nft-radio"><input type="radio" name="storage" checked> IPFS / public handoff</label>
+          </div>
+
+          <div class="ms-json-block">
+            <div class="ms-json-block__title">NFT Metadata (preview)</div>
+            <pre class="ms-json">{
+  "name": "4-Week Yoga Launch — Intro Video",
+  "description": "Professional wellness intro…",
+  "image": "ipfs://<media-CID>",
+  "animation_url": "ipfs://<media-CID>",
+  "external_url": "https://...",
+  "attributes": [
+    {"trait_type": "Type", "value": "Video NFT"},
+    {"trait_type": "Duration", "value": "30s"}
+  ]
+}</pre>
+          </div>
+
+          <button class="ms-btn ms-btn--primary">Prepare NFT Handoff →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 12 — EXTERNAL WALLET HANDOFF
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-12">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 12</span>
+      <span class="screen-block__label">External Wallet Handoff</span>
+      <span class="screen-block__viewport">1440 × 900</span>
+    </div>
+
+    <div class="ms-app" style="position:relative;height:580px;border-radius:12px;overflow:hidden;border:1px solid var(--ms-border);background:var(--ms-bg)">
+      <div class="ms-header">
+        <div class="ms-header__title">← Back</div>
+        <span class="ms-header__note">NFT Handoff</span>
+      </div>
+      <div class="ms-body" style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+
+        <!-- Handoff Summary -->
+        <div>
+          <div class="ms-card" style="margin-bottom:12px">
+            <div class="ms-card__info">
+              <div class="ms-card__name">4-Week Yoga Launch — Intro Video</div>
+              <div class="ms-card__meta">ERC-721 · Single collectible</div>
+              <div class="ms-card__meta">Media: ipfs://bafybeig…</div>
+              <div class="ms-card__meta">Metadata: ipfs://bafybeih…</div>
+              <div class="ms-card__meta">Network: <span class="ms-select" style="display:inline-block;padding:2px 8px;font-size:12px">Base ▾</span></div>
+            </div>
+          </div>
+
+          <div class="ms-safety-panel">
+            <div class="ms-safety-panel__title">⚠ Before proceeding</div>
+            <div class="ms-safety-item">
+              <span class="ms-safety-item__icon">🔒</span>
+              <span><strong>External wallet required</strong> — Matterhorn does not hold keys. You sign in your own wallet.</span>
+            </div>
+            <div class="ms-safety-item">
+              <span class="ms-safety-item__icon">💰</span>
+              <span><strong>Fees apply</strong> — Minting requires gas. Review before signing.</span>
+            </div>
+            <div class="ms-safety-item">
+              <span class="ms-safety-item__icon">📋</span>
+              <span><strong>Receipt generated</strong> — Matterhorn records the handoff for your records.</span>
+            </div>
+            <div class="ms-safety-item">
+              <span class="ms-safety-item__icon">🌍</span>
+              <span><strong>IPFS is permanent</strong> — Do not upload personal data you wish to remove.</span>
+            </div>
+            <div class="ms-safety-item">
+              <span class="ms-safety-item__icon">🚫</span>
+              <span><strong>No custody</strong> — Matterhorn never takes ownership or control of your NFT.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Wallet Connect -->
+        <div>
+          <div class="ms-nft-section">
+            <div class="ms-nft-section__title">Select Wallet</div>
+            <div class="ms-wallet-options">
+              <button class="ms-wallet-btn">MetaMask</button>
+              <button class="ms-wallet-btn">WalletConnect</button>
+              <button class="ms-wallet-btn">Coinbase Wallet</button>
+            </div>
+          </div>
+
+          <div class="ms-wallet-connect-panel">
+            <div class="ms-wallet-connect-panel__icon">🔗</div>
+            <div class="ms-wallet-connect-panel__title">Connect your wallet to review and sign the mint transaction.</div>
+            <div class="ms-wallet-connect-panel__sub">Matterhorn cannot see or store your private key at any time.</div>
+            <button class="ms-btn ms-btn--primary" style="margin-top:12px">Connect Wallet →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       SCREEN 13 — MOBILE LAYOUT
+       ═══════════════════════════════════════════════════ -->
+  <div class="screen-block" id="screen-13">
+    <div class="screen-block__header">
+      <span class="screen-block__title">Screen 13</span>
+      <span class="screen-block__label">Mobile Layout — Single-Output Mode (375px)</span>
+      <span class="screen-block__viewport">375 × 667</span>
+    </div>
+
+    <div style="display:flex;justify-content:center;align-items:start;padding:8px;background:#080808">
+      <div style="width:375px;height:580px;border-radius:12px;overflow:hidden;border:1px solid #2a2a2a;background:#0c0c0c;position:relative;display:flex;flex-direction:column">
+
+        <!-- Condensed Safety Strip -->
+        <div style="background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:8px 12px;font-size:11px;color:#888;display:flex;gap:8px;align-items:center">
+          <span>🔒</span><span>⚠ Preview</span><span>·</span><span>🧠 3</span>
+        </div>
+
+        <!-- Mode Tabs -->
+        <div style="display:flex;border-bottom:1px solid #2a2a2a;background:#111">
+          <button style="flex:1;padding:8px;font-size:12px;border:none;background:none;color:#f59e0b;font-weight:600;border-bottom:2px solid #f59e0b;cursor:pointer">⚠</button>
+          <button style="flex:1;padding:8px;font-size:12px;border:none;background:none;color:#888;font-weight:400;cursor:pointer">💬</button>
+          <button style="flex:1;padding:8px;font-size:12px;border:none;background:none;color:#888;font-weight:400;cursor:pointer">🌱</button>
+        </div>
+
+        <!-- Response Card (single) -->
+        <div style="flex:1;padding:12px;overflow-y:auto">
+          <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:12px">
+            <div style="font-size:11px;color:#22c55e;font-weight:600;margin-bottom:8px">🌱 Optimistic · Opportunity-forward</div>
+            <p style="font-size:13px;color:#e0e0e0;line-height:1.6;margin:0 0 8px">Your Hyperliquid position is well-managed. 3× leverage is conservative — you're within your 10× ceiling. Isolated margin protects other funds. External signer = YOU in control.</p>
+            <div style="font-size:11px;color:#555;margin-bottom:8px">Sources: HL API · Memory</div>
+            <button style="font-size:12px;padding:6px 12px;background:#22c55e;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">Use this</button>
+          </div>
+          <div style="font-size:11px;color:#555;text-align:center;margin-top:8px">← swipe → to switch modes</div>
+        </div>
+
+        <!-- Composer (fixed bottom) -->
+        <div style="padding:8px 12px 12px;border-top:1px solid #2a2a2a;background:#0c0c0c">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+            <button style="font-size:11px;padding:4px 8px;background:#1a1a1a;border:1px solid #2a2a2a;color:#22c55e;border-radius:4px;cursor:pointer">🌱 Optimistic ▾</button>
+            <input placeholder="Ask about positions…" style="flex:1;background:#1a1a1a;border:1px solid #2a2a2a;color:#e0e0e0;border-radius:6px;padding:8px 10px;font-size:13px;outline:none">
+          </div>
+          <div style="display:flex;gap:6px;justify-content:flex-end">
+            <button style="font-size:12px;padding:6px 10px;background:none;border:1px solid #2a2a2a;color:#888;border-radius:6px;cursor:pointer">📎</button>
+            <button style="font-size:12px;padding:6px 12px;background:#d1f2ff;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600">⏎</button>
+          </div>
+        </div>
+
+        <!-- Bottom Tab Bar -->
+        <div style="display:flex;border-top:1px solid #2a2a2a;background:#111;padding-bottom:4px">
+          <div style="flex:1;text-align:center;padding:6px 0">
+            <div style="font-size:16px;margin-bottom:2px">💬</div>
+            <div style="font-size:9px;color:#888">Chat</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:6px 0;border-top:2px solid #d1f2ff">
+            <div style="font-size:16px;margin-bottom:2px">🧠</div>
+            <div style="font-size:9px;color:#d1f2ff">Perspectives</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:6px 0">
+            <div style="font-size:16px;margin-bottom:2px">🧊</div>
+            <div style="font-size:9px;color:#888">Memory</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:6px 0">
+            <div style="font-size:16px;margin-bottom:2px">🎬</div>
+            <div style="font-size:9px;color:#888">Media</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="prototype.js"></script>
+</body>
+</html>
