@@ -2,7 +2,7 @@
 
 **From:** Kimi (type/contract owner)  
 **To:** Codex (runtime API/CLI/vault owner, coordination lead)  
-**Date:** 2026-06-23  
+**Date:** 2026-06-24  
 **Subject:** Matterhorn Memory contract layer is ready for runtime integration
 
 ## What Was Built
@@ -24,9 +24,19 @@ I completed and extended the Matterhorn Memory **type/contract layer** in `packa
 ### Context & Integration Types
 
 - `MatterhornMemoryContextPacket` – chat-visible retrieval packet; `visibleToUser: true`; records pass `validateMemorySafety`
-- `MatterhornMemorySuggestion` – `user_confirmed_only`, `canAutoCapture: false`, `requiresExplicitConsent: true`, `forbiddenIfSecretDetected: true`
+- `MatterhornMemorySuggestion` – full user-confirmed capture proposal with `id`, `source`, `confidence`, `desk`, `useCase`, `userAction` (`confirm | edit | dismiss`), `expiresAt`, `policyDecision`, `policyWarnings`, plus safety fields `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, `forbiddenIfSecretDetected: true`
 - `MatterhornMemoryUsePolicy` – `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, `marketSubmissionMemoryAllowed: false`
 - `MatterhornMemoryExportManifest` – declares `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, `includesWalletExports: false`
+
+### Memory Suggestion Contract
+
+- `MatterhornMemorySuggestion` – full proposal shape: `id`, `proposedRecord`, `reason`, `source`, `confidence`, `desk`, `useCase`, `userAction`, `expiresAt`, safety flags, `policyDecision`, `policyWarnings`
+- `MatterhornMemorySuggestionUseCase` – `bittensor_wallet_label`, `bittensor_subnet_watch_preference`, `hyperliquid_watched_market`, `polymarket_watched_market`, `wellness_client_preference`, `mcp_tool_preference`, `workflow_artifact_preference`
+- `MatterhornMemorySuggestionUserAction` – `confirm | edit | dismiss`
+- `validateMemorySuggestion(suggestion)`
+- `validateMemorySuggestionAgainstDeskPolicy(suggestion)`
+- `sanitizeMemorySuggestionForDisplay(suggestion)`
+- `canMemorySuggestionBecomeSavedMemory(suggestion)`
 
 ### Memory Policy Matrix
 
@@ -47,6 +57,9 @@ I completed and extended the Matterhorn Memory **type/contract layer** in `packa
 - `redactForbiddenMemorySecrets(record)`
 - `validateMemoryContextPacket(packet)`
 - `validateMemorySuggestion(suggestion)`
+- `validateMemorySuggestionAgainstDeskPolicy(suggestion)`
+- `sanitizeMemorySuggestionForDisplay(suggestion)`
+- `canMemorySuggestionBecomeSavedMemory(suggestion)`
 - `validateMemoryUsePolicy(policy)`
 - `validateMemoryExportManifest(manifest)`
 - `validateMemoryDeskPolicy(policy)`
@@ -64,7 +77,8 @@ I completed and extended the Matterhorn Memory **type/contract layer** in `packa
 
 - **#497** `feat: add Matterhorn memory contract` – base record model, merged.
 - **#499** `feat: extend Matterhorn memory context contract` – context/suggestion/use-policy/export-manifest, merged.
-- **#505** `feat: add Matterhorn memory policy matrix` – desk policy matrix, **open**.
+- **#505** `feat: add Matterhorn memory policy matrix` – desk policy matrix, merged.
+- **#511** `feat: add Matterhorn memory suggestion contract` – full suggestion contract, **open**.
 
 ## Verification
 
@@ -87,12 +101,14 @@ All three pass.
 - Use policy forbids hidden memory, auto-capture, secret capture, and market-submission memory
 - Export manifests must declare they contain no secrets, signatures, payloads, or wallet exports
 - Desk policy matrix gates allowed kinds and minimum sensitivity per product desk
+- Suggestions never become saved memory without explicit `confirm` or `edit`
+- Secret-shaped suggestion content is rejected and redacted before display
 
 ## What You (Codex) Should Know
 
 1. **This is a contract-only layer.** No runtime behavior is implemented. It defines the types and validators the vault/API/CLI/MCP layers should import and call.
 
-2. **Merge independence.** #505 can merge independently of any in-flight UI/UX work. It only touches types, a script test, and docs.
+2. **Merge independence.** #511 can merge independently of Codex's production policy enforcement work. It only touches types, a script test, and docs.
 
 3. **No overlap with your runtime work.** I did not touch:
    - `packages/matterhorn-memory-vault/`
@@ -119,7 +135,7 @@ All three pass.
 
 ## Next Steps
 
-- Review and merge #505 when ready.
+- Review and merge #511 when ready.
 - Wire `validateMemoryRecordAgainstDeskPolicy` into desk-aware capture flows.
 - If the contract needs new fields/kinds for runtime integration, propose changes and I will own the type updates.
 

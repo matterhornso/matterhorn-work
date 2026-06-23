@@ -382,14 +382,43 @@ export interface MatterhornMemoryContextPacket {
 
 export const MATTERHORN_MEMORY_SUGGESTION_VERSION = "matterhorn.memory.suggestion.v1";
 
+export const MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS = [
+  "confirm",
+  "edit",
+  "dismiss",
+] as const;
+export type MatterhornMemorySuggestionUserAction =
+  (typeof MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS)[number];
+
+export const MATTERHORN_MEMORY_SUGGESTION_USE_CASES = [
+  "bittensor_wallet_label",
+  "bittensor_subnet_watch_preference",
+  "hyperliquid_watched_market",
+  "polymarket_watched_market",
+  "wellness_client_preference",
+  "mcp_tool_preference",
+  "workflow_artifact_preference",
+] as const;
+export type MatterhornMemorySuggestionUseCase =
+  (typeof MATTERHORN_MEMORY_SUGGESTION_USE_CASES)[number];
+
 export interface MatterhornMemorySuggestion {
   version: "matterhorn.memory.suggestion.v1";
+  id: string;
   proposedRecord: MatterhornMemoryRecord;
   reason: string;
+  source: MatterhornMemorySource;
+  confidence: number;
+  desk: MatterhornMemoryDesk;
+  useCase: MatterhornMemorySuggestionUseCase;
+  userAction: MatterhornMemorySuggestionUserAction;
+  expiresAt?: string;
   captureMode: "user_confirmed_only";
   canAutoCapture: false;
   requiresExplicitConsent: true;
   forbiddenIfSecretDetected: true;
+  policyDecision?: "approve" | "reject" | "review";
+  policyWarnings?: string[];
 }
 
 export const MATTERHORN_MEMORY_USE_POLICY_DEFAULTS = {
@@ -484,6 +513,34 @@ export function validateMemorySuggestion(
     errors.push(`suggestion version must be ${MATTERHORN_MEMORY_SUGGESTION_VERSION}`);
   }
 
+  if (!suggestion.id || typeof suggestion.id !== "string") {
+    errors.push("suggestion id is required and must be a string");
+  }
+
+  if (!suggestion.reason || typeof suggestion.reason !== "string") {
+    errors.push("suggestion reason is required and must be a string");
+  }
+
+  if (!MATTERHORN_MEMORY_SOURCES.includes(suggestion.source as MatterhornMemorySource)) {
+    errors.push(`suggestion source must be one of ${MATTERHORN_MEMORY_SOURCES.join(", ")}`);
+  }
+
+  if (typeof suggestion.confidence !== "number" || suggestion.confidence < 0 || suggestion.confidence > 1) {
+    errors.push("suggestion confidence must be a number between 0 and 1");
+  }
+
+  if (!MATTERHORN_MEMORY_DESKS.includes(suggestion.desk as MatterhornMemoryDesk)) {
+    errors.push(`suggestion desk must be one of ${MATTERHORN_MEMORY_DESKS.join(", ")}`);
+  }
+
+  if (!MATTERHORN_MEMORY_SUGGESTION_USE_CASES.includes(suggestion.useCase as MatterhornMemorySuggestionUseCase)) {
+    errors.push(`suggestion useCase must be one of ${MATTERHORN_MEMORY_SUGGESTION_USE_CASES.join(", ")}`);
+  }
+
+  if (!MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS.includes(suggestion.userAction as MatterhornMemorySuggestionUserAction)) {
+    errors.push(`suggestion userAction must be one of ${MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS.join(", ")}`);
+  }
+
   if (suggestion.captureMode !== "user_confirmed_only") {
     errors.push("suggestion captureMode must be user_confirmed_only");
   }
@@ -500,6 +557,14 @@ export function validateMemorySuggestion(
     errors.push("suggestion forbiddenIfSecretDetected must be true");
   }
 
+  if (suggestion.policyDecision && !["approve", "reject", "review"].includes(suggestion.policyDecision)) {
+    errors.push("suggestion policyDecision must be one of approve, reject, review");
+  }
+
+  if (suggestion.policyWarnings && !Array.isArray(suggestion.policyWarnings)) {
+    errors.push("suggestion policyWarnings must be an array");
+  }
+
   const recordResult = validateMemorySafety(suggestion.proposedRecord);
   if (!recordResult.ok) {
     errors.push(`suggested record is unsafe: ${recordResult.errors.join("; ")}`);
@@ -510,6 +575,81 @@ export function validateMemorySuggestion(
   }
 
   return { ok: errors.length === 0, errors };
+}
+
+export function validateMemorySuggestionAgainstDeskPolicy(
+  suggestion: MatterhornMemorySuggestion,
+  matrix: Record<MatterhornMemoryDesk, MatterhornMemoryDeskPolicy> = MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  const suggestionResult = validateMemorySuggestion(suggestion);
+  errors.push(...suggestionResult.errors);
+
+  const deskResult = validateMemoryRecordAgainstDeskPolicy(suggestion.proposedRecord, suggestion.desk, matrix);
+  errors.push(...deskResult.errors);
+
+  const deskPolicy = matrix[suggestion.desk];
+  if (deskPolicy && !deskPolicy.allowedKinds.includes(suggestion.proposedRecord.kind)) {
+    errors.push(`useCase ${suggestion.useCase} targets desk ${suggestion.desk} but kind ${suggestion.proposedRecord.kind} is not allowed`);
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function sanitizeMemorySuggestionForDisplay(
+  suggestion: MatterhornMemorySuggestion,
+): MatterhornMemorySuggestion {
+  if (!isForbiddenMemorySecretBody(suggestion.proposedRecord.body)) {
+    return suggestion;
+  }
+
+  const redactedBody: Record<string, unknown> = {
+    __redacted: true,
+    reason: "Forbidden secret material was detected and removed before display.",
+    redactedFields: findForbiddenMemorySecretFields(suggestion.proposedRecord.body),
+  };
+
+  return {
+    ...suggestion,
+    proposedRecord: {
+      ...suggestion.proposedRecord,
+      body: redactedBody,
+      summary: "[Redacted] suggestion contains forbidden secret material.",
+    },
+    policyDecision: "reject",
+    policyWarnings: [
+      ...(suggestion.policyWarnings ?? []),
+      "Display sanitizer removed forbidden secret-shaped material.",
+    ],
+  };
+}
+
+export function canMemorySuggestionBecomeSavedMemory(
+  suggestion: MatterhornMemorySuggestion,
+): boolean {
+  if (suggestion.userAction !== "confirm" && suggestion.userAction !== "edit") {
+    return false;
+  }
+  if (suggestion.canAutoCapture !== false) {
+    return false;
+  }
+  if (suggestion.requiresExplicitConsent !== true) {
+    return false;
+  }
+  if (suggestion.forbiddenIfSecretDetected !== true) {
+    return false;
+  }
+  if (!validateMemorySafety(suggestion.proposedRecord).ok) {
+    return false;
+  }
+  if (isForbiddenMemorySecretBody(suggestion.proposedRecord.body)) {
+    return false;
+  }
+  if (suggestion.policyDecision === "reject") {
+    return false;
+  }
+  return true;
 }
 
 export function validateMemoryUsePolicy(

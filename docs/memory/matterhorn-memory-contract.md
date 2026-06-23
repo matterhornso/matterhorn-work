@@ -136,14 +136,35 @@ A memory suggestion is a proposed record presented to the user for explicit conf
 ```ts
 {
   version: "matterhorn.memory.suggestion.v1";
+  id: string;
   proposedRecord: MatterhornMemoryRecord;
   reason: string;
+  source: MatterhornMemorySource;
+  confidence: number; // 0–1
+  desk: MatterhornMemoryDesk;
+  useCase: MatterhornMemorySuggestionUseCase;
+  userAction: "confirm" | "edit" | "dismiss";
+  expiresAt?: string;
   captureMode: "user_confirmed_only";
   canAutoCapture: false;
   requiresExplicitConsent: true;
   forbiddenIfSecretDetected: true;
+  policyDecision?: "approve" | "reject" | "review";
+  policyWarnings?: string[];
 }
 ```
+
+Use cases:
+
+- `bittensor_wallet_label`
+- `bittensor_subnet_watch_preference`
+- `hyperliquid_watched_market`
+- `polymarket_watched_market`
+- `wellness_client_preference`
+- `mcp_tool_preference`
+- `workflow_artifact_preference`
+
+A suggestion only becomes saved memory when `userAction` is `confirm` or `edit`, all safety validators pass, no secret material is detected, and the policy decision is not `reject`.
 
 ### `MatterhornMemoryUsePolicy`
 
@@ -236,7 +257,9 @@ The contract enforces these invariants at validation time:
 - **Bittensor is public-address / external-signer only.** Bittensor memories may store SS58 addresses, coldkey names, hotkey addresses, netuid, and validator names. They must never hold private keys, seed phrases, mnemonics, or wallet exports.
 - **Wellness is educational and opt-in.** Wellness/health/clinical memories require `user_confirmed` provenance. Medical/clinical records (diagnosis, treatment plan, prescription, guaranteed outcome) must also be tagged `opt-in`. The system defaults to educational, non-clinical memory only.
 - **Context packets are always visible.** A `MatterhornMemoryContextPacket` must have `visibleToUser: true` and only include records that pass `validateMemorySafety`.
-- **Suggestions require explicit consent.** A `MatterhornMemorySuggestion` must use `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, and `forbiddenIfSecretDetected: true`.
+- **Suggestions require explicit consent.** A `MatterhornMemorySuggestion` must use `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, and `forbiddenIfSecretDetected: true`. It only becomes saved memory when `userAction` is `confirm` or `edit`, all validators pass, and `policyDecision` is not `reject`.
+- **Suggestions are desk-aware.** Each suggestion targets a `desk` and `useCase` and must pass `validateMemorySuggestionAgainstDeskPolicy`.
+- **Suggestion display is sanitized.** `sanitizeMemorySuggestionForDisplay` redacts any secret-shaped material before the UI renders the proposal.
 - **Use policy keeps memory visible and consent-based.** `MatterhornMemoryUsePolicy` defaults to `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, and `marketSubmissionMemoryAllowed: false`.
 - **Export manifests are secret-free.** A `MatterhornMemoryExportManifest` must declare `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, and `includesWalletExports: false`.
 - **Desk policy matrix gates per-desk memory.** A record must match the allowed kinds and minimum sensitivity of its desk. The matrix also controls whether memory may be used in chat (`canUseInChat`), exported (`canExport`), or sent to MCP/API tools (`canSendToMcpApi`). Bittensor remains public-address/external-signer only; Hyperliquid/Polymarket reject live-submission and secrets; Wellness defaults to `restricted` and rejects clinical data without opt-in; generic workspace must not silently inherit protocol, wallet, or medical data.
@@ -252,6 +275,9 @@ Runtime validators exported from `packages/types/src/memory.ts`:
 - `validateMemorySafety(record)` – runs all record validators together
 - `validateMemoryContextPacket(packet)` – context packets are user-visible and contain only safe records
 - `validateMemorySuggestion(suggestion)` – suggestions require explicit consent and cannot auto-capture
+- `validateMemorySuggestionAgainstDeskPolicy(suggestion)` – validates a suggestion against its desk policy
+- `sanitizeMemorySuggestionForDisplay(suggestion)` – redacts secret-shaped material before UI display
+- `canMemorySuggestionBecomeSavedMemory(suggestion)` – determines whether a user-approved suggestion may be persisted
 - `validateMemoryUsePolicy(policy)` – use policy must keep memory visible and consent-based
 - `validateMemoryExportManifest(manifest)` – export manifest must not claim secret material
 - `validateMemoryDeskPolicy(policy)` – validates a desk policy entry

@@ -54,6 +54,8 @@ for (const token of [
   "MATTERHORN_MEMORY_EXPORT_MANIFEST_VERSION",
   "MATTERHORN_MEMORY_DESKS",
   "MATTERHORN_MEMORY_DESK_POLICY_MATRIX",
+  "MATTERHORN_MEMORY_SUGGESTION_USE_CASES",
+  "MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -103,6 +105,22 @@ for (const desk of [
   "generic_workspace",
 ]) {
   assert.ok(memorySource.includes(`"${desk}"`), `desk ${desk} must be defined`);
+}
+
+for (const action of ["confirm", "edit", "dismiss"]) {
+  assert.ok(memorySource.includes(`"${action}"`), `userAction ${action} must be defined`);
+}
+
+for (const useCase of [
+  "bittensor_wallet_label",
+  "bittensor_subnet_watch_preference",
+  "hyperliquid_watched_market",
+  "polymarket_watched_market",
+  "wellness_client_preference",
+  "mcp_tool_preference",
+  "workflow_artifact_preference",
+]) {
+  assert.ok(memorySource.includes(`"${useCase}"`), `useCase ${useCase} must be defined`);
 }
 
 // 4. Record shape includes every required field.
@@ -160,12 +178,21 @@ for (const field of [
 // 5b. Suggestion shape includes every required field.
 for (const field of [
   "version",
+  "id",
   "proposedRecord",
   "reason",
+  "source",
+  "confidence",
+  "desk",
+  "useCase",
+  "userAction",
+  "expiresAt",
   "captureMode",
   "canAutoCapture",
   "requiresExplicitConsent",
   "forbiddenIfSecretDetected",
+  "policyDecision",
+  "policyWarnings",
 ]) {
   assert.ok(
     memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
@@ -445,38 +472,181 @@ assert.equal(
 );
 
 // 12. Memory suggestions cannot auto-capture and require explicit consent.
-const validSuggestion = {
-  version: "matterhorn.memory.suggestion.v1",
-  proposedRecord: validBittensor,
-  reason: "User mentioned this address for TAO lookups",
-  captureMode: "user_confirmed_only",
-  canAutoCapture: false,
-  requiresExplicitConsent: true,
-  forbiddenIfSecretDetected: true,
-};
+function makeSuggestion(overrides = {}) {
+  return {
+    version: "matterhorn.memory.suggestion.v1",
+    id: "sugg-test",
+    proposedRecord: validBittensor,
+    reason: "User mentioned this address for TAO lookups",
+    source: "chat_capture",
+    confidence: 0.9,
+    desk: "bittensor",
+    useCase: "bittensor_wallet_label",
+    userAction: "confirm",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+    ...overrides,
+  };
+}
+
+const validSuggestion = makeSuggestion();
 assert.ok(
   memory.validateMemorySuggestion(validSuggestion).ok,
   "valid suggestion should pass",
 );
 
-const autoCaptureSuggestion = {
-  ...validSuggestion,
-  canAutoCapture: true,
-};
+const autoCaptureSuggestion = makeSuggestion({ canAutoCapture: true });
 assert.equal(
   memory.validateMemorySuggestion(autoCaptureSuggestion).ok,
   false,
   "suggestion must not allow auto-capture",
 );
 
-const secretSuggestion = {
-  ...validSuggestion,
-  proposedRecord: custodialBittensor,
-};
+const secretSuggestion = makeSuggestion({ proposedRecord: custodialBittensor });
 assert.equal(
   memory.validateMemorySuggestion(secretSuggestion).ok,
   false,
   "suggestion containing secret material must be rejected",
+);
+
+for (const body of [
+  { seedPhrase: "abandon abandon" },
+  { privateKey: "0x123" },
+  { mnemonic: "word word word" },
+  { apiSecret: "sk-abc" },
+  { rawSignature: "0xdeadbeef" },
+  { signedPayload: "payload" },
+  { walletExport: "export" },
+]) {
+  const suggestion = makeSuggestion({ proposedRecord: makeRecord({ body }) });
+  assert.equal(
+    memory.validateMemorySuggestion(suggestion).ok,
+    false,
+    `suggestion with forbidden body ${JSON.stringify(body)} must be rejected`,
+  );
+}
+
+// 12a. Suggestions never become saved memory without explicit confirm/edit action.
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "dismiss" })),
+  false,
+  "dismissed suggestion must not become saved memory",
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "confirm" })),
+  true,
+  "confirmed suggestion may become saved memory",
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "edit" })),
+  true,
+  "edited suggestion may become saved memory",
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "confirm", canAutoCapture: true })),
+  false,
+  "auto-capturing suggestion must not become saved memory",
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "confirm", proposedRecord: custodialBittensor })),
+  false,
+  "secret suggestion must not become saved memory",
+);
+assert.equal(
+  memory.canMemorySuggestionBecomeSavedMemory(makeSuggestion({ userAction: "confirm", policyDecision: "reject" })),
+  false,
+  "rejected-policy suggestion must not become saved memory",
+);
+
+// 12b. Suggestions respect desk policy.
+const bittensorWalletLabelSuggestion = makeSuggestion({
+  desk: "bittensor",
+  useCase: "bittensor_wallet_label",
+  proposedRecord: validBittensor,
+});
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorWalletLabelSuggestion).ok,
+  "valid Bittensor wallet label suggestion should pass desk policy",
+);
+
+const bittensorSecretSuggestion = makeSuggestion({
+  desk: "bittensor",
+  useCase: "bittensor_wallet_label",
+  proposedRecord: custodialBittensor,
+});
+assert.equal(
+  memory.validateMemorySuggestionAgainstDeskPolicy(bittensorSecretSuggestion).ok,
+  false,
+  "Bittensor suggestion with secret material must fail desk policy",
+);
+
+const hyperliquidMarketSuggestion = makeSuggestion({
+  desk: "hyperliquid",
+  useCase: "hyperliquid_watched_market",
+  proposedRecord: validMarket,
+});
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(hyperliquidMarketSuggestion).ok,
+  "valid Hyperliquid market suggestion should pass desk policy",
+);
+
+const hyperliquidLiveSubmissionSuggestion = makeSuggestion({
+  desk: "hyperliquid",
+  useCase: "hyperliquid_watched_market",
+  proposedRecord: liveSubmissionMarket,
+});
+assert.equal(
+  memory.validateMemorySuggestionAgainstDeskPolicy(hyperliquidLiveSubmissionSuggestion).ok,
+  false,
+  "Hyperliquid suggestion enabling live submission must fail desk policy",
+);
+
+const wellnessPreferenceSuggestion = makeSuggestion({
+  desk: "wellness",
+  useCase: "wellness_client_preference",
+  proposedRecord: validWellness,
+});
+assert.ok(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessPreferenceSuggestion).ok,
+  "valid wellness preference suggestion should pass desk policy",
+);
+
+const wellnessClinicalSuggestion = makeSuggestion({
+  desk: "wellness",
+  useCase: "wellness_client_preference",
+  proposedRecord: clinicalWithoutConsent,
+});
+assert.equal(
+  memory.validateMemorySuggestionAgainstDeskPolicy(wellnessClinicalSuggestion).ok,
+  false,
+  "wellness suggestion with clinical record must fail desk policy",
+);
+
+// 12c. Display sanitizer removes forbidden secret-shaped material.
+const sanitized = memory.sanitizeMemorySuggestionForDisplay(secretSuggestion);
+assert.equal(
+  sanitized.proposedRecord.body.__redacted,
+  true,
+  "sanitizer must redact body containing secret material",
+);
+assert.ok(
+  sanitized.policyWarnings.some((w) => w.includes("secret")),
+  "sanitizer must add a policy warning",
+);
+assert.equal(
+  sanitized.policyDecision,
+  "reject",
+  "sanitizer must set policyDecision to reject",
+);
+
+const cleanSuggestion = makeSuggestion();
+const unchangedSanitized = memory.sanitizeMemorySuggestionForDisplay(cleanSuggestion);
+assert.equal(
+  unchangedSanitized.proposedRecord.body.ss58Address,
+  validBittensor.body.ss58Address,
+  "sanitizer must not alter clean suggestions",
 );
 
 // 13. Use policies cannot enable hidden memory, auto-capture, or secret capture.
@@ -765,6 +935,13 @@ for (const phrase of [
   "canUseInChat",
   "canSendToMcpApi",
   "forbiddenCases",
+  "bittensor_wallet_label",
+  "hyperliquid_watched_market",
+  "wellness_client_preference",
+  "userAction",
+  "sanitizeMemorySuggestionForDisplay",
+  "canMemorySuggestionBecomeSavedMemory",
+  "validateMemorySuggestionAgainstDeskPolicy",
 ]) {
   assert.ok(
     memoryDocLower.includes(phrase.toLowerCase()),
