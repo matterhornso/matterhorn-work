@@ -177,6 +177,37 @@ An export manifest describes a memory bundle that has left the device. It must n
 }
 ```
 
+### `MatterhornMemoryDeskPolicy` and `MATTERHORN_MEMORY_DESK_POLICY_MATRIX`
+
+The desk policy matrix maps each product desk to the memory kinds it may store, the default sensitivity, export eligibility, external-context eligibility, and the cases that are forbidden for that desk.
+
+```ts
+"bittensor" | "hyperliquid" | "polymarket" | "wellness" | "decentralized_services" | "generic_workspace"
+```
+
+```ts
+interface MatterhornMemoryDeskPolicy {
+  desk: MatterhornMemoryDesk;
+  allowedKinds: MatterhornMemoryKind[];
+  defaultSensitivity: MatterhornMemorySensitivity;
+  canUseInChat: boolean;
+  canExport: boolean;
+  canSendToMcpApi: boolean;
+  forbiddenCases: string[];
+}
+```
+
+Matrix summary:
+
+| Desk | Allowed kinds | Default sensitivity | Chat | Export | MCP/API | Forbidden cases |
+|------|---------------|---------------------|--------|------------------|-----------------|
+| `bittensor` | `protocol_address`, `watchlist`, `user_preference`, `decision` | `public` | yes | yes | yes | private keys, seed phrases, mnemonics, raw signatures, signed payloads, wallet exports, custodial key material |
+| `hyperliquid` | `watchlist`, `user_preference`, `decision`, `receipt` | `public` | yes | no | no | API secrets, private keys, raw signatures, signed payloads, live submission flags, wallet exports |
+| `polymarket` | `watchlist`, `user_preference`, `decision`, `receipt` | `public` | yes | no | no | API secrets, private keys, raw signatures, signed payloads, live submission flags, wallet exports |
+| `wellness` | `user_preference`, `client_profile`, `decision` | `restricted` | yes | no | no | clinical records, diagnosis, treatment plans, prescriptions, guaranteed outcomes, medical records without explicit opt-in, auto-capture |
+| `decentralized_services` | `project_fact`, `user_preference`, `connector_preference`, `decision`, `receipt` | `private` | yes | no | no | API secrets, private keys, raw signatures, signed payloads, wallet exports |
+| `generic_workspace` | `user_preference`, `project_fact`, `workflow_artifact`, `decision` | `private` | yes | no | no | protocol wallet data, private keys, seed phrases, medical/clinical records, API secrets, raw signatures, signed payloads |
+
 ## Safety Policy
 
 `DEFAULT_MATTERHORN_MEMORY_SAFETY_POLICY` is the conservative baseline:
@@ -208,6 +239,7 @@ The contract enforces these invariants at validation time:
 - **Suggestions require explicit consent.** A `MatterhornMemorySuggestion` must use `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, and `forbiddenIfSecretDetected: true`.
 - **Use policy keeps memory visible and consent-based.** `MatterhornMemoryUsePolicy` defaults to `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, and `marketSubmissionMemoryAllowed: false`.
 - **Export manifests are secret-free.** A `MatterhornMemoryExportManifest` must declare `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, and `includesWalletExports: false`.
+- **Desk policy matrix gates per-desk memory.** A record must match the allowed kinds and minimum sensitivity of its desk. The matrix also controls whether memory may be used in chat (`canUseInChat`), exported (`canExport`), or sent to MCP/API tools (`canSendToMcpApi`). Bittensor remains public-address/external-signer only; Hyperliquid/Polymarket reject live-submission and secrets; Wellness defaults to `restricted` and rejects clinical data without opt-in; generic workspace must not silently inherit protocol, wallet, or medical data.
 
 ## Validation Functions
 
@@ -222,6 +254,9 @@ Runtime validators exported from `packages/types/src/memory.ts`:
 - `validateMemorySuggestion(suggestion)` – suggestions require explicit consent and cannot auto-capture
 - `validateMemoryUsePolicy(policy)` – use policy must keep memory visible and consent-based
 - `validateMemoryExportManifest(manifest)` – export manifest must not claim secret material
+- `validateMemoryDeskPolicy(policy)` – validates a desk policy entry
+- `validateMemoryRecordAgainstDeskPolicy(record, desk)` – validates a record against its desk policy
+- `detectMemoryDeskFromRecord(record)` – derives the desk from record tags
 - `redactForbiddenMemorySecrets(record)` – returns a redaction decision
 
 ## Usage Example
