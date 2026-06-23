@@ -11,7 +11,6 @@ const expectedTemplateIds = [
   "hyperliquid_trader",
   "polymarket_researcher",
   "wellness_creator_workflow",
-  "decentralized_services_operator",
   "blank_chat_workflow",
 ];
 
@@ -44,7 +43,7 @@ describe("customer workflow template launch cards", () => {
     }
   });
 
-  test("wellness and services prompts stay planned or educational", () => {
+  test("wellness prompts stay educational and services stay hidden from customer launchers", () => {
     const cards = buildCustomerWorkflowStarterCards(FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES);
     const wellness = cards.find((card) => card.id === "wellness_creator_workflow");
     const services = cards.find((card) => card.id === "decentralized_services_operator");
@@ -53,13 +52,12 @@ describe("customer workflow template launch cards", () => {
     expect(wellness?.prompt).toContain("do not diagnose");
     expect(wellness?.prompt).toContain("claim live payments");
 
-    expect(services?.prompt).toContain("planned-not-live future contracts");
-    expect(services?.prompt).toContain("Do not claim live hosting");
-    expect(services?.prompt).toContain("provider execution");
+    expect(services).toBeUndefined();
+    expect(cards.map((card) => card.title).join(" ")).not.toContain("Services");
   });
 
   test("invalid or empty server payloads fall back to safe local templates", () => {
-    expect(normalizeCustomerWorkflowTemplates({ ok: true, customerTemplates: [] }).map((template) => template.id))
+    expect(buildCustomerWorkflowStarterCards(normalizeCustomerWorkflowTemplates({ ok: true, customerTemplates: [] })).map((template) => template.id))
       .toEqual(expectedTemplateIds);
 
     const unsafeTemplate = {
@@ -71,7 +69,7 @@ describe("customer workflow template launch cards", () => {
       },
     };
 
-    expect(normalizeCustomerWorkflowTemplates({ ok: true, customerTemplates: [unsafeTemplate] }).map((template) => template.id))
+    expect(buildCustomerWorkflowStarterCards(normalizeCustomerWorkflowTemplates({ ok: true, customerTemplates: [unsafeTemplate] })).map((template) => template.id))
       .toEqual(expectedTemplateIds);
   });
 });

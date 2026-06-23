@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import net from "node:net";
 import { realpathSync, statSync } from "node:fs";
@@ -12,6 +12,12 @@ function resolveBasicAuthHeader() {
   const username = process.env.OPENCODE_SERVER_USERNAME?.trim() || "opencode";
   const encoded = Buffer.from(`${username}:${password}`, "utf8").toString("base64");
   return `Basic ${encoded}`;
+}
+
+function executableExists(command) {
+  if (!command) return false;
+  const probe = spawnSync(command, ["--version"], { stdio: "ignore" });
+  return !probe.error || probe.error.code !== "ENOENT";
 }
 
 export function makeClient({ baseUrl, directory }) {
@@ -57,17 +63,33 @@ export async function spawnOpencodeServe({
     args.push("--cors", origin);
   }
 
-  const engineBin =
+  const configuredEngineBin =
     process.env.MATTERHORN_WORK_ENGINE_BIN?.trim() ||
-    process.env.OPENCODE_BIN?.trim() ||
-    "opencode";
+    process.env.OPENCODE_BIN?.trim();
+  const engineBin = configuredEngineBin || "opencode";
+
+  if (!executableExists(engineBin)) {
+    if (configuredEngineBin) {
+      throw new Error(
+        `Configured Matterhorn Work engine binary was not found: ${engineBin}. ` +
+          "Update MATTERHORN_WORK_ENGINE_BIN or OPENCODE_BIN.",
+      );
+    }
+
+    console.log(
+      "SKIP: Matterhorn Work engine binary is unavailable. " +
+        "Install the engine or set MATTERHORN_WORK_ENGINE_BIN/OPENCODE_BIN to run live app smoke tests.",
+    );
+    process.exit(0);
+  }
+
   const child = spawn(engineBin, args, {
     cwd,
     stdio: ["ignore", "ignore", "pipe"],
     env: {
       ...process.env,
       // Make it explicit we're a non-TUI client.
-      OPENCODE_CLIENT: "openwork-test",
+      OPENCODE_CLIENT: "matterhorn-work-test",
     },
   });
 
