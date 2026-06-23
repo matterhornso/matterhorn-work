@@ -143,6 +143,20 @@ node scripts/wellness-creator-workflow.mjs --check
 - **P2 (medium):** mis-categorized safe candidate, or evidence-summary flag wrong while behavior is safe.
 - **P3 (low):** wording/labeling/cosmetic.
 
+### Contract adapter (suggestions only)
+
+The adapter converts safe candidates into `MatterhornMemorySuggestion` fixtures — **non-writing, opt-in, user-confirmed only**.
+
+```bash
+node scripts/wellness-creator-workflow.mjs --memory-suggestions --json
+```
+
+Confirm:
+- `mode: "memory-suggestions"`, `writesMemory: false`, `suggestionVersion: "matterhorn.memory.suggestion.v1"`.
+- A suggestion for **personal_trainer**, **yoga_instructor**, and **dietician**, each `proposedRecord` with `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`.
+- Every suggestion: `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, `forbiddenIfSecretDetected: true`.
+- Clinical and secret examples appear only under `refused` as `[withheld]` — never as records, never echoed.
+
 ### Customer-safe sign-off checklist
 
 - [ ] Safe candidates for all three personas are allowed and opt-in.

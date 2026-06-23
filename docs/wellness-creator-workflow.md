@@ -301,6 +301,12 @@ A black-box **QA evidence pack** proves the candidates are useful but safe (per-
 node scripts/wellness-creator-workflow.mjs --memory-qa --json
 ```
 
+A **contract adapter** converts safe candidates into `MatterhornMemorySuggestion`-shaped fixtures (the merged shape in `packages/types/src/memory.ts`) — **suggestions only, never writes**. Each proposed record is `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`, with `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, and `requiresExplicitConsent: true`. Clinical and secret-shaped inputs are refused/redacted and never become records:
+
+```bash
+node scripts/wellness-creator-workflow.mjs --memory-suggestions --json
+```
+
 ### Safe to remember
 Creator service type · offer preferences · program style · check-in cadence · client communication preferences · artifact preferences · renewal/follow-up preferences.
 

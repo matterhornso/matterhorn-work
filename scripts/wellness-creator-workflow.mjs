@@ -1017,6 +1017,97 @@ function buildMemoryQa() {
   };
 }
 
+// ---- Wellness Memory contract adapter (suggestions only) ----
+// Convert safe wellness memory candidates into MatterhornMemorySuggestion-shaped
+// fixtures (packages/types/src/memory.ts). Non-writing, opt-in, user-confirmed
+// only. Clinical/secret inputs are refused/redacted and never become records.
+const MEMORY_SUGGESTION_VERSION = "matterhorn.memory.suggestion.v1";
+const MEMORY_RECORD_KIND = "client_profile";
+const MEMORY_RECORD_SCOPE = "user";
+const MEMORY_RECORD_SENSITIVITY = "private";
+const MEMORY_PROVENANCE_SOURCE = "user_confirmed";
+// Fixed, deterministic timestamp so fixtures/tests are stable.
+const MEMORY_STAMP = "2026-01-01T00:00:00.000Z";
+
+function memorySuggestionFor(persona, candidate, index) {
+  const result = classifyMemoryCandidate(candidate);
+  if (!result.allowed) {
+    return { ok: false, refused: { allowed: false, action: result.action, reason: result.reason, input: "[withheld]" } };
+  }
+  const category = result.category;
+  const personaLabel = OFFER_PERSONA_LABELS[persona] ?? persona;
+  const record = {
+    id: `wellness-${persona}-${category}-${index}`,
+    kind: MEMORY_RECORD_KIND,
+    scope: MEMORY_RECORD_SCOPE,
+    title: `${personaLabel} — ${category.replace(/_/g, " ")}`,
+    summary: candidate,
+    body: { persona, category, preference: candidate },
+    tags: ["wellness", "opt-in", persona, category],
+    links: [],
+    provenance: {
+      source: MEMORY_PROVENANCE_SOURCE,
+      capturedAt: MEMORY_STAMP,
+      capturedBy: "user",
+      confidence: 0.9,
+      reasonRemembered: "Creator confirmed this service/workflow preference.",
+    },
+    sensitivity: MEMORY_RECORD_SENSITIVITY,
+    createdAt: MEMORY_STAMP,
+    updatedAt: MEMORY_STAMP,
+    canUseInChat: true,
+    canExport: true,
+    canDelete: true,
+  };
+  const suggestion = {
+    version: MEMORY_SUGGESTION_VERSION,
+    proposedRecord: record,
+    reason: "Proposed wellness service/workflow preference. Requires explicit user confirmation before anything is stored.",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+  };
+  return { ok: true, suggestion };
+}
+
+function buildMemorySuggestions() {
+  const suggestions = [];
+  const refused = [];
+  for (const [persona, prompts] of Object.entries(MEMORY_QA_SAFE_BY_PERSONA)) {
+    prompts.forEach((prompt, index) => {
+      const built = memorySuggestionFor(persona, prompt, index);
+      if (built.ok) suggestions.push(built.suggestion);
+      else refused.push(built.refused);
+    });
+  }
+  // Clinical + secret examples must never become suggestions.
+  for (const prompt of [...MEMORY_QA_CLINICAL, ...MEMORY_QA_SECRET]) {
+    const result = classifyMemoryCandidate(prompt);
+    refused.push({ allowed: false, action: result.action, reason: result.reason, input: "[withheld]" });
+  }
+  return {
+    title: "Wellness Memory Contract Adapter",
+    suggestionVersion: MEMORY_SUGGESTION_VERSION,
+    captureMode: "user_confirmed_only",
+    writesMemory: false,
+    educationalOnly: true,
+    notMedicalAdvice: "This is general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.",
+    personas: Object.keys(MEMORY_QA_SAFE_BY_PERSONA),
+    suggestions,
+    refused,
+    evidenceSummary: {
+      suggestions: suggestions.length,
+      refused: refused.length,
+      allSuggestionsUserConfirmedOnly: suggestions.every((s) => s.captureMode === "user_confirmed_only" && s.canAutoCapture === false && s.requiresExplicitConsent === true),
+      allRefusedWithheld: refused.every((r) => r.input === "[withheld]"),
+      writesMemory: false,
+      noLiveServiceClaims: true,
+    },
+    note: "Non-writing adapter: safe wellness candidates become MatterhornMemorySuggestion fixtures (user_confirmed, opt-in tagged). Clinical and secret-shaped inputs are refused/redacted and never become records. Nothing is written to memory.",
+  };
+}
+
 function flag(name) {
   return args.includes(name);
 }
@@ -1090,6 +1181,7 @@ function buildContract() {
     customerDemoPack: buildCustomerDemoPack(),
     memory: buildMemoryLane(),
     memoryQa: buildMemoryQa(),
+    memorySuggestions: buildMemorySuggestions(),
     demoPacketExport: {
       personas: EXPORT_PERSONAS,
       defaultPersona: "wellness_creator",
@@ -1543,6 +1635,65 @@ function runCheck() {
     }
   }
 
+  // Wellness Memory contract adapter: MatterhornMemorySuggestion fixtures.
+  const suggestionsBlock = contract.memorySuggestions;
+  if (!suggestionsBlock) {
+    failures.push("memorySuggestions adapter must be present in the contract.");
+  } else {
+    if (suggestionsBlock.writesMemory !== false) failures.push("memorySuggestions.writesMemory must be false.");
+    if (suggestionsBlock.suggestionVersion !== "matterhorn.memory.suggestion.v1") {
+      failures.push("memorySuggestions.suggestionVersion must match the contract.");
+    }
+    for (const persona of ["personal_trainer", "yoga_instructor", "dietician"]) {
+      if (!suggestionsBlock.suggestions.some((s) => s.proposedRecord?.tags?.includes(persona))) {
+        failures.push(`memorySuggestions should include a suggestion for ${persona}.`);
+      }
+    }
+    const ALLOWED_KINDS = ["user_preference", "project_fact", "protocol_address", "watchlist", "receipt", "workflow_artifact", "decision", "client_profile", "connector_preference", "mcp_tool_preference"];
+    const ALLOWED_SCOPES = ["user", "workspace", "project", "session"];
+    const ALLOWED_SENSITIVITIES = ["public", "private", "restricted", "forbidden_secret"];
+    for (const s of suggestionsBlock.suggestions) {
+      if (s.version !== "matterhorn.memory.suggestion.v1") failures.push("suggestion.version must match the contract.");
+      if (s.captureMode !== "user_confirmed_only") failures.push("suggestion.captureMode must be user_confirmed_only.");
+      if (s.canAutoCapture !== false) failures.push("suggestion.canAutoCapture must be false.");
+      if (s.requiresExplicitConsent !== true) failures.push("suggestion.requiresExplicitConsent must be true.");
+      if (s.forbiddenIfSecretDetected !== true) failures.push("suggestion.forbiddenIfSecretDetected must be true.");
+      const r = s.proposedRecord;
+      if (!r || typeof r !== "object") {
+        failures.push("suggestion.proposedRecord must be an object.");
+        continue;
+      }
+      for (const field of ["id", "kind", "scope", "title", "summary", "body", "tags", "links", "provenance", "sensitivity", "createdAt", "updatedAt"]) {
+        if (!(field in r)) failures.push(`proposedRecord missing required field: ${field}`);
+      }
+      if (!ALLOWED_KINDS.includes(r.kind)) failures.push(`proposedRecord.kind invalid: ${r.kind}`);
+      if (!ALLOWED_SCOPES.includes(r.scope)) failures.push(`proposedRecord.scope invalid: ${r.scope}`);
+      if (!ALLOWED_SENSITIVITIES.includes(r.sensitivity)) failures.push(`proposedRecord.sensitivity invalid: ${r.sensitivity}`);
+      if (r.provenance?.source !== "user_confirmed") failures.push("proposedRecord.provenance.source must be user_confirmed.");
+      if (typeof r.provenance?.confidence !== "number") failures.push("proposedRecord.provenance.confidence must be a number.");
+      if (!r.provenance?.reasonRemembered) failures.push("proposedRecord.provenance.reasonRemembered is required.");
+      if (!Array.isArray(r.tags) || !r.tags.includes("opt-in") || !r.tags.includes("wellness")) {
+        failures.push("proposedRecord.tags must include 'wellness' and 'opt-in'.");
+      }
+      [r.canUseInChat, r.canExport, r.canDelete].forEach((value, idx) => {
+        if (typeof value !== "boolean") failures.push(`proposedRecord boolean capability ${idx} must be present.`);
+      });
+    }
+    for (const item of suggestionsBlock.refused) {
+      if (item.allowed !== false || item.input !== "[withheld]") failures.push("Refused suggestion must be withheld and not allowed.");
+    }
+    const sum = suggestionsBlock.evidenceSummary || {};
+    for (const key of ["allSuggestionsUserConfirmedOnly", "allRefusedWithheld", "noLiveServiceClaims"]) {
+      if (sum[key] !== true) failures.push(`memorySuggestions.evidenceSummary.${key} must be true.`);
+    }
+    if (sum.writesMemory !== false) failures.push("memorySuggestions.evidenceSummary.writesMemory must be false.");
+    // No clinical/secret source tokens or live-service claims anywhere in the adapter output.
+    const sgText = JSON.stringify(suggestionsBlock).toLowerCase();
+    for (const leak of ["metformin", "diabetes", "500mg", "lab results", "third-trimester", "cutting protocol", "seed phrase", "private key", "api secret", "wallet export", "apple banana", "0xabc123", "payments are live", "email sending is live", "storage is live", "token gating is live"]) {
+      if (sgText.includes(leak)) failures.push(`memorySuggestions must not contain: "${leak}"`);
+    }
+  }
+
   // Demo Packet Export: stitched, shareable packet per persona.
   const exportMeta = contract.demoPacketExport;
   if (!exportMeta || !Array.isArray(exportMeta.personas) || exportMeta.defaultPersona !== "wellness_creator") {
@@ -1675,6 +1826,16 @@ function main() {
       mode: "memory-qa",
       writesMemory: false,
       ...buildMemoryQa(),
+    }, null, 2)}\n`);
+    return;
+  }
+
+  if (flag("--memory-suggestions")) {
+    process.stdout.write(`${JSON.stringify({
+      version: VERSION,
+      mode: "memory-suggestions",
+      writesMemory: false,
+      ...buildMemorySuggestions(),
     }, null, 2)}\n`);
     return;
   }
