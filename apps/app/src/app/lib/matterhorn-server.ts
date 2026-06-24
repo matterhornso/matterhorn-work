@@ -3,6 +3,9 @@ import type {
   MatterhornMemoryExportManifest,
   MatterhornMemoryRecord,
   MatterhornMemorySuggestion,
+  MatterhornMemorySuggestionAction,
+  MatterhornMemorySuggestionLifecycle,
+  MatterhornMemorySuggestionStatus,
 } from "@matterhorn-work/types";
 import { desktopFetch } from "./desktop";
 import { isDesktopRuntime } from "../utils";
@@ -171,26 +174,18 @@ export type MatterhornMemorySuggestionResolveResponse = {
   policyWarnings: string[];
 };
 
-export type MatterhornMemorySuggestionInboxStatus =
-  | "pending"
-  | "confirmed"
-  | "edited"
-  | "dismissed"
-  | "blocked";
+export type MatterhornMemorySuggestionInboxStatus = MatterhornMemorySuggestionStatus;
 
-export type MatterhornMemorySuggestionInboxEntry = {
+export type MatterhornMemorySuggestionInboxEntry = MatterhornMemorySuggestionLifecycle & {
   version: "matterhorn.memory.suggestion-inbox.v1";
   id: string;
   suggestion: MatterhornMemorySuggestion;
-  status: MatterhornMemorySuggestionInboxStatus;
-  createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
-  lastAction?: MatterhornMemorySuggestion["userAction"];
-  reason?: string;
+  lastAction?: MatterhornMemorySuggestionAction;
+  resolutionReason?: string;
   recordId?: string;
   markdownPath?: string;
-  dismissedUntil?: string;
   policyWarnings: string[];
 };
 
@@ -1638,7 +1633,7 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       }),
 
     resolveStoredMemorySuggestion: (id: string, payload: {
-      action?: MatterhornMemorySuggestion["userAction"];
+      action?: MatterhornMemorySuggestionAction;
       patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
       reason?: string;
     }) =>

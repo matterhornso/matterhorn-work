@@ -20,8 +20,10 @@ import type {
   MatterhornMemoryScope,
   MatterhornMemorySensitivity,
   MatterhornMemorySuggestion,
+  MatterhornMemorySuggestionAction,
 } from "@matterhorn-work/types";
 import {
+  DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
   containsForbiddenMemorySecretMaterial,
   isForbiddenMemorySecretBody,
   MATTERHORN_MEMORY_KINDS,
@@ -92,6 +94,21 @@ function parseTags(tags: string) {
     .map((tag) => tag.trim().toLowerCase())
     .filter(Boolean)
     .slice(0, 12);
+}
+
+function localSuggestionDedupeKey(suggestion: MatterhornMemorySuggestion) {
+  return [
+    suggestion.desk,
+    suggestion.useCase,
+    suggestion.proposedRecord.kind,
+    suggestion.proposedRecord.scope,
+    suggestion.proposedRecord.title,
+  ]
+    .join(":")
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 160);
 }
 
 function buildMemoryRecord(draft: CaptureDraft, workspaceId: string | null, sessionId: string | null): MatterhornMemoryRecord {
@@ -174,6 +191,17 @@ function localSuggestionEntry(suggestion: MatterhornMemorySuggestion): Matterhor
     version: "matterhorn.memory.suggestion-inbox.v1",
     id: suggestion.id,
     suggestion,
+    suggestionId: suggestion.id,
+    dedupeKey: localSuggestionDedupeKey(suggestion),
+    source: suggestion.source,
+    kind: suggestion.proposedRecord.kind,
+    scope: suggestion.proposedRecord.scope,
+    sensitivity: suggestion.proposedRecord.sensitivity,
+    confidence: suggestion.confidence,
+    reason: suggestion.reason,
+    proposedRecord: suggestion.proposedRecord,
+    dismissalWindowDays: DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
+    actorConfirmationRequired: true,
     status: suggestion.policyDecision === "reject" ? "blocked" : "pending",
     createdAt: now,
     updatedAt: now,
@@ -325,7 +353,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
     }
   };
 
-  const handleResolveSuggestion = async (entry: MatterhornMemorySuggestionInboxEntry, action: MatterhornMemorySuggestion["userAction"]) => {
+  const handleResolveSuggestion = async (entry: MatterhornMemorySuggestionInboxEntry, action: MatterhornMemorySuggestionAction) => {
     if (!props.client) return;
     setCaptureError(null);
     try {
@@ -519,9 +547,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     <p className="mt-2 text-xs leading-5 text-dls-secondary">
                       <span className="font-semibold text-dls-text">Why suggested:</span> {suggestion.reason}
                     </p>
-                    {entry.reason && resolved ? (
+                    {entry.resolutionReason && resolved ? (
                       <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                        <span className="font-semibold text-dls-text">Resolution:</span> {entry.reason}
+                        <span className="font-semibold text-dls-text">Resolution:</span> {entry.resolutionReason}
                       </p>
                     ) : null}
                     {entry.policyWarnings?.length ? (

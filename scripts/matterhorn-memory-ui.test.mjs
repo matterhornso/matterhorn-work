@@ -61,6 +61,9 @@ for (const expected of [
   "exportMemory",
   "MatterhornMemoryRecord",
   "MatterhornMemorySuggestionInboxEntry",
+  "MatterhornMemorySuggestionLifecycle",
+  "MatterhornMemorySuggestionStatus",
+  "MatterhornMemorySuggestionAction",
   "MatterhornMemoryExportManifest",
 ]) {
   assert.match(serverClient, new RegExp(expected), `missing server client memory method/type: ${expected}`)
@@ -157,6 +160,11 @@ for (const expected of [
   "resolveStoredMemorySuggestion",
   "listMemorySuggestions",
   "matterhorn.memory.suggestion-inbox.v1",
+  "actorConfirmationRequired",
+  "dismissalWindowDays",
+  "suggestionId",
+  "dedupeKey",
+  "resolutionReason",
   "matterhorn:memory-suggestions-updated",
   "matterhorn:memory-suggestion",
   "resolveMemorySuggestion",

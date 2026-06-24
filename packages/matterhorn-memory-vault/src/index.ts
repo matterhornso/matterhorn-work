@@ -2,15 +2,22 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import path from "node:path"
 import {
+  DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
   type MatterhornMemorySuggestion,
+  type MatterhornMemorySuggestionAction,
+  type MatterhornMemorySuggestionLifecycle,
+  type MatterhornMemorySuggestionStatus,
   type MatterhornMemoryKind,
   type MatterhornMemoryRecord,
+  applyMemorySuggestionAction,
   canMemorySuggestionBecomeSavedMemory,
+  computeMemorySuggestionDismissedUntil,
   detectMemoryDeskFromRecord,
   redactForbiddenMemorySecrets,
   sanitizeMemorySuggestionForDisplay,
   validateMemorySuggestionAgainstDeskPolicy,
+  validateMemorySuggestionLifecycle,
   validateMemoryRecordAgainstDeskPolicy,
   validateMemorySafety,
 } from "@matterhorn-work/types/memory"
@@ -54,7 +61,7 @@ export interface MatterhornMemoryExportResult {
 }
 
 export interface MatterhornMemorySuggestionResolveOptions {
-  action?: MatterhornMemorySuggestion["userAction"]
+  action?: MatterhornMemorySuggestionAction
   patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
   reason?: string
 }
@@ -69,26 +76,18 @@ export interface MatterhornMemorySuggestionResolveResult {
   policyWarnings: string[]
 }
 
-export type MatterhornMemorySuggestionInboxStatus =
-  | "pending"
-  | "confirmed"
-  | "edited"
-  | "dismissed"
-  | "blocked"
+export type MatterhornMemorySuggestionInboxStatus = MatterhornMemorySuggestionStatus
 
-export interface MatterhornMemorySuggestionInboxEntry {
+export interface MatterhornMemorySuggestionInboxEntry extends MatterhornMemorySuggestionLifecycle {
   version: typeof MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION
   id: string
   suggestion: MatterhornMemorySuggestion
-  status: MatterhornMemorySuggestionInboxStatus
-  createdAt: string
   updatedAt: string
   resolvedAt?: string
-  lastAction?: MatterhornMemorySuggestion["userAction"]
-  reason?: string
+  lastAction?: MatterhornMemorySuggestionAction
+  resolutionReason?: string
   recordId?: string
   markdownPath?: string
-  dismissedUntil?: string
   policyWarnings: string[]
 }
 
@@ -120,6 +119,47 @@ interface MatterhornMemorySuggestionInbox {
   version: typeof MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION
   updatedAt: string
   entries: Record<string, MatterhornMemorySuggestionInboxEntry>
+}
+
+function suggestionDedupeKey(suggestion: MatterhornMemorySuggestion): string {
+  return [
+    suggestion.desk,
+    suggestion.useCase,
+    suggestion.proposedRecord.kind,
+    suggestion.proposedRecord.scope,
+    suggestion.proposedRecord.title,
+  ]
+    .join(":")
+    .toLowerCase()
+    .replace(/[^a-z0-9:._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 160)
+}
+
+function buildSuggestionLifecycle(
+  suggestion: MatterhornMemorySuggestion,
+  status: MatterhornMemorySuggestionStatus,
+  createdAt: string,
+  existing?: MatterhornMemorySuggestionInboxEntry,
+): MatterhornMemorySuggestionLifecycle {
+  return {
+    suggestionId: suggestion.id,
+    dedupeKey: existing?.dedupeKey ?? suggestionDedupeKey(suggestion),
+    source: suggestion.source,
+    kind: suggestion.proposedRecord.kind,
+    scope: suggestion.proposedRecord.scope,
+    sensitivity: suggestion.proposedRecord.sensitivity,
+    confidence: suggestion.confidence,
+    reason: suggestion.reason,
+    proposedRecord: suggestion.proposedRecord,
+    createdAt: existing?.createdAt ?? createdAt,
+    expiresAt: existing?.expiresAt,
+    dismissedUntil: existing?.dismissedUntil,
+    dismissalWindowDays: existing?.dismissalWindowDays ?? DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
+    actorConfirmationRequired: true,
+    status,
+    policyWarnings: existing?.policyWarnings,
+  }
 }
 
 type MemoryLogAction =
@@ -251,31 +291,44 @@ export class MatterhornMemoryVault {
       const validation = validateMemorySuggestionAgainstDeskPolicy(sanitized)
       const canSave = validation.ok && sanitized.policyDecision !== "reject"
       const existing = inbox.entries[sanitized.id]
-      const status: MatterhornMemorySuggestionInboxStatus = canSave ? existing?.status ?? "pending" : "blocked"
+      const existingDismissalExpired =
+        existing?.status === "dismissed" &&
+        typeof existing.dismissedUntil === "string" &&
+        existing.dismissedUntil <= now
+      const status: MatterhornMemorySuggestionInboxStatus = canSave
+        ? existingDismissalExpired
+          ? "expired"
+          : existing?.status ?? "pending"
+        : "blocked"
+      const policyWarnings = [
+        ...(sanitized.policyWarnings ?? []),
+        ...validation.errors,
+      ]
+      const lifecycle = buildSuggestionLifecycle(sanitized, status, now, existing)
+      const lifecycleValidation = validateMemorySuggestionLifecycle({
+        ...lifecycle,
+        policyWarnings,
+      })
       const entry: MatterhornMemorySuggestionInboxEntry = {
         version: MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION,
         id: sanitized.id,
         suggestion: sanitized,
-        status,
-        createdAt: existing?.createdAt ?? now,
+        ...lifecycle,
+        status: lifecycleValidation.ok ? status : "blocked",
         updatedAt: now,
         resolvedAt: existing?.resolvedAt,
         lastAction: existing?.lastAction,
-        reason: canSave
-          ? existing?.reason
-          : validation.errors.join("; ") || "Suggestion is blocked by memory policy.",
+        resolutionReason: lifecycleValidation.ok && canSave
+          ? existing?.resolutionReason
+          : [...validation.errors, ...lifecycleValidation.errors].join("; ") || "Suggestion is blocked by memory policy.",
         recordId: existing?.recordId,
         markdownPath: existing?.markdownPath,
-        dismissedUntil: existing?.dismissedUntil,
-        policyWarnings: [
-          ...(sanitized.policyWarnings ?? []),
-          ...validation.errors,
-        ],
+        policyWarnings: [...policyWarnings, ...lifecycleValidation.errors],
       }
       inbox.entries[entry.id] = entry
       entries.push(entry)
-      await this.appendLog(status === "blocked" ? "suggestion_reject" : "suggestion_store", entry.id, {
-        status,
+      await this.appendLog(entry.status === "blocked" ? "suggestion_reject" : "suggestion_store", entry.id, {
+        status: entry.status,
         useCase: sanitized.useCase,
         desk: sanitized.desk,
       })
@@ -319,28 +372,33 @@ export class MatterhornMemoryVault {
       const result = await this.resolveSuggestion(existing.suggestion, options)
       const action = options.action ?? existing.suggestion.userAction
       const now = new Date().toISOString()
-      const status: MatterhornMemorySuggestionInboxStatus = result.dismissed
-        ? "dismissed"
-        : action === "edit"
-          ? "edited"
-          : "confirmed"
+      const actionResult = applyMemorySuggestionAction(existing, action, {
+        memoryRecordId: result.record?.id,
+        now,
+        dismissalWindowDays: existing.dismissalWindowDays,
+      })
+      if (!result.dismissed && actionResult.blockedReasons.length) {
+        throw new Error(`Memory suggestion lifecycle rejected action: ${actionResult.blockedReasons.join("; ")}`)
+      }
       const entry: MatterhornMemorySuggestionInboxEntry = {
         ...existing,
         suggestion: result.suggestion,
-        status,
+        status: actionResult.status,
         updatedAt: now,
         resolvedAt: now,
         lastAction: action,
-        reason: result.reason,
-        recordId: result.record?.id,
+        resolutionReason: result.reason,
+        recordId: actionResult.memoryRecordId ?? result.record?.id,
         markdownPath: result.markdownPath,
-        dismissedUntil: result.dismissed ? addDaysIso(now, 30) : undefined,
-        policyWarnings: result.policyWarnings,
+        dismissedUntil: result.dismissed
+          ? computeMemorySuggestionDismissedUntil(now, existing.dismissalWindowDays)
+          : undefined,
+        policyWarnings: [...result.policyWarnings, ...actionResult.blockedReasons],
       }
       inbox.entries[id] = entry
       await this.writeSuggestionInbox(inbox)
       await this.appendLog(action === "dismiss" ? "suggestion_dismiss" : action === "edit" ? "suggestion_edit" : "suggestion_confirm", id, {
-        status,
+        status: entry.status,
         recordId: result.record?.id,
       })
       return { ...result, entry }
@@ -352,7 +410,7 @@ export class MatterhornMemoryVault {
         updatedAt: now,
         resolvedAt: now,
         lastAction: options.action ?? existing.suggestion.userAction,
-        reason: error instanceof Error ? error.message : String(error),
+        resolutionReason: error instanceof Error ? error.message : String(error),
         policyWarnings: [
           ...(existing.policyWarnings ?? []),
           error instanceof Error ? error.message : String(error),
@@ -678,12 +736,6 @@ function emptySuggestionInbox(): MatterhornMemorySuggestionInbox {
     updatedAt: new Date().toISOString(),
     entries: {},
   }
-}
-
-function addDaysIso(value: string, days: number): string {
-  const date = new Date(value)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString()
 }
 
 function folderForRecord(record: MatterhornMemoryRecord): string {
