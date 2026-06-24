@@ -61,16 +61,18 @@ export function BetaAuthMenu({ compact }: BetaAuthMenuProps) {
   if (!auth.isSignedIn) {
     return (
       <DropdownMenu>
-        <DropdownMenuTrigger>
-          <Button
-            variant="secondary"
-            size={compact ? "icon-xs" : "xs"}
-            aria-label={t("den.signin_title")}
-          >
-            <Cloud className="size-3.5" />
-            {compact ? null : <span>{t("den.signin_button")}</span>}
-          </Button>
-        </DropdownMenuTrigger>
+        <DropdownMenuTrigger
+          render={(
+            <Button
+              variant="secondary"
+              size={compact ? "icon-xs" : "xs"}
+              aria-label={t("den.signin_title")}
+            >
+              <Cloud className="size-3.5" />
+              {compact ? null : <span>{t("den.signin_button")}</span>}
+            </Button>
+          )}
+        />
         <DropdownMenuContent align="end" side="top" sideOffset={6}>
           <DropdownMenuLabel>{t("den.signin_title")}</DropdownMenuLabel>
           <DropdownMenuItem onClick={auth.openSignIn}>
@@ -96,19 +98,21 @@ export function BetaAuthMenu({ compact }: BetaAuthMenuProps) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
-        <Button
-          variant="ghost"
-          size={compact ? "icon-xs" : "xs"}
-          className="gap-2"
-          aria-label={`Signed in as ${displayName}`}
-        >
-          <UserAvatar name={auth.user?.name ?? null} email={auth.user?.email ?? null} />
-          {compact ? null : (
-            <span className="max-w-[16ch] truncate">{displayName}</span>
-          )}
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={(
+          <Button
+            variant="ghost"
+            size={compact ? "icon-xs" : "xs"}
+            className="gap-2"
+            aria-label={`Signed in as ${displayName}`}
+          >
+            <UserAvatar name={auth.user?.name ?? null} email={auth.user?.email ?? null} />
+            {compact ? null : (
+              <span className="max-w-[16ch] truncate">{displayName}</span>
+            )}
+          </Button>
+        )}
+      />
       <DropdownMenuContent align="end" side="top" sideOffset={6}>
         <DropdownMenuLabel>
           <div className="flex flex-col gap-0.5">
