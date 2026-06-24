@@ -1089,3 +1089,216 @@ export function validateMemoryRecordAgainstDeskPolicy(
 
   return { ok: errors.length === 0, errors };
 }
+
+export const MATTERHORN_MEMORY_SUGGESTION_STATUSES = [
+  "pending",
+  "confirmed",
+  "edited",
+  "dismissed",
+  "expired",
+  "blocked",
+] as const;
+export type MatterhornMemorySuggestionStatus =
+  (typeof MATTERHORN_MEMORY_SUGGESTION_STATUSES)[number];
+
+export const MATTERHORN_MEMORY_SUGGESTION_ACTIONS = [
+  "confirm",
+  "edit",
+  "dismiss",
+] as const;
+export type MatterhornMemorySuggestionAction =
+  (typeof MATTERHORN_MEMORY_SUGGESTION_ACTIONS)[number];
+
+export interface MatterhornMemorySuggestionLifecycle {
+  suggestionId: string;
+  dedupeKey: string;
+  source: MatterhornMemorySource;
+  kind: MatterhornMemoryKind;
+  scope: MatterhornMemoryScope;
+  sensitivity: MatterhornMemorySensitivity;
+  confidence: number;
+  reason: string;
+  proposedRecord: MatterhornMemoryRecord;
+  createdAt: string;
+  expiresAt?: string;
+  dismissedUntil?: string;
+  dismissalWindowDays: number;
+  actorConfirmationRequired: true;
+  status: MatterhornMemorySuggestionStatus;
+  policyWarnings?: string[];
+}
+
+export interface MatterhornMemorySuggestionConfirmationResult {
+  action: MatterhornMemorySuggestionAction;
+  suggestionId: string;
+  status: MatterhornMemorySuggestionStatus;
+  memoryRecordId?: string;
+  redaction: boolean;
+  blockedReasons: string[];
+  provenance: MatterhornMemoryProvenance;
+}
+
+export const DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS = 30;
+
+export function validateMemorySuggestionLifecycle(
+  entry: MatterhornMemorySuggestionLifecycle,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (!entry.suggestionId || typeof entry.suggestionId !== "string") {
+    errors.push("lifecycle suggestionId is required and must be a string");
+  }
+
+  if (!entry.dedupeKey || typeof entry.dedupeKey !== "string") {
+    errors.push("lifecycle dedupeKey is required and must be a string");
+  }
+
+  if (!MATTERHORN_MEMORY_SOURCES.includes(entry.source as MatterhornMemorySource)) {
+    errors.push(`lifecycle source must be one of ${MATTERHORN_MEMORY_SOURCES.join(", ")}`);
+  }
+
+  if (!MATTERHORN_MEMORY_KINDS.includes(entry.kind as MatterhornMemoryKind)) {
+    errors.push(`lifecycle kind must be one of ${MATTERHORN_MEMORY_KINDS.join(", ")}`);
+  }
+
+  if (!MATTERHORN_MEMORY_SCOPES.includes(entry.scope as MatterhornMemoryScope)) {
+    errors.push(`lifecycle scope must be one of ${MATTERHORN_MEMORY_SCOPES.join(", ")}`);
+  }
+
+  if (!MATTERHORN_MEMORY_SENSITIVITIES.includes(entry.sensitivity as MatterhornMemorySensitivity)) {
+    errors.push(`lifecycle sensitivity must be one of ${MATTERHORN_MEMORY_SENSITIVITIES.join(", ")}`);
+  }
+
+  if (typeof entry.confidence !== "number" || entry.confidence < 0 || entry.confidence > 1) {
+    errors.push("lifecycle confidence must be a number between 0 and 1");
+  }
+
+  if (!entry.reason || typeof entry.reason !== "string") {
+    errors.push("lifecycle reason is required and must be a string");
+  }
+
+  if (!entry.proposedRecord || typeof entry.proposedRecord !== "object") {
+    errors.push("lifecycle proposedRecord is required");
+  } else {
+    const recordResult = validateMemorySafety(entry.proposedRecord);
+    if (!recordResult.ok) {
+      errors.push(`lifecycle proposedRecord is unsafe: ${recordResult.errors.join("; ")}`);
+    }
+  }
+
+  if (!entry.createdAt || typeof entry.createdAt !== "string") {
+    errors.push("lifecycle createdAt is required and must be a string");
+  }
+
+  if (typeof entry.dismissalWindowDays !== "number" || entry.dismissalWindowDays < 0) {
+    errors.push("lifecycle dismissalWindowDays must be a non-negative number");
+  }
+
+  if (entry.actorConfirmationRequired !== true) {
+    errors.push("lifecycle actorConfirmationRequired must be true");
+  }
+
+  if (!MATTERHORN_MEMORY_SUGGESTION_STATUSES.includes(entry.status as MatterhornMemorySuggestionStatus)) {
+    errors.push(`lifecycle status must be one of ${MATTERHORN_MEMORY_SUGGESTION_STATUSES.join(", ")}`);
+  }
+
+  if (entry.status === "dismissed" && !entry.dismissedUntil) {
+    errors.push("lifecycle dismissed entries must include dismissedUntil");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+export function isMemorySuggestionDismissalActive(
+  entry: MatterhornMemorySuggestionLifecycle,
+  now = new Date().toISOString(),
+): boolean {
+  if (entry.status !== "dismissed" || !entry.dismissedUntil) return false;
+  return entry.dismissedUntil > now;
+}
+
+export function computeMemorySuggestionDismissedUntil(
+  dismissedAt: string,
+  dismissalWindowDays = DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
+): string {
+  const date = new Date(dismissedAt);
+  date.setUTCDate(date.getUTCDate() + dismissalWindowDays);
+  return date.toISOString();
+}
+
+export function applyMemorySuggestionAction(
+  entry: MatterhornMemorySuggestionLifecycle,
+  action: MatterhornMemorySuggestionAction,
+  options: {
+    memoryRecordId?: string;
+    now?: string;
+    dismissalWindowDays?: number;
+  } = {},
+): MatterhornMemorySuggestionConfirmationResult {
+  const now = options.now ?? new Date().toISOString();
+  const blockedReasons: string[] = [];
+  let redaction = false;
+  let status: MatterhornMemorySuggestionStatus = entry.status;
+  let memoryRecordId = options.memoryRecordId;
+
+  if (!MATTERHORN_MEMORY_SUGGESTION_ACTIONS.includes(action as MatterhornMemorySuggestionAction)) {
+    blockedReasons.push(`invalid action ${action}`);
+    status = "blocked";
+  }
+
+  const lifecycleResult = validateMemorySuggestionLifecycle(entry);
+  if (!lifecycleResult.ok) {
+    blockedReasons.push(...lifecycleResult.errors);
+    status = "blocked";
+  }
+
+  if (isForbiddenMemorySecretBody(entry.proposedRecord.body)) {
+    blockedReasons.push("proposed record contains forbidden secret material");
+    redaction = true;
+    status = "blocked";
+  }
+
+  if (action === "confirm") {
+    if (status !== "blocked") {
+      status = "confirmed";
+      memoryRecordId = memoryRecordId ?? `mem-${entry.suggestionId}`;
+    }
+  } else if (action === "edit") {
+    if (status !== "blocked") {
+      status = "edited";
+      memoryRecordId = memoryRecordId ?? `mem-edited-${entry.suggestionId}`;
+    }
+  } else if (action === "dismiss") {
+    status = "dismissed";
+    memoryRecordId = undefined;
+  }
+
+  const provenance: MatterhornMemoryProvenance = {
+    source: "user_confirmed",
+    capturedAt: now,
+    capturedBy: "user",
+    confidence: entry.confidence,
+    reasonRemembered: `Suggestion ${entry.suggestionId} received action ${action}`,
+  };
+
+  return {
+    action,
+    suggestionId: entry.suggestionId,
+    status,
+    memoryRecordId,
+    redaction,
+    blockedReasons,
+    provenance,
+  };
+}
+
+export function canMemorySuggestionActionProduceMemoryRecord(
+  result: MatterhornMemorySuggestionConfirmationResult,
+): boolean {
+  return (
+    (result.status === "confirmed" || result.status === "edited") &&
+    result.redaction === false &&
+    result.blockedReasons.length === 0 &&
+    typeof result.memoryRecordId === "string"
+  );
+}

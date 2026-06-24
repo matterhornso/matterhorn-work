@@ -36,6 +36,10 @@ for (const token of [
   "MatterhornMemoryExportManifest",
   "MatterhornMemoryDesk",
   "MatterhornMemoryDeskPolicy",
+  "MatterhornMemorySuggestionStatus",
+  "MatterhornMemorySuggestionAction",
+  "MatterhornMemorySuggestionLifecycle",
+  "MatterhornMemorySuggestionConfirmationResult",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -56,6 +60,9 @@ for (const token of [
   "MATTERHORN_MEMORY_DESK_POLICY_MATRIX",
   "MATTERHORN_MEMORY_SUGGESTION_USE_CASES",
   "MATTERHORN_MEMORY_SUGGESTION_USER_ACTIONS",
+  "MATTERHORN_MEMORY_SUGGESTION_STATUSES",
+  "MATTERHORN_MEMORY_SUGGESTION_ACTIONS",
+  "DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -109,6 +116,14 @@ for (const desk of [
 
 for (const action of ["confirm", "edit", "dismiss"]) {
   assert.ok(memorySource.includes(`"${action}"`), `userAction ${action} must be defined`);
+}
+
+for (const status of ["pending", "confirmed", "edited", "dismissed", "expired", "blocked"]) {
+  assert.ok(memorySource.includes(`"${status}"`), `status ${status} must be defined`);
+}
+
+for (const action of ["confirm", "edit", "dismiss"]) {
+  assert.ok(memorySource.includes(`"${action}"`), `lifecycle action ${action} must be defined`);
 }
 
 for (const useCase of [
@@ -249,6 +264,46 @@ for (const field of [
   assert.ok(
     memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
     `MatterhornMemoryDeskPolicy must include ${field}`,
+  );
+}
+
+// 5f. Suggestion lifecycle shape includes every required field.
+for (const field of [
+  "suggestionId",
+  "dedupeKey",
+  "source",
+  "kind",
+  "scope",
+  "sensitivity",
+  "confidence",
+  "reason",
+  "proposedRecord",
+  "createdAt",
+  "expiresAt",
+  "dismissedUntil",
+  "dismissalWindowDays",
+  "actorConfirmationRequired",
+  "status",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemorySuggestionLifecycle must include ${field}`,
+  );
+}
+
+// 5g. Confirmation result shape includes every required field.
+for (const field of [
+  "action",
+  "suggestionId",
+  "status",
+  "memoryRecordId",
+  "redaction",
+  "blockedReasons",
+  "provenance",
+]) {
+  assert.ok(
+    memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
+    `MatterhornMemorySuggestionConfirmationResult must include ${field}`,
   );
 }
 
@@ -1101,7 +1156,186 @@ assert.equal(
   "wellness producer suggestion with clinical data must fail desk policy",
 );
 
-// 18. Docs cover the contract, safety invariants, and ownership.
+// 19. Memory Suggestion Inbox V1 lifecycle contract.
+function makeLifecycleEntry(overrides = {}) {
+  return {
+    suggestionId: "sugg-lifecycle-1",
+    dedupeKey: "wellness/format/education-first",
+    source: "chat_capture",
+    kind: "user_preference",
+    scope: "user",
+    sensitivity: "restricted",
+    confidence: 0.9,
+    reason: "User prefers education-first wellness content",
+    proposedRecord: validWellness,
+    createdAt: new Date().toISOString(),
+    dismissalWindowDays: 30,
+    actorConfirmationRequired: true,
+    status: "pending",
+    ...overrides,
+  };
+}
+
+const validLifecycle = makeLifecycleEntry();
+assert.ok(
+  memory.validateMemorySuggestionLifecycle(validLifecycle).ok,
+  "valid lifecycle entry should pass",
+);
+
+// Lifecycle statuses and actions are defined.
+for (const status of memory.MATTERHORN_MEMORY_SUGGESTION_STATUSES) {
+  const entry = makeLifecycleEntry({ status });
+  if (status === "dismissed") {
+    entry.dismissedUntil = memory.computeMemorySuggestionDismissedUntil(entry.createdAt);
+  }
+  assert.ok(
+    memory.validateMemorySuggestionLifecycle(entry).ok,
+    `lifecycle entry with status ${status} should be valid when complete`,
+  );
+}
+
+for (const action of memory.MATTERHORN_MEMORY_SUGGESTION_ACTIONS) {
+  assert.ok(typeof action === "string", `action ${action} must be a string`);
+}
+
+// Confirm and edit produce memory records; dismiss does not.
+const confirmResult = memory.applyMemorySuggestionAction(validLifecycle, "confirm");
+assert.equal(confirmResult.action, "confirm");
+assert.equal(confirmResult.status, "confirmed");
+assert.ok(confirmResult.memoryRecordId, "confirm result should include memoryRecordId");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(confirmResult),
+  true,
+  "confirm result should be able to produce memory record",
+);
+
+const editResult = memory.applyMemorySuggestionAction(validLifecycle, "edit");
+assert.equal(editResult.status, "edited");
+assert.ok(editResult.memoryRecordId);
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(editResult),
+  true,
+  "edit result should be able to produce memory record",
+);
+
+const dismissResult = memory.applyMemorySuggestionAction(validLifecycle, "dismiss");
+assert.equal(dismissResult.status, "dismissed");
+assert.equal(dismissResult.memoryRecordId, undefined, "dismiss result must not include memoryRecordId");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(dismissResult),
+  false,
+  "dismiss result must not produce memory record",
+);
+
+// Suggestions never become memory without explicit confirm or edit.
+const dismissedEntry = makeLifecycleEntry({
+  status: "dismissed",
+  dismissedUntil: memory.computeMemorySuggestionDismissedUntil(new Date().toISOString()),
+});
+const reconfirmDismissed = memory.applyMemorySuggestionAction(dismissedEntry, "confirm");
+assert.equal(reconfirmDismissed.status, "confirmed", "confirm can transition from dismissed");
+assert.ok(
+  memory.canMemorySuggestionActionProduceMemoryRecord(reconfirmDismissed),
+  "explicit confirm on dismissed entry may still produce memory record",
+);
+
+// Dismissed suggestions do not reappear during the dismissal window.
+const now = new Date().toISOString();
+const dismissedUntil = memory.computeMemorySuggestionDismissedUntil(now, 7);
+const dismissedDuringWindow = makeLifecycleEntry({
+  status: "dismissed",
+  dismissedUntil,
+});
+assert.equal(
+  memory.isMemorySuggestionDismissalActive(dismissedDuringWindow, now),
+  true,
+  "dismissal should be active immediately after dismiss",
+);
+
+const pastDismissedUntil = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+const expiredDismissal = makeLifecycleEntry({
+  status: "dismissed",
+  dismissedUntil: pastDismissedUntil,
+});
+assert.equal(
+  memory.isMemorySuggestionDismissalActive(expiredDismissal),
+  false,
+  "dismissal should be inactive after the window expires",
+);
+
+// Secret-shaped suggestions are blocked/redacted.
+const secretLifecycle = makeLifecycleEntry({
+  proposedRecord: custodialBittensor,
+  sensitivity: "forbidden_secret",
+});
+const secretResult = memory.applyMemorySuggestionAction(secretLifecycle, "confirm");
+assert.equal(secretResult.status, "blocked", "secret suggestion must be blocked on confirm");
+assert.equal(secretResult.redaction, true, "secret result must be marked redacted");
+assert.ok(
+  secretResult.blockedReasons.some((r) => r.includes("secret")),
+  "secret result must include a blocked reason mentioning secret",
+);
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(secretResult),
+  false,
+  "secret suggestion must not produce memory record",
+);
+
+// Wellness lifecycle defaults to restricted/local/opt-in.
+const wellnessLifecycle = makeLifecycleEntry({
+  dedupeKey: "wellness/client/format",
+  proposedRecord: validWellness,
+  sensitivity: "restricted",
+});
+assert.equal(wellnessLifecycle.sensitivity, "restricted", "wellness lifecycle sensitivity must be restricted");
+assert.ok(
+  wellnessLifecycle.proposedRecord.tags.includes("opt-in"),
+  "wellness lifecycle record must be opt-in",
+);
+
+// Market lifecycle suggestions cannot enable live submission.
+const marketLifecycle = makeLifecycleEntry({
+  suggestionId: "sugg-market-1",
+  dedupeKey: "hyperliquid/watch/btc",
+  kind: "watchlist",
+  sensitivity: "public",
+  proposedRecord: validMarket,
+});
+const marketConfirm = memory.applyMemorySuggestionAction(marketLifecycle, "confirm");
+assert.equal(marketConfirm.status, "confirmed", "valid market lifecycle should confirm");
+
+const liveMarketLifecycle = makeLifecycleEntry({
+  suggestionId: "sugg-market-bad",
+  dedupeKey: "hyperliquid/live/btc",
+  kind: "decision",
+  sensitivity: "public",
+  proposedRecord: liveSubmissionMarket,
+});
+const liveMarketResult = memory.applyMemorySuggestionAction(liveMarketLifecycle, "confirm");
+assert.equal(liveMarketResult.status, "blocked", "market lifecycle enabling live submission must be blocked");
+
+// Bittensor lifecycle stays public-address / external-signer only.
+const bittensorLifecycle = makeLifecycleEntry({
+  suggestionId: "sugg-bittensor-1",
+  dedupeKey: "bittensor/wallet/tao",
+  kind: "protocol_address",
+  sensitivity: "public",
+  proposedRecord: validBittensor,
+});
+const bittensorConfirm = memory.applyMemorySuggestionAction(bittensorLifecycle, "confirm");
+assert.equal(bittensorConfirm.status, "confirmed", "valid bittensor lifecycle should confirm");
+
+const bittensorCustodialLifecycle = makeLifecycleEntry({
+  suggestionId: "sugg-bittensor-bad",
+  dedupeKey: "bittensor/wallet/custodial",
+  kind: "protocol_address",
+  sensitivity: "public",
+  proposedRecord: custodialBittensor,
+});
+const bittensorCustodialResult = memory.applyMemorySuggestionAction(bittensorCustodialLifecycle, "confirm");
+assert.equal(bittensorCustodialResult.status, "blocked", "custodial bittensor lifecycle must be blocked");
+
+// 20. Docs cover the contract, safety invariants, and ownership.
 const memoryDocLower = memoryDoc.toLowerCase();
 for (const phrase of [
   "Matterhorn Memory",
@@ -1169,6 +1403,20 @@ for (const phrase of [
   "sanitizeMemorySuggestionForDisplay",
   "canMemorySuggestionBecomeSavedMemory",
   "validateMemorySuggestionAgainstDeskPolicy",
+  "MatterhornMemorySuggestionStatus",
+  "MatterhornMemorySuggestionAction",
+  "MatterhornMemorySuggestionLifecycle",
+  "MatterhornMemorySuggestionConfirmationResult",
+  "validateMemorySuggestionLifecycle",
+  "applyMemorySuggestionAction",
+  "isMemorySuggestionDismissalActive",
+  "canMemorySuggestionActionProduceMemoryRecord",
+  "dismissedUntil",
+  "dismissalWindowDays",
+  "actorConfirmationRequired",
+  "blockedReasons",
+  "Memory Suggestion Inbox V1",
+  "edited",
 ]) {
   assert.ok(
     memoryDocLower.includes(phrase.toLowerCase()),
