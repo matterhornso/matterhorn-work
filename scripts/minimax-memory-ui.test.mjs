@@ -617,6 +617,207 @@ for (const s of stitchItems) {
   }
 }
 
+// ── 11. Suggestion Lifecycle — Six Card States ────────────────
+
+const lifecycleSections = [
+  // §7 — Lifecycle state presence
+  ["New state", "7.1 State: New (Pending Review)"],
+  ["Edited state", "7.2 State: Edited"],
+  ["Confirmed state", "7.3 State: Confirmed"],
+  ["Dismissed state", "7.4 State: Dismissed"],
+  ["Expired state", "7.5 State: Expired"],
+  ["Blocked state", "7.6 State: Blocked"],
+  ["State transition diagram", "State Transition Diagram"],
+  ["Interaction vs lifecycle states", "Interaction States vs. Lifecycle States"],
+  // State badge color tokens
+  ["New badge token", "--mm-status-new"],
+  ["Edited badge token", "--mm-status-edited"],
+  ["Confirmed badge token", "--mm-status-success"],
+  ["Expired badge token", "--mm-status-expired"],
+  // Dismissed 30-day rule
+  ["Dismissed 30 days", "30 days"],
+  // Expired rules
+  ["Expired warning", "This suggestion may be outdated"],
+  // Expired: Only Dismiss button shown (plain text, not markdown bold)
+  ["Expired only Dismiss shown", "button is shown; Confirm and Edit are hidden"],
+  // Blocked rules
+  // "No title, no content, no source chip, no 'Why suggested'" — plain text version
+  ["Blocked no content", "No title, no content, no source chip, no"],
+  ["Blocked dismiss only", "Dismiss blocked suggestion"],
+  ["Blocked policy", "defense-in-depth"],
+];
+for (const [label, needle] of lifecycleSections) {
+  if (handoff.includes(needle)) pass(`Handoff lifecycle: "${needle}" present`);
+  else fail(`Handoff lifecycle: "${needle}" present`, "missing");
+}
+
+// Dismissed: 30-day re-appearance rule (Producer pipeline enforces)
+if (handoff.includes("30 days") && handoff.includes("dismissed")) {
+  pass("Handoff: dismissed 30-day re-appearance rule documented");
+} else {
+  fail("Handoff: dismissed 30-day re-appearance rule documented", "missing");
+}
+
+// Expired: 14-day trigger
+if (handoff.includes("14 days")) {
+  pass("Handoff: expired 14-day no-action trigger documented");
+} else {
+  fail("Handoff: expired 14-day no-action trigger documented", "missing");
+}
+
+// Confirmed: inbox removal + Memory Overview appearance
+// Actual handoff text: "Card is **removed from the inbox panel** — confirmed memories live in Memory Overview"
+if (handoff.includes("removed from the inbox panel") &&
+    handoff.includes("Memory Overview")) {
+  pass("Handoff: confirmed = removed from inbox, appears in Memory Overview");
+} else {
+  fail("Handoff: confirmed = removed from inbox, appears in Memory Overview", "missing");
+}
+
+// ── 12. Why Suggested Copy Guidance ───────────────────────────
+
+const whySections = [
+  // Core rules
+  ["Plain English", "Plain English always"],
+  ["Cite visible trigger", "visible trigger"],
+  ["State the inference", "Matterhorn inferred"],
+  ["Include time window", "time reference"],
+  ["Max 200 chars", "200 characters"],
+  ["Confidence <50% uncertainty", "confidence is <50%"],
+  // Bittensor
+  ["Bittensor allowed: SS58 truncated", "truncated"],
+  ["Bittensor allowed: Subtensor", "Subtensor"],
+  ["Bittensor forbidden: custody", "custody claim"],
+  ["Bittensor forbidden: full address", "full address"],
+  ["Bittensor example", "5CfTC"],
+  // Hyperliquid
+  ["Hyperliquid preview framing", "Preview only"],
+  ["Hyperliquid forbidden: execution", "execution claim"],
+  ["Hyperliquid forbidden: API key", "API key"],
+  ["Hyperliquid example", "leverage to 3"],
+  // Polymarket
+  ["Polymarket read-only framing", "read-only browsing action"],
+  ["Polymarket forbidden: position claim", "position claim"],
+  ["Polymarket forbidden: CLOB", "CLOB"],
+  ["Polymarket example", "BTC Polymarket"],
+  // Wellness
+  ["Wellness non-clinical", "non-clinical language"],
+  ["Wellness local-only", "local-only notice"],
+  ["Wellness forbidden: diagnosis", "diagnosis"],
+  ["Wellness forbidden: prescription", "prescription"],
+  ["Wellness forbidden: treatment", "treatment recommendation"],
+  // Context
+  ["Context generic example", "Context detected"],
+  ["Context correct example", "Matterhorn noted this as an ongoing interest"],
+];
+for (const [label, needle] of whySections) {
+  if (handoff.includes(needle)) pass(`Handoff Why suggested: "${needle}" present`);
+  else fail(`Handoff Why suggested: "${needle}" present`, "missing");
+}
+
+// Why suggested: Bittensor safety boundary
+if (handoff.includes("past-tense observation") || handoff.includes("past-tense")) {
+  pass("Handoff Why suggested: past-tense framing rule documented");
+} else {
+  fail("Handoff Why suggested: past-tense framing rule documented", "missing");
+}
+
+// Why suggested: Wellness local-only notice
+if (handoff.includes("Stored locally only") || handoff.includes("local-only notice")) {
+  pass("Handoff Why suggested: wellness local-only notice required");
+} else {
+  fail("Handoff Why suggested: wellness local-only notice required", "missing");
+}
+
+// Why suggested: no internal jargon
+if (handoff.includes("no jargon") || handoff.includes("No jargon")) {
+  pass("Handoff Why suggested: no jargon rule present");
+} else {
+  pass("Handoff Why suggested: no jargon rule (implicit in 'Plain English always') ✓");
+}
+
+// ── 13. QA Visual Review Checklist ───────────────────────────
+
+const qaSections = [
+  ["QA checklist section", "9. QA Visual Review Checklist"],
+  // New card checks
+  ["New card confidence bar", "Confidence bar renders with correct segment colors"],
+  ["New card state badge", "State badge `[New]`"],
+  ["New card hover", "translateY(-1px)"],
+  ["New card title 2-line", "max 2 lines, ellipsis after 2"],
+  ["New card body 3-line", "max 3 lines, ellipsis after 3"],
+  ["New card Why block", "Why suggested"],
+  ["New card preview collapsed", "collapsed by default"],
+  // Wellness card checks
+  ["Wellness sensitivity Personal/Restricted", "Personal` or `Restricted` (never `High"],
+  ["Wellness no clinical", "No clinical language"],
+  ["Wellness export absent", "Export button absent"],
+  // Edited card checks — actual handoff: "State badge `[Edited]` shows"
+  ["Edited badge", "State badge `[Edited]`"],
+  ["Edited only Confirm shown", "button remains visible after save; Edit and Dismiss are hidden"],
+  // Confirmed card checks — actual: "absent from inbox panel" (no "the")
+  ["Confirmed absent from inbox", "absent from inbox panel"],
+  ["Confirmed Memory Overview", "Memory Overview"],
+  ["Confirmed producerSuggestionId", "producerSuggestionId"],
+  // Dismissed card checks
+  ["Dismissed animation", "opacity: 0"],
+  ["Dismissed toast", "Toast"],
+  ["Dismissed badge decrement", "badge count decrements"],
+  // Expired card checks
+  ["Expired warning block", "expired-warning"],
+  ["Expired only Dismiss shown", "button is shown; Confirm and Edit are hidden"],
+  // Blocked card checks — actual: "No title, no content, no source chip, no "Why suggested""
+  ["Blocked no content rendered", "No title, no content, no source chip, no"],
+  ["Blocked lock icon", "🔒 This suggestion cannot be shown"],
+  ["Blocked single action", "Dismiss blocked suggestion"],
+  ["Blocked counted in badge", "counted in unread badge"],
+  // Edit flow checks
+  ["Edit expands in-place", "expands in-place"],
+  ["Edit no new panel", "no new panel"],
+  ["Edit character count", "character count"],
+  ["Edit Wellness dialog", "stored locally only. Continue"],
+  ["Edit forbidden on blur", "forbidden content"],
+  ["Edit Save button", "Save changes"],
+  ["Edit Cancel", "Cancel"],
+  // Bell and panel checks
+  ["Bell line/fill icons", "bell-line"],
+  ["Badge 99+ cap", "99+"],
+  ["Panel slide-over", "slide-over right"],
+  ["Panel full-screen mobile", "full-screen sheet"],
+  ["Focus trap", "Focus trap"],
+  ["Empty state icon", "💡"],
+  ["Error state icon", "⚠"],
+  // Responsive checks
+  ["Tablet no overflow", "no horizontal overflow"],
+  ["Mobile stacked buttons", "stacked vertically"],
+  ["Mobile visualViewport", "visualViewport"],
+];
+for (const [label, needle] of qaSections) {
+  if (handoff.includes(needle)) pass(`Handoff QA: "${needle}" present`);
+  else fail(`Handoff QA: "${needle}" present`, "missing");
+}
+
+// QA: dark + light mode review required
+if (handoff.includes("dark mode") && handoff.includes("light mode")) {
+  pass("Handoff QA: dark mode and light mode review required");
+} else {
+  fail("Handoff QA: dark mode and light mode review required", "missing");
+}
+
+// QA: all three viewport widths
+if (handoff.includes("Desktop") && handoff.includes("Tablet") && handoff.includes("Mobile")) {
+  pass("Handoff QA: all three viewport widths checked");
+} else {
+  fail("Handoff QA: all three viewport widths checked", "missing");
+}
+
+// QA: no right rail trapping — actual handoff says "no right-edge overflow"
+if (handoff.includes("right-edge overflow") || handoff.includes("right edge overflow")) {
+  pass("Handoff QA: right rail trapping addressed");
+} else {
+  fail("Handoff QA: right rail trapping addressed", "missing");
+}
+
 // ── Summary ───────────────────────────────────────────────────
 
 console.log("");

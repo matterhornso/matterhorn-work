@@ -581,8 +581,448 @@ Before production implementation begins, Stitch should confirm:
 
 ---
 
+## 7. Suggestion Lifecycle — Six Card States
+
+This section covers the six customer-visible lifecycle states for Memory Suggestion cards (the inbox panel accessible via the bell icon in the app header). These states are implemented in PR #529 (Codex).
+
+Confirmed memories transition from the inbox to the Memory Overview as standard `.mm-card` instances — the five Memory Overview card states are covered in §2. The inbox itself only ever shows **New** and **Blocked** suggestion cards. **Edited**, **Confirmed**, **Dismissed**, and **Expired** are transition/interim states.
+
+### 7.1 State: New (Pending Review)
+
+**Trigger:** Producer pipeline surfaced a new suggestion. Entry status: `pending`.
+
+**Visual:**
+```
+┌─ Suggestion Card ─────────────────────────────────────┐
+│  [████████░░ 87%]  [Protocol]  [Personal]   [New]     │
+│                                                         │
+│  Your BTC-PERP leverage ceiling: 3×                    │
+│  ...                                                   │
+│  [Confirm ✓]        [Edit]        [Dismiss ✕]         │
+└────────────────────────────────────────────────────────┘
+```
+
+- Confidence bar fully visible, right-aligned numeric label
+- State badge: `[New]` — `--mm-status-new` (`#2563EB`), pill, `--text-xs`
+- Confirm/Edit/Dismiss buttons visible
+- No animation on first render
+- If user does not act within **14 days**, suggestion transitions to **Expired**
+- `data-testid="suggestion-card--{n}"`, `data-testid="suggestion-card--{n}__state-badge"`
+
+### 7.2 State: Edited
+
+**Trigger:** User clicked Edit, modified one or more fields, clicked Save. Entry status: `edited`.
+
+**Visual:**
+```
+┌─ Suggestion Card ─────────────────────────────────────┐
+│  [████████░░ 87%]  [Protocol]  [Personal]   [Edited]   │
+│                                                         │
+│  My BTC-PERP leverage ceiling: 5×                      │  ← user-edited title
+│  ...                                                   │
+│  [Confirmed ✓]                                         │  ← only Confirm shown; Edit/Dismiss hidden
+└────────────────────────────────────────────────────────┘
+```
+
+- State badge: `[Edited]` — `--mm-status-edited` (`#A855F7`), pill
+- Only the **Confirm** button remains visible after save; Edit and Dismiss are hidden
+- Confirm saves the user's edited version
+- Card shows user's edited title and field values (not the original suggestion values)
+- `data-testid="suggestion-card--{n}__confirm"` still applies
+
+### 7.3 State: Confirmed (Remembered)
+
+**Trigger:** User clicked Confirm on a New or Edited card. Entry status: `confirmed`, `resolvedAt` set.
+
+**Visual:**
+```
+┌─ Memory Card ──────────────────────────────────────────┐
+│  [████████░░ 87%]  [Protocol]  [Personal]  [Confirmed] │
+│                                                         │
+│  Your BTC-PERP leverage ceiling: 3×                    │
+│  ...                                                   │
+│  [Use]        [Edit]        [Export]        [Forget]  │
+└────────────────────────────────────────────────────────┘
+```
+
+- Card is **removed from the inbox panel** — confirmed memories live in Memory Overview
+- In Memory Overview, state badge: `[Confirmed ✓]` — `--mm-status-success` (`#22C55E`), pill
+- Full `.mm-card` rendering with all four action buttons (Use, Edit, Export, Forget)
+- Card carries `producerSuggestionId` reference (provenance)
+- Wellness confirmed memories: local-only notice always shown; no export button
+- `data-testid="memory-card--{n}__state-badge"` in Memory Overview
+
+### 7.4 State: Dismissed (Suppressed)
+
+**Trigger:** User clicked Dismiss on a New or Edited card. Entry status: `dismissed`.
+
+**Visual:** Card animates out (opacity 0 + translateY(-8px), 200ms), then removed from DOM. Toast: "Dismissed" (2s, top-right).
+
+- Toast text: "Dismissed", `--mm-text-secondary`
+- Entry status set to `dismissed`, `resolvedAt` set
+- Entry **not shown** in the inbox panel
+- Suggestion may reappear in **30 days** for the same trigger (enforced by Producer pipeline)
+- If user has dismissed the same suggestion type 3+ times in 30 days: surface the "Stop suggesting this?" prompt (see §5.2 of `memory-suggestion-inbox-v1.md`)
+
+### 7.5 State: Expired (Stale)
+
+**Trigger:** Producer pipeline marks a suggestion as stale. Entry status: `expired`. The Producer may regenerate a fresh suggestion with updated context.
+
+**Visual:**
+```
+┌─ Suggestion Card ─────────────────────────────────────┐
+│  [██████░░░░ 60%]  [Protocol]  [Personal]  [Expired]  │
+│                                                         │
+│  Your BTC-PERP leverage ceiling: 3×                    │
+│  ⚠ This suggestion may be outdated.                    │
+│  Context updated. A fresh suggestion will appear soon.  │
+│                                                         │
+│  [Dismiss]                                             │
+└────────────────────────────────────────────────────────┘
+```
+
+- State badge: `[Expired]` — `--mm-status-expired` (`#F59E0B`), pill
+- Warning block below the content: amber left border (`--mm-amber`), `⚠` icon
+- Only **Dismiss** button is shown; Confirm and Edit are hidden (stale content should not be confirmed without refresh)
+- User may also ignore — card remains in inbox until dismissed
+- Dismiss behavior is identical to §7.4 (card animates out, 30-day suppression)
+- `data-testid="suggestion-card--{n}__expired-warning"`
+
+**When does a suggestion expire?**
+- 14 days without user action (no confirm, edit, or dismiss)
+- Source context has changed significantly (e.g., user changed their leverage ceiling after the suggestion was generated)
+- Producer pipeline makes the expiry decision — the UI receives `status: "expired"` in the inbox entry
+
+### 7.6 State: Blocked (Policy Prevented)
+
+**Trigger:** Producer pipeline surfaced a suggestion that contains forbidden content (seed phrase, private key fragment, medical diagnosis, etc.) OR the user tried to save an edited suggestion that violates a safety rule.
+
+**Visual:**
+```
+┌─ Suggestion Card ─────────────────────────────────────┐
+│  [Expired]  [Blocked]                                  │
+│                                                         │
+│  🔒 This suggestion cannot be shown                     │
+│                                                         │
+│  It may contain sensitive data that was not saved.     │
+│                                                         │
+│  [Dismiss blocked suggestion]                             │
+└────────────────────────────────────────────────────────┘
+```
+
+- State badges stacked: `[Expired]` + `[Blocked]` — both shown
+- No title, no content, no source chip, no "Why suggested"
+- Amber left border (`--mm-amber`)
+- Lock icon: `🔒`
+- Body text variants:
+  - Forbidden secrets: `"It may contain sensitive data that was not saved."`
+  - Wellness clinical content: `"This suggestion contains content that is not allowed in wellness memories."`
+- Single action: `[Dismiss blocked suggestion]` (`.mm-btn--default`)
+- Card counted in unread badge
+- No Confirm, no Edit, no source exposure
+- The blocked state is a defense-in-depth measure — the Producer pipeline must also reject these suggestions at the source
+- `data-testid="blocked-suggestion-card--{n}"`, `data-testid="blocked-suggestion-card--{n}__dismiss"`
+
+### 7.7 State Transition Diagram
+
+```
+New (pending)
+  ├─ Confirm → Confirmed → Memory Overview (.mm-card)
+  ├─ Edit → Edit form → Save → Edited (pending confirm)
+  │                        └─ Confirm → Confirmed → Memory Overview
+  │                        └─ Cancel → New
+  ├─ Dismiss (30 days) → gone
+  └─ 14 days no action → Expired
+                          ├─ Dismiss → gone (30 days)
+                          └─ Producer re-evaluates → fresh New suggestion
+
+Blocked
+  └─ Dismiss → gone (no 30-day rule — blocked suggestions are never re-suggested)
+```
+
+### 7.8 Interaction States vs. Lifecycle States
+
+The inbox spec's §3.6 ("Card States") covers **interaction states** (Default, Hover, Confirming, Editing, Dismissing). This §7 covers **lifecycle states** (New, Edited, Confirmed, Dismissed, Expired, Blocked). Both are independent axes — a card in New lifecycle state passes through Hover, Confirming, Dismissing interaction states.
+
+---
+
+## 8. "Why Suggested" Copy Guidance
+
+Every suggestion card must display a "Why suggested" block. The copy in this block is the single most important UX element in the inbox — it determines whether the user trusts and engages with the suggestion system. Poor copy ("Context detected") leads to dismissal; specific copy leads to confirmation.
+
+### 8.1 Core Copy Rules
+
+**Rule 1 — Plain English always.**
+No jargon, no internal terminology, no JSON field names. Write as if explaining to a colleague.
+
+**Rule 2 — Cite the visible trigger.**
+The user must be able to recognize the action or context that triggered the suggestion. Vague triggers are not acceptable.
+
+**Rule 3 — State the inference, not just the fact.**
+Tell the user not just what they did, but what Matterhorn inferred from it.
+
+**Rule 4 — Include the time window.**
+Always include a time reference so the user can validate the claim ("in the past 2 weeks", "this month", "3 times").
+
+**Rule 5 — Maximum length: 200 characters.**
+Longer copy is truncated with ellipsis. Write tight.
+
+**Rule 6 — Never guess at intent.**
+If confidence is <50%, the "Why suggested" block should acknowledge uncertainty:
+`"You've asked about validator returns a few times, though not consistently enough to infer a strong preference."`
+
+### 8.2 Why Suggested — Bittensor
+
+**Allowed content:** Public Subtensor data, SS58 addresses (truncated), subnet IDs, validator Uids, external-signer metadata (read-only), user-initiated settings changes.
+
+**Required safety framing:**
+- Framing must be **past-tense observation of user action or public on-chain fact**
+- Subject must always be the **user** or the **network** — never Matterhorn
+- Public addresses always truncated: `5CfTC…3bX9`
+
+**Correct examples:**
+```
+"You set your validator preference to subnet 1 with a 1000 TAO ceiling
+ in Settings 3 times this month."
+"You delegated 1500 TAO to validator 5CfTC…3bX9 twice this week
+ (confirmed on Subtensor)."
+"You've asked about Bittensor subnet 1 validator returns in 2
+ separate chat sessions this week."
+```
+
+**Forbidden examples (never in UI):**
+```
+"Matterhorn tracks your Bittensor stake"              ← custody claim
+"Your validator 5CfTC3bX9qR7pLmN8... holds 2000 TAO" ← full address
+"Matterhorn will manage your subnet 1 allocation"     ← implies control
+"Your hot key should be rotated"                       ← security advice
+```
+
+### 8.3 Why Suggested — Hyperliquid
+
+**Allowed content:** User-initiated settings changes, public on-chain position history (read-only), funding rate alert settings, leverage ceiling changes.
+
+**Required safety framing:**
+- "Preview only" framing — Matterhorn reads your account settings, not your broker
+- Never imply that Matterhorn can place, modify, or close orders
+- Never expose API credentials, secret keys, or wallet private keys
+
+**Correct examples:**
+```
+"You set your BTC-PERP leverage to 3× in Settings 3 times this month.
+ Matterhorn noticed a ceiling preference."
+"You've held a BTC-PERP position for 5 consecutive days this week
+ (public on-chain data)."
+"You created a funding rate alert for BTC-PERP at 0.01% threshold
+ in Hyperliquid Settings."
+```
+
+**Forbidden examples (never in UI):**
+```
+"You have an open BTC-PERP long position worth $12,400"     ← position value implied
+"Matterhorn will close your position if funding goes negative" ← execution claim
+"Your Hyperliquid API key shows high margin utilization"     ← secret exposure
+```
+
+### 8.4 Why Suggested — Polymarket
+
+**Allowed content:** Markets the user viewed or asked about in chat, prediction question preferences, market sentiment annotations, market volume/liquidity criteria.
+
+**Required safety framing:**
+- "Tracked" means the user browsed or asked about the market — a read-only browsing action
+- Never imply that Matterhorn placed a bet, accessed CLOB credentials, or has position data
+- Never show outstanding bet amounts or order state
+
+**Correct examples:**
+```
+"You asked about 'BTC > $100k by EOY 2025' in Chat on Tuesday.
+ Viewed market details 2 times."
+"You've looked at 3 Polymarket BTC prediction markets this week,
+ all with > $100k volume."
+"You flagged the BTC Polymarket market as high confidence in a
+ chat session 4 days ago."
+```
+
+**Forbidden examples (never in UI):**
+```
+"You have $500 on BTC Polymarket markets"           ← position claim
+"Your Polymarket CLOB key shows unresolved orders"  ← secret exposure
+"Matterhorn placed a bet on your behalf"            ← execution claim
+```
+
+### 8.5 Why Suggested — Wellness
+
+**Allowed content:** Completed check-ins, goal streaks, wellness workflow interactions, self-reported preferences.
+
+**Required safety framing:**
+- Strictly educational, non-clinical language
+- No medical diagnoses, symptoms, prescriptions, or treatment recommendations
+- No references to PHI
+- Must include local-only notice
+
+**Correct examples:**
+```
+"You completed 4 morning yoga check-ins in the past 2 weeks.
+ Matterhorn inferred a preference for short morning sessions."
+"You logged a 7-day wellness streak in the Matterhorn Wellness
+ workflow. That's your longest streak this month."
+"You said in Chat that you prefer evening meditation sessions.
+ Matterhorn noted this preference."
+```
+
+**Forbidden examples (never in UI):**
+```
+"You show symptoms consistent with burnout based on your check-in patterns" ← diagnosis
+"You should increase your yoga frequency to 5x per week"                    ← prescription
+"Your sleep data suggests insomnia — try melatonin"                        ← treatment advice
+```
+
+### 8.6 Why Suggested — Context (Generic)
+
+For context-type suggestions that don't map to a specific protocol:
+
+**Correct examples:**
+```
+"You asked about AI agent frameworks in Chat on Monday.
+ Matterhorn noted this as an ongoing interest."
+"You mentioned a preference for Node.js over Python in a
+ project kickoff chat 3 days ago."
+```
+
+**Forbidden (generic):**
+```
+"Context detected."                               ← too vague
+"You seem interested in this topic."             ← no trigger cited
+```
+
+---
+
+## 9. QA Visual Review Checklist
+
+Use this checklist for visual QA of every Memory Suggestion card state and the inline edit flow. Review in dark mode and light mode on all three viewport widths.
+
+### 9.1 New (Pending Review) Card — Desktop/Tablet/Mobile
+
+- [ ] Confidence bar renders with correct segment colors (high/medium/low per thresholds)
+- [ ] Confidence numeric label right-aligned
+- [ ] State badge `[New]` shows `--mm-status-new` (`#2563EB`), pill, `--text-xs`
+- [ ] Title: max 2 lines, ellipsis after 2
+- [ ] Body: max 3 lines, ellipsis after 3
+- [ ] "Why suggested" block: left border 4px `--mm-accent`, label uppercase `--text-xs`
+- [ ] "Why suggested" body: specific, plain-English, cites trigger, includes time window
+- [ ] Source chip: icon + name + relative timestamp
+- [ ] "Will be saved as" preview: collapsed by default, "▶ Show preview", expands to show Type/Sensitivity/Scope/Title
+- [ ] Confirm button: `--mm-accent` bg, "Confirm ✓"
+- [ ] Edit button: default style, "Edit"
+- [ ] Dismiss button: ghost style, "Dismiss ✕", red on hover
+- [ ] All three buttons visible; no hidden save
+- [ ] Hover: card lifts (`translateY(-1px)`), border `--mm-accent`, `--shadow-sm`
+- [ ] **Mobile only:** buttons stack vertically (full width each)
+- [ ] **Mobile only:** card padding 12px, no right-edge overflow
+- [ ] **Mobile only:** virtual keyboard opens without pushing panel off-screen
+
+### 9.2 New Card — Wellness Variant
+
+- [ ] State badge: `[New]`
+- [ ] Sensitivity badge: `Personal` or `Restricted` (never `High`)
+- [ ] Type badge: `Wellness`
+- [ ] Local-only notice: "🔒 Stored locally only. Never sent to external servers."
+- [ ] No clinical language in title, body, or "Why suggested"
+- [ ] Export button absent from "Will be saved as" preview
+
+### 9.3 Edited Card
+
+- [ ] State badge `[Edited]` shows `--mm-status-edited` (`#A855F7`), pill
+- [ ] Card displays user's **edited** title (not original suggestion title)
+- [ ] Only **Confirm** button visible; Edit and Dismiss are hidden
+- [ ] Confirm button: "Confirmed ✓" (after save click, awaiting server response shows spinner)
+- [ ] If edit was partially filled and dismissed: original title restored, no partial save
+
+### 9.4 Confirmed Card (Memory Overview)
+
+- [ ] Card is **absent from inbox panel** after confirmation
+- [ ] Card appears in Memory Overview with `[Confirmed ✓]` badge (`--mm-status-success`, `#22C55E`)
+- [ ] All four actions present: Use, Edit, Export, Forget
+- [ ] "Why remembered" (not "Why suggested") label in Memory Overview card
+- [ ] `producerSuggestionId` shown in card metadata (provenance)
+- [ ] Wellness confirmed cards: local-only notice visible; Export button absent
+
+### 9.5 Dismissed Card (Animation)
+
+- [ ] On Dismiss click: card fades (`opacity: 0`) + slides up (`translateY(-8px)`), 200ms
+- [ ] Card removed from DOM after animation completes
+- [ ] Toast "Dismissed" appears (2s, top-right, `--mm-text-secondary`)
+- [ ] Bell badge count decrements
+- [ ] Entry absent from panel on refresh
+
+### 9.6 Expired Card
+
+- [ ] State badge `[Expired]` shows `--mm-status-expired` (`#F59E0B`), pill
+- [ ] Warning block below content: amber left border, `⚠` icon, "This suggestion may be outdated."
+- [ ] Only **Dismiss** button visible; Confirm and Edit are hidden
+- [ ] Confirm and Edit do not appear in any state on expired cards
+
+### 9.7 Blocked Card
+
+- [ ] No title, no body, no source chip, no "Why suggested" block rendered
+- [ ] Lock icon: `🔒`
+- [ ] Amber left border (`--mm-amber`)
+- [ ] Title: "🔒 This suggestion cannot be shown"
+- [ ] Body: appropriate variant ("sensitive data" or "clinical wellness content")
+- [ ] Single action: `[Dismiss blocked suggestion]`
+- [ ] Blocked card counted in unread badge
+- [ ] No way to reveal suggestion content (no expand, no override in V1)
+
+### 9.8 Inline Edit Flow
+
+- [ ] Click "Edit" → card expands in-place (no new panel, no panel close)
+- [ ] Edit form fields in order: Title (required), Type, Sensitivity, Why suggested body
+- [ ] Title field: live character count "N / 80", red border + error on empty blur
+- [ ] Type dropdown: Protocol / Preference / Context / Wellness
+- [ ] Sensitivity dropdown: Personal / High / Restricted
+- [ ] "Why suggested" label is read-only; body is editable (300 char max)
+- [ ] On Wellness type: "Wellness memories are stored locally only. Continue?" dialog before save
+- [ ] Forbidden content detection: seed phrase, private key, API secret, medical diagnosis blocked on blur
+- [ ] "Save changes ✓" button: primary style
+- [ ] "Cancel" button: returns card to read mode, no network request, no toast
+- [ ] Navigation away during edit: draft discarded silently, no recovery in V1
+
+### 9.9 Bell Icon and Inbox Panel
+
+- [ ] Bell icon in app header: bell-line when no unread, bell-fill when unread
+- [ ] Badge: pill, `--mm-red` bg, count ≤ 99; absent when 0; `99+` when > 99
+- [ ] Badge pulses once on new suggestion arrival (panel must be closed)
+- [ ] Tooltip: correct copy per state
+- [ ] Panel: slide-over right (desktop), full-width (tablet), full-screen sheet (mobile)
+- [ ] Panel header: title + count + "Mark all read" + close X
+- [ ] Filter dropdown: All / Protocol / Preference / Context / Wellness
+- [ ] Focus trap: Tab cycles within panel; Escape closes; focus returns to bell
+- [ ] Empty state: `💡 No memory suggestions yet`
+- [ ] Error state: `⚠ Couldn't load suggestions` + "Try again" button
+- [ ] Loading: 3 skeleton cards with shimmer animation
+
+### 9.10 Responsive Layout — Tablet
+
+- [ ] Panel width: 100vw minus sidebar (sidebar stays visible)
+- [ ] Card list: single column, full-width within panel, no horizontal overflow
+- [ ] Action buttons: may wrap to 2 rows if needed
+- [ ] "Will be saved as" preview: collapsed, expands in-place
+
+### 9.11 Responsive Layout — Mobile
+
+- [ ] Panel: full-screen sheet from bottom, swipe-down to dismiss
+- [ ] Card padding: 12px, no right-edge overflow
+- [ ] Action buttons: stacked vertically, full-width each
+- [ ] Virtual keyboard: `visualViewport` API, panel height adjusts without content jump
+- [ ] Header: sticky, title + count + close X
+- [ ] Filter dropdown: full-width on tap
+- [ ] "Mark all read" text link always visible
+
+---
+
 ## Revision History
 
 | Version | Date | Author | Notes |
 |---------|------|--------|-------|
+| 0.2 | 2026-06-24 | Coder (minimax) | Added §7: Suggestion Lifecycle — six card states (New/Edited/Confirmed/Dismissed/Expired/Blocked) from PR #529. Added §8: Why Suggested copy guidance with per-desk safety boundaries (Bittensor/Hyperliquid/Polymarket/Wellness). Added §9: QA visual review checklist. |
 | 0.1 | 2026-06-22 | Coder (minimax) | Initial draft — based on Memory UI prototype, awaiting Stitch final design |
