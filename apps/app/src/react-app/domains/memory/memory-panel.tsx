@@ -368,6 +368,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
           setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
         }
         upsertSuggestionEntries([response.entry]);
+        window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+          detail: { id: entry.id, action, status: response.entry.status },
+        }));
         return;
       }
 
@@ -382,6 +385,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
         setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
       }
       removeSuggestionEntry(entry.id);
+      window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+        detail: { id: entry.id, action, status: action === "dismiss" ? "dismissed" : "confirmed" },
+      }));
     } catch (nextError) {
       setCaptureError(nextError instanceof Error ? nextError.message : "Could not resolve this memory suggestion.");
     }

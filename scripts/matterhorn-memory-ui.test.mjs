@@ -29,7 +29,12 @@ for (const expected of [
   "memoryRailActive",
   "toggleCurrentSidePanel(\"memory\")",
   "<MemoryPanel",
-  "title=\"Memory: review remembered context",
+  "title={`${memoryInboxLabel}",
+  "memorySuggestionUnreadCount",
+  "refreshMemorySuggestionUnreadCount",
+  "Memory inbox: no pending suggestions",
+  "pending suggestions",
+  "matterhorn:memory-suggestions-changed",
 ]) {
   assert.match(`${uiState}\n${sessionPage}`, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing shell integration: ${expected}`)
 }
@@ -167,6 +172,7 @@ for (const expected of [
   "resolutionReason",
   "matterhorn:memory-suggestions-updated",
   "matterhorn:memory-suggestion",
+  "matterhorn:memory-suggestions-changed",
   "resolveMemorySuggestion",
   "I confirm this is safe to remember",
   "This looks like secret material",
