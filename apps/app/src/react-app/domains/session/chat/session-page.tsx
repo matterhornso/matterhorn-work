@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
   BarChart3,
+  Bell,
   BrainCircuit,
   Database,
   Dumbbell,
@@ -339,6 +340,39 @@ export function SessionPage(props: SessionPageProps) {
     () => customerWorkflowStarterCards.filter((card) => card.panel === "bittensor" || card.panel === "hyperliquid" || card.panel === "polymarket"),
     [customerWorkflowStarterCards],
   );
+  const [memorySuggestionUnreadCount, setMemorySuggestionUnreadCount] = useState(0);
+  const refreshMemorySuggestionUnreadCount = useCallback(async () => {
+    const client = props.matterhornServerClient;
+    if (!client) {
+      setMemorySuggestionUnreadCount(0);
+      return;
+    }
+    try {
+      const response = await client.listMemorySuggestions({ status: "pending", limit: 50 });
+      setMemorySuggestionUnreadCount((response.entries ?? []).filter((entry) => entry.status === "pending").length);
+    } catch {
+      setMemorySuggestionUnreadCount(0);
+    }
+  }, [props.matterhornServerClient]);
+  useEffect(() => {
+    void refreshMemorySuggestionUnreadCount();
+  }, [refreshMemorySuggestionUnreadCount]);
+  useEffect(() => {
+    const refresh = () => {
+      void refreshMemorySuggestionUnreadCount();
+    };
+    window.addEventListener("matterhorn:memory-suggestions-updated", refresh);
+    window.addEventListener("matterhorn:memory-suggestion", refresh);
+    window.addEventListener("matterhorn:memory-suggestions-changed", refresh);
+    return () => {
+      window.removeEventListener("matterhorn:memory-suggestions-updated", refresh);
+      window.removeEventListener("matterhorn:memory-suggestion", refresh);
+      window.removeEventListener("matterhorn:memory-suggestions-changed", refresh);
+    };
+  }, [refreshMemorySuggestionUnreadCount]);
+  const memoryInboxLabel = memorySuggestionUnreadCount > 0
+    ? `Memory inbox: ${memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount} pending suggestions`
+    : "Memory inbox: no pending suggestions";
   const businessWorkflowLaunchers = useMemo(
     () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow"),
     [customerWorkflowStarterCards],
@@ -1384,16 +1418,21 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                "relative h-auto w-full flex-col gap-1 rounded-xl px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
                 memoryRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openMemoryRailPane}
-              title="Memory: review remembered context, use selected memories in chat, forget records, and export evidence"
-              aria-label="Memory: review remembered context, use selected memories in chat, forget records, and export evidence"
+              title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
+              aria-label={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
               aria-pressed={memoryRailActive}
             >
-              <Database size={17} />
+              {memorySuggestionUnreadCount > 0 ? <Bell size={17} /> : <Database size={17} />}
               <span className="text-[9px] leading-none">Memory</span>
+              {memorySuggestionUnreadCount > 0 ? (
+                <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
+                  {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
+                </span>
+              ) : null}
             </Button>
             {([
               {
