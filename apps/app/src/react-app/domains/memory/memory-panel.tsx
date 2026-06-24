@@ -74,6 +74,8 @@ type SuggestionEditDraft = {
   note: string;
 };
 
+type SuggestionInboxFilter = "all" | MatterhornMemorySuggestionStatus;
+
 type MemorySuggestionEventDetail = {
   suggestion?: MatterhornMemorySuggestion;
   suggestions?: MatterhornMemorySuggestion[];
@@ -90,6 +92,20 @@ const INITIAL_DRAFT: CaptureDraft = {
   tags: "",
   confirmed: false,
 };
+
+const SUGGESTION_INBOX_FILTERS: Array<{
+  id: SuggestionInboxFilter;
+  label: string;
+  description: string;
+}> = [
+  { id: "all", label: "All", description: "Every visible suggestion" },
+  { id: "pending", label: "New", description: "Needs review" },
+  { id: "edited", label: "Edited", description: "Changed and saved" },
+  { id: "confirmed", label: "Confirmed", description: "Remembered" },
+  { id: "dismissed", label: "Dismissed", description: "Not saved" },
+  { id: "expired", label: "Expired", description: "Stale" },
+  { id: "blocked", label: "Blocked", description: "Policy stopped" },
+];
 
 function formatKind(kind: string) {
   return kind.replaceAll("_", " ");
@@ -412,6 +428,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
   const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
+  const [suggestionStatusFilter, setSuggestionStatusFilter] = useState<SuggestionInboxFilter>("all");
 
   useEffect(() => {
     const handleSuggestions = (event: Event) => {
@@ -443,6 +460,32 @@ export function MemoryPanel(props: MemoryPanelProps) {
     () => selectedRecords.filter((record) => records.some((candidate) => candidate.id === record.id)),
     [records, selectedRecords],
   );
+
+  const suggestionStatusCounts = useMemo(() => {
+    const counts: Record<SuggestionInboxFilter, number> = {
+      all: suggestionEntries.length,
+      pending: 0,
+      confirmed: 0,
+      edited: 0,
+      dismissed: 0,
+      expired: 0,
+      blocked: 0,
+    };
+    for (const entry of suggestionEntries) {
+      counts[entry.status] += 1;
+    }
+    return counts;
+  }, [suggestionEntries]);
+
+  const filteredSuggestionEntries = useMemo(
+    () => suggestionStatusFilter === "all"
+      ? suggestionEntries
+      : suggestionEntries.filter((entry) => entry.status === suggestionStatusFilter),
+    [suggestionEntries, suggestionStatusFilter],
+  );
+
+  const selectedSuggestionFilter = SUGGESTION_INBOX_FILTERS.find((filter) => filter.id === suggestionStatusFilter)
+    ?? SUGGESTION_INBOX_FILTERS[0]!;
 
   const updateDraft = <Key extends keyof CaptureDraft>(key: Key, value: CaptureDraft[Key]) => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -715,9 +758,66 @@ export function MemoryPanel(props: MemoryPanelProps) {
               {suggestionsError}
             </div>
           ) : null}
-          {suggestionEntries.length ? (
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
+            <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
+              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.pending}</div>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">New suggestions that can be confirmed, edited, or dismissed.</p>
+            </div>
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-200">Saved history</div>
+              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited memories that were saved after review.</p>
+            </div>
+            <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Not saved</div>
+              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.dismissed + suggestionStatusCounts.expired + suggestionStatusCounts.blocked}</div>
+              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked candidates kept out of Memory.</p>
+            </div>
+          </div>
+
+          <div className="mt-3 overflow-x-auto pb-1" aria-label="Memory inbox filters">
+            <div className="flex min-w-max gap-2">
+              {SUGGESTION_INBOX_FILTERS.map((filter) => {
+                const selected = suggestionStatusFilter === filter.id;
+                return (
+                  <button
+                    key={filter.id}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setSuggestionStatusFilter(filter.id)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
+                      selected
+                        ? "border-primary bg-[rgba(var(--matterhorn-blue-rgb),0.16)] text-primary"
+                        : "border-dls-border bg-dls-card text-dls-secondary hover:border-primary/50 hover:text-dls-text",
+                    )}
+                  >
+                    <span className="font-semibold">{filter.label}</span>
+                    <span className="ml-1 text-[11px] opacity-80">{suggestionStatusCounts[filter.id]}</span>
+                    <span className="sr-only">: {filter.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {suggestionsLoading && !suggestionEntries.length ? (
+            <div className="mt-3 rounded-xl border border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              Loading suggestion inbox. Matterhorn is checking for visible, reviewable memory candidates.
+            </div>
+          ) : null}
+
+          {suggestionEntries.length > 0 && !filteredSuggestionEntries.length ? (
+            <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              No suggestions match this filter. <span className="font-semibold text-dls-text">{selectedSuggestionFilter.label}</span> currently has no visible entries.
+            </div>
+          ) : null}
+
+          {filteredSuggestionEntries.length ? (
             <div className="mt-3 space-y-2">
-              {suggestionEntries.map((entry) => {
+              {filteredSuggestionEntries.map((entry) => {
                 const suggestion = entry.suggestion;
                 const statusMeta = suggestionStatusMeta(entry.status);
                 const StatusIcon = statusMeta.icon;
@@ -866,9 +966,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
               })}
             </div>
           ) : (
-            <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
-              No pending suggestions. Matterhorn will show candidates here before anything is remembered.
-            </div>
+            !suggestionsLoading && !suggestionEntries.length ? (
+              <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+                No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
+              </div>
+            ) : null
           )}
         </section>
 
