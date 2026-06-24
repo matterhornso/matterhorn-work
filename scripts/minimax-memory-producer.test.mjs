@@ -232,6 +232,99 @@ for (const [label, needle] of checklistSections) {
   else fail(`Inbox spec §10: "${needle}" present`, "missing");
 }
 
+// §10.3 — Correct API route mapping (from PR #520 server.ts)
+const apiRoutes = [
+  ["GET /api/memory/suggestions", "GET /api/memory/suggestions"],
+  ["POST /api/memory/suggestions/:id/resolve", "/api/memory/suggestions/:id/resolve"],
+  ["Resolve request body action field", '"action": "confirm | edit | dismiss"'],
+  ["Resolve response saved field", '"saved": true'],
+  ["Resolve response dismissed field", '"dismissed": true'],
+  ["GET /api/memory/suggestions/:id", "GET /api/memory/suggestions/:id"],
+  ["MatterhornMemorySuggestionInboxEntry", "MatterhornMemorySuggestionInboxEntry"],
+  ["Wrong route absent: /memory/suggestions/:id/confirm", "/memory/suggestions/:id/confirm"],
+  ["Wrong route absent: /memory/suggestions/:id/dismiss", "/memory/suggestions/:id/dismiss"],
+];
+for (const [label, needle] of apiRoutes) {
+  const isWrongRoute = needle.startsWith("/memory/suggestions/:id/confirm") ||
+    needle.startsWith("/memory/suggestions/:id/dismiss");
+  if (isWrongRoute) {
+    if (!inbox.includes(needle)) pass(`Inbox spec §10.3: wrong route absent: ${needle} ✓`);
+    else fail(`Inbox spec §10.3: wrong route still present: ${needle}`, "PRESENT");
+  } else {
+    if (inbox.includes(needle)) pass(`Inbox spec §10.3: "${needle}" present`);
+    else fail(`Inbox spec §10.3: "${needle}" present`, "missing");
+  }
+}
+
+// §8.3 — Market Preview-Only Behavior (Polymarket)
+const marketPreviewSections = [
+  ["Preview only notice", "Preview only"],
+  ["Preview notice read-only", "read-only browsing action"],
+  ["Preview notice tracked", "tracks what you've viewed, not your positions"],
+  ["Polymarket crystal ball icon", "🔮"],
+  ["No CLOB credentials", "CLOB"],
+  ["No Polymarket bet", "Place bet on your behalf"],
+  ["Polymarket card example", "BTC Polymarket"],
+];
+for (const [label, needle] of marketPreviewSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §8.3 (market preview): "${needle}" present`);
+  else fail(`Inbox spec §8.3 (market preview): "${needle}" present`, "missing");
+}
+
+// §8.1 — Bittensor Public Address Behavior
+const bittensorSections = [
+  ["Public address truncation", "5CfTC…3bX9"],
+  ["Read-only notice", "Read-only — public Subtensor data only"],
+  ["No full address", "full address"],
+  ["Bittensor bolt icon", "⚡"],
+  ["Bittensor notice chip in card example", "🔗 Read-only"],
+];
+for (const [label, needle] of bittensorSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §8.1 (Bittensor): "${needle}" present`);
+  else fail(`Inbox spec §8.1 (Bittensor): "${needle}" present`, "missing");
+}
+
+// §8.2 — Hyperliquid Preview-Only Behavior
+const hyperliquidSections = [
+  ["Hyperliquid preview notice", "read-only account data"],
+  ["Hyperliquid no submit", "on your behalf"],
+  ["Hyperliquid gear icon", "⚙"],
+  ["Hyperliquid card example", "3×"],
+];
+for (const [label, needle] of hyperliquidSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §8.2 (Hyperliquid): "${needle}" present`);
+  else fail(`Inbox spec §8.2 (Hyperliquid): "${needle}" present`, "missing");
+}
+
+// §2.7 — Exact state copy (empty, error, mobile)
+const stateCopySections = [
+  ["Empty state title", "No memory suggestions yet"],
+  ["Empty state icon", "💡"],
+  ["Empty state body", "Matterhorn will suggest memories"],
+  ["Error state title", "Couldn't load suggestions"],
+  ["Error retry button", "Try again"],
+  ["Error state data-testid", "suggestions-error-state__retry"],
+  ["Loading skeleton", "suggestion-skeleton"],
+  ["Mobile swipe dismiss", "swipe-down"],
+  ["Virtual keyboard handling", "visualViewport"],
+  ["Empty state data-testid", "suggestions-empty-state"],
+  ["Error state data-testid", "suggestions-error-state"],
+];
+for (const [label, needle] of stateCopySections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §2.7 (state copy): "${needle}" present`);
+  else fail(`Inbox spec §2.7 (state copy): "${needle}" present`, "missing");
+}
+
+// §10.3 — Error response shapes
+const errorShapes = [
+  ["memory_record_forbidden", "memory_record_forbidden"],
+  ["memory_wellness_sensitivity_violation", "memory_wellness_sensitivity_violation"],
+];
+for (const [label, needle] of errorShapes) {
+  if (inbox.includes(needle)) pass(`Inbox spec §10.3 (error shape): "${needle}" present`);
+  else fail(`Inbox spec §10.3 (error shape): "${needle}" present`, "missing");
+}
+
 // §10 — Forbidden examples must be ABSENT from positive content
 // (they may appear in §5 blocked state or §8 forbidden rules section)
 const forbiddenAbsent = [

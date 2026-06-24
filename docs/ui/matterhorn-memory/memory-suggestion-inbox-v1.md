@@ -139,6 +139,112 @@ Dismissed suggestions are NOT shown. They are permanently removed from the inbox
 - Escape closes panel
 - All interactive elements keyboard-accessible
 
+### 2.7 Exact State Copy — Empty, Error, and Mobile
+
+#### Empty State (no suggestions in inbox)
+
+```
+┌─ Memory Suggestions ──────────────────── 0 ─ [×] ─┐
+│                                                        │
+│                                                        │
+│              💡                                        │
+│                                                        │
+│          No memory suggestions yet                     │
+│                                                        │
+│    Matterhorn will suggest memories about your         │
+│    preferences, protocols, and context as you work.    │
+│                                                        │
+│                                                        │
+│    All suggestions reviewed. [View saved memories →]    │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+- Icon: `💡` (lightbulb), `--mm-text-tertiary`, `48×48px`
+- Title: "No memory suggestions yet", `--text-base`, `--mm-text-primary`, semibold
+- Body: Two lines, `--text-sm`, `--mm-text-secondary`, centered
+- "View saved memories →" link: `--text-sm`, `--mm-accent` — only shown when no pending suggestions exist
+- `data-testid="suggestions-empty-state"`
+
+#### Error State (failed to load suggestions)
+
+```
+┌─ Memory Suggestions ────────────────────── [×] ─┐
+│                                                    │
+│                                                    │
+│              ⚠                                     │
+│                                                    │
+│         Couldn't load suggestions                  │
+│                                                    │
+│    Something went wrong. Your suggestions are safe. │
+│    Try again in a moment.                          │
+│                                                    │
+│                   [Try again]                       │
+│                                                    │
+└────────────────────────────────────────────────────┘
+```
+
+- Icon: `⚠` (warning triangle), `--mm-amber`, `40×40px`
+- Title: "Couldn't load suggestions", `--text-base`, `--mm-text-primary`, semibold
+- Body: Two lines, `--text-sm`, `--mm-text-secondary`, centered, `--mm-amber` tint on body bg
+- "Try again" button: `mm-btn--default`, centered, `data-testid="suggestions-error-state__retry"`
+- Panel shows error state, not the card list
+- Bell icon shows amber `!` badge while error persists (see §1.6)
+- `data-testid="suggestions-error-state"`
+
+#### Loading State (skeleton cards)
+
+```
+┌─ Memory Suggestions ──────────────── Loading… [×] ─┐
+│                                                      │
+│  ┌─ Skeleton card ──────────────────────────────┐ │
+│  │  [██████░░░░░░░░░░] [████] [████]              │ │
+│  │  [███████████████████████░░░░░░░░]            │ │
+│  │  [███████████████░░░░░░░]                      │ │
+│  │  [████████████░░░░░░░░░░]                      │ │
+│  │  [Confirm]    [Edit]    [Dismiss]              │ │
+│  └────────────────────────────────────────────────┘ │
+│                                                      │
+│  ┌─ Skeleton card ──────────────────────────────┐ │
+│  │  ... (same structure)                         │ │
+│  └────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
+```
+
+- 3 skeleton cards shown while `GET /api/memory/suggestions` is in-flight
+- Skeleton bars use `--mm-bg-elevated` and `--mm-bg-overlay-1` alternating
+- Animation: shimmer (CSS gradient sweep, 1.5s, infinite)
+- `data-testid="suggestion-skeleton--0"`, `"suggestion-skeleton--1"`, `"suggestion-skeleton--2"`
+
+#### Mobile-Specific Copy Variations
+
+Mobile uses the same content as desktop with these adaptations:
+
+| Element | Desktop | Mobile |
+|---------|---------|--------|
+| Panel title | "Memory Suggestions" | "Memory Suggestions" (same) |
+| Header subtitle | Count badge `3` | Count badge `3`, subtitle "3 suggestions" |
+| Empty state icon | `💡 48px` | `💡 40px` |
+| Empty state body | 2 lines, centered | 2 lines, left-aligned, 16px padding |
+| Error state | Full centered layout | Full centered layout |
+| Close button | `×` in header | `×` in header + swipe-down gesture |
+| Filter dropdown | "All ▾" | "All ▾" (same, full-width on tap) |
+| "Mark all read" | Text link in header | Same, always visible |
+| "View saved memories →" | Text link below card list | Full-width text button, bottom of panel |
+
+**Swipe-down to dismiss (mobile only):**
+- Trigger: finger moves >80px downward from panel top
+- Visual: panel slides down, backdrop fades to `rgba(0,0,0,0.3)` during swipe
+- Threshold: if swipe distance >120px → panel closes automatically
+- If swipe distance <120px → panel springs back to open position
+- `data-testid="memory-suggestions-panel--swipe-dismiss"`
+
+**Virtual keyboard handling (mobile):**
+- When keyboard opens, panel height shrinks to `100vh - keyboardHeight`
+- Uses `visualViewport` API: `visualViewport.addEventListener('resize', ...)`
+- No content reflow during keyboard open/close — panel resizes smoothly
+- Edit form fields scroll into view automatically on focus (native behavior)
+
 ---
 
 ## §3. Suggestion Card
@@ -417,12 +523,12 @@ If the Producer surfaces a Wellness suggestion containing clinical language (med
 
 When the user clicks "Confirm" or "Save changes":
 
-1. Frontend sends `POST /memory/suggestions/:id/confirm` with the suggestion payload
+1. Frontend sends `POST /api/memory/suggestions/:id/resolve` with `{ action: "confirm" }` (or `{ action: "edit", patch: { title, type, sensitivity, whySuggestedBody } }` for edited saves)
 2. Backend writes to the memory store as a standard memory object
-3. Backend marks the suggestion as `confirmed: true, confirmedAt: ISO8601`
-4. Frontend shows "Confirmed ✓" toast
-5. Card animates out
-6. Memory badge in the app header (if any) increments the Memory count
+3. Backend marks the suggestion entry status as `confirmed`, sets `resolvedAt: ISO8601`, and stores `recordId`
+4. Frontend receives `{ success: true, saved: true, record: MatterhornMemoryRecord }` — shows toast "Confirmed ✓" (3s, top-right)
+5. Card animates out (`opacity: 0` + `transform: translateY(-8px)`, 200ms, then removed from DOM)
+6. Bell badge count decrements; inbox count decrements
 
 ### 6.2 Link to Memory Panel
 
@@ -542,9 +648,42 @@ Wellness memories are **excluded from all standard exports**. The Export button 
 
 ## §8. Protocol-Specific Behavior
 
-### 8.1 Bittensor
+### 8.1 Bittensor — Public Address Behavior
 
-**What can be suggested:** Validator preferences, subnet selection criteria, stake ceiling, delegation history (public on-chain data only).
+**Memory model:** All Bittensor memories are derived from **public on-chain data** via Subtensor. Matterhorn reads validator state, stake amounts, and subnet stats from public Subtensor endpoints. It never accesses Bittensor wallet private keys, hot keys, or signing capabilities.
+
+**What can be suggested:**
+- Validator preference ("You consistently run validators on subnet 1")
+- Stake ceiling ("You've set a 1000 TAO stake ceiling for subnet 3")
+- Delegation history ("You've delegated to validator 5CfTC…3bX9 twice this month")
+- Subnet selection criteria ("You prefer validators with >1000 Uids on subnet 1")
+
+**Bittensor suggestion card UX — public address display:**
+
+```
+┌─ Suggestion Card ─────────────────────────────────────────┐
+│  [████░ 85%]  [Protocol]  [Personal]                       │
+│                                                            │
+│  Your delegation ceiling: 2000 TAO on subnet 1            │
+│                                                            │
+│  ┌─ Why suggested ─────────────────────────────────────┐ │
+│  │ You've delegated 1500 TAO to validator 5CfTC…3bX9      │ │
+│  │ on subnet 1 in 2 separate transactions.                │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                            │
+│  Source: ⚡ Bittensor · 5 days ago                         │
+│                                                            │
+│  🔗 Read-only — public Subtensor data only                 │
+│                                                            │
+│  [Confirm ✓]        [Edit]        [Dismiss ✕]             │
+└────────────────────────────────────────────────────────────┘
+```
+
+- Public wallet addresses are **always truncated** to first 6 + last 4 chars: `5CfTC…3bX9`
+- Full addresses are never displayed in any card, tooltip, source chip, or edit form
+- The `🔗 Read-only — public Subtensor data only` notice appears on all Bittensor suggestion cards
+- Font: `--text-xs`, `--mm-text-tertiary`, non-interactive
+- `aria-label="Read-only — public Subtensor data only"`
 
 **Safety rules:**
 - Suggestions must only reference **public wallet addresses** — never private keys or seed phrases
@@ -558,9 +697,39 @@ Wellness memories are **excluded from all standard exports**. The Export button 
 - Any implication that Matterhorn can sign or submit on-chain transactions
 - Any financial guarantee about validator returns
 
-### 8.2 Hyperliquid
+### 8.2 Hyperliquid — Preview-Only Behavior
 
-**What can be suggested:** Margin preference, leverage ceiling, funding rate alert settings, position memory (without exposing API keys or secret keys).
+**Memory model:** All Hyperliquid memories are **preview-only**. Matterhorn reads public on-chain position data and user-submitted account settings via the Hyperliquid Info API (read-only). It never places, modifies, or closes orders.
+
+**What can be suggested:**
+- Leverage ceiling ("Your BTC-PERP leverage ceiling: 3×")
+- Margin mode preference ("You prefer cross-margin on BTC-PERP")
+- Funding rate alert settings ("You've set alerts for BTC-PERP funding rate > 0.01%")
+- Position memory ("You've held a BTC-PERP position for 5 days this month")
+
+**Hyperliquid suggestion card — preview notice:**
+
+```
+┌─ Suggestion Card ─────────────────────────────────────────┐
+│  [████░ 78%]  [Protocol]  [Personal]                       │
+│                                                            │
+│  Your BTC-PERP leverage ceiling: 3×                       │
+│                                                            │
+│  ┌─ Why suggested ─────────────────────────────────────┐ │
+│  │ You set your Hyperliquid BTC-PERP leverage to 3× in    │ │
+│  │ Settings 3 times this month.                            │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                            │
+│  Source: ⚙ Hyperliquid Settings · 1 week ago              │
+│                                                            │
+│  📖 Preview only — read-only account data                 │
+│                                                            │
+│  [Confirm ✓]        [Edit]        [Dismiss ✕]             │
+└────────────────────────────────────────────────────────────┘
+```
+
+- The `📖 Preview only — read-only account data` notice appears on all Hyperliquid suggestion cards
+- Font: `--text-xs`, `--mm-text-tertiary`, non-interactive
 
 **Safety rules:**
 - Position memory: stores the fact that the user has a position — not the position value in a way that implies live execution capability
@@ -573,30 +742,80 @@ Wellness memories are **excluded from all standard exports**. The Export button 
 - "submit order", "place trade", "close position on your behalf"
 - Margin ratio expressed as a financial guarantee
 
-### 8.3 Polymarket
+### 8.3 Polymarket — Market Preview-Only Behavior
 
-**What can be suggested:** Tracked markets, prediction questions, resolution criteria, market sentiment notes.
+**Memory model:** All Polymarket memories are **preview-only**. Matterhorn reads market data from public Polymarket REST API sources and stores facts about markets the user has viewed or tracked. Matterhorn never places bets, connects to the Polymarket CLOB, or accesses user credentials.
 
-**Safety rules:**
-- Suggestions must never imply that Matterhorn can place bets, connect to Polymarket on the user's behalf, or access CLOB credentials
+**What can be suggested:**
+- Markets the user viewed or asked about in chat ("You've looked at BTC >$100k by EOY 2025 3 times")
+- Prediction question preferences ("You prefer markets with >$100k volume")
+- Resolution criteria notes ("You want to track your BTC-PERP prediction markets separately from Polymarket")
+- Market sentiment annotations ("You flagged BTC >$100k by EOY as high confidence")
+
+**What cannot be suggested:**
+- Market positions, outstanding bets, or order state
+- CLOB credentials or API tokens
+- Signed payloads or submission metadata
 - "Tracked" means the user browsed the market in Matterhorn — a read-only browsing action
-- No API keys or signed payloads in suggestion content
+
+**Correct framing examples:**
+- "You've tracked 3 Polymarket BTC prediction markets this week" ✓
+- "Your preferred resolution criteria: binary, cash-settled" ✓
+- "Your Polymarket prediction question: BTC above $100k by end of year" ✓
+
+**Incorrect framing (never in UI):**
+- "You have $500 on BTC Polymarket markets" ✗
+- "Your Polymarket portfolio" ✗
+- "Place a bet on BTC Polymarket" ✗
+- "Your Polymarket CLOB key" ✗
+
+**Market Preview card UX — Polymarket suggestion card:**
+
+```
+┌─ Suggestion Card ─────────────────────────────────────────┐
+│  [████░ 71%]  [Protocol]  [Personal]                       │
+│                                                            │
+│  You've viewed 3 BTC Polymarket prediction markets          │
+│  this week                                                │
+│                                                            │
+│  ┌─ Why suggested ─────────────────────────────────────┐ │
+│  │ You asked about "BTC > $100k by EOY" in Chat on        │ │
+│  │ Tuesday. Viewed market details 2 times.               │ │
+│  └──────────────────────────────────────────────────────┘ │
+│                                                            │
+│  Source: ⚙ Chat · 2 days ago                              │
+│                                                            │
+│  📖 Preview only — this tracks what you've viewed,        │
+│    not your positions or bets                             │
+│                                                            │
+│  [Confirm ✓]        [Edit]        [Dismiss ✕]             │
+└────────────────────────────────────────────────────────────┘
+```
+
+- The `📖 Preview only` notice appears on all Polymarket suggestion cards, directly below the source chip
+- Font: `--text-xs`, `--mm-text-tertiary`, non-interactive
+- `aria-label="Preview only — this tracks what you've viewed, not your positions or bets"`
 
 **Forbidden patterns in Polymarket suggestions:**
 - API secret, CLOB credentials, signed payload
 - "Place bet on your behalf", "submit market on your behalf"
 - Any guarantee about market outcomes
+- "Portfolio", "position", "order" (in the sense of active trades)
 
 ### 8.4 Source Chip Icons — Protocol Reference
 
-| Protocol | Source type icon | Color |
-|---------|-----------------|-------|
-| Bittensor | `⚡` (bolt) | `--mm-type-protocol` blue |
-| Hyperliquid | `⚙` (gear) | `--mm-type-protocol` blue |
-| Polymarket | `🔮` (crystal ball) | `--mm-type-protocol` blue |
+| Protocol | Source type icon | Color | Notice chip |
+|---------|-----------------|-------|-------------|
+| Bittensor | `⚡` (bolt) | `--mm-type-protocol` | `🔗 Read-only — public Subtensor data only` |
+| Hyperliquid | `⚙` (gear) | `--mm-type-protocol` | `📖 Preview only — read-only account data` |
+| Polymarket | `🔮` (crystal ball) | `--mm-type-protocol` | `📖 Preview only — this tracks what you've viewed, not your positions or bets` |
+| Wellness | `♥` (heart) | `--mm-type-wellness` | `🔒 Stored locally only. Never sent to external servers.` |
 
-Source chip format: `[icon] Protocol name · Relative time`
-Example: `⚙ Hyperliquid Settings · 3 days ago`
+Source chip format: `[icon] Source name · Relative time`
+Example: `⚡ Bittensor · 5 days ago`
+Example: `🔮 BTC Polymarket · 2 days ago`
+
+Notice chips appear directly below the source chip, before the action buttons, on all protocol and Wellness cards.
 
 ---
 
@@ -737,14 +956,154 @@ interface EditFields {
 
 ### 10.3 Events and API Calls
 
-| Event | API call | Payload | Response |
-|-------|----------|---------|----------|
-| Panel open | `GET /memory/suggestions?status=pending` | — | `Suggestion[]` |
-| Confirm | `POST /memory/suggestions/:id/confirm` | `{ title, type, sensitivity, whySuggestedBody, scope }` | `{ id, memoryId }` |
-| Edit + Save | `PATCH /memory/suggestions/:id` | `{ title, type, sensitivity, whySuggestedBody }` then `POST /memory/suggestions/:id/confirm` | `{ suggestion }` then `{ memoryId }` |
-| Dismiss | `POST /memory/suggestions/:id/dismiss` | `{ dismissedAt: ISO8601 }` | `{ success: true }` |
-| Load more | `GET /memory/suggestions?status=pending&offset=N&limit=20` | — | `{ suggestions: Suggestion[], total: number }` |
-| Real-time | `WS /memory/suggestions/stream` or `GET /memory/suggestions/unread-count` (polling) | — | `{ unreadCount: number }` |
+All routes are prefixed with `/api/memory/suggestions`. The inbox operates on `MatterhornMemorySuggestionInboxEntry` objects (not raw `Suggestion` objects) — see §10.3.1–§10.3.6 for exact mappings.
+
+#### 10.3.1 `GET /api/memory/suggestions`
+
+**When:** Panel opens, panel refresh, filter change.
+
+**Query params:**
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `status` | `pending \| confirmed \| edited \| dismissed \| blocked` | `pending` (UI default) | Omit to get all statuses |
+| `desk` | `bittensor \| hyperliquid \| polymarket \| wellness` | all | Filter by memory desk |
+| `includeResolved` | `true` | `false` | `include_resolved` also accepted |
+| `limit` | integer | 20 | Max entries per page |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "entries": [
+    {
+      "version": "matterhorn.memory.suggestion-inbox.v1",
+      "id": "uuid",
+      "suggestion": { /* MatterhornMemorySuggestion */ },
+      "status": "pending",
+      "createdAt": "2025-06-24T00:00:00.000Z",
+      "updatedAt": "2025-06-24T00:00:00.000Z",
+      "resolvedAt": null,
+      "lastAction": null,
+      "reason": null,
+      "recordId": null,
+      "markdownPath": null,
+      "dismissedUntil": null,
+      "policyWarnings": []
+    }
+  ],
+  "count": 1
+}
+```
+
+**UX mapping:**
+- `entries` is rendered as suggestion cards
+- `status === "pending"` → show card with Confirm/Edit/Dismiss actions
+- `status === "blocked"` → show `BlockedSuggestionCard` (§5.3)
+- `status === "confirmed" | "edited" | "dismissed"` → card already gone from pending list
+- `policyWarnings` → if non-empty and Wellness type, show amber warning badge on card
+
+#### 10.3.2 `POST /api/memory/suggestions/:id/resolve`
+
+**When:** User clicks Confirm, Edit → Save, or Dismiss on any suggestion card.
+
+**Path params:** `id` — the inbox entry ID (not the suggestion ID).
+
+**Request body:**
+```json
+{
+  "action": "confirm | edit | dismiss",
+  "patch": {
+    "title": "string",
+    "type": "bittensor | hyperliquid | polymarket | wellness | context",
+    "sensitivity": "personal | high | restricted",
+    "whySuggestedBody": "string"
+  },
+  "reason": "optional string"
+}
+```
+
+- `action` is required. If omitted, server falls back to `entry.suggestion.userAction`.
+- `patch` is required for `confirm` and `edit`; ignored for `dismiss`.
+- Wellness saves: `sensitivity` must be `personal` or `restricted` (server enforces).
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "suggestion": { /* MatterhornMemorySuggestion — resolved copy */ },
+  "saved": true | false,
+  "dismissed": true | false,
+  "reason": "string",
+  "record": { /* MatterhornMemoryRecord — only if saved === true */ },
+  "markdownPath": "/path/to/memory.md",
+  "policyWarnings": []
+}
+```
+
+**UX mapping per `action`:**
+
+| Action | `saved` | `dismissed` | UI outcome |
+|--------|---------|-------------|-----------|
+| `confirm` | `true` | `false` | Toast "Confirmed ✓", card animates out |
+| `edit` | `true` | `false` | Toast "Saved ✓", card animates out |
+| `dismiss` | `false` | `true` | Toast "Dismissed", card animates out |
+
+**Error `400`:** If `action === "confirm"` or `"edit"` and the patched record contains forbidden content (seed phrase, private key, medical diagnosis, etc.):
+```json
+{
+  "success": false,
+  "error": "memory_record_forbidden",
+  "message": "Memory cannot contain sensitive credentials or clinical wellness content."
+}
+```
+Frontend shows inline validation error on the card — does not crash or show a generic toast.
+
+**Error `400` (wellness sensitivity violation):**
+```json
+{
+  "success": false,
+  "error": "memory_wellness_sensitivity_violation",
+  "message": "Wellness memories cannot have High sensitivity."
+}
+```
+
+**Error `404`:** Entry not found → show error state in panel.
+
+#### 10.3.3 `GET /api/memory/suggestions/:id`
+
+**When:** Deep link to a specific suggestion, or re-fetch before edit.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "entry": { /* MatterhornMemorySuggestionInboxEntry */ }
+}
+```
+
+**Error `404`:** Suggestion not found.
+
+#### 10.3.4 `POST /api/memory/suggestions` — (Pipeline Only, Not UI-Initiated)
+
+This route triggers the Producer pipeline. It is called by the internal agent system, not by the UI. Frontend never calls this route directly.
+
+#### 10.3.5 `GET /api/memory/entities` / `:id` — Confirmed Memories
+
+After a suggestion is confirmed, the resulting memory is accessible via the standard memory entities API:
+
+- `GET /api/memory/entities?desk=<desk>` — list confirmed memories by desk
+- `GET /api/memory/entities/:id` — get single confirmed memory
+- `PATCH /api/memory/entities/:id` — edit confirmed memory (forget, re-tag)
+- `DELETE /api/memory/entities/:id` — forget confirmed memory
+
+**The UI links to these via "View saved memories →" (see §6.2).**
+
+#### 10.3.6 Real-Time Updates
+
+**Polling (V1):** On panel open, poll `GET /api/memory/suggestions?status=pending` every 30 seconds. If `count` changes, animate bell badge.
+
+**WebSocket / SSE (Future):** The backend supports `WS /api/memory/suggestions/stream`. Engineering may wire this in V2. V1 ships with polling only.
 
 ### 10.4 Test IDs for Codex Implementation
 
