@@ -1226,6 +1226,36 @@ export function computeMemorySuggestionDismissedUntil(
   return date.toISOString();
 }
 
+export function isMemorySuggestionTransitionAllowed(
+  entry: MatterhornMemorySuggestionLifecycle,
+  action: MatterhornMemorySuggestionAction,
+): MatterhornMemoryValidationResult {
+  const errors: string[] = [];
+
+  if (!MATTERHORN_MEMORY_SUGGESTION_ACTIONS.includes(action as MatterhornMemorySuggestionAction)) {
+    errors.push(`invalid action ${action}`);
+    return { ok: false, errors };
+  }
+
+  if (action === "confirm" || action === "edit") {
+    if (entry.status !== "pending") {
+      errors.push(`cannot ${action} a suggestion that is ${entry.status}`);
+    }
+  }
+
+  if (action === "dismiss") {
+    if (entry.status === "expired" || entry.status === "blocked") {
+      errors.push(`cannot dismiss a suggestion that is ${entry.status}`);
+    }
+  }
+
+  if (entry.status === "expired") {
+    errors.push("expired suggestions cannot create memory records");
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
 export function applyMemorySuggestionAction(
   entry: MatterhornMemorySuggestionLifecycle,
   action: MatterhornMemorySuggestionAction,
@@ -1249,6 +1279,12 @@ export function applyMemorySuggestionAction(
   const lifecycleResult = validateMemorySuggestionLifecycle(entry);
   if (!lifecycleResult.ok) {
     blockedReasons.push(...lifecycleResult.errors);
+    status = "blocked";
+  }
+
+  const transitionResult = isMemorySuggestionTransitionAllowed(entry, action);
+  if (!transitionResult.ok) {
+    blockedReasons.push(...transitionResult.errors);
     status = "blocked";
   }
 
@@ -1301,4 +1337,174 @@ export function canMemorySuggestionActionProduceMemoryRecord(
     result.blockedReasons.length === 0 &&
     typeof result.memoryRecordId === "string"
   );
+}
+
+export function createMemorySuggestionLifecycleFixture(
+  status: MatterhornMemorySuggestionStatus,
+  overrides: Partial<MatterhornMemorySuggestionLifecycle> = {},
+): MatterhornMemorySuggestionLifecycle {
+  const now = new Date();
+  const createdAt = now.toISOString();
+  const dismissedUntil =
+    status === "dismissed"
+      ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+  const expiresAt =
+    status === "expired"
+      ? new Date(now.getTime() - 1).toISOString()
+      : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const base: MatterhornMemorySuggestionLifecycle = {
+    suggestionId: `sugg-fixture-${status}`,
+    dedupeKey: `fixture/${status}/example`,
+    source: "chat_capture",
+    kind: "user_preference",
+    scope: "user",
+    sensitivity: "public",
+    confidence: 0.9,
+    reason: `Example ${status} suggestion fixture`,
+    proposedRecord: {
+      id: `rec-fixture-${status}`,
+      kind: "user_preference",
+      scope: "user",
+      title: "Example public preference",
+      summary: "Safe public data only",
+      body: { interest: "public example" },
+      tags: ["example"],
+      links: [],
+      provenance: {
+        source: "chat_capture",
+        capturedAt: createdAt,
+        capturedBy: "agent",
+        confidence: 0.9,
+        reasonRemembered: `Fixture for ${status}`,
+      },
+      sensitivity: "public",
+      createdAt,
+      updatedAt: createdAt,
+      canUseInChat: true,
+      canExport: false,
+      canDelete: true,
+    },
+    createdAt,
+    expiresAt,
+    dismissedUntil,
+    dismissalWindowDays: 30,
+    actorConfirmationRequired: true,
+    status,
+    ...overrides,
+  };
+
+  return base;
+}
+
+export function createWellnessMemorySuggestionLifecycleFixture(
+  status: MatterhornMemorySuggestionStatus,
+  overrides: Partial<MatterhornMemorySuggestionLifecycle> = {},
+): MatterhornMemorySuggestionLifecycle {
+  return createMemorySuggestionLifecycleFixture(status, {
+    suggestionId: `sugg-wellness-fixture-${status}`,
+    dedupeKey: `wellness/fixture/${status}`,
+    kind: "user_preference",
+    sensitivity: "restricted",
+    reason: "Example wellness suggestion fixture",
+    proposedRecord: {
+      id: `rec-wellness-fixture-${status}`,
+      kind: "user_preference",
+      scope: "user",
+      title: "Wellness preference",
+      summary: "Educational opt-in preference",
+      body: { interest: "sleep education" },
+      tags: ["wellness", "opt-in"],
+      links: [],
+      provenance: {
+        source: "user_confirmed",
+        capturedAt: new Date().toISOString(),
+        capturedBy: "user",
+        confidence: 1,
+        reasonRemembered: "User opted into wellness education",
+      },
+      sensitivity: "restricted",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      canUseInChat: true,
+      canExport: false,
+      canDelete: true,
+    },
+    ...overrides,
+  });
+}
+
+export function createBittensorMemorySuggestionLifecycleFixture(
+  status: MatterhornMemorySuggestionStatus,
+  overrides: Partial<MatterhornMemorySuggestionLifecycle> = {},
+): MatterhornMemorySuggestionLifecycle {
+  return createMemorySuggestionLifecycleFixture(status, {
+    suggestionId: `sugg-bittensor-fixture-${status}`,
+    dedupeKey: `bittensor/fixture/${status}`,
+    kind: "protocol_address",
+    sensitivity: "public",
+    reason: "Example Bittensor suggestion fixture",
+    proposedRecord: {
+      id: `rec-bittensor-fixture-${status}`,
+      kind: "protocol_address",
+      scope: "user",
+      title: "TAO wallet label",
+      summary: "Public SS58 address label",
+      body: { ss58Address: "5abc123...", coldkey: "my-coldkey", hotkey: "5xyz789..." },
+      tags: ["bittensor"],
+      links: [],
+      provenance: {
+        source: "user_confirmed",
+        capturedAt: new Date().toISOString(),
+        capturedBy: "user",
+        confidence: 1,
+        reasonRemembered: "User labeled a TAO wallet",
+      },
+      sensitivity: "public",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      canUseInChat: true,
+      canExport: true,
+      canDelete: true,
+    },
+    ...overrides,
+  });
+}
+
+export function createMarketMemorySuggestionLifecycleFixture(
+  status: MatterhornMemorySuggestionStatus,
+  overrides: Partial<MatterhornMemorySuggestionLifecycle> = {},
+): MatterhornMemorySuggestionLifecycle {
+  return createMemorySuggestionLifecycleFixture(status, {
+    suggestionId: `sugg-market-fixture-${status}`,
+    dedupeKey: `market/fixture/${status}`,
+    kind: "watchlist",
+    sensitivity: "public",
+    reason: "Example market watch suggestion fixture",
+    proposedRecord: {
+      id: `rec-market-fixture-${status}`,
+      kind: "watchlist",
+      scope: "user",
+      title: "BTC watchlist",
+      summary: "Track BTC price on Hyperliquid",
+      body: { symbol: "BTC", exchange: "hyperliquid" },
+      tags: ["hyperliquid", "watchlist"],
+      links: [],
+      provenance: {
+        source: "user_confirmed",
+        capturedAt: new Date().toISOString(),
+        capturedBy: "user",
+        confidence: 1,
+        reasonRemembered: "User added BTC to watchlist",
+      },
+      sensitivity: "public",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      canUseInChat: true,
+      canExport: false,
+      canDelete: true,
+    },
+    ...overrides,
+  });
 }

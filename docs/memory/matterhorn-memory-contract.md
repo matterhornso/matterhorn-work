@@ -234,10 +234,41 @@ interface MatterhornMemorySuggestionConfirmationResult {
 Lifecycle helpers:
 
 - `validateMemorySuggestionLifecycle(entry)` – validates the full lifecycle shape and safety of the proposed record
-- `applyMemorySuggestionAction(entry, action, options?)` – applies `confirm`, `edit`, or `dismiss`; returns a `MatterhornMemorySuggestionConfirmationResult`. Proposals that fail safety validation are automatically `blocked`.
+- `isMemorySuggestionTransitionAllowed(entry, action)` – validates whether an action is allowed from the current status (e.g. only `pending` can be confirmed or edited)
+- `applyMemorySuggestionAction(entry, action, options?)` – applies `confirm`, `edit`, or `dismiss`; returns a `MatterhornMemorySuggestionConfirmationResult`. Proposals that fail safety validation or transition rules are automatically `blocked`.
 - `isMemorySuggestionDismissalActive(entry, now?)` – returns `true` if a dismissed suggestion is still within its dismissal window
 - `computeMemorySuggestionDismissedUntil(dismissedAt, windowDays?)` – computes the `dismissedUntil` timestamp
 - `canMemorySuggestionActionProduceMemoryRecord(result)` – returns `true` only when the confirmation result represents an approved, non-redacted, non-blocked memory creation
+
+#### Suggestion Lifecycle States
+
+The production UI card states map directly to the contract statuses:
+
+| Status | Meaning | Can create memory? |
+|--------|---------|-------------------|
+| `pending` | New suggestion waiting for user review | No |
+| `confirmed` | User accepted the suggestion as-is | Yes |
+| `edited` | User edited inline before accepting | Yes |
+| `dismissed` | User dismissed the suggestion; suppressed for `dismissalWindowDays` | No |
+| `expired` | Suggestion passed `expiresAt` without action | No |
+| `blocked` | Failed safety/policy validation (secrets, live submission, etc.) | No |
+
+Allowed transitions:
+
+- `pending` + `confirm` → `confirmed`
+- `pending` + `edit` → `edited`
+- `pending` + `dismiss` → `dismissed`
+- Any state with forbidden/secret/policy failure → `blocked`
+- `expired` or `blocked` suggestions never create memory records
+
+Fixture helpers for UI previews and tests:
+
+- `createMemorySuggestionLifecycleFixture(status)`
+- `createWellnessMemorySuggestionLifecycleFixture(status)`
+- `createBittensorMemorySuggestionLifecycleFixture(status)`
+- `createMarketMemorySuggestionLifecycleFixture(status)`
+
+All fixtures contain only public/redacted data and never include seed phrases, private keys, mnemonics, API secrets, raw signatures, signed payloads, wallet exports, bearer tokens, or exchange secrets.
 
 ### `MatterhornMemoryUsePolicy`
 
@@ -336,9 +367,11 @@ The contract enforces these invariants at validation time:
 - **Use policy keeps memory visible and consent-based.** `MatterhornMemoryUsePolicy` defaults to `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, and `marketSubmissionMemoryAllowed: false`.
 - **Export manifests are secret-free.** A `MatterhornMemoryExportManifest` must declare `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, and `includesWalletExports: false`.
 - **Desk policy matrix gates per-desk memory.** A record must match the allowed kinds and minimum sensitivity of its desk. The matrix also controls whether memory may be used in chat (`canUseInChat`), exported (`canExport`), or sent to MCP/API tools (`canSendToMcpApi`). Bittensor remains public-address/external-signer only; Hyperliquid/Polymarket reject live-submission and secrets; Wellness defaults to `restricted` and rejects clinical data without opt-in; generic workspace must not silently inherit protocol, wallet, or medical data.
-- **Suggestions move through a lifecycle.** `MatterhornMemorySuggestionLifecycle` tracks `status`, `dedupeKey`, and dismissal windows. `confirm` and `edit` may produce memory records; `dismiss` never does. Proposals that fail safety validation automatically become `blocked`.
-- **Dismissed suggestions stay suppressed.** `isMemorySuggestionDismissalActive` returns `true` until `dismissedUntil` passes, preventing re-appearance for the same `dedupeKey` during the window.
-- **Blocked suggestions produce no memory.** `applyMemorySuggestionAction` returns `blocked` for invalid lifecycle entries or secret-shaped proposed records. `canMemorySuggestionActionProduceMemoryRecord` returns `false` for any blocked, redacted, or non-confirmed result.
+- **Suggestions move through a hardened lifecycle.** `MatterhornMemorySuggestionLifecycle` tracks `status`, `dedupeKey`, and dismissal windows. Only `pending` suggestions may be `confirmed` or `edited`; `dismiss` transitions to `dismissed`. Proposals that fail safety validation or transition rules automatically become `blocked`.
+- **Only explicit confirm/edit create memory.** `confirmed` and `edited` results from `applyMemorySuggestionAction` can produce memory records; `dismissed`, `expired`, and `blocked` never can.
+- **Dismissed suggestions stay suppressed.** `isMemorySuggestionDismissalActive` returns `true` until `dismissedUntil` passes, preventing re-appearance for the same `dedupeKey` during the window. Dismissed entries must include `dismissedUntil`.
+- **Expired suggestions cannot create records.** A suggestion whose `expiresAt` has passed cannot be confirmed or edited into memory.
+- **Blocked suggestions produce no memory.** `applyMemorySuggestionAction` returns `blocked` for invalid lifecycle entries, secret-shaped proposed records, live-submission market records, non-opt-in clinical wellness records, or disallowed transitions. `canMemorySuggestionActionProduceMemoryRecord` returns `false` for any blocked, redacted, or non-confirmed result.
 
 ## Validation Functions
 
