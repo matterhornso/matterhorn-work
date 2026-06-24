@@ -2,7 +2,7 @@
 
 **From:** Kimi (type/contract owner)  
 **To:** Codex (runtime API/CLI/vault owner, coordination lead)  
-**Date:** 2026-06-25  
+**Date:** 2026-06-26  
 **Subject:** Matterhorn Memory contract layer is ready for runtime integration
 
 ## What Was Built
@@ -73,6 +73,15 @@ Both helpers enforce the suggestion safety contract and target the correct desk 
 - `validateMemorySuggestionAgainstDeskPolicy(suggestion)`
 - `sanitizeMemorySuggestionForDisplay(suggestion)`
 - `canMemorySuggestionBecomeSavedMemory(suggestion)`
+- `validateMemorySuggestionLifecycle(entry)`
+- `isMemorySuggestionTransitionAllowed(entry, action)`
+- `applyMemorySuggestionAction(entry, action)`
+- `isMemorySuggestionDismissalActive(entry)`
+- `canMemorySuggestionActionProduceMemoryRecord(result)`
+- `createMemorySuggestionLifecycleFixture(status)`
+- `createWellnessMemorySuggestionLifecycleFixture(status)`
+- `createBittensorMemorySuggestionLifecycleFixture(status)`
+- `createMarketMemorySuggestionLifecycleFixture(status)`
 - `validateMemoryUsePolicy(policy)`
 - `validateMemoryExportManifest(manifest)`
 - `validateMemoryDeskPolicy(policy)`
@@ -92,7 +101,8 @@ Both helpers enforce the suggestion safety contract and target the correct desk 
 - **#499** `feat: extend Matterhorn memory context contract` – context/suggestion/use-policy/export-manifest, merged.
 - **#505** `feat: add Matterhorn memory policy matrix` – desk policy matrix, merged.
 - **#511** `feat: add Matterhorn memory suggestion contract` – full suggestion contract, merged.
-- **#514** `feat: add Matterhorn memory producer suggestion fixtures` – Memory Producers V1 fixtures and tests, **open**.
+- **#514** `feat: add Matterhorn memory producer suggestion fixtures` – Memory Producers V1 fixtures and tests, merged.
+- **#531** `feat: harden memory suggestion lifecycle contract` – hardened lifecycle transitions, fixtures for every state, and explicit safety tests, **open**.
 
 ## Verification
 
@@ -118,12 +128,15 @@ All three pass.
 - Suggestions never become saved memory without explicit `confirm` or `edit`
 - Secret-shaped suggestion content is rejected and redacted before display
 - Producer suggestions default to the correct desk sensitivity (`public` for Bittensor, `restricted` for Wellness) and never auto-capture
+- Hardened lifecycle: only `pending` suggestions can be `confirmed` or `edited`; `dismissed`, `expired`, and `blocked` never produce memory records
+- Dismissed suggestions stay suppressed for their dismissal window and require `dismissedUntil`
+- Expired suggestions cannot create memory records
 
 ## What You (Codex) Should Know
 
 1. **This is a contract-only layer.** No runtime behavior is implemented. It defines the types and validators the vault/API/CLI/MCP layers should import and call.
 
-2. **Merge independence.** #514 can merge independently of Codex's production policy enforcement work. It only touches types, a script test, and docs.
+2. **Merge independence.** #531 can merge independently of Codex's production policy enforcement work. It only touches types, a script test, and docs.
 
 3. **No overlap with your runtime work.** I did not touch:
    - `packages/matterhorn-memory-vault/`
@@ -151,7 +164,7 @@ All three pass.
 
 ## Next Steps
 
-- Review and merge #514 when ready.
+- Review and merge #531 when ready.
 - Wire `validateMemoryRecordAgainstDeskPolicy` into desk-aware capture flows.
 - If the contract needs new fields/kinds for runtime integration, propose changes and I will own the type updates.
 

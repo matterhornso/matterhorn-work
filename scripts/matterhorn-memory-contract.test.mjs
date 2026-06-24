@@ -1198,45 +1198,103 @@ for (const action of memory.MATTERHORN_MEMORY_SUGGESTION_ACTIONS) {
   assert.ok(typeof action === "string", `action ${action} must be a string`);
 }
 
-// Confirm and edit produce memory records; dismiss does not.
-const confirmResult = memory.applyMemorySuggestionAction(validLifecycle, "confirm");
-assert.equal(confirmResult.action, "confirm");
-assert.equal(confirmResult.status, "confirmed");
-assert.ok(confirmResult.memoryRecordId, "confirm result should include memoryRecordId");
-assert.equal(
-  memory.canMemorySuggestionActionProduceMemoryRecord(confirmResult),
-  true,
-  "confirm result should be able to produce memory record",
+// Fixtures for every state with public/redacted data only.
+for (const status of memory.MATTERHORN_MEMORY_SUGGESTION_STATUSES) {
+  const fixture = memory.createMemorySuggestionLifecycleFixture(status);
+  assert.ok(
+    memory.validateMemorySuggestionLifecycle(fixture).ok,
+    `fixture for ${status} should be valid`,
+  );
+  assert.equal(fixture.status, status, `fixture status must be ${status}`);
+  assert.equal(fixture.actorConfirmationRequired, true, `fixture ${status} must require actor confirmation`);
+}
+
+const wellnessFixturePending = memory.createWellnessMemorySuggestionLifecycleFixture("pending");
+assert.equal(wellnessFixturePending.sensitivity, "restricted", "wellness fixture sensitivity must be restricted");
+assert.ok(
+  wellnessFixturePending.proposedRecord.tags.includes("opt-in"),
+  "wellness fixture must be opt-in",
 );
 
-const editResult = memory.applyMemorySuggestionAction(validLifecycle, "edit");
-assert.equal(editResult.status, "edited");
-assert.ok(editResult.memoryRecordId);
-assert.equal(
-  memory.canMemorySuggestionActionProduceMemoryRecord(editResult),
-  true,
-  "edit result should be able to produce memory record",
+const bittensorFixturePending = memory.createBittensorMemorySuggestionLifecycleFixture("pending");
+assert.equal(bittensorFixturePending.sensitivity, "public", "bittensor fixture sensitivity must be public");
+assert.ok(
+  bittensorFixturePending.proposedRecord.tags.includes("bittensor"),
+  "bittensor fixture must be tagged bittensor",
 );
 
-const dismissResult = memory.applyMemorySuggestionAction(validLifecycle, "dismiss");
-assert.equal(dismissResult.status, "dismissed");
-assert.equal(dismissResult.memoryRecordId, undefined, "dismiss result must not include memoryRecordId");
+const marketFixturePending = memory.createMarketMemorySuggestionLifecycleFixture("pending");
+assert.equal(marketFixturePending.kind, "watchlist", "market fixture kind must be watchlist");
+
+// Explicit transition expectations.
+// pending + confirm -> confirmed
+const pendingConfirm = memory.applyMemorySuggestionAction(validLifecycle, "confirm");
+assert.equal(pendingConfirm.status, "confirmed", "pending + confirm -> confirmed");
+assert.ok(
+  memory.canMemorySuggestionActionProduceMemoryRecord(pendingConfirm),
+  "pending + confirm can produce memory record",
+);
+
+// pending + edit -> edited
+const pendingEdit = memory.applyMemorySuggestionAction(validLifecycle, "edit");
+assert.equal(pendingEdit.status, "edited", "pending + edit -> edited");
+assert.ok(
+  memory.canMemorySuggestionActionProduceMemoryRecord(pendingEdit),
+  "pending + edit can produce memory record",
+);
+
+// pending + dismiss -> dismissed
+const pendingDismiss = memory.applyMemorySuggestionAction(validLifecycle, "dismiss");
+assert.equal(pendingDismiss.status, "dismissed", "pending + dismiss -> dismissed");
 assert.equal(
-  memory.canMemorySuggestionActionProduceMemoryRecord(dismissResult),
+  pendingDismiss.memoryRecordId,
+  undefined,
+  "dismissed result must not include memoryRecordId",
+);
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(pendingDismiss),
   false,
-  "dismiss result must not produce memory record",
+  "dismissed result must not produce memory record",
 );
 
-// Suggestions never become memory without explicit confirm or edit.
+// Only pending can be confirmed or edited.
+const confirmedEntry = makeLifecycleEntry({ status: "confirmed" });
+const confirmedConfirm = memory.applyMemorySuggestionAction(confirmedEntry, "confirm");
+assert.equal(confirmedConfirm.status, "blocked", "cannot confirm an already confirmed suggestion");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(confirmedConfirm),
+  false,
+);
+
+const editedEntry = makeLifecycleEntry({ status: "edited" });
+const editedEdit = memory.applyMemorySuggestionAction(editedEntry, "edit");
+assert.equal(editedEdit.status, "blocked", "cannot edit an already edited suggestion");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(editedEdit),
+  false,
+);
+
+// Expired suggestions cannot create records.
+const expiredEntry = makeLifecycleEntry({ status: "expired", expiresAt: new Date(Date.now() - 1).toISOString() });
+const expiredConfirm = memory.applyMemorySuggestionAction(expiredEntry, "confirm");
+assert.equal(expiredConfirm.status, "blocked", "expired + confirm must be blocked");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(expiredConfirm),
+  false,
+  "expired suggestion must not produce memory record",
+);
+
+// Dismissed suggestions require dismissedUntil and cannot create records while dismissed.
 const dismissedEntry = makeLifecycleEntry({
   status: "dismissed",
   dismissedUntil: memory.computeMemorySuggestionDismissedUntil(new Date().toISOString()),
 });
-const reconfirmDismissed = memory.applyMemorySuggestionAction(dismissedEntry, "confirm");
-assert.equal(reconfirmDismissed.status, "confirmed", "confirm can transition from dismissed");
-assert.ok(
-  memory.canMemorySuggestionActionProduceMemoryRecord(reconfirmDismissed),
-  "explicit confirm on dismissed entry may still produce memory record",
+const dismissedConfirm = memory.applyMemorySuggestionAction(dismissedEntry, "confirm");
+assert.equal(dismissedConfirm.status, "blocked", "dismissed + confirm must be blocked");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(dismissedConfirm),
+  false,
+  "dismissed suggestion must not produce memory record",
 );
 
 // Dismissed suggestions do not reappear during the dismissal window.
@@ -1293,6 +1351,19 @@ assert.ok(
   "wellness lifecycle record must be opt-in",
 );
 
+const clinicalWellnessLifecycle = makeLifecycleEntry({
+  dedupeKey: "wellness/client/clinical",
+  proposedRecord: clinicalWithoutConsent,
+  sensitivity: "restricted",
+});
+const clinicalResult = memory.applyMemorySuggestionAction(clinicalWellnessLifecycle, "confirm");
+assert.equal(clinicalResult.status, "blocked", "hidden clinical wellness record must be blocked");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(clinicalResult),
+  false,
+  "clinical wellness suggestion must not produce memory record",
+);
+
 // Market lifecycle suggestions cannot enable live submission.
 const marketLifecycle = makeLifecycleEntry({
   suggestionId: "sugg-market-1",
@@ -1313,6 +1384,11 @@ const liveMarketLifecycle = makeLifecycleEntry({
 });
 const liveMarketResult = memory.applyMemorySuggestionAction(liveMarketLifecycle, "confirm");
 assert.equal(liveMarketResult.status, "blocked", "market lifecycle enabling live submission must be blocked");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(liveMarketResult),
+  false,
+  "market lifecycle with live submission must not produce memory record",
+);
 
 // Bittensor lifecycle stays public-address / external-signer only.
 const bittensorLifecycle = makeLifecycleEntry({
@@ -1334,6 +1410,33 @@ const bittensorCustodialLifecycle = makeLifecycleEntry({
 });
 const bittensorCustodialResult = memory.applyMemorySuggestionAction(bittensorCustodialLifecycle, "confirm");
 assert.equal(bittensorCustodialResult.status, "blocked", "custodial bittensor lifecycle must be blocked");
+assert.equal(
+  memory.canMemorySuggestionActionProduceMemoryRecord(bittensorCustodialResult),
+  false,
+  "custodial bittensor suggestion must not produce memory record",
+);
+
+// No fixture contains forbidden secret material.
+for (const status of memory.MATTERHORN_MEMORY_SUGGESTION_STATUSES) {
+  for (const fixtureFactory of [
+    () => memory.createMemorySuggestionLifecycleFixture(status),
+    () => memory.createWellnessMemorySuggestionLifecycleFixture(status),
+    () => memory.createBittensorMemorySuggestionLifecycleFixture(status),
+    () => memory.createMarketMemorySuggestionLifecycleFixture(status),
+  ]) {
+    const fixture = fixtureFactory();
+    assert.equal(
+      memory.isForbiddenMemorySecretBody(fixture.proposedRecord.body),
+      false,
+      `fixture for ${status} must not contain forbidden secret material`,
+    );
+    assert.equal(
+      memory.containsForbiddenMemorySecretMaterial(fixture.proposedRecord),
+      false,
+      `fixture for ${status} must not contain forbidden secret material anywhere`,
+    );
+  }
+}
 
 // 20. Docs cover the contract, safety invariants, and ownership.
 const memoryDocLower = memoryDoc.toLowerCase();
@@ -1417,6 +1520,12 @@ for (const phrase of [
   "blockedReasons",
   "Memory Suggestion Inbox V1",
   "edited",
+  "isMemorySuggestionTransitionAllowed",
+  "createMemorySuggestionLifecycleFixture",
+  "createWellnessMemorySuggestionLifecycleFixture",
+  "createBittensorMemorySuggestionLifecycleFixture",
+  "createMarketMemorySuggestionLifecycleFixture",
+  "Suggestion Lifecycle States",
 ]) {
   assert.ok(
     memoryDocLower.includes(phrase.toLowerCase()),
