@@ -1001,12 +1001,12 @@ function coerceMemorySuggestionAction(value: unknown): MatterhornMemorySuggestio
   throw new ApiError(400, "invalid_memory_suggestion_action", "memory suggestion action must be confirm, edit, or dismiss");
 }
 
-function coerceMemorySuggestionStatus(value: string | null): "pending" | "confirmed" | "edited" | "dismissed" | "blocked" | undefined {
+function coerceMemorySuggestionStatus(value: string | null): "pending" | "confirmed" | "edited" | "dismissed" | "expired" | "blocked" | undefined {
   if (!value) return undefined;
-  if (value === "pending" || value === "confirmed" || value === "edited" || value === "dismissed" || value === "blocked") {
+  if (value === "pending" || value === "confirmed" || value === "edited" || value === "dismissed" || value === "expired" || value === "blocked") {
     return value;
   }
-  throw new ApiError(400, "invalid_memory_suggestion_status", "status must be pending, confirmed, edited, dismissed, or blocked");
+  throw new ApiError(400, "invalid_memory_suggestion_status", "status must be pending, confirmed, edited, dismissed, expired, or blocked");
 }
 
 function normalizeMemoryTags(value: string | null): string[] | undefined {

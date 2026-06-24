@@ -1,13 +1,20 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Ban,
+  CheckCircle2,
+  Clock3,
   Download,
+  Edit3,
   Eye,
+  Info,
   RefreshCw,
   Search,
   ShieldAlert,
+  Sparkles,
   Trash2,
   X,
+  XCircle,
 } from "lucide-react";
 
 import type {
@@ -21,6 +28,7 @@ import type {
   MatterhornMemorySensitivity,
   MatterhornMemorySuggestion,
   MatterhornMemorySuggestionAction,
+  MatterhornMemorySuggestionStatus,
 } from "@matterhorn-work/types";
 import {
   DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
@@ -60,6 +68,12 @@ type CaptureDraft = {
   confirmed: boolean;
 };
 
+type SuggestionEditDraft = {
+  title: string;
+  summary: string;
+  note: string;
+};
+
 type MemorySuggestionEventDetail = {
   suggestion?: MatterhornMemorySuggestion;
   suggestions?: MatterhornMemorySuggestion[];
@@ -86,6 +100,133 @@ function sensitivityClassName(sensitivity: MatterhornMemorySensitivity) {
   if (sensitivity === "private") return "border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary";
   if (sensitivity === "restricted") return "border-amber-500/35 bg-amber-500/10 text-amber-200";
   return "border-red-500/35 bg-red-500/10 text-red-200";
+}
+
+function suggestionStatusMeta(status: MatterhornMemorySuggestionStatus) {
+  if (status === "confirmed") {
+    return {
+      label: "Confirmed",
+      title: "Remembered",
+      description: "Saved as visible memory after user confirmation.",
+      icon: CheckCircle2,
+      className: "border-emerald-500/35 bg-emerald-500/10 text-emerald-100",
+      cardClassName: "border-emerald-500/25 bg-emerald-500/5",
+    };
+  }
+  if (status === "edited") {
+    return {
+      label: "Edited",
+      title: "Edited + saved",
+      description: "Saved only after the user reviewed and changed it.",
+      icon: Edit3,
+      className: "border-[rgba(var(--matterhorn-blue-rgb),0.42)] bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary",
+      cardClassName: "border-[rgba(var(--matterhorn-blue-rgb),0.32)] bg-[rgba(var(--matterhorn-blue-rgb),0.07)]",
+    };
+  }
+  if (status === "dismissed") {
+    return {
+      label: "Dismissed",
+      title: "Dismissed",
+      description: "Kept out of memory and suppressed for this trigger window.",
+      icon: XCircle,
+      className: "border-dls-border bg-dls-surface text-dls-secondary",
+      cardClassName: "opacity-75",
+    };
+  }
+  if (status === "expired") {
+    return {
+      label: "Expired",
+      title: "Expired",
+      description: "Needs a fresh suggestion before it can be saved.",
+      icon: Clock3,
+      className: "border-amber-500/35 bg-amber-500/10 text-amber-100",
+      cardClassName: "border-amber-500/25 bg-amber-500/5 opacity-80",
+    };
+  }
+  if (status === "blocked") {
+    return {
+      label: "Blocked",
+      title: "Blocked",
+      description: "Policy stopped this suggestion from becoming memory.",
+      icon: Ban,
+      className: "border-red-500/35 bg-red-500/10 text-red-100",
+      cardClassName: "border-red-500/30 bg-red-500/10",
+    };
+  }
+  return {
+    label: "New",
+    title: "New suggestion",
+    description: "Review, edit, or dismiss. No hidden save happens here.",
+    icon: Sparkles,
+    className: "border-[rgba(var(--matterhorn-blue-rgb),0.42)] bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary",
+    cardClassName: "",
+  };
+}
+
+function confidenceSegments(confidence: number) {
+  const bounded = Math.max(0, Math.min(1, confidence));
+  if (bounded >= 0.72) return 3;
+  if (bounded >= 0.42) return 2;
+  if (bounded > 0) return 1;
+  return 0;
+}
+
+function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
+  if (suggestion.desk === "bittensor") {
+    return "Bittensor memory is limited to public SS58, subnet, validator, watch, and external-signer context. It never stores seed phrases, private keys, mnemonics, or wallet exports.";
+  }
+  if (suggestion.desk === "hyperliquid" || suggestion.desk === "polymarket") {
+    return "Market memory is read/preview/watch context only. It cannot enable live submission, custody, exchange API secrets, raw signatures, or signed payloads.";
+  }
+  if (suggestion.desk === "wellness") {
+    return "Wellness memory stays opt-in and restricted by default. It should describe preferences or workflow context, not hidden medical or clinical records.";
+  }
+  return "This suggestion came from visible workflow context. Confirming it stores only the shown record.";
+}
+
+function suggestionActionMessage(entry: MatterhornMemorySuggestionInboxEntry) {
+  if (entry.status === "confirmed") return "Remembered as visible memory.";
+  if (entry.status === "edited") return "Edited, then saved as visible memory.";
+  if (entry.status === "dismissed") {
+    return `Dismissed. Similar suggestions stay suppressed for ${entry.dismissalWindowDays} days unless created again by new context.`;
+  }
+  if (entry.status === "expired") return "Expired. Ask Matterhorn again to create a fresh suggestion.";
+  if (entry.status === "blocked") return "Blocked by memory policy. It was not saved.";
+  return "Review first. Confirm, edit, or dismiss. Nothing is saved automatically.";
+}
+
+function readableSuggestionNote(record: MatterhornMemoryRecord) {
+  const note = record.body.note;
+  if (typeof note === "string") return note;
+  if (note == null) return "";
+  try {
+    return JSON.stringify(note, null, 2);
+  } catch {
+    return String(note);
+  }
+}
+
+function buildSuggestionEditDraft(entry: MatterhornMemorySuggestionInboxEntry): SuggestionEditDraft {
+  return {
+    title: entry.proposedRecord.title,
+    summary: entry.proposedRecord.summary,
+    note: readableSuggestionNote(entry.proposedRecord),
+  };
+}
+
+function buildEditedSuggestionPatch(entry: MatterhornMemorySuggestionInboxEntry, draft: SuggestionEditDraft) {
+  const title = draft.title.trim();
+  const summary = draft.summary.trim();
+  const note = draft.note.trim();
+  return {
+    title: title || entry.proposedRecord.title,
+    summary: summary || entry.proposedRecord.summary,
+    body: {
+      ...entry.proposedRecord.body,
+      note: note || readableSuggestionNote(entry.proposedRecord),
+    },
+    updatedAt: new Date().toISOString(),
+  } satisfies Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
 }
 
 function parseTags(tags: string) {
@@ -269,6 +410,8 @@ export function MemoryPanel(props: MemoryPanelProps) {
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [captureBusy, setCaptureBusy] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
+  const [suggestionEditDraft, setSuggestionEditDraft] = useState<SuggestionEditDraft | null>(null);
 
   useEffect(() => {
     const handleSuggestions = (event: Event) => {
@@ -390,6 +533,55 @@ export function MemoryPanel(props: MemoryPanelProps) {
       }));
     } catch (nextError) {
       setCaptureError(nextError instanceof Error ? nextError.message : "Could not resolve this memory suggestion.");
+    }
+  };
+
+  const beginSuggestionEdit = (entry: MatterhornMemorySuggestionInboxEntry) => {
+    setEditingSuggestionId(entry.id);
+    setSuggestionEditDraft(buildSuggestionEditDraft(entry));
+  };
+
+  const cancelSuggestionEdit = () => {
+    setEditingSuggestionId(null);
+    setSuggestionEditDraft(null);
+  };
+
+  const handleSaveEditedSuggestion = async (entry: MatterhornMemorySuggestionInboxEntry) => {
+    if (!props.client || !suggestionEditDraft) return;
+    setCaptureError(null);
+    const patch = buildEditedSuggestionPatch(entry, suggestionEditDraft);
+    try {
+      if (entry.status === "pending") {
+        const response = await props.client.resolveStoredMemorySuggestion(entry.id, {
+          action: "edit",
+          patch,
+          reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+        });
+        if (response.record) {
+          setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
+        }
+        upsertSuggestionEntries([response.entry]);
+        window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+          detail: { id: entry.id, action: "edit", status: response.entry.status },
+        }));
+      } else {
+        const response = await props.client.resolveMemorySuggestion({
+          suggestion: entry.suggestion,
+          action: "edit",
+          patch,
+          reason: "User edited this visible Memory suggestion, reviewed why it was suggested, and saved it from the Matterhorn Memory panel.",
+        });
+        if (response.record) {
+          setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
+        }
+        removeSuggestionEntry(entry.id);
+        window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+          detail: { id: entry.id, action: "edit", status: "edited" },
+        }));
+      }
+      cancelSuggestionEdit();
+    } catch (nextError) {
+      setCaptureError(nextError instanceof Error ? nextError.message : "Could not save the edited memory suggestion.");
     }
   };
 
@@ -527,32 +719,101 @@ export function MemoryPanel(props: MemoryPanelProps) {
             <div className="mt-3 space-y-2">
               {suggestionEntries.map((entry) => {
                 const suggestion = entry.suggestion;
+                const statusMeta = suggestionStatusMeta(entry.status);
+                const StatusIcon = statusMeta.icon;
                 const resolved = entry.status === "confirmed" || entry.status === "edited" || entry.status === "dismissed";
+                const actionable = entry.status === "pending" && suggestion.policyDecision !== "reject";
+                const editing = editingSuggestionId === entry.id && suggestionEditDraft;
+                const confidence = Math.round(suggestion.confidence * 100);
+                const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
                 return (
                   <article key={entry.id} className={cn(
-                    "rounded-xl border border-dls-border bg-dls-card px-3 py-2",
-                    entry.status === "blocked" && "border-red-500/30 bg-red-500/10",
-                    resolved && "opacity-75",
+                    "overflow-hidden rounded-xl border border-dls-border bg-dls-card px-3 py-3",
+                    statusMeta.cardClassName,
+                    resolved && "shadow-none",
                   )}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
-                        {suggestion.proposedRecord.sensitivity}
-                      </span>
-                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                        {suggestion.desk}
-                      </span>
-                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                        {entry.status}
-                      </span>
-                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                        {Math.round(suggestion.confidence * 100)}% confidence
-                      </span>
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusMeta.className)}>
+                            <StatusIcon className="size-3" />
+                            {statusMeta.label}
+                          </span>
+                          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
+                            {suggestion.proposedRecord.sensitivity}
+                          </span>
+                          <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                            {suggestion.desk}
+                          </span>
+                          <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                            {formatKind(suggestion.proposedRecord.kind)}
+                          </span>
+                        </div>
+                        <h3 className="mt-2 break-words text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
+                        <p className="mt-1 break-words text-xs leading-5 text-dls-secondary">{suggestion.proposedRecord.summary}</p>
+                      </div>
+                      <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 md:w-44">
+                        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                          <span>Confidence</span>
+                          <span>{confidence}%</span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-1" aria-label={`${confidence}% confidence`}>
+                          {[0, 1, 2].map((segment) => (
+                            <span
+                              key={segment}
+                              className={cn(
+                                "h-1.5 rounded-full bg-dls-hover",
+                                segment < activeConfidenceSegments && "bg-primary",
+                              )}
+                            />
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{statusMeta.description}</p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-dls-secondary">{suggestion.proposedRecord.summary}</p>
-                    <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                      <span className="font-semibold text-dls-text">Why suggested:</span> {suggestion.reason}
-                    </p>
+
+                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <div className="flex items-center gap-2 font-semibold text-dls-text">
+                        <Info className="size-3.5 text-primary" />
+                        Why suggested
+                      </div>
+                      <p className="mt-1 break-words">{entry.reason || suggestion.reason}</p>
+                      <p className="mt-1 break-words">{suggestionDeskReason(suggestion)}</p>
+                    </div>
+
+                    {editing ? (
+                      <div className="mt-3 grid gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.3)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
+                        <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
+                        <input
+                          value={suggestionEditDraft.title}
+                          onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, title: event.target.value } : current)}
+                          className="h-10 min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          placeholder="Memory title"
+                        />
+                        <input
+                          value={suggestionEditDraft.summary}
+                          onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, summary: event.target.value } : current)}
+                          className="h-10 min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          placeholder="Short summary"
+                        />
+                        <textarea
+                          value={suggestionEditDraft.note}
+                          onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, note: event.target.value } : current)}
+                          className="min-h-24 min-w-0 resize-y rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
+                          placeholder="Memory note"
+                        />
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                          <Button size="sm" onClick={() => void handleSaveEditedSuggestion(entry)} disabled={!props.client}>
+                            <CheckCircle2 className="mr-2 size-3.5" />
+                            Save edited memory
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={cancelSuggestionEdit}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {entry.resolutionReason && resolved ? (
                       <p className="mt-2 text-xs leading-5 text-dls-secondary">
                         <span className="font-semibold text-dls-text">Resolution:</span> {entry.resolutionReason}
@@ -563,23 +824,43 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         {entry.policyWarnings.slice(0, 3).join(" ")}
                       </div>
                     ) : null}
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
+                    </div>
+                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                       <Button
                         size="sm"
                         onClick={() => void handleResolveSuggestion(entry, "confirm")}
-                        disabled={!props.client || entry.status !== "pending" || suggestion.policyDecision === "reject"}
+                        disabled={!props.client || !actionable}
+                        aria-label={`Remember visible Memory suggestion: ${suggestion.proposedRecord.title}`}
                       >
-                        Remember
+                        <CheckCircle2 className="mr-2 size-3.5" />
+                        Remember this
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => beginSuggestionEdit(entry)}
+                        disabled={!props.client || !actionable || Boolean(editing)}
+                        aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
+                      >
+                        <Edit3 className="mr-2 size-3.5" />
+                        Edit first
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => void handleResolveSuggestion(entry, "dismiss")}
                         disabled={!props.client || entry.status !== "pending"}
+                        aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
                       >
+                        <XCircle className="mr-2 size-3.5" />
                         Dismiss
                       </Button>
                     </div>
+                    <p className="mt-2 text-[11px] leading-4 text-dls-secondary">
+                      No hidden save. Confirm and edit actions are explicit user choices; blocked, expired, dismissed, confirmed, and edited cards are read-only history.
+                    </p>
                   </article>
                 );
               })}
