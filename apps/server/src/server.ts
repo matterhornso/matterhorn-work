@@ -1001,6 +1001,14 @@ function coerceMemorySuggestionAction(value: unknown): MatterhornMemorySuggestio
   throw new ApiError(400, "invalid_memory_suggestion_action", "memory suggestion action must be confirm, edit, or dismiss");
 }
 
+function coerceMemorySuggestionStatus(value: string | null): "pending" | "confirmed" | "edited" | "dismissed" | "blocked" | undefined {
+  if (!value) return undefined;
+  if (value === "pending" || value === "confirmed" || value === "edited" || value === "dismissed" || value === "blocked") {
+    return value;
+  }
+  throw new ApiError(400, "invalid_memory_suggestion_status", "status must be pending, confirmed, edited, dismissed, or blocked");
+}
+
 function normalizeMemoryTags(value: string | null): string[] | undefined {
   if (!value) return undefined;
   const tags = value
@@ -4624,6 +4632,78 @@ function createRoutes(
       }
       const plan = planMatterhornMemorySuggestions(input);
       return jsonResponse({ success: true, ...plan });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/memory/suggestions", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const input = (body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? body.input
+        : body) as MatterhornMemorySuggestionPlanInput;
+      if (hasForbiddenMatterhornMemorySuggestionInput(input)) {
+        throw new ApiError(
+          400,
+          "memory_suggestion_secret_rejected",
+          "Memory suggestions cannot be created from seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, or secret-shaped fields.",
+        );
+      }
+      const plan = planMatterhornMemorySuggestions(input);
+      const inbox = await memoryVault.storeSuggestions(plan.suggestions);
+      return jsonResponse({ success: true, ...plan, inbox });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/api/memory/suggestions", "client", async (ctx) => {
+    try {
+      const entries = await memoryVault.listSuggestions({
+        status: coerceMemorySuggestionStatus(ctx.url.searchParams.get("status")),
+        desk: ctx.url.searchParams.get("desk") as MatterhornMemorySuggestion["desk"] | null ?? undefined,
+        includeResolved: ctx.url.searchParams.get("includeResolved") === "true" || ctx.url.searchParams.get("include_resolved") === "true",
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+      });
+      return jsonResponse({ success: true, entries, count: entries.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/api/memory/suggestions/:id", "client", async (ctx) => {
+    const entry = await memoryVault.getSuggestion(ctx.params.id);
+    if (!entry) {
+      throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
+    }
+    return jsonResponse({ success: true, entry });
+  });
+
+  addRoute(routes, "POST", "/api/memory/suggestions/:id/resolve", "client", async (ctx) => {
+    try {
+      const body = await readJsonBody(ctx.request);
+      const action = coerceMemorySuggestionAction(body.action);
+      const patch = body.patch && typeof body.patch === "object" && !Array.isArray(body.patch)
+        ? body.patch as Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>
+        : undefined;
+      const entry = await memoryVault.getSuggestion(ctx.params.id);
+      if (!entry) {
+        throw new ApiError(404, "memory_suggestion_not_found", "Memory suggestion not found");
+      }
+      const effectiveAction = action ?? entry.suggestion.userAction;
+      if (effectiveAction === "confirm" || effectiveAction === "edit") {
+        assertMemoryRecordAllowedForSurface({ ...entry.suggestion.proposedRecord, ...(patch ?? {}) } as MatterhornMemoryRecord, memorySurface(ctx.url));
+      }
+      const result = await memoryVault.resolveStoredSuggestion(ctx.params.id, {
+        action,
+        patch,
+        reason: typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined,
+      });
+      return jsonResponse({ success: true, ...result });
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw memoryApiError(error);
