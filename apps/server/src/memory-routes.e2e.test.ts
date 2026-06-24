@@ -233,6 +233,89 @@ describe("Matterhorn memory API routes", () => {
     expect(rejected.payload.code).toBe("memory_suggestion_secret_rejected");
   });
 
+  test("stores and resolves pending memory suggestions through the inbox", async () => {
+    const { base } = await boot();
+
+    const created = await jsonFetch(base, "/api/memory/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "bittensor",
+          prompt: "Remember 5F3sa2TJAWMqDhXG6jhV4N8ko9SxwGy8TpaNS1routeFixture for TAO reads and subnet 14.",
+          sourceId: "memory-inbox-test",
+        },
+      }),
+    });
+    expect(created.response.status).toBe(200);
+    expect(created.payload.success).toBe(true);
+    expect(created.payload.writesMemory).toBe(false);
+    expect(created.payload.inbox.count).toBeGreaterThanOrEqual(2);
+    expect(created.payload.inbox.entries.every((entry: { status: string }) => entry.status === "pending")).toBe(true);
+
+    const beforeResolve = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
+    expect(beforeResolve.response.status).toBe(200);
+    expect(beforeResolve.payload.count).toBe(0);
+
+    const pending = await jsonFetch(base, "/api/memory/suggestions?status=pending&desk=bittensor&limit=10");
+    expect(pending.response.status).toBe(200);
+    expect(pending.payload.count).toBeGreaterThanOrEqual(2);
+    const walletEntry = pending.payload.entries.find((entry: { suggestion: { useCase: string } }) => entry.suggestion.useCase === "bittensor_wallet_label");
+    expect(walletEntry).toBeTruthy();
+    expect(walletEntry.suggestion.canAutoCapture).toBe(false);
+    expect(walletEntry.suggestion.requiresExplicitConsent).toBe(true);
+
+    const fetched = await jsonFetch(base, `/api/memory/suggestions/${walletEntry.id}`);
+    expect(fetched.response.status).toBe(200);
+    expect(fetched.payload.entry.id).toBe(walletEntry.id);
+
+    const confirmed = await jsonFetch(base, `/api/memory/suggestions/${walletEntry.id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "edit",
+        patch: { title: "Edited TAO wallet memory" },
+        reason: "User confirmed from the visible suggestion inbox.",
+      }),
+    });
+    expect(confirmed.response.status).toBe(200);
+    expect(confirmed.payload.saved).toBe(true);
+    expect(confirmed.payload.entry.status).toBe("edited");
+    expect(confirmed.payload.record.title).toBe("Edited TAO wallet memory");
+
+    const afterResolve = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
+    expect(afterResolve.response.status).toBe(200);
+    expect(afterResolve.payload.count).toBe(1);
+
+    const resolvedVisible = await jsonFetch(base, `/api/memory/suggestions/${walletEntry.id}`);
+    expect(resolvedVisible.response.status).toBe(200);
+    expect(resolvedVisible.payload.entry.status).toBe("edited");
+    expect(resolvedVisible.payload.entry.recordId).toBe(confirmed.payload.record.id);
+
+    const dismissCreated = await jsonFetch(base, "/api/memory/suggestions", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "wellness",
+          prompt: "Remember that this trainer workflow should stay educational and weekly.",
+          templateId: "wellness_creator_workflow",
+        },
+      }),
+    });
+    expect(dismissCreated.response.status).toBe(200);
+    const wellnessEntry = dismissCreated.payload.inbox.entries[0];
+    expect(wellnessEntry.suggestion.proposedRecord.sensitivity).toBe("restricted");
+    expect(wellnessEntry.suggestion.proposedRecord.canExport).toBe(false);
+
+    const dismissed = await jsonFetch(base, `/api/memory/suggestions/${wellnessEntry.id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ action: "dismiss", reason: "User does not want this remembered." }),
+    });
+    expect(dismissed.response.status).toBe(200);
+    expect(dismissed.payload.saved).toBe(false);
+    expect(dismissed.payload.dismissed).toBe(true);
+    expect(dismissed.payload.entry.status).toBe("dismissed");
+    expect(dismissed.payload.entry.dismissedUntil).toBeTruthy();
+  });
+
   test("capture, search, update, export, and forget records", async () => {
     const { base, dir } = await boot();
 

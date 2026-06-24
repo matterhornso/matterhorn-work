@@ -17,6 +17,7 @@ import {
 
 export const MATTERHORN_MEMORY_VAULT_VERSION = "matterhorn.memory.vault.v1" as const
 export const MATTERHORN_MEMORY_INDEX_VERSION = "matterhorn.memory.index.v1" as const
+export const MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION = "matterhorn.memory.suggestion-inbox.v1" as const
 
 export interface MatterhornMemoryVaultOptions {
   rootDir: string
@@ -68,6 +69,41 @@ export interface MatterhornMemorySuggestionResolveResult {
   policyWarnings: string[]
 }
 
+export type MatterhornMemorySuggestionInboxStatus =
+  | "pending"
+  | "confirmed"
+  | "edited"
+  | "dismissed"
+  | "blocked"
+
+export interface MatterhornMemorySuggestionInboxEntry {
+  version: typeof MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION
+  id: string
+  suggestion: MatterhornMemorySuggestion
+  status: MatterhornMemorySuggestionInboxStatus
+  createdAt: string
+  updatedAt: string
+  resolvedAt?: string
+  lastAction?: MatterhornMemorySuggestion["userAction"]
+  reason?: string
+  recordId?: string
+  markdownPath?: string
+  dismissedUntil?: string
+  policyWarnings: string[]
+}
+
+export interface MatterhornMemorySuggestionListOptions {
+  status?: MatterhornMemorySuggestionInboxStatus
+  desk?: MatterhornMemorySuggestion["desk"]
+  includeResolved?: boolean
+  limit?: number
+}
+
+export interface MatterhornMemorySuggestionStoreResult {
+  entries: MatterhornMemorySuggestionInboxEntry[]
+  count: number
+}
+
 interface MatterhornMemoryIndexEntry {
   record: MatterhornMemoryRecord
   markdownPath: string
@@ -80,16 +116,33 @@ interface MatterhornMemoryIndex {
   entries: Record<string, MatterhornMemoryIndexEntry>
 }
 
-type MemoryLogAction = "capture" | "update" | "forget" | "export" | "suggestion_dismiss" | "suggestion_reject"
+interface MatterhornMemorySuggestionInbox {
+  version: typeof MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION
+  updatedAt: string
+  entries: Record<string, MatterhornMemorySuggestionInboxEntry>
+}
+
+type MemoryLogAction =
+  | "capture"
+  | "update"
+  | "forget"
+  | "export"
+  | "suggestion_store"
+  | "suggestion_confirm"
+  | "suggestion_edit"
+  | "suggestion_dismiss"
+  | "suggestion_reject"
 
 export class MatterhornMemoryVault {
   readonly rootDir: string
   readonly indexPath: string
+  readonly suggestionInboxPath: string
   readonly logPath: string
 
   constructor(options: MatterhornMemoryVaultOptions) {
     this.rootDir = options.rootDir
     this.indexPath = path.join(this.rootDir, "memory-index.json")
+    this.suggestionInboxPath = path.join(this.rootDir, "memory-suggestions.json")
     this.logPath = path.join(this.rootDir, "memory-log.jsonl")
   }
 
@@ -115,6 +168,11 @@ export class MatterhornMemoryVault {
       await readFile(this.indexPath, "utf8")
     } catch {
       await this.writeIndex(emptyIndex())
+    }
+    try {
+      await readFile(this.suggestionInboxPath, "utf8")
+    } catch {
+      await this.writeSuggestionInbox(emptySuggestionInbox())
     }
   }
 
@@ -179,6 +237,130 @@ export class MatterhornMemoryVault {
       record: captured.record,
       markdownPath: captured.markdownPath,
       policyWarnings: warnings,
+    }
+  }
+
+  async storeSuggestions(suggestions: MatterhornMemorySuggestion[]): Promise<MatterhornMemorySuggestionStoreResult> {
+    await this.initialize()
+    const inbox = await this.readSuggestionInbox()
+    const now = new Date().toISOString()
+    const entries: MatterhornMemorySuggestionInboxEntry[] = []
+
+    for (const suggestion of suggestions) {
+      const sanitized = sanitizeMemorySuggestionForDisplay(suggestion)
+      const validation = validateMemorySuggestionAgainstDeskPolicy(sanitized)
+      const canSave = validation.ok && sanitized.policyDecision !== "reject"
+      const existing = inbox.entries[sanitized.id]
+      const status: MatterhornMemorySuggestionInboxStatus = canSave ? existing?.status ?? "pending" : "blocked"
+      const entry: MatterhornMemorySuggestionInboxEntry = {
+        version: MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION,
+        id: sanitized.id,
+        suggestion: sanitized,
+        status,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        resolvedAt: existing?.resolvedAt,
+        lastAction: existing?.lastAction,
+        reason: canSave
+          ? existing?.reason
+          : validation.errors.join("; ") || "Suggestion is blocked by memory policy.",
+        recordId: existing?.recordId,
+        markdownPath: existing?.markdownPath,
+        dismissedUntil: existing?.dismissedUntil,
+        policyWarnings: [
+          ...(sanitized.policyWarnings ?? []),
+          ...validation.errors,
+        ],
+      }
+      inbox.entries[entry.id] = entry
+      entries.push(entry)
+      await this.appendLog(status === "blocked" ? "suggestion_reject" : "suggestion_store", entry.id, {
+        status,
+        useCase: sanitized.useCase,
+        desk: sanitized.desk,
+      })
+    }
+
+    await this.writeSuggestionInbox(inbox)
+    return { entries, count: entries.length }
+  }
+
+  async listSuggestions(options: MatterhornMemorySuggestionListOptions = {}): Promise<MatterhornMemorySuggestionInboxEntry[]> {
+    await this.initialize()
+    const limit = Math.max(1, Math.min(options.limit ?? 50, 200))
+    return Object.values((await this.readSuggestionInbox()).entries)
+      .filter((entry) => options.status ? entry.status === options.status : true)
+      .filter((entry) => options.desk ? entry.suggestion.desk === options.desk : true)
+      .filter((entry) => options.includeResolved ? true : entry.status === "pending" || entry.status === "blocked")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(0, limit)
+  }
+
+  async getSuggestion(id: string): Promise<MatterhornMemorySuggestionInboxEntry | null> {
+    await this.initialize()
+    return (await this.readSuggestionInbox()).entries[id] ?? null
+  }
+
+  async resolveStoredSuggestion(
+    id: string,
+    options: MatterhornMemorySuggestionResolveOptions = {},
+  ): Promise<MatterhornMemorySuggestionResolveResult & { entry: MatterhornMemorySuggestionInboxEntry }> {
+    await this.initialize()
+    const inbox = await this.readSuggestionInbox()
+    const existing = inbox.entries[id]
+    if (!existing) {
+      throw new Error(`Memory suggestion not found: ${id}`)
+    }
+    if (existing.status !== "pending") {
+      throw new Error(`Memory suggestion is not pending: ${id}`)
+    }
+
+    try {
+      const result = await this.resolveSuggestion(existing.suggestion, options)
+      const action = options.action ?? existing.suggestion.userAction
+      const now = new Date().toISOString()
+      const status: MatterhornMemorySuggestionInboxStatus = result.dismissed
+        ? "dismissed"
+        : action === "edit"
+          ? "edited"
+          : "confirmed"
+      const entry: MatterhornMemorySuggestionInboxEntry = {
+        ...existing,
+        suggestion: result.suggestion,
+        status,
+        updatedAt: now,
+        resolvedAt: now,
+        lastAction: action,
+        reason: result.reason,
+        recordId: result.record?.id,
+        markdownPath: result.markdownPath,
+        dismissedUntil: result.dismissed ? addDaysIso(now, 30) : undefined,
+        policyWarnings: result.policyWarnings,
+      }
+      inbox.entries[id] = entry
+      await this.writeSuggestionInbox(inbox)
+      await this.appendLog(action === "dismiss" ? "suggestion_dismiss" : action === "edit" ? "suggestion_edit" : "suggestion_confirm", id, {
+        status,
+        recordId: result.record?.id,
+      })
+      return { ...result, entry }
+    } catch (error) {
+      const now = new Date().toISOString()
+      const entry: MatterhornMemorySuggestionInboxEntry = {
+        ...existing,
+        status: "blocked",
+        updatedAt: now,
+        resolvedAt: now,
+        lastAction: options.action ?? existing.suggestion.userAction,
+        reason: error instanceof Error ? error.message : String(error),
+        policyWarnings: [
+          ...(existing.policyWarnings ?? []),
+          error instanceof Error ? error.message : String(error),
+        ],
+      }
+      inbox.entries[id] = entry
+      await this.writeSuggestionInbox(inbox)
+      throw error
     }
   }
 
@@ -350,6 +532,20 @@ export class MatterhornMemoryVault {
     await writeFile(this.indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8")
   }
 
+  private async readSuggestionInbox(): Promise<MatterhornMemorySuggestionInbox> {
+    try {
+      const parsed = JSON.parse(await readFile(this.suggestionInboxPath, "utf8")) as MatterhornMemorySuggestionInbox
+      return parsed.version === MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION ? parsed : emptySuggestionInbox()
+    } catch {
+      return emptySuggestionInbox()
+    }
+  }
+
+  private async writeSuggestionInbox(inbox: MatterhornMemorySuggestionInbox): Promise<void> {
+    inbox.updatedAt = new Date().toISOString()
+    await writeFile(this.suggestionInboxPath, `${JSON.stringify(inbox, null, 2)}\n`, "utf8")
+  }
+
   private async appendLog(action: MemoryLogAction, id: string, details: Record<string, unknown>): Promise<void> {
     await writeFile(
       this.logPath,
@@ -474,6 +670,20 @@ function emptyIndex(): MatterhornMemoryIndex {
     updatedAt: new Date().toISOString(),
     entries: {},
   }
+}
+
+function emptySuggestionInbox(): MatterhornMemorySuggestionInbox {
+  return {
+    version: MATTERHORN_MEMORY_SUGGESTION_INBOX_VERSION,
+    updatedAt: new Date().toISOString(),
+    entries: {},
+  }
+}
+
+function addDaysIso(value: string, days: number): string {
+  const date = new Date(value)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString()
 }
 
 function folderForRecord(record: MatterhornMemoryRecord): string {
