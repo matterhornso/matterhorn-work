@@ -55,30 +55,30 @@ async function parseSkillEntry(
   entryName: string,
   scope: "project" | "global",
 ): Promise<SkillItem | null> {
-  const content = await readFile(skillPath, "utf8");
-  const { data, body } = parseFrontmatter(content);
-  const name = typeof data.name === "string" ? data.name : entryName;
-  const description = typeof data.description === "string" ? data.description : "";
-  const trigger =
-    typeof data.trigger === "string"
-      ? data.trigger
-      : typeof data.when === "string"
-        ? data.when
-        : extractTriggerFromBody(body);
   try {
+    const content = await readFile(skillPath, "utf8");
+    const { data, body } = parseFrontmatter(content);
+    const name = typeof data.name === "string" ? data.name : entryName;
+    const description = typeof data.description === "string" ? data.description : "";
+    const trigger =
+      typeof data.trigger === "string"
+        ? data.trigger
+        : typeof data.when === "string"
+          ? data.when
+          : extractTriggerFromBody(body);
     validateSkillName(name);
     validateDescription(description);
+    if (name !== entryName) return null;
+    return {
+      name,
+      description,
+      path: skillPath,
+      scope,
+      trigger: trigger.trim() || undefined,
+    };
   } catch {
     return null;
   }
-  if (name !== entryName) return null;
-  return {
-    name,
-    description,
-    path: skillPath,
-    scope,
-    trigger: trigger.trim() || undefined,
-  };
 }
 
 async function listSkillsInDir(dir: string, scope: "project" | "global"): Promise<SkillItem[]> {

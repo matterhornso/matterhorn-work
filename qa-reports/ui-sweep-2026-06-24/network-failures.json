@@ -1,0 +1,32 @@
+[
+  {
+    "status": 401,
+    "url": "http://127.0.0.1:64869/env/keys",
+    "method": "GET"
+  },
+  {
+    "status": 404,
+    "url": "http://127.0.0.1:64869/workspace/ws_cb09ad9321f4/files/content?path=.opencode%2Fagents%2Fopencode-router.md",
+    "method": "GET"
+  },
+  {
+    "status": 401,
+    "url": "http://127.0.0.1:64869/env/keys",
+    "method": "GET"
+  },
+  {
+    "status": 404,
+    "url": "http://127.0.0.1:64869/workspace/ws_cb09ad9321f4/files/content?path=.opencode%2Fagents%2Fopencode-router.md",
+    "method": "GET"
+  },
+  {
+    "status": 401,
+    "url": "http://127.0.0.1:64869/env/keys",
+    "method": "GET"
+  },
+  {
+    "status": 404,
+    "url": "http://127.0.0.1:64869/workspace/ws_cb09ad9321f4/files/content?path=.opencode%2Fagents%2Fopencode-router.md",
+    "method": "GET"
+  }
+]
