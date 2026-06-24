@@ -104,6 +104,7 @@
     "test:beta-auth": "node scripts/beta-auth.test.mjs",
     "test:matterhorn-memory-contract": "node scripts/matterhorn-memory-contract.test.mjs",
     "test:matterhorn-memory-api-cli": "cd apps/server && bun test src/memory-routes.e2e.test.ts && cd ../.. && node scripts/matterhorn-memory-api-cli.test.mjs",
+    "test:matterhorn-memory-producers": "bun test apps/app/tests/memory-suggestion-producers.test.ts",
     "test:matterhorn-memory-ui": "node scripts/matterhorn-memory-ui.test.mjs",
     "workflow:evidence:list": "node scripts/matterhorn-workflow-evidence-bundles.mjs --list",
     "workflow:evidence:show": "node scripts/matterhorn-workflow-evidence-bundles.mjs --id",

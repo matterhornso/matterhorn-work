@@ -9,7 +9,7 @@ import {
   type MatterhornMemorySuggestion,
 } from "@matterhorn-work/types";
 
-type MemoryProducerDesk = Extract<MatterhornMemoryDesk, "bittensor" | "wellness">;
+type MemoryProducerDesk = Extract<MatterhornMemoryDesk, "bittensor" | "hyperliquid" | "polymarket" | "wellness">;
 
 export type MatterhornMemorySuggestionProducerInput = {
   desk?: MatterhornMemoryDesk | string;
@@ -26,8 +26,10 @@ export type MatterhornMemorySuggestionProducerInput = {
 
 const SS58_RE = /\b5[1-9A-HJ-NP-Za-km-z]{20,63}\b/;
 const NETUID_RE = /\b(?:netuid|subnet)\s*#?:?\s*(\d{1,4})\b/i;
+const HYPERLIQUID_ASSET_RE = /\b(BTC|ETH|SOL|HYPE|ARB|DOGE|XRP|AVAX|BNB|LINK|SUI|TON|WIF|PUMP)\b/i;
 const SECRET_TOKEN_RE = /\bsk-[a-zA-Z0-9]{20,}\b|\b[A-Za-z0-9_]+_(API_KEY|SECRET)\s*=|\b0x[0-9a-fA-F]{64}\b/;
 const SECRET_CAPTURE_INTENT_RE = /\b(remember|store|save|capture|use|paste|enter|send|include|my|here is|here's)\b.{0,80}\b(seed phrase|private key|mnemonic|api secret|raw signature|signed payload|signed order|wallet export|bearer token|exchange secret)\b/i;
+const POLYMARKET_TOPIC_BRAND_RE = /\bpolymarket\b[:\s-]*/i;
 
 function nowIso() {
   return new Date().toISOString();
@@ -51,6 +53,12 @@ function inferDesk(input: MatterhornMemorySuggestionProducerInput): MemoryProduc
   if (raw.includes("bittensor") || raw.includes("tao") || raw.includes("ss58") || raw.includes("subnet")) {
     return "bittensor";
   }
+  if (raw.includes("hyperliquid") || raw.includes("perp") || raw.includes("funding") || raw.includes("orderbook")) {
+    return "hyperliquid";
+  }
+  if (raw.includes("polymarket") || raw.includes("prediction market") || raw.includes("outcome") || raw.includes("odds")) {
+    return "polymarket";
+  }
   if (raw.includes("wellness") || raw.includes("trainer") || raw.includes("dietician") || raw.includes("yoga")) {
     return "wellness";
   }
@@ -71,6 +79,20 @@ function extractNetuid(input: MatterhornMemorySuggestionProducerInput): number |
   if (!matched) return null;
   const netuid = Number(matched);
   return Number.isInteger(netuid) && netuid >= 0 ? netuid : null;
+}
+
+function extractHyperliquidAsset(input: MatterhornMemorySuggestionProducerInput): string | null {
+  const matched = input.prompt?.match(HYPERLIQUID_ASSET_RE)?.[1];
+  return matched ? matched.toUpperCase() : null;
+}
+
+function extractPolymarketTopic(input: MatterhornMemorySuggestionProducerInput): string {
+  const text = (input.prompt ?? "")
+    .replace(POLYMARKET_TOPIC_BRAND_RE, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "Polymarket market research";
+  return text.slice(0, 120);
 }
 
 function hasForbiddenSuggestionInput(input: MatterhornMemorySuggestionProducerInput): boolean {
@@ -192,6 +214,72 @@ function buildBittensorSuggestions(input: MatterhornMemorySuggestionProducerInpu
   return suggestions;
 }
 
+function buildHyperliquidSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
+  const asset = extractHyperliquidAsset(input);
+  const record = baseRecord(input, {
+    id: safeId("mem_hyperliquid_watch", [asset ?? "market"]),
+    kind: "watchlist",
+    scope: "workspace",
+    title: asset ? `Hyperliquid ${asset} market watch` : "Hyperliquid market watch",
+    summary: asset
+      ? `Remember ${asset} as a Hyperliquid market the user may want to read, preview, or watch.`
+      : "Remember Hyperliquid as a market desk the user may want to read, preview, or watch.",
+    body: {
+      venue: "hyperliquid",
+      ...(asset ? { asset } : { query: "general_hyperliquid_market_context" }),
+      readOnly: true,
+      previewOnly: true,
+      externalSignerRequired: true,
+    },
+    tags: ["hyperliquid", "market", "watchlist", "preview-only", "memory-suggestion"],
+    sensitivity: "public",
+    canUseInChat: true,
+    canExport: false,
+  });
+  const marketSuggestion = suggestion(
+    input,
+    "hyperliquid",
+    record,
+    "hyperliquid_watched_market",
+    asset
+      ? `${asset} appeared in this Hyperliquid workflow. Remembering it can make future read-only market follow-ups simpler after you confirm.`
+      : "This Hyperliquid workflow can be remembered as a read-only market context after you confirm.",
+    asset ? 0.76 : 0.66,
+  );
+  return marketSuggestion ? [marketSuggestion] : [];
+}
+
+function buildPolymarketSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
+  const topic = extractPolymarketTopic(input);
+  const record = baseRecord(input, {
+    id: safeId("mem_polymarket_watch", [topic]),
+    kind: "watchlist",
+    scope: "workspace",
+    title: "Polymarket research watch",
+    summary: "Remember this public Polymarket topic for future market, outcome, liquidity, and compliance reads.",
+    body: {
+      venue: "polymarket",
+      topic,
+      readOnly: true,
+      previewOnly: true,
+      externalSignerRequired: true,
+    },
+    tags: ["polymarket", "prediction-market", "watchlist", "preview-only", "memory-suggestion"],
+    sensitivity: "public",
+    canUseInChat: true,
+    canExport: false,
+  });
+  const marketSuggestion = suggestion(
+    input,
+    "polymarket",
+    record,
+    "polymarket_watched_market",
+    "This Polymarket topic appeared in a read-only market workflow. Remembering it can make future research follow-ups simpler after you confirm.",
+    0.72,
+  );
+  return marketSuggestion ? [marketSuggestion] : [];
+}
+
 function buildWellnessSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
   const prompt = input.prompt?.trim() ?? "";
   const templateId = input.templateId?.trim();
@@ -232,6 +320,8 @@ export function buildMatterhornMemorySuggestions(
   }
   const desk = inferDesk(input);
   if (desk === "bittensor") return buildBittensorSuggestions(input);
+  if (desk === "hyperliquid") return buildHyperliquidSuggestions(input);
+  if (desk === "polymarket") return buildPolymarketSuggestions(input);
   if (desk === "wellness") return buildWellnessSuggestions(input);
   return [];
 }
