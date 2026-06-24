@@ -10,7 +10,10 @@ import {
   X,
 } from "lucide-react";
 
-import type { MatterhornServerClient } from "../../../app/lib/matterhorn-server";
+import type {
+  MatterhornMemorySuggestionInboxEntry,
+  MatterhornServerClient,
+} from "../../../app/lib/matterhorn-server";
 import type {
   MatterhornMemoryKind,
   MatterhornMemoryRecord,
@@ -58,6 +61,7 @@ type CaptureDraft = {
 type MemorySuggestionEventDetail = {
   suggestion?: MatterhornMemorySuggestion;
   suggestions?: MatterhornMemorySuggestion[];
+  input?: Parameters<NonNullable<MatterhornServerClient>["createMemorySuggestions"]>[0];
 };
 
 const INITIAL_DRAFT: CaptureDraft = {
@@ -164,10 +168,75 @@ function useMemoryRecords(client: MatterhornServerClient | null) {
   return { query, setQuery, records, setRecords, loading, error, refresh };
 }
 
+function localSuggestionEntry(suggestion: MatterhornMemorySuggestion): MatterhornMemorySuggestionInboxEntry {
+  const now = new Date().toISOString();
+  return {
+    version: "matterhorn.memory.suggestion-inbox.v1",
+    id: suggestion.id,
+    suggestion,
+    status: suggestion.policyDecision === "reject" ? "blocked" : "pending",
+    createdAt: now,
+    updatedAt: now,
+    policyWarnings: suggestion.policyWarnings ?? [],
+  };
+}
+
+function useMemorySuggestionInbox(client: MatterhornServerClient | null) {
+  const [entries, setEntries] = useState<MatterhornMemorySuggestionInboxEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!client) {
+      setEntries([]);
+      setError("Suggestion inbox unavailable. Connect to the local Matterhorn server.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await client.listMemorySuggestions({ includeResolved: true, limit: 40 });
+      setEntries(response.entries ?? []);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Could not load Memory suggestions.");
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const upsertEntries = useCallback((incoming: MatterhornMemorySuggestionInboxEntry[]) => {
+    if (!incoming.length) return;
+    setEntries((current) => {
+      const byId = new Map(current.map((entry) => [entry.id, entry]));
+      for (const entry of incoming) byId.set(entry.id, entry);
+      return Array.from(byId.values())
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .slice(0, 40);
+    });
+  }, []);
+
+  const removeEntry = useCallback((id: string) => {
+    setEntries((current) => current.filter((entry) => entry.id !== id));
+  }, []);
+
+  return { entries, setEntries, loading, error, refresh, upsertEntries, removeEntry };
+}
+
 export function MemoryPanel(props: MemoryPanelProps) {
   const { query, setQuery, records, setRecords, loading, error, refresh } = useMemoryRecords(props.client);
+  const {
+    entries: suggestionEntries,
+    loading: suggestionsLoading,
+    error: suggestionsError,
+    refresh: refreshSuggestions,
+    upsertEntries: upsertSuggestionEntries,
+    removeEntry: removeSuggestionEntry,
+  } = useMemorySuggestionInbox(props.client);
   const [selectedRecords, setSelectedRecords] = useState<MatterhornMemoryRecord[]>([]);
-  const [suggestions, setSuggestions] = useState<MatterhornMemorySuggestion[]>([]);
   const [draft, setDraft] = useState<CaptureDraft>(INITIAL_DRAFT);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [captureBusy, setCaptureBusy] = useState(false);
@@ -181,11 +250,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
         ...(detail.suggestion ? [detail.suggestion] : []),
       ].map(sanitizeMemorySuggestionForDisplay);
       if (!incoming.length) return;
-      setSuggestions((current) => {
-        const byId = new Map(current.map((suggestion) => [suggestion.id, suggestion]));
-        for (const suggestion of incoming) byId.set(suggestion.id, suggestion);
-        return Array.from(byId.values()).slice(-8);
-      });
+      const localEntries = incoming.map(localSuggestionEntry);
+      upsertSuggestionEntries(localEntries);
+      if (detail.input && props.client) {
+        void props.client.createMemorySuggestions(detail.input)
+          .then((response) => upsertSuggestionEntries(response.inbox.entries ?? []))
+          .catch(() => {
+            // Keep local visible suggestions if the durable inbox is unavailable.
+          });
+      }
     };
     window.addEventListener("matterhorn:memory-suggestions-updated", handleSuggestions);
     window.addEventListener("matterhorn:memory-suggestion", handleSuggestions);
@@ -193,7 +266,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       window.removeEventListener("matterhorn:memory-suggestions-updated", handleSuggestions);
       window.removeEventListener("matterhorn:memory-suggestion", handleSuggestions);
     };
-  }, []);
+  }, [props.client, upsertSuggestionEntries]);
 
   const visibleSelectedRecords = useMemo(
     () => selectedRecords.filter((record) => records.some((candidate) => candidate.id === record.id)),
@@ -252,12 +325,26 @@ export function MemoryPanel(props: MemoryPanelProps) {
     }
   };
 
-  const handleResolveSuggestion = async (suggestion: MatterhornMemorySuggestion, action: MatterhornMemorySuggestion["userAction"]) => {
+  const handleResolveSuggestion = async (entry: MatterhornMemorySuggestionInboxEntry, action: MatterhornMemorySuggestion["userAction"]) => {
     if (!props.client) return;
     setCaptureError(null);
     try {
+      if (entry.status === "pending") {
+        const response = await props.client.resolveStoredMemorySuggestion(entry.id, {
+          action,
+          reason: action === "dismiss"
+            ? "User dismissed this visible Memory suggestion from the Matterhorn Memory panel."
+            : "User confirmed this visible Memory suggestion from the Matterhorn Memory panel.",
+        });
+        if (response.record) {
+          setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
+        }
+        upsertSuggestionEntries([response.entry]);
+        return;
+      }
+
       const response = await props.client.resolveMemorySuggestion({
-        suggestion,
+        suggestion: entry.suggestion,
         action,
         reason: action === "dismiss"
           ? "User dismissed this visible Memory suggestion from the Matterhorn Memory panel."
@@ -266,7 +353,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       if (response.record) {
         setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
       }
-      setSuggestions((current) => current.filter((item) => item.id !== suggestion.id));
+      removeSuggestionEntry(entry.id);
     } catch (nextError) {
       setCaptureError(nextError instanceof Error ? nextError.message : "Could not resolve this memory suggestion.");
     }
@@ -381,54 +468,94 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </section>
         ) : null}
 
-        {suggestions.length ? (
-          <section className="mt-4 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+        <section className="mt-4 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+          <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
               <ShieldAlert className="mt-0.5 size-4 shrink-0 text-primary" />
               <div>
-                <div className="text-sm font-semibold">Memory suggestions</div>
+                <div className="text-sm font-semibold">Suggestion inbox</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Matterhorn can propose memories, but nothing is saved unless you confirm. Review every suggestion first.
+                  Visible memory candidates only: nothing is saved unless you confirm or edit to save; dismiss keeps it out of memory.
                 </p>
               </div>
             </div>
-            <div className="mt-3 space-y-2">
-              {suggestions.map((suggestion) => (
-                <article key={suggestion.id} className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
-                    <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
-                      {suggestion.proposedRecord.sensitivity}
-                    </span>
-                    <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                      {suggestion.desk}
-                    </span>
-                    <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                      {Math.round(suggestion.confidence * 100)}% confidence
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs leading-5 text-dls-secondary">{suggestion.proposedRecord.summary}</p>
-                  <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                    <span className="font-semibold text-dls-text">Why:</span> {suggestion.reason}
-                  </p>
-                  {suggestion.policyWarnings?.length ? (
-                    <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
-                      {suggestion.policyWarnings.slice(0, 3).join(" ")}
-                    </div>
-                  ) : null}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" onClick={() => void handleResolveSuggestion(suggestion, "confirm")} disabled={!props.client || suggestion.policyDecision === "reject"}>
-                      Remember
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => void handleResolveSuggestion(suggestion, "dismiss")} disabled={!props.client}>
-                      Dismiss
-                    </Button>
-                  </div>
-                </article>
-              ))}
+            <Button variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
+              <RefreshCw className={cn("mr-2 size-3.5", suggestionsLoading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
+          {suggestionsError ? (
+            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              {suggestionsError}
             </div>
-          </section>
-        ) : null}
+          ) : null}
+          {suggestionEntries.length ? (
+            <div className="mt-3 space-y-2">
+              {suggestionEntries.map((entry) => {
+                const suggestion = entry.suggestion;
+                const resolved = entry.status === "confirmed" || entry.status === "edited" || entry.status === "dismissed";
+                return (
+                  <article key={entry.id} className={cn(
+                    "rounded-xl border border-dls-border bg-dls-card px-3 py-2",
+                    entry.status === "blocked" && "border-red-500/30 bg-red-500/10",
+                    resolved && "opacity-75",
+                  )}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
+                        {suggestion.proposedRecord.sensitivity}
+                      </span>
+                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        {suggestion.desk}
+                      </span>
+                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        {entry.status}
+                      </span>
+                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        {Math.round(suggestion.confidence * 100)}% confidence
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-dls-secondary">{suggestion.proposedRecord.summary}</p>
+                    <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                      <span className="font-semibold text-dls-text">Why suggested:</span> {suggestion.reason}
+                    </p>
+                    {entry.reason && resolved ? (
+                      <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                        <span className="font-semibold text-dls-text">Resolution:</span> {entry.reason}
+                      </p>
+                    ) : null}
+                    {entry.policyWarnings?.length ? (
+                      <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
+                        {entry.policyWarnings.slice(0, 3).join(" ")}
+                      </div>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => void handleResolveSuggestion(entry, "confirm")}
+                        disabled={!props.client || entry.status !== "pending" || suggestion.policyDecision === "reject"}
+                      >
+                        Remember
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void handleResolveSuggestion(entry, "dismiss")}
+                        disabled={!props.client || entry.status !== "pending"}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              No pending suggestions. Matterhorn will show candidates here before anything is remembered.
+            </div>
+          )}
+        </section>
 
         <section className="mt-4 space-y-2">
           {records.length === 0 && !loading ? (
