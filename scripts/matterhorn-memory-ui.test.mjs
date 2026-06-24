@@ -201,6 +201,16 @@ for (const expected of [
   "Edit before saving",
   "Save edited memory",
   "No hidden save",
+  "canActOnSuggestion",
+  "showActiveSuggestionActions",
+  "shouldHideSuggestionContent",
+  "Blocked suggestion content hidden",
+  "proposed title, body, source, and Why suggested details are intentionally hidden",
+  "No title, body, source, confidence detail, or trigger text is rendered",
+  "Expired suggestions cannot be confirmed or edited",
+  "Dismiss from view",
+  "Policy protected",
+  "edited cards are already saved",
   "Remember visible Memory suggestion",
   "Edit visible Memory suggestion before saving",
   "Dismiss visible Memory suggestion",
@@ -225,6 +235,15 @@ for (const expected of [
   "wallet exports",
 ]) {
   assert.match(memoryPanel, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `missing memory panel copy/safety: ${expected}`)
+}
+
+for (const forbidden of [
+  "Edit -> Save -> Confirm",
+  "Edit → Save → Confirm",
+  "then still confirm",
+  "only Confirm",
+]) {
+  assert.doesNotMatch(memoryPanel, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `conflicting Memory lifecycle copy found: ${forbidden}`)
 }
 
 for (const forbidden of [
