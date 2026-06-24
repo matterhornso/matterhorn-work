@@ -358,253 +358,341 @@ Verify the following do NOT exist in any Memory UI surface:
 
 If any of these are found, file a P0 and fix immediately.
 
+
 ---
 
-## Sprint 6: Memory Producer V1
+## Sprint 6: Memory Producer V1 — Suggestion Inbox
 
-### 18. Producer Bell Icon
+### 18. Producer Bell Icon & Badge
 
-Add a bell icon to the app header for pending memory suggestions.
+Implement the bell icon entry point for the Memory Producer inbox.
 
-**Behavior:**
-- Shows an unread badge when safe memory suggestions are waiting for review.
-- Opens the suggestion inbox when clicked.
-- Never saves memory by itself.
-- Badge count only reflects suggestions that the user can review.
-- Wellness suggestions stay hidden unless the user has enabled wellness memory suggestions.
+**Location:** App header, far right, adjacent to profile menu.
+**Icon:** Bell SVG (outline when empty, filled when unread). 24×24px.
+**Badge:** Unread count badge. Positioned top-right of bell. Max display: "99+".
+**Badge animation:** Pulse once (scale 1 → 1.15 → 1, 2s, non-intrusive) when a new suggestion arrives.
 
 **States:**
-- Empty: no badge, neutral icon.
-- Has suggestions: badge with count, accessible label "Memory suggestions waiting".
-- Loading: subtle skeleton badge, no spinner.
-- Error: amber badge and tooltip explaining that suggestions could not be loaded.
+- Empty: outline bell, no badge
+- Has unread: filled bell, badge visible
+- Panel open: filled bell, badge hidden
+- Loading: outline bell, subtle spinner overlay on icon
+
+**Layout:**
+```
+[Avatar] [Search] [🔔 3] [⚙]
+```
+
+**Responsive:**
+- Desktop ≥ 1200px: header shows bell + badge inline
+- Tablet 768–1199px: bell + badge inline
+- Mobile < 768px: bell + badge inline, bell slightly smaller (20×20px)
+
+**Safety:** The bell icon must not trigger any data collection. It is a read surface — it displays suggestions, it does not capture input.
 
 ---
 
 ### 19. Suggestion Inbox Slide-Over Panel
 
-Design a right-side panel titled "Memory suggestions".
+Implement the suggestion inbox panel as specified in `memory-producer-v1.md` §2.2.
 
-**Layout:**
-- Header with title, count, close button, and privacy shortcut.
-- Intro line: "Review what Matterhorn thinks may be useful later. Nothing is saved until you confirm."
-- Scrollable stack of suggestion cards.
-- Footer with a link to Memory Privacy settings.
-
-**Rules:**
-- The panel must not block the main chat.
-- Escape closes the panel.
-- Focus is trapped while the panel is open.
-- Empty state explains that Matterhorn has not found anything useful to suggest yet.
-
----
-
-### 20. Suggestion Card
-
-Each card must show the suggestion clearly enough for the user to accept, edit, or reject.
-
-**Required content:**
-- Title.
-- Body.
-- Type badge.
-- Sensitivity badge.
-- Source chip.
-- Confidence bar.
-- "Why suggested" explanation in plain English.
-- Suggested scope.
-- Timestamp.
-
-**Actions:**
-- Confirm.
-- Edit.
-- Dismiss.
-
-**Safety copy:**
-- "Nothing is saved until you confirm."
-- "Matterhorn never stores seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports."
-
----
-
-### 21. Inline Edit Mode
-
-When the user clicks Edit, keep the card in place and switch title/body fields to editable controls.
-
-**Behavior:**
-- Save changes.
-- Cancel.
-- Preserve the original "Why suggested" explanation.
-- Re-run forbidden-content validation before saving.
-- Show inline validation errors for secret-shaped or clinical content.
-
-**NO HIDDEN SAVE:**
-- Do not save on blur.
-- Do not save on typing.
-- Do not save on panel close.
-- Only save on explicit "Save changes".
-
----
-
-### 22. Producer Privacy Controls
-
-Add privacy controls to the suggestion inbox and Memory settings.
-
-**Required controls:**
-- Enable/disable memory suggestions globally.
-- Enable/disable suggestions by source.
-- Enable/disable protocol-address suggestions.
-- Enable/disable receipt suggestions.
-- Enable/disable wellness suggestions.
-
-**Wellness default:**
-- Wellness suggestions are off by default.
-- Wellness suggestions are restricted and local-first.
-- The UI must explain that wellness memory is optional and user-confirmed.
-
----
-
-### 23. Empty/Error States
-
-Design complete empty, loading, and error states for the producer flow.
-
-**Empty state:**
-- Title: "No suggestions right now"
-- Body: "Matterhorn will suggest memories only when they may help future work. Nothing is saved automatically."
-
-**Error state:**
-- Title: "Suggestions unavailable"
-- Body: "Memory suggestions could not be loaded. Existing memories are unaffected."
-- Action: Retry.
-
-**Blocked state:**
-- Title: "Suggestion blocked"
-- Body: "This candidate looked like a secret, credential, signed payload, or restricted wellness data, so Matterhorn refused to save it."
-
----
-
-### 24. Anti-Patterns Checklist — Producer
-
-The producer UI must never include:
-
-- Auto-save claims.
-- Hidden memory writes.
-- Seed phrase fields.
-- Private key fields.
-- API secret fields.
-- Raw signature fields.
-- Signed payload fields.
-- Wallet export fields.
-- Medical diagnosis memories without explicit opt-in and review.
-- Any button that says "Remember everything".
-- Any suggestion that bypasses Confirm.
-
----
-
-## Sprint 7: Customer UX Overhaul
-
-### 25. Desk-First Navigation Sidebar
-
-Replace internal-category navigation with a customer-facing desk model.
-
-```text
-Desk
-  Bittensor
-  Hyperliquid
-  Polymarket
-  Wellness
-Memory
-Tools
-Settings
+**Panel anatomy:**
+```
+Header: "Memory Suggestions" + count + "Mark all read" link + close [×]
+Filter bar: scope dropdown (All / Protocol / Wellness / Context / Preference)
+Content: stacked suggestion cards
+Footer: pagination ("Showing N of M · Load more")
 ```
 
-**Rules:**
-- Do not show Services as a primary customer nav item.
-- Each desk has its own icon and color accent.
-- The selected desk must be visually obvious.
-- Mobile uses a bottom tab or compact drawer, not a trapped right rail.
+**Animation:** Slide in from right. `transform: translateX(100%)` → `translateX(0)`. 250ms, `cubic-bezier(0.32, 0.72, 0, 1)`.
+**Close:** X button, click outside panel, Escape key.
+**Backdrop:** Content behind panel dims to `opacity: 0.3`, `pointer-events: none`.
+
+**Widths:**
+- Desktop ≥ 1200px: 480px
+- Tablet 768–1199px: 100vw
+- Mobile < 768px: 100vw × 100vh (full-screen overlay)
+
+**Accessibility:**
+- Focus traps inside panel when open (Tab cycles within panel)
+- Escape closes panel
+- Focus returns to bell icon on close
 
 ---
 
-### 26. Desk Surfaces
+### 20. Suggestion Card — Display & Actions
 
-Create first-class desk surfaces instead of a generic crypto workspace.
+Implement the suggestion card as specified in `memory-producer-v1.md` §3.
 
-**Bittensor desk:**
-- Wallet, subnets, validators, watches, receipts, unsigned staking previews.
-- SS58/coldkey/hotkey language.
-- External signer required for actions.
+**Card structure:**
+```
+Metadata row: confidence bar + sensitivity badge + type badge
+Title: max 2 lines, ellipsis
+Body: max 3 lines, ellipsis (optional)
+Why suggested: left-border accent (4px, --mm-accent), label + body
+Source chip: icon + name + relative timestamp (read-only)
+Action row: Confirm (primary) / Edit (default) / Dismiss (ghost/danger)
+```
 
-**Hyperliquid desk:**
-- Read-only account/orderbook/preview.
-- Can submit: No.
-- Live submission: Off.
-- External signer/client required.
+**Confidence bar:**
+- 3 segments, filled = high (≥ 80%, green), amber = medium (50–79%), red = low (< 50%)
+- Numeric label: "82%" right-aligned
+- `aria-label`: "Confidence: 82%, high"
 
-**Polymarket desk:**
-- Market discovery, outcome context, compliance state, preview.
-- Can submit: No.
-- Live submission: Off.
-- Compliance-blocked previews must not show executable price, size, or share fields.
+**Sensitivity badge:** Personal / High / Restricted — same color system as Memory cards.
+**Type badge:** Protocol / Preference / Context / Wellness — same color system as Memory cards.
 
-**Wellness desk:**
-- Plain workflow surface, not Web3.
-- Training, yoga, dietician, client workflow, progress check-in, offer builder.
-- Educational only, non-medical, no live payments/email/hosting/access claims.
+**Action behaviors:**
+- Confirm: saves as memory, shows "Confirmed ✓" toast (3s), card animates out
+- Edit: expands card in-place, shows editable fields (see Sprint 21)
+- Dismiss: shows "Dismissed" toast (2s), card animates out. Dismissal is permanent for this suggestion.
 
----
-
-### 27. Semantic Color Token System
-
-Use semantic tokens instead of one global accent.
-
-**Required namespaces:**
-- `--brand-*`
-- `--action-*`
-- `--status-*`
-- `--desk-*`
-- `--nav-*`
-
-**Desk accents:**
-- Bittensor: energetic pink.
-- Hyperliquid: electric blue.
-- Polymarket: violet.
-- Wellness: warm rose.
-- Memory: cyan.
-
-**Matterhorn brand:**
-- Keep `#0C0C0C` and `#D1F2FF` for primary brand moments, primary buttons, and selected states.
-- Use brighter supporting colors for protocols, alerts, and workflow categories.
+**Hover state:** subtle `translateY(-1px)`, border color shifts to `--mm-accent`, `box-shadow: var(--shadow-sm)`.
 
 ---
 
-### 28. Responsive Behavior
+### 21. Suggestion Card — Inline Edit Mode
 
-Every desk and memory screen must work at desktop, tablet, and mobile sizes.
+Implement the inline edit mode as specified in `memory-producer-v1.md` §4.
 
-**Desktop:**
-- Left navigation, central chat/workspace, optional right context panel.
+**Trigger:** Click "Edit" on any suggestion card.
 
-**Tablet:**
-- Collapsible side panels.
-- Cards use two columns only when width allows.
+**Editable fields:**
+- Title: textarea, 2 rows, live character count, max 80 chars
+- Type: dropdown (Protocol / Preference / Context / Wellness)
+- Sensitivity: dropdown (Personal / High / Restricted)
+- Why suggested (body only): textarea, non-editable label, editable body
 
-**Mobile:**
-- One-column content.
-- Bottom navigation or drawer.
-- No horizontal overflow.
-- Composer remains reachable.
-- Right rail never traps content off-screen.
+**Non-editable label:** The "Why suggested:" label itself cannot be edited — only the explanation body text.
+
+**Validation (on save):**
+- Title must not be empty → red border + "Title is required"
+- Title must not contain seed phrases, private keys, API secrets, raw signatures, medical diagnoses, or financial guarantees → red border + "This memory contains sensitive or forbidden content and cannot be saved."
+
+**Wellness type confirmation:** If changing type to Wellness, show confirmation dialog: "Wellness memories are stored locally only. Continue?"
+
+**Footer actions:** "Save changes ✓" (primary) / "Cancel" (text link).
+
+**Safety — NO HIDDEN SAVE:**
+- No changes persist without clicking "Save changes"
+- No changes persist if user navigates away
+- No network request fires until "Save changes" is clicked
 
 ---
 
-### 29. Anti-Patterns Checklist
+### 22. Producer Privacy Controls & Empty/Error States
 
-The customer UX must not include:
+Implement the privacy controls and state management as specified in `memory-producer-v1.md` §6.
 
-- Services as a top-level customer desk.
-- Computer Use as a customer-facing default.
-- OpenWork or OpenCode copy on customer-facing screens.
-- Buttons implying live market submission.
-- Buttons implying Matterhorn signs or holds custody.
-- Credential entry fields.
-- Hidden memory saves.
-- Wellness copy that implies diagnosis, treatment, prescription, or guaranteed outcomes.
+**Privacy toggles (in Privacy & Forget Center):**
+- "Allow memory suggestions" — default: on
+- "Allow wellness memory suggestions" — default: off
+
+**Wellness paused state:** If Wellness suggestions exist AND toggle is off, show:
+```
+🔒 Wellness suggestions are paused
+─────────────────────────────
+Wellness memory suggestions are currently disabled.
+Enable them in Privacy & Forget Center → Wellness tab.
+[Open Privacy settings]  [Dismiss]
+```
+
+**Empty state:** No suggestions at all:
+```
+🔔 No suggestions yet
+─────────────────────────────
+Matterhorn will suggest memories when it finds
+patterns in your activity.
+Suggestions appear here for you to review before
+they're saved.
+```
+
+**Loading state:** Skeleton cards (3 cards), animated pulse. Filter bar disabled.
+**Error state:** Amber banner: "Couldn't load suggestions. Try again." + Retry button.
+
+---
+
+## Sprint 7: Customer UX Overhaul — Navigation & Theme
+
+### 23. Desk-First Navigation Sidebar
+
+Implement the redesigned sidebar as specified in `customer-ux-overhaul.md` §2.
+
+**Nav sections:**
+```
+[Matterhorn logo — top]
+────────────────────
+Desk:
+  Bittensor          [⊗] (pink)
+  Hyperliquid        [H]  (blue)
+  Polymarket         [P]  (purple)
+  Wellness           [♥]  (pink)
+────────────────────
+Memory:
+  Memory             [M]  (green)  [+badge if unread]
+  Sources & Provenance
+  Watchlists
+────────────────────
+Tools:
+  MCPs               [⚡]
+  Workflows (future — disabled/coming soon)
+────────────────────
+Settings:
+  Settings
+  Profile
+  Privacy & Forget Center
+────────────────────
+[Collapse sidebar —]
+```
+
+**"Services" removal:** The "Services" nav section must not exist. Its contents are redistributed as above. Audit all routes and redirects.
+
+**Nav active state:** `--nav-bg-active` background, `--nav-text-active` color, left border accent (3px, `--brand-accent`).
+
+**Collapsed state:** 56px wide, icon-only, tooltips on hover. "Collapse sidebar" button at bottom. Double-click sidebar edge also collapses.
+
+**Responsive:**
+- Desktop ≥ 1200px: always visible, 220px wide
+- Tablet 768–1199px: 220px, collapsible
+- Mobile < 768px: hidden, hamburger in header opens full-screen overlay
+
+**Mobile overlay:** Full-screen, `--nav-bg` with `backdrop-filter: blur(8px)`. Slide in from left. Active item highlighted. X button to close.
+
+---
+
+### 24. Desk Surfaces — Protocol Headers
+
+Implement the desk surface headers for Bittensor, Hyperliquid, Polymarket, and Wellness as specified in `customer-ux-overhaul.md` §3.
+
+**Each desk surface has:**
+- Protocol icon: 32×32px, `--desk-*` color background (tinted circle)
+- Protocol name: `--brand-text`, 18px semibold
+- Description: `--brand-text-secondary`, 14px
+- "View [Protocol] ↗" link: opens external browser (never iframe)
+- "Settings ⚙" link: opens protocol integration settings
+- Stats row: Memories count / Protocol-specific stat / Avg confidence
+
+**Protocol colors:**
+- Bittensor: `--desk-bittensor` (pink `#F472B6` dark / `#DB2777` light)
+- Hyperliquid: `--desk-hyperliquid` (blue `#60A5FA` dark / `#2563EB` light)
+- Polymarket: `--desk-polymarket` (purple `#C084FC` dark / `#9333EA` light)
+- Wellness: `--desk-wellness` (pink `#F472B6` dark / `#DB2777` light) + mandatory privacy notice
+- Memory: `--desk-memory` (green `#34D399` dark / `#059669` light)
+
+**Wellness privacy notice (mandatory):** Always visible at top of Wellness desk surface:
+```
+🔒 Wellness memories are stored locally only.
+No wellness data is sent to external servers.
+```
+
+---
+
+### 25. Semantic Color Token System
+
+Implement the new semantic CSS token system as specified in `customer-ux-overhaul.md` §4.
+
+**Token namespaces:**
+```css
+/* Brand — core palette */
+--brand-bg: ...;
+--brand-surface: ...;
+--brand-elevated: ...;
+--brand-accent: ...;
+--brand-text: ...;
+--brand-text-secondary: ...;
+--brand-border: ...;
+
+/* Action — buttons and interactive elements */
+--action-primary: ...;         /* Primary CTA */
+--action-primary-hover: ...;
+--action-secondary: ...;        /* Secondary buttons */
+--action-ghost: ...;            /* Ghost/icon buttons */
+--action-ghost-hover: ...;
+--action-danger: ...;           /* Forget, delete */
+
+/* Status — indicators */
+--status-success: ...;          /* Green */
+--status-success-dim: ...;
+--status-warning: ...;          /* Amber */
+--status-warning-dim: ...;
+--status-info: ...;             /* Blue — read-only, preview */
+--status-info-dim: ...;
+--status-danger: ...;          /* Red — errors */
+--status-danger-dim: ...;
+
+/* Desk — protocol branding */
+--desk-bittensor: ...;          /* Pink */
+--desk-hyperliquid: ...;         /* Blue */
+--desk-polymarket: ...;         /* Purple */
+--desk-wellness: ...;           /* Pink */
+--desk-memory: ...;             /* Green */
+
+/* Navigation */
+--nav-bg: ...;
+--nav-bg-hover: ...;
+--nav-bg-active: ...;
+--nav-text: ...;
+--nav-text-active: ...;
+--nav-border: ...;
+```
+
+**Migration approach:** Add new tokens alongside existing `--mm-*` tokens. Migrate components one at a time. Remove old tokens after full migration.
+
+**Light mode:** All tokens have `[data-theme="light"]` overrides. See `customer-ux-overhaul.md` §4.4 for specific values and principles.
+
+**Usage rules:**
+- Protocol surfaces → `--desk-*`
+- Action buttons → `--action-*`
+- Status indicators → `--status-*`
+- Navigation → `--nav-*`
+- Core brand → `--brand-*`
+- Never mix: `--desk-*` for status, or `--status-*` for protocol
+
+---
+
+### 26. Responsive Behavior — Sidebar, Cards, Producer Panel
+
+Implement responsive behavior as specified in `customer-ux-overhaul.md` §5.
+
+**Sidebar:**
+- ≥ 1200px: 220px, always visible
+- 768–1199px: 220px, collapsible
+- < 768px: hidden, hamburger opens overlay
+
+**Memory card grid (Memory Overview, desk surfaces):**
+- ≥ 1200px: 3 columns, 20px card padding
+- 768–1199px: 2 columns, 16px padding
+- < 768px: 1 column, 12px padding
+
+**Producer inbox panel:**
+- ≥ 1200px: 480px, overlays content
+- 768–1199px: 100vw
+- < 768px: 100vw × 100vh, full-screen overlay
+
+**Mobile Producer panel keyboard handling:** When a textarea in edit mode receives focus, the virtual keyboard must not push the panel off-screen. Use `visualViewport` API or `position: fixed` on the panel.
+
+---
+
+### 27. Anti-Patterns Checklist — Producer & Overhaul
+
+Verify the following do NOT exist in any Producer or navigation surface:
+
+**Memory Producer:**
+- [ ] Auto-save on any field (Confirm or Save changes must always be explicit)
+- [ ] Network request on field blur (saves only on button click)
+- [ ] Wellness suggestions appearing when "Allow wellness memory suggestions" is off
+- [ ] Restricted sensitivity Wellness suggestions auto-suggested without opt-in
+- [ ] Any field accepting seed phrases, private keys, API secrets, raw signatures, medical diagnoses
+- [ ] "Dismiss" not permanently dismissing the suggestion
+- [ ] Suggestion count badge appearing when count === 0
+
+**Customer Navigation:**
+- [ ] "Services" section or nav item anywhere in the sidebar
+- [ ] "Markets" as a primary nav section (replaced by Desk)
+- [ ] Protocol brand colors (`--desk-*`) used for status indicators
+- [ ] Status colors used for protocol branding
+- [ ] `--mh-accent` used for anything other than links in new components (old tokens are deprecated)
+- [ ] External links (Bittensor, Hyperliquid, Polymarket "View ↗") opening in iframe
+- [ ] Wellness privacy notice absent from Wellness desk surface
+
+If any of these are found, file a P0 and fix immediately.
