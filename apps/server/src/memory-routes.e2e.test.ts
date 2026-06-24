@@ -251,6 +251,19 @@ describe("Matterhorn memory API routes", () => {
     expect(created.payload.writesMemory).toBe(false);
     expect(created.payload.inbox.count).toBeGreaterThanOrEqual(2);
     expect(created.payload.inbox.entries.every((entry: { status: string }) => entry.status === "pending")).toBe(true);
+    expect(created.payload.inbox.entries.every((entry: {
+      actorConfirmationRequired: boolean;
+      dismissalWindowDays: number;
+      suggestionId: string;
+      dedupeKey: string;
+    }) => (
+      entry.actorConfirmationRequired === true &&
+      entry.dismissalWindowDays === 30 &&
+      typeof entry.suggestionId === "string" &&
+      entry.suggestionId.length > 0 &&
+      typeof entry.dedupeKey === "string" &&
+      entry.dedupeKey.length > 0
+    ))).toBe(true);
 
     const beforeResolve = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
     expect(beforeResolve.response.status).toBe(200);
@@ -267,6 +280,11 @@ describe("Matterhorn memory API routes", () => {
     const fetched = await jsonFetch(base, `/api/memory/suggestions/${walletEntry.id}`);
     expect(fetched.response.status).toBe(200);
     expect(fetched.payload.entry.id).toBe(walletEntry.id);
+    expect(fetched.payload.entry.suggestionId).toBe(walletEntry.id);
+    expect(fetched.payload.entry.actorConfirmationRequired).toBe(true);
+    expect(fetched.payload.entry.kind).toBe(fetched.payload.entry.suggestion.proposedRecord.kind);
+    expect(fetched.payload.entry.scope).toBe(fetched.payload.entry.suggestion.proposedRecord.scope);
+    expect(fetched.payload.entry.sensitivity).toBe(fetched.payload.entry.suggestion.proposedRecord.sensitivity);
 
     const confirmed = await jsonFetch(base, `/api/memory/suggestions/${walletEntry.id}/resolve`, {
       method: "POST",
@@ -279,6 +297,8 @@ describe("Matterhorn memory API routes", () => {
     expect(confirmed.response.status).toBe(200);
     expect(confirmed.payload.saved).toBe(true);
     expect(confirmed.payload.entry.status).toBe("edited");
+    expect(confirmed.payload.entry.lastAction).toBe("edit");
+    expect(confirmed.payload.entry.resolutionReason).toBe("User confirmed from the visible suggestion inbox.");
     expect(confirmed.payload.record.title).toBe("Edited TAO wallet memory");
 
     const afterResolve = await jsonFetch(base, "/api/memory/search?tags=bittensor&limit=5");
@@ -314,6 +334,8 @@ describe("Matterhorn memory API routes", () => {
     expect(dismissed.payload.dismissed).toBe(true);
     expect(dismissed.payload.entry.status).toBe("dismissed");
     expect(dismissed.payload.entry.dismissedUntil).toBeTruthy();
+    expect(dismissed.payload.entry.lastAction).toBe("dismiss");
+    expect(dismissed.payload.entry.resolutionReason).toBe("User does not want this remembered.");
   });
 
   test("capture, search, update, export, and forget records", async () => {
