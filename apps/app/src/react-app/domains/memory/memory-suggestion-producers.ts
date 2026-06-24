@@ -244,6 +244,7 @@ export function dispatchMatterhornMemorySuggestions(
   window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-updated", {
     detail: {
       suggestions,
+      input,
       source: input.sourceId ?? "memory-suggestion-producer",
     },
   }));

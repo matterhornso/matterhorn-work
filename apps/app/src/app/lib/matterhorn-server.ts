@@ -171,6 +171,51 @@ export type MatterhornMemorySuggestionResolveResponse = {
   policyWarnings: string[];
 };
 
+export type MatterhornMemorySuggestionInboxStatus =
+  | "pending"
+  | "confirmed"
+  | "edited"
+  | "dismissed"
+  | "blocked";
+
+export type MatterhornMemorySuggestionInboxEntry = {
+  version: "matterhorn.memory.suggestion-inbox.v1";
+  id: string;
+  suggestion: MatterhornMemorySuggestion;
+  status: MatterhornMemorySuggestionInboxStatus;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  lastAction?: MatterhornMemorySuggestion["userAction"];
+  reason?: string;
+  recordId?: string;
+  markdownPath?: string;
+  dismissedUntil?: string;
+  policyWarnings: string[];
+};
+
+export type MatterhornMemorySuggestionInboxResponse = MatterhornMemorySuggestionPlanResponse & {
+  inbox: {
+    entries: MatterhornMemorySuggestionInboxEntry[];
+    count: number;
+  };
+};
+
+export type MatterhornMemorySuggestionListResponse = {
+  success: boolean;
+  entries: MatterhornMemorySuggestionInboxEntry[];
+  count: number;
+};
+
+export type MatterhornMemorySuggestionGetResponse = {
+  success: boolean;
+  entry: MatterhornMemorySuggestionInboxEntry;
+};
+
+export type MatterhornMemoryStoredSuggestionResolveResponse = MatterhornMemorySuggestionResolveResponse & {
+  entry: MatterhornMemorySuggestionInboxEntry;
+};
+
 export type MatterhornMemoryForgetResponse = {
   success: boolean;
   forgotten: boolean;
@@ -1554,6 +1599,54 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         method: "POST",
         body: { input },
+        timeoutMs: timeouts.config,
+      }),
+
+    createMemorySuggestions: (input: MatterhornMemorySuggestionPlanInput) =>
+      requestJson<MatterhornMemorySuggestionInboxResponse>(baseUrl, "/api/memory/suggestions", {
+        token,
+        hostToken,
+        method: "POST",
+        body: { input },
+        timeoutMs: timeouts.config,
+      }),
+
+    listMemorySuggestions: (options?: {
+      status?: MatterhornMemorySuggestionInboxStatus;
+      desk?: string;
+      includeResolved?: boolean;
+      limit?: number;
+    }) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.desk?.trim()) params.set("desk", options.desk.trim());
+      if (options?.includeResolved) params.set("includeResolved", "true");
+      if (typeof options?.limit === "number") params.set("limit", String(options.limit));
+      const suffix = params.size ? `?${params.toString()}` : "";
+      return requestJson<MatterhornMemorySuggestionListResponse>(baseUrl, `/api/memory/suggestions${suffix}`, {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      });
+    },
+
+    getMemorySuggestion: (id: string) =>
+      requestJson<MatterhornMemorySuggestionGetResponse>(baseUrl, `/api/memory/suggestions/${encodeURIComponent(id)}`, {
+        token,
+        hostToken,
+        timeoutMs: timeouts.status,
+      }),
+
+    resolveStoredMemorySuggestion: (id: string, payload: {
+      action?: MatterhornMemorySuggestion["userAction"];
+      patch?: Partial<Omit<MatterhornMemoryRecord, "id" | "createdAt">>;
+      reason?: string;
+    }) =>
+      requestJson<MatterhornMemoryStoredSuggestionResolveResponse>(baseUrl, `/api/memory/suggestions/${encodeURIComponent(id)}/resolve`, {
+        token,
+        hostToken,
+        method: "POST",
+        body: payload,
         timeoutMs: timeouts.config,
       }),
 

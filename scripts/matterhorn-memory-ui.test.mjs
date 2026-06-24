@@ -52,10 +52,15 @@ for (const expected of [
   "listMemory",
   "captureMemory",
   "planMemorySuggestions",
+  "createMemorySuggestions",
+  "listMemorySuggestions",
+  "getMemorySuggestion",
+  "resolveStoredMemorySuggestion",
   "resolveMemorySuggestion",
   "forgetMemory",
   "exportMemory",
   "MatterhornMemoryRecord",
+  "MatterhornMemorySuggestionInboxEntry",
   "MatterhornMemoryExportManifest",
 ]) {
   assert.match(serverClient, new RegExp(expected), `missing server client memory method/type: ${expected}`)
@@ -146,8 +151,12 @@ for (const expected of [
 
 for (const expected of [
   "Remember this",
-  "Memory suggestions",
+  "Suggestion inbox",
   "nothing is saved unless you confirm",
+  "visible Memory suggestion",
+  "resolveStoredMemorySuggestion",
+  "listMemorySuggestions",
+  "matterhorn.memory.suggestion-inbox.v1",
   "matterhorn:memory-suggestions-updated",
   "matterhorn:memory-suggestion",
   "resolveMemorySuggestion",
