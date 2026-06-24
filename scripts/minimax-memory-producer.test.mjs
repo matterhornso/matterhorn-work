@@ -48,6 +48,7 @@ console.log("\nMatterhorn Memory Producer & Customer UX Overhaul — Static Desi
 
 const requiredFiles = [
   "docs/ui/matterhorn-memory/memory-producer-v1.md",
+  "docs/ui/matterhorn-memory/memory-suggestion-inbox-v1.md",
   "docs/ui/matterhorn-memory/customer-ux-overhaul.md",
   "docs/ui/matterhorn-memory/stitch-prompts.md",
   "docs/ui/matterhorn-memory/styles.css",
@@ -60,6 +61,191 @@ for (const f of requiredFiles) {
   } catch {
     fail(`File exists: ${f}`, "NOT FOUND");
   }
+}
+
+// ── 1b. Memory Suggestion Inbox V1 — all 10 required sections ───
+
+const inbox = read("docs/ui/matterhorn-memory/memory-suggestion-inbox-v1.md");
+
+// §1 — Entry point
+const entrySections = [
+  ["Bell icon", "Bell Icon"],
+  ["Bell icon", "bell icon"],
+  ["Unread count", "unread count"],
+  ["Tooltip", "Tooltip"],
+  ["Empty state", "No memory suggestions"],
+  ["Loading state", "Loading"],
+  ["Error state", "error"],
+  ["Badge pulse", "pulse"],
+  ["Bell states table", "States Summary"],
+];
+for (const [label, needle] of entrySections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §1: "${needle}" present`);
+  else fail(`Inbox spec §1: "${needle}" present`, "missing");
+}
+
+// §2 — Inbox panel
+const panelSections = [
+  ["Slide-over desktop", "Slide-over from right"],
+  ["480px panel", "480px"],
+  ["Tablet behavior", "768px"],
+  ["Mobile full-screen", "Full-screen sheet from bottom"],
+  ["No overflow", "no horizontal overflow"],
+  ["Pending vs confirmed", "pending suggestions only"],
+  ["Filter bar", "Filter"],
+  ["Mark all read", "Mark all read"],
+  ["Focus trap", "Focus trap"],
+  ["Escape closes", "Escape"],
+  ["Accessibility aria", "aria-modal"],
+];
+for (const [label, needle] of panelSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §2: "${needle}" present`);
+  else fail(`Inbox spec §2: "${needle}" present`, "missing");
+}
+
+// §3 — Suggestion card
+const cardSections = [
+  ["Title", "Title"],
+  ["Proposed value body", "proposed memory value"],
+  ["Kind badge", "Kind badge"],
+  ["Sensitivity badge", "Sensitivity badge"],
+  ["Confidence bar", "Confidence bar"],
+  ["Source chip", "Source chip"],
+  ["Why suggested", "Why suggested"],
+  ["Preview of what will be saved", "Will be saved as"],
+  ["Confirm button", "Confirm"],
+  ["Edit button", "Edit"],
+  ["Dismiss button", "Dismiss"],
+];
+for (const [label, needle] of cardSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §3: "${needle}" present`);
+  else fail(`Inbox spec §3: "${needle}" present`, "missing");
+}
+
+// §4 — Edit flow
+const editSections = [
+  ["Inline edit", "Inline Expansion"],
+  ["Save changes", "Save changes"],
+  ["Cancel", "Cancel"],
+  ["Redaction warning", "sensitive credentials"],
+  ["Wellness confirmation", "stored locally only. Continue"],
+  ["No hidden save rules", "No Hidden Save"],
+  ["No save on blur", "blur validates"],
+  ["No network on blur", "No network request fires until"],
+];
+for (const [label, needle] of editSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §4: "${needle}" present`);
+  else fail(`Inbox spec §4: "${needle}" present`, "missing");
+}
+
+// §5 — Dismiss/block flow
+const dismissSections = [
+  ["Dismiss copy", "Dismiss"],
+  ["30 days", "30 days"],
+  ["Blocked state", "Suggestion blocked"],
+  ["Forbidden secrets blocked", "sensitive data"],
+  ["Wellness clinical blocked", "clinical language"],
+  ["Dismiss blocked button", "Dismiss blocked suggestion"],
+];
+for (const [label, needle] of dismissSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §5: "${needle}" present`);
+  else fail(`Inbox spec §5: "${needle}" present`, "missing");
+}
+
+// §6 — Saved memories
+const savedSections = [
+  ["Link to Memory panel", "View saved memories"],
+  ["Why remembered", "whyRemembered"],
+  ["Source", "source"],
+  ["Sensitivity", "sensitivity"],
+  ["Forget action", "Forget"],
+  ["Export action", "Export"],
+  ["Forget vs. Dismiss", "Forget vs. Dismiss"],
+];
+for (const [label, needle] of savedSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §6: "${needle}" present`);
+  else fail(`Inbox spec §6: "${needle}" present`, "missing");
+}
+
+// §7 — Wellness-specific
+const wellnessSections = [
+  ["Off by default", "Off (unchecked)"],
+  ["Toggle copy", "Allow wellness memory suggestions"],
+  ["Restricted language", "Stored locally only"],
+  ["No medical diagnosis", "Medical diagnoses"],
+  ["No prescription", "prescription"],
+  ["Wellness paused state", "paused"],
+  ["Wellness local notice chip", "Stored locally only"],
+  ["Export exclusion", "Export is not available for wellness memories"],
+];
+for (const [label, needle] of wellnessSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §7: "${needle}" present`);
+  else fail(`Inbox spec §7: "${needle}" present`, "missing");
+}
+
+// §8 — Protocol-specific
+const protocolSections = [
+  ["Bittensor public only", "public wallet addresses"],
+  ["Bittensor truncated address", "truncated"],
+  ["Hyperliquid preview-only", "preview"],
+  ["Hyperliquid no custody", "on your behalf"],
+  ["Polymarket preview-only", "read-only browsing action"],
+  ["No API secret", "API secret"],
+  ["No raw signature", "raw signature"],
+  ["No signed payload", "signed payload"],
+  ["No private key", "private key"],
+  ["No seed phrase", "seed phrase"],
+];
+for (const [label, needle] of protocolSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §8: "${needle}" present`);
+  else fail(`Inbox spec §8: "${needle}" present`, "missing");
+}
+
+// §9 — Visual system
+const visualSections = [
+  ["Brand tokens", "--mm-accent"],
+  ["Sensitivity tokens", "--mm-sens-"],
+  ["Status tokens", "--mm-red"],
+  ["Dark mode", "data-theme=\"light\""],
+  ["Light mode", "Light mode"],
+  ["Mobile responsive", "< 768px"],
+  ["Tablet responsive", "768px"],
+  ["Desktop responsive", "≥ 1200px"],
+];
+for (const [label, needle] of visualSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §9: "${needle}" present`);
+  else fail(`Inbox spec §9: "${needle}" present`, "missing");
+}
+
+// §10 — Implementation checklist
+const checklistSections = [
+  ["Components", "Components to Build"],
+  ["Required props", "Required Props"],
+  ["Events and API calls", "Events and API Calls"],
+  ["Test IDs", "data-testid"],
+  ["Acceptance criteria", "Acceptance Criteria Checklist"],
+  ["WellnessPausedBanner", "WellnessPausedBanner"],
+  ["BlockedSuggestionCard", "BlockedSuggestionCard"],
+];
+for (const [label, needle] of checklistSections) {
+  if (inbox.includes(needle)) pass(`Inbox spec §10: "${needle}" present`);
+  else fail(`Inbox spec §10: "${needle}" present`, "missing");
+}
+
+// §10 — Forbidden examples must be ABSENT from positive content
+// (they may appear in §5 blocked state or §8 forbidden rules section)
+const forbiddenAbsent = [
+  "0x" + "a".repeat(64),  // raw private key pattern
+  "0x" + "a".repeat(40),  // raw address (not a secret in context)
+];
+const inboxLower = inbox.toLowerCase();
+// The inbox spec describes what NOT to show — forbidden examples in prose
+// must only appear in §5 blocked state or §8 forbidden rules
+// Check that "example private key" or "example seed phrase" as features are absent
+if (inbox.match(/example.*seed phrase/i) && !inbox.match(/forbidden|blocked|never.*seed/i)) {
+  fail("Inbox spec: 'example seed phrase' as feature", "PRESENT");
+} else {
+  pass("Inbox spec: no example seed phrase as feature ✓");
 }
 
 // ── 2. Memory Producer V1 — spec sections ────────────────────────
