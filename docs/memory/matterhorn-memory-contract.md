@@ -189,6 +189,56 @@ Both helpers set:
 - `requiresExplicitConsent: true`
 - `forbiddenIfSecretDetected: true`
 
+### Memory Suggestion Inbox V1
+
+The lifecycle contract governs how suggestions move through the inbox, from proposal to persistence or dismissal.
+
+```ts
+"pending" | "confirmed" | "edited" | "dismissed" | "expired" | "blocked"
+"confirm" | "edit" | "dismiss"
+```
+
+```ts
+interface MatterhornMemorySuggestionLifecycle {
+  suggestionId: string;
+  dedupeKey: string;
+  source: MatterhornMemorySource;
+  kind: MatterhornMemoryKind;
+  scope: MatterhornMemoryScope;
+  sensitivity: MatterhornMemorySensitivity;
+  confidence: number;
+  reason: string;
+  proposedRecord: MatterhornMemoryRecord;
+  createdAt: string;
+  expiresAt?: string;
+  dismissedUntil?: string;
+  dismissalWindowDays: number;
+  actorConfirmationRequired: true;
+  status: MatterhornMemorySuggestionStatus;
+  policyWarnings?: string[];
+}
+```
+
+```ts
+interface MatterhornMemorySuggestionConfirmationResult {
+  action: MatterhornMemorySuggestionAction;
+  suggestionId: string;
+  status: MatterhornMemorySuggestionStatus;
+  memoryRecordId?: string;
+  redaction: boolean;
+  blockedReasons: string[];
+  provenance: MatterhornMemoryProvenance;
+}
+```
+
+Lifecycle helpers:
+
+- `validateMemorySuggestionLifecycle(entry)` – validates the full lifecycle shape and safety of the proposed record
+- `applyMemorySuggestionAction(entry, action, options?)` – applies `confirm`, `edit`, or `dismiss`; returns a `MatterhornMemorySuggestionConfirmationResult`. Proposals that fail safety validation are automatically `blocked`.
+- `isMemorySuggestionDismissalActive(entry, now?)` – returns `true` if a dismissed suggestion is still within its dismissal window
+- `computeMemorySuggestionDismissedUntil(dismissedAt, windowDays?)` – computes the `dismissedUntil` timestamp
+- `canMemorySuggestionActionProduceMemoryRecord(result)` – returns `true` only when the confirmation result represents an approved, non-redacted, non-blocked memory creation
+
 ### `MatterhornMemoryUsePolicy`
 
 The use policy governs how memory may be injected into chat, UI, and export flows. It defaults to visible, consent-based memory only.
@@ -286,6 +336,9 @@ The contract enforces these invariants at validation time:
 - **Use policy keeps memory visible and consent-based.** `MatterhornMemoryUsePolicy` defaults to `hiddenMemoryAllowed: false`, `userVisibleMemoryChipsRequired: true`, `autoCaptureAllowed: false`, `secretCaptureAllowed: false`, `wellnessClinicalCaptureRequiresExplicitConsent: true`, and `marketSubmissionMemoryAllowed: false`.
 - **Export manifests are secret-free.** A `MatterhornMemoryExportManifest` must declare `includesSecrets: false`, `includesRawSignatures: false`, `includesSignedPayloads: false`, and `includesWalletExports: false`.
 - **Desk policy matrix gates per-desk memory.** A record must match the allowed kinds and minimum sensitivity of its desk. The matrix also controls whether memory may be used in chat (`canUseInChat`), exported (`canExport`), or sent to MCP/API tools (`canSendToMcpApi`). Bittensor remains public-address/external-signer only; Hyperliquid/Polymarket reject live-submission and secrets; Wellness defaults to `restricted` and rejects clinical data without opt-in; generic workspace must not silently inherit protocol, wallet, or medical data.
+- **Suggestions move through a lifecycle.** `MatterhornMemorySuggestionLifecycle` tracks `status`, `dedupeKey`, and dismissal windows. `confirm` and `edit` may produce memory records; `dismiss` never does. Proposals that fail safety validation automatically become `blocked`.
+- **Dismissed suggestions stay suppressed.** `isMemorySuggestionDismissalActive` returns `true` until `dismissedUntil` passes, preventing re-appearance for the same `dedupeKey` during the window.
+- **Blocked suggestions produce no memory.** `applyMemorySuggestionAction` returns `blocked` for invalid lifecycle entries or secret-shaped proposed records. `canMemorySuggestionActionProduceMemoryRecord` returns `false` for any blocked, redacted, or non-confirmed result.
 
 ## Validation Functions
 
@@ -301,6 +354,10 @@ Runtime validators exported from `packages/types/src/memory.ts`:
 - `validateMemorySuggestionAgainstDeskPolicy(suggestion)` – validates a suggestion against its desk policy
 - `sanitizeMemorySuggestionForDisplay(suggestion)` – redacts secret-shaped material before UI display
 - `canMemorySuggestionBecomeSavedMemory(suggestion)` – determines whether a user-approved suggestion may be persisted
+- `validateMemorySuggestionLifecycle(entry)` – validates a suggestion inbox lifecycle entry
+- `applyMemorySuggestionAction(entry, action)` – applies a lifecycle action and returns a confirmation result
+- `isMemorySuggestionDismissalActive(entry)` – checks whether a dismissed suggestion is still suppressed
+- `canMemorySuggestionActionProduceMemoryRecord(result)` – determines whether a confirmation result may create a memory record
 - `validateMemoryUsePolicy(policy)` – use policy must keep memory visible and consent-based
 - `validateMemoryExportManifest(manifest)` – export manifest must not claim secret material
 - `validateMemoryDeskPolicy(policy)` – validates a desk policy entry
