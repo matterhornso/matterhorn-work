@@ -1330,7 +1330,7 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1.5 py-2 text-muted-foreground mac:titlebar-no-drag">
+          <aside className="flex w-[84px] shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1.5 py-2 text-muted-foreground mac:titlebar-no-drag">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
@@ -1434,6 +1434,9 @@ export function SessionPage(props: SessionPageProps) {
                 </span>
               ) : null}
             </Button>
+            <div className="mt-1 w-full border-t border-border/70 pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+              Desks
+            </div>
             {([
               {
                 panel: "bittensor" as const,
@@ -1444,14 +1447,14 @@ export function SessionPage(props: SessionPageProps) {
               },
               {
                 panel: "hyperliquid" as const,
-                label: "Hyper",
+                label: "Hyperliquid",
                 title: "Hyperliquid: account, orderbook, watches, and external-signer previews",
                 active: hyperliquidRailActive,
                 icon: BarChart3,
               },
               {
                 panel: "polymarket" as const,
-                label: "Poly",
+                label: "Polymarket",
                 title: "Polymarket: markets, outcomes, compliance, and external-signer previews",
                 active: polymarketRailActive,
                 icon: ShieldCheck,
