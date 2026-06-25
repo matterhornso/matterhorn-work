@@ -1035,15 +1035,15 @@ export function SessionPage(props: SessionPageProps) {
                       <div className="w-full max-w-5xl space-y-7">
                         <div className="mx-auto max-w-2xl space-y-3 text-center">
                           <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.26)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                            Test customer launch hub
+                            Matterhorn Desk launcher
                           </div>
                           <h2 className="text-2xl font-semibold tracking-[-0.01em] text-dls-text sm:text-3xl">
-                            Create a Matterhorn session.
+                            Choose a Desk.
                           </h2>
                           <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
-                            Pick Bittensor, Hyperliquid, Polymarket, Wellness, or blank chat. Matterhorn opens the
-                            right interface, inserts an editable prompt, and keeps every safety boundary visible before
-                            anything runs.
+                            Start from Bittensor, Hyperliquid, Polymarket, Wellness, or blank chat. Matterhorn opens a
+                            focused desk, inserts an editable prompt, and keeps wallet, preview, and safety boundaries
+                            visible before anything runs.
                           </p>
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
@@ -1077,9 +1077,9 @@ export function SessionPage(props: SessionPageProps) {
                         <section className="space-y-3">
                           <div className="flex items-end justify-between gap-3">
                             <div>
-                              <h3 className="text-sm font-semibold text-dls-text">Protocol desks</h3>
+                              <h3 className="text-sm font-semibold text-dls-text">Matterhorn Desks</h3>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Separate interfaces for TAO, perps, and prediction markets. Each opens its own rail and starts an editable prompt.
+                                Separate interfaces for TAO, perps, prediction markets, and real-world workflows. Each opens its own rail and starts an editable prompt.
                               </p>
                             </div>
                             <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
