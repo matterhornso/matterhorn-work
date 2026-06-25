@@ -1086,7 +1086,7 @@ export function SessionPage(props: SessionPageProps) {
                               No hidden auto-send
                             </span>
                           </div>
-                          <div className="grid gap-2 md:grid-cols-3">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-2">
                             {protocolWorkflowLaunchers.map((launcher) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
                               return (
@@ -1132,7 +1132,7 @@ export function SessionPage(props: SessionPageProps) {
                               Public/redacted only
                             </span>
                           </div>
-                          <div className="grid gap-2 lg:grid-cols-2">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
                             {mondayBetaDemoCards.map((demo) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
                               return (
@@ -1184,7 +1184,7 @@ export function SessionPage(props: SessionPageProps) {
                               Use the same chat engine for real-world customer work. Wellness stays separate from Web3 and markets.
                             </p>
                           </div>
-                          <div className="grid gap-2 md:grid-cols-2">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
                             {businessWorkflowLaunchers.map((task) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
                               return (
@@ -1214,7 +1214,7 @@ export function SessionPage(props: SessionPageProps) {
                             })}
                           </div>
                         </section>
-                        <section className="grid gap-2 md:grid-cols-2">
+                        <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
                           {blankWorkflowLauncher ? (
                             <button
                               type="button"
@@ -1283,9 +1283,9 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 480) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 560) : browserPanelDefaultWidth}px`}
-                  minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "420px" : protocolSidePanelOpen ? "500px" : "320px"}
-                  maxSize={protocolSidePanelOpen || activeSidePanel === "memory" ? "78%" : "70%"}
+                  defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 420) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 440) : browserPanelDefaultWidth}px`}
+                  minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "360px" : protocolSidePanelOpen ? "380px" : "320px"}
+                  maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "58%" : "70%"}
                   className="min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   {activeSidePanel === "extensions" && props.settingsSlot ? (

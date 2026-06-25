@@ -187,7 +187,7 @@ export function StatusBar(props: StatusBarProps) {
 
   return (
     <div className="border-t border-border bg-background">
-      <div className="flex h-8 items-center justify-between gap-3 px-4 md:px-6">
+      <div className="flex h-8 min-w-0 items-center justify-between gap-2 px-3 md:gap-3 md:px-6">
         <StatusIndicator
           clientConnected={props.clientConnected}
           matterhornServerStatus={props.matterhornServerStatus}
@@ -197,7 +197,7 @@ export function StatusBar(props: StatusBarProps) {
           initializing={initializing}
         />
 
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 shrink-0 items-center gap-1">
           {shellConfig.cloudSignin ? (
             <BetaAuthMenu compact={false} />
           ) : null}
@@ -212,7 +212,7 @@ export function StatusBar(props: StatusBarProps) {
               aria-label={t("status.open_docs")}
             >
               <BookOpen className="size-3.5" />
-              <span>{t("status.docs")}</span>
+              <span className="hidden sm:inline">{t("status.docs")}</span>
             </Button>
           ) : null}
           {shellConfig.feedbackButton ? (
@@ -226,7 +226,7 @@ export function StatusBar(props: StatusBarProps) {
               aria-label={t("status.send_feedback")}
             >
               <MessageCircleMore className="size-3.5" />
-              <span>
+              <span className="hidden sm:inline">
                 {t("status.feedback")}
               </span>
             </Button>
@@ -245,7 +245,7 @@ export function StatusBar(props: StatusBarProps) {
                     aria-label={props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}
                   >
                     <Settings className="size-3.5" />
-                    <span>{props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}</span>
+                    <span className="hidden md:inline">{props.settingsOpen ? t("status.back") : PROFILE_SETTINGS_LABEL}</span>
                   </Button>
                 )}
               />
