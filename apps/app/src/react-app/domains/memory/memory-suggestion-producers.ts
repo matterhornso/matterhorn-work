@@ -48,6 +48,17 @@ function safeId(prefix: string, parts: Array<string | number | null | undefined>
   return `${prefix}_${suffix || "memory"}_${random}`;
 }
 
+function compactSuggestionReason(reason: string) {
+  const normalized = reason.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 200) return normalized;
+  return `${normalized.slice(0, 197).trimEnd()}...`;
+}
+
+function truncatedPublicAddress(address: string) {
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 function inferDesk(input: MatterhornMemorySuggestionProducerInput): MemoryProducerDesk | null {
   const raw = `${input.desk ?? ""} ${input.prompt ?? ""}`.toLowerCase();
   if (raw.includes("bittensor") || raw.includes("tao") || raw.includes("ss58") || raw.includes("subnet")) {
@@ -153,7 +164,10 @@ function suggestion(
   };
   const validation = validateMemorySuggestionAgainstDeskPolicy(candidate);
   if (!validation.ok) return null;
-  return sanitizeMemorySuggestionForDisplay(candidate);
+  return sanitizeMemorySuggestionForDisplay({
+    ...candidate,
+    reason: compactSuggestionReason(candidate.reason),
+  });
 }
 
 function buildBittensorSuggestions(input: MatterhornMemorySuggestionProducerInput): MatterhornMemorySuggestion[] {
@@ -177,7 +191,7 @@ function buildBittensorSuggestions(input: MatterhornMemorySuggestionProducerInpu
       "bittensor",
       record,
       "bittensor_wallet_label",
-      "This public SS58 address can be remembered for future Bittensor reads after you confirm it.",
+      `You mentioned public SS58 ${truncatedPublicAddress(ss58Address)} in visible chat. I can use it for future TAO and subnet reads after you confirm.`,
       0.84,
     );
     if (walletSuggestion) suggestions.push(walletSuggestion);
@@ -205,7 +219,7 @@ function buildBittensorSuggestions(input: MatterhornMemorySuggestionProducerInpu
       "bittensor",
       record,
       "bittensor_subnet_watch_preference",
-      `Subnet ${netuid} appeared in this workflow. Remembering it can make future Bittensor follow-ups simpler after you confirm.`,
+      `Subnet ${netuid} appeared in this Bittensor workflow. I can reuse it for future subnet or validator follow-ups after you confirm.`,
       0.72,
     );
     if (subnetSuggestion) suggestions.push(subnetSuggestion);
@@ -242,8 +256,8 @@ function buildHyperliquidSuggestions(input: MatterhornMemorySuggestionProducerIn
     record,
     "hyperliquid_watched_market",
     asset
-      ? `${asset} appeared in this Hyperliquid workflow. Remembering it can make future read-only market follow-ups simpler after you confirm.`
-      : "This Hyperliquid workflow can be remembered as a read-only market context after you confirm.",
+      ? `${asset} appeared in this Hyperliquid preview. I can reuse it for read-only orderbook and funding follow-ups after you confirm.`
+      : "A Hyperliquid preview appeared in visible chat. I can reuse it for read-only market follow-ups after you confirm.",
     asset ? 0.76 : 0.66,
   );
   return marketSuggestion ? [marketSuggestion] : [];
@@ -274,7 +288,7 @@ function buildPolymarketSuggestions(input: MatterhornMemorySuggestionProducerInp
     "polymarket",
     record,
     "polymarket_watched_market",
-    "This Polymarket topic appeared in a read-only market workflow. Remembering it can make future research follow-ups simpler after you confirm.",
+    "This Polymarket topic appeared in a read-only research prompt. I can reuse it for market, outcome, and liquidity follow-ups after you confirm.",
     0.72,
   );
   return marketSuggestion ? [marketSuggestion] : [];
@@ -306,7 +320,7 @@ function buildWellnessSuggestions(input: MatterhornMemorySuggestionProducerInput
     "wellness",
     record,
     "wellness_client_preference",
-    "This wellness workflow preference can be remembered only after explicit confirmation. It remains restricted and educational.",
+    "This wellness workflow preference appeared in visible chat. If you confirm, it stays restricted, educational, and never clinical.",
     0.7,
   );
   return wellnessSuggestion ? [wellnessSuggestion] : [];

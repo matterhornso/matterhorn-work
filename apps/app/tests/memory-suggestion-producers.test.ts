@@ -7,6 +7,27 @@ function bodyOf(suggestion: ReturnType<typeof buildMatterhornMemorySuggestions>[
 }
 
 describe("Matterhorn memory suggestion producers", () => {
+  test("writes compact Bittensor why-suggested copy without exposing full SS58", () => {
+    const ss58Address = "5GrwvaEF5zXb26Fz9rcQpDWS7KSJYEcC5F11jTXURrWbkE3";
+    const suggestions = buildMatterhornMemorySuggestions({
+      desk: "bittensor",
+      prompt: `Show my TAO for ${ss58Address}`,
+      source: "chat_capture",
+      sourceId: "producer-bittensor-test",
+      workspaceId: "workspace-test",
+      sessionId: "session-test",
+    });
+
+    expect(suggestions).toHaveLength(1);
+    const suggestion = suggestions[0]!;
+    expect(suggestion.desk).toBe("bittensor");
+    expect(suggestion.reason.length).toBeLessThanOrEqual(200);
+    expect(suggestion.reason).toContain("visible chat");
+    expect(suggestion.reason).toContain("5Grwva...bkE3");
+    expect(suggestion.reason).not.toContain(ss58Address);
+    expect(suggestion.proposedRecord.body).toEqual({ ss58Address });
+  });
+
   test("suggests public Hyperliquid watch context without execution fields", () => {
     const suggestions = buildMatterhornMemorySuggestions({
       desk: "hyperliquid",
@@ -25,6 +46,10 @@ describe("Matterhorn memory suggestion producers", () => {
     expect(suggestion.captureMode).toBe("user_confirmed_only");
     expect(suggestion.canAutoCapture).toBe(false);
     expect(suggestion.requiresExplicitConsent).toBe(true);
+    expect(suggestion.reason.length).toBeLessThanOrEqual(200);
+    expect(suggestion.reason).toContain("Hyperliquid preview");
+    expect(suggestion.reason).toContain("read-only orderbook");
+    expect(suggestion.reason).not.toMatch(/\bsubmit|submitted|execute|executed|signing\b/i);
     expect(suggestion.proposedRecord.kind).toBe("watchlist");
     expect(suggestion.proposedRecord.canExport).toBe(false);
     expect(body.venue).toBe("hyperliquid");
@@ -54,6 +79,10 @@ describe("Matterhorn memory suggestion producers", () => {
     expect(suggestion.captureMode).toBe("user_confirmed_only");
     expect(suggestion.canAutoCapture).toBe(false);
     expect(suggestion.requiresExplicitConsent).toBe(true);
+    expect(suggestion.reason.length).toBeLessThanOrEqual(200);
+    expect(suggestion.reason).toContain("read-only research prompt");
+    expect(suggestion.reason).toContain("outcome");
+    expect(suggestion.reason).not.toMatch(/\bbet|placed|submit|submitted|execute|executed|signing\b/i);
     expect(suggestion.proposedRecord.kind).toBe("watchlist");
     expect(suggestion.proposedRecord.canExport).toBe(false);
     expect(body.venue).toBe("polymarket");
