@@ -256,21 +256,21 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           </p>
         </SettingsCard>
 
-        {/* 5. Extensions & MCP */}
+        {/* 5. MCPs & Connectors */}
         <SettingsCard
           icon={<Boxes size={18} />}
-          title="Extensions &amp; MCP"
-          description="Connected apps, tools, and custom MCP servers."
+          title="MCPs &amp; Connectors"
+          description="Connected protocol tools, app connectors, and custom MCP servers."
         >
           <p className="text-sm leading-6 text-dls-secondary">
-            Connect apps and Model Context Protocol (MCP) servers to give the agent more tools. Some tools may be unavailable until their app is connected or signed in.
+            Connect Model Context Protocol (MCP) servers, protocol tools, and app connectors so Matterhorn Work can use them from chat. Some tools may be unavailable until their connector is configured or signed in.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("extensions")}>
-              Manage extensions
+              Manage MCPs
             </Button>
             <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={() => onSelectTab("extensions")}>
-              Add a custom app / MCP server
+              Add a custom MCP
             </Button>
           </div>
         </SettingsCard>

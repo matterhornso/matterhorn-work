@@ -509,7 +509,7 @@ export function McpView(props: McpViewProps) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-dls-secondary" />
           <input
             className="w-full rounded-lg border border-dls-border bg-dls-surface py-2 pl-9 pr-3 text-xs text-dls-text placeholder:text-dls-secondary focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.2)]"
-            placeholder="Search extensions..."
+            placeholder="Search MCPs, connectors, and skills..."
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
           />
@@ -923,8 +923,8 @@ function McpQuickConnectSection(props: {
         {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 ? (
           <div className="col-span-full rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
             <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
-            <div className="text-sm font-medium text-dls-secondary">No extensions found</div>
-            <div className="mt-1 text-xs text-dls-secondary/60">Try a different search, filter, or open Marketplace to add one.</div>
+            <div className="text-sm font-medium text-dls-secondary">No MCPs or connectors found</div>
+            <div className="mt-1 text-xs text-dls-secondary/60">Try a different search, filter, or add a custom MCP.</div>
           </div>
         ) : null}
       </div>
