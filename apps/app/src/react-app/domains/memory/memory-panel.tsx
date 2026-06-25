@@ -225,9 +225,9 @@ function canDismissSuggestionFromView(entry: MatterhornMemorySuggestionInboxEntr
 
 function hiddenSuggestionSummary(entry: MatterhornMemorySuggestionInboxEntry) {
   if (entry.status === "expired") {
-    return "Expired suggestions cannot be confirmed or edited. Dismiss this stale item and ask Matterhorn to create a fresh suggestion from current context.";
+    return "This suggestion is stale and cannot be saved. Dismiss it and ask Matterhorn again if the context still matters.";
   }
-  return "Blocked suggestion content hidden. The proposed title, body, source, and Why suggested details are intentionally hidden so unsafe memory material is not shown again.";
+  return "Blocked suggestion content hidden. Matterhorn hides the proposed title, body, source, and Why suggested details because the candidate may contain unsafe memory material.";
 }
 
 function readableSuggestionNote(record: MatterhornMemoryRecord) {
@@ -710,9 +710,9 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
         <section className="rounded-2xl border border-dls-border bg-dls-card p-3.5">
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2">
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
               <input
@@ -722,7 +722,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 placeholder="Search memories, receipts, addresses, workflow notes..."
               />
             </label>
-            <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+            <Button className="w-full justify-center" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               <RefreshCw className={cn("mr-2 size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
@@ -736,14 +736,14 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
         {visibleSelectedRecords.length ? (
           <section className="mt-4 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3">
               <div>
                 <div className="text-sm font-semibold">Using memories in chat</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
                   These records will appear as visible composer chips. Remove any record before sending if it is not relevant.
                 </p>
               </div>
-              <Button size="sm" onClick={() => dispatchMemoryContext(visibleSelectedRecords)}>
+              <Button className="w-full justify-center" size="sm" onClick={() => dispatchMemoryContext(visibleSelectedRecords)}>
                 Use in chat
               </Button>
             </div>
@@ -774,7 +774,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
+            <Button className="shrink-0" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
               <RefreshCw className={cn("mr-2 size-3.5", suggestionsLoading && "animate-spin")} />
               Refresh
             </Button>
@@ -785,7 +785,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : null}
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
+          <div className="mt-3 grid gap-2" aria-label="Memory inbox lifecycle summary">
             <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
               <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.pending}</div>
@@ -803,8 +803,8 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           </div>
 
-          <div className="mt-3 overflow-x-auto pb-1" aria-label="Memory inbox filters">
-            <div className="flex min-w-max gap-2">
+          <div className="mt-3 pb-1" aria-label="Memory inbox filters">
+            <div className="flex flex-wrap gap-2">
               {SUGGESTION_INBOX_FILTERS.map((filter) => {
                 const selected = suggestionStatusFilter === filter.id;
                 return (
@@ -814,7 +814,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     aria-pressed={selected}
                     onClick={() => setSuggestionStatusFilter(filter.id)}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
+                      "min-w-0 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
                       selected
                         ? "border-primary bg-[rgba(var(--matterhorn-blue-rgb),0.16)] text-primary"
                         : "border-dls-border bg-dls-card text-dls-secondary hover:border-primary/50 hover:text-dls-text",
@@ -861,7 +861,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
-                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+                    <div className="grid gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={cn("inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", statusMeta.className)}>
@@ -894,12 +894,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         </p>
                       </div>
                       {hidesSensitiveContent ? (
-                        <div className="min-w-0 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100 md:w-44">
+                        <div className="min-w-0 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
                           <div className="text-[10px] font-semibold uppercase tracking-[0.08em]">Content redacted</div>
                           <p className="mt-1">No title, body, source, confidence detail, or trigger text is rendered for blocked suggestions.</p>
                         </div>
                       ) : (
-                        <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 md:w-44">
+                        <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
                           <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                             <span>Confidence</span>
                             <span>{confidence}%</span>
@@ -927,7 +927,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                           Why hidden
                         </div>
                         <p className="mt-1">
-                          The original trigger, proposed memory, and source metadata are withheld because this candidate was blocked by policy before it could become Memory.
+                          Matterhorn withheld the trigger, proposed memory, and source metadata before this candidate could become Memory.
                         </p>
                       </div>
                     ) : (
@@ -1205,14 +1205,14 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </section>
 
         <section className="mt-4 rounded-2xl border border-dls-border bg-dls-card p-3.5">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3">
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
                 Export only policy-approved public-safe memory bundle metadata. Restricted, market, wellness, and forbidden-secret records stay out.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Button className="w-full justify-center" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
               <Download className="mr-2 size-3.5" />
               Export
             </Button>
