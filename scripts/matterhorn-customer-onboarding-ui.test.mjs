@@ -209,6 +209,13 @@ assert.equal(sessionPage.includes('label: "Services"'), false, "customer right r
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
+assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
+assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
+assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 440)'), "protocol side panel should not default to an oversized rail");
+assert.ok(sessionPage.includes('protocolSidePanelOpen ? "380px"'), "protocol side panel should keep a narrower minimum width");
+assert.ok(sessionPage.includes('activeSidePanel === "extensions" ? "58%" : "70%"'), "extensions side panel should not consume most of the workspace");
+assert.ok(statusBar.includes('className="hidden sm:inline"'), "status bar text labels should collapse on narrow workspaces");
+assert.ok(statusBar.includes('className="hidden md:inline"'), "profile/settings label should collapse before it overflows the bottom bar");
 
 for (const phrase of [
   "matterhorn-work.server.token",

@@ -1092,13 +1092,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-dls-sidebar via-dls-sidebar to-dls-canvas text-[15px] animate-fade-in">
-      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
+      <div className="max-h-[52vh] shrink-0 overflow-y-auto overscroll-y-contain border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex size-10 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-blue-rgb),0.18)] shadow-[0_0_28px_rgba(var(--matterhorn-blue-rgb),0.14)]">
               <BrainCircuit className="size-5 text-sky-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-[-0.01em] text-dls-text">{activeVenue.workspaceTitle}</h2>
               <p className="text-[12px] leading-5 text-dls-secondary">
                 {activeVenue.eyebrow} · {venue === "bittensor" && sidecarStatus?.configured ? "Subtensor sidecar ready" : activeManifestStatus}
@@ -1108,7 +1108,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 text-xs text-dls-secondary"
+            className="shrink-0 gap-1.5 text-xs text-dls-secondary"
             onClick={refreshBittensor}
             disabled={loading || marketExecutionReadinessLoading || marketExecutionChainLoading || marketSdkValidationLoading}
           >
