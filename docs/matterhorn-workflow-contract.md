@@ -426,6 +426,69 @@ pnpm test:matterhorn-customer-workflow-template-registry
 The registry emits `matterhorn.customer.workflow.template.v1`; it is catalog-only
 and rejects credential-shaped flags.
 
+## Desk Manifest Registry
+
+The contract includes a `MatterhornDeskManifest` registry
+(`MATTERHORN_DESK_MANIFEST_REGISTRY`) that defines how each product desk is
+presented to users and what safety posture it holds. This lets the production UI
+render desks from a single source of truth without hard-coding labels, accents,
+or safety strips.
+
+```ts
+interface MatterhornDeskManifest {
+  version: "matterhorn.desk.manifest.v1";
+  deskId: "bittensor" | "hyperliquid" | "polymarket" | "wellness" | "memory" | "mcp" | "settings" | "services";
+  deskDisplayName: string;
+  deskShortName: string;
+  deskDescription: string;
+  deskAccent: "matterhorn_blue" | "purple" | "green" | "orange" | "caution" | "neutral";
+  customerPrimaryAction: string;
+  customerSafetyStrip: string;
+  status: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live" | "blank";
+  allowedSurfaces: string[];
+  liveSubmissionEnabled: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  isPrimaryCustomerDesk: boolean;
+}
+```
+
+| Desk | Status | Primary action | Safety strip |
+| --- | --- | --- | --- |
+| Bittensor | `beta_ready` | Preview stake or delegation handoff | Read-only previews and external-signer handoffs only. Never provide private keys or seed phrases. |
+| Hyperliquid | `preview_only` | Preview market or manage watchlist | Preview-only. No live submission, signing, custody, or secrets. |
+| Polymarket | `preview_only` | Research market or manage watchlist | Preview-only. No live submission, signing, custody, or secrets. |
+| Wellness | `workflow_ready` | Build a wellness program packet | Educational content only. Not medical advice. No live payments, email, hosting, or data access. |
+| Memory | `beta_ready` | Review and manage saved memory | User-controlled memory. Nothing hidden. Secrets, keys, and clinical records are rejected. |
+| MCP | `planned_not_live` | Manage MCP tool preferences | MCP tools operate with explicit user approval. No secrets or custody. |
+| Settings | `beta_ready` | Manage preferences | Settings never request private keys, seed phrases, API secrets, or signatures. |
+| Services | `planned_not_live` | Plan future service capabilities | Planned-not-live. No provider execution, hosting, email, payments, or identity access today. |
+
+Customer workflow templates map to desks one-to-one via
+`MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK`:
+
+| Customer template | Desk |
+| --- | --- |
+| `bittensor_operator` | `bittensor` |
+| `hyperliquid_trader` | `hyperliquid` |
+| `polymarket_researcher` | `polymarket` |
+| `wellness_creator_workflow` | `wellness` |
+| `decentralized_services_operator` | `services` |
+| `blank_chat_workflow` | `settings` |
+
+### Desk safety rules
+
+- Every desk keeps `liveSubmissionEnabled: false` and all secret-acceptance flags `false`.
+- Market desks (Hyperliquid, Polymarket) are `preview_only` and never require an external signer.
+- Bittensor is `beta_ready`, may prepare read/preview handoffs, and always requires an external signer.
+- Wellness is `workflow_ready`, educational, non-medical, and never claims live payments, email, hosting, or data access.
+- Services are `planned_not_live` and are not a primary customer desk.
+
 ## Protocol Workspace Manifest Registry
 
 The contract includes a `MatterhornProtocolWorkspaceManifest` registry

@@ -2655,3 +2655,252 @@ export const MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS: Record<string, CustomerBetaDem
   wellness_client_program_packet: WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO,
   decentralized_services_future_plan: DECENTRALIZED_SERVICES_FUTURE_PLAN_DEMO_SCENARIO,
 };
+
+export const MATTERHORN_DESK_IDS = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "memory",
+  "mcp",
+  "settings",
+  "services",
+] as const;
+export type MatterhornDeskId = (typeof MATTERHORN_DESK_IDS)[number];
+
+export const MATTERHORN_DESK_STATUSES = [
+  "beta_ready",
+  "preview_only",
+  "workflow_ready",
+  "planned_not_live",
+  "blank",
+] as const;
+export type MatterhornDeskStatus = (typeof MATTERHORN_DESK_STATUSES)[number];
+
+export const MATTERHORN_DESK_ACCENTS = [
+  "matterhorn_blue",
+  "purple",
+  "green",
+  "orange",
+  "caution",
+  "neutral",
+] as const;
+export type MatterhornDeskAccent = (typeof MATTERHORN_DESK_ACCENTS)[number];
+
+export interface MatterhornDeskManifest {
+  version: "matterhorn.desk.manifest.v1";
+  deskId: MatterhornDeskId;
+  deskDisplayName: string;
+  deskShortName: string;
+  deskDescription: string;
+  deskAccent: MatterhornDeskAccent;
+  customerPrimaryAction: string;
+  customerSafetyStrip: string;
+  status: MatterhornDeskStatus;
+  allowedSurfaces: string[];
+  liveSubmissionEnabled: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  isPrimaryCustomerDesk: boolean;
+}
+
+export const BITTENSOR_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "bittensor",
+  deskDisplayName: "Bittensor",
+  deskShortName: "TAO",
+  deskDescription: "Read, preview, and external-signer handoffs for Bittensor staking and delegation.",
+  deskAccent: "purple",
+  customerPrimaryAction: "Preview stake or delegation handoff",
+  customerSafetyStrip: "Beta-ready. Read-only previews and external-signer handoffs only. Never provide private keys or seed phrases.",
+  status: "beta_ready",
+  allowedSurfaces: ["protocol_desk", "workflow_chat", "evidence_packet"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: true,
+  isPrimaryCustomerDesk: true,
+};
+
+export const HYPERLIQUID_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "hyperliquid",
+  deskDisplayName: "Hyperliquid",
+  deskShortName: "HL",
+  deskDescription: "Read-only market previews and watchlists for Hyperliquid. No live submission or signing.",
+  deskAccent: "green",
+  customerPrimaryAction: "Preview market or manage watchlist",
+  customerSafetyStrip: "Preview-only. No live submission, signing, custody, or secrets.",
+  status: "preview_only",
+  allowedSurfaces: ["protocol_desk", "workflow_chat"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: true,
+};
+
+export const POLYMARKET_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "polymarket",
+  deskDisplayName: "Polymarket",
+  deskShortName: "PM",
+  deskDescription: "Read-only market research and watchlists for Polymarket. No live submission or signing.",
+  deskAccent: "orange",
+  customerPrimaryAction: "Research market or manage watchlist",
+  customerSafetyStrip: "Preview-only. No live submission, signing, custody, or secrets.",
+  status: "preview_only",
+  allowedSurfaces: ["protocol_desk", "workflow_chat"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: true,
+};
+
+export const WELLNESS_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "wellness",
+  deskDisplayName: "Wellness",
+  deskShortName: "Wellness",
+  deskDescription: "Workflow-ready wellness program builder for creators and coaches. Educational and non-medical.",
+  deskAccent: "matterhorn_blue",
+  customerPrimaryAction: "Build a wellness program packet",
+  customerSafetyStrip: "Workflow-ready. Educational content only. Not medical advice. No live payments, no live email, no live hosting, and no live data access.",
+  status: "workflow_ready",
+  allowedSurfaces: ["workflow_chat", "evidence_packet"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: true,
+};
+
+export const MEMORY_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "memory",
+  deskDisplayName: "Memory",
+  deskShortName: "Memory",
+  deskDescription: "Inspect and manage what Matterhorn remembers across desks. User-controlled, editable, forgettable.",
+  deskAccent: "matterhorn_blue",
+  customerPrimaryAction: "Review and manage saved memory",
+  customerSafetyStrip: "User-controlled memory. Nothing hidden. Secrets, keys, and clinical records are rejected.",
+  status: "beta_ready",
+  allowedSurfaces: ["settings", "workflow_chat"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: false,
+};
+
+export const MCP_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "mcp",
+  deskDisplayName: "MCP Tools",
+  deskShortName: "MCP",
+  deskDescription: "Manage approved Model Context Protocol tools and their memory boundaries.",
+  deskAccent: "neutral",
+  customerPrimaryAction: "Manage MCP tool preferences",
+  customerSafetyStrip: "MCP tools operate with explicit user approval. No secrets or custody.",
+  status: "planned_not_live",
+  allowedSurfaces: ["settings"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: false,
+};
+
+export const SETTINGS_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "settings",
+  deskDisplayName: "Settings",
+  deskShortName: "Settings",
+  deskDescription: "Preferences, accounts, and workspace configuration.",
+  deskAccent: "neutral",
+  customerPrimaryAction: "Manage preferences",
+  customerSafetyStrip: "Settings never request private keys, seed phrases, API secrets, or signatures.",
+  status: "beta_ready",
+  allowedSurfaces: ["settings"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: false,
+};
+
+export const SERVICES_DESK_MANIFEST: MatterhornDeskManifest = {
+  version: "matterhorn.desk.manifest.v1",
+  deskId: "services",
+  deskDisplayName: "Services",
+  deskShortName: "Services",
+  deskDescription: "Future decentralized services planner. Not a primary customer desk in the beta.",
+  deskAccent: "caution",
+  customerPrimaryAction: "Plan future service capabilities",
+  customerSafetyStrip: "Planned-not-live. No provider execution, hosting, email, payments, or identity access today.",
+  status: "planned_not_live",
+  allowedSurfaces: ["workflow_chat", "evidence_packet"],
+  liveSubmissionEnabled: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  isPrimaryCustomerDesk: false,
+};
+
+export const MATTERHORN_DESK_MANIFEST_REGISTRY: Record<MatterhornDeskId, MatterhornDeskManifest> = {
+  bittensor: BITTENSOR_DESK_MANIFEST,
+  hyperliquid: HYPERLIQUID_DESK_MANIFEST,
+  polymarket: POLYMARKET_DESK_MANIFEST,
+  wellness: WELLNESS_DESK_MANIFEST,
+  memory: MEMORY_DESK_MANIFEST,
+  mcp: MCP_DESK_MANIFEST,
+  settings: SETTINGS_DESK_MANIFEST,
+  services: SERVICES_DESK_MANIFEST,
+};
+
+export const MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK: Record<string, MatterhornDeskId> = {
+  bittensor_operator: "bittensor",
+  hyperliquid_trader: "hyperliquid",
+  polymarket_researcher: "polymarket",
+  wellness_creator_workflow: "wellness",
+  decentralized_services_operator: "services",
+  blank_chat_workflow: "settings",
+};

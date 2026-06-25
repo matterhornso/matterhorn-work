@@ -37,6 +37,12 @@ Defined in `packages/types/src/matterhorn-workflows.ts`:
 - `MatterhornWorkflowQAContract`
 - `MatterhornWorkflowStatus`
 - `MatterhornWorkflowServiceHookType`
+- `MatterhornDeskManifest`
+- `MatterhornDeskId`
+- `MatterhornDeskStatus`
+- `MatterhornDeskAccent`
+- `MATTERHORN_DESK_MANIFEST_REGISTRY`
+- `MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK`
 
 Registries:
 
@@ -75,6 +81,19 @@ Registry: `MATTERHORN_WORKFLOW_FIXTURES` maps all four workflow IDs to their man
 ```
 
 Every fixture explicitly sets `liveExecutionEnabled: false` and `canSubmit: false`. No fixture accepts secrets, private keys, raw signatures, or API secrets.
+
+## Desk manifest alignment (added in #532)
+
+A typed `MatterhornDeskManifest` registry now defines how each product desk is surfaced to users:
+
+- `deskDisplayName`, `deskShortName`, `deskDescription`, `deskAccent`
+- `customerPrimaryAction`, `customerSafetyStrip`
+- `status` per desk: Bittensor `beta_ready`; Hyperliquid and Polymarket `preview_only`; Wellness `workflow_ready`; Services `planned_not_live`; Memory, MCP, and Settings also defined
+- All secret-acceptance flags are `false`; `liveSubmissionEnabled` is `false`
+- `requiresExternalSigner: true` only for Bittensor
+- `isPrimaryCustomerDesk` flags primary vs. non-primary desks
+
+Customer workflow templates map one-to-one to desks via `MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK`.
 
 ## Static test assertions
 

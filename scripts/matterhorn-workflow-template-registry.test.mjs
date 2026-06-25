@@ -27,6 +27,11 @@ for (const token of [
   "MatterhornWorkflowTemplateSafetyBoundary",
   "DEFAULT_MATTERHORN_WORKFLOW_TEMPLATE_SAFETY_BOUNDARY",
   "MATTERHORN_WORKFLOW_TEMPLATE_REGISTRY",
+  "MatterhornDeskManifest",
+  "MatterhornDeskId",
+  "MatterhornDeskStatus",
+  "MatterhornDeskAccent",
+  "MATTERHORN_DESK_MANIFEST_REGISTRY",
 ]) {
   assert.ok(types.includes(token), `types missing workflow template token: ${token}`);
 }
@@ -171,5 +176,97 @@ for (const snippet of [
 ]) {
   assert.ok(doc.includes(snippet), `doc missing: ${snippet}`);
 }
+
+// 13. Desk manifest registry exists and covers expected desks.
+const deskIds = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "memory",
+  "mcp",
+  "settings",
+  "services",
+];
+const deskRegistryBlock = types.slice(types.indexOf("MATTERHORN_DESK_MANIFEST_REGISTRY"));
+for (const id of deskIds) {
+  assert.ok(deskRegistryBlock.includes(id), `desk manifest registry missing: ${id}`);
+}
+
+// 14. Every desk manifest declares required display/safety fields.
+function extractDeskManifestBlocks(text) {
+  const blocks = {};
+  const regex = /export const (\w+)_DESK_MANIFEST:\s*MatterhornDeskManifest\s*=\s*\{/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    const start = match.index;
+    let braceDepth = 0;
+    let inString = false;
+    let stringChar = "";
+    let started = false;
+    for (let i = match.index + match[0].length - 1; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") {
+          i++;
+          continue;
+        }
+        if (ch === stringChar) {
+          inString = false;
+        }
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = true;
+        stringChar = ch;
+        continue;
+      }
+      if (ch === "{") {
+        braceDepth++;
+        started = true;
+      } else if (ch === "}") {
+        braceDepth--;
+      }
+      if (started && braceDepth === 0) {
+        blocks[name] = text.slice(start, i + 1);
+        break;
+      }
+    }
+  }
+  return blocks;
+}
+
+const deskBlocks = extractDeskManifestBlocks(types);
+assert.equal(Object.keys(deskBlocks).length, deskIds.length, `expected ${deskIds.length} desk manifest blocks`);
+
+for (const [name, block] of Object.entries(deskBlocks)) {
+  for (const field of [
+    "deskDisplayName",
+    "deskShortName",
+    "deskDescription",
+    "deskAccent",
+    "customerPrimaryAction",
+    "customerSafetyStrip",
+  ]) {
+    assert.ok(block.includes(`${field}:`), `${name} desk manifest must include ${field}`);
+  }
+  assert.ok(block.includes("liveSubmissionEnabled: false"), `${name} desk manifest must disable live submission`);
+  assert.ok(block.includes("acceptsPrivateKeys: false"), `${name} desk manifest must not accept private keys`);
+  assert.ok(block.includes("acceptsSeedPhrases: false"), `${name} desk manifest must not accept seed phrases`);
+  assert.ok(block.includes("acceptsApiSecrets: false"), `${name} desk manifest must not accept API secrets`);
+  assert.ok(block.includes("acceptsRawSignatures: false"), `${name} desk manifest must not accept raw signatures`);
+  assert.ok(block.includes("acceptsSignedPayloads: false"), `${name} desk manifest must not accept signed payloads`);
+  assert.ok(block.includes("acceptsWalletExports: false"), `${name} desk manifest must not accept wallet exports`);
+}
+
+// 15. Desk status rules.
+assert.ok(deskBlocks["BITTENSOR"].includes('status: "beta_ready"'), "Bittensor desk must be beta_ready");
+assert.ok(deskBlocks["BITTENSOR"].includes("requiresExternalSigner: true"), "Bittensor desk must require external signer");
+assert.ok(deskBlocks["HYPERLIQUID"].includes('status: "preview_only"'), "Hyperliquid desk must be preview_only");
+assert.ok(deskBlocks["POLYMARKET"].includes('status: "preview_only"'), "Polymarket desk must be preview_only");
+assert.ok(deskBlocks["WELLNESS"].includes('status: "workflow_ready"'), "Wellness desk must be workflow_ready");
+assert.ok(deskBlocks["SERVICES"].includes('status: "planned_not_live"'), "Services desk must be planned_not_live");
+assert.ok(deskBlocks["SERVICES"].includes("isPrimaryCustomerDesk: false"), "Services desk must not be a primary customer desk");
 
 console.log("Matterhorn workflow template registry check passed.");

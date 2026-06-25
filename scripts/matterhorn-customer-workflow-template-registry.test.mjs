@@ -30,8 +30,12 @@ for (const token of [
   "MatterhornCustomerWorkflowUiMetadata",
   "MatterhornCustomerWorkflowRoutingMetadata",
   "MatterhornProtocolWorkspaceManifest",
+  "MatterhornDeskManifest",
+  "MatterhornDeskId",
+  "MATTERHORN_DESK_MANIFEST_REGISTRY",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
+  "MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK",
   "MATTERHORN_CUSTOMER_WORKFLOW_TEMPLATE_REGISTRY",
 ]) {
   assert.ok(types.includes(token), `types missing customer workflow template token: ${token}`);
@@ -98,6 +102,33 @@ assert.equal(
   new Set(mappedWorkspaces).size,
   mappedWorkspaces.length,
   "each customer template must map to exactly one protocol workspace",
+);
+
+// 3c. Every customer-visible template maps to exactly one desk manifest.
+const deskMappingBlock = extractBlock(types, "MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK");
+assert.ok(deskMappingBlock, "MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK block must be extractable");
+const deskRegistryBlock = types.slice(types.indexOf("MATTERHORN_DESK_MANIFEST_REGISTRY"));
+const deskMappedTemplateIds = [
+  "bittensor_operator",
+  "hyperliquid_trader",
+  "polymarket_researcher",
+  "wellness_creator_workflow",
+  "decentralized_services_operator",
+  "blank_chat_workflow",
+];
+for (const id of deskMappedTemplateIds) {
+  assert.ok(deskMappingBlock.includes(id), `customer-template-to-desk mapping missing: ${id}`);
+  const deskMatch = deskMappingBlock.match(new RegExp(`${id}:\\s*"([^"]+)"`));
+  assert.ok(deskMatch, `${id} must map to a desk`);
+  const deskId = deskMatch[1];
+  assert.ok(deskRegistryBlock.includes(deskId), `mapped desk ${deskId} must exist in registry`);
+}
+const deskMappingEntries = [...deskMappingBlock.matchAll(/(\w+):\s*"(\w+)"/g)];
+const mappedDesks = deskMappingEntries.map(([, , deskId]) => deskId);
+assert.equal(
+  new Set(mappedDesks).size,
+  mappedDesks.length,
+  "each customer template must map to exactly one desk",
 );
 
 // 4. Registry script emits a valid catalog envelope.
@@ -287,5 +318,81 @@ const reject = spawnSync(
 );
 assert.notEqual(reject.status, 0, "customer template registry should reject credential-shaped flags");
 assert.match(reject.stderr, /Forbidden credential-shaped flag --private-key/);
+
+// 13. Desk manifest safety invariants.
+const deskRegistryMatch = types.match(/MATTERHORN_DESK_MANIFEST_REGISTRY:\s*Record<MatterhornDeskId,\s*MatterhornDeskManifest>\s*=\s*\{([\s\S]*?)\n\};/);
+assert.ok(deskRegistryMatch, "MATTERHORN_DESK_MANIFEST_REGISTRY must be extractable");
+const deskRegistryBody = deskRegistryMatch[1];
+const deskManifestBlocks = {};
+const deskBlockRegex = /(\w+):\s*(\w+)_DESK_MANIFEST,?/g;
+let deskBlockMatch;
+while ((deskBlockMatch = deskBlockRegex.exec(deskRegistryBody)) !== null) {
+  const deskId = deskBlockMatch[1];
+  const constName = deskBlockMatch[2];
+  const block = extractBlock(types, `${constName}_DESK_MANIFEST`);
+  deskManifestBlocks[deskId] = block;
+}
+
+for (const [deskId, block] of Object.entries(deskManifestBlocks)) {
+  assert.ok(block, `desk manifest ${deskId} must be extractable`);
+  assert.ok(block.includes("liveSubmissionEnabled: false"), `${deskId} desk must disable live submission`);
+  assert.ok(block.includes("acceptsPrivateKeys: false"), `${deskId} desk must not accept private keys`);
+  assert.ok(block.includes("acceptsSeedPhrases: false"), `${deskId} desk must not accept seed phrases`);
+  assert.ok(block.includes("acceptsApiSecrets: false"), `${deskId} desk must not accept API secrets`);
+  assert.ok(block.includes("acceptsRawSignatures: false"), `${deskId} desk must not accept raw signatures`);
+  assert.ok(block.includes("acceptsSignedPayloads: false"), `${deskId} desk must not accept signed payloads`);
+  assert.ok(block.includes("acceptsWalletExports: false"), `${deskId} desk must not accept wallet exports`);
+}
+
+// 14. Market desk manifests are preview-only and do not enable live submission, signing, or custody.
+for (const deskId of ["hyperliquid", "polymarket"]) {
+  const block = deskManifestBlocks[deskId];
+  assert.ok(block.includes('status: "preview_only"'), `${deskId} desk must be preview_only`);
+  assert.ok(block.includes("requiresExternalSigner: false"), `${deskId} desk must not require external signer`);
+  assert.ok(block.includes("isPrimaryCustomerDesk: true"), `${deskId} desk must be a primary customer desk`);
+}
+
+// 15. Bittensor desk is beta-ready, read/preview/external-signer only.
+const bittensorDeskBlock = deskManifestBlocks.bittensor;
+assert.ok(bittensorDeskBlock.includes('status: "beta_ready"'), "Bittensor desk must be beta_ready");
+assert.ok(bittensorDeskBlock.includes("requiresExternalSigner: true"), "Bittensor desk must require external signer");
+assert.ok(bittensorDeskBlock.includes("isPrimaryCustomerDesk: true"), "Bittensor desk must be a primary customer desk");
+
+// 16. Wellness desk is workflow-ready, non-medical, no live payments/email/hosting/access.
+const wellnessDeskBlock = deskManifestBlocks.wellness;
+assert.ok(wellnessDeskBlock.includes('status: "workflow_ready"'), "Wellness desk must be workflow_ready");
+const wellnessDeskLower = wellnessDeskBlock.toLowerCase();
+for (const phrase of ["not medical", "educational", "no live payments", "no live email", "no live hosting"]) {
+  assert.ok(
+    wellnessDeskLower.includes(phrase),
+    `Wellness desk safety strip must include "${phrase}"`,
+  );
+}
+
+assert.ok(wellnessDeskBlock.includes("requiresExternalSigner: false"), "Wellness desk must not require external signer");
+assert.ok(wellnessDeskBlock.includes("isPrimaryCustomerDesk: true"), "Wellness desk must be a primary customer desk");
+
+// 17. Services/decentralized services desk is planned-not-live and not a primary customer desk.
+const servicesDeskBlock = deskManifestBlocks.services;
+assert.ok(servicesDeskBlock.includes('status: "planned_not_live"'), "Services desk must be planned_not_live");
+assert.ok(servicesDeskBlock.includes("isPrimaryCustomerDesk: false"), "Services desk must not be a primary customer desk");
+
+// 18. Desk mapping: every non-blank customer-visible template maps to exactly one desk manifest with matching safety posture.
+const expectedDeskMappings = {
+  bittensor_operator: "bittensor",
+  hyperliquid_trader: "hyperliquid",
+  polymarket_researcher: "polymarket",
+  wellness_creator_workflow: "wellness",
+  decentralized_services_operator: "services",
+  blank_chat_workflow: "settings",
+};
+
+for (const [templateId, expectedDesk] of Object.entries(expectedDeskMappings)) {
+  assert.equal(
+    deskMappingEntries.find(([, id]) => id === templateId)?.[2],
+    expectedDesk,
+    `${templateId} should map to ${expectedDesk} desk`,
+  );
+}
 
 console.log("Matterhorn customer workflow template registry check passed.");
