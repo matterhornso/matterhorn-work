@@ -1181,7 +1181,7 @@ export function SessionPage(props: SessionPageProps) {
                           <div>
                             <h3 className="text-sm font-semibold text-dls-text">Business workflows</h3>
                             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                              Use the same chat engine for real-world customer work. Wellness stays separate from Web3 and markets.
+                              Use the same chat engine for real-world customer work. Wellness is a standalone business workflow, not Web3, not markets, and not medical care.
                             </p>
                           </div>
                           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
@@ -1484,7 +1484,7 @@ export function SessionPage(props: SessionPageProps) {
               {
                 id: "wellness_creator_workflow",
                 label: "Wellness",
-                title: "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
+                title: "Wellness: standalone client programs, service offers, lifecycle packets, and safe creator workflows. Not Web3 or markets.",
                 icon: Dumbbell,
                 launcher: wellnessRailLauncher,
               },
