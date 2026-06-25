@@ -274,7 +274,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     status: "beta_ready",
     examplePrompts: ["Show my TAO", "Which subnet is useful for image generation?", "Compare validators on subnet 14"],
     launch: {
-      primaryCta: "Open Bittensor panel",
+      primaryCta: "Open Bittensor desk",
       secondaryCta: "Preview a stake handoff",
       defaultPrompt: "Show my TAO",
       handoffContextLabel: "Public wallet address",
@@ -300,23 +300,23 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "hyperliquid_trader",
-    name: "Trade on Hyperliquid",
-    summary: "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
+    name: "Use Hyperliquid",
+    summary: "Read Hyperliquid markets, check exposure, and prepare external-signer previews without live submission.",
     promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
     category: "markets",
     status: "preview_only",
-    examplePrompts: ["Preview a Hyperliquid BTC-PERP trade", "Show my Hyperliquid exposure"],
+    examplePrompts: ["Preview Hyperliquid BTC-PERP context", "Show my Hyperliquid exposure"],
     launch: {
-      primaryCta: "Open Hyperliquid panel",
-      secondaryCta: "Preview a trade",
-      defaultPrompt: "Preview a Hyperliquid BTC-PERP trade",
+      primaryCta: "Open Hyperliquid desk",
+      secondaryCta: "Preview market context",
+      defaultPrompt: "Preview Hyperliquid BTC-PERP context",
       handoffContextLabel: "Public wallet address",
       recommendedSurface: "protocol_desk",
     },
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Preview Hyperliquid trades and generate external-signer handoffs.",
+      shortDescription: "Read Hyperliquid markets and prepare external-signer previews.",
     },
     routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
     safetyBoundaries: {
@@ -333,14 +333,14 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "polymarket_researcher",
-    name: "Bet on Polymarket",
-    summary: "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
+    name: "Use Polymarket",
+    summary: "Research Polymarket outcomes, liquidity, and compliance before preparing external-signer previews.",
     promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
     category: "markets",
     status: "preview_only",
-    examplePrompts: ["Summarize this Polymarket market", "Preview a Polymarket trade"],
+    examplePrompts: ["Summarize this Polymarket market", "Check Polymarket compliance"],
     launch: {
-      primaryCta: "Open Polymarket panel",
+      primaryCta: "Open Polymarket desk",
       secondaryCta: "Research markets",
       defaultPrompt: "Summarize this Polymarket market",
       handoffContextLabel: "Public wallet address",
@@ -349,7 +349,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research Polymarket markets and prepare signing handoffs.",
+      shortDescription: "Research Polymarket markets and prepare external-signer handoffs.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
     safetyBoundaries: {
