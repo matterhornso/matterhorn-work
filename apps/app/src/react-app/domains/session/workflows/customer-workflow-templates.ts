@@ -106,7 +106,7 @@ const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
 const WELLNESS_SUFFIX =
-  "Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating.";
+  "Use the standalone Wellness workflow, not a Web3 or market desk. Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating.";
 
 const SERVICES_SUFFIX =
   "Treat service hooks as planned-not-live future contracts. Do not claim live hosting, storage, email, payment, identity, custody, or provider execution.";
@@ -187,7 +187,7 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
     return "Can submit: No. Live submission: Off. External signer/client only.";
   }
   if (template.routing.chatMode === "wellness") {
-    return "Educational workflow. No medical advice or live payments/email/hosting.";
+    return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
   }
   if (template.routing.chatMode === "services") {
     return "Future-contract planning only. No provider execution or credentials.";
@@ -367,8 +367,8 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "wellness_creator_workflow",
     name: "Build a Wellness Creator business workflow",
-    summary: "Design wellness programs, service packages, and client management workflows without giving medical advice.",
-    promise: "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    summary: "Design standalone client programs, service packages, and customer-management workflows without Web3, markets, or medical advice.",
+    promise: "Plan your wellness business as a normal workflow. No medical advice, no Web3 trading, and service hooks remain planned-not-live.",
     category: "wellness",
     status: "workflow_ready",
     examplePrompts: ["Create a wellness program for my clients", "Build a yoga class schedule"],
@@ -382,7 +382,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "wellness",
       accent: "neutral",
-      shortDescription: "Design wellness programs and service packages without medical advice.",
+      shortDescription: "Plan trainer, yoga, or dietician service workflows without Web3, markets, or medical advice.",
     },
     routing: { chatMode: "wellness", startsSession: true },
     safetyBoundaries: {
