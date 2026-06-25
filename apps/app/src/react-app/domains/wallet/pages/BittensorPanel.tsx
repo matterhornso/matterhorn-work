@@ -297,6 +297,83 @@ const BITTENSOR_BETA_MODE = (() => {
 type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
 type CryptoVenue = "bittensor" | "hyperliquid" | "polymarket";
 type ActionType = BittensorActionQuote["action"];
+const BITTENSOR_STANDARD_ACTIONS = [
+  {
+    id: "wallet-balance",
+    title: "Show TAO balance",
+    summary: "Read a public SS58 coldkey, TAO balance, stake positions, and provider freshness.",
+    safety: "Public address only",
+    prompt:
+      "Use Bittensor chat mode. Show my TAO balance from the public SS58 coldkey in context. If no address is set, ask once for a public coldkey only. Explain free TAO, staked TAO, validator exposure, provider source, freshness, and safe next steps.",
+  },
+  {
+    id: "subnet-discovery",
+    title: "Find useful subnets",
+    summary: "Discover subnets by goal, category, utility, adapter support, and public metagraph context.",
+    safety: "Read-only discovery",
+    prompt:
+      "Use Bittensor chat mode. Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
+  },
+  {
+    id: "validator-compare",
+    title: "Compare validators",
+    summary: "Compare validator hotkeys for a subnet using public validator/metagraph context.",
+    safety: "No staking unless approved externally",
+    formAction: "compare",
+    prompt:
+      "Use Bittensor chat mode. Compare validators for the netuid in context. Explain stake, trust, rank, emissions, risks, and what I should verify before preparing any staking preview. Do not sign or broadcast anything.",
+  },
+  {
+    id: "stake-preview",
+    title: "Prepare stake preview",
+    summary: "Prepare an unsigned stake preview with netuid, validator hotkey, expected alpha, fee, and slippage.",
+    safety: "External signer required",
+    formAction: "stake",
+    prompt:
+      "Use Bittensor chat mode. Prepare a stake preview using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, warnings, and the exact external-signing handoff. Never ask for seed phrases or private keys.",
+  },
+  {
+    id: "unstake-preview",
+    title: "Prepare unstake preview",
+    summary: "Review an unsigned unstake preview and explain the consequence before external signing.",
+    safety: "External signer required",
+    formAction: "unstake",
+    prompt:
+      "Use Bittensor chat mode. Prepare an unstake preview using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, warnings, and the external-signing step. Never ask for seed phrases or private keys.",
+  },
+  {
+    id: "transfer-preview",
+    title: "Prepare transfer preview",
+    summary: "Prepare a TAO transfer preview to a destination coldkey without signing or broadcasting.",
+    safety: "External signer required",
+    formAction: "transfer",
+    prompt:
+      "Use Bittensor chat mode. Prepare a TAO transfer preview using the amount and recipient coldkey in context. Confirm destination meaning, fee, consequence, warnings, and external-signing requirements. Never ask for seed phrases or private keys.",
+  },
+  {
+    id: "watch-alert",
+    title: "Create watch or alert",
+    summary: "Monitor a wallet, subnet, validator, emission movement, or provider freshness.",
+    safety: "Read-only monitoring",
+    prompt:
+      "Use Bittensor chat mode. Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
+  },
+  {
+    id: "keys-explainer",
+    title: "Explain coldkey/hotkey",
+    summary: "Clarify Bittensor wallet concepts, staking exposure, and external signer boundaries.",
+    safety: "No secrets requested",
+    prompt:
+      "Use Bittensor chat mode. Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and external signer boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
+  },
+] satisfies Array<{
+  id: string;
+  title: string;
+  summary: string;
+  safety: string;
+  prompt: string;
+  formAction?: ActionType;
+}>;
 const VENUE_PROTOCOL_MANIFESTS: Record<CryptoVenue, MatterhornProtocolWorkspaceManifest> = {
   bittensor: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.bittensor,
   hyperliquid: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.hyperliquid,
@@ -1005,6 +1082,23 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       mode: venue === "bittensor" ? "bittensor" : "crypto",
       source: `${venue}-workspace-panel`,
     });
+  };
+
+  const askAgentForStandardBittensorAction = async (item: (typeof BITTENSOR_STANDARD_ACTIONS)[number]) => {
+    if (item.formAction) {
+      setAction(item.formAction);
+    }
+    await sendToChat(item.prompt, {
+      standardAction: item.id,
+      action: item.formAction,
+      ss58Address: watchAddress.trim() || undefined,
+      netuid: Number.isFinite(Number(actionNetuid)) ? Number(actionNetuid) : undefined,
+      amountTao: amountTao.trim() || undefined,
+      validatorHotkey: validatorHotkey.trim() || undefined,
+      recipient: recipient.trim() || undefined,
+      destination: recipient.trim() || undefined,
+      wallet,
+    }, { source: "bittensor-standard-action" });
   };
 
   const askAgentAboutQuote = async () => {
@@ -1933,6 +2027,35 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Notice tone="info" icon={<Shield className="size-4" />} title="Quote-only actions">
               Matterhorn prepares Bittensor action previews for review. External Bittensor-compatible signing is required.
             </Notice>
+            <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
+              <div className="space-y-3">
+                <p className="text-sm leading-6 text-dls-secondary">
+                  Start from the common Bittensor workflows below. These insert an editable chat prompt with public context;
+                  they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {BITTENSOR_STANDARD_ACTIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="group rounded-xl border border-dls-border bg-dls-surface/70 p-3 text-left transition-colors hover:border-sky-400/60 hover:bg-sky-500/10 focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                      onClick={() => void askAgentForStandardBittensorAction(item)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-dls-text">{item.title}</div>
+                          <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.summary}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                          Chat
+                        </span>
+                      </div>
+                      <div className="mt-2 text-[11px] font-medium text-sky-200">{item.safety}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Section>
             <Section title="Prepare Preview" icon={<ArrowUpDown className="size-4" />}>
               <div className="space-y-3">
                 <div className="grid grid-cols-4 gap-1 rounded-lg bg-dls-surface p-1">

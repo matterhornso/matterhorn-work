@@ -33,6 +33,15 @@ for (const phrase of [
   "Analyze prediction markets and preview safely.",
   "Preview Actions",
   "Matterhorn prepares Bittensor action previews for review.",
+  "Standard Bittensor actions",
+  "Show TAO balance",
+  "Find useful subnets",
+  "Compare validators",
+  "Prepare stake preview",
+  "Prepare unstake preview",
+  "Prepare transfer preview",
+  "Create watch or alert",
+  "Explain coldkey/hotkey",
   "Prepare Preview",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose a dedicated venue desk: ${phrase}`);
@@ -63,6 +72,9 @@ assert.ok(panel.includes('source: "crypto-beta-try"'), "Beta prompts should rout
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff") || panel.includes('mode: item.mode'), "Beta prompts should use the insert handoff event");
 assert.ok(panel.includes("Nothing sends automatically"), "Panel should tell testers prompts are not auto-sent");
 assert.ok(panel.includes("Right-rail command groups stay single-column"), "Protocol rail command groups should avoid cramped multi-column controls");
+assert.ok(panel.includes("askAgentForStandardBittensorAction"), "Standard Bittensor action cards should insert editable chat prompts");
+assert.ok(panel.includes('source: "bittensor-standard-action"'), "Standard Bittensor actions should use a dedicated handoff source");
+assert.ok(panel.includes("they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets."), "Standard Bittensor action copy should state no auto-send and no signing");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
 //     support prompt insertion plus evidence command copy.
