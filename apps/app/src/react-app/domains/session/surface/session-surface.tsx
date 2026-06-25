@@ -1455,7 +1455,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         className="self-start rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-blue-rgb),0.18)] sm:self-auto"
                         onClick={() => props.onOpenSettingsSection?.("mcps")}
                       >
-                        Connect extensions
+                        Connect MCPs
                       </button>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

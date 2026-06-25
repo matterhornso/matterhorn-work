@@ -1249,8 +1249,8 @@ export function SessionPage(props: SessionPageProps) {
                               <Settings2 className="size-4" />
                             </span>
                             <span>
-                              <span className="block text-[13px] font-medium text-dls-text">Connect extensions</span>
-                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, agent tools, and wallet connectors.</span>
+                              <span className="block text-[13px] font-medium text-dls-text">Connect MCPs</span>
+                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, protocol tools, and wallet connectors.</span>
                             </span>
                           </button>
                         </section>
@@ -1407,12 +1407,12 @@ export function SessionPage(props: SessionPageProps) {
                 extensionsRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
-              title="Extensions"
-              aria-label="Extensions"
+              title="MCPs & Connectors"
+              aria-label="MCPs & Connectors"
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
-              <span className="text-[9px] leading-none">Ext</span>
+              <span className="text-[9px] leading-none">MCPs</span>
             </Button>
             <Button
               variant="ghost"

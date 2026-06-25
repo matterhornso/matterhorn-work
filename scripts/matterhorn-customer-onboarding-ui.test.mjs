@@ -27,6 +27,7 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 
@@ -87,7 +88,9 @@ for (const phrase of [
   "Summarize this Polymarket market",
   "Check Polymarket compliance",
   "Create a wellness program for my clients",
-  "Connect extensions",
+  "Connect MCPs",
+  "MCPs & Connectors",
+  "Add MCP servers, protocol tools, and wallet connectors.",
   "Start with a Matterhorn workflow",
   "Wellness: client programs, service offers, lifecycle packets, and safe creator workflows",
   "Can submit: No",
@@ -318,5 +321,19 @@ assert.ok(
     settingsRoute.includes("isCustomerFacingMatterhornExtension(entry)"),
   "Settings extension grid should filter customer-hidden entries before rendering",
 );
+for (const phrase of [
+  "MCPs & Connectors",
+  "MCPs & Tools",
+  "Connected protocol tools, app connectors, and custom MCP servers.",
+  "Manage MCPs",
+  "Add a custom MCP",
+  "Connect MCP servers, protocol tools, and agent capabilities",
+  "Available MCPs & connectors",
+  "Search MCPs, connectors, and skills",
+  "No MCPs or connectors found",
+  "add a custom MCP",
+]) {
+  assert.ok(`${english}\n${settingsRoute}\n${settingsOverview}`.includes(phrase), `MCP connector surface should use customer-facing MCP language: ${phrase}`);
+}
 
 console.log("Matterhorn customer onboarding UI static check passed.");
