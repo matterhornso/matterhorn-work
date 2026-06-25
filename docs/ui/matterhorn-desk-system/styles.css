@@ -1,0 +1,170 @@
+/**
+ * docs/ui/matterhorn-desk-system/styles.css
+ *
+ * Matterhorn Desk System — design token reference.
+ * All tokens follow the semantic naming convention used in the
+ * matterhorn-memory UI system. No new token namespace is introduced.
+ *
+ * Dark mode is the primary theme. Light mode overrides are under
+ * [data-theme="light"].
+ *
+ * Brand: #0C0C0C · #D1F2FF · JetBrains Mono · Aeonik-style sans
+ */
+
+:root {
+  /* ── Backgrounds ─────────────────────────────────────────────── */
+  --desk-bg-base:        #080808;
+  --desk-bg-surface:     #0C0C0C;
+  --desk-bg-elevated:    #141414;
+  --desk-bg-overlay-1:   #1A1A1A;
+  --desk-bg-overlay-2:   #1F1F1F;
+
+  /* ── Borders ─────────────────────────────────────────────────── */
+  --desk-border:          #1F1F1F;
+  --desk-border-strong:   #2A2A2A;
+
+  /* ── Brand ────────────────────────────────────────────────────── */
+  --desk-accent:         #D1F2FF;
+  --desk-accent-dim:    rgba(209,242,255,0.12);
+  --desk-accent-glow:   rgba(209,242,255,0.2);
+
+  /* ── Text ─────────────────────────────────────────────────────── */
+  --desk-text-primary:   #FFFFFF;
+  --desk-text-secondary: #CCCCCC;
+  --desk-text-tertiary: #777777;
+  --desk-text-disabled: #444444;
+
+  /* ── Semantic: Type ───────────────────────────────────────────── */
+  --desk-type-bittensor:   #60A5FA;
+  --desk-type-hyperliquid:#C084FC;
+  --desk-type-polymarket:  #A78BFA;
+  --desk-type-wellness:    #F472B6;
+  --desk-type-memory:      #D1F2FF;
+  --desk-type-mcp:        #34D399;
+  --desk-type-context:    #34D399;
+
+  /* ── Semantic: Sensitivity ───────────────────────────────────── */
+  --desk-sens-personal:   #D1F2FF;
+  --desk-sens-high:      #F59E0B;
+  --desk-sens-restricted:#EF4444;
+
+  /* ── Semantic: Status ─────────────────────────────────────────── */
+  --desk-status-success: #22C55E;
+  --desk-status-warning: #F59E0B;
+  --desk-status-error:  #EF4444;
+  --desk-status-info:   #60A5FA;
+
+  /* ── Semantic: Confidence ─────────────────────────────────────── */
+  --desk-conf-high:      #22C55E;
+  --desk-conf-medium:    #F59E0B;
+  --desk-conf-low:      #EF4444;
+  --desk-conf-dim:      #1F1F1F;
+
+  /* ── Semantic: Action ─────────────────────────────────────────── */
+  --desk-action-primary:   #D1F2FF;
+  --desk-action-secondary: #1F1F1F;
+  --desk-action-ghost:    transparent;
+  --desk-action-danger:   #EF4444;
+
+  /* ── Navigation ──────────────────────────────────────────────── */
+  --desk-nav-bg:          #0C0C0C;
+  --desk-nav-text:       #999999;
+  --desk-nav-text-active:#D1F2FF;
+  --desk-nav-hover-bg:   #1A1A1A;
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  --desk-sidebar-width:   220px;
+  --desk-tablet-sidebar:  180px;
+  --desk-mobile-nav-h:    56px;
+
+  /* ── Shadows ───────────────────────────────────────────────── */
+  --desk-shadow-sm:  0 2px 8px rgba(0,0,0,0.4);
+  --desk-shadow-md:  0 8px 24px rgba(0,0,0,0.5);
+  --desk-shadow-lg:  0 16px 48px rgba(0,0,0,0.6);
+
+  /* ── Radius ─────────────────────────────────────────────────── */
+  --desk-radius-sm:  6px;
+  --desk-radius-md:  10px;
+  --desk-radius-lg:  12px;
+
+  /* ── Fonts ──────────────────────────────────────────────────── */
+  --font-sans:  'Aeonik', system-ui, -apple-system, sans-serif;
+  --font-mono:  'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+
+  /* ── Typography scale ───────────────────────────────────────── */
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 15px;
+  --text-lg:   17px;
+  --text-xl:   22px;
+}
+
+/* ── Light mode overrides ─────────────────────────────────────── */
+
+[data-theme="light"] {
+  --desk-bg-base:        #F5F5F5;
+  --desk-bg-surface:     #FFFFFF;
+  --desk-bg-elevated:    #FFFFFF;
+  --desk-bg-overlay-1:    #F0F0F0;
+  --desk-bg-overlay-2:    #E8E8E8;
+
+  --desk-border:          #E0E0E0;
+  --desk-border-strong:   #C8C8C8;
+
+  --desk-accent:         #2563EB;
+  --desk-accent-dim:     rgba(37,99,235,0.08);
+  --desk-accent-glow:    rgba(37,99,235,0.15);
+
+  --desk-text-primary:   #111111;
+  --desk-text-secondary: #333333;
+  --desk-text-tertiary: #888888;
+  --desk-text-disabled: #BBBBBB;
+
+  --desk-nav-bg:          #FFFFFF;
+  --desk-nav-text:       #666666;
+  --desk-nav-text-active:#2563EB;
+  --desk-nav-hover-bg:   #F0F4FF;
+
+  --desk-action-secondary: #F0F0F0;
+}
+
+/* ── Responsive breakpoints ────────────────────────────────────── */
+
+@media (max-width: 1199px) {
+  :root { --desk-sidebar-width: var(--desk-tablet-sidebar); }
+}
+
+@media (max-width: 767px) {
+  :root { --desk-sidebar-width: 0px; }
+}
+
+/* ── Utility classes (production use) ───────────────────────────── */
+
+.desk-app { background: var(--desk-bg-base); color: var(--desk-text-primary); font-family: var(--font-sans); }
+.desk-sidebar { width: var(--desk-sidebar-width); background: var(--desk-nav-bg); border-right: 1px solid var(--desk-border); position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.desk-main { flex: 1; min-width: 0; }
+.desk-panel { background: var(--desk-bg-surface); border-radius: var(--desk-radius-lg); padding: 24px; }
+.desk-card { background: var(--desk-bg-elevated); border: 1px solid var(--desk-border); border-radius: var(--desk-radius-lg); padding: 20px; }
+.desk-card:hover { border-color: var(--desk-border-strong); box-shadow: var(--desk-shadow-sm); }
+.desk-btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: var(--desk-radius-sm); font-size: var(--text-sm); font-weight: 600; font-family: var(--font-sans); cursor: pointer; border: 1px solid transparent; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.desk-btn--primary { background: var(--desk-action-primary); color: var(--desk-bg-base); }
+.desk-btn--default { background: var(--desk-action-secondary); color: var(--desk-text-secondary); border-color: var(--desk-border-strong); }
+.desk-btn--ghost { background: transparent; color: var(--desk-text-tertiary); }
+.desk-btn--danger { background: transparent; color: var(--desk-status-error); }
+.desk-btn--danger:hover { background: rgba(239,68,68,0.1); }
+.desk-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 20px; font-size: var(--text-xs); font-weight: 700; white-space: nowrap; }
+.desk-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; background: var(--desk-bg-elevated); border: 1px solid var(--desk-border-strong); border-radius: 20px; font-size: var(--text-xs); color: var(--desk-text-secondary); cursor: pointer; }
+.desk-chip--active { background: var(--desk-accent-dim); border-color: var(--desk-accent-glow); color: var(--desk-accent); }
+.desk-toggle { position: relative; width: 36px; height: 20px; border-radius: 10px; background: var(--desk-bg-overlay-1); cursor: pointer; transition: background 0.2s; border: none; flex-shrink: 0; }
+.desk-toggle.on { background: var(--desk-status-success); }
+.desk-toggle::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #FFF; top: 3px; left: 3px; transition: transform 0.2s; }
+.desk-toggle.on::after { transform: translateX(16px); }
+.desk-empty { text-align: center; padding: 60px 24px; }
+.desk-skeleton { background: var(--desk-bg-elevated); border: 1px solid var(--desk-border); border-radius: var(--desk-radius-md); overflow: hidden; }
+.desk-skeleton-bar { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--desk-bg-overlay-1) 25%, var(--desk-bg-overlay-2) 50%, var(--desk-bg-overlay-1) 75%); background-size: 200% 100%; animation: desk-shimmer 1.5s infinite; }
+@keyframes desk-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.desk-safety-strip { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-radius: var(--desk-radius-sm); font-size: var(--text-sm); margin-bottom: 20px; line-height: 1.5; }
+.desk-safety-strip--protocol { background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2); color: #93C5FD; }
+.desk-safety-strip--wellness { background: rgba(244,114,182,0.08); border: 1px solid rgba(244,114,182,0.2); color: #F9A8D4; }
+.desk-safety-strip--memory { background: rgba(209,242,255,0.08); border: 1px solid rgba(209,242,255,0.2); color: #93D5FF; }
+.desk-safety-strip--mcp { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2); color: #86EFAC; }
