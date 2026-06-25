@@ -1068,7 +1068,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     }, { mode: mondayBetaScenarioMode(scenario), source: "monday-beta-panel" });
   };
 
-  const askAgentForVenuePrompt = async (prompt: string) => {
+  const askAgentForVenuePrompt = async (prompt: string, options: { source?: string } = {}) => {
     await sendToChat(prompt, {
       venue,
       ss58Address: watchAddress.trim() || undefined,
@@ -1080,7 +1080,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       marketSdkValidation,
     }, {
       mode: venue === "bittensor" ? "bittensor" : "crypto",
-      source: `${venue}-workspace-panel`,
+      source: options.source ?? `${venue}-workspace-panel`,
     });
   };
 
@@ -1301,14 +1301,17 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title={`${activeVenue.label} chat starters`} icon={<BrainCircuit className="size-4" />}>
+            <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
+              <p className="mb-3 text-xs leading-5 text-dls-secondary">
+                These insert editable {activeVenue.label} prompts into chat. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+              </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
                   <button
                     key={item.label}
                     type="button"
                     className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
-                    onClick={() => void askAgentForVenuePrompt(item.prompt)}
+                    onClick={() => void askAgentForVenuePrompt(item.prompt, { source: `${venue}-standard-action` })}
                   >
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
                     <span className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">{item.prompt}</span>
