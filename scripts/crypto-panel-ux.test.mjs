@@ -34,6 +34,8 @@ for (const phrase of [
   "Preview Actions",
   "Matterhorn prepares Bittensor action previews for review.",
   "Standard Bittensor actions",
+  "Standard Hyperliquid actions",
+  "Standard Polymarket actions",
   "Show TAO balance",
   "Find useful subnets",
   "Compare validators",
@@ -75,6 +77,8 @@ assert.ok(panel.includes("Right-rail command groups stay single-column"), "Proto
 assert.ok(panel.includes("askAgentForStandardBittensorAction"), "Standard Bittensor action cards should insert editable chat prompts");
 assert.ok(panel.includes('source: "bittensor-standard-action"'), "Standard Bittensor actions should use a dedicated handoff source");
 assert.ok(panel.includes("they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets."), "Standard Bittensor action copy should state no auto-send and no signing");
+assert.ok(panel.includes('source: `${venue}-standard-action`'), "Standard market actions should use a dedicated handoff source");
+assert.ok(panel.includes("They do not auto-send, sign, submit, place orders, bet, or ask for private keys"), "Standard market action copy should state no auto-send, no submission, and no secrets");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
 //     support prompt insertion plus evidence command copy.
