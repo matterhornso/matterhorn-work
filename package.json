@@ -61,6 +61,7 @@
     "test:matterhorn-theme-readability": "node scripts/matterhorn-theme-readability.test.mjs",
     "test:minimax-memory-ui": "node scripts/minimax-memory-ui.test.mjs",
     "test:minimax-memory-producer": "node scripts/minimax-memory-producer.test.mjs",
+    "test:minimax-desk-system": "node scripts/minimax-desk-system.test.mjs",
     "test:minimax-ui-system": "node scripts/minimax-ui-system.test.mjs",
     "test:minimax-chat-perspectives-media-nft": "node scripts/minimax-chat-perspectives-media-nft.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",

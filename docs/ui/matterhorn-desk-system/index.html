@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matterhorn Desk System — Design Prototype</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* ── Showcase shell ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Aeonik', system-ui, sans-serif;
+  background: #080808;
+  color: #E5E5E5;
+  min-height: 100vh;
+}
+
+.showcase {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+.showcase-nav {
+  background: #0C0C0C;
+  border-right: 1px solid #1F1F1F;
+  padding: 24px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.showcase-nav__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 24px;
+  border-bottom: 1px solid #1F1F1F;
+  margin-bottom: 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #D1F2FF;
+  letter-spacing: 0.02em;
+}
+
+.showcase-nav__logo svg { width: 20px; height: 20px; }
+
+.showcase-nav h3 {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #666;
+  padding: 0 20px 8px;
+}
+
+.showcase-nav ul { list-style: none; }
+
+.showcase-nav li {
+  padding: 0 12px;
+  margin: 2px 0;
+}
+
+.showcase-nav button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #999;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.showcase-nav button:hover { background: #1A1A1A; color: #D1F2FF; }
+.showcase-nav button.active { background: #1A1A1A; color: #D1F2FF; border-left: 2px solid #D1F2FF; }
+
+.showcase-nav button .nav-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.showcase-content {
+  padding: 32px;
+  background: #080808;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.screen-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #D1F2FF;
+  margin-bottom: 8px;
+}
+
+.screen-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #FFF;
+  margin-bottom: 4px;
+}
+
+.screen-subtitle {
+  font-size: 13px;
+  color: #777;
+  margin-bottom: 28px;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: #1A1A1A;
+  border: 1px solid #2A2A2A;
+  border-radius: 8px;
+  padding: 6px 12px;
+  color: #999;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  z-index: 100;
+  transition: background 0.15s;
+}
+
+.theme-toggle:hover { background: #222; color: #D1F2FF; }
+
+/* ── Desk Card (launcher) ───────────────────────────────────────── */
+.desk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.desk-card {
+  background: #141414;
+  border: 1px solid #1F1F1F;
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+
+.desk-card:hover {
+  border-color: #2A2A2A;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.desk-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.desk-card__icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.desk-card__status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #333;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.desk-card__status.active { background: #22C55E; }
+.desk-card__status.warning { background: #F59E0B; }
+.desk-card__status.inactive { background: #333; }
+
+.desk-card__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #FFF;
+  margin-bottom: 4px;
+}
+
+.desk-card__desc {
+  font-size: 12px;
+  color: #777;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.desk-card__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── SubNav ────────────────────────────────────────────────────── */
+.sub-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #1F1F1F;
+  padding-bottom: 12px;
+  overflow-x: auto;
+}
+
+.sub-nav__item {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #777;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sub-nav__item:hover { background: #141414; color: #D1F2FF; }
+.sub-nav__item.active { background: #1A1A1A; color: #D1F2FF; border-bottom: 2px solid #D1F2FF; }
+
+/* ── Content Header ─────────────────────────────────────────────── */
+.content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.content-header__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.content-header__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.content-header__meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Stat Row ───────────────────────────────────────────────────── */
+.stat-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.stat-tile {
+  background: #141414;
+  border: 1px solid #1F1F1F;
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 120px;
+}
+
+.stat-tile__label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.stat-tile__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFF;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-tile__sub {
+  font-size: 11px;
+  color: #555;
+  margin-top: 2px;
+}
+
+/* ── Data Table ─────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #555;
+  padding: 8px 12px;
+  border-bottom: 1px solid #1F1F1F;
+}
+
+.data-table td {
+  padding: 12px 12px;
+  border-bottom: 1px solid #141414;
+  color: #CCC;
+  vertical-align: middle;
+}
+
+.data-table tr:hover td { background: #141414; }
+
+/* ── Card Grid ──────────────────────────────────────────────────── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.mm-card {
+  background: #141414;
+  border: 1px solid #1F1F1F;
+  border-radius: 10px;
+  padding: 16px;
+  transition: border-color 0.15s;
+}
+
+.mm-card:hover { border-color: #2A2A2A; }
+
+.mm-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mm-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #FFF;
+  line-height: 1.4;
+}
+
+.mm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mm-badge--protocol { background: rgba(96,165,250,0.15); color: #60A5FA; }
+.mm-badge--wellness { background: rgba(244,114,182,0.15); color: #F472B6; }
+.mm-badge--memory   { background: rgba(209,242,255,0.12); color: #D1F2FF; }
+.mm-badge--preference { background: rgba(192,132,252,0.15); color: #C084FC; }
+.mm-badge--high { background: rgba(245,158,11,0.15); color: #F59E0B; }
+.mm-badge--success { background: rgba(34,197,94,0.15); color: #22C55E; }
+
+.mm-card__meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.mm-source {
+  font-size: 11px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mm-confidence {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.mm-confidence__bar {
+  display: flex;
+  gap: 2px;
+}
+
+.mm-confidence__segment {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: #1F1F1F;
+}
+
+.mm-confidence__segment.high { background: #22C55E; }
+.mm-confidence__segment.med { background: #F59E0B; }
+.mm-confidence__segment.low { background: #EF4444; }
+
+.mm-confidence__label {
+  font-size: 11px;
+  color: #555;
+  font-family: 'JetBrains Mono', monospace;
+  margin-left: 4px;
+}
+
+.mm-card__why {
+  background: rgba(209,242,255,0.05);
+  border-left: 3px solid #D1F2FF;
+  padding: 8px 10px;
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  color: #AAA;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.mm-card__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+.mm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.mm-btn--primary {
+  background: #D1F2FF;
+  color: #0C0C0C;
+  border-color: #D1F2FF;
+}
+
+.mm-btn--primary:hover { background: #B0E0F5; }
+
+.mm-btn--default {
+  background: #1F1F1F;
+  color: #CCC;
+  border-color: #2A2A2A;
+}
+
+.mm-btn--default:hover { background: #2A2A2A; color: #FFF; }
+
+.mm-btn--ghost {
+  background: transparent;
+  color: #666;
+  border-color: transparent;
+}
+
+.mm-btn--ghost:hover { color: #CCC; background: #141414; }
+
+.mm-btn--danger {
+  background: transparent;
+  color: #EF4444;
+  border-color: transparent;
+}
+
+.mm-btn--danger:hover { background: rgba(239,68,68,0.1); }
+
+/* ── Safety Strip ───────────────────────────────────────────────── */
+.safety-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
+.safety-strip--protocol {
+  background: rgba(96,165,250,0.08);
+  border: 1px solid rgba(96,165,250,0.2);
+  color: #93C5FD;
+}
+
+.safety-strip--wellness {
+  background: rgba(244,114,182,0.08);
+  border: 1px solid rgba(244,114,182,0.2);
+  color: #F9A8D4;
+}
+
+.safety-strip--memory {
+  background: rgba(209,242,255,0.08);
+  border: 1px solid rgba(209,242,255,0.2);
+  color: #93D5FF;
+}
+
+.safety-strip--mcp {
+  background: rgba(34,197,94,0.08);
+  border: 1px solid rgba(34,197,94,0.2);
+  color: #86EFAC;
+}
+
+.safety-strip__icon { font-size: 14px; flex-shrink: 0; }
+
+/* ── Memory Suggestions Bell ─────────────────────────────────────── */
+.suggestion-bell {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1F1F1F;
+  border: 1px solid #2A2A2A;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #999;
+  transition: background 0.15s;
+}
+
+.suggestion-bell:hover { background: #2A2A2A; color: #D1F2FF; }
+
+.suggestion-bell__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  background: #EF4444;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #FFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── Memory Chip Bar ────────────────────────────────────────────── */
+.memory-chip-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid #1F1F1F;
+  margin-bottom: 16px;
+}
+
+.mm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #1F1F1F;
+  border: 1px solid #2A2A2A;
+  border-radius: 20px;
+  font-size: 11px;
+  color: #AAA;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.mm-chip:hover { background: #222; color: #D1F2FF; border-color: #333; }
+
+.mm-chip--active {
+  background: rgba(209,242,255,0.1);
+  border-color: rgba(209,242,255,0.3);
+  color: #D1F2FF;
+}
+
+.mm-chip--bittensor { border-color: rgba(96,165,250,0.3); color: #93C5FD; }
+.mm-chip--hyperliquid { border-color: rgba(192,132,252,0.3); color: #C084FC; }
+.mm-chip--wellness { border-color: rgba(244,114,182,0.3); color: #F472B6; }
+
+/* ── Toggle ────────────────────────────────────────────────────── */
+.mm-toggle {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #2A2A2A;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+  flex-shrink: 0;
+}
+
+.mm-toggle.on { background: #22C55E; }
+
+.mm-toggle::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #FFF;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s;
+}
+
+.mm-toggle.on::after { transform: translateX(16px); }
+
+/* ── Empty State ───────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  color: #555;
+}
+
+.empty-state__icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+.empty-state__title { font-size: 16px; font-weight: 600; color: #777; margin-bottom: 6px; }
+.empty-state__body { font-size: 13px; color: #444; line-height: 1.6; max-width: 360px; margin: 0 auto 20px; }
+.empty-state__action { display: flex; justify-content: center; }
+
+/* ── Error Banner ──────────────────────────────────────────────── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #F59E0B;
+  margin-bottom: 20px;
+}
+
+/* ── Skeleton ──────────────────────────────────────────────────── */
+.skeleton-card {
+  background: #141414;
+  border: 1px solid #1F1F1F;
+  border-radius: 10px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1F1F1F 25%, #252525 50%, #1F1F1F 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Responsive: tablet ──────────────────────────────────────── */
+@media (max-width: 1199px) {
+  .desk-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .showcase { grid-template-columns: 180px 1fr; }
+  .showcase-nav { width: 180px; }
+}
+
+/* ── Responsive: mobile ───────────────────────────────────────── */
+@media (max-width: 767px) {
+  .showcase { grid-template-columns: 1fr; }
+  .showcase-nav { display: none; }
+  .mobile-nav-bar {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: #0C0C0C;
+    border-top: 1px solid #1F1F1F;
+    z-index: 200;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 8px;
+  }
+  .mobile-nav-bar__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: #555;
+    font-size: 10px;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 8px;
+    transition: color 0.15s;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .mobile-nav-bar__item:hover,
+  .mobile-nav-bar__item.active { color: #D1F2FF; }
+  .mobile-nav-bar__icon { font-size: 18px; }
+  .showcase-content { padding: 16px 16px 72px; }
+  .desk-grid { grid-template-columns: 1fr; }
+  .card-grid { grid-template-columns: 1fr; }
+  .stat-row { flex-direction: column; }
+  .content-header { flex-direction: column; align-items: flex-start; }
+  .data-table { font-size: 12px; }
+}
+
+.mobile-nav-bar { display: none; }
+
+/* ── Light theme ───────────────────────────────────────────────── */
+[data-theme="light"] {
+  background: #F5F5F5;
+  color: #111;
+}
+
+[data-theme="light"] .showcase { background: #F5F5F5; }
+
+[data-theme="light"] .showcase-nav {
+  background: #FFFFFF;
+  border-color: #E0E0E0;
+}
+
+[data-theme="light"] .showcase-nav__logo { color: #2563EB; }
+
+[data-theme="light"] .showcase-nav button { color: #666; }
+[data-theme="light"] .showcase-nav button:hover,
+[data-theme="light"] .showcase-nav button.active { background: #F0F4FF; color: #2563EB; }
+
+[data-theme="light"] .desk-card { background: #FFFFFF; border-color: #E0E0E0; }
+[data-theme="light"] .desk-card:hover { border-color: #C0D0F0; }
+[data-theme="light"] .desk-card__name { color: #111; }
+[data-theme="light"] .desk-card__desc { color: #666; }
+
+[data-theme="light"] .mm-card { background: #FFFFFF; border-color: #E0E0E0; }
+[data-theme="light"] .mm-card__title { color: #111; }
+[data-theme="light"] .mm-card td { color: #333; border-color: #F0F0F0; }
+[data-theme="light"] .mm-card tr:hover td { background: #F8FAFF; }
+
+[data-theme="light"] .mm-card__why { background: rgba(37,99,235,0.05); border-color: #2563EB; color: #444; }
+
+[data-theme="light"] .stat-tile { background: #FFFFFF; border-color: #E0E0E0; }
+[data-theme="light"] .stat-tile__value { color: #111; }
+[data-theme="light"] .stat-tile__label { color: #888; }
+
+[data-theme="light"] .mm-btn--default { background: #F0F0F0; color: #333; border-color: #D0D0D0; }
+[data-theme="light"] .mm-btn--primary { background: #2563EB; color: #FFF; }
+
+[data-theme="light"] .mm-chip { background: #F0F0F0; border-color: #D0D0D0; color: #555; }
+[data-theme="light"] .mm-chip:hover { background: #E8F0FF; color: #2563EB; }
+
+[data-theme="light"] .mobile-nav-bar { background: #FFFFFF; border-color: #E0E0E0; }
+[data-theme="light"] .mobile-nav-bar__item { color: #888; }
+[data-theme="light"] .mobile-nav-bar__item.active { color: #2563EB; }
+
+[data-theme="light"] .showcase-content { background: #F5F5F5; }
+[data-theme="light"] .sub-nav { border-color: #E0E0E0; }
+[data-theme="light"] .sub-nav__item { color: #666; }
+[data-theme="light"] .sub-nav__item.active { background: #F0F4FF; color: #2563EB; }
+[data-theme="light"] .data-table th { color: #888; border-color: #E0E0E0; }
+[data-theme="light"] .data-table td { border-color: #F0F0F0; }
+[data-theme="light"] .suggestion-bell { background: #F0F0F0; border-color: #D0D0D0; color: #666; }
+[data-theme="light"] .memory-chip-bar { border-color: #E0E0E0; }
+[data-theme="light"] .theme-toggle { background: #FFFFFF; border-color: #D0D0D0; color: #666; }
+[data-theme="light"] .theme-toggle:hover { background: #F0F4FF; color: #2563EB; }
+[data-theme="light"] .skeleton-card { background: #FFFFFF; border-color: #E0E0E0; }
+[data-theme="light"] .skeleton-line { background: linear-gradient(90deg, #F0F0F0 25%, #E8E8E8 50%, #F0F0F0 75%); }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">◐ Dark</button>
+
+<!-- ── Mobile Bottom Nav ────────────────────────────────────────── -->
+<nav class="mobile-nav-bar" id="mobileNav">
+  <button class="mobile-nav-bar__item active" onclick="showScreen('desk-launcher')">
+    <span class="mobile-nav-bar__icon">🏠</span>
+    Home
+  </button>
+  <button class="mobile-nav-bar__item" onclick="showScreen('bittensor-desk')">
+    <span class="mobile-nav-bar__icon">⚡</span>
+    Bittensor
+  </button>
+  <button class="mobile-nav-bar__item" onclick="showScreen('hyperliquid-desk')">
+    <span class="mobile-nav-bar__icon">💎</span>
+    Hyperliquid
+  </button>
+  <button class="mobile-nav-bar__item" onclick="showScreen('wellness-desk')">
+    <span class="mobile-nav-bar__icon">♥</span>
+    Wellness
+  </button>
+  <button class="mobile-nav-bar__item" onclick="showScreen('settings-desk')">
+    <span class="mobile-nav-bar__icon">⚙</span>
+    More
+  </button>
+</nav>
+
+<div class="showcase" id="screen-1">
+
+  <!-- ── Showcase Nav ────────────────────────────────────────────── -->
+  <nav class="showcase-nav">
+    <div class="showcase-nav__logo">
+      <svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" stroke="#D1F2FF" stroke-width="1.5"/><circle cx="10" cy="10" r="4" fill="#D1F2FF"/></svg>
+      Matterhorn Desks
+    </div>
+
+    <h3>Desks</h3>
+    <ul>
+      <li><button class="active" onclick="showScreen('desk-launcher')"><span class="nav-icon">🏠</span> Desk Launcher</button></li>
+      <li><button onclick="showScreen('bittensor-desk')"><span class="nav-icon">⚡</span> Bittensor</button></li>
+      <li><button onclick="showScreen('hyperliquid-desk')"><span class="nav-icon">💎</span> Hyperliquid</button></li>
+      <li><button onclick="showScreen('polymarket-desk')"><span class="nav-icon">🔮</span> Polymarket</button></li>
+      <li><button onclick="showScreen('wellness-desk')"><span class="nav-icon">♥</span> Wellness</button></li>
+      <li><button onclick="showScreen('memory-desk')"><span class="nav-icon">🧠</span> Memory</button></li>
+      <li><button onclick="showScreen('mcp-desk')"><span class="nav-icon">🔌</span> MCP</button></li>
+    </ul>
+
+    <h3 style="margin-top:16px">Settings</h3>
+    <ul>
+      <li><button onclick="showScreen('settings-desk')"><span class="nav-icon">⚙</span> Settings &amp; Profile</button></li>
+    </ul>
+  </nav>
+
+  <!-- ── Screen: Desk Launcher ──────────────────────────────────── -->
+  <section class="showcase-content screen active" id="desk-launcher">
+    <div class="screen-label">Screen 1 · Desk Launcher</div>
+    <div class="screen-title">Your Desks</div>
+    <div class="screen-subtitle">Select a desk to open its workspace. Active desks show your current context.</div>
+
+    <div class="desk-grid">
+      <!-- Bittensor -->
+      <div class="desk-card" onclick="showScreen('bittensor-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(96,165,250,0.15)">⚡</div>
+          <div class="desk-card__status active" title="Active"></div>
+        </div>
+        <div class="desk-card__name">Bittensor</div>
+        <div class="desk-card__desc">Validator preferences, subnet intelligence, stake planning, and delegation tracking.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--protocol">3 subnets</span>
+          <span class="mm-badge mm-badge--success">2 active</span>
+        </div>
+      </div>
+
+      <!-- Hyperliquid -->
+      <div class="desk-card" onclick="showScreen('hyperliquid-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(192,132,252,0.15)">💎</div>
+          <div class="desk-card__status active" title="Active"></div>
+        </div>
+        <div class="desk-card__name">Hyperliquid</div>
+        <div class="desk-card__desc">Perpetual positions, margin preferences, funding rate alerts, and funding planning.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--protocol">2 positions</span>
+          <span class="mm-badge mm-badge--high">3× max</span>
+        </div>
+      </div>
+
+      <!-- Polymarket -->
+      <div class="desk-card" onclick="showScreen('polymarket-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(167,139,250,0.15)">🔮</div>
+          <div class="desk-card__status warning" title="Stale data"></div>
+        </div>
+        <div class="desk-card__name">Polymarket</div>
+        <div class="desk-card__desc">Tracked prediction markets, resolution criteria, and sentiment annotations.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--protocol">4 tracked</span>
+          <span class="mm-badge mm-badge--high">Last 7d</span>
+        </div>
+      </div>
+
+      <!-- Wellness -->
+      <div class="desk-card" onclick="showScreen('wellness-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(244,114,182,0.15)">♥</div>
+          <div class="desk-card__status inactive" title="Inactive — toggle on"></div>
+        </div>
+        <div class="desk-card__name">Wellness</div>
+        <div class="desk-card__desc">Goals, streaks, check-ins, and wellness workflow preferences. Stored locally only.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--wellness">Local only</span>
+          <span class="mm-badge mm-badge--high">Off</span>
+        </div>
+      </div>
+
+      <!-- Memory -->
+      <div class="desk-card" onclick="showScreen('memory-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(209,242,255,0.1)">🧠</div>
+          <div class="desk-card__status active" title="Active"></div>
+        </div>
+        <div class="desk-card__name">Memory</div>
+        <div class="desk-card__desc">Confirmed memories, context chips, and active suggestion inbox for all desks.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--memory">127 memories</span>
+          <span class="mm-badge mm-badge--success">3 suggestions</span>
+        </div>
+      </div>
+
+      <!-- MCP -->
+      <div class="desk-card" onclick="showScreen('mcp-desk')">
+        <div class="desk-card__header">
+          <div class="desk-card__icon-wrap" style="background:rgba(34,197,94,0.1)">🔌</div>
+          <div class="desk-card__status active" title="Active"></div>
+        </div>
+        <div class="desk-card__name">MCP</div>
+        <div class="desk-card__desc">Tool configuration, agent capability matrix, and skill registry management.</div>
+        <div class="desk-card__actions">
+          <span class="mm-badge mm-badge--success">8 tools</span>
+          <span class="mm-badge mm-badge--protocol">4 agents</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error State Variant -->
+    <div style="margin-top:32px">
+      <div class="screen-label" style="color:#555">Error State — Degraded Desk Data</div>
+      <div class="error-banner">
+        ⚠ Subtensor data unavailable — showing cached values from 3 hours ago
+        <button class="mm-btn mm-btn--default" style="margin-left:auto">Retry</button>
+      </div>
+      <div class="desk-grid">
+        <div class="desk-card" style="opacity:0.5">
+          <div class="desk-card__header">
+            <div class="desk-card__icon-wrap" style="background:rgba(96,165,250,0.15)">⚡</div>
+            <div class="desk-card__status warning" title="Stale data"></div>
+          </div>
+          <div class="desk-card__name">Bittensor</div>
+          <div class="desk-card__desc">Data may be outdated. Retrying connection…</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Screen: Bittensor Desk ──────────────────────────────────── -->
+  <section class="showcase-content screen" id="bittensor-desk">
+    <div class="screen-label">Screen 2 · Bittensor Desk</div>
+    <div class="screen-title">Bittensor</div>
+    <div class="screen-subtitle">Subnet intelligence, validator preferences, and delegation history. Public Subtensor data only.</div>
+
+    <!-- Safety Strip -->
+    <div class="safety-strip safety-strip--protocol">
+      <span class="safety-strip__icon">🔗</span>
+      Read-only. Public Subtensor data only. No private keys, seed phrases, or signing capabilities. Matterhorn never holds or manages stake.
+    </div>
+
+    <!-- Memory Chip Bar -->
+    <div class="memory-chip-bar">
+      <span style="font-size:11px;color:#555;margin-right:4px">Active:</span>
+      <span class="mm-chip mm-chip--bittensor mm-chip--active">Validator subnet 1</span>
+      <span class="mm-chip mm-chip--bittensor">Delegation ceiling 1000 TAO</span>
+      <span class="mm-chip mm-chip--bittensor">+ Add to context</span>
+    </div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(96,165,250,0.15);font-size:20px">⚡</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">Subnet Intelligence</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--success">5 subnets</span>
+            <span style="font-size:12px;color:#555">Updated 2 min ago</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="mm-btn mm-btn--default">Refresh</button>
+        <button class="mm-btn mm-btn--ghost" style="color:#555;font-size:12px">⚙ Preferences</button>
+      </div>
+    </div>
+
+    <!-- Stat Row -->
+    <div class="stat-row">
+      <div class="stat-tile">
+        <div class="stat-tile__label">Total Stake</div>
+        <div class="stat-tile__value">12,450</div>
+        <div class="stat-tile__sub">TAO across all subnets</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Active Validators</div>
+        <div class="stat-tile__value">3</div>
+        <div class="stat-tile__sub">On subnet 1, 2, 7</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Delegation Ceiling</div>
+        <div class="stat-tile__value">1000 TAO</div>
+        <div class="stat-tile__sub">Per subnet, per validator</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Last Sync</div>
+        <div class="stat-tile__value" style="font-size:14px">2m ago</div>
+        <div class="stat-tile__sub">via public Subtensor RPC</div>
+      </div>
+    </div>
+
+    <!-- Subnets Table -->
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Subnet</th>
+          <th>Your Stake</th>
+          <th>Confidence</th>
+          <th>Delegation</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Subnet 1 — Core</td>
+          <td>8,200 TAO</td>
+          <td>
+            <div class="mm-confidence">
+              <div class="mm-confidence__bar">
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment high"></div>
+              </div>
+              <span class="mm-confidence__label">91%</span>
+            </div>
+          </td>
+          <td>Validator 5CfTC…3bX9</td>
+          <td><span class="mm-badge mm-badge--success">Active</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Subnet 2 — Compute</td>
+          <td>2,500 TAO</td>
+          <td>
+            <div class="mm-confidence">
+              <div class="mm-confidence__bar">
+                <div class="mm-confidence__segment med"></div>
+                <div class="mm-confidence__segment med"></div>
+                <div class="mm-confidence__segment low" style="background:#333"></div>
+              </div>
+              <span class="mm-confidence__label">67%</span>
+            </div>
+          </td>
+          <td>Delegated</td>
+          <td><span class="mm-badge mm-badge--success">Active</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Subnet 7 — Inference</td>
+          <td>1,750 TAO</td>
+          <td>
+            <div class="mm-confidence">
+              <div class="mm-confidence__bar">
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment low" style="background:#333"></div>
+              </div>
+              <span class="mm-confidence__label">78%</span>
+            </div>
+          </td>
+          <td>Validator 9XmKp…Q7rL2</td>
+          <td><span class="mm-badge mm-badge--protocol">Watching</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Loading State -->
+    <div style="margin-top:24px">
+      <div class="screen-label" style="color:#555">Loading State — Skeleton</div>
+      <div class="card-grid">
+        <div class="skeleton-card">
+          <div class="skeleton-line" style="width:60%;margin-bottom:12px"></div>
+          <div class="skeleton-line" style="width:80%"></div>
+          <div class="skeleton-line" style="width:40%;margin-top:8px"></div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton-line" style="width:50%;margin-bottom:12px"></div>
+          <div class="skeleton-line" style="width:70%"></div>
+          <div class="skeleton-line" style="width:30%;margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Screen: Hyperliquid Desk ────────────────────────────────── -->
+  <section class="showcase-content screen" id="hyperliquid-desk">
+    <div class="screen-label">Screen 3 · Hyperliquid Desk</div>
+    <div class="screen-title">Hyperliquid</div>
+    <div class="screen-subtitle">Perpetual positions, margin preferences, and funding rate planning.</div>
+
+    <!-- Safety Strip -->
+    <div class="safety-strip safety-strip--protocol">
+      <span class="safety-strip__icon">📖</span>
+      Preview only. Read-only account data via Hyperliquid Info API. No API keys, no signing, no order placement. Matterhorn never places, modifies, or closes orders.
+    </div>
+
+    <!-- Memory Chip Bar -->
+    <div class="memory-chip-bar">
+      <span style="font-size:11px;color:#555;margin-right:4px">Active:</span>
+      <span class="mm-chip mm-chip--hyperliquid mm-chip--active">BTC-PERP 3× ceiling</span>
+      <span class="mm-chip mm-chip--hyperliquid">Cross margin</span>
+      <span class="mm-chip mm-chip--hyperliquid">+ Add to context</span>
+    </div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(192,132,252,0.15);font-size:20px">💎</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">Perpetual Positions</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--protocol">2 active</span>
+            <span style="font-size:12px;color:#555">Preview only</span>
+          </div>
+        </div>
+      </div>
+      <button class="mm-btn mm-btn--default">⚙ Margin Preferences</button>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-tile">
+        <div class="stat-tile__label">BTC-PERP</div>
+        <div class="stat-tile__value" style="color:#C084FC">3× Long</div>
+        <div class="stat-tile__sub">Entry: $98,450 · Size: 0.05 BTC</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">ETH-PERP</div>
+        <div class="stat-tile__value" style="color:#C084FC">2× Long</div>
+        <div class="stat-tile__sub">Entry: $3,210 · Size: 0.2 ETH</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Leverage Ceiling</div>
+        <div class="stat-tile__value">3×</div>
+        <div class="stat-tile__sub">Last set 4 days ago in Settings</div>
+      </div>
+    </div>
+
+    <!-- Positions Table -->
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th>Side</th>
+          <th>Size</th>
+          <th>Entry Price</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;color:#FFF">BTC-PERP</td>
+          <td style="color:#22C55E">Long</td>
+          <td>0.05 BTC</td>
+          <td>$98,450</td>
+          <td>
+            <div class="mm-confidence">
+              <div class="mm-confidence__bar">
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment high"></div>
+                <div class="mm-confidence__segment high"></div>
+              </div>
+              <span class="mm-confidence__label">88%</span>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">ETH-PERP</td>
+          <td style="color:#22C55E">Long</td>
+          <td>0.2 ETH</td>
+          <td>$3,210</td>
+          <td>
+            <div class="mm-confidence">
+              <div class="mm-confidence__bar">
+                <div class="mm-confidence__segment med"></div>
+                <div class="mm-confidence__segment med"></div>
+                <div class="mm-confidence__segment low" style="background:#333"></div>
+              </div>
+              <span class="mm-confidence__label">71%</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Screen: Polymarket Desk ──────────────────────────────────── -->
+  <section class="showcase-content screen" id="polymarket-desk">
+    <div class="screen-label">Screen 4 · Polymarket Desk</div>
+    <div class="screen-title">Polymarket</div>
+    <div class="screen-subtitle">Tracked prediction markets and resolution criteria.</div>
+
+    <!-- Safety Strip -->
+    <div class="safety-strip safety-strip--protocol">
+      <span class="safety-strip__icon">📖</span>
+      Preview only. Read-only browsing data. No bet placement, no CLOB credentials, no signed payloads. Matterhorn never places bets or accesses trading accounts.
+    </div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(167,139,250,0.15);font-size:20px">🔮</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">Tracked Markets</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--protocol">4 tracked</span>
+            <span style="font-size:12px;color:#555">Preview only</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="mm-btn mm-btn--default">Filter: All</button>
+        <button class="mm-btn mm-btn--ghost" style="color:#555;font-size:12px">+ Track new market</button>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">BTC above $100k by end of 2025</div>
+          <span class="mm-badge mm-badge--high">71%</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--protocol">Binary</span>
+          <span class="mm-source">⚡ Chat · 2 days ago</span>
+        </div>
+        <div class="mm-card__why">You asked about this market in Chat on Tuesday. Viewed market details 2 times. Flagged as high confidence.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--default">View market</button>
+          <button class="mm-btn mm-btn--ghost">Remove</button>
+        </div>
+      </div>
+
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">ETH Merge hard fork happens by Q3</div>
+          <span class="mm-badge mm-badge--high">44%</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--protocol">Binary</span>
+          <span class="mm-source">⚡ Chat · 5 days ago</span>
+        </div>
+        <div class="mm-card__why">You asked about Ethereum hard fork predictions in 3 chat sessions this week.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--default">View market</button>
+          <button class="mm-btn mm-btn--ghost">Remove</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div style="margin-top:32px">
+      <div class="screen-label" style="color:#555">Empty State — No Tracked Markets</div>
+      <div class="empty-state">
+        <div class="empty-state__icon">🔮</div>
+        <div class="empty-state__title">No markets tracked yet</div>
+        <div class="empty-state__body">Markets you view or ask about in Chat will appear here automatically. Tracking is read-only — Matterhorn never places bets.</div>
+        <div class="empty-state__action">
+          <button class="mm-btn mm-btn--primary">Browse markets</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Screen: Wellness Desk ────────────────────────────────────── -->
+  <section class="showcase-content screen" id="wellness-desk">
+    <div class="screen-label">Screen 5 · Wellness Desk</div>
+    <div class="screen-title">Wellness</div>
+    <div class="screen-subtitle">Goals, streaks, and wellness check-ins. All data stored locally on this device.</div>
+
+    <!-- Safety Strip -->
+    <div class="safety-strip safety-strip--wellness">
+      <span class="safety-strip__icon">🔒</span>
+      Stored locally only. Never sent to external servers. No wellness data in exports, receipts, or provenance tables. Not medical advice.
+    </div>
+
+    <!-- Wellness Toggle -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;padding:14px 16px;background:#141414;border:1px solid #1F1F1F;border-radius:8px">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:#FFF">Allow wellness memory suggestions</div>
+        <div style="font-size:12px;color:#555;margin-top:2px">When enabled, Matterhorn may suggest memories about your wellness activity.</div>
+      </div>
+      <button class="mm-toggle on" onclick="this.classList.toggle('on')" style="margin-left:auto;flex-shrink:0"></button>
+    </div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(244,114,182,0.15);font-size:20px">♥</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">Wellness Goals</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--wellness">Local only</span>
+            <span class="mm-badge mm-badge--high">Restricted</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="mm-btn mm-btn--default">+ New goal</button>
+        <button class="mm-btn mm-btn--ghost" style="color:#555">Check in</button>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">Morning yoga sessions</div>
+          <span class="mm-badge mm-badge--wellness">Personal</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--wellness">Restricted</span>
+          <span class="mm-source">♥ Wellness workflow · 2 days ago</span>
+        </div>
+        <div class="mm-confidence" style="margin-bottom:10px">
+          <div class="mm-confidence__bar">
+            <div class="mm-confidence__segment high"></div>
+            <div class="mm-confidence__segment high"></div>
+            <div class="mm-confidence__segment high"></div>
+          </div>
+          <span class="mm-confidence__label">92%</span>
+        </div>
+        <div class="mm-card__why">You completed 4 morning yoga sessions in the past 2 weeks. Matterhorn inferred a preference.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--default">Check in</button>
+          <button class="mm-btn mm-btn--ghost">Edit</button>
+          <button class="mm-btn mm-btn--danger">Forget</button>
+        </div>
+      </div>
+
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">7-day wellness streak</div>
+          <span class="mm-badge mm-badge--wellness">Personal</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--wellness">Restricted</span>
+          <span class="mm-source">♥ Wellness workflow · 1 day ago</span>
+        </div>
+        <div class="mm-card__why">You logged a 7-day wellness streak. That's your longest streak this month.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--default">Check in</button>
+          <button class="mm-btn mm-btn--danger">Forget</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wellness disabled state -->
+    <div style="margin-top:32px">
+      <div class="screen-label" style="color:#555">Wellness Disabled State</div>
+      <div class="empty-state" style="border:1px dashed #2A2A2A;border-radius:12px">
+        <div class="empty-state__icon">♥</div>
+        <div class="empty-state__title">Wellness suggestions are paused</div>
+        <div class="empty-state__body">Enable wellness memory suggestions in Privacy &amp; Forget Center to track goals, streaks, and check-ins locally.</div>
+        <div class="empty-state__action">
+          <button class="mm-btn mm-btn--primary">Open Privacy Center</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Screen: Memory Desk ───────────────────────────────────────── -->
+  <section class="showcase-content screen" id="memory-desk">
+    <div class="screen-label">Screen 6 · Memory Desk</div>
+    <div class="screen-title">Memory</div>
+    <div class="screen-subtitle">Confirmed memories, active context, and the suggestion inbox.</div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(209,242,255,0.1);font-size:20px">🧠</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">127 memories across all desks</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--memory">127 confirmed</span>
+            <span class="mm-badge mm-badge--success">3 pending</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="suggestion-bell" onclick="showScreen('memory-desk')">
+          🔔
+          <div class="suggestion-bell__badge">3</div>
+        </div>
+        <button class="mm-btn mm-btn--default">+ New memory</button>
+        <button class="mm-btn mm-btn--ghost" style="color:#555">Export</button>
+      </div>
+    </div>
+
+    <!-- Filter Chip Bar -->
+    <div class="memory-chip-bar">
+      <span class="mm-chip mm-chip--active">All (127)</span>
+      <span class="mm-chip">⚡ Bittensor (23)</span>
+      <span class="mm-chip">💎 Hyperliquid (18)</span>
+      <span class="mm-chip">🔮 Polymarket (9)</span>
+      <span class="mm-chip">♥ Wellness (34)</span>
+      <span class="mm-chip">🧠 General (43)</span>
+    </div>
+
+    <div class="card-grid">
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">Your validator preference: subnet 1, 1000 TAO ceiling</div>
+          <span class="mm-badge mm-badge--success">Confirmed ✓</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--protocol">Protocol</span>
+          <span class="mm-badge mm-badge--high">Personal</span>
+          <span class="mm-source">⚡ Settings · 3 days ago</span>
+        </div>
+        <div class="mm-confidence" style="margin-bottom:10px">
+          <div class="mm-confidence__bar">
+            <div class="mm-confidence__segment high"></div>
+            <div class="mm-confidence__segment high"></div>
+            <div class="mm-confidence__segment high"></div>
+          </div>
+          <span class="mm-confidence__label">91%</span>
+        </div>
+        <div class="mm-card__why">You set your validator preference to subnet 1 with a 1000 TAO ceiling in Settings 3 times this month.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--primary">Use</button>
+          <button class="mm-btn mm-btn--default">Edit</button>
+          <button class="mm-btn mm-btn--danger">Forget</button>
+        </div>
+      </div>
+
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">Your BTC-PERP leverage ceiling: 3×</div>
+          <span class="mm-badge mm-badge--success">Confirmed ✓</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--protocol">Protocol</span>
+          <span class="mm-badge mm-badge--high">Personal</span>
+          <span class="mm-source">💎 Settings · 4 days ago</span>
+        </div>
+        <div class="mm-card__why">You set your Hyperliquid BTC-PERP leverage to 3× in Settings 3 times this month. Matterhorn noticed a ceiling preference.</div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--primary">Use</button>
+          <button class="mm-btn mm-btn--default">Edit</button>
+          <button class="mm-btn mm-btn--danger">Forget</button>
+        </div>
+      </div>
+
+      <div class="mm-card">
+        <div class="mm-card__header">
+          <div class="mm-card__title">You prefer short morning yoga sessions</div>
+          <span class="mm-badge mm-badge--wellness">Wellness</span>
+        </div>
+        <div class="mm-card__meta">
+          <span class="mm-badge mm-badge--wellness">Restricted</span>
+          <span class="mm-source">♥ Wellness workflow · 2 days ago</span>
+        </div>
+        <div class="mm-card__why">You completed 4 morning yoga sessions in the past 2 weeks. Matterhorn inferred a preference.</div>
+        <div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-top:1px solid #1F1F1F;margin-top:8px">
+          <span style="font-size:11px;color:#555">🔒 Stored locally only. Never sent to external servers.</span>
+        </div>
+        <div class="mm-card__actions">
+          <button class="mm-btn mm-btn--primary">Use</button>
+          <button class="mm-btn mm-btn--danger">Forget</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Screen: MCP Desk ─────────────────────────────────────────── -->
+  <section class="showcase-content screen" id="mcp-desk">
+    <div class="screen-label">Screen 7 · MCP Desk</div>
+    <div class="screen-title">MCP</div>
+    <div class="screen-subtitle">Tool configuration, agent capability matrix, and skill registry.</div>
+
+    <!-- Safety Strip -->
+    <div class="safety-strip safety-strip--mcp">
+      <span class="safety-strip__icon">🔌</span>
+      MCP tools run locally in your environment. No credentials are stored in Matterhorn. Tool access is scoped to your configured permissions.
+    </div>
+
+    <div class="content-header">
+      <div class="content-header__title">
+        <div class="content-header__icon" style="background:rgba(34,197,94,0.1);font-size:20px">🔌</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#FFF">MCP Tool Registry</div>
+          <div class="content-header__meta">
+            <span class="mm-badge mm-badge--success">8 tools</span>
+            <span class="mm-badge mm-badge--protocol">4 agents</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="mm-btn mm-btn--default">+ Add MCP Server</button>
+        <button class="mm-btn mm-btn--ghost" style="color:#555">Capability matrix</button>
+      </div>
+    </div>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Tool</th>
+          <th>Agent</th>
+          <th>Status</th>
+          <th>Scope</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Bittensor Subnet Adapter</td>
+          <td>Orchestrator</td>
+          <td><span class="mm-badge mm-badge--success">Active</span></td>
+          <td style="color:#555">Read Subtensor, preview invoke</td>
+          <td><button class="mm-btn mm-btn--ghost" style="font-size:11px">Configure</button></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Hyperliquid Info</td>
+          <td>Research Agent</td>
+          <td><span class="mm-badge mm-badge--success">Active</span></td>
+          <td style="color:#555">Read-only market data</td>
+          <td><button class="mm-btn mm-btn--ghost" style="font-size:11px">Configure</button></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Hyperliquid Signing</td>
+          <td>Orchestrator</td>
+          <td><span class="mm-badge mm-badge--high">External signer</span></td>
+          <td style="color:#555">Preview only, external signer required</td>
+          <td><button class="mm-btn mm-btn--ghost" style="font-size:11px">Configure</button></td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;color:#FFF">Polymarket Info</td>
+          <td>Research Agent</td>
+          <td><span class="mm-badge mm-badge--success">Active</span></td>
+          <td style="color:#555">Read-only market browsing</td>
+          <td><button class="mm-btn mm-btn--ghost" style="font-size:11px">Configure</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Screen: Settings / Profile ────────────────────────────────── -->
+  <section class="showcase-content screen" id="settings-desk">
+    <div class="screen-label">Screen 8 · Settings &amp; Profile</div>
+    <div class="screen-title">Settings</div>
+    <div class="screen-subtitle">Profile, desk preferences, privacy controls, and account management.</div>
+
+    <!-- Profile Header -->
+    <div style="display:flex;align-items:center;gap:16px;padding:20px;background:#141414;border:1px solid #1F1F1F;border-radius:10px;margin-bottom:24px">
+      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#D1F2FF,#60A5FA);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#0C0C0C;flex-shrink:0">M</div>
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#FFF">matterhorn-user</div>
+        <div style="font-size:12px;color:#555;margin-top:2px">matterhorn@example.com · Member since Jan 2026</div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <span class="mm-badge mm-badge--memory">127 memories</span>
+          <span class="mm-badge mm-badge--protocol">6 desks</span>
+        </div>
+      </div>
+      <button class="mm-btn mm-btn--default" style="margin-left:auto">Edit profile</button>
+    </div>
+
+    <!-- SubNav -->
+    <div class="sub-nav">
+      <button class="sub-nav__item active">Desk Preferences</button>
+      <button class="sub-nav__item">Privacy &amp; Forget</button>
+      <button class="sub-nav__item">Memory Settings</button>
+      <button class="sub-nav__item">Notifications</button>
+      <button class="sub-nav__item">Security</button>
+    </div>
+
+    <!-- Desk Preferences -->
+    <div class="card-grid" style="margin-bottom:24px">
+      <div style="background:#141414;border:1px solid #1F1F1F;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">⚡</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#FFF">Bittensor</div>
+          <div style="font-size:11px;color:#555">Subnets 1, 2, 7</div>
+        </div>
+        <div class="mm-toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div style="background:#141414;border:1px solid #1F1F1F;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">💎</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#FFF">Hyperliquid</div>
+          <div style="font-size:11px;color:#555">Leverage ceiling 3×</div>
+        </div>
+        <div class="mm-toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div style="background:#141414;border:1px solid #1F1F1F;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">🔮</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#FFF">Polymarket</div>
+          <div style="font-size:11px;color:#555">4 markets tracked</div>
+        </div>
+        <div class="mm-toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div style="background:#141414;border:1px solid #1F1F1F;border-radius:8px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px">♥</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#FFF">Wellness</div>
+          <div style="font-size:11px;color:#555">Local only · Disabled</div>
+        </div>
+        <div class="mm-toggle" onclick="this.classList.toggle('on')"></div>
+      </div>
+    </div>
+
+    <!-- Privacy Controls -->
+    <div class="screen-label" style="margin-top:8px">Privacy &amp; Forget Center</div>
+    <div style="background:#141414;border:1px solid #1F1F1F;border-radius:8px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#FFF">Allow memory suggestions</div>
+          <div style="font-size:12px;color:#555;margin-top:2px">Matterhorn surfaces suggestions based on your activity.</div>
+        </div>
+        <div class="mm-toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:13px;font-weight:600;color:#FFF">Allow wellness memory suggestions</div>
+          <div style="font-size:12px;color:#555;margin-top:2px">Wellness data is stored locally only.</div>
+        </div>
+        <div class="mm-toggle" onclick="this.classList.toggle('on')"></div>
+      </div>
+    </div>
+
+    <button class="mm-btn mm-btn--danger">Forget all memories</button>
+  </section>
+
+</div><!-- /showcase -->
+
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.showcase-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  // Find and activate nav button
+  document.querySelectorAll('.showcase-nav button').forEach(b => {
+    if (b.getAttribute('onclick')?.includes(id)) b.classList.add('active');
+  });
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn = document.getElementById('themeToggle');
+  const isDark = html.getAttribute('data-theme') === 'dark';
+  html.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  btn.textContent = isDark ? '◑ Light' : '◐ Dark';
+}
+</script>
+</body>
+</html>
