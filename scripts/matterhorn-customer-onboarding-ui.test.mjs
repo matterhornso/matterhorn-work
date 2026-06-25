@@ -200,6 +200,10 @@ assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launch
 assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(sessionPage.includes('w-[84px]'), "right rail should be wide enough for readable customer desk labels");
+assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and workflow entry points as Desks");
+assert.ok(sessionPage.includes('label: "Hyperliquid"'), "right rail should spell out Hyperliquid instead of using a cryptic short label");
+assert.ok(sessionPage.includes('label: "Polymarket"'), "right rail should spell out Polymarket instead of using a cryptic short label");
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail clicks should prime an editable chat prompt");
 assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
 assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
