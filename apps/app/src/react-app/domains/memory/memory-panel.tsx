@@ -211,6 +211,25 @@ function suggestionActionMessage(entry: MatterhornMemorySuggestionInboxEntry) {
   return "Review first. Confirm, edit, or dismiss. Nothing is saved automatically.";
 }
 
+function shouldHideSuggestionContent(entry: MatterhornMemorySuggestionInboxEntry) {
+  return entry.status === "blocked" || entry.suggestion.policyDecision === "reject";
+}
+
+function canActOnSuggestion(entry: MatterhornMemorySuggestionInboxEntry) {
+  return entry.status === "pending" && !shouldHideSuggestionContent(entry);
+}
+
+function canDismissSuggestionFromView(entry: MatterhornMemorySuggestionInboxEntry) {
+  return entry.status === "expired" || entry.status === "blocked";
+}
+
+function hiddenSuggestionSummary(entry: MatterhornMemorySuggestionInboxEntry) {
+  if (entry.status === "expired") {
+    return "Expired suggestions cannot be confirmed or edited. Dismiss this stale item and ask Matterhorn to create a fresh suggestion from current context.";
+  }
+  return "Blocked suggestion content hidden. The proposed title, body, source, and Why suggested details are intentionally hidden so unsafe memory material is not shown again.";
+}
+
 function readableSuggestionNote(record: MatterhornMemoryRecord) {
   const note = record.body.note;
   if (typeof note === "string") return note;
@@ -579,6 +598,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
     }
   };
 
+  const handleDismissSuggestionFromView = (entry: MatterhornMemorySuggestionInboxEntry) => {
+    removeSuggestionEntry(entry.id);
+    window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+      detail: { id: entry.id, action: "dismiss", status: entry.status, viewOnly: true },
+    }));
+  };
+
   const beginSuggestionEdit = (entry: MatterhornMemorySuggestionInboxEntry) => {
     setEditingSuggestionId(entry.id);
     setSuggestionEditDraft(buildSuggestionEditDraft(entry));
@@ -822,7 +848,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 const statusMeta = suggestionStatusMeta(entry.status);
                 const StatusIcon = statusMeta.icon;
                 const resolved = entry.status === "confirmed" || entry.status === "edited" || entry.status === "dismissed";
-                const actionable = entry.status === "pending" && suggestion.policyDecision !== "reject";
+                const hidesSensitiveContent = shouldHideSuggestionContent(entry);
+                const actionable = canActOnSuggestion(entry);
+                const showActiveSuggestionActions = actionable;
+                const showDismissFromViewAction = canDismissSuggestionFromView(entry);
                 const editing = editingSuggestionId === entry.id && suggestionEditDraft;
                 const confidence = Math.round(suggestion.confidence * 100);
                 const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
@@ -839,47 +868,78 @@ export function MemoryPanel(props: MemoryPanelProps) {
                             <StatusIcon className="size-3" />
                             {statusMeta.label}
                           </span>
-                          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
-                            {suggestion.proposedRecord.sensitivity}
-                          </span>
-                          <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                            {suggestion.desk}
-                          </span>
-                          <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                            {formatKind(suggestion.proposedRecord.kind)}
-                          </span>
+                          {hidesSensitiveContent ? (
+                            <span className="rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-red-100">
+                              Policy protected
+                            </span>
+                          ) : (
+                            <>
+                              <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
+                                {suggestion.proposedRecord.sensitivity}
+                              </span>
+                              <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                {suggestion.desk}
+                              </span>
+                              <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                {formatKind(suggestion.proposedRecord.kind)}
+                              </span>
+                            </>
+                          )}
                         </div>
-                        <h3 className="mt-2 break-words text-sm font-semibold">{suggestion.proposedRecord.title}</h3>
-                        <p className="mt-1 break-words text-xs leading-5 text-dls-secondary">{suggestion.proposedRecord.summary}</p>
+                        <h3 className="mt-2 break-words text-sm font-semibold">
+                          {hidesSensitiveContent ? "Blocked suggestion hidden" : suggestion.proposedRecord.title}
+                        </h3>
+                        <p className="mt-1 break-words text-xs leading-5 text-dls-secondary">
+                          {hidesSensitiveContent ? hiddenSuggestionSummary(entry) : suggestion.proposedRecord.summary}
+                        </p>
                       </div>
-                      <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 md:w-44">
-                        <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                          <span>Confidence</span>
-                          <span>{confidence}%</span>
+                      {hidesSensitiveContent ? (
+                        <div className="min-w-0 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100 md:w-44">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.08em]">Content redacted</div>
+                          <p className="mt-1">No title, body, source, confidence detail, or trigger text is rendered for blocked suggestions.</p>
                         </div>
-                        <div className="mt-2 grid grid-cols-3 gap-1" aria-label={`${confidence}% confidence`}>
-                          {[0, 1, 2].map((segment) => (
-                            <span
-                              key={segment}
-                              className={cn(
-                                "h-1.5 rounded-full bg-dls-hover",
-                                segment < activeConfidenceSegments && "bg-primary",
-                              )}
-                            />
-                          ))}
+                      ) : (
+                        <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 md:w-44">
+                          <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                            <span>Confidence</span>
+                            <span>{confidence}%</span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-3 gap-1" aria-label={`${confidence}% confidence`}>
+                            {[0, 1, 2].map((segment) => (
+                              <span
+                                key={segment}
+                                className={cn(
+                                  "h-1.5 rounded-full bg-dls-hover",
+                                  segment < activeConfidenceSegments && "bg-primary",
+                                )}
+                              />
+                            ))}
+                          </div>
+                          <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{statusMeta.description}</p>
                         </div>
-                        <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{statusMeta.description}</p>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
-                      <div className="flex items-center gap-2 font-semibold text-dls-text">
-                        <Info className="size-3.5 text-primary" />
-                        Why suggested
+                    {hidesSensitiveContent ? (
+                      <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
+                        <div className="flex items-center gap-2 font-semibold">
+                          <Ban className="size-3.5" />
+                          Why hidden
+                        </div>
+                        <p className="mt-1">
+                          The original trigger, proposed memory, and source metadata are withheld because this candidate was blocked by policy before it could become Memory.
+                        </p>
                       </div>
-                      <p className="mt-1 break-words">{entry.reason || suggestion.reason}</p>
-                      <p className="mt-1 break-words">{suggestionDeskReason(suggestion)}</p>
-                    </div>
+                    ) : (
+                      <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                        <div className="flex items-center gap-2 font-semibold text-dls-text">
+                          <Info className="size-3.5 text-primary" />
+                          Why suggested
+                        </div>
+                        <p className="mt-1 break-words">{entry.reason || suggestion.reason}</p>
+                        <p className="mt-1 break-words">{suggestionDeskReason(suggestion)}</p>
+                      </div>
+                    )}
 
                     {editing ? (
                       <div className="mt-3 grid gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.3)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
@@ -919,7 +979,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <span className="font-semibold text-dls-text">Resolution:</span> {entry.resolutionReason}
                       </p>
                     ) : null}
-                    {entry.policyWarnings?.length ? (
+                    {entry.policyWarnings?.length && !hidesSensitiveContent ? (
                       <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
                         {entry.policyWarnings.slice(0, 3).join(" ")}
                       </div>
@@ -927,39 +987,53 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
                       <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
                     </div>
-                    <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                      <Button
-                        size="sm"
-                        onClick={() => void handleResolveSuggestion(entry, "confirm")}
-                        disabled={!props.client || !actionable}
-                        aria-label={`Remember visible Memory suggestion: ${suggestion.proposedRecord.title}`}
-                      >
-                        <CheckCircle2 className="mr-2 size-3.5" />
-                        Remember this
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => beginSuggestionEdit(entry)}
-                        disabled={!props.client || !actionable || Boolean(editing)}
-                        aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
-                      >
-                        <Edit3 className="mr-2 size-3.5" />
-                        Edit first
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleResolveSuggestion(entry, "dismiss")}
-                        disabled={!props.client || entry.status !== "pending"}
-                        aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
-                      >
-                        <XCircle className="mr-2 size-3.5" />
-                        Dismiss
-                      </Button>
-                    </div>
+                    {showActiveSuggestionActions ? (
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <Button
+                          size="sm"
+                          onClick={() => void handleResolveSuggestion(entry, "confirm")}
+                          disabled={!props.client}
+                          aria-label={`Remember visible Memory suggestion: ${suggestion.proposedRecord.title}`}
+                        >
+                          <CheckCircle2 className="mr-2 size-3.5" />
+                          Remember this
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => beginSuggestionEdit(entry)}
+                          disabled={!props.client || Boolean(editing)}
+                          aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
+                        >
+                          <Edit3 className="mr-2 size-3.5" />
+                          Edit first
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void handleResolveSuggestion(entry, "dismiss")}
+                          disabled={!props.client}
+                          aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
+                        >
+                          <XCircle className="mr-2 size-3.5" />
+                          Dismiss
+                        </Button>
+                      </div>
+                    ) : showDismissFromViewAction ? (
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDismissSuggestionFromView(entry)}
+                          aria-label={`Dismiss ${entry.status} Memory suggestion from view`}
+                        >
+                          <XCircle className="mr-2 size-3.5" />
+                          Dismiss from view
+                        </Button>
+                      </div>
+                    ) : null}
                     <p className="mt-2 text-[11px] leading-4 text-dls-secondary">
-                      No hidden save. Confirm and edit actions are explicit user choices; blocked, expired, dismissed, confirmed, and edited cards are read-only history.
+                      No hidden save. Confirm and edit actions are explicit user choices; edited cards are already saved, and blocked, expired, dismissed, confirmed, and edited cards are read-only history.
                     </p>
                   </article>
                 );
