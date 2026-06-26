@@ -1463,7 +1463,7 @@ export function SessionPage(props: SessionPageProps) {
                   defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
                   minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
                   maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
-                  className="min-h-0 overflow-hidden lg:flex lg:flex-col"
+                  className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   {activeSidePanel === "extensions" && props.settingsSlot ? (
                     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background">
@@ -1507,12 +1507,12 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="flex w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 bg-dls-sidebar/92 px-1.5 py-2 text-muted-foreground shadow-[-10px_0_24px_rgba(0,0,0,0.12)] mac:titlebar-no-drag 2xl:w-[var(--nav-rail-width)]">
+          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 border-l border-white/[0.06] bg-dls-sidebar/80 px-2 py-2 text-muted-foreground mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground"
                 onClick={closeRightPane}
                 title="Back to chat"
                 aria-label="Back to chat"
@@ -1521,7 +1521,7 @@ export function SessionPage(props: SessionPageProps) {
                 <span className="text-[9px] leading-none">Chat</span>
               </Button>
             ) : null}
-            <div className="flex w-full flex-col items-center gap-1 pb-2 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.12)]">
+            <div className="flex w-full flex-col items-center gap-1 border-b border-white/[0.06] pb-2">
               {shellConfig.cloudSignin ? (
                 <div className="flex w-full flex-col items-center gap-1 rounded-md px-1 py-1 text-muted-foreground" title="Profile and account">
                   <BetaAuthMenu compact />
@@ -1531,7 +1531,7 @@ export function SessionPage(props: SessionPageProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground"
                   onClick={props.onOpenSettings}
                   title="Profile and Settings"
                   aria-label="Profile and Settings"
@@ -1544,8 +1544,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  walletRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  walletRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={() => setCurrentSidePanel("wallet")}
                 title="Wallet details"
@@ -1561,8 +1561,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  browserRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  browserRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openBrowserRailPane}
                 title="Browser"
@@ -1578,8 +1578,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  voiceRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  voiceRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openVoiceRailPane}
                 title="Voice Mode"
@@ -1594,8 +1594,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                artifactRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openArtifactRailPane}
               title={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
@@ -1615,8 +1615,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                extensionsRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                extensionsRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
               title="MCPs & Connectors"
@@ -1630,8 +1630,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "relative h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                memoryRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
+                "relative h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                memoryRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openMemoryRailPane}
               title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
@@ -1646,7 +1646,7 @@ export function SessionPage(props: SessionPageProps) {
                 </span>
               ) : null}
             </Button>
-            <div className="mt-1 w-full pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 shadow-[0_-1px_0_rgba(var(--matterhorn-blue-rgb),0.12)]">
+            <div className="mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
               Desks
             </div>
             {VENUE_SIDE_PANELS.map((panel) => {
@@ -1670,7 +1670,7 @@ export function SessionPage(props: SessionPageProps) {
                   style={deskToneStyle(item.panel)}
                   className={cn(
                     "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-foreground",
-                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] shadow-[inset_3px_0_0_var(--matterhorn-desk-color)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
+                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.38)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
                   onClick={() => openVenueRailPane(item.panel, { primePrompt: true })}
                   title={item.title}
