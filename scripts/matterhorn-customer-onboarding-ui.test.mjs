@@ -203,7 +203,19 @@ assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launch
 assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
-assert.ok(sessionPage.includes('w-[84px]'), "right rail should be wide enough for readable customer desk labels");
+assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
+assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
+for (const token of [
+  "deskToneStyle",
+  "--matterhorn-desk-color",
+  "--matterhorn-desk-rgb",
+  "style={deskToneStyle(launcher.iconHint)}",
+  "style={deskToneStyle(demo.iconHint)}",
+  "style={deskToneStyle(item.panel)}",
+  'style={deskToneStyle("wellness")}',
+]) {
+  assert.ok(sessionPage.includes(token), `customer desks should use semantic desk tone styling: ${token}`);
+}
 assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and workflow entry points as Desks");
 assert.ok(sessionPage.includes('label: "Hyperliquid"'), "right rail should spell out Hyperliquid instead of using a cryptic short label");
 assert.ok(sessionPage.includes('label: "Polymarket"'), "right rail should spell out Polymarket instead of using a cryptic short label");
@@ -219,11 +231,11 @@ assert.equal(sessionPage.includes('label: "Services"'), false, "customer right r
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
-assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
+assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
-assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 440)'), "protocol side panel should not default to an oversized rail");
-assert.ok(sessionPage.includes('protocolSidePanelOpen ? "380px"'), "protocol side panel should keep a narrower minimum width");
-assert.ok(sessionPage.includes('activeSidePanel === "extensions" ? "58%" : "70%"'), "extensions side panel should not consume most of the workspace");
+assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400)'), "protocol side panel should not default to an oversized rail");
+assert.ok(sessionPage.includes('protocolSidePanelOpen ? "340px"'), "protocol side panel should keep a narrower minimum width");
+assert.ok(sessionPage.includes('? "500px" : "70%"'), "protocol side panel should cap width so it does not consume most of the workspace");
 assert.ok(statusBar.includes('className="hidden sm:inline"'), "status bar text labels should collapse on narrow workspaces");
 assert.ok(statusBar.includes('className="hidden md:inline"'), "profile/settings label should collapse before it overflows the bottom bar");
 
