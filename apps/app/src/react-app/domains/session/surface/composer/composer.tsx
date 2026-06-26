@@ -866,14 +866,14 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   const panelRoundedClass =
     mentionOpen || slashOpen
-      ? "rounded-t-[18px] border-t-transparent"
+      ? "rounded-t-[14px]"
       : "";
 
   const renderSlashMenu = () => {
     if (!slashOpen) return null;
     return (
       <div className="absolute bottom-full left-[-1px] right-[-1px] z-30">
-          <div className="overflow-hidden rounded-t-[20px] border border-dls-border border-b-0 bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+          <div className="overflow-hidden rounded-t-xl bg-dls-surface shadow-[0_10px_28px_rgba(0,0,0,0.20)] ring-1 ring-dls-border/35">
             <div
               role="presentation"
               className="max-h-64 overflow-y-auto p-2"
@@ -888,7 +888,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                       menuItemRefs.current[index] = element;
                     }}
                     type="button"
-                    className={`flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left transition-colors hover:bg-gray-2/70 ${activeMenu === "slash" && slashFiltered[menuIndex]?.id === command.id ? "bg-gray-3 text-gray-12" : "text-gray-11"}`}
+                    className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-gray-2/70 ${activeMenu === "slash" && slashFiltered[menuIndex]?.id === command.id ? "bg-gray-3 text-gray-12" : "text-gray-11"}`}
                     onMouseEnter={() => setMenuIndex(index)}
                     onMouseDown={(event) => {
                       event.preventDefault();
@@ -929,7 +929,7 @@ export function ReactSessionComposer(props: ComposerProps) {
     if (!mentionOpen || mentionFiltered.length === 0) return null;
     return (
       <div className="absolute bottom-full left-[-1px] right-[-1px] z-30">
-          <div className="overflow-hidden rounded-t-[20px] border border-dls-border border-b-0 bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+          <div className="overflow-hidden rounded-t-xl bg-dls-surface shadow-[0_10px_28px_rgba(0,0,0,0.20)] ring-1 ring-dls-border/35">
             <div
               role="presentation"
               className="max-h-64 overflow-y-auto p-2"
@@ -943,7 +943,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     menuItemRefs.current[index] = element;
                   }}
                   type="button"
-                  className={`flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left transition-colors hover:bg-gray-2/70 ${activeMenu === "mention" && mentionFiltered[menuIndex]?.id === item.id ? "bg-gray-3 text-gray-12" : "text-gray-11"}`}
+                  className={`flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-gray-2/70 ${activeMenu === "mention" && mentionFiltered[menuIndex]?.id === item.id ? "bg-gray-3 text-gray-12" : "text-gray-11"}`}
                   onMouseEnter={() => setMenuIndex(index)}
                   onClick={() => {
                     props.onInsertMention(item.kind, item.value);
@@ -975,7 +975,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   return (
     <div
       ref={rootRef}
-      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/95 to-transparent px-4 md:px-8 pb-5 ${props.compactTopSpacing ? "pt-0" : "pt-3"}`}
+      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/95 to-transparent px-4 pb-5 md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-3"}`}
       style={{ contain: "layout style" }}
       onKeyDownCapture={handleKeyDownCapture}
       onCompositionStart={() => {
@@ -988,7 +988,7 @@ export function ReactSessionComposer(props: ComposerProps) {
       <div className="max-w-[800px] mx-auto">
         {/* Main composer panel */}
         <div
-          className={`relative overflow-visible rounded-[24px] border border-dls-border bg-dls-surface transition-all ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-xl bg-dls-surface/96 shadow-[0_12px_32px_rgba(0,0,0,0.18)] ring-1 ring-dls-border/35 transition-all ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
@@ -1037,8 +1037,8 @@ export function ReactSessionComposer(props: ComposerProps) {
           */}
 
           {dropzoneActive ? (
-            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-[20px] border-2 border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
-              <div className="rounded-2xl border border-dls-border bg-dls-surface/95 px-5 py-4 text-center backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-xl border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
+              <div className="rounded-xl bg-dls-surface/95 px-5 py-4 text-center shadow-[0_8px_22px_rgba(0,0,0,0.16)] backdrop-blur-sm">
                 <div className="text-sm font-medium text-dls-text">{t("composer.attach_files")}</div>
                 <div className="mt-1 text-xs text-dls-secondary">{t("composer.any_file_type_supported")}</div>
               </div>

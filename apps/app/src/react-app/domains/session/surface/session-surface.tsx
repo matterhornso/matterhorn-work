@@ -1508,8 +1508,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
                keep a comfortable reading width and don't feel "too big". */}
           <div ref={contentRef} className="mx-auto w-full max-w-[720px]">
             {showDelayedLoading && pendingSessionLoad ? (
-              <div className="px-6 py-16">
-                <div className="mx-auto max-w-sm rounded-3xl border border-dls-border bg-dls-hover/60 px-8 py-10 text-center">
+                <div className="px-6 py-16">
+                <div className="mx-auto max-w-sm rounded-xl bg-dls-hover/60 px-8 py-10 text-center">
                   <div className="text-sm text-dls-secondary">Opening session…</div>
                 </div>
               </div>
@@ -1523,7 +1523,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     onOpenModelPicker={props.onModelClick}
                   />
                 ) : (
-                  <div className="mx-auto max-w-xl rounded-3xl border border-red-6/40 bg-red-3/20 px-6 py-5 text-sm text-red-11">
+                  <div className="mx-auto max-w-xl rounded-xl bg-red-3/20 px-6 py-5 text-sm text-red-11 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.22)]">
                     {snapshotQuery.error instanceof Error ? snapshotQuery.error.message : "Failed to load session."}
                   </div>
                 )}
@@ -1559,21 +1559,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group relative isolate flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.095)] p-5 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group relative isolate flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_20%_0%,rgba(var(--matterhorn-desk-rgb),0.28),transparent_34%),linear-gradient(145deg,rgba(var(--matterhorn-desk-rgb),0.16),rgba(var(--matterhorn-desk-rgb),0.045))] p-5 text-left shadow-[0_18px_42px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                            <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent_42%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                             <span className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]" aria-hidden="true">
                               {protocolLogo ?? <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
                             </span>
                             <span className="relative flex items-start gap-4">
-                              <span className="mt-0.5 flex size-14 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                              <span className="mt-0.5 flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.18)] text-[var(--matterhorn-desk-color)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                                 {protocolLogo ? ProtocolLogo({ iconHint: item.iconHint, size: 42 }) : <Icon className="size-5" />}
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex flex-wrap items-center gap-2">
                                   <span className="text-base font-semibold leading-tight text-dls-text">{item.title}</span>
-                                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                  <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.18)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
                                     {item.statusLabel}
                                   </span>
                                 </span>
@@ -1584,7 +1584,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                               {capabilityItems.map((capability) => (
                                 <span
                                   key={capability}
-                                  className="flex items-center justify-between gap-3 rounded-md bg-dls-surface/70 px-3 py-2 text-[12px] font-medium text-dls-text"
+                                  className="flex items-center justify-between gap-3 rounded-full bg-dls-surface/42 px-3 py-2 text-[12px] font-medium text-dls-text"
                                 >
                                   <span>{capability}</span>
                                   <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
@@ -1632,7 +1632,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         </div>
         {!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId) ? (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface/95 p-1 shadow-[var(--dls-card-shadow)] backdrop-blur-md">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-md bg-dls-surface/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-md">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
@@ -1660,7 +1660,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
         ) : null}
       </div>
 
-      <div ref={composerShellRef} className="shrink-0 border-t border-dls-border/70 px-0 pb-3 pt-3">
+      <div ref={composerShellRef} className="shrink-0 bg-[linear-gradient(180deg,transparent,var(--dls-surface)_32%)] px-0 pb-3 pt-3">
         <DevProfiler id="SessionComposer">
         <ReactSessionComposer
           draft={draft}
