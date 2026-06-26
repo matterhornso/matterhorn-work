@@ -363,4 +363,29 @@ for (const phrase of [
   assert.ok(`${english}\n${settingsRoute}\n${settingsOverview}`.includes(phrase), `MCP connector surface should use customer-facing MCP language: ${phrase}`);
 }
 
+for (const phrase of [
+  "Matterhorn MCPs",
+  "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
+  "Bittensor MCP",
+  "Hyperliquid MCP",
+  "Polymarket MCP",
+  "Memory MCP",
+  "Workflow MCP",
+  "UI Control MCP",
+  "Copy install command",
+  "matterhorn-work mcp config --target codex --profile full",
+  "matterhorn-work mcp config --target claude --profile full",
+  "matterhorn-work mcp config --target claude-desktop --profile full",
+  "matterhorn-work mcp config --target cursor --profile full",
+  "Can submit: No. Live submission: Off.",
+  "External signer/client required.",
+  "No seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+  "No API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+  "No hidden memory saves.",
+  "No provider execution, no live payments, no email sending, no hosting publish, and no token-gated access enforcement.",
+  "No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
+]) {
+  assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
+}
+
 console.log("Matterhorn customer onboarding UI static check passed.");

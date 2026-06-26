@@ -7,6 +7,7 @@ import {
   CircleAlert,
   Cloud,
   Code2,
+  Copy,
   CreditCard,
   ExternalLink,
   FolderOpen,
@@ -228,6 +229,109 @@ function isToggleOnlyExtension(entry: McpDirectoryInfo) {
 
 type ExtensionFilter = "all" | "mcp" | "skill" | "plugin";
 
+type MatterhornMcpProductCard = {
+  id: string;
+  name: string;
+  description: string;
+  command: string;
+  tools: string[];
+  boundary: string;
+  worksWith: string[];
+};
+
+const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
+  {
+    id: "bittensor",
+    name: "Bittensor MCP",
+    description:
+      "Run Bittensor chat, TAO wallet reads, subnet discovery, validator comparison, watches, receipts, and external-signer handoffs from agent clients.",
+    command: "matterhorn-work mcp config --target codex --profile full",
+    tools: [
+      "matterhorn_bittensor_chat",
+      "matterhorn_bittensor_prepare_extrinsic",
+      "matterhorn_bittensor_watch_digest",
+    ],
+    boundary:
+      "Public SS58/coldkey reads and unsigned previews only. External Bittensor-compatible signer required. No seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+  {
+    id: "hyperliquid",
+    name: "Hyperliquid MCP",
+    description:
+      "Inspect Hyperliquid markets, orderbooks, funding, public account exposure, read-only watches, previews, handoffs, and public receipt evidence.",
+    command: "matterhorn-work mcp config --target claude --profile full",
+    tools: [
+      "matterhorn_hyperliquid_chat",
+      "matterhorn_hyperliquid_get_orderbook",
+      "matterhorn_hyperliquid_preview_order",
+    ],
+    boundary:
+      "Preview only. Can submit: No. Live submission: Off. External signer/client required. No API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+  {
+    id: "polymarket",
+    name: "Polymarket MCP",
+    description:
+      "Search Polymarket markets, review outcomes, check compliance, inspect liquidity/orderbooks, create watches, prepare previews, and verify public receipts.",
+    command: "matterhorn-work mcp config --target claude-desktop --profile full",
+    tools: [
+      "matterhorn_polymarket_chat",
+      "matterhorn_polymarket_check_compliance",
+      "matterhorn_polymarket_preview_order",
+    ],
+    boundary:
+      "Preview only. Can submit: No. Live submission: Off. Compliance-blocked previews expose no executable price, size, or share fields.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+  {
+    id: "memory",
+    name: "Memory MCP",
+    description:
+      "Search, list, capture, update, forget, and export explicit Matterhorn Memory records with provenance and privacy controls.",
+    command: "matterhorn-work mcp config --target cursor --profile full",
+    tools: [
+      "matterhorn_memory_search",
+      "matterhorn_memory_capture",
+      "matterhorn_memory_forget",
+    ],
+    boundary:
+      "No hidden memory saves. Memory capture is explicit and user-confirmed; forbidden secrets and restricted wellness records are rejected or kept local by policy.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+  {
+    id: "workflow",
+    name: "Workflow MCP",
+    description:
+      "Expose customer workflow templates, prompt packs, wellness creator workflows, and evidence bundles to external coding and agent environments.",
+    command: "matterhorn-work mcp config --target json --profile full",
+    tools: [
+      "matterhorn_workflows_catalog",
+      "matterhorn_workflows_prompt_pack",
+      "matterhorn_workflows_customer_templates",
+    ],
+    boundary:
+      "Discovery and planning only. No provider execution, no live payments, no email sending, no hosting publish, and no token-gated access enforcement.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+  {
+    id: "ui-control",
+    name: "UI Control MCP",
+    description:
+      "Let a compatible agent inspect the local Matterhorn desktop UI, open desks, read action metadata, and run safe browser/control smoke checks.",
+    command: "matterhorn-work mcp config --target env --profile full",
+    tools: [
+      "matterhorn_ui_get_state",
+      "matterhorn_ui_list_actions",
+      "matterhorn_ui_run_action",
+    ],
+    boundary:
+      "Local desktop control only. No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+  },
+];
+
 export function McpView(props: McpViewProps) {
   const showHeader = props.showHeader !== false;
   const [detailEntry, setDetailEntry] = useState<McpDirectoryInfo | null>(null);
@@ -437,6 +541,11 @@ export function McpView(props: McpViewProps) {
     setLogoutOpen(true);
   };
 
+  const copyMatterhornMcpCommand = (command: string) => {
+    if (typeof navigator === "undefined") return;
+    void navigator.clipboard?.writeText(command).catch(() => undefined);
+  };
+
   const confirmLogout = async () => {
     const name = logoutTarget;
     if (!name || logoutBusy) return;
@@ -500,6 +609,11 @@ export function McpView(props: McpViewProps) {
           Built-in Matterhorn Work extensions are disabled by your organization. Use Show hidden to review blocked built-ins.
         </div>
       ) : null}
+
+      <MatterhornMcpProductSection
+        cards={MATTERHORN_MCP_PRODUCT_CARDS}
+        onCopyCommand={copyMatterhornMcpCommand}
+      />
 
       <McpCustomAppCard onOpen={() => setAddMcpModalOpen(true)} />
 
@@ -807,6 +921,82 @@ function McpViewHeader(props: { connectedCount: number }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function MatterhornMcpProductSection(props: {
+  cards: MatterhornMcpProductCard[];
+  onCopyCommand: (command: string) => void;
+}) {
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-lg font-semibold text-dls-text">Matterhorn MCPs</h3>
+        <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
+          Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3">
+        {props.cards.map((card) => (
+          <article
+            key={card.id}
+            className="flex min-w-0 flex-col gap-4 rounded-xl border border-dls-border bg-dls-surface p-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover text-dls-text">
+                <Code2 size={16} />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <h4 className="text-sm font-semibold text-dls-text">{card.name}</h4>
+                <p className="text-xs leading-5 text-dls-secondary">{card.description}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-dls-text">Install command</span>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dls-border px-2 py-1 text-xs text-dls-text hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  onClick={() => props.onCopyCommand(card.command)}
+                >
+                  <Copy size={13} />
+                  Copy install command
+                </button>
+              </div>
+              <code className="block overflow-x-auto rounded-lg border border-dls-border bg-dls-hover px-3 py-2 text-xs text-dls-text">
+                {card.command}
+              </code>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div>
+                <div className="font-medium text-dls-text">Supported tools</div>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {card.tools.map((tool) => (
+                    <span
+                      key={tool}
+                      className="rounded-md border border-dls-border bg-dls-hover px-2 py-1 font-mono text-[11px] text-dls-secondary"
+                    >
+                      {tool}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <p className="leading-5 text-dls-secondary">
+                <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
+                {card.boundary}
+              </p>
+              <p className="leading-5 text-dls-secondary">
+                <span className="font-medium text-dls-text">Works in:</span>{" "}
+                {card.worksWith.join(", ")}
+              </p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
