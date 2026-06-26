@@ -160,7 +160,7 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
 
 function HomeCapabilityStatus() {
   return (
-    <section className="space-y-4" aria-label="Current capability status">
+    <section className="space-y-3" aria-label="Current capability status">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Current capability status</h3>
@@ -171,20 +171,20 @@ function HomeCapabilityStatus() {
             Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <span className="self-start rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.16)] px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
+        <span className="self-start rounded-md bg-dls-surface-muted px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
           Live boundaries visible
         </span>
       </div>
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-1.5 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
             <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="flex items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.075)] px-3 py-3 text-left"
+                  className="flex items-start gap-3 rounded-[18px] bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb),0.11),rgba(var(--matterhorn-desk-rgb),0.035))] px-3 py-2.5 text-left shadow-[0_8px_22px_rgba(0,0,0,0.08)]"
             >
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-surface text-[var(--matterhorn-desk-color)]">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
                 {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
                   <ProtocolLogo venue={item.id} size={24} />
                 ) : (
@@ -194,7 +194,7 @@ function HomeCapabilityStatus() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[12px] font-semibold text-dls-text">{item.title}</span>
-                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+                  <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.15)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
                     {item.statusLabel}
                   </span>
                 </div>
@@ -919,7 +919,7 @@ export function SessionPage(props: SessionPageProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,rgba(74,111,255,0.12),transparent_42%),var(--app-bg,#0b1020)] text-dls-text mac:bg-transparent">
+    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top,rgba(var(--matterhorn-blue-rgb),0.08),transparent_38%),var(--app-bg,#0b1020)] text-dls-text mac:bg-transparent">
       <SidebarProvider
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
@@ -970,8 +970,8 @@ export function SessionPage(props: SessionPageProps) {
             className="min-h-0 flex-1"
           >
             <ResizablePanel minSize="360px" className="min-w-0">
-              <main className="flex h-full min-w-0 flex-col overflow-hidden border-r border-border">
-          <header className="z-10 flex h-10 shrink-0 items-center justify-between border-b border-border px-4 md:px-6 mac:titlebar-drag  mac:backdrop-blur-2xl mac:backdrop-saturate-150 @container/titlebar">
+              <main className="flex h-full min-w-0 flex-col overflow-hidden bg-dls-surface">
+          <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/88 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.10)] backdrop-blur-xl md:px-6 mac:titlebar-drag mac:backdrop-saturate-150 @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
               <h1 className="truncate text-[15px] font-semibold text-dls-text">
@@ -1015,7 +1015,7 @@ export function SessionPage(props: SessionPageProps) {
           </header>
 
           <div className="flex min-h-0 flex-1 overflow-hidden">
-            <div className="relative min-w-0 flex-1 overflow-hidden bg-dls-surface mac:bg-dls-surface/85 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
+            <div className="relative min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,var(--dls-surface)_0%,var(--dls-background)_100%)] mac:bg-dls-surface/85 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
               {showStartupSkeleton ? (
                 <div className="px-6 py-14" role="status" aria-live="polite">
                   <div className="mx-auto max-w-2xl space-y-6">
@@ -1097,7 +1097,7 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : showWorkspaceSetupEmptyState ? (
                     <div className="space-y-6 px-6 text-center">
-                      <div className="mx-auto flex size-16 items-center justify-center rounded-3xl border border-dls-border bg-dls-hover">
+                      <div className="mx-auto flex size-16 items-center justify-center rounded-xl bg-dls-hover text-dls-secondary">
                         <Zap className="text-dls-secondary" />
                       </div>
                       <div className="space-y-2">
@@ -1157,8 +1157,8 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : (
                     <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-10 sm:px-6 sm:py-14">
-                      <div className="pointer-events-none absolute left-1/2 top-12 h-64 w-[42rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.18),transparent_68%)] blur-3xl" aria-hidden="true" />
-                      <div className="pointer-events-none absolute right-8 top-1/3 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.13),transparent_70%)] blur-3xl" aria-hidden="true" />
+                      <div className="pointer-events-none absolute left-1/2 top-12 h-56 w-[38rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.11),transparent_70%)] blur-3xl" aria-hidden="true" />
+                      <div className="pointer-events-none absolute right-8 top-1/3 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.08),transparent_72%)] blur-3xl" aria-hidden="true" />
                       <div className="relative w-full max-w-5xl space-y-8">
                         <div className="mx-auto max-w-2xl space-y-3 text-center">
                           <h2 className="text-2xl font-semibold text-dls-text sm:text-3xl">
@@ -1172,7 +1172,7 @@ export function SessionPage(props: SessionPageProps) {
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-md bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] shadow-[0_14px_38px_rgba(var(--matterhorn-blue-rgb),0.18)] transition-colors hover:bg-[#e7f8ff]"
+                            className="inline-flex items-center gap-2 rounded-md bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] shadow-[0_8px_18px_rgba(var(--matterhorn-blue-rgb),0.12)] transition-colors hover:bg-[#e7f8ff]"
                             onClick={props.sidebar.onOpenCreateWorkspace}
                           >
                             <Plus className="size-4" />
@@ -1227,7 +1227,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="group relative isolate flex min-h-[284px] w-full flex-col items-start overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.095)] p-5 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                  className="group relative isolate flex min-h-[284px] w-full flex-col items-start overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_20%_0%,rgba(var(--matterhorn-desk-rgb),0.28),transparent_34%),linear-gradient(145deg,rgba(var(--matterhorn-desk-rgb),0.16),rgba(var(--matterhorn-desk-rgb),0.045))] p-5 text-left shadow-[0_18px_42px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1236,18 +1236,18 @@ export function SessionPage(props: SessionPageProps) {
                                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
                                   }}
                                 >
-                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent_42%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                                   <span className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]" aria-hidden="true">
                                     {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={132} /> : <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
                                   </span>
                                   <span className="relative flex w-full items-start gap-4">
-                                    <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                                    <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.18)] text-[var(--matterhorn-desk-color)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
                                       {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={42} /> : <Icon className="size-5" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
                                         <span className="text-base font-semibold leading-tight text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
-                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.18)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
                                           {launcher.statusLabel}
                                         </span>
                                       </span>
@@ -1258,7 +1258,7 @@ export function SessionPage(props: SessionPageProps) {
                                     {capabilityItems.map((item) => (
                                       <span
                                         key={item}
-                                        className="flex items-center justify-between gap-3 rounded-md bg-dls-surface/70 px-3 py-2 text-[12px] font-medium text-dls-text"
+                                        className="flex items-center justify-between gap-3 rounded-full bg-dls-surface/42 px-3 py-2 text-[12px] font-medium text-dls-text"
                                       >
                                         <span>{item}</span>
                                         <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
@@ -1294,7 +1294,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={demo.id}
                                   type="button"
                                   style={deskToneStyle(demo.iconHint)}
-                                  className="group relative isolate flex min-h-[190px] w-full flex-col items-start overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                  className="group relative isolate flex min-h-[190px] w-full flex-col items-start overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_16%_0%,rgba(var(--matterhorn-desk-rgb),0.20),transparent_36%),rgba(var(--matterhorn-desk-rgb),0.07)] p-4 text-left shadow-[0_12px_30px_rgba(0,0,0,0.12)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     if (demo.panel) {
                                       openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
@@ -1303,18 +1303,18 @@ export function SessionPage(props: SessionPageProps) {
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
                                   }}
                                 >
-                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                                   <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
                                     {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
                                   </span>
                                   <span className="relative flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
                                       {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
                                         <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
-                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                           {demo.statusLabel}
                                         </span>
                                       </span>
@@ -1356,20 +1356,20 @@ export function SessionPage(props: SessionPageProps) {
                                   key={task.id}
                                   type="button"
                                   style={deskToneStyle(task.iconHint)}
-                                  className="relative isolate flex min-h-[220px] w-full flex-col gap-4 overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] p-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                  className="relative isolate flex min-h-[220px] w-full flex-col gap-4 overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_16%_0%,rgba(var(--matterhorn-desk-rgb),0.22),transparent_36%),rgba(var(--matterhorn-desk-rgb),0.075)] p-4 text-left shadow-[0_12px_30px_rgba(0,0,0,0.12)] transition-transform duration-200 hover:-translate-y-0.5 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
                                   }}
                                 >
-                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
                                   <span className="flex items-start gap-3">
-                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
+                                      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
                                       <Icon className="size-4" />
                                     </span>
                                     <span className="min-w-0">
                                       <span className="flex flex-wrap items-center gap-2">
                                         <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
-                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                           {task.statusLabel}
                                         </span>
                                       </span>
@@ -1387,13 +1387,13 @@ export function SessionPage(props: SessionPageProps) {
                                     ].map((artifact) => (
                                       <span
                                         key={artifact}
-                                        className="rounded-md bg-dls-surface/70 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                        className="rounded-full bg-dls-surface/52 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
                                       >
                                         {artifact}
                                       </span>
                                     ))}
                                   </span>
-                                  <span className="rounded-md bg-dls-surface/80 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
+                                  <span className="rounded-[18px] bg-dls-surface/60 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
                                     {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
                                   </span>
                                   <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
@@ -1408,7 +1408,7 @@ export function SessionPage(props: SessionPageProps) {
                           {blankWorkflowLauncher ? (
                             <button
                               type="button"
-                              className="flex min-h-[92px] w-full items-start gap-3 rounded-lg border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                              className="flex min-h-[92px] w-full items-start gap-3 rounded-xl bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
                               onClick={() => {
                                 props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
                               }}
@@ -1419,7 +1419,7 @@ export function SessionPage(props: SessionPageProps) {
                               <span>
                                 <span className="flex flex-wrap items-center gap-2">
                                   <span className="text-[13px] font-medium text-dls-text">{blankWorkflowLauncher.title}</span>
-                                  <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                                  <span className="rounded-md bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                                     {blankWorkflowLauncher.statusLabel}
                                   </span>
                                 </span>
@@ -1515,12 +1515,12 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="flex w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 border-l border-border bg-background/95 px-1.5 py-2 text-muted-foreground mac:titlebar-no-drag 2xl:w-[var(--nav-rail-width)]">
+          <aside className="flex w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 bg-dls-sidebar/92 px-1.5 py-2 text-muted-foreground shadow-[-10px_0_24px_rgba(0,0,0,0.12)] mac:titlebar-no-drag 2xl:w-[var(--nav-rail-width)]">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
                 onClick={closeRightPane}
                 title="Back to chat"
                 aria-label="Back to chat"
@@ -1529,7 +1529,7 @@ export function SessionPage(props: SessionPageProps) {
                 <span className="text-[9px] leading-none">Chat</span>
               </Button>
             ) : null}
-            <div className="flex w-full flex-col items-center gap-1 border-b border-border/70 pb-2">
+            <div className="flex w-full flex-col items-center gap-1 pb-2 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.12)]">
               {shellConfig.cloudSignin ? (
                 <div className="flex w-full flex-col items-center gap-1 rounded-md px-1 py-1 text-muted-foreground" title="Profile and account">
                   <BetaAuthMenu compact />
@@ -1553,7 +1553,7 @@ export function SessionPage(props: SessionPageProps) {
                 size="icon-sm"
                 className={cn(
                   "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  walletRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                  walletRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={() => setCurrentSidePanel("wallet")}
                 title="Wallet details"
@@ -1569,8 +1569,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  browserRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                  browserRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openBrowserRailPane}
                 title="Browser"
@@ -1586,8 +1586,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                  voiceRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                  voiceRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openVoiceRailPane}
                 title="Voice Mode"
@@ -1602,8 +1602,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                artifactRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                artifactRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openArtifactRailPane}
               title={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
@@ -1623,8 +1623,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                extensionsRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                extensionsRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
               title="MCPs & Connectors"
@@ -1638,8 +1638,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "relative h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
-                memoryRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                "relative h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                memoryRailActive && "bg-primary/10 text-primary shadow-[inset_3px_0_0_var(--matterhorn-blue)] hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openMemoryRailPane}
               title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
@@ -1654,7 +1654,7 @@ export function SessionPage(props: SessionPageProps) {
                 </span>
               ) : null}
             </Button>
-            <div className="mt-1 w-full border-t border-border/70 pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+            <div className="mt-1 w-full pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70 shadow-[0_-1px_0_rgba(var(--matterhorn-blue-rgb),0.12)]">
               Desks
             </div>
             {VENUE_SIDE_PANELS.map((panel) => {
@@ -1677,8 +1677,8 @@ export function SessionPage(props: SessionPageProps) {
                   size="icon-sm"
                   style={deskToneStyle(item.panel)}
                   className={cn(
-                    "h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-foreground",
-                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
+                    "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-foreground",
+                    item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] shadow-[inset_3px_0_0_var(--matterhorn-desk-color)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
                   onClick={() => openVenueRailPane(item.panel, { primePrompt: true })}
                   title={item.title}
@@ -1706,7 +1706,7 @@ export function SessionPage(props: SessionPageProps) {
                   variant="ghost"
                   size="icon-sm"
                   style={deskToneStyle("wellness")}
-                  className="h-auto w-full flex-col gap-1 rounded-lg px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-[var(--matterhorn-desk-color)]"
+                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-[var(--matterhorn-desk-color)]"
                   onClick={() => {
                     if (item.launcher) {
                       dispatchMatterhornMemorySuggestions({
