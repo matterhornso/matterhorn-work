@@ -1215,7 +1215,7 @@ export function SessionPage(props: SessionPageProps) {
                               No hidden auto-send
                             </span>
                           </div>
-                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
+                          <div className="space-y-1">
                             {[...protocolWorkflowLaunchers, ...businessWorkflowLaunchers].map((launcher) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
                               const capabilityItems = workflowLauncherCapabilityItems(launcher);
@@ -1224,7 +1224,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="group relative isolate flex min-h-[148px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[linear-gradient(180deg,rgba(var(--matterhorn-desk-rgb),0.12),rgba(var(--matterhorn-desk-rgb),0.04))] p-3.5 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.11)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                  className="group relative isolate flex w-full flex-col items-start overflow-hidden rounded-md px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1236,7 +1236,7 @@ export function SessionPage(props: SessionPageProps) {
                                   <span className="pointer-events-none absolute -right-4 -top-5 opacity-[0.06]" aria-hidden="true">
                                     {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={96} /> : <Icon className="size-20 text-[var(--matterhorn-desk-color)]" />}
                                   </span>
-                                  <span className="relative flex w-full items-start gap-3">
+                                  <span className="relative flex w-full min-w-0 items-start gap-3">
                                     <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.15)] text-[var(--matterhorn-desk-color)]">
                                       {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={30} /> : <Icon className="size-4" />}
                                     </span>
@@ -1250,7 +1250,7 @@ export function SessionPage(props: SessionPageProps) {
                                       <span className="mt-1.5 line-clamp-3 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
                                     </span>
                                   </span>
-                                  <span className="relative mt-3 flex w-full flex-wrap gap-x-3 gap-y-1">
+                                  <span className="relative mt-3 flex w-full flex-wrap gap-x-3 gap-y-1 sm:mt-0 sm:max-w-[360px] sm:justify-end">
                                     {capabilityItems.slice(0, 3).map((item) => (
                                       <span
                                         key={item}
@@ -1260,9 +1260,9 @@ export function SessionPage(props: SessionPageProps) {
                                         <span>{item}</span>
                                       </span>
                                     ))}
-                                  </span>
-                                  <span className="relative mt-auto pt-3 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                    Open desk with editable prompt
+                                    <span className="basis-full pt-1 text-left text-[12px] font-semibold text-[var(--matterhorn-desk-color)] sm:text-right">
+                                      Open desk with editable prompt
+                                    </span>
                                   </span>
                                   <span className="sr-only">{launcher.safetySummary}</span>
                                 </button>
