@@ -1549,7 +1549,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-2 rounded-2xl bg-dls-surface-muted/30 p-2 sm:grid-cols-2 xl:grid-cols-3">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         const protocolLogo = ProtocolLogo({ iconHint: item.iconHint });
@@ -1559,16 +1559,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group relative isolate flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_20%_0%,rgba(var(--matterhorn-desk-rgb),0.28),transparent_34%),linear-gradient(145deg,rgba(var(--matterhorn-desk-rgb),0.16),rgba(var(--matterhorn-desk-rgb),0.045))] p-5 text-left shadow-[0_18px_42px_rgba(0,0,0,0.18)] transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(0,0,0,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group relative isolate flex min-h-[186px] min-w-0 flex-col overflow-hidden rounded-xl bg-transparent p-4 text-left transition-colors duration-200 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.105)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),transparent_42%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
-                            <span className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]" aria-hidden="true">
+                            <span className="pointer-events-none absolute -right-6 -top-7 opacity-[0.055]" aria-hidden="true">
                               {protocolLogo ?? <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
                             </span>
                             <span className="relative flex items-start gap-4">
-                              <span className="mt-0.5 flex size-14 shrink-0 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.18)] text-[var(--matterhorn-desk-color)] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]">
-                                {protocolLogo ? ProtocolLogo({ iconHint: item.iconHint, size: 42 }) : <Icon className="size-5" />}
+                              <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
+                                {protocolLogo ? ProtocolLogo({ iconHint: item.iconHint, size: 36 }) : <Icon className="size-5" />}
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex flex-wrap items-center gap-2">
@@ -1580,21 +1579,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
                                 <span className="mt-2 block text-[13px] leading-6 text-dls-secondary">{item.description}</span>
                               </span>
                             </span>
-                            <span className="relative mt-5 grid gap-2">
+                            <span className="relative mt-4 flex flex-wrap gap-x-4 gap-y-2">
                               {capabilityItems.map((capability) => (
                                 <span
                                   key={capability}
-                                  className="flex items-center justify-between gap-3 rounded-full bg-dls-surface/42 px-3 py-2 text-[12px] font-medium text-dls-text"
+                                  className="flex items-center gap-2 text-[12px] font-medium text-dls-text"
                                 >
+                                  <span className="size-1.5 shrink-0 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
                                   <span>{capability}</span>
-                                  <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
                                 </span>
                               ))}
                             </span>
-                            <span className="relative mt-4 block text-[11px] leading-5 text-dls-secondary/85">{item.safetySummary}</span>
-                            <span className="relative mt-auto pt-5 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                            <span className="relative mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
                               Insert editable prompt
                             </span>
+                            <span className="sr-only">{item.safetySummary}</span>
                           </button>
                         );
                       })}
