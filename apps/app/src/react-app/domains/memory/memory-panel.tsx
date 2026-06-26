@@ -710,13 +710,16 @@ export function MemoryPanel(props: MemoryPanelProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background text-dls-text">
-      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-dls-border px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(var(--matterhorn-blue-rgb),0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_42%),var(--dls-background)] text-dls-text">
+      <header className="flex shrink-0 items-start justify-between gap-3 px-5 py-5">
         <div className="min-w-0">
           <div className="text-base font-semibold">Matterhorn Memory</div>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
             Explicit, user-controlled memory. No hidden memory, no auto-capture, no seeds or private keys.
           </p>
+          <div className="mt-3 inline-flex rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+            Visible review only
+          </div>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
           <X size={16} />
@@ -724,18 +727,18 @@ export function MemoryPanel(props: MemoryPanelProps) {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <section className="rounded-2xl border border-dls-border bg-dls-card p-3.5">
+        <section className="rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.20),inset_0_1px_0_rgba(255,255,255,0.06)]">
           <div className="flex flex-col gap-2">
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-dls-secondary focus:border-primary"
+                className="h-11 w-full rounded-2xl border border-transparent bg-background/70 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-dls-secondary focus:border-primary focus:bg-background"
                 placeholder="Search memories, receipts, addresses, workflow notes..."
               />
             </label>
-            <Button className="w-full justify-center" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+            <Button className="w-full justify-center rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               <RefreshCw className={cn("mr-2 size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
@@ -776,10 +779,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </section>
         ) : null}
 
-        <section className="mt-4 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+        <section className="mt-4 rounded-[28px] bg-[linear-gradient(135deg,rgba(var(--matterhorn-blue-rgb),0.16),rgba(255,255,255,0.035))] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.08)]">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+                <ShieldAlert className="size-4" />
+              </span>
               <div>
                 <div className="text-sm font-semibold">Suggestion inbox</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
@@ -787,7 +792,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 </p>
               </div>
             </div>
-            <Button className="shrink-0" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
+            <Button className="shrink-0 rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
               <RefreshCw className={cn("mr-2 size-3.5", suggestionsLoading && "animate-spin")} />
               Refresh
             </Button>
@@ -798,21 +803,27 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : null}
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
-            <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
-              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.pending}</div>
-              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">New suggestions that can be confirmed, edited, or dismissed.</p>
+          <div className="mt-4 divide-y divide-white/10 rounded-[22px] bg-background/45 px-3" aria-label="Memory inbox lifecycle summary">
+            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">New suggestions that can be confirmed, edited, or dismissed.</p>
+              </div>
+              <div className="text-lg font-semibold">{suggestionStatusCounts.pending}</div>
             </div>
-            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-200">Saved history</div>
-              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
-              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited memories that were saved after review.</p>
+            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-200">Saved history</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited memories that were saved after review.</p>
+              </div>
+              <div className="text-lg font-semibold text-emerald-100">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
             </div>
-            <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Not saved</div>
-              <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.dismissed + suggestionStatusCounts.expired + suggestionStatusCounts.blocked}</div>
-              <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked candidates kept out of Memory.</p>
+            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Not saved</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked candidates kept out of Memory.</p>
+              </div>
+              <div className="text-lg font-semibold">{suggestionStatusCounts.dismissed + suggestionStatusCounts.expired + suggestionStatusCounts.blocked}</div>
             </div>
           </div>
 
@@ -829,8 +840,8 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     className={cn(
                       "min-w-0 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
                       selected
-                        ? "border-primary bg-[rgba(var(--matterhorn-blue-rgb),0.16)] text-primary"
-                        : "border-dls-border bg-dls-card text-dls-secondary hover:border-primary/50 hover:text-dls-text",
+                        ? "border-primary bg-[rgba(var(--matterhorn-blue-rgb),0.20)] text-primary shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
+                        : "border-transparent bg-background/45 text-dls-secondary hover:bg-background/70 hover:text-dls-text",
                     )}
                   >
                     <span className="font-semibold">{filter.label}</span>
@@ -843,13 +854,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
 
           {suggestionsLoading && !suggestionEntries.length ? (
-            <div className="mt-3 rounded-xl border border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               Loading suggestion inbox. Matterhorn is checking for visible, reviewable memory candidates.
             </div>
           ) : null}
 
           {suggestionEntries.length > 0 && !filteredSuggestionEntries.length ? (
-            <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               No suggestions match this filter. <span className="font-semibold text-dls-text">{selectedSuggestionFilter.label}</span> currently has no visible entries.
             </div>
           ) : null}
@@ -870,7 +881,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
                 return (
                   <article key={entry.id} className={cn(
-                    "overflow-hidden rounded-xl border border-dls-border bg-dls-card px-3 py-3",
+                    "overflow-hidden rounded-[24px] bg-background/62 px-3 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.18),inset_3px_0_0_rgba(var(--matterhorn-blue-rgb),0.58)]",
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
@@ -890,10 +901,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
                               <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(suggestion.proposedRecord.sensitivity))}>
                                 {suggestion.proposedRecord.sensitivity}
                               </span>
-                              <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                              <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                                 {suggestion.desk}
                               </span>
-                              <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                              <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                                 {formatKind(suggestion.proposedRecord.kind)}
                               </span>
                             </>
@@ -912,7 +923,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                           <p className="mt-1">No title, body, source, confidence detail, or trigger text is rendered for blocked suggestions.</p>
                         </div>
                       ) : (
-                        <div className="min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
+                        <div className="min-w-0 rounded-2xl bg-black/18 px-3 py-2">
                           <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                             <span>Confidence</span>
                             <span>{confidence}%</span>
@@ -933,7 +944,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       )}
                     </div>
 
-                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                    <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-dls-text">Lifecycle state:</span>
                         <span>{statusMeta.title}</span>
@@ -952,7 +963,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         </p>
                       </div>
                     ) : (
-                      <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
                         <div className="flex items-center gap-2 font-semibold text-dls-text">
                           <Info className="size-3.5 text-primary" />
                           Why suggested
@@ -970,7 +981,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     )}
 
                     {editing ? (
-                      <div className="mt-3 grid gap-2 rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.3)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
+                      <div className="mt-3 grid gap-2 rounded-[22px] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] p-3">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
                         <input
                           value={suggestionEditDraft.title}
@@ -1012,7 +1023,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         {entry.policyWarnings.slice(0, 3).join(" ")}
                       </div>
                     ) : null}
-                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                    <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
                       <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
                     </div>
                     {showActiveSuggestionActions ? (
@@ -1072,7 +1083,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : (
             !suggestionsLoading && !suggestionEntries.length ? (
-              <div className="mt-3 rounded-xl border border-dashed border-dls-border bg-dls-card px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
                 No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
               </div>
             ) : null
@@ -1081,7 +1092,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
         <section className="mt-4 space-y-2">
           {records.length === 0 && !loading ? (
-            <div className="rounded-2xl border border-dashed border-dls-border bg-dls-card px-4 py-8 text-center">
+            <div className="rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] px-4 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
               <div className="text-sm font-medium">No memories yet</div>
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
                 Save one manually below. Matterhorn will not remember anything unless you explicitly confirm it.
@@ -1092,7 +1103,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             const policyDecision = getMatterhornMemoryPolicyDecision(record);
             const selected = visibleSelectedRecords.some((item) => item.id === record.id);
             return (
-              <article key={record.id} className="rounded-2xl border border-dls-border bg-dls-card p-3.5">
+              <article key={record.id} className="rounded-[24px] bg-dls-card/70 p-3.5 shadow-[0_16px_50px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.05)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1100,7 +1111,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]", sensitivityClassName(record.sensitivity))}>
                         {record.sensitivity}
                       </span>
-                      <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                      <span className="rounded-full border border-transparent bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                         {policyDecision.deskLabel}
                       </span>
                     </div>
@@ -1108,12 +1119,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.08em] text-dls-secondary">
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{formatKind(record.kind)}</span>
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{record.scope}</span>
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{record.provenance.source}</span>
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
-                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{formatKind(record.kind)}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{record.scope}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{record.provenance.source}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
+                  <span className="rounded-full bg-white/5 px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
                 </div>
                 {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
                   <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
@@ -1154,9 +1165,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
           })}
         </section>
 
-        <section className="mt-4 rounded-2xl border border-dls-border bg-dls-card p-3.5">
+        <section className="mt-4 rounded-[28px] bg-dls-card/70 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)]">
           <div className="flex items-start gap-2">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-primary" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+              <ShieldAlert className="size-4" />
+            </span>
             <div>
               <div className="text-sm font-semibold">Remember this</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
@@ -1165,57 +1178,57 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           </div>
           <div className="mt-3 grid gap-2">
-            <div className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <div className="rounded-2xl bg-background/45 px-3 py-2 text-xs leading-5 text-dls-secondary">
               Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Wellness becomes restricted by default; market memories cannot be exported or shared with MCP/API.
             </div>
             <input
               value={draft.title}
               onChange={(event) => updateDraft("title", event.target.value)}
-              className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+              className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
               placeholder="Memory title"
             />
             <input
               value={draft.summary}
               onChange={(event) => updateDraft("summary", event.target.value)}
-              className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+              className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
               placeholder="Short summary"
             />
             <textarea
               value={draft.body}
               onChange={(event) => updateDraft("body", event.target.value)}
-              className="min-h-24 resize-y rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
+              className="min-h-24 resize-y rounded-2xl border border-transparent bg-background/55 px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:bg-background"
               placeholder="What should Matterhorn remember?"
             />
             <div className="grid gap-2 sm:grid-cols-2">
               <select
                 value={draft.kind}
                 onChange={(event) => updateDraft("kind", event.target.value as MatterhornMemoryKind)}
-                className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
               >
                 {MATTERHORN_MEMORY_KINDS.map((kind) => <option key={kind} value={kind}>{formatKind(kind)}</option>)}
               </select>
               <select
                 value={draft.scope}
                 onChange={(event) => updateDraft("scope", event.target.value as MatterhornMemoryScope)}
-                className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
               >
                 {MATTERHORN_MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
               </select>
               <select
                 value={draft.sensitivity}
                 onChange={(event) => updateDraft("sensitivity", event.target.value as CaptureDraft["sensitivity"])}
-                className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
               >
                 {SELECTABLE_SENSITIVITIES.map((sensitivity) => <option key={sensitivity} value={sensitivity}>{sensitivity}</option>)}
               </select>
               <input
                 value={draft.tags}
                 onChange={(event) => updateDraft("tags", event.target.value)}
-                className="h-10 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
                 placeholder="tags, comma separated"
               />
             </div>
-            <label className="flex items-start gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <label className="flex items-start gap-2 rounded-2xl bg-background/45 px-3 py-2 text-xs leading-5 text-dls-secondary">
               <input
                 type="checkbox"
                 checked={draft.confirmed}
@@ -1229,13 +1242,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
             {captureError ? (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
             ) : null}
-            <Button onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
+            <Button className="rounded-2xl" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
               {captureBusy ? "Remembering..." : "Remember this"}
             </Button>
           </div>
         </section>
 
-        <section className="mt-4 rounded-2xl border border-dls-border bg-dls-card p-3.5">
+        <section className="mt-4 rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.07)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
           <div className="flex flex-col gap-3">
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
@@ -1243,7 +1256,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 Export only policy-approved public-safe memory bundle metadata. Restricted, market, wellness, and forbidden-secret records stay out.
               </p>
             </div>
-            <Button className="w-full justify-center" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Button className="w-full justify-center rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
               <Download className="mr-2 size-3.5" />
               Export
             </Button>
