@@ -141,7 +141,7 @@ export function getSettingsTabLabel(tab: SettingsTab) {
     case "wallet":
       return "Wallet";
     case "marketplace":
-      return "Agent Marketplace";
+      return "Agent Templates";
     case "general":
       return "Settings";
     default:
@@ -186,9 +186,9 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "debug":
       return t("settings.tab_description_debug");
     case "wallet":
-      return "Connect your wallet, view balances, and manage transactions.";
+      return "Connect a wallet for external-signing workflows.";
     case "marketplace":
-      return "Browse and deploy autonomous Web3 agents.";
+      return "Preview future agent templates. Hiring and deployment are not live.";
     case "general":
       return "Overview of all settings";
     default:
@@ -196,20 +196,71 @@ export function getSettingsTabDescription(tab: SettingsTab) {
   }
 }
 
-export function getWorkspaceSettingsTabs(): SettingsTab[] {
-  return ["preferences", "permissions", "wallet", "marketplace", "extensions", "advanced"];
+export type SettingsReadinessStatus = "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only";
+
+export function getSettingsTabStatus(tab: SettingsTab): SettingsReadinessStatus | null {
+  switch (tab) {
+    case "preferences":
+    case "permissions":
+    case "appearance":
+    case "extensions":
+      return "Ready";
+    case "wallet":
+    case "ai":
+    case "cloud-account":
+      return "Needs setup";
+    case "shell":
+    case "marketplace":
+    case "recovery":
+      return "Preview";
+    case "updates":
+      return "Desktop only";
+    case "cloud-workers":
+      return "Cloud only";
+    case "environment":
+    case "debug":
+      return "Preview";
+    case "advanced":
+      return "Desktop only";
+    default:
+      return null;
+  }
 }
 
-export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
-  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "environment", "updates", "recovery"];
-  if (developerMode) tabs.push("debug");
+export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
+  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "extensions", "advanced"];
+  if (developerMode) tabs.splice(4, 0, "marketplace");
   return tabs;
 }
 
-export const CLOUD_SETTINGS_TABS: SettingsTab[] = [
-  "cloud-account",
-  "cloud-workers",
-];
+export function getGlobalSettingsTabs(developerMode: boolean): SettingsTab[] {
+  const tabs: SettingsTab[] = ["overview", "ai", "shell", "appearance", "updates"];
+  if (developerMode) tabs.push("environment", "recovery", "debug");
+  return tabs;
+}
+
+export function getCloudSettingsTabs(developerMode = false): SettingsTab[] {
+  return developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"];
+}
+
+function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | null }) {
+  if (!props.status) return null;
+
+  const tone =
+    props.status === "Ready"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+      : props.status === "Needs setup"
+        ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
+        : props.status === "Preview"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+
+  return (
+    <span className={`ml-auto hidden shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] xl:inline-flex ${tone}`}>
+      {props.status}
+    </span>
+  );
+}
 
 type SettingsPageProps = {
   activeTab: SettingsTab;
@@ -237,9 +288,9 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
 };
 
 export function SettingsSidebar(props: SettingsSidebarProps) {
-  const workspaceTabs = getWorkspaceSettingsTabs();
+  const workspaceTabs = getWorkspaceSettingsTabs(props.developerMode);
   const globalTabs = getGlobalSettingsTabs(props.developerMode);
-  const cloudTabs = CLOUD_SETTINGS_TABS;
+  const cloudTabs = getCloudSettingsTabs(props.developerMode);
 
   return (
     <Sidebar className="mac:**:data-[sidebar=sidebar]:bg-transparent">
@@ -313,6 +364,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -336,6 +388,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -359,6 +412,7 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
                     >
                       <Icon />
                       <span>{getSettingsTabLabel(tab)}</span>
+                      <SettingsTabReadinessBadge status={getSettingsTabStatus(tab)} />
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

@@ -164,8 +164,19 @@ function EnvironmentSettingsPanel(props: EnvironmentSettingsPanelProps) {
         </div>
       </LayoutSectionHeader>
 
+      <SettingsNotice>
+        Developer setting: this editor manages local runtime environment variables only. It requires an active local Matterhorn
+        server token; if this page reports an auth error, restart the desktop runtime or use shell environment variables.
+      </SettingsNotice>
+
       {props.isRemoteWorkspace ? (
         <SettingsNotice>{t("settings.environment.remote_workspace_hint")}</SettingsNotice>
+      ) : null}
+
+      {!props.isRemoteWorkspace && !props.client ? (
+        <SettingsNotice tone="error">
+          Local runtime token unavailable. Environment editing is disabled for this session.
+        </SettingsNotice>
       ) : null}
 
       {error ? <SettingsNotice tone="error">{error.message}</SettingsNotice> : null}
@@ -481,4 +492,3 @@ export function EnvironmentApplyModal(props: EnvironmentApplyModalProps) {
     />
   );
 }
-

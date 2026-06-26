@@ -23,7 +23,9 @@ import {
   type ThemeMode,
 } from "../../../../app/theme";
 
-const APP_VERSION = String(import.meta.env.VITE_OPENWORK_APP_VERSION ?? "").trim();
+const APP_VERSION = String(
+  import.meta.env.VITE_MATTERHORN_WORK_APP_VERSION ?? import.meta.env.VITE_OPENWORK_APP_VERSION ?? "",
+).trim();
 const DENSITY_STORAGE_KEY = "matterhorn:settings:density";
 
 type Density = "comfortable" | "compact";
@@ -54,6 +56,7 @@ function SettingsCard(props: {
   icon: ReactNode;
   title: string;
   description: string;
+  status?: ReactNode;
   children?: ReactNode;
 }) {
   return (
@@ -66,6 +69,7 @@ function SettingsCard(props: {
           <h2 className="text-base font-semibold leading-6 text-dls-text">{props.title}</h2>
           <p className="mt-0.5 text-sm leading-5 text-dls-secondary">{props.description}</p>
         </div>
+        {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
       </div>
       {props.children ? <div className="flex flex-col gap-3">{props.children}</div> : null}
     </section>
@@ -84,9 +88,19 @@ function Row(props: { label: string; value: ReactNode; hint?: string }) {
   );
 }
 
-function StatusBadge(props: { children: ReactNode }) {
+function StatusBadge(props: { children: ReactNode; tone?: "ready" | "setup" | "preview" | "desktop" | "cloud" }) {
+  const tone =
+    props.tone === "ready"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+      : props.tone === "setup"
+        ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
+        : props.tone === "preview"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          : props.tone === "cloud"
+            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+            : "border-dls-border bg-background text-dls-secondary";
   return (
-    <span className="inline-flex items-center rounded-full border border-dls-border bg-background px-2.5 py-0.5 text-xs font-medium text-dls-secondary">
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone}`}>
       {props.children}
     </span>
   );
@@ -151,11 +165,12 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<CircleUser size={18} />}
           title="Profile"
           description="Your account and sign-in status."
+          status={<StatusBadge tone="setup">Needs setup</StatusBadge>}
         >
           <Row
             label="Account"
             hint="You are not signed in to a Matterhorn Work account. Sign in to sync cloud workspaces. Local use needs no account."
-            value={<StatusBadge>Signed out</StatusBadge>}
+            value={<StatusBadge tone="setup">Signed out</StatusBadge>}
           />
           <div>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("cloud-account")}>
@@ -169,6 +184,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Palette size={18} />}
           title="Appearance"
           description="Theme, accent, and text density."
+          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <Row
             label="Theme"
@@ -225,6 +241,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<ShieldCheck size={18} />}
           title="Safety & Wallets"
           description="How Matterhorn Work keeps Web3 actions safe."
+          status={<StatusBadge tone="setup">Wallet setup</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
             Matterhorn Work is <span className="font-medium text-dls-text">non-custodial</span>. It never holds your keys, signs silently, or moves funds on your behalf. You stay in control of every on-chain action.
@@ -247,10 +264,11 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Network size={18} />}
           title="Protocols"
           description="Status of each Web3 workspace."
+          status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}
         >
-          <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge>Beta — read &amp; preview</StatusBadge>} />
-          <Row label="Hyperliquid" hint="Account, orderbook, and order previews. Live submission off." value={<StatusBadge>Preview only</StatusBadge>} />
-          <Row label="Polymarket" hint="Market discovery, odds, and compliance previews. Live submission off." value={<StatusBadge>Preview only</StatusBadge>} />
+          <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Beta ready</StatusBadge>} />
+          <Row label="Hyperliquid" hint="Account, orderbook, and order previews. Live submission off." value={<StatusBadge tone="preview">Preview only</StatusBadge>} />
+          <Row label="Polymarket" hint="Market discovery, odds, and compliance previews. Live submission off." value={<StatusBadge tone="preview">Preview only</StatusBadge>} />
           <p className="text-xs leading-5 text-dls-secondary">
             Open a protocol workspace from the sidebar to explore its desk.
           </p>
@@ -261,6 +279,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Boxes size={18} />}
           title="MCPs &amp; Connectors"
           description="Connected protocol tools, app connectors, and custom MCP servers."
+          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
             Connect Model Context Protocol (MCP) servers, protocol tools, and app connectors so Matterhorn Work can use them from chat. Some tools may be unavailable until their connector is configured or signed in.
@@ -280,6 +299,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<FolderCog size={18} />}
           title="Workspaces"
           description="Local and shared workspaces, and diagnostics."
+          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
             A workspace is a folder on your machine the agent can work in. <span className="font-medium text-dls-text">Local</span> workspaces stay on your computer. <span className="font-medium text-dls-text">Remote / shared</span> workspaces connect to a hosted worker so you can run work in the cloud.
@@ -288,8 +308,8 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
             <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => onSelectTab("permissions")}>
               Authorized folders
             </Button>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={() => onSelectTab("recovery")}>
-              Workspace diagnostics
+            <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-dls-secondary" onClick={() => onSelectTab("advanced")}>
+              Runtime diagnostics
             </Button>
           </div>
         </SettingsCard>
@@ -299,6 +319,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Stethoscope size={18} />}
           title="Beta Diagnostics"
           description="Version info and tools for reporting issues."
+          status={<StatusBadge tone="desktop">Desktop only</StatusBadge>}
         >
           <Row label="App version" value={<span className="font-mono text-xs">{APP_VERSION || "dev"}</span>} />
           <Row
@@ -316,6 +337,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Lock size={18} />}
           title="Privacy &amp; Data"
           description="Where your data lives, and what is never stored."
+          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <p className="text-sm leading-6 text-dls-secondary">
             Your chats, generated artifacts, and on-chain receipts are stored <span className="font-medium text-dls-text">locally on your machine</span> by default.
@@ -335,6 +357,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           icon={<Info size={18} />}
           title="About"
           description="Matterhorn Work version and resources."
+          status={<StatusBadge tone="ready">Ready</StatusBadge>}
         >
           <Row label="Matterhorn Work" value={<span className="font-mono text-xs">{APP_VERSION ? `v${APP_VERSION}` : "developer build"}</span>} />
           <div className="flex flex-wrap gap-2">

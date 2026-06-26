@@ -28,28 +28,48 @@ export type GeneralSettingsViewProps = {
   onReportIssue: () => void;
 };
 
-const workspaceCards: { tab: SettingsTab; icon: typeof Sparkles; title: string; desc: string }[] = [
-  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Default model, reasoning, and compaction." },
-  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Authorized folders and file access." },
-  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers, protocol tools, connectors, and plugins." },
-  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime, engine, and developer options." },
+type SettingsHubCard = {
+  tab: SettingsTab;
+  icon: typeof Sparkles;
+  title: string;
+  desc: string;
+  status: "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only";
+  developerOnly?: boolean;
+};
+
+const workspaceCards: SettingsHubCard[] = [
+  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Default model, reasoning, and compaction.", status: "Ready" },
+  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Authorized folders and file access.", status: "Ready" },
+  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers, protocol tools, connectors, and plugins.", status: "Ready" },
+  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime, engine, and developer options.", status: "Desktop only" },
 ];
 
-const globalCards: { tab: SettingsTab; icon: typeof Sparkles; title: string; desc: string }[] = [
-  { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect services that provide AI models." },
-  { tab: "cloud-account", icon: Cloud, title: "Cloud", desc: "Matterhorn Cloud account and organization." },
-  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme, font size, and display." },
-  { tab: "environment", icon: Terminal, title: "Environment", desc: "Environment variables and paths." },
-  { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "App version and update channel." },
-  { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Reset onboarding and clear data." },
+const globalCards: SettingsHubCard[] = [
+  { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect services that provide AI models.", status: "Needs setup" },
+  { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account, sign-in, and organization.", status: "Needs setup" },
+  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme, font size, and display.", status: "Ready" },
+  { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "App version and update channel.", status: "Desktop only" },
+  { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud-only worker instances after Matterhorn Cloud sign-in.", status: "Cloud only", developerOnly: true },
+  { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables. Requires server token.", status: "Preview", developerOnly: true },
+  { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Disabled reset/repair diagnostics preview.", status: "Preview", developerOnly: true },
 ];
 
 function SettingsCard(props: {
   icon: typeof Sparkles;
   title: string;
   desc: string;
+  status: SettingsHubCard["status"];
   onClick: () => void;
 }) {
+  const statusClass =
+    props.status === "Ready"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+      : props.status === "Needs setup"
+        ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
+        : props.status === "Preview"
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+
   return (
     <button
       type="button"
@@ -60,7 +80,12 @@ function SettingsCard(props: {
         <props.icon size={16} className="text-dls-secondary" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-medium text-dls-text">{props.title}</div>
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
+          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${statusClass}`}>
+            {props.status}
+          </span>
+        </div>
         <div className="text-[11px] text-dls-secondary">{props.desc}</div>
       </div>
       <ArrowRight size={14} className="shrink-0 text-dls-secondary" />
@@ -77,15 +102,18 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
           Workspace
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {workspaceCards.map((card) => (
-            <SettingsCard
-              key={card.tab}
-              icon={card.icon}
-              title={card.title}
-              desc={card.desc}
-              onClick={() => props.onNavigateTab(card.tab)}
-            />
-          ))}
+          {workspaceCards
+            .filter((card) => props.developerMode || !card.developerOnly)
+            .map((card) => (
+              <SettingsCard
+                key={card.tab}
+                icon={card.icon}
+                title={card.title}
+                desc={card.desc}
+                status={card.status}
+                onClick={() => props.onNavigateTab(card.tab)}
+              />
+            ))}
         </div>
       </div>
 
@@ -95,15 +123,18 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
           Global
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {globalCards.map((card) => (
-            <SettingsCard
-              key={card.tab}
-              icon={card.icon}
-              title={card.title}
-              desc={card.desc}
-              onClick={() => props.onNavigateTab(card.tab)}
-            />
-          ))}
+          {globalCards
+            .filter((card) => props.developerMode || !card.developerOnly)
+            .map((card) => (
+              <SettingsCard
+                key={card.tab}
+                icon={card.icon}
+                title={card.title}
+                desc={card.desc}
+                status={card.status}
+                onClick={() => props.onNavigateTab(card.tab)}
+              />
+            ))}
         </div>
       </div>
 
