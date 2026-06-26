@@ -106,6 +106,36 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   blank: FileText,
 };
 
+function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconHint; size?: number }) {
+  if (iconHint === "bittensor") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+        <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (iconHint === "hyperliquid") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+        <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (iconHint === "polymarket") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+        <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+        <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return null;
+}
+
 type SessionError = {
   message: string;
   kind?: "model-not-found" | "generic";
@@ -1450,26 +1480,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
                         <p className="text-sm text-dls-secondary">Pick a focused workspace or start a blank chat. You can edit every prompt before sending.</p>
                       </div>
-                      <button
-                        type="button"
-                        className="self-start rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-blue-rgb),0.18)] sm:self-auto"
-                        onClick={() => props.onOpenSettingsSection?.("mcps")}
-                      >
-                        Connect MCPs
-                      </button>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
+                        const protocolLogo = ProtocolLogo({ iconHint: item.iconHint });
                         return (
                           <button
                             key={item.id}
                             type="button"
-                            className="flex min-h-[132px] min-w-0 items-start gap-3 rounded-2xl border border-dls-border bg-dls-surface p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.5)] hover:bg-dls-hover"
+                            className="flex min-h-[132px] min-w-0 items-start gap-3 rounded-lg border border-dls-border bg-dls-surface p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.5)] hover:bg-dls-hover"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary">
-                              <Icon className="size-[18px]" />
+                            <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.14)] text-primary">
+                              {protocolLogo ?? <Icon className="size-[18px]" />}
                             </span>
                             <span className="min-w-0">
                               <span className="block text-[15px] font-semibold leading-snug text-dls-text">{item.title}</span>

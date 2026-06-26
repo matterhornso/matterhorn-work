@@ -486,9 +486,9 @@ const VENUE_DESKS: Record<CryptoVenue, {
     label: "Bittensor",
     shortLabel: "TAO",
     workspaceTitle: "Bittensor desk",
-    eyebrow: "Wallet · subnets · validators",
-    headline: "Use Bittensor without learning the CLI first.",
-    description: "Read public SS58 wallets, understand subnets, compare validators, prepare staking previews, and create watches. Actions still require an external Bittensor-compatible signer.",
+    eyebrow: "TAO wallet · subnets · validators",
+    headline: "Start with your TAO, then choose what to do next.",
+    description: "Matterhorn explains Bittensor in plain language: check a public wallet, browse subnets, compare validators, prepare staking or transfer previews, and keep every action external-signer only.",
     statusLabel: "Beta-ready",
     canSubmit: "Unsigned preview only",
     liveSubmission: "External signer only",
@@ -646,17 +646,34 @@ function formatNumber(value: number | null | undefined, digits = 3): string {
 }
 
 function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?: boolean }) {
-  const label = venue === "bittensor" ? "τ" : venue === "hyperliquid" ? "HL" : "PM";
   const title = VENUE_DESKS[venue].label;
+  const size = compact ? 20 : 36;
   return (
     <span
       aria-label={`${title} mark`}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] font-semibold text-[var(--protocol-desk-accent)]",
-        compact ? "size-5 text-[10px]" : "size-9 text-sm",
+        "inline-flex shrink-0 items-center justify-center rounded-md border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]",
+        compact ? "size-5" : "size-9",
       )}
     >
-      {label}
+      {venue === "bittensor" ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+          <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      ) : venue === "hyperliquid" ? (
+        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+          <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+          <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+          <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      )}
     </span>
   );
 }
@@ -1262,7 +1279,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const activeManifestSigner = protocolSignerLabel(activeManifest);
   const activeSafetyBadge = venue === "bittensor" ? "Read/preview + external signer" : "Preview Only";
   const activeSafetyCopy = venue === "bittensor"
-    ? "Safety strip: Bittensor supports public SS58/coldkey reads, subnet discovery, watches, receipts, and unsigned previews. Any action must be reviewed and signed in an external Bittensor-compatible signer; never paste seed phrases, private keys, mnemonics, or wallet exports."
+    ? "Bittensor safety: share only public SS58/coldkey or validator hotkey addresses. Matterhorn can read balances, explain subnets, create watches, and prepare unsigned previews. You review and sign elsewhere; never paste seed phrases, private keys, mnemonics, or wallet exports."
     : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
@@ -1349,7 +1366,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               { key: "demo" as const, label: "Demo" },
               { key: "subnets" as const, label: "Subnets" },
               { key: "wallet" as const, label: "Wallet" },
-              { key: "actions" as const, label: "Preview Actions" },
+              { key: "actions" as const, label: "Actions" },
             ].map((item) => (
             <button
               key={item.key}
@@ -2198,16 +2215,22 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 </div>
               </div>
             </Section>
-            <Section title="Prepare Preview" icon={<ArrowUpDown className="size-4" />}>
-              <div className="space-y-3">
-                <div className="grid grid-cols-4 gap-1 rounded-lg bg-dls-surface p-1">
+            <Section title="Prepare an unsigned preview" icon={<ArrowUpDown className="size-4" />}>
+              <div className="space-y-4">
+                <div className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.24)] bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+                  Choose the action, add only public routing details, then review the quote. Matterhorn does not sign,
+                  broadcast, or move TAO; the next step is always an external Bittensor-compatible signer.
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {(["stake", "unstake", "transfer", "compare"] as ActionType[]).map((item) => (
                     <button
                       key={item}
                       type="button"
                       className={cn(
-                        "rounded-md px-2 py-1.5 text-xs font-medium capitalize transition-colors",
-                        action === item ? "bg-sky-500 text-white" : "text-dls-secondary hover:text-dls-text",
+                        "rounded-md border px-3 py-2 text-left text-xs font-semibold capitalize transition-colors",
+                        action === item
+                          ? "border-[rgba(var(--protocol-desk-rgb),0.58)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]"
+                          : "border-dls-border bg-dls-surface text-dls-secondary hover:text-dls-text",
                       )}
                       onClick={() => setAction(item)}
                     >
@@ -2215,22 +2238,29 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     </button>
                   ))}
                 </div>
-                {action !== "transfer" && (
-                  <LabeledInput label="Netuid" value={actionNetuid} onChange={setActionNetuid} />
-                )}
-                {action !== "compare" && (
-                  <LabeledInput label="Amount TAO" value={amountTao} onChange={setAmountTao} />
-                )}
-                {(action === "stake" || action === "unstake") && (
-                  <LabeledInput label="Validator hotkey" value={validatorHotkey} onChange={setValidatorHotkey} />
-                )}
-                {action === "transfer" && (
-                  <LabeledInput label="Recipient coldkey" value={recipient} onChange={setRecipient} />
-                )}
-                <Button className="w-full gap-1.5 bg-sky-500 text-white hover:bg-sky-600" onClick={requestQuote} disabled={quoteLoading}>
-                  {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
-                  Prepare Quote
-                </Button>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {action !== "transfer" && (
+                    <LabeledInput label="Subnet netuid" value={actionNetuid} onChange={setActionNetuid} hint="Example: 14. A subnet is the Bittensor market you are acting in." />
+                  )}
+                  {action !== "compare" && (
+                    <LabeledInput label="Amount TAO" value={amountTao} onChange={setAmountTao} hint="The amount to preview. This is not submitted from Matterhorn." />
+                  )}
+                  {(action === "stake" || action === "unstake") && (
+                    <LabeledInput label="Validator hotkey" value={validatorHotkey} onChange={setValidatorHotkey} hint="Paste a public validator hotkey. Never paste a seed phrase or private key." />
+                  )}
+                  {action === "transfer" && (
+                    <LabeledInput label="Recipient coldkey" value={recipient} onChange={setRecipient} hint="Paste the public destination coldkey only." />
+                  )}
+                </div>
+                <div className="grid gap-2 rounded-md border border-dls-border bg-dls-surface p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="text-xs leading-5 text-dls-secondary">
+                    Missing context is allowed. Chat can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted.
+                  </div>
+                  <Button className="gap-1.5 rounded-md bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] hover:opacity-90" onClick={requestQuote} disabled={quoteLoading}>
+                    {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
+                    Prepare unsigned preview
+                  </Button>
+                </div>
               </div>
             </Section>
 
@@ -2504,15 +2534,26 @@ function Pill({ children }: { children: ReactNode }) {
   );
 }
 
-function LabeledInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function LabeledInput({
+  label,
+  value,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: string;
+}) {
   return (
     <label className="block">
       <span className="mb-1 block text-xs font-medium text-dls-secondary">{label}</span>
       <input
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
-        className="h-10 w-full rounded-xl border border-dls-border bg-dls-surface px-3 font-mono text-sm text-dls-text outline-none placeholder:text-dls-secondary"
+        className="h-10 w-full rounded-md border border-dls-border bg-dls-surface px-3 font-mono text-sm text-dls-text outline-none placeholder:text-dls-secondary focus:border-[rgba(var(--protocol-desk-rgb),0.65)]"
       />
+      {hint ? <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">{hint}</span> : null}
     </label>
   );
 }

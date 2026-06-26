@@ -28,7 +28,7 @@ for (const phrase of [
   "Copy launch check",
   "Monday beta promise",
   "VENUE_DESKS",
-  "Use Bittensor without learning the CLI first.",
+  "Start with your TAO, then choose what to do next.",
   "Preview Hyperliquid trades through chat, with execution off.",
   "Analyze prediction markets and preview safely.",
   "BTC orderbook",

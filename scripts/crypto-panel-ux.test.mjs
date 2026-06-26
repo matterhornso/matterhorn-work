@@ -28,10 +28,10 @@ for (const phrase of [
   "Protocol manifest",
   "Allowed intents",
   "primaryPanelRouteId",
-  "Use Bittensor without learning the CLI first.",
+  "Start with your TAO, then choose what to do next.",
   "Preview Hyperliquid trades through chat, with execution off.",
   "Analyze prediction markets and preview safely.",
-  "Preview Actions",
+  "Actions",
   "Matterhorn prepares Bittensor action previews for review.",
   "Standard Bittensor actions",
   "Standard Hyperliquid actions",
@@ -44,7 +44,7 @@ for (const phrase of [
   "Prepare transfer preview",
   "Create watch or alert",
   "Explain coldkey/hotkey",
-  "Prepare Preview",
+  "Prepare an unsigned preview",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose a dedicated venue desk: ${phrase}`);
 }

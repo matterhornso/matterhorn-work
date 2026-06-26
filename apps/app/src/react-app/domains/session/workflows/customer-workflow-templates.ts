@@ -268,8 +268,8 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "bittensor_operator",
     name: "Use Bittensor",
-    summary: "Read TAO balances, compare subnets and validators, and prepare external-signer staking handoffs.",
-    promise: "You stay non-custodial. Matterhorn never holds your private key or submits a transaction.",
+    summary: "Start with a public TAO wallet, understand subnets, compare validators, and prepare external-signer previews.",
+    promise: "Matterhorn explains the Bittensor concepts as you go. It never asks for seed phrases, private keys, or wallet exports.",
     category: "bittensor",
     status: "beta_ready",
     examplePrompts: ["Show my TAO", "Which subnet is useful for image generation?", "Compare validators on subnet 14"],
@@ -283,7 +283,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "bittensor",
       accent: "matterhorn_blue",
-      shortDescription: "Read TAO balances and prepare external-signer staking handoffs.",
+      shortDescription: "Check TAO, browse subnets, compare validators, and prepare unsigned staking or transfer previews.",
     },
     routing: { chatMode: "bittensor", opensPanel: "bittensor", startsSession: true },
     safetyBoundaries: {
@@ -316,7 +316,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Read Hyperliquid markets and prepare external-signer previews.",
+      shortDescription: "Read orderbooks, account exposure, funding, and external-signer previews. Submission stays off.",
     },
     routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
     safetyBoundaries: {
@@ -349,7 +349,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research Polymarket markets and prepare external-signer handoffs.",
+      shortDescription: "Research markets, outcomes, liquidity, compliance, and external-signer previews. Bet placement stays off.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
     safetyBoundaries: {
