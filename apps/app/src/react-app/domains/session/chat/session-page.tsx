@@ -160,49 +160,47 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
 
 function HomeCapabilityStatus() {
   return (
-    <section className="space-y-3 rounded-xl bg-dls-surface/70 p-4 shadow-sm ring-1 ring-dls-border/55" aria-label="Current capability status">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section className="space-y-4" aria-label="Current capability status">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Current capability status</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+          <p className="mt-1 max-w-3xl text-xs leading-5 text-dls-secondary">
             A quick read on what each desk can do today. Open a desk for the full workflow.
             These launchers are connected to Matterhorn workflow metadata.
             Matterhorn Wallet lives in the right rail. One wallet surface for EVM tools.
             Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <span className="self-start rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
+        <span className="self-start rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.16)] px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
           Live boundaries visible
         </span>
       </div>
-      <div className="grid max-h-[260px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
             <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="grid gap-3 rounded-xl bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb),0.14),rgba(var(--matterhorn-desk-rgb),0.035))] p-3 text-left ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.18)] sm:grid-rows-[1fr_auto]"
+              className="flex items-start gap-3 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.075)] px-3 py-3 text-left"
             >
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
-                  {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
-                    <ProtocolLogo venue={item.id} size={22} />
-                  ) : (
-                    <Icon className="size-4" />
-                  )}
-                </span>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[12px] font-semibold text-dls-text">{item.title}</span>
-                    <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-                      {item.statusLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
+                  <ProtocolLogo venue={item.id} size={24} />
+                ) : (
+                  <Icon className="size-4" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[12px] font-semibold text-dls-text">{item.title}</span>
+                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {item.statusLabel}
+                  </span>
                 </div>
+                <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
+                <p className="sr-only">{item.proof}</p>
               </div>
-              <p className="rounded-lg bg-dls-surface/60 px-2.5 py-2 text-[10px] leading-4 text-dls-secondary/90">{item.proof}</p>
             </div>
           );
         })}
@@ -1158,8 +1156,10 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : (
-                    <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-14">
-                      <div className="w-full max-w-5xl space-y-7">
+                    <div className="relative flex flex-1 items-center justify-center overflow-hidden px-4 py-10 sm:px-6 sm:py-14">
+                      <div className="pointer-events-none absolute left-1/2 top-12 h-64 w-[42rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.18),transparent_68%)] blur-3xl" aria-hidden="true" />
+                      <div className="pointer-events-none absolute right-8 top-1/3 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.13),transparent_70%)] blur-3xl" aria-hidden="true" />
+                      <div className="relative w-full max-w-5xl space-y-8">
                         <div className="mx-auto max-w-2xl space-y-3 text-center">
                           <h2 className="text-2xl font-semibold text-dls-text sm:text-3xl">
                             Start a Matterhorn project.
@@ -1172,7 +1172,7 @@ export function SessionPage(props: SessionPageProps) {
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-md border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff]"
+                            className="inline-flex items-center gap-2 rounded-md bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] shadow-[0_14px_38px_rgba(var(--matterhorn-blue-rgb),0.18)] transition-colors hover:bg-[#e7f8ff]"
                             onClick={props.sidebar.onOpenCreateWorkspace}
                           >
                             <Plus className="size-4" />
@@ -1180,7 +1180,7 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-md border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                            className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             disabled={props.sidebar.newTaskDisabled}
                             onClick={() => {
                               if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
@@ -1195,7 +1195,7 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-md border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                            className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             onClick={() => {
                               const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
                               if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel, { primePrompt: true });
@@ -1206,7 +1206,7 @@ export function SessionPage(props: SessionPageProps) {
                           </button>
                         </div>
                         <HomeCapabilityStatus />
-                        <section className="space-y-3">
+                        <section className="space-y-4">
                           <div className="flex items-end justify-between gap-3">
                             <div>
                               <h3 className="text-sm font-semibold text-dls-text">Matterhorn Desks</h3>
@@ -1214,11 +1214,11 @@ export function SessionPage(props: SessionPageProps) {
                                 Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness. Each desk has its own prompt context, capability status, and safety boundary.
                               </p>
                             </div>
-                            <span className="hidden rounded-md border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                            <span className="hidden rounded-md bg-dls-surface-muted px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
                               No hidden auto-send
                             </span>
                           </div>
-                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-4">
                             {protocolWorkflowLaunchers.map((launcher) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
                               const capabilityItems = workflowLauncherCapabilityItems(launcher);
@@ -1227,7 +1227,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="group flex min-h-[196px] w-full flex-col items-start overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(var(--matterhorn-desk-rgb),0.16),rgba(var(--matterhorn-desk-rgb),0.045)_58%,rgba(255,255,255,0.02))] p-4 text-left shadow-sm ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
+                                  className="group relative isolate flex min-h-[284px] w-full flex-col items-start overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.095)] p-5 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1236,33 +1236,37 @@ export function SessionPage(props: SessionPageProps) {
                                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
                                   }}
                                 >
-                                  <span className="flex w-full items-start gap-3">
-                                    <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.18)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
-                                      {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={28} /> : <Icon className="size-4" />}
+                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                                  <span className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]" aria-hidden="true">
+                                    {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={132} /> : <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
+                                  </span>
+                                  <span className="relative flex w-full items-start gap-4">
+                                    <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                                      {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={42} /> : <Icon className="size-5" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-[15px] font-semibold text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
-                                        <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                        {launcher.statusLabel}
+                                        <span className="text-base font-semibold leading-tight text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
+                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                          {launcher.statusLabel}
                                         </span>
                                       </span>
-                                      <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
+                                      <span className="mt-2 block text-[13px] leading-6 text-dls-secondary">{launcher.description}</span>
                                     </span>
                                   </span>
-                                  <span className="mt-4 grid w-full gap-1.5">
+                                  <span className="relative mt-5 grid w-full gap-2">
                                     {capabilityItems.map((item) => (
                                       <span
                                         key={item}
-                                        className="flex items-center justify-between gap-3 border-t border-[rgba(var(--matterhorn-desk-rgb),0.18)] py-1.5 text-[11px] font-medium text-dls-text first:border-t-0"
+                                        className="flex items-center justify-between gap-3 rounded-md bg-dls-surface/70 px-3 py-2 text-[12px] font-medium text-dls-text"
                                       >
                                         <span>{item}</span>
                                         <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
                                       </span>
                                     ))}
                                   </span>
-                                  <span className="mt-4 block text-[10px] leading-relaxed text-dls-secondary/90">{launcher.safetySummary}</span>
-                                  <span className="mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                  <span className="relative mt-4 block text-[11px] leading-5 text-dls-secondary/90">{launcher.safetySummary}</span>
+                                  <span className="relative mt-auto pt-5 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
                                     Open desk with editable prompt
                                   </span>
                                 </button>
@@ -1278,7 +1282,7 @@ export function SessionPage(props: SessionPageProps) {
                                 Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
                               </p>
                             </div>
-                            <span className="hidden rounded-md border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                            <span className="hidden rounded-md bg-dls-surface-muted px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
                               Public/redacted only
                             </span>
                           </div>
@@ -1290,7 +1294,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={demo.id}
                                   type="button"
                                   style={deskToneStyle(demo.iconHint)}
-                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-xl bg-dls-card/80 p-4 text-left shadow-sm ring-1 ring-dls-border/65 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
+                                  className="group relative isolate flex min-h-[190px] w-full flex-col items-start overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     if (demo.panel) {
                                       openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
@@ -1299,28 +1303,32 @@ export function SessionPage(props: SessionPageProps) {
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
                                   }}
                                 >
-                                  <span className="flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.2)]">
+                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                                  <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
+                                    {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
+                                  </span>
+                                  <span className="relative flex w-full items-start gap-3">
+                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
                                       {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
                                         <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
-                                        <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                           {demo.statusLabel}
                                         </span>
                                       </span>
                                       <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
                                     </span>
                                   </span>
-                                  <span className="mt-3 block text-[11px] leading-5 text-dls-secondary">
+                                  <span className="relative mt-3 block text-[11px] leading-5 text-dls-secondary">
                                     <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
                                   </span>
-                                  <span className="mt-2 block text-[11px] leading-5 text-dls-secondary">
+                                  <span className="relative mt-2 block text-[11px] leading-5 text-dls-secondary">
                                     <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
                                   </span>
-                                  <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{demo.safetySummary}</span>
-                                  <span className="mt-3 block max-w-full truncate rounded-lg border border-dls-border bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
+                                  <span className="relative mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{demo.safetySummary}</span>
+                                  <span className="relative mt-3 block max-w-full truncate rounded-md bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
                                     {demo.evidenceCommand}
                                   </span>
                                 </button>
@@ -1336,7 +1344,7 @@ export function SessionPage(props: SessionPageProps) {
                                 Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
                               </p>
                             </div>
-                            <span className="self-start rounded-lg border border-dls-border bg-dls-surface px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
+                            <span className="self-start rounded-md bg-dls-surface-muted px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
                               Planned services only
                             </span>
                           </div>
@@ -1348,11 +1356,12 @@ export function SessionPage(props: SessionPageProps) {
                                   key={task.id}
                                   type="button"
                                   style={deskToneStyle(task.iconHint)}
-                                  className="flex min-h-[220px] w-full flex-col gap-4 rounded-xl border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.52)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
+                                  className="relative isolate flex min-h-[220px] w-full flex-col gap-4 overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] p-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                   onClick={() => {
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
                                   }}
                                 >
+                                  <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
                                   <span className="flex items-start gap-3">
                                     <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
                                       <Icon className="size-4" />
@@ -1360,7 +1369,7 @@ export function SessionPage(props: SessionPageProps) {
                                     <span className="min-w-0">
                                       <span className="flex flex-wrap items-center gap-2">
                                         <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
-                                        <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                           {task.statusLabel}
                                         </span>
                                       </span>
@@ -1378,13 +1387,13 @@ export function SessionPage(props: SessionPageProps) {
                                     ].map((artifact) => (
                                       <span
                                         key={artifact}
-                                        className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.22)] bg-dls-card px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                        className="rounded-md bg-dls-surface/70 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
                                       >
                                         {artifact}
                                       </span>
                                     ))}
                                   </span>
-                                  <span className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-[11px] leading-5 text-dls-secondary">
+                                  <span className="rounded-md bg-dls-surface/80 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
                                     {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
                                   </span>
                                   <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
