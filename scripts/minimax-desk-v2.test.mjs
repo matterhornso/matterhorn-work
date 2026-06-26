@@ -560,6 +560,167 @@ for (const [needle, label] of v2VisualRules) {
   }
 }
 
+// ── 12. PRODUCTION-QA.md ─────────────────────────────────────────
+
+const prodQa = read("docs/ui/matterhorn-desk-v2/PRODUCTION-QA.md");
+
+// File exists (already checked above as requiredFiles, but assert it's parseable)
+if (prodQa.length > 500) {
+  pass("PRODUCTION-QA.md exists and is non-empty");
+} else {
+  fail("PRODUCTION-QA.md exists and is non-empty", "empty");
+}
+
+// All 7 desks covered (Home + 6 desk-specific sections)
+const prodQaDesks = [
+  "Home Command Center",
+  "Bittensor Desk",
+  "Hyperliquid Desk",
+  "Polymarket Desk",
+  "Wellness Desk",
+  "Memory Desk",
+  "MCPs Desk",
+  "Settings & Profile",
+];
+for (const desk of prodQaDesks) {
+  if (prodQa.includes(desk)) {
+    pass(`PRODUCTION-QA.md desk: "${desk}"`);
+  } else {
+    fail(`PRODUCTION-QA.md desk: "${desk}"`, "missing");
+  }
+}
+
+// Per-desk acceptance criteria — key implementation rules present
+const perDeskRules = [
+  "Safety strip",
+  "Beginner",
+  "Expert",
+  "toggle",
+  "stat tile",
+  "Position tile",
+  "Market card",
+  "Local-only",
+  "Memory card",
+  "Tool registry",
+];
+for (const rule of perDeskRules) {
+  if (prodQa.includes(rule)) {
+    pass(`PRODUCTION-QA.md per-desk rule: "${rule}"`);
+  } else {
+    fail(`PRODUCTION-QA.md per-desk rule: "${rule}"`, "missing");
+  }
+}
+
+// Right rail checklist items
+const rightRailItems = [
+  "260px",
+  "Profile",
+  "copy button",
+  "Bell",
+  "chip bar",
+  "FAB",
+  "tablet",
+  "mobile",
+];
+for (const item of rightRailItems) {
+  if (prodQa.includes(item)) {
+    pass(`PRODUCTION-QA.md right rail: "${item}"`);
+  } else {
+    fail(`PRODUCTION-QA.md right rail: "${item}"`, "missing");
+  }
+}
+
+// Light/dark theme criteria
+const themeItems = [
+  "#0C0C0C",
+  "#D1F2FF",
+  "Light Mode",
+  "Dark Mode",
+  "#F5F5F5",
+  "#2563EB",
+  "contrast ratio",
+  "focus-visible",
+];
+for (const item of themeItems) {
+  if (prodQa.includes(item)) {
+    pass(`PRODUCTION-QA.md theme: "${item}"`);
+  } else {
+    fail(`PRODUCTION-QA.md theme: "${item}"`, "missing");
+  }
+}
+
+// Mobile / tablet criteria
+const responsiveItems = [
+  "Bottom tab bar",
+  "390",
+  "768",
+  "composer",
+  "above keyboard",
+  "tablet",
+  "mobile",
+  "1-column",
+  "2-column",
+  "3-column",
+];
+for (const item of responsiveItems) {
+  if (prodQa.includes(item)) {
+    pass(`PRODUCTION-QA.md responsive: "${item}"`);
+  } else {
+    fail(`PRODUCTION-QA.md responsive: "${item}"`, "missing");
+  }
+}
+
+// Boxiness removal checklist
+const boxinessUnique = [
+  "border-radius: 4px",
+  "surface fill",
+  "Sharp corners",
+  "nested card",
+  "glassmorphism",
+  "3px",
+  "Sharp corners",
+];
+for (const item of boxinessUnique) {
+  if (prodQa.includes(item)) {
+    pass(`PRODUCTION-QA.md boxiness: "${item}"`);
+  } else {
+    fail(`PRODUCTION-QA.md boxiness: "${item}"`, "missing");
+  }
+}
+
+// Forbidden patterns documented in PRODUCTION-QA
+const prodForbidden = [
+  "seed phrase",
+  "private key",
+  "submit order",
+  "sign transaction",
+  "close position",
+  "mint now",
+  "hire agent",
+  "OpenWork",
+  "openwork",
+  "opencodec",
+  "glassmorphism",
+  "medical",
+  "prescription",
+  "treatment recommendation",
+  "Crypto workspace",
+];
+for (const phrase of prodForbidden) {
+  if (prodQa.toLowerCase().includes(phrase.toLowerCase())) {
+    pass(`PRODUCTION-QA.md forbidden pattern documented: "${phrase}"`);
+  } else {
+    fail(`PRODUCTION-QA.md forbidden pattern documented: "${phrase}"`, "missing");
+  }
+}
+
+// Screenshot matrix present
+if (prodQa.includes("Production Screenshot Matrix") || prodQa.includes("Screenshot Matrix")) {
+  pass("PRODUCTION-QA.md: Screenshot Matrix present");
+} else {
+  fail("PRODUCTION-QA.md: Screenshot Matrix present", "missing");
+}
+
 // ── 12. Market execution safety gate compatibility ──────────────
 
 if (fileExists("scripts/market-execution-safety-gate.test.mjs")) {
