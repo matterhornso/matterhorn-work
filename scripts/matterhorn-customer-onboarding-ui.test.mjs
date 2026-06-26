@@ -28,6 +28,11 @@ const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
+const feedback = read("apps/app/src/app/lib/feedback.ts");
+const den = read("apps/app/src/app/lib/den.ts");
+const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
+const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx");
+const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
 
@@ -384,6 +389,67 @@ for (const phrase of [
   "No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
+}
+
+for (const phrase of [
+  "VITE_MATTERHORN_WORK_FEEDBACK_URL",
+  "VITE_MATTERHORN_WORK_APP_VERSION",
+  "https://matterhorn.work/feedback",
+]) {
+  assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
+}
+assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
+
+for (const phrase of [
+  "VITE_MATTERHORN_CLOUD_URL",
+  "VITE_MATTERHORN_DEN_BASE_URL",
+  "VITE_MATTERHORN_CLOUD_API_URL",
+  "VITE_MATTERHORN_DEN_API_BASE_URL",
+  "VITE_MATTERHORN_REQUIRE_SIGNIN",
+  "https://app.matterhorn.work",
+]) {
+  assert.ok(den.includes(phrase), `cloud auth should expose Matterhorn-native config: ${phrase}`);
+}
+assert.equal(den.includes("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
+
+for (const phrase of [
+  "Parallel Web Systems web search",
+  "Matterhorn Work engine endpoint",
+  "formatEngineEndpoint",
+]) {
+  assert.ok(`${english}\n${advancedSettings}`.includes(phrase), `advanced settings should use Matterhorn customer-safe wording: ${phrase}`);
+}
+assert.equal(english.includes("Enable Exa web search"), false, "English settings copy should not expose Exa as the default customer search brand");
+
+for (const phrase of [
+  "Agent Marketplace Preview",
+  "Hiring, payment, and deployment are not live in this beta.",
+  "Preview-only in this beta. No wallet, payment, or live deployment.",
+  "Preview template",
+  "Save preview",
+  "Generate preview",
+  "No wallet connection, payment, or on-chain deployment was attempted.",
+]) {
+  assert.ok(marketplaceSettings.includes(phrase), `agent marketplace should be explicit preview-only beta UI: ${phrase}`);
+}
+for (const forbidden of [
+  "Connect wallet to hire",
+  "Hire Agent",
+  "Hire This Agent",
+  "Deriving agent wallet",
+  "is now live",
+]) {
+  assert.equal(marketplaceSettings.includes(forbidden), false, `agent marketplace must not imply live hiring/deployment: ${forbidden}`);
+}
+
+for (const phrase of [
+  "Matterhorn Wallet",
+  "EVM wallet",
+  "Bittensor coldkeys/hotkeys",
+  "seed phrases or private keys",
+  "Public Bittensor reads, Hyperliquid previews, and Polymarket previews still work without connecting an EVM wallet.",
+]) {
+  assert.ok(walletSettings.includes(phrase), `wallet settings should clearly explain current wallet boundaries: ${phrase}`);
 }
 
 console.log("Matterhorn customer onboarding UI static check passed.");

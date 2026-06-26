@@ -45,17 +45,27 @@ const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
 export const DEFAULT_DEN_AUTH_NAME = "Matterhorn Work User";
 const BUILD_DEN_BASE_URL =
-  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_BASE_URL === "string"
-    ? import.meta.env.VITE_DEN_BASE_URL
-    : "").trim() || "https://app.openworklabs.com";
+  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_URL === "string"
+    ? import.meta.env.VITE_MATTERHORN_CLOUD_URL
+    : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_DEN_BASE_URL === "string"
+      ? import.meta.env.VITE_MATTERHORN_DEN_BASE_URL
+      : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_BASE_URL === "string"
+        ? import.meta.env.VITE_DEN_BASE_URL
+        : "").trim() || "https://app.matterhorn.work";
 const BUILD_DEN_API_BASE_URL =
-  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_API_BASE_URL === "string"
-    ? import.meta.env.VITE_DEN_API_BASE_URL
-    : "").trim() || undefined;
+  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_CLOUD_API_URL === "string"
+    ? import.meta.env.VITE_MATTERHORN_CLOUD_API_URL
+    : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_DEN_API_BASE_URL === "string"
+      ? import.meta.env.VITE_MATTERHORN_DEN_API_BASE_URL
+      : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_API_BASE_URL === "string"
+        ? import.meta.env.VITE_DEN_API_BASE_URL
+        : "").trim() || undefined;
 const BUILD_DEN_REQUIRE_SIGNIN =
-  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_REQUIRE_SIGNIN === "string"
-    ? /^(1|true|yes|on)$/i.test(import.meta.env.VITE_DEN_REQUIRE_SIGNIN.trim())
-    : false);
+  (typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_MATTERHORN_REQUIRE_SIGNIN === "string"
+    ? /^(1|true|yes|on)$/i.test(import.meta.env.VITE_MATTERHORN_REQUIRE_SIGNIN.trim())
+    : typeof import.meta !== "undefined" && typeof import.meta.env?.VITE_DEN_REQUIRE_SIGNIN === "string"
+      ? /^(1|true|yes|on)$/i.test(import.meta.env.VITE_DEN_REQUIRE_SIGNIN.trim())
+      : false);
 
 export const DEFAULT_DEN_BASE_URL = BUILD_DEN_BASE_URL;
 export const DEN_INFERENCE_PATH = "/dashboard/inference";

@@ -73,6 +73,10 @@ function formatOpencodeBinary(info: EngineInfo | null) {
   return source ? `${binary} (${source})` : binary;
 }
 
+function formatEngineEndpoint(baseUrl: string) {
+  return baseUrl.replace(/\/opencode\/?$/i, "/engine");
+}
+
 interface AdvancedRuntimeSectionProps {
   engineInfo: EngineInfo | null;
   clientStatusLabel: string;
@@ -301,7 +305,10 @@ export function AdvancedConnectionSection(props: AdvancedConnectionSectionProps)
       </LayoutSectionHeader>
 
       <LayoutSectionItem className="gap-3">
-        <div className="break-all font-mono text-xs text-gray-8">{props.baseUrl}</div>
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-gray-11">Matterhorn Work engine endpoint</div>
+          <div className="break-all font-mono text-xs text-gray-8">{formatEngineEndpoint(props.baseUrl)}</div>
+        </div>
         <div className="flex flex-wrap gap-2 pt-2">
           <Button
             type="button"
