@@ -330,9 +330,14 @@ for (const phrase of [
   "Profile & Settings",
   "Open profile and settings from the status bar",
   "visible profile and settings button",
+  "walletStatusLabel",
+  "Wallet not connected",
+  "Open Matterhorn Wallet",
+  "Bittensor uses public SS58 reads and external signing; market desks remain preview-only.",
 ]) {
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
+assert.ok(sessionPage.includes("onOpenWallet={() => setCurrentSidePanel(\"wallet\")}"), "status bar wallet button should open the real wallet panel");
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");

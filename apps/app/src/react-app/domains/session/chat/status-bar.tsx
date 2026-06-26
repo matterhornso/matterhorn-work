@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, MessageCircleMore, Settings } from "lucide-react";
+import { BookOpen, MessageCircleMore, Settings, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,6 +16,14 @@ const DOCS_URL = "https://github.com/matterhornso/matterhorn-work/tree/dev/docs"
 const PROFILE_SETTINGS_LABEL = "Profile & Settings";
 const STATUS_BAR_BOOT_STARTED_AT = Date.now();
 const STATUS_BAR_INITIALIZING_MS = 15_000;
+
+type WalletStatus = {
+  address: string | null;
+  chainId: number | null;
+  connector: string | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+};
 
 type StatusDotVariant = "connected" | "loading" | "partial" | "disconnected";
 
@@ -120,6 +128,21 @@ function StatusIndicator(props: StatusIndicatorProps) {
   );
 }
 
+function truncateAddress(address: string | null) {
+  if (!address) return "";
+  if (address.length <= 13) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function walletStatusLabel(wallet: WalletStatus | null | undefined) {
+  if (!wallet) return "Wallet unavailable";
+  if (wallet.isConnecting) return "Wallet connecting";
+  if (!wallet.isConnected) return "Wallet not connected";
+  const address = truncateAddress(wallet.address);
+  const network = wallet.chainId ? `chain ${wallet.chainId}` : wallet.connector ?? "connected";
+  return `Wallet ${address}${address ? " · " : ""}${network}`;
+}
+
 export type StatusBarProps = {
   clientConnected: boolean;
   matterhornServerStatus: MatterhornServerStatus;
@@ -129,6 +152,8 @@ export type StatusBarProps = {
   onOpenSettings: () => void;
   providerConnectedIds: string[];
   mcpConnectedCount: number;
+  walletStatus?: WalletStatus | null;
+  onOpenWallet?: () => void;
   loading?: boolean;
   showSettingsButton?: boolean;
   initializing?: boolean;
@@ -185,6 +210,18 @@ export function StatusBar(props: StatusBarProps) {
   }), [props.onOpenSettings, props.settingsOpen, props.showSettingsButton]);
   useControlAction(settingsControlAction);
 
+  const walletButtonLabel = walletStatusLabel(props.walletStatus);
+  const walletControlAction = useMemo<MatterhornControlAction | null>(() => (
+    props.onOpenWallet ? {
+      id: "status.wallet.open",
+      label: "Open Matterhorn Wallet",
+      description: "Open the Matterhorn Wallet panel from the status bar.",
+      sideEffect: "navigation",
+      execute: props.onOpenWallet,
+    } : null
+  ), [props.onOpenWallet]);
+  useControlAction(walletControlAction);
+
   return (
     <div className="border-t border-border bg-background">
       <div className="flex h-8 min-w-0 items-center justify-between gap-2 px-3 md:gap-3 md:px-6">
@@ -198,6 +235,20 @@ export function StatusBar(props: StatusBarProps) {
         />
 
         <div className="flex min-w-0 shrink-0 items-center gap-1">
+          {props.onOpenWallet ? (
+            <Button
+              className="max-w-[210px] gap-1.5 truncate text-muted-foreground"
+              variant="ghost"
+              size="xs"
+              onClick={props.onOpenWallet}
+              title={`${walletButtonLabel}. Bittensor uses public SS58 reads and external signing; market desks remain preview-only.`}
+              aria-label={`${walletButtonLabel}. Open Matterhorn Wallet.`}
+            >
+              <Wallet className="size-3.5" />
+              <span className="hidden max-w-[170px] truncate sm:inline">{walletButtonLabel}</span>
+              <span className="sm:hidden">Wallet</span>
+            </Button>
+          ) : null}
           {shellConfig.cloudSignin ? (
             <BetaAuthMenu compact={false} />
           ) : null}

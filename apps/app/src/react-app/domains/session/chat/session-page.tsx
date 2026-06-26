@@ -1518,6 +1518,14 @@ export function SessionPage(props: SessionPageProps) {
               onOpenSettings={props.onOpenSettings}
               providerConnectedIds={props.providerConnectedIds}
               mcpConnectedCount={props.mcpConnectedCount}
+              walletStatus={{
+                address: wallet.snapshot.address,
+                chainId: wallet.snapshot.chainId,
+                connector: wallet.snapshot.connector,
+                isConnected: wallet.snapshot.isConnected,
+                isConnecting: wallet.snapshot.isConnecting,
+              }}
+              onOpenWallet={() => setCurrentSidePanel("wallet")}
               loading={props.statusBar?.loading ?? false}
               showSettingsButton={props.statusBar?.showSettingsButton}
             />
