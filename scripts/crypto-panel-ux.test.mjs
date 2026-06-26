@@ -210,12 +210,12 @@ for (const forbidden of [
 // metrics, and protocol panels scroll vertically.
 for (const phrase of [
   "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
-  "shrink-0 border-b border-dls-border bg-dls-sidebar/95",
+  "shrink-0 bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
   "style={venueToneStyle(venue)}",
   "--protocol-desk-accent",
   "These are the core Bittensor workflows Matterhorn should make easy.",
   "mb-4 flex flex-wrap items-start justify-between gap-3",
-  "grid-cols-1 gap-1 rounded-lg bg-dls-surface p-1 sm:grid-cols-3",
+  "grid-cols-1 gap-1 rounded-full bg-dls-background/55 p-1",
   "grid-cols-[repeat(auto-fit,minmax(132px,1fr))]",
   "break-words font-mono",
   "text-[15px]",
