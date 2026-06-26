@@ -1549,7 +1549,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         const protocolLogo = ProtocolLogo({ iconHint: item.iconHint });
@@ -1559,36 +1559,40 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group flex min-h-[214px] min-w-0 flex-col rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[linear-gradient(180deg,rgba(var(--matterhorn-desk-rgb),0.09),rgba(var(--matterhorn-desk-rgb),0.025))] p-4 text-left shadow-sm transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.56)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)]"
+                            className="group relative isolate flex min-h-[260px] min-w-0 flex-col overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.095)] p-5 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="flex items-start gap-3">
-                              <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-                                {protocolLogo ?? <Icon className="size-[18px]" />}
+                            <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
+                            <span className="pointer-events-none absolute -right-6 -top-6 opacity-[0.08]" aria-hidden="true">
+                              {protocolLogo ?? <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
+                            </span>
+                            <span className="relative flex items-start gap-4">
+                              <span className="mt-0.5 flex size-14 shrink-0 items-center justify-center rounded-lg bg-dls-surface text-[var(--matterhorn-desk-color)]">
+                                {protocolLogo ? ProtocolLogo({ iconHint: item.iconHint, size: 42 }) : <Icon className="size-5" />}
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex flex-wrap items-center gap-2">
-                                  <span className="text-[15px] font-semibold leading-snug text-dls-text">{item.title}</span>
-                                  <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-2 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                  <span className="text-base font-semibold leading-tight text-dls-text">{item.title}</span>
+                                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
                                     {item.statusLabel}
                                   </span>
                                 </span>
-                                <span className="mt-1.5 block text-[12px] leading-relaxed text-dls-secondary">{item.description}</span>
+                                <span className="mt-2 block text-[13px] leading-6 text-dls-secondary">{item.description}</span>
                               </span>
                             </span>
-                            <span className="mt-4 grid gap-1.5">
+                            <span className="relative mt-5 grid gap-2">
                               {capabilityItems.map((capability) => (
                                 <span
                                   key={capability}
-                                  className="flex items-center justify-between gap-3 rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.2)] bg-dls-card/70 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                  className="flex items-center justify-between gap-3 rounded-md bg-dls-surface/70 px-3 py-2 text-[12px] font-medium text-dls-text"
                                 >
                                   <span>{capability}</span>
                                   <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
                                 </span>
                               ))}
                             </span>
-                            <span className="mt-3 block text-[10px] leading-relaxed text-dls-secondary/85">{item.safetySummary}</span>
-                            <span className="mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                            <span className="relative mt-4 block text-[11px] leading-5 text-dls-secondary/85">{item.safetySummary}</span>
+                            <span className="relative mt-auto pt-5 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
                               Insert editable prompt
                             </span>
                           </button>

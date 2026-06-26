@@ -1,8 +1,5 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
   <title id="title">Polymarket</title>
-  <rect width="64" height="64" rx="18" fill="#FFF1E6"/>
-  <rect x="17" y="17" width="13" height="13" rx="3" fill="#7C3AED"/>
-  <rect x="34" y="17" width="13" height="13" rx="3" fill="#F97316"/>
-  <rect x="17" y="34" width="13" height="13" rx="3" fill="#F97316"/>
-  <rect x="34" y="34" width="13" height="13" rx="3" fill="#111827"/>
+  <rect width="64" height="64" rx="16" fill="#F7F4FF"/>
+  <path d="M15 15H49V21.6L25.8 32L49 42.4V49H15V15ZM23 24.4V39.6L40.1 32L23 24.4Z" fill="#0C0C0C"/>
 </svg>
