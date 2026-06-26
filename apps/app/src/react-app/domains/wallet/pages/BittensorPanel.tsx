@@ -476,6 +476,12 @@ async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Prom
   } catch {
     const source = api.baseUrl || "current app origin";
     const preview = body.trim().slice(0, 80) || response.statusText;
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("text/html") || preview.startsWith("<")) {
+      throw new Error(
+        `Matterhorn server did not answer ${path}. The app received an HTML page from ${source} instead of JSON. Reconnect the Matterhorn Work server from Profile & Settings, then refresh this desk.`,
+      );
+    }
     throw new Error(
       `Matterhorn API returned non-JSON from ${source}${path}: ${preview}. Check the local Matterhorn server connection.`,
     );
@@ -2070,7 +2076,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <div>
                   <div className="text-sm font-semibold text-dls-text">All Bittensor subnets</div>
                   <div className="mt-0.5 text-xs text-dls-secondary">
-                    {filteredSubnets.length} shown from {subnets.length || "fallback"} subnets. Select a row to inspect utility, source, and next actions.
+                    Dynamic subnet list from the Matterhorn Bittensor API. {filteredSubnets.length} shown from {subnets.length || "0"} loaded subnets.
                   </div>
                 </div>
                 <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={loadSubnets} disabled={loading}>
@@ -2090,6 +2096,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </label>
               {loading ? (
                 <LoadingLabel label="Loading subnets" />
+              ) : error && subnets.length === 0 ? (
+                <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Subnet list unavailable">
+                  The subnet browser is live-data backed, not hardcoded. Reconnect the Matterhorn Work server or refresh this desk, then the full subnet list will appear here with search by netuid, name, symbol, category, or utility.
+                </Notice>
               ) : filteredSubnets.length === 0 ? (
                 <Notice tone="info" icon={<Search className="size-4" />} title="No matching subnets">
                   Clear the search or try a category like image, data, inference, validator, or compute.
