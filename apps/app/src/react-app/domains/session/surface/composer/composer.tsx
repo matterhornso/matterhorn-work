@@ -866,14 +866,14 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   const panelRoundedClass =
     mentionOpen || slashOpen
-      ? "rounded-t-[14px]"
+      ? "rounded-t-lg"
       : "";
 
   const renderSlashMenu = () => {
     if (!slashOpen) return null;
     return (
-      <div className="absolute bottom-full left-[-1px] right-[-1px] z-30">
-          <div className="overflow-hidden rounded-t-xl bg-dls-surface shadow-[0_10px_28px_rgba(0,0,0,0.20)] ring-1 ring-dls-border/35">
+      <div className="absolute bottom-full left-0 right-0 z-30">
+          <div className="overflow-hidden rounded-t-lg bg-dls-surface/98 shadow-[0_8px_22px_rgba(0,0,0,0.14)] ring-1 ring-dls-border/20">
             <div
               role="presentation"
               className="max-h-64 overflow-y-auto p-2"
@@ -904,7 +904,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                       <div className="flex items-center justify-between gap-3">
                         <div className="truncate text-xs font-semibold">/{command.name}</div>
                         {command.source && command.source !== "command" ? (
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${command.source === "skill" ? "bg-violet-3/40 text-violet-11" : "bg-cyan-3/40 text-cyan-11"}`}>
+                          <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${command.source === "skill" ? "bg-violet-3/40 text-violet-11" : "bg-cyan-3/40 text-cyan-11"}`}>
                             {command.source === "skill" ? t("composer.skill_source") : t("composer.mcps_label")}
                           </span>
                         ) : null}
@@ -928,8 +928,8 @@ export function ReactSessionComposer(props: ComposerProps) {
   const renderMentionMenu = () => {
     if (!mentionOpen || mentionFiltered.length === 0) return null;
     return (
-      <div className="absolute bottom-full left-[-1px] right-[-1px] z-30">
-          <div className="overflow-hidden rounded-t-xl bg-dls-surface shadow-[0_10px_28px_rgba(0,0,0,0.20)] ring-1 ring-dls-border/35">
+      <div className="absolute bottom-full left-0 right-0 z-30">
+          <div className="overflow-hidden rounded-t-lg bg-dls-surface/98 shadow-[0_8px_22px_rgba(0,0,0,0.14)] ring-1 ring-dls-border/20">
             <div
               role="presentation"
               className="max-h-64 overflow-y-auto p-2"
@@ -988,7 +988,7 @@ export function ReactSessionComposer(props: ComposerProps) {
       <div className="max-w-[800px] mx-auto">
         {/* Main composer panel */}
         <div
-          className={`relative overflow-visible rounded-xl bg-dls-surface/96 shadow-[0_12px_32px_rgba(0,0,0,0.18)] ring-1 ring-dls-border/35 transition-all ${panelRoundedClass}`}
+          className={`relative overflow-visible rounded-lg bg-dls-surface/96 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.14)] ring-1 ring-dls-border/18 transition-all ${panelRoundedClass}`}
         >
           {props.topAccessory ? <div className="relative z-10">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
@@ -999,9 +999,9 @@ export function ReactSessionComposer(props: ComposerProps) {
           {props.attachments.length > 0 ? (
             <div className="mx-5 mt-5 flex flex-wrap gap-2 md:mx-6">
               {props.attachments.map((attachment) => (
-                <div key={attachment.id} className="flex items-center gap-2 rounded-2xl border border-gray-6 bg-gray-2 px-3 py-2 text-xs text-gray-10">
+                <div key={attachment.id} className="flex items-center gap-2 rounded-lg bg-gray-2/80 px-3 py-2 text-xs text-gray-10 ring-1 ring-gray-6/45">
                   {isImageAttachment(attachment) && attachment.previewUrl ? (
-                    <div className="h-10 w-10 overflow-hidden rounded-xl border border-gray-6 bg-gray-1">
+                    <div className="h-10 w-10 overflow-hidden rounded-md bg-gray-1 ring-1 ring-gray-6/45">
                       <img src={attachment.previewUrl} alt={attachment.name} decoding="async" className="h-full w-full object-cover" />
                     </div>
                   ) : (
@@ -1017,7 +1017,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   </div>
                   <button
                     type="button"
-                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
+                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 hover:text-gray-12"
                     onClick={() => props.onRemoveAttachment(attachment.id)}
                     title={t("action.remove")}
                   >
@@ -1037,8 +1037,8 @@ export function ReactSessionComposer(props: ComposerProps) {
           */}
 
           {dropzoneActive ? (
-            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-xl border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
-              <div className="rounded-xl bg-dls-surface/95 px-5 py-4 text-center shadow-[0_8px_22px_rgba(0,0,0,0.16)] backdrop-blur-sm">
+            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-lg border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
+              <div className="rounded-lg bg-dls-surface/95 px-5 py-4 text-center shadow-[0_8px_22px_rgba(0,0,0,0.14)] backdrop-blur-sm">
                 <div className="text-sm font-medium text-dls-text">{t("composer.attach_files")}</div>
                 <div className="mt-1 text-xs text-dls-secondary">{t("composer.any_file_type_supported")}</div>
               </div>
@@ -1184,7 +1184,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     <Plug size={16} />
                   </button>
                   {toolMenuOpen ? (
-                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-[22px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                    <div className="absolute bottom-full left-0 z-40 mb-3 w-[min(calc(100vw-2.5rem),34rem)] overflow-hidden rounded-xl bg-dls-surface/98 shadow-[0_18px_42px_rgba(0,0,0,0.22)] ring-1 ring-dls-border/25">
                       <div className="grid grid-cols-[152px_minmax(0,1fr)] sm:grid-cols-[176px_minmax(0,1fr)]">
                         <div className="border-r border-dls-border bg-gray-2/30 p-2">
                           {([
@@ -1196,7 +1196,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                             <button
                               key={section}
                               type="button"
-                              className={`mb-1 flex w-full items-center justify-between rounded-[16px] px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
+                              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
                               onClick={() => setToolMenuSection(section)}
                             >
                               <span className="truncate">{label}</span>
@@ -1208,7 +1208,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                             <button
                               key={plugin.pluginId}
                               type="button"
-                              className={`mb-1 flex w-full items-center justify-between rounded-[16px] px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
+                              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${toolMenuSection === section ? "bg-gray-3 text-gray-12" : "text-gray-11 hover:bg-gray-2"}`}
                               onClick={() => setToolMenuSection(section)}
                             >
                               <span className="truncate">{plugin.name}</span>
@@ -1220,7 +1220,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                           <div className="mb-2 flex justify-end border-b border-dls-border px-1 pb-2">
                             <button
                               type="button"
-                              className="inline-flex items-center gap-1.5 rounded-full border border-dls-border px-3 py-1.5 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-2"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-gray-2/70 px-3 py-1.5 text-[12px] font-medium text-gray-11 transition-colors hover:bg-gray-3"
                               onClick={() => {
                                 setToolMenuOpen(false);
                                 openToolMenuSettings();
@@ -1237,7 +1237,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={command.id}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Terminal size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1261,7 +1261,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={command.id}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyCommandSelection(command)}
                                   >
                                     <Zap size={14} className="mt-0.5 shrink-0 text-gray-9" />
@@ -1282,12 +1282,12 @@ export function ReactSessionComposer(props: ComposerProps) {
                             activeMcpItems.length > 0 ? (
                               <div className="grid gap-1">
                                 {activeMcpItems.map(({ entry, status }) => (
-                                  <div key={entry.name} className="flex items-start gap-3 rounded-[16px] px-3 py-2.5 text-gray-11">
+                                  <div key={entry.name} className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-gray-11">
                                     <Plug size={14} className="mt-0.5 shrink-0 text-gray-9" />
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="truncate text-xs font-semibold text-gray-11">{entry.name}</div>
-                                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${mcpStatusBadgeClass(status)}`}>
+                                        <span className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium ${mcpStatusBadgeClass(status)}`}>
                                           {formatMcpStatusLabel(status)}
                                         </span>
                                       </div>
@@ -1309,7 +1309,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={entry.id ?? entry.serverName ?? entry.name}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyExtensionSelection(entry)}
                                   >
                                     <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-white shadow-sm">
@@ -1319,7 +1319,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="truncate text-xs font-semibold text-gray-11">{entry.name}</div>
                                         {entry.defaultEnabled ? (
-                                          <span className="shrink-0 rounded-full bg-green-3 px-2 py-0.5 text-[10px] font-medium text-green-11">Enabled</span>
+                                          <span className="shrink-0 rounded-md bg-green-3 px-2 py-0.5 text-[10px] font-medium text-green-11">Enabled</span>
                                         ) : null}
                                       </div>
                                       <div className="truncate text-xs text-gray-10">{entry.description}</div>
@@ -1338,14 +1338,14 @@ export function ReactSessionComposer(props: ComposerProps) {
                                   <button
                                     key={`${file.configObjectId}:${file.path}`}
                                     type="button"
-                                    className="flex w-full items-start gap-3 rounded-[16px] px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
+                                    className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-gray-11 transition-colors hover:bg-gray-2/70"
                                     onClick={() => applyPluginFileSelection(file)}
                                   >
                                     <FileText size={14} className="mt-0.5 shrink-0 text-gray-9" />
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="truncate text-xs font-semibold text-gray-11">{file.title}</div>
-                                        <span className="shrink-0 rounded-full bg-gray-3 px-2 py-0.5 text-[10px] font-medium text-gray-11">
+                                        <span className="shrink-0 rounded-md bg-gray-3 px-2 py-0.5 text-[10px] font-medium text-gray-11">
                                           {formatPluginObjectType(file.objectType)}
                                         </span>
                                       </div>
@@ -1379,7 +1379,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={props.onStop}
-                    className="inline-flex h-9 max-h-9 items-center gap-2 rounded-full bg-gray-12 px-4 text-[13px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
+                    className="inline-flex h-9 max-h-9 items-center gap-2 rounded-md bg-gray-12 px-4 text-[13px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
                     title={t("composer.stop")}
                   >
                     <Square size={12} fill="currentColor" />
@@ -1390,7 +1390,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     type="button"
                     onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
                     disabled={props.disabled || (!canSend && !props.busy)}
-                    className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-full px-4 text-[13px] font-medium transition-colors ${
+                    className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-md px-4 text-[13px] font-medium transition-colors ${
                       !canSend || props.disabled
                         ? "bg-gray-4 text-gray-10"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"

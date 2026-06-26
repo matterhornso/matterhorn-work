@@ -105,8 +105,8 @@ class ComposerMentionNode extends TextNode {
     const dom = document.createElement("span");
     const isFile = this.__kind === "file";
     dom.className = isFile
-      ? "inline-flex items-center rounded-full border border-gray-6 bg-gray-3 px-2.5 py-1 text-xs font-medium text-gray-11"
-      : "inline-flex items-center rounded-full border border-sky-6/35 bg-sky-3/20 px-2.5 py-1 text-xs font-medium text-sky-11";
+      ? "inline-flex items-center rounded-md bg-gray-3 px-2.5 py-1 text-xs font-medium text-gray-11 ring-1 ring-gray-6/45"
+      : "inline-flex items-center rounded-md bg-sky-3/20 px-2.5 py-1 text-xs font-medium text-sky-11 ring-1 ring-sky-6/30";
     dom.textContent = `@${isFile ? this.__value.split(/[\\/]/).pop() || this.__value : this.__value}`;
     dom.contentEditable = "false";
     dom.setAttribute("spellcheck", "false");
@@ -118,8 +118,8 @@ class ComposerMentionNode extends TextNode {
     if (prevNode.__value !== this.__value || prevNode.__kind !== this.__kind) {
       const isFile = this.__kind === "file";
       dom.className = isFile
-        ? "inline-flex items-center rounded-full border border-gray-6 bg-gray-3 px-2.5 py-1 text-xs font-medium text-gray-11"
-        : "inline-flex items-center rounded-full border border-sky-6/35 bg-sky-3/20 px-2.5 py-1 text-xs font-medium text-sky-11";
+        ? "inline-flex items-center rounded-md bg-gray-3 px-2.5 py-1 text-xs font-medium text-gray-11 ring-1 ring-gray-6/45"
+        : "inline-flex items-center rounded-md bg-sky-3/20 px-2.5 py-1 text-xs font-medium text-sky-11 ring-1 ring-sky-6/30";
       dom.textContent = `@${isFile ? this.__value.split(/[\\/]/).pop() || this.__value : this.__value}`;
       dom.title = `@${this.__value}`;
     }
@@ -178,7 +178,7 @@ class ComposerSlashCommandNode extends TextNode {
 
   override createDOM(_config: EditorConfig) {
     const dom = document.createElement("span");
-    dom.className = "inline-flex items-center rounded-full border border-violet-6/35 bg-violet-3/20 px-2.5 py-1 text-xs font-medium text-violet-11";
+    dom.className = "inline-flex items-center rounded-md bg-violet-3/20 px-2.5 py-1 text-xs font-medium text-violet-11 ring-1 ring-violet-6/30";
     dom.textContent = `/${this.__commandName}`;
     dom.contentEditable = "false";
     dom.setAttribute("spellcheck", "false");
@@ -221,7 +221,7 @@ function pastedTextChipLabel(lines: number) {
 
 function createPastedTextChipDom(label: string, lines: number) {
   const dom = document.createElement("span");
-  dom.className = "inline-flex items-center gap-1 rounded-full border border-amber-6/35 bg-amber-3/15 px-2.5 py-1 text-xs font-medium text-amber-11";
+  dom.className = "inline-flex items-center gap-1 rounded-md bg-amber-3/15 px-2.5 py-1 text-xs font-medium text-amber-11 ring-1 ring-amber-6/30";
   dom.contentEditable = "false";
   dom.setAttribute("spellcheck", "false");
   dom.title = `Pasted text · ${label}`;
@@ -231,7 +231,7 @@ function createPastedTextChipDom(label: string, lines: number) {
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-amber-10 transition-colors hover:bg-amber-4 hover:text-amber-12";
+  button.className = "ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md text-amber-10 transition-colors hover:bg-amber-4 hover:text-amber-12";
   button.title = "Expand pasted text";
   button.setAttribute("aria-label", "Expand pasted text");
   button.dataset.pastedExpandLabel = label;
