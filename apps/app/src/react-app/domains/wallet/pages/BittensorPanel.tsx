@@ -676,7 +676,7 @@ function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?
     <span
       aria-label={`${title} mark`}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-md border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]",
+        "inline-flex shrink-0 items-center justify-center rounded-xl bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]",
         compact ? "size-5" : "size-9",
       )}
     >
@@ -1311,7 +1311,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       className="flex h-full min-h-0 flex-col overflow-hidden bg-dls-canvas text-[15px] animate-fade-in"
       style={venueToneStyle(venue)}
     >
-      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
+      <div className="shrink-0 bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <ProtocolMark venue={venue} />
@@ -1333,14 +1333,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Refresh
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface p-1 sm:grid-cols-3">
+        <div className="mb-3 grid grid-cols-1 gap-1 rounded-full bg-dls-background/55 p-1 shadow-[inset_0_0_0_1px_rgba(var(--protocol-desk-rgb),0.08)] sm:grid-cols-3">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
               type="button"
               className={cn(
-                "flex items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-semibold transition-colors",
-                venue === item ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
+                "flex items-center justify-center gap-2 rounded-full px-2 py-2 text-xs font-semibold transition-colors",
+                venue === item ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] shadow-[0_8px_22px_rgba(var(--protocol-desk-rgb),0.18)]" : "text-dls-secondary hover:bg-dls-hover/70 hover:text-dls-text",
               )}
               onClick={() => {
                 setVenue(item);
@@ -1354,15 +1354,15 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-lg border border-[rgba(var(--protocol-desk-rgb),0.30)] bg-[var(--protocol-desk-soft)] p-3.5">
+        <div className="mb-3 rounded-[24px] bg-[radial-gradient(circle_at_12%_0%,rgba(var(--protocol-desk-rgb),0.20),transparent_36%),var(--protocol-desk-soft)] p-3.5 shadow-[0_14px_34px_rgba(0,0,0,0.14)]">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--protocol-desk-accent)]">
             <span>Safety strip</span>
             <span>Protocol manifest</span>
-            <span className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] px-2 py-0.5 text-[9px] text-dls-secondary">
+            <span className="rounded-full bg-dls-surface/55 px-2 py-0.5 text-[9px] text-dls-secondary">
               {activeSafetyBadge}
             </span>
           </div>
-          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
+          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-1.5">
             <Metric label="Can submit" value={activeManifestCanSubmit} compact />
             <Metric label="Live submission" value={activeManifestLiveSubmission} compact />
             <Metric label="External signer" value={activeManifestSigner} compact />
@@ -1384,7 +1384,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           }}
         />
         {venue === "bittensor" ? (
-          <div className="mt-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface p-1 sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-1 gap-1 rounded-full bg-dls-background/55 p-1 shadow-[inset_0_0_0_1px_rgba(var(--protocol-desk-rgb),0.08)] sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1396,8 +1396,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               key={item.key}
               type="button"
               className={cn(
-                "rounded-lg px-2 py-2 text-xs font-medium transition-colors",
-                tab === item.key ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:text-dls-text",
+                "rounded-full px-2 py-2 text-xs font-medium transition-colors",
+                tab === item.key ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] shadow-[0_8px_22px_rgba(var(--protocol-desk-rgb),0.18)]" : "text-dls-secondary hover:bg-dls-hover/60 hover:text-dls-text",
               )}
               onClick={() => setTab(item.key)}
             >
@@ -1419,7 +1419,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] p-3">
+                <div className="rounded-[20px] bg-[var(--protocol-desk-soft)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
@@ -1445,12 +1445,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <button
                     key={item.label}
                     type="button"
-                    className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
+                    className="rounded-[20px] bg-dls-surface/75 px-3 py-2.5 text-left shadow-[0_8px_22px_rgba(0,0,0,0.08)] transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
                     onClick={() => void askAgentForVenuePrompt(item.prompt, { source: `${venue}-standard-action` })}
                   >
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
                     <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">{item.summary}</span>
-                    <span className="mt-2 inline-flex rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] px-2 py-0.5 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
+                    <span className="mt-2 inline-flex rounded-full bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
                       Ask in Chat -&gt;
                     </span>
                   </button>
@@ -1460,7 +1460,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] px-3 py-2.5">
+                <div className="rounded-[20px] bg-[var(--protocol-desk-soft)] px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <p className="text-xs font-semibold text-dls-text">Read-only market context</p>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
                     Preview boundary: show the user what can be read, what context is missing, and why no market action can submit from Matterhorn.
@@ -1498,7 +1498,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] p-3">
+                <div className="rounded-[20px] bg-[var(--protocol-desk-soft)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
@@ -1621,13 +1621,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
                   const copied = copiedCustomerCommand === `monday-beta:${scenario.id}`;
                   return (
-                    <div key={scenario.id} className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5">
+                    <div key={scenario.id} className="rounded-[20px] bg-dls-surface/75 px-3 py-2.5 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-dls-text">{scenario.displayName}</p>
                           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{scenario.targetCustomerPersona}</p>
                         </div>
-                        <span className="rounded-full border border-dls-border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+                        <span className="rounded-full bg-dls-card px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                           {scenario.status === "demo_ready" ? "Demo-ready" : scenario.status === "preview_only" ? "Preview only" : "Planned, not live"}
                         </span>
                       </div>
@@ -1659,13 +1659,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 {MONDAY_BETA_LAUNCH_CHECKLIST.map((item) => {
                   const copied = copiedCustomerCommand === item.commandKey;
                   return (
-                    <div key={item.id} className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5">
+                    <div key={item.id} className="rounded-[20px] bg-dls-surface/75 px-3 py-2.5 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs font-semibold text-dls-text">{item.title}</p>
                           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.proof}</p>
                         </div>
-                        <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.28)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                        <span className="rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-sky-200">
                           {item.owner}
                         </span>
                       </div>
@@ -1688,19 +1688,19 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title="Safety status" icon={<Shield className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Bittensor</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Most complete beta flow. External signer required for actions; Matterhorn never holds keys.
                   </p>
                 </div>
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Hyperliquid</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Preview only, live submission off. Can submit: No.
                   </p>
                 </div>
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Polymarket</p>
                   <p className="mt-1 break-words text-[11px] leading-5 text-dls-secondary">
                     Preview only, compliance checks required. Can submit: No.
@@ -1714,15 +1714,15 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title="Evidence / QA" icon={<Database className="size-4" />}>
               <div className="grid grid-cols-1 gap-2">
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Customer readiness smoke</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm smoke:customer-ready-crypto</code>
                 </div>
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Bittensor beta packet</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">pnpm beta:bittensor:packet</code>
                 </div>
-                <div className="min-w-0 rounded-lg border border-dls-border bg-dls-surface px-3 py-2">
+                <div className="min-w-0 rounded-[18px] bg-dls-surface/75 px-3 py-2 shadow-[0_8px_22px_rgba(0,0,0,0.08)]">
                   <p className="text-xs font-semibold text-dls-text">Market SDK validation evidence</p>
                   <code className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">matterhorn-work crypto sdk-validate-public --mode fixture</code>
                 </div>
@@ -2305,9 +2305,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dls-border bg-dls-card p-4 sm:p-5">
+    <div className="rounded-[24px] bg-[linear-gradient(145deg,rgba(var(--protocol-desk-rgb),0.08),rgba(var(--protocol-desk-rgb),0.025)),var(--dls-card)] p-4 shadow-[0_12px_34px_rgba(0,0,0,0.12)] sm:p-5">
       <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]">{icon}</span>
+        <span className="flex size-8 items-center justify-center rounded-xl bg-[rgba(var(--protocol-desk-rgb),0.16)] text-[var(--protocol-desk-accent)]">{icon}</span>
         {title}
       </div>
       {children}
@@ -2321,28 +2321,25 @@ function BittensorStandardActionList({
   onAction: (item: (typeof BITTENSOR_STANDARD_ACTIONS)[number]) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-dls-border bg-dls-surface">
-      {BITTENSOR_STANDARD_ACTIONS.map((item, index) => (
+    <div className="grid gap-2">
+      {BITTENSOR_STANDARD_ACTIONS.map((item) => (
         <button
           key={item.id}
           type="button"
-          className={cn(
-            "group grid w-full gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]",
-            index > 0 && "border-t border-dls-border",
-          )}
+          className="group grid w-full gap-3 rounded-[20px] bg-dls-surface/70 px-3.5 py-3 text-left shadow-[0_8px_22px_rgba(0,0,0,0.08)] transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]"
           onClick={() => onAction(item)}
         >
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.34)] bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--protocol-desk-accent)]">
+              <span className="rounded-full bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--protocol-desk-accent)]">
                 {item.intent}
               </span>
               <span className="text-sm font-semibold text-dls-text">{item.title}</span>
             </div>
             <div className="mt-1.5 text-xs leading-5 text-dls-secondary">{item.summary}</div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dls-secondary">
-              <span className="rounded-md bg-dls-card px-2 py-1">Outcome: {item.outcome}</span>
-              <span className="rounded-md bg-dls-card px-2 py-1">Safety: {item.safety}</span>
+              <span className="rounded-full bg-dls-card/80 px-2 py-1">Outcome: {item.outcome}</span>
+              <span className="rounded-full bg-dls-card/80 px-2 py-1">Safety: {item.safety}</span>
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
@@ -2372,7 +2369,7 @@ function UnifiedWalletPanel({
     ? (watchAddress.trim() ? shortAddress(watchAddress.trim()) : "Not connected")
     : "Preview-only beta";
   return (
-    <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2.5">
+    <div className="rounded-[22px] bg-dls-surface/75 px-3 py-2.5 shadow-[0_10px_28px_rgba(0,0,0,0.10)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm font-semibold text-dls-text">
@@ -2399,7 +2396,7 @@ function UnifiedWalletPanel({
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("min-w-0 rounded-lg border border-dls-border bg-dls-surface p-3.5", compact && "p-3")}>
+    <div className={cn("min-w-0 rounded-[18px] bg-dls-surface/72 p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]", compact && "p-3")}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-dls-secondary">{label}</div>
       <div className={cn("mt-1.5 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-sm" : "text-xl")}>{value}</div>
     </div>
@@ -2408,10 +2405,10 @@ function Metric({ label, value, compact = false }: { label: string; value: strin
 
 function Notice({ tone, icon, title, children }: { tone: "info" | "warning"; icon: ReactNode; title: string; children: ReactNode }) {
   const classes = tone === "warning"
-    ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
-    : "border-[rgba(var(--protocol-desk-rgb),0.22)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]";
+    ? "bg-amber-500/10 text-amber-200"
+    : "bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]";
   return (
-    <div className={cn("mb-4 flex items-start gap-2 rounded-lg border px-3 py-2.5", classes)}>
+    <div className={cn("mb-4 flex items-start gap-2 rounded-[18px] px-3 py-2.5 shadow-[0_8px_22px_rgba(0,0,0,0.08)]", classes)}>
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div>
         <div className="text-xs font-semibold">{title}</div>
