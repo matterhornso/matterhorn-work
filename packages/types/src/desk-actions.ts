@@ -1,0 +1,807 @@
+// Desk Action Manifest contract for production Desk V2 action surfaces.
+// This file defines every action a user can invoke from a desk launcher or chat thread,
+// including required context, safety boundaries, execution state, prompt templates,
+// MCP tool hints, CLI hints, and result card kinds.
+
+export const DESK_ACTION_EXECUTION_STATES = [
+  "live_read",
+  "preview_only",
+  "external_signer_required",
+  "planned_not_live",
+] as const;
+export type DeskActionExecutionState = (typeof DESK_ACTION_EXECUTION_STATES)[number];
+
+export const DESK_ACTION_CARD_KINDS = [
+  "summary_card",
+  "preview_card",
+  "handoff_card",
+  "watch_card",
+  "receipt_card",
+  "education_card",
+  "settings_card",
+  "empty_card",
+] as const;
+export type DeskActionCardKind = (typeof DESK_ACTION_CARD_KINDS)[number];
+
+export interface DeskActionSafetyBoundary {
+  liveSubmissionEnabled: false;
+  canSubmit: boolean;
+  canRequestSecrets: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+}
+
+export interface DeskActionManifest {
+  version: "matterhorn.desk.action.manifest.v1";
+  id: string;
+  deskId: string;
+  title: string;
+  description: string;
+  requiredContextFields: string[];
+  optionalContextFields: string[];
+  safetyBoundary: DeskActionSafetyBoundary;
+  executionState: DeskActionExecutionState;
+  promptTemplate: string;
+  mcpToolHints?: string[];
+  cliCommandHints?: string[];
+  resultCardKinds: DeskActionCardKind[];
+}
+
+export const DEFAULT_DESK_ACTION_SAFETY_BOUNDARY: DeskActionSafetyBoundary = {
+  liveSubmissionEnabled: false,
+  canSubmit: false,
+  canRequestSecrets: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  allowsRealFunds: false,
+};
+
+// --- Bittensor actions ---
+
+export const BITTENSOR_SHOW_TAO_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_show_tao",
+  deskId: "bittensor",
+  title: "Show my TAO",
+  description: "Display TAO balance and stake overview for a connected SS58 address.",
+  requiredContextFields: ["ss58Address"],
+  optionalContextFields: ["subtensorNetwork"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    canSubmit: false,
+  },
+  executionState: "live_read",
+  promptTemplate: "Show my TAO for {ss58Address}",
+  mcpToolHints: ["bittensor_read_balance"],
+  cliCommandHints: ["matterhorn-work bittensor balance {ss58Address}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const BITTENSOR_WALLET_STAKE_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_wallet_stake_read",
+  deskId: "bittensor",
+  title: "Where am I staked?",
+  description: "List current delegations and stake allocations across subnets.",
+  requiredContextFields: ["ss58Address"],
+  optionalContextFields: ["subnetId"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    canSubmit: false,
+  },
+  executionState: "live_read",
+  promptTemplate: "Where is {ss58Address} staked?",
+  mcpToolHints: ["bittensor_read_stake"],
+  cliCommandHints: ["matterhorn-work bittensor stake {ss58Address}"],
+  resultCardKinds: ["summary_card", "watch_card"],
+};
+
+export const BITTENSOR_DISCOVER_SUBNETS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_discover_subnets",
+  deskId: "bittensor",
+  title: "Discover subnets",
+  description: "Explore Bittensor subnets, their emissions, and recent activity.",
+  requiredContextFields: [],
+  optionalContextFields: ["subnetId", "sortBy"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show Bittensor subnets",
+  mcpToolHints: ["bittensor_list_subnets"],
+  cliCommandHints: ["matterhorn-work bittensor subnets"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const BITTENSOR_COMPARE_VALIDATORS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_compare_validators",
+  deskId: "bittensor",
+  title: "Compare validators",
+  description: "Compare validator performance, take, and stake on a subnet.",
+  requiredContextFields: ["subnetId"],
+  optionalContextFields: ["validatorHotkeys", "minStake"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Compare validators on subnet {subnetId}",
+  mcpToolHints: ["bittensor_compare_validators"],
+  cliCommandHints: ["matterhorn-work bittensor validators --subnet {subnetId}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const BITTENSOR_PREPARE_STAKE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_prepare_stake",
+  deskId: "bittensor",
+  title: "Prepare stake handoff",
+  description: "Build an external-signer handoff to stake TAO with a validator. Matterhorn never holds the key.",
+  requiredContextFields: ["ss58Address", "amount", "validatorHotkey"],
+  optionalContextFields: ["subnetId"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    requiresExternalSigner: true,
+  },
+  executionState: "external_signer_required",
+  promptTemplate: "Prepare staking {amount} TAO with {validatorHotkey}",
+  mcpToolHints: ["bittensor_prepare_stake_handoff"],
+  cliCommandHints: ["matterhorn-work bittensor stake-handoff --amount {amount} --validator {validatorHotkey}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const BITTENSOR_PREPARE_UNSTAKE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_prepare_unstake",
+  deskId: "bittensor",
+  title: "Prepare unstake handoff",
+  description: "Build an external-signer handoff to unstake TAO. Matterhorn never holds the key.",
+  requiredContextFields: ["ss58Address", "amount", "validatorHotkey"],
+  optionalContextFields: ["subnetId"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    requiresExternalSigner: true,
+  },
+  executionState: "external_signer_required",
+  promptTemplate: "Prepare unstaking {amount} TAO from {validatorHotkey}",
+  mcpToolHints: ["bittensor_prepare_unstake_handoff"],
+  cliCommandHints: ["matterhorn-work bittensor unstake-handoff --amount {amount} --validator {validatorHotkey}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const BITTENSOR_PREPARE_TRANSFER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_prepare_transfer",
+  deskId: "bittensor",
+  title: "Prepare transfer handoff",
+  description: "Build an external-signer handoff to transfer TAO. Matterhorn never holds the key.",
+  requiredContextFields: ["fromSs58Address", "toSs58Address", "amount"],
+  optionalContextFields: ["memo"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    requiresExternalSigner: true,
+  },
+  executionState: "external_signer_required",
+  promptTemplate: "Prepare transferring {amount} TAO to {toSs58Address}",
+  mcpToolHints: ["bittensor_prepare_transfer_handoff"],
+  cliCommandHints: ["matterhorn-work bittensor transfer-handoff --to {toSs58Address} --amount {amount}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const BITTENSOR_CREATE_WATCH_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_create_watch",
+  deskId: "bittensor",
+  title: "Watch subnet or validator",
+  description: "Create a watchlist entry for subnet emissions or validator changes.",
+  requiredContextFields: ["watchType", "targetId"],
+  optionalContextFields: ["threshold"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Watch {watchType} {targetId}",
+  mcpToolHints: ["bittensor_create_watch"],
+  cliCommandHints: ["matterhorn-work bittensor watch --type {watchType} --target {targetId}"],
+  resultCardKinds: ["watch_card"],
+};
+
+export const BITTENSOR_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_import_receipt",
+  deskId: "bittensor",
+  title: "Import receipt",
+  description: "Import a public transaction receipt to update memory and watchlists.",
+  requiredContextFields: ["receipt"],
+  optionalContextFields: ["label"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Import this Bittensor receipt",
+  mcpToolHints: ["bittensor_import_receipt"],
+  cliCommandHints: ["matterhorn-work bittensor receipt"],
+  resultCardKinds: ["receipt_card"],
+};
+
+export const BITTENSOR_EXPLAIN_KEYS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "bittensor_explain_keys",
+  deskId: "bittensor",
+  title: "Explain coldkey vs hotkey",
+  description: "Educational explanation of SS58 coldkeys, hotkeys, and why Matterhorn never asks for them.",
+  requiredContextFields: [],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Explain coldkey and hotkey in Bittensor",
+  mcpToolHints: [],
+  cliCommandHints: [],
+  resultCardKinds: ["education_card"],
+};
+
+// --- Hyperliquid actions ---
+
+export const HYPERLIQUID_MARKET_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_market_read",
+  deskId: "hyperliquid",
+  title: "Read market",
+  description: "Read a Hyperliquid perp market summary including mark price and funding.",
+  requiredContextFields: ["symbol"],
+  optionalContextFields: ["interval"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show {symbol} on Hyperliquid",
+  mcpToolHints: ["hyperliquid_read_market"],
+  cliCommandHints: ["matterhorn-work hyperliquid market {symbol}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const HYPERLIQUID_ORDERBOOK_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_orderbook_read",
+  deskId: "hyperliquid",
+  title: "Show orderbook",
+  description: "Display the Hyperliquid orderbook for a symbol.",
+  requiredContextFields: ["symbol"],
+  optionalContextFields: ["depth"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show {symbol} orderbook on Hyperliquid",
+  mcpToolHints: ["hyperliquid_read_orderbook"],
+  cliCommandHints: ["matterhorn-work hyperliquid orderbook {symbol}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const HYPERLIQUID_ACCOUNT_EXPOSURE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_account_exposure",
+  deskId: "hyperliquid",
+  title: "Show exposure",
+  description: "Show open positions, margin, and account exposure for a public EVM address.",
+  requiredContextFields: ["evmAddress"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show my Hyperliquid exposure for {evmAddress}",
+  mcpToolHints: ["hyperliquid_read_exposure"],
+  cliCommandHints: ["matterhorn-work hyperliquid exposure {evmAddress}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const HYPERLIQUID_FUNDING_READ_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_funding_read",
+  deskId: "hyperliquid",
+  title: "Show funding",
+  description: "Display current and predicted funding rates for Hyperliquid perps.",
+  requiredContextFields: ["symbol"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show {symbol} funding on Hyperliquid",
+  mcpToolHints: ["hyperliquid_read_funding"],
+  cliCommandHints: ["matterhorn-work hyperliquid funding {symbol}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const HYPERLIQUID_OPEN_ORDERS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_open_orders",
+  deskId: "hyperliquid",
+  title: "Show open orders",
+  description: "List open orders for a public EVM address.",
+  requiredContextFields: ["evmAddress"],
+  optionalContextFields: ["symbol"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show open orders for {evmAddress} on Hyperliquid",
+  mcpToolHints: ["hyperliquid_read_open_orders"],
+  cliCommandHints: ["matterhorn-work hyperliquid orders {evmAddress}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const HYPERLIQUID_PREVIEW_ORDER_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_preview_order",
+  deskId: "hyperliquid",
+  title: "Preview order",
+  description: "Preview a Hyperliquid order without submitting it.",
+  requiredContextFields: ["symbol", "side", "size"],
+  optionalContextFields: ["price", "orderType"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "preview_only",
+  promptTemplate: "Preview a {side} {size} {symbol} order on Hyperliquid",
+  mcpToolHints: ["hyperliquid_preview_order"],
+  cliCommandHints: ["matterhorn-work hyperliquid preview-order --symbol {symbol} --side {side} --size {size}"],
+  resultCardKinds: ["preview_card"],
+};
+
+export const HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_external_signer_handoff",
+  deskId: "hyperliquid",
+  title: "Prepare handoff",
+  description: "Build an external-signer handoff for a Hyperliquid order. Matterhorn never signs or submits.",
+  requiredContextFields: ["evmAddress", "symbol", "side", "size"],
+  optionalContextFields: ["price", "orderType"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    requiresExternalSigner: true,
+  },
+  executionState: "external_signer_required",
+  promptTemplate: "Prepare a {side} {size} {symbol} handoff on Hyperliquid",
+  mcpToolHints: ["hyperliquid_prepare_handoff"],
+  cliCommandHints: ["matterhorn-work hyperliquid handoff --symbol {symbol} --side {side} --size {size}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const HYPERLIQUID_CREATE_WATCH_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_create_watch",
+  deskId: "hyperliquid",
+  title: "Watch market",
+  description: "Add a Hyperliquid market or funding rate to the watchlist.",
+  requiredContextFields: ["symbol"],
+  optionalContextFields: ["threshold"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Watch {symbol} on Hyperliquid",
+  mcpToolHints: ["hyperliquid_create_watch"],
+  cliCommandHints: ["matterhorn-work hyperliquid watch {symbol}"],
+  resultCardKinds: ["watch_card"],
+};
+
+export const HYPERLIQUID_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "hyperliquid_import_receipt",
+  deskId: "hyperliquid",
+  title: "Import receipt",
+  description: "Import a public Hyperliquid receipt to update memory.",
+  requiredContextFields: ["receipt"],
+  optionalContextFields: ["label"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Import this Hyperliquid receipt",
+  mcpToolHints: ["hyperliquid_import_receipt"],
+  cliCommandHints: ["matterhorn-work hyperliquid receipt"],
+  resultCardKinds: ["receipt_card"],
+};
+
+// --- Polymarket actions ---
+
+export const POLYMARKET_MARKET_DISCOVERY_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_market_discovery",
+  deskId: "polymarket",
+  title: "Discover markets",
+  description: "Search and filter Polymarket prediction markets.",
+  requiredContextFields: [],
+  optionalContextFields: ["query", "category", "volumeMin"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Find Polymarket markets about {query}",
+  mcpToolHints: ["polymarket_search_markets"],
+  cliCommandHints: ["matterhorn-work polymarket search {query}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const POLYMARKET_OUTCOME_PROBABILITIES_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_outcome_probabilities",
+  deskId: "polymarket",
+  title: "Outcome probabilities",
+  description: "Show current outcome probabilities and price history for a market.",
+  requiredContextFields: ["marketId"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show probabilities for Polymarket market {marketId}",
+  mcpToolHints: ["polymarket_read_probabilities"],
+  cliCommandHints: ["matterhorn-work polymarket probabilities {marketId}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const POLYMARKET_LIQUIDITY_ORDERBOOK_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_liquidity_orderbook",
+  deskId: "polymarket",
+  title: "Show orderbook",
+  description: "Display the Polymarket orderbook and liquidity for a market outcome.",
+  requiredContextFields: ["marketId", "outcomeId"],
+  optionalContextFields: ["depth"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show orderbook for {marketId} outcome {outcomeId}",
+  mcpToolHints: ["polymarket_read_orderbook"],
+  cliCommandHints: ["matterhorn-work polymarket orderbook {marketId} {outcomeId}"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const POLYMARKET_COMPLIANCE_CHECK_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_compliance_check",
+  deskId: "polymarket",
+  title: "Compliance check",
+  description: "Surface jurisdictional restrictions and market eligibility without placing a trade.",
+  requiredContextFields: ["marketId"],
+  optionalContextFields: ["jurisdiction"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "preview_only",
+  promptTemplate: "Check if I can trade Polymarket market {marketId}",
+  mcpToolHints: ["polymarket_compliance_check"],
+  cliCommandHints: ["matterhorn-work polymarket compliance {marketId}"],
+  resultCardKinds: ["preview_card"],
+};
+
+export const POLYMARKET_PREVIEW_TRADE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_preview_trade",
+  deskId: "polymarket",
+  title: "Preview trade",
+  description: "Preview a Polymarket trade without placing it.",
+  requiredContextFields: ["marketId", "outcomeId", "amount"],
+  optionalContextFields: ["side"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "preview_only",
+  promptTemplate: "Preview buying ${amount} of {outcomeId} in {marketId}",
+  mcpToolHints: ["polymarket_preview_trade"],
+  cliCommandHints: ["matterhorn-work polymarket preview-trade --market {marketId} --outcome {outcomeId} --amount {amount}"],
+  resultCardKinds: ["preview_card"],
+};
+
+export const POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_external_signer_handoff",
+  deskId: "polymarket",
+  title: "Prepare handoff",
+  description: "Build an external-signer handoff for a Polymarket trade. Matterhorn never signs or submits.",
+  requiredContextFields: ["evmAddress", "marketId", "outcomeId", "amount"],
+  optionalContextFields: ["side"],
+  safetyBoundary: {
+    ...DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+    requiresExternalSigner: true,
+  },
+  executionState: "external_signer_required",
+  promptTemplate: "Prepare a handoff to buy ${amount} of {outcomeId} in {marketId}",
+  mcpToolHints: ["polymarket_prepare_handoff"],
+  cliCommandHints: ["matterhorn-work polymarket handoff --market {marketId} --outcome {outcomeId} --amount {amount}"],
+  resultCardKinds: ["preview_card", "handoff_card"],
+};
+
+export const POLYMARKET_CREATE_WATCH_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_create_watch",
+  deskId: "polymarket",
+  title: "Watch market",
+  description: "Add a Polymarket market to the watchlist.",
+  requiredContextFields: ["marketId"],
+  optionalContextFields: ["threshold"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Watch Polymarket market {marketId}",
+  mcpToolHints: ["polymarket_create_watch"],
+  cliCommandHints: ["matterhorn-work polymarket watch {marketId}"],
+  resultCardKinds: ["watch_card"],
+};
+
+export const POLYMARKET_IMPORT_RECEIPT_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "polymarket_import_receipt",
+  deskId: "polymarket",
+  title: "Import receipt",
+  description: "Import a public Polymarket receipt to update memory.",
+  requiredContextFields: ["receipt"],
+  optionalContextFields: ["label"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Import this Polymarket receipt",
+  mcpToolHints: ["polymarket_import_receipt"],
+  cliCommandHints: ["matterhorn-work polymarket receipt"],
+  resultCardKinds: ["receipt_card"],
+};
+
+// --- Wellness actions ---
+
+export const WELLNESS_BUILD_PROGRAM_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "wellness_build_program",
+  deskId: "wellness",
+  title: "Build program",
+  description: "Generate an educational, non-medical wellness program from a goal and audience.",
+  requiredContextFields: ["goal", "audience"],
+  optionalContextFields: ["durationWeeks", "format"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Build a {durationWeeks}-week {goal} program for {audience}",
+  mcpToolHints: ["wellness_build_program"],
+  cliCommandHints: ["matterhorn-work wellness build --goal {goal} --audience {audience}"],
+  resultCardKinds: ["education_card"],
+};
+
+export const WELLNESS_GENERATE_ARTIFACTS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "wellness_generate_artifacts",
+  deskId: "wellness",
+  title: "Generate artifacts",
+  description: "Create intake forms, schedules, and education packets for a wellness program.",
+  requiredContextFields: ["programId"],
+  optionalContextFields: ["artifactTypes"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Generate artifacts for program {programId}",
+  mcpToolHints: ["wellness_generate_artifacts"],
+  cliCommandHints: ["matterhorn-work wellness artifacts {programId}"],
+  resultCardKinds: ["education_card"],
+};
+
+export const WELLNESS_PACKAGE_SERVICE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "wellness_package_service",
+  deskId: "wellness",
+  title: "Package service",
+  description: "Package a program into a client-facing service offer. No live payments or hosting.",
+  requiredContextFields: ["programId"],
+  optionalContextFields: ["price", "currency"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Package program {programId} as a service",
+  mcpToolHints: ["wellness_package_service"],
+  cliCommandHints: ["matterhorn-work wellness package {programId}"],
+  resultCardKinds: ["summary_card", "education_card"],
+};
+
+export const WELLNESS_PLAN_LIVE_SERVICE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "wellness_plan_live_service",
+  deskId: "wellness",
+  title: "Plan live service",
+  description: "Plan future live payments, email, hosting, or access integrations. Not available today.",
+  requiredContextFields: [],
+  optionalContextFields: ["serviceType"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "planned_not_live",
+  promptTemplate: "Plan future {serviceType} integration for my wellness service",
+  mcpToolHints: [],
+  cliCommandHints: [],
+  resultCardKinds: ["preview_card"],
+};
+
+// --- Memory actions ---
+
+export const MEMORY_REVIEW_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "memory_review",
+  deskId: "memory",
+  title: "Review memory",
+  description: "Inspect saved memory records across desks.",
+  requiredContextFields: [],
+  optionalContextFields: ["deskId", "kind", "query"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show my memory",
+  mcpToolHints: ["memory_review"],
+  cliCommandHints: ["matterhorn-work memory list"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const MEMORY_MANAGE_SUGGESTIONS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "memory_manage_suggestions",
+  deskId: "memory",
+  title: "Manage suggestions",
+  description: "Confirm, edit, or dismiss pending memory suggestions.",
+  requiredContextFields: [],
+  optionalContextFields: ["status"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Show my memory suggestions",
+  mcpToolHints: ["memory_manage_suggestions"],
+  cliCommandHints: ["matterhorn-work memory suggestions"],
+  resultCardKinds: ["summary_card", "settings_card"],
+};
+
+export const MEMORY_FORGET_RECORD_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "memory_forget_record",
+  deskId: "memory",
+  title: "Forget record",
+  description: "Permanently delete a memory record.",
+  requiredContextFields: ["recordId"],
+  optionalContextFields: [],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Forget memory record {recordId}",
+  mcpToolHints: ["memory_forget_record"],
+  cliCommandHints: ["matterhorn-work memory forget {recordId}"],
+  resultCardKinds: ["settings_card"],
+};
+
+export const MEMORY_EXPORT_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "memory_export",
+  deskId: "memory",
+  title: "Export memory",
+  description: "Export memory records for backup or portability. Secrets and clinical records are excluded.",
+  requiredContextFields: [],
+  optionalContextFields: ["deskId", "format"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "live_read",
+  promptTemplate: "Export my memory",
+  mcpToolHints: ["memory_export"],
+  cliCommandHints: ["matterhorn-work memory export"],
+  resultCardKinds: ["summary_card"],
+};
+
+// --- MCPs actions ---
+
+export const MCPS_BROWSE_TOOLS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "mcps_browse_tools",
+  deskId: "mcps",
+  title: "Browse tools",
+  description: "Browse available MCP tools and their required permissions.",
+  requiredContextFields: [],
+  optionalContextFields: ["category"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "planned_not_live",
+  promptTemplate: "Browse MCP tools",
+  mcpToolHints: [],
+  cliCommandHints: ["matterhorn-work mcps browse"],
+  resultCardKinds: ["summary_card"],
+};
+
+export const MCPS_INSTALL_TOOL_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "mcps_install_tool",
+  deskId: "mcps",
+  title: "Install tool",
+  description: "Install an approved MCP tool. No secrets, signing, or holding of credentials.",
+  requiredContextFields: ["toolId"],
+  optionalContextFields: ["version"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "planned_not_live",
+  promptTemplate: "Install MCP tool {toolId}",
+  mcpToolHints: [],
+  cliCommandHints: ["matterhorn-work mcps install {toolId}"],
+  resultCardKinds: ["settings_card"],
+};
+
+export const MCPS_MANAGE_PERMISSIONS_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "mcps_manage_permissions",
+  deskId: "mcps",
+  title: "Manage permissions",
+  description: "Review and revoke MCP tool permissions and memory access.",
+  requiredContextFields: [],
+  optionalContextFields: ["toolId"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "planned_not_live",
+  promptTemplate: "Show my MCP permissions",
+  mcpToolHints: [],
+  cliCommandHints: ["matterhorn-work mcps permissions"],
+  resultCardKinds: ["settings_card"],
+};
+
+export const MCPS_VIEW_USAGE_GUIDE_ACTION: DeskActionManifest = {
+  version: "matterhorn.desk.action.manifest.v1",
+  id: "mcps_view_usage_guide",
+  deskId: "mcps",
+  title: "Usage guide",
+  description: "View install and use guidance for MCP tools. No live execution.",
+  requiredContextFields: [],
+  optionalContextFields: ["toolId"],
+  safetyBoundary: DEFAULT_DESK_ACTION_SAFETY_BOUNDARY,
+  executionState: "planned_not_live",
+  promptTemplate: "How do MCP tools work in Matterhorn?",
+  mcpToolHints: [],
+  cliCommandHints: [],
+  resultCardKinds: ["education_card"],
+};
+
+// --- Registries ---
+
+export const BITTENSOR_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  bittensor_show_tao: BITTENSOR_SHOW_TAO_ACTION,
+  bittensor_wallet_stake_read: BITTENSOR_WALLET_STAKE_READ_ACTION,
+  bittensor_discover_subnets: BITTENSOR_DISCOVER_SUBNETS_ACTION,
+  bittensor_compare_validators: BITTENSOR_COMPARE_VALIDATORS_ACTION,
+  bittensor_prepare_stake: BITTENSOR_PREPARE_STAKE_ACTION,
+  bittensor_prepare_unstake: BITTENSOR_PREPARE_UNSTAKE_ACTION,
+  bittensor_prepare_transfer: BITTENSOR_PREPARE_TRANSFER_ACTION,
+  bittensor_create_watch: BITTENSOR_CREATE_WATCH_ACTION,
+  bittensor_import_receipt: BITTENSOR_IMPORT_RECEIPT_ACTION,
+  bittensor_explain_keys: BITTENSOR_EXPLAIN_KEYS_ACTION,
+};
+
+export const HYPERLIQUID_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  hyperliquid_market_read: HYPERLIQUID_MARKET_READ_ACTION,
+  hyperliquid_orderbook_read: HYPERLIQUID_ORDERBOOK_READ_ACTION,
+  hyperliquid_account_exposure: HYPERLIQUID_ACCOUNT_EXPOSURE_ACTION,
+  hyperliquid_funding_read: HYPERLIQUID_FUNDING_READ_ACTION,
+  hyperliquid_open_orders: HYPERLIQUID_OPEN_ORDERS_ACTION,
+  hyperliquid_preview_order: HYPERLIQUID_PREVIEW_ORDER_ACTION,
+  hyperliquid_external_signer_handoff: HYPERLIQUID_EXTERNAL_SIGNER_HANDOFF_ACTION,
+  hyperliquid_create_watch: HYPERLIQUID_CREATE_WATCH_ACTION,
+  hyperliquid_import_receipt: HYPERLIQUID_IMPORT_RECEIPT_ACTION,
+};
+
+export const POLYMARKET_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  polymarket_market_discovery: POLYMARKET_MARKET_DISCOVERY_ACTION,
+  polymarket_outcome_probabilities: POLYMARKET_OUTCOME_PROBABILITIES_ACTION,
+  polymarket_liquidity_orderbook: POLYMARKET_LIQUIDITY_ORDERBOOK_ACTION,
+  polymarket_compliance_check: POLYMARKET_COMPLIANCE_CHECK_ACTION,
+  polymarket_preview_trade: POLYMARKET_PREVIEW_TRADE_ACTION,
+  polymarket_external_signer_handoff: POLYMARKET_EXTERNAL_SIGNER_HANDOFF_ACTION,
+  polymarket_create_watch: POLYMARKET_CREATE_WATCH_ACTION,
+  polymarket_import_receipt: POLYMARKET_IMPORT_RECEIPT_ACTION,
+};
+
+export const WELLNESS_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  wellness_build_program: WELLNESS_BUILD_PROGRAM_ACTION,
+  wellness_generate_artifacts: WELLNESS_GENERATE_ARTIFACTS_ACTION,
+  wellness_package_service: WELLNESS_PACKAGE_SERVICE_ACTION,
+  wellness_plan_live_service: WELLNESS_PLAN_LIVE_SERVICE_ACTION,
+};
+
+export const MEMORY_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  memory_review: MEMORY_REVIEW_ACTION,
+  memory_manage_suggestions: MEMORY_MANAGE_SUGGESTIONS_ACTION,
+  memory_forget_record: MEMORY_FORGET_RECORD_ACTION,
+  memory_export: MEMORY_EXPORT_ACTION,
+};
+
+export const MCPS_DESK_ACTION_REGISTRY: Record<string, DeskActionManifest> = {
+  mcps_browse_tools: MCPS_BROWSE_TOOLS_ACTION,
+  mcps_install_tool: MCPS_INSTALL_TOOL_ACTION,
+  mcps_manage_permissions: MCPS_MANAGE_PERMISSIONS_ACTION,
+  mcps_view_usage_guide: MCPS_VIEW_USAGE_GUIDE_ACTION,
+};
+
+export const DESK_ACTION_REGISTRY: Record<string, Record<string, DeskActionManifest>> = {
+  bittensor: BITTENSOR_DESK_ACTION_REGISTRY,
+  hyperliquid: HYPERLIQUID_DESK_ACTION_REGISTRY,
+  polymarket: POLYMARKET_DESK_ACTION_REGISTRY,
+  wellness: WELLNESS_DESK_ACTION_REGISTRY,
+  memory: MEMORY_DESK_ACTION_REGISTRY,
+  mcps: MCPS_DESK_ACTION_REGISTRY,
+};
+
+export function getDeskActionManifest(deskId: string, actionId: string): DeskActionManifest | undefined {
+  return DESK_ACTION_REGISTRY[deskId]?.[actionId];
+}
+
+export function listDeskActions(deskId: string): DeskActionManifest[] {
+  const registry = DESK_ACTION_REGISTRY[deskId];
+  if (!registry) return [];
+  return Object.values(registry);
+}
+
+export function listAllDeskActionIds(): string[] {
+  return Object.values(DESK_ACTION_REGISTRY).flatMap((registry) => Object.keys(registry));
+}
