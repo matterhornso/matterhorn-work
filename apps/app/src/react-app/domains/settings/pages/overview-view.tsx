@@ -60,9 +60,9 @@ function SettingsCard(props: {
   children?: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3 rounded-2xl border border-dls-border bg-dls-surface p-5">
+    <section className="flex flex-col gap-4 px-3 py-5 first:pt-3 last:pb-3">
       <div className="flex items-start gap-3">
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-background text-dls-text">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
           {props.icon}
         </div>
         <div className="min-w-0">
@@ -71,14 +71,14 @@ function SettingsCard(props: {
         </div>
         {props.status ? <div className="ml-auto shrink-0">{props.status}</div> : null}
       </div>
-      {props.children ? <div className="flex flex-col gap-3">{props.children}</div> : null}
+      {props.children ? <div className="flex flex-col divide-y divide-dls-border/45 pl-12">{props.children}</div> : null}
     </section>
   );
 }
 
 function Row(props: { label: string; value: ReactNode; hint?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-dls-border bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+    <div className="flex flex-col gap-1 px-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="text-sm font-medium text-dls-text">{props.label}</p>
         {props.hint ? <p className="mt-0.5 break-words text-xs leading-5 text-dls-secondary">{props.hint}</p> : null}
@@ -100,7 +100,7 @@ function StatusBadge(props: { children: ReactNode; tone?: "ready" | "setup" | "p
             ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
             : "border-dls-border bg-background text-dls-secondary";
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone}`}>
+    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${tone}`}>
       {props.children}
     </span>
   );
@@ -151,7 +151,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
   ];
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+    <div className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-dls-text">Settings</h1>
         <p className="mt-1 text-sm leading-6 text-dls-secondary">
@@ -159,7 +159,8 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
         </p>
       </header>
 
-      <div className="flex flex-col gap-4">
+      <div className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+        <div className="divide-y divide-dls-border/45">
         {/* 1. Profile */}
         <SettingsCard
           icon={<CircleUser size={18} />}
@@ -246,14 +247,14 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           <p className="text-sm leading-6 text-dls-secondary">
             Matterhorn Work is <span className="font-medium text-dls-text">non-custodial</span>. It never holds your keys, signs silently, or moves funds on your behalf. You stay in control of every on-chain action.
           </p>
-          <ul className="flex list-none flex-col gap-2 text-sm leading-6 text-dls-secondary">
-            <li className="rounded-xl border border-dls-border bg-background px-4 py-3">
+          <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
+            <li className="px-1 py-3">
               <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Work cannot sign or broadcast.
             </li>
-            <li className="rounded-xl border border-dls-border bg-background px-4 py-3">
+            <li className="px-1 py-3">
               <span className="font-medium text-dls-text">Hyperliquid &amp; Polymarket:</span> read and preview only. Live submission is off; Matterhorn Work does not submit live market trades.
             </li>
-            <li className="rounded-xl border border-dls-border bg-background px-4 py-3">
+            <li className="px-1 py-3">
               <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Work never asks for or stores seed phrases, private keys, or API secrets.
             </li>
           </ul>
@@ -342,11 +343,11 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           <p className="text-sm leading-6 text-dls-secondary">
             Your chats, generated artifacts, and on-chain receipts are stored <span className="font-medium text-dls-text">locally on your machine</span> by default.
           </p>
-          <ul className="flex list-none flex-col gap-2 text-sm leading-6 text-dls-secondary">
-            <li className="rounded-xl border border-dls-border bg-background px-4 py-3">
+          <ul className="flex list-none flex-col divide-y divide-dls-border/45 text-sm leading-6 text-dls-secondary">
+            <li className="px-1 py-3">
               <span className="font-medium text-dls-text">Stored locally:</span> chat history, artifacts, and public on-chain receipts/links.
             </li>
-            <li className="rounded-xl border border-dls-border bg-background px-4 py-3">
+            <li className="px-1 py-3">
               <span className="font-medium text-dls-text">Never stored:</span> seed phrases, private keys, API secrets, raw signatures, or wallet exports.
             </li>
           </ul>
@@ -375,6 +376,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
             </a>
           </div>
         </SettingsCard>
+        </div>
       </div>
     </div>
   );
