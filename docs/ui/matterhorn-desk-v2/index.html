@@ -1,0 +1,2520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matterhorn Desk UI V2 — Annotated Visual Spec</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   MATTERHORN DESK UI V2 — ANNOTATED VISUAL SPEC STYLES
+   Brand: #0C0C0C · #D1F2FF · JetBrains Mono · Aeonik-style sans
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Dark mode — V2 surfaces (warmer than flat black) */
+  --v2-bg-base:       #0C0C0C;
+  --v2-bg-surface:     #111111;
+  --v2-bg-elevated:    #1A1A1A;
+  --v2-bg-hover:       #202020;
+  --v2-border-subtle:  #1F1F1F;
+  --v2-border-default: #2A2A2A;
+  --v2-border-strong:  #3A3A3A;
+  --v2-text-primary:   #F0F0F0;
+  --v2-text-secondary: #8A8A8A;
+  --v2-text-tertiary:  #555555;
+  --v2-accent:         #D1F2FF;
+  --v2-accent-dim:     rgba(209,242,255,0.08);
+
+  /* Per-desk accents (dark mode) */
+  --v2-desk-home:        #D1F2FF;
+  --v2-desk-bittensor:   #FF7C43;
+  --v2-desk-hyperliquid: #C084FC;
+  --v2-desk-polymarket:  #FBBF24;
+  --v2-desk-wellness:    #F472B6;
+  --v2-desk-memory:      #67E8F9;
+  --v2-desk-mcp:         #34D399;
+
+  /* Status / confidence */
+  --v2-status-success: #22C55E;
+  --v2-status-warning: #F59E0B;
+  --v2-status-error:   #EF4444;
+  --v2-status-info:    #60A5FA;
+
+  /* Layout */
+  --v2-nav-width:  56px;
+  --v2-rail-width: 260px;
+  --v2-radius:     4px;
+  --v2-font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --v2-font-sans:  'Aeonik', system-ui, -apple-system, sans-serif;
+}
+
+[data-theme="light"] {
+  --v2-bg-base:       #F5F5F5;
+  --v2-bg-surface:     #FFFFFF;
+  --v2-bg-elevated:    #FAFAFA;
+  --v2-bg-hover:       #F0F0F0;
+  --v2-border-subtle:  #EBEBEB;
+  --v2-border-default: #D4D4D4;
+  --v2-border-strong:  #A3A3A3;
+  --v2-text-primary:   #0C0C0C;
+  --v2-text-secondary: #5C5C5C;
+  --v2-text-tertiary:  #9CA3AF;
+  --v2-accent:         #2563EB;
+  --v2-accent-dim:     rgba(37,99,235,0.08);
+  --v2-desk-home:       #2563EB;
+  --v2-desk-bittensor:  #EA580C;
+  --v2-desk-hyperliquid:#7C3AED;
+  --v2-desk-polymarket: #D97706;
+  --v2-desk-wellness:   #DB2777;
+  --v2-desk-memory:     #0891B2;
+  --v2-desk-mcp:        #059669;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--v2-bg-base);
+  color: var(--v2-text-primary);
+  font-family: var(--v2-font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHOWCASE SHELL
+   ═══════════════════════════════════════════════════════════════════ */
+
+.showcase-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: var(--v2-bg-surface);
+  border-bottom: 1px solid var(--v2-border-default);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-wrap: wrap;
+}
+
+.showcase-nav__logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--v2-text-primary);
+  text-decoration: none;
+}
+
+.showcase-nav__logo-mark {
+  width: 20px;
+  height: 20px;
+  background: var(--v2-accent);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #0C0C0C;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.nav-btn {
+  padding: 4px 10px;
+  border-radius: var(--v2-radius);
+  border: 1px solid var(--v2-border-default);
+  background: transparent;
+  color: var(--v2-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--v2-font-sans);
+  transition: background 0.15s, color 0.15s;
+}
+.nav-btn:hover { background: var(--v2-bg-hover); color: var(--v2-text-primary); }
+.nav-btn.active {
+  background: var(--v2-accent-dim);
+  border-color: var(--v2-accent);
+  color: var(--v2-accent);
+}
+.nav-btn--theme {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ANNOTATION SYSTEM
+   ═══════════════════════════════════════════════════════════════════ */
+
+.annotation {
+  position: relative;
+  border-left: 3px solid var(--v2-accent);
+  background: var(--v2-accent-dim);
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: 0 var(--v2-radius) var(--v2-radius) 0;
+}
+
+.annotation__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-accent);
+  margin-bottom: 4px;
+}
+
+.annotation__body {
+  font-size: 13px;
+  color: var(--v2-text-secondary);
+  line-height: 1.5;
+}
+
+.annotation--warning {
+  border-color: var(--v2-status-warning);
+  background: rgba(245,158,11,0.08);
+}
+.annotation--warning .annotation__label { color: var(--v2-status-warning); }
+
+.annotation--danger {
+  border-color: var(--v2-status-error);
+  background: rgba(239,68,68,0.08);
+}
+.annotation--danger .annotation__label { color: var(--v2-status-error); }
+
+.annotation--success {
+  border-color: var(--v2-status-success);
+  background: rgba(34,197,94,0.08);
+}
+.annotation--success .annotation__label { color: var(--v2-status-success); }
+
+.annotation--p1 { border-color: #FF6B6B; background: rgba(255,107,107,0.08); }
+.annotation--p1 .annotation__label { color: #FF6B6B; }
+.annotation--p2 { border-color: #FFB84D; background: rgba(255,184,77,0.08); }
+.annotation--p2 .annotation__label { color: #FFB84D; }
+.annotation--p3 { border-color: #67E8F9; background: rgba(103,232,249,0.08); }
+.annotation--p3 .annotation__label { color: #67E8F9; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCREEN WRAPPER
+   ═══════════════════════════════════════════════════════════════════ */
+
+.screen {
+  display: none;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.screen.active { display: block; }
+
+.screen-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 6px;
+}
+
+.screen-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--v2-text-primary);
+  margin-bottom: 4px;
+}
+
+.screen-subtitle {
+  font-size: 13px;
+  color: var(--v2-text-secondary);
+  margin-bottom: 20px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 32px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--v2-border-subtle);
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+}
+
+.screen-divider {
+  border: none;
+  border-top: 1px solid var(--v2-border-subtle);
+  margin: 32px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PROBLEM ANNOTATION SCREEN (Screen 1)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#screen-problems .problem-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 16px;
+}
+
+.problem-card {
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+}
+
+.problem-card__header {
+  padding: 10px 14px;
+  background: var(--v2-bg-surface);
+  border-bottom: 1px solid var(--v2-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.problem-card__num {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.p1-badge { background: rgba(255,107,107,0.2); color: #FF6B6B; }
+.p2-badge { background: rgba(255,184,77,0.2); color: #FFB84D; }
+.p3-badge { background: rgba(103,232,249,0.2); color: #67E8F9; }
+
+.problem-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+}
+
+.problem-card__body {
+  padding: 12px 14px;
+  background: var(--v2-bg-elevated);
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BEFORE / AFTER SCREEN (Screen 2)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.compare-panel {
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+}
+
+.compare-panel__header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.compare-panel__header--before {
+  background: rgba(239,68,68,0.1);
+  color: var(--v2-status-error);
+  border-bottom: 1px solid rgba(239,68,68,0.2);
+}
+.compare-panel__header--after {
+  background: rgba(34,197,94,0.1);
+  color: var(--v2-status-success);
+  border-bottom: 1px solid rgba(34,197,94,0.2);
+}
+
+.compare-panel__body { padding: 12px; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   V2 LAYOUT DEMO (Screen 3) — Main Desk Architecture
+   ═══════════════════════════════════════════════════════════════════ */
+
+.layout-demo {
+  display: grid;
+  grid-template-columns: var(--v2-nav-width) 1fr var(--v2-rail-width);
+  height: 520px;
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+  background: var(--v2-bg-base);
+}
+
+.layout-demo__nav {
+  background: var(--v2-bg-surface);
+  border-right: 1px solid var(--v2-border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+}
+
+.layout-demo__rail {
+  background: var(--v2-bg-surface);
+  border-left: 1px solid var(--v2-border-subtle);
+  padding: 16px 12px;
+  overflow: hidden;
+}
+
+.nav-item {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--v2-radius);
+  color: var(--v2-text-secondary);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s;
+  font-size: 18px;
+}
+.nav-item:hover { background: var(--v2-bg-hover); color: var(--v2-text-primary); }
+.nav-item.active {
+  background: var(--v2-accent-dim);
+  color: var(--v2-accent);
+}
+.nav-item__tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--v2-text-primary);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+.nav-item:hover .nav-item__tooltip { opacity: 1; }
+.nav-item__divider { width: 24px; height: 1px; background: var(--v2-border-subtle); margin: 4px 0; }
+
+.layout-demo__main {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.desk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.desk-header__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.desk-header__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--v2-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.desk-header__name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--v2-text-primary);
+}
+
+.desk-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Toggle pill */
+.toggle-pill {
+  display: flex;
+  align-items: center;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  border-radius: 20px;
+  padding: 3px;
+  gap: 2px;
+}
+.toggle-pill__item {
+  padding: 2px 10px;
+  border-radius: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v2-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.toggle-pill__item.active {
+  background: var(--v2-bg-surface);
+  color: var(--v2-text-primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+/* Safety strip */
+.safety-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: var(--v2-radius);
+  font-size: 11px;
+  color: var(--v2-status-warning);
+  line-height: 1.5;
+}
+.safety-strip__icon { flex-shrink: 0; margin-top: 1px; }
+
+/* Stat tiles */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.stat-tile {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 12px;
+}
+.stat-tile__label {
+  font-size: 11px;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+.stat-tile__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--v2-text-primary);
+  font-family: var(--v2-font-mono);
+}
+.stat-tile__sub {
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+  margin-top: 2px;
+}
+
+/* Desk card — V2 surface pattern (no heavy outline) */
+.desk-card {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+  position: relative;
+}
+.desk-card__accent-bar {
+  height: 3px;
+  width: 100%;
+}
+.desk-card__body { padding: 12px; }
+.desk-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+  margin-bottom: 4px;
+}
+.desk-card__desc {
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.desk-card__actions { display: flex; gap: 8px; align-items: center; }
+.desk-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.status-dot--success { background: var(--v2-status-success); }
+.status-dot--warning { background: var(--v2-status-warning); }
+.status-dot--error   { background: var(--v2-status-error); }
+.status-dot--muted   { background: var(--v2-text-tertiary); }
+
+/* Confidence bar — 3 segments */
+.conf-bar {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+}
+.conf-segment {
+  flex: 1;
+  border-radius: 2px;
+  background: var(--v2-border-subtle);
+}
+.conf-segment.filled { background: var(--v2-status-success); }
+.conf-segment.filled.med { background: var(--v2-status-warning); }
+.conf-segment.filled.low { background: var(--v2-status-error); }
+
+/* Right rail components */
+.rail-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--v2-border-subtle);
+  margin-bottom: 12px;
+}
+.rail-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--v2-accent), #60A5FA);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0C0C0C;
+  flex-shrink: 0;
+}
+.rail-profile__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+}
+.rail-profile__email {
+  font-size: 11px;
+  color: var(--v2-text-tertiary);
+}
+.rail-wallet {
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.rail-wallet__addr {
+  font-family: var(--v2-font-mono);
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+}
+.rail-wallet__copy {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--v2-text-tertiary);
+  font-size: 12px;
+  padding: 2px;
+}
+.rail-wallet__copy:hover { color: var(--v2-accent); }
+
+.rail-quick-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.rail-stat {
+  background: var(--v2-bg-elevated);
+  border-radius: var(--v2-radius);
+  padding: 8px;
+}
+.rail-stat__label {
+  font-size: 10px;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 2px;
+}
+.rail-stat__value {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--v2-font-mono);
+  color: var(--v2-text-primary);
+}
+
+.rail-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 6px;
+}
+
+.rail-bell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--v2-bg-elevated);
+  border-radius: var(--v2-radius);
+  margin-bottom: 10px;
+}
+.rail-bell__label {
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rail-bell__badge {
+  background: var(--v2-status-warning);
+  color: #0C0C0C;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
+/* Memory chip bar */
+.chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+}
+.chip--active {
+  border-color: var(--chip-color, var(--v2-accent));
+  color: var(--chip-color, var(--v2-accent));
+  background: color-mix(in srgb, var(--chip-color, var(--v2-accent)) 12%, transparent);
+}
+.chip__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: 10px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.6;
+}
+.chip__remove:hover { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   HOME COMMAND CENTER (Screen 4)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.home-hero {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+  position: relative;
+}
+.home-hero__accent {
+  height: 3px;
+  background: var(--v2-desk-home);
+}
+.home-hero__body { padding: 20px; }
+.home-hero__greeting {
+  font-size: 11px;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 4px;
+}
+.home-hero__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--v2-text-primary);
+  margin-bottom: 12px;
+}
+.home-hero__active-desk {
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.home-hero__active-desk__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.home-hero__active-desk__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--v2-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+.home-hero__active-desk__label {
+  font-size: 11px;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 2px;
+}
+.home-hero__active-desk__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--v2-text-primary);
+}
+.home-hero__cta {
+  background: var(--v2-accent);
+  color: #0C0C0C;
+  border: none;
+  border-radius: var(--v2-radius);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: var(--v2-font-sans);
+}
+.home-hero__cta:hover { opacity: 0.9; }
+
+.desk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.desk-grid__item {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+.desk-grid__item:hover {
+  background: var(--v2-bg-elevated);
+  border-color: var(--v2-border-default);
+}
+.desk-grid__item__accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.desk-grid__item__icon {
+  font-size: 20px;
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+.desk-grid__item__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+  margin-bottom: 3px;
+}
+.desk-grid__item__desc {
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+  line-height: 1.4;
+}
+.desk-grid__item__stats {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+.mini-stat {
+  font-size: 10px;
+  font-family: var(--v2-font-mono);
+  color: var(--v2-text-tertiary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BITTENSOR DESK (Screen 5) — Beginner vs Expert
+   ═══════════════════════════════════════════════════════════════════ */
+
+.beginner-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.beginner-view__empty { display: none; }
+.beginner-view__data { }
+
+.expert-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(245,158,11,0.15);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--v2-status-warning);
+}
+.expert-badge svg { width: 10px; height: 10px; }
+
+.beginner-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+}
+.beginner-table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+  background: var(--v2-bg-elevated);
+  border-bottom: 1px solid var(--v2-border-subtle);
+}
+.beginner-table td {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  border-bottom: 1px solid var(--v2-border-subtle);
+}
+.beginner-table tr:last-child td { border-bottom: none; }
+.beginner-table .mono { font-family: var(--v2-font-mono); font-size: 11px; }
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: var(--v2-radius);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--v2-font-sans);
+  border: none;
+  transition: opacity 0.15s;
+}
+.action-btn:hover { opacity: 0.85; }
+.action-btn--primary {
+  background: var(--v2-accent);
+  color: #0C0C0C;
+}
+.action-btn--ghost {
+  background: transparent;
+  color: var(--v2-accent);
+  border: 1px solid var(--v2-border-default);
+}
+.action-btn--danger {
+  background: transparent;
+  color: var(--v2-status-error);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SESSION CARDS (Screen 6) — Before/After
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* V1 session card — the problem */
+.session-card-v1 {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-default);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 8px;
+}
+.session-card-v1__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.session-card-v1__indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--v2-status-success);
+  animation: pulse-v1 2s infinite;
+}
+@keyframes pulse-v1 {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.session-card-v1__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+}
+.session-card-v1__time {
+  font-size: 11px;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 10px;
+}
+.session-card-v1__body {
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.session-card-v1__chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.v1-chip {
+  padding: 4px 10px;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+}
+
+/* V2 session card — the solution */
+.session-card-v2 {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 14px;
+  margin-bottom: 8px;
+}
+.session-card-v2__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.session-card-v2__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+}
+.session-card-v2__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--v2-status-success);
+  flex-shrink: 0;
+}
+.session-card-v2__time {
+  font-size: 10px;
+  color: var(--v2-text-tertiary);
+  font-family: var(--v2-font-mono);
+}
+.session-card-v2__body {
+  font-size: 12px;
+  color: var(--v2-text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.session-card-v2__metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.metric-chip {
+  padding: 3px 8px;
+  background: var(--v2-bg-elevated);
+  border-radius: var(--v2-radius);
+  font-size: 11px;
+  font-family: var(--v2-font-mono);
+  color: var(--v2-text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PROTOCOL ICONS (Screen 7)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.icon-cell {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.icon-cell__svg {
+  width: 32px;
+  height: 32px;
+  color: var(--icon-color, var(--v2-accent));
+}
+.icon-cell__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+}
+.icon-cell__sublabel {
+  font-size: 10px;
+  color: var(--v2-text-tertiary);
+}
+
+/* SVG icons */
+.icon-bittensor { color: var(--v2-desk-bittensor); }
+.icon-hyperliquid { color: var(--v2-desk-hyperliquid); }
+.icon-polymarket { color: var(--v2-desk-polymarket); }
+.icon-wellness { color: var(--v2-desk-wellness); }
+.icon-memory { color: var(--v2-desk-memory); }
+.icon-mcp { color: var(--v2-desk-mcp); }
+.icon-home { color: var(--v2-desk-home); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT MODE SECTION
+   ═══════════════════════════════════════════════════════════════════ */
+
+.light-mode-section { margin-top: 24px; }
+.light-mode-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+  margin-bottom: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--v2-border-subtle);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE / MOBILE PREVIEW (Screen 8)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mobile-preview-wrap {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.mobile-frame {
+  width: 280px;
+  height: 600px;
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-default);
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.mobile-frame__topbar {
+  height: 44px;
+  background: var(--v2-bg-elevated);
+  border-bottom: 1px solid var(--v2-border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.mobile-frame__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--v2-accent), #60A5FA);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0C0C0C;
+}
+.mobile-frame__topbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v2-text-primary);
+  flex: 1;
+}
+.mobile-frame__topbar-icon {
+  color: var(--v2-text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.mobile-frame__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.mobile-frame__bottom {
+  height: 56px;
+  background: var(--v2-bg-surface);
+  border-top: 1px solid var(--v2-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  flex-shrink: 0;
+}
+.mobile-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: var(--v2-radius);
+  cursor: pointer;
+}
+.mobile-tab__icon { font-size: 16px; }
+.mobile-tab__label { font-size: 9px; color: var(--v2-text-tertiary); }
+.mobile-tab.active .mobile-tab__icon { }
+.mobile-tab.active .mobile-tab__label { color: var(--v2-accent); }
+.mobile-tab.active { background: var(--v2-accent-dim); }
+
+.mobile-composer {
+  height: 48px;
+  background: var(--v2-bg-surface);
+  border-top: 1px solid var(--v2-border-subtle);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.mobile-composer__input {
+  flex: 1;
+  height: 36px;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  border-radius: 18px;
+  padding: 0 14px;
+  font-size: 13px;
+  color: var(--v2-text-primary);
+  outline: none;
+}
+.mobile-composer__send {
+  width: 32px;
+  height: 32px;
+  background: var(--v2-accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #0C0C0C;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BUTTONS & FORBIDDEN PATTERNS (Screen 9)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.btn-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.btn-demo-cell {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-subtle);
+  border-radius: var(--v2-radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.btn-demo-cell__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-text-tertiary);
+}
+.btn-demo-cell__btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Forbidden pattern demo */
+.forbidden-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+.forbidden-item {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.forbidden-item__icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+  color: var(--v2-status-error);
+}
+.forbidden-item__text { font-size: 12px; color: var(--v2-text-secondary); line-height: 1.5; }
+.forbidden-item__tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--v2-status-error);
+  background: rgba(239,68,68,0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .compare-grid { grid-template-columns: 1fr; }
+  .desk-grid { grid-template-columns: 1fr 1fr; }
+  .icon-grid { grid-template-columns: repeat(3, 1fr); }
+  .forbidden-grid { grid-template-columns: 1fr; }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  #screen-problems .problem-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .desk-grid { grid-template-columns: 1fr; }
+  .icon-grid { grid-template-columns: repeat(2, 1fr); }
+  .stat-row { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE LABEL BADGE
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme="light"] .theme-label { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<nav class="showcase-nav">
+  <a class="showcase-nav__logo" href="#">
+    <div class="showcase-nav__logo-mark">M</div>
+    Desk UI V2
+  </a>
+
+  <button class="nav-btn active" onclick="showScreen('screen-problems')">Problems</button>
+  <button class="nav-btn" onclick="showScreen('screen-beforeafter')">Before/After</button>
+  <button class="nav-btn" onclick="showScreen('screen-layout')">Layout</button>
+  <button class="nav-btn" onclick="showScreen('screen-home')">Home</button>
+  <button class="nav-btn" onclick="showScreen('screen-bittensor')">Bittensor</button>
+  <button class="nav-btn" onclick="showScreen('screen-session-cards')">Session Cards</button>
+  <button class="nav-btn" onclick="showScreen('screen-icons')">Icons</button>
+  <button class="nav-btn" onclick="showScreen('screen-mobile')">Mobile</button>
+  <button class="nav-btn" onclick="showScreen('screen-forbidden')">Do Not Build</button>
+
+  <button class="nav-btn nav-btn--theme" onclick="toggleTheme()" id="themeBtn">
+    ◐ Dark
+  </button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 1: THE 7 PROBLEMS
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen active" id="screen-problems">
+  <div class="screen-label">V2 Visual Redesign</div>
+  <div class="screen-title">7 Problems V2 Solves</div>
+  <div class="screen-subtitle">These are the specific visual quality problems Codex must fix in the implementation.</div>
+
+  <div class="problem-grid">
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p1-badge">P1</div>
+        <div class="problem-card__title">Too Many Outlined Boxes</div>
+      </div>
+      <div class="problem-card__body">
+        Every card has <code>border: 1px solid var(--border)</code> — they stack as outlines competing for attention. V2: surface fills + subtle 1px separators.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p2-badge">P2</div>
+        <div class="problem-card__title">Monotonous Dark UI</div>
+      </div>
+      <div class="problem-card__body">
+        Flat <code>#0C0C0C</code> everywhere with no warmth. V2: <code>#111111</code> surface cards, per-desk accent tints, richer hierarchy.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p3-badge">P3</div>
+        <div class="problem-card__title">Profile/Wallet Hidden</div>
+      </div>
+      <div class="problem-card__body">
+        Wallet address absent on desktop. V2: right rail profile card with truncated address + copy button.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p1-badge">P4</div>
+        <div class="problem-card__title">Side Rail = Info Dump</div>
+      </div>
+      <div class="problem-card__body">
+        Every status, chip, and count crammed into the nav rail. V2: nav rail = clean icon+label; content in main + right rail.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p2-badge">P5</div>
+        <div class="problem-card__title">Fake Protocol Icons</div>
+      </div>
+      <div class="problem-card__body">
+        Emoji (⚡💎📊) instead of SVG icons. V2: full SVG icon set per desk, <code>currentColor</code>, 24×24px, 1.5px stroke.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p1-badge">P6</div>
+        <div class="problem-card__title">Ugly Curved Session Cards</div>
+      </div>
+ <div class="problem-card__body">
+        Heavy <code>border-radius: 12px</code> + nested card grids. V2: <code>border-radius: 4px</code>, no nested cards, metric chips not sub-cards.
+      </div>
+    </div>
+
+    <div class="problem-card">
+      <div class="problem-card__header">
+        <div class="problem-card__num p3-badge">P7</div>
+        <div class="problem-card__title">Bittensor Too Expert-Oriented</div>
+      </div>
+      <div class="problem-card__body">
+        Raw Subtensor data, validator addresses, subnet IDs — developer dashboard. V2: beginner view by default, Expert toggle.
+      </div>
+    </div>
+
+    <div class="annotation annotation--success" style="grid-column: 1 / -1; margin-top: 0;">
+      <div class="annotation__label">V2 Goal</div>
+      <div class="annotation__body">
+        Every problem above has a corresponding visual example on the next screens. Codex must verify each fix against the annotated examples before calling a desk done.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 2: BEFORE / AFTER
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-beforeafter">
+  <div class="screen-label">Annotated Before/After</div>
+  <div class="screen-title">Surface vs. Outline — P1</div>
+  <div class="screen-subtitle">The core V2 card pattern. Surface fills replace outlined boxes.</div>
+
+  <div class="compare-grid">
+    <!-- BEFORE -->
+    <div class="compare-panel">
+      <div class="compare-panel__header compare-panel__header--before">Before (V1 / Current)</div>
+      <div class="compare-panel__body">
+        <!-- V1 card pattern: outlined boxes -->
+        <div style="background: #0C0C0C; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: #0C0C0C; border: 1px solid #2A2A2A; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 13px; font-weight: 600; color: #F0F0F0; margin-bottom: 6px;">Subnet 1 — Navion</div>
+            <div style="font-size: 11px; color: #8A8A8A;">1,247 TAO delegated · Active validator</div>
+            <div style="margin-top: 10px; border-top: 1px solid #2A2A2A; padding-top: 10px;">
+              <div style="display: inline-block; background: none; border: 1px solid #2A2A2A; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #8A8A8A;">[Set Ceiling]</div>
+            </div>
+          </div>
+          <div style="background: #0C0C0C; border: 1px solid #2A2A2A; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 13px; font-weight: 600; color: #F0F0F0; margin-bottom: 6px;">Subnet 4 — Finetune</div>
+            <div style="font-size: 11px; color: #8A8A8A;">824 TAO delegated · 3 validators</div>
+            <div style="margin-top: 10px; border-top: 1px solid #2A2A2A; padding-top: 10px;">
+              <div style="display: inline-block; background: none; border: 1px solid #2A2A2A; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #8A8A8A;">[Set Ceiling]</div>
+            </div>
+          </div>
+        </div>
+        <div class="annotation annotation--warning" style="margin-top: 12px; margin-bottom: 0;">
+          <div class="annotation__label">Problem</div>
+          <div class="annotation__body">Every card has a heavy 1px <code>#2A2A2A</code> outline. Outlines compete. No surface depth. Cards feel flat and indistinguishable.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AFTER -->
+    <div class="compare-panel">
+      <div class="compare-panel__header compare-panel__header--after">After (V2)</div>
+      <div class="compare-panel__body">
+        <!-- V2 card pattern: surface fills + accent bar -->
+        <div style="background: #0C0C0C; padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+          <div class="desk-card" style="background: #111111;">
+            <div class="desk-card__accent-bar" style="background: #FF7C43;"></div>
+            <div class="desk-card__body">
+              <div class="desk-card__title">Subnet 1 — Navion</div>
+              <div class="desk-card__desc">1,247 TAO delegated · Active validator</div>
+              <div class="desk-card__actions">
+                <button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 4px 10px;">Set Ceiling</button>
+                <span class="mini-stat" style="margin-left: auto;">▲ 0.8%</span>
+              </div>
+            </div>
+          </div>
+          <div class="desk-card" style="background: #111111;">
+            <div class="desk-card__accent-bar" style="background: #FF7C43;"></div>
+            <div class="desk-card__body">
+              <div class="desk-card__title">Subnet 4 — Finetune</div>
+              <div class="desk-card__desc">824 TAO delegated · 3 validators</div>
+              <div class="desk-card__actions">
+                <button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 4px 10px;">Set Ceiling</button>
+                <span class="mini-stat" style="margin-left: auto;">▲ 1.2%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="annotation annotation--success" style="margin-top: 12px; margin-bottom: 0;">
+          <div class="annotation__label">V2 Pattern</div>
+          <div class="annotation__body"><code>#111111</code> surface fill. <code>#1F1F1F</code> border (nearly invisible separator, not a frame). 3px accent bar per desk. Depth via hierarchy, not outline weight.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="screen-divider">
+
+  <div class="screen-label" style="margin-top: 8px;">Session Cards — P6</div>
+  <div class="screen-title" style="font-size: 18px;">Curved vs. Sharp Corners</div>
+
+  <div class="compare-grid">
+    <div class="compare-panel">
+      <div class="compare-panel__header compare-panel__header--before">Before</div>
+      <div class="compare-panel__body">
+        <div style="background: #0C0C0C; padding: 8px;">
+          <div class="session-card-v1">
+            <div class="session-card-v1__header">
+              <div class="session-card-v1__indicator"></div>
+              <div class="session-card-v1__title">Active session</div>
+            </div>
+            <div class="session-card-v1__time">Today at 2:34 PM</div>
+            <div class="session-card-v1__body">You asked about subnet validator rewards and set a delegation ceiling of 200 TAO on Finetune.</div>
+            <div class="session-card-v1__chips">
+              <span class="v1-chip">Bittensor</span>
+              <span class="v1-chip">Delegation</span>
+              <span class="v1-chip">200 TAO</span>
+            </div>
+          </div>
+        </div>
+        <div class="annotation annotation--warning" style="margin-top: 12px; margin-bottom: 0;">
+          <div class="annotation__label">Problem</div>
+          <div class="annotation__body"><code>border-radius: 12px</code> is excessive for data cards. Pulsing animation is distracting. Chips inside chips look nested.</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <div class="compare-panel__header compare-panel__header--after">After</div>
+      <div class="compare-panel__body">
+        <div style="background: #0C0C0C; padding: 8px;">
+          <div class="session-card-v2">
+            <div class="session-card-v2__header">
+              <div class="session-card-v2__title">
+                <div class="session-card-v2__dot"></div>
+                Active session · Matterhorn Dev
+              </div>
+              <div class="session-card-v2__time">Today 2:34 PM</div>
+            </div>
+            <div class="session-card-v2__body">You asked about subnet validator rewards and set a delegation ceiling of 200 TAO on Finetune.</div>
+            <div class="session-card-v2__metrics">
+              <span class="metric-chip">Bittensor</span>
+              <span class="metric-chip">Delegation</span>
+              <span class="metric-chip">200 TAO</span>
+            </div>
+          </div>
+        </div>
+        <div class="annotation annotation--success" style="margin-top: 12px; margin-bottom: 0;">
+          <div class="annotation__label">V2 Pattern</div>
+          <div class="annotation__body"><code>border-radius: 4px</code> max. No pulsing. Metrics as inline chips, not sub-cards. Active dot is 7px, solid green — no animation.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 3: V2 LAYOUT ARCHITECTURE
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-layout">
+  <div class="screen-label">Architecture</div>
+  <div class="screen-title">V2 Layout: Left Nav + Main + Right Rail</div>
+  <div class="screen-subtitle">Right rail is new in V2. Left nav is cleaned up. Profile/wallet moves to right rail.</div>
+
+  <div class="annotation annotation--success">
+    <div class="annotation__label">Layout Formula</div>
+    <div class="annotation__body">
+      <code>Left Nav (56px) + Main (flex: 1) + Right Rail (260px)</code> on ≥1200px.
+      Right rail collapses to overlay FAB on tablet (768–1199px).
+      Right rail absent on mobile (<768px); profile moves to top bar.
+    </div>
+  </div>
+
+  <div class="layout-demo">
+    <!-- LEFT NAV -->
+    <div class="layout-demo__nav">
+      <div class="nav-item active">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <div class="nav-item__tooltip">Home</div>
+      </div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        <div class="nav-item__tooltip">Bittensor</div>
+      </div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
+        <div class="nav-item__tooltip">Hyperliquid</div>
+      </div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+        <div class="nav-item__tooltip">Polymarket</div>
+      </div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        <div class="nav-item__tooltip">Wellness</div>
+      </div>
+      <div class="nav-item__divider"></div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+        <div class="nav-item__tooltip">Memory</div>
+      </div>
+      <div class="nav-item">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+        <div class="nav-item__tooltip">MCPs</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div class="nav-item" style="margin-bottom: 4px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <div class="nav-item__tooltip">Settings</div>
+      </div>
+    </div>
+
+    <!-- MAIN AREA -->
+    <div class="layout-demo__main">
+      <div class="desk-header">
+        <div class="desk-header__left">
+          <div class="desk-header__icon" style="background: rgba(255,124,67,0.15); color: #FF7C43;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/></svg>
+          </div>
+          <div>
+            <div class="desk-header__name">Bittensor</div>
+          </div>
+        </div>
+        <div class="desk-header__actions">
+          <div class="toggle-pill">
+            <div class="toggle-pill__item active">Beginner</div>
+            <div class="toggle-pill__item">Expert 🔒</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="safety-strip">
+        <span class="safety-strip__icon">🔗</span>
+        <span>Read-only. Public Subtensor data only. No seed phrases, private keys, or signing capabilities. Matterhorn never holds or manages stake.</span>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-tile">
+          <div class="stat-tile__label">Total Stake</div>
+          <div class="stat-tile__value">1,247</div>
+          <div class="stat-tile__sub">TAO · ▲ 12.3% ytd</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile__label">Active Subnets</div>
+          <div class="stat-tile__value">8/11</div>
+          <div class="stat-tile__sub" style="color: var(--v2-status-success);">All healthy</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile__label">Delegation Ceiling</div>
+          <div class="stat-tile__value">800</div>
+          <div class="stat-tile__sub">TAO · 3 wallets</div>
+        </div>
+      </div>
+
+      <div class="desk-card">
+        <div class="desk-card__accent-bar" style="background: #FF7C43;"></div>
+        <div class="desk-card__body">
+          <div class="desk-card__title">Your Top Subnets</div>
+          <div class="desk-card__desc">Sorted by your current delegation. Click any subnet to manage its stake ceiling.</div>
+          <div style="margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--v2-border-subtle); align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">Navion (1)</div>
+                <div style="font-size: 11px; font-family: var(--v2-font-mono); color: var(--v2-text-secondary);">12.4 TAO</div>
+              </div>
+              <button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 4px 10px;">Stake more</button>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 8px 0; align-items: center;">
+              <div>
+                <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">Finetune (4)</div>
+                <div style="font-size: 11px; font-family: var(--v2-font-mono); color: var(--v2-text-secondary);">8.2 TAO</div>
+              </div>
+              <button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 4px 10px;">Stake more</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div class="layout-demo__rail">
+      <div class="rail-profile">
+        <div class="rail-avatar">A</div>
+        <div>
+          <div class="rail-profile__name">Alex Chen</div>
+          <div class="rail-profile__email">alex@matter.io</div>
+        </div>
+      </div>
+
+      <div class="rail-wallet">
+        <span class="rail-wallet__addr">0x7a3B…F9d2</span>
+        <button class="rail-wallet__copy" title="Copy address">📋</button>
+      </div>
+
+      <div style="font-size: 10px; color: var(--v2-text-tertiary); margin-bottom: 6px;">Connected 3 min ago</div>
+
+      <div class="rail-quick-stats">
+        <div class="rail-stat">
+          <div class="rail-stat__label">Stake</div>
+          <div class="rail-stat__value">1,247</div>
+        </div>
+        <div class="rail-stat">
+          <div class="rail-stat__label">Positions</div>
+          <div class="rail-stat__value">2</div>
+        </div>
+      </div>
+
+      <div class="rail-bell">
+        <div class="rail-bell__label">💬 Suggestions <span class="rail-bell__badge">3</span></div>
+      </div>
+
+      <div class="rail-section-label">Active Context</div>
+      <div class="chip-bar">
+        <div class="chip chip--active" style="--chip-color: #FF7C43);">
+          Bittensor
+          <button class="chip__remove">×</button>
+        </div>
+        <div class="chip chip--active" style="--chip-color: #67E8F9);">
+          Delegation
+          <button class="chip__remove">×</button>
+        </div>
+        <div class="chip">Finetune (4)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--success" style="margin-top: 12px;">
+    <div class="annotation__label">Annotation</div>
+    <div class="annotation__body">
+      <strong>Left nav (56px):</strong> SVG icons + tooltips on hover. No text labels in rail. Active state uses <code>--v2-accent-dim</code> fill, not a border.<br>
+      <strong>Right rail (260px):</strong> Profile card + wallet + quick stats + bell + chip bar. Never scrolls with main content.<br>
+      <strong>Main area:</strong> Full-height scroll. Desk header + safety strip + stat tiles + desk cards.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 4: HOME COMMAND CENTER
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-home">
+  <div class="screen-label">Desk: Home</div>
+  <div class="screen-title">Command Center</div>
+  <div class="screen-subtitle">The entry point. Surfaces the most relevant desk without requiring navigation.</div>
+
+  <div class="home-hero">
+    <div class="home-hero__accent"></div>
+    <div class="home-hero__body">
+      <div class="home-hero__greeting">Wednesday, June 25</div>
+      <div class="home-hero__title">Good morning, Alex</div>
+
+      <div class="home-hero__active-desk">
+        <div class="home-hero__active-desk__left">
+          <div class="home-hero__active-desk__icon" style="background: rgba(255,124,67,0.15); color: #FF7C43; font-size: 20px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/></svg>
+          </div>
+          <div>
+            <div class="home-hero__active-desk__label">Active desk</div>
+            <div class="home-hero__active-desk__name">Bittensor</div>
+          </div>
+        </div>
+        <button class="home-hero__cta">Open desk →</button>
+      </div>
+
+      <div class="chip-bar">
+        <div class="chip chip--active" style="--chip-color: #FF7C43);">Bittensor · Delegation</div>
+        <div class="chip chip--active" style="--chip-color: #C084FC);">Hyperliquid · BTC-PERP</div>
+        <div class="chip">Memecoin · MFER</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Your Desks</div>
+  </div>
+
+  <div class="desk-grid">
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #FF7C43;"></div>
+      <div class="desk-grid__item__icon" style="color: #FF7C43;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="5" cy="12" r="2"/></svg>
+      </div>
+      <div class="desk-grid__item__name">Bittensor</div>
+      <div class="desk-grid__item__desc">Subnet intelligence and delegation management</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">1,247 TAO</span>
+        <span class="mini-stat">8 subnets</span>
+      </div>
+    </div>
+
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #C084FC;"></div>
+      <div class="desk-grid__item__icon" style="color: #C084FC;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg>
+      </div>
+      <div class="desk-grid__item__name">Hyperliquid</div>
+      <div class="desk-grid__item__desc">Perpetual positions and funding alerts</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">2 positions</span>
+        <span class="mini-stat">3× avg</span>
+      </div>
+    </div>
+
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #FBBF24;"></div>
+      <div class="desk-grid__item__icon" style="color: #FBBF24;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      </div>
+      <div class="desk-grid__item__name">Polymarket</div>
+      <div class="desk-grid__item__desc">Tracked prediction markets</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">4 tracked</span>
+        <span class="mini-stat">$2.4M vol</span>
+      </div>
+    </div>
+
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #F472B6;"></div>
+      <div class="desk-grid__item__icon" style="color: #F472B6;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </div>
+      <div class="desk-grid__item__name">Wellness</div>
+      <div class="desk-grid__item__desc">Goals and wellness check-ins</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">7-day streak</span>
+        <span class="mini-stat">3 goals</span>
+      </div>
+    </div>
+
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #67E8F9;"></div>
+      <div class="desk-grid__item__icon" style="color: #67E8F9;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+      </div>
+      <div class="desk-grid__item__name">Memory</div>
+      <div class="desk-grid__item__desc">Confirmed memories and suggestion inbox</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">12 memories</span>
+        <span class="mini-stat">3 suggestions</span>
+      </div>
+    </div>
+
+    <div class="desk-grid__item" style="cursor: default;">
+      <div class="desk-grid__item__accent" style="background: #34D399;"></div>
+      <div class="desk-grid__item__icon" style="color: #34D399;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      </div>
+      <div class="desk-grid__item__name">MCPs</div>
+      <div class="desk-grid__item__desc">Tool registry and agent capabilities</div>
+      <div class="desk-grid__item__stats">
+        <span class="mini-stat">4 tools</span>
+        <span class="mini-stat">2 agents</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 5: BITTENSOR DESK — BEGINNER VS EXPERT
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-bittensor">
+  <div class="screen-label">Desk: Bittensor</div>
+  <div class="screen-title">Beginner View (Default)</div>
+  <div class="screen-subtitle">Expert view is a toggle in the header. Beginner shows TAO amounts and subnet names — no addresses.</div>
+
+  <div class="annotation annotation--success">
+    <div class="annotation__label">P7 Solution: Beginner by Default</div>
+    <div class="annotation__body">
+      <code>Beginner</code> shows: Total Stake (TAO), Active Subnets, Delegation Ceiling. No validator addresses, no subnet IDs. Expert view unlocks full Subtensor data with a 🔒 lock badge.
+    </div>
+  </div>
+
+  <div class="beginner-view beginner-view__data">
+    <div class="stat-row" style="margin-bottom: 12px;">
+      <div class="stat-tile">
+        <div class="stat-tile__label">Total Stake</div>
+        <div class="stat-tile__value" style="color: #FF7C43;">1,247</div>
+        <div class="stat-tile__sub">TAO · ▲ 12.3% ytd</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Active Subnets</div>
+        <div class="stat-tile__value">8/11</div>
+        <div class="stat-tile__sub" style="color: var(--v2-status-success); display: flex; align-items: center; gap: 4px;">
+          <span class="status-dot status-dot--success" style="width:5px;height:5px;"></span> All healthy
+        </div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-tile__label">Delegation Ceiling</div>
+        <div class="stat-tile__value">800</div>
+        <div class="stat-tile__sub">TAO · 3 wallets</div>
+      </div>
+    </div>
+
+    <div class="desk-card" style="margin-bottom: 12px;">
+      <div class="desk-card__accent-bar" style="background: #FF7C43;"></div>
+      <div class="desk-card__body">
+        <div class="desk-card__title">Your Top Subnets</div>
+        <div class="desk-card__desc">Sorted by your current delegation amount.</div>
+        <table class="beginner-table" style="margin-top: 10px;">
+          <thead>
+            <tr>
+              <th>Subnet</th>
+              <th>Stake</th>
+              <th>Confidence</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight: 600; color: var(--v2-text-primary);">Navion (1)</td>
+              <td class="mono">12.4 TAO</td>
+              <td>
+                <div class="conf-bar" style="width: 60px;">
+                  <div class="conf-segment filled"></div>
+                  <div class="conf-segment filled"></div>
+                  <div class="conf-segment filled"></div>
+                </div>
+              </td>
+              <td><button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 3px 8px;">Stake more</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: 600; color: var(--v2-text-primary);">Finetune (4)</td>
+              <td class="mono">8.2 TAO</td>
+              <td>
+                <div class="conf-bar" style="width: 60px;">
+                  <div class="conf-segment filled"></div>
+                  <div class="conf-segment filled"></div>
+                  <div class="conf-segment"></div>
+                </div>
+              </td>
+              <td><button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 3px 8px;">Stake more</button></td>
+            </tr>
+            <tr>
+              <td style="font-weight: 600; color: var(--v2-text-primary);">Alpha (7)</td>
+              <td class="mono">2.1 TAO</td>
+              <td>
+                <div class="conf-bar" style="width: 60px;">
+                  <div class="conf-segment filled"></div>
+                  <div class="conf-segment filled med"></div>
+                  <div class="conf-segment"></div>
+                </div>
+              </td>
+              <td><button class="action-btn action-btn--ghost" style="font-size: 11px; padding: 3px 8px;">Stake more</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button class="action-btn action-btn--primary">Set Validator Preference</button>
+      <button class="action-btn action-btn--ghost">Manage Delegations</button>
+    </div>
+  </div>
+
+  <hr class="screen-divider">
+
+  <div class="screen-label" style="margin-top: 8px;">Expert View (Toggle)</div>
+  <div class="screen-subtitle" style="margin-bottom: 12px;">Expert mode shows full Subtensor data. Note the 🔒 expert badge.</div>
+
+  <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+    <div class="toggle-pill">
+      <div class="toggle-pill__item">Beginner</div>
+      <div class="toggle-pill__item active">Expert 🔒</div>
+    </div>
+    <span class="expert-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Expert view
+    </span>
+  </div>
+
+  <table class="beginner-table">
+    <thead>
+      <tr>
+        <th>Subnet</th>
+        <th>Delegation</th>
+        <th>Validator</th>
+        <th>Confidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-weight: 600; color: var(--v2-text-primary);">Navion (1)</td>
+        <td class="mono">12.4 TAO</td>
+        <td class="mono" style="color: var(--v2-text-tertiary);">5CfTC…3bX9</td>
+        <td style="display: flex; align-items: center; gap: 6px;">
+          <div class="conf-bar" style="width: 60px;"><div class="conf-segment filled"></div><div class="conf-segment filled"></div><div class="conf-segment filled"></div></div>
+          <span style="font-size: 10px; color: var(--v2-status-success);">High</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="annotation annotation--warning" style="margin-top: 12px;">
+    <div class="annotation__label">Address Truncation (Always)</div>
+    <div class="annotation__body">Expert mode still shows truncated addresses: <code>5CfTC…3bX9</code>. No full wallet address is ever displayed. Copy button on the right rail provides the full address when needed.</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 6: SESSION CARDS
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-session-cards">
+  <div class="screen-label">Session Cards</div>
+  <div class="screen-title">V2 Session Card Anatomy</div>
+  <div class="screen-subtitle"><code>border-radius: 4px</code>. No pulsing animation. Metrics as inline chips, not sub-cards.</div>
+
+  <div style="max-width: 600px; display: flex; flex-direction: column; gap: 8px;">
+    <div class="session-card-v2">
+      <div class="session-card-v2__header">
+        <div class="session-card-v2__title">
+          <div class="session-card-v2__dot"></div>
+          Active session · Matterhorn Dev
+        </div>
+        <div class="session-card-v2__time">Today 2:34 PM</div>
+      </div>
+      <div class="session-card-v2__body">You asked about subnet validator rewards and set a delegation ceiling of 200 TAO on Finetune subnet 4.</div>
+      <div class="session-card-v2__metrics">
+        <span class="metric-chip">Bittensor</span>
+        <span class="metric-chip">Delegation</span>
+        <span class="metric-chip">200 TAO</span>
+      </div>
+    </div>
+
+    <div class="session-card-v2">
+      <div class="session-card-v2__header">
+        <div class="session-card-v2__title" style="color: var(--v2-text-secondary);">
+          <div class="status-dot status-dot--muted" style="background: var(--v2-text-tertiary);"></div>
+          Closed session · Yesterday
+        </div>
+        <div class="session-card-v2__time">Jun 24, 11:20 AM</div>
+      </div>
+      <div class="session-card-v2__body">You reviewed BTC-PERP position on Hyperliquid and set a leverage ceiling of 3× with isolated margin mode.</div>
+      <div class="session-card-v2__metrics">
+        <span class="metric-chip" style="color: #C084FC; border-color: rgba(192,132,252,0.3);">Hyperliquid</span>
+        <span class="metric-chip">3× leverage</span>
+        <span class="metric-chip">BTC-PERP</span>
+      </div>
+    </div>
+
+    <div class="session-card-v2">
+      <div class="session-card-v2__header">
+        <div class="session-card-v2__title" style="color: var(--v2-text-secondary);">
+          <div class="status-dot status-dot--muted" style="background: var(--v2-text-tertiary);"></div>
+          Closed session · Jun 23
+        </div>
+        <div class="session-card-v2__time">Jun 23, 4:15 PM</div>
+      </div>
+      <div class="session-card-v2__body">You tracked the BTC election outcome market on Polymarket and added a note about the 68% threshold.</div>
+      <div class="session-card-v2__metrics">
+        <span class="metric-chip" style="color: #FBBF24; border-color: rgba(251,191,36,0.3);">Polymarket</span>
+        <span class="metric-chip">BTC Election</span>
+        <span class="metric-chip">68% threshold</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--success" style="margin-top: 16px;">
+    <div class="annotation__label">Rules</div>
+    <div class="annotation__body">
+      <code>border-radius: 4px</code> max. Active dot: 7px solid green — <strong>no animation</strong>. Closed sessions: gray dot. Time in <code>--v2-text-tertiary</code>, <code>--text-xs</code>. Metrics as <code>.metric-chip</code> (inline), never nested bordered cards.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 7: PROTOCOL ICONS
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-icons">
+  <div class="screen-label">P5 Solution</div>
+  <div class="screen-title">SVG Icon System</div>
+  <div class="screen-subtitle">Emoji is never a primary protocol icon. All icons: 24×24px SVG, <code>currentColor</code>, 1.5px stroke. Emoji only in empty states.</div>
+
+  <div class="icon-grid">
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-bittensor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <circle cx="12" cy="4" r="2"/>
+        <circle cx="19" cy="12" r="2"/>
+        <circle cx="5" cy="12" r="2"/>
+        <circle cx="12" cy="20" r="2"/>
+        <line x1="12" y1="6" x2="12" y2="9"/>
+        <line x1="17" y1="12" x2="14" y2="12"/>
+        <line x1="7" y1="12" x2="10" y2="12"/>
+        <line x1="12" y1="14" x2="12" y2="18"/>
+      </svg>
+      <div class="icon-cell__label">Bittensor</div>
+      <div class="icon-cell__sublabel">#FF7C43</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-hyperliquid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20"/>
+        <path d="M2 12h20"/>
+      </svg>
+      <div class="icon-cell__label">Hyperliquid</div>
+      <div class="icon-cell__sublabel">#C084FC</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-polymarket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="12" cy="12" r="6"/>
+        <circle cx="12" cy="12" r="2"/>
+      </svg>
+      <div class="icon-cell__label">Polymarket</div>
+      <div class="icon-cell__sublabel">#FBBF24</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-wellness" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        <polyline points="8 14 10 16 14 12" stroke-width="2"/>
+      </svg>
+      <div class="icon-cell__label">Wellness</div>
+      <div class="icon-cell__sublabel">#F472B6</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-memory" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+        <circle cx="7" cy="9" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="15" r="1.5" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="icon-cell__label">Memory</div>
+      <div class="icon-cell__sublabel">#67E8F9</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-mcp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+        <line x1="6" y1="1" x2="6" y2="4"/>
+        <line x1="10" y1="1" x2="10" y2="4"/>
+        <line x1="14" y1="1" x2="14" y2="4"/>
+      </svg>
+      <div class="icon-cell__label">MCPs</div>
+      <div class="icon-cell__sublabel">#34D399</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg icon-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      <div class="icon-cell__label">Home</div>
+      <div class="icon-cell__sublabel">#D1F2FF</div>
+    </div>
+
+    <div class="icon-cell">
+      <svg class="icon-cell__svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--v2-text-secondary);">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+      <div class="icon-cell__label">Settings</div>
+      <div class="icon-cell__sublabel">#8A8A8A</div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--warning" style="margin-top: 16px;">
+    <div class="annotation__label">Emoji: Empty States Only</div>
+    <div class="annotation__body">Emoji is acceptable as a visual accent in empty states (e.g., 💡 "No memories yet") but <strong>never</strong> as a primary desk icon. Emoji must not appear in the nav rail, desk headers, or card icons.</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 8: MOBILE RESPONSIVE
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-mobile">
+  <div class="screen-label">Responsive</div>
+  <div class="screen-title">Mobile Layout (<768px)</div>
+  <div class="screen-subtitle">Bottom tab bar (5 tabs). Profile in top bar. Right rail absent. Composer above keyboard.</div>
+
+  <div class="mobile-preview-wrap">
+    <!-- Dark mode mobile -->
+    <div class="mobile-frame">
+      <div class="mobile-frame__topbar">
+        <div class="mobile-frame__avatar">A</div>
+        <div class="mobile-frame__topbar-title">Bittensor</div>
+        <div class="mobile-frame__topbar-icon">⚙</div>
+      </div>
+      <div class="mobile-frame__content">
+        <div class="safety-strip" style="font-size: 10px; padding: 6px 8px; margin-bottom: 8px;">
+          <span style="margin-right: 4px;">🔗</span> Read-only · Public Subtensor
+        </div>
+        <div class="stat-row" style="grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px;">
+          <div class="stat-tile" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px;">
+            <div>
+              <div class="stat-tile__label" style="margin-bottom: 0;">Total Stake</div>
+              <div class="stat-tile__value" style="font-size: 16px;">1,247 TAO</div>
+            </div>
+            <div class="stat-tile__sub" style="color: var(--v2-status-success);">▲ 12.3%</div>
+          </div>
+        </div>
+        <div class="desk-card" style="margin-bottom: 8px;">
+          <div class="desk-card__accent-bar" style="background: #FF7C43;"></div>
+          <div class="desk-card__body" style="padding: 10px;">
+            <div class="desk-card__title" style="font-size: 13px;">Navion (1)</div>
+            <div class="desk-card__desc" style="font-size: 11px;">12.4 TAO · High confidence</div>
+            <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+              <div class="conf-bar" style="width: 60px;"><div class="conf-segment filled"></div><div class="conf-segment filled"></div><div class="conf-segment filled"></div></div>
+              <button class="action-btn action-btn--ghost" style="font-size: 10px; padding: 3px 8px;">Stake more</button>
+            </div>
+          </div>
+        </div>
+        <div class="chip-bar" style="gap: 4px;">
+          <div class="chip chip--active" style="--chip-color: #FF7C43); font-size: 10px; padding: 2px 6px;">Bittensor</div>
+          <div class="chip" style="font-size: 10px; padding: 2px 6px;">Delegation</div>
+        </div>
+      </div>
+      <div class="mobile-composer">
+        <input class="mobile-composer__input" placeholder="Ask about your subnets…" type="text">
+        <div class="mobile-composer__send">↑</div>
+      </div>
+      <div class="mobile-frame__bottom">
+        <div class="mobile-tab active">
+          <div class="mobile-tab__icon">🏠</div>
+          <div class="mobile-tab__label">Home</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">⚡</div>
+          <div class="mobile-tab__label">Bittensor</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">💎</div>
+          <div class="mobile-tab__label">Hyper</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">📊</div>
+          <div class="mobile-tab__label">Poly</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">♥</div>
+          <div class="mobile-tab__label">Wellness</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Light mode mobile -->
+    <div class="mobile-frame" style="border-color: #D4D4D4;" data-theme="light">
+      <div class="mobile-frame__topbar" style="background: #FAFAFA; border-color: #EBEBEB;">
+        <div class="mobile-frame__avatar">A</div>
+        <div class="mobile-frame__topbar-title" style="color: #0C0C0C;">Bittensor</div>
+        <div class="mobile-frame__topbar-icon" style="color: #5C5C5C;">⚙</div>
+      </div>
+      <div class="mobile-frame__content" style="background: #F5F5F5;">
+        <div class="safety-strip" style="background: rgba(234,88,12,0.06); border-color: rgba(234,88,12,0.15); color: #EA580C; font-size: 10px; padding: 6px 8px; margin-bottom: 8px;">
+          <span style="margin-right: 4px;">🔗</span> Read-only · Public Subtensor
+        </div>
+        <div class="stat-row" style="grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px;">
+          <div class="stat-tile" style="background: #FFFFFF; border-color: #EBEBEB; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px;">
+            <div>
+              <div class="stat-tile__label" style="color: #9CA3AF; margin-bottom: 0;">Total Stake</div>
+              <div class="stat-tile__value" style="font-size: 16px; color: #0C0C0C;">1,247 TAO</div>
+            </div>
+            <div class="stat-tile__sub" style="color: #059669;">▲ 12.3%</div>
+          </div>
+        </div>
+        <div class="desk-card" style="background: #FFFFFF; border-color: #EBEBEB; margin-bottom: 8px;">
+          <div class="desk-card__accent-bar" style="background: #EA580C;"></div>
+          <div class="desk-card__body" style="padding: 10px;">
+            <div class="desk-card__title" style="font-size: 13px; color: #0C0C0C;">Navion (1)</div>
+            <div class="desk-card__desc" style="font-size: 11px; color: #5C5C5C;">12.4 TAO · High confidence</div>
+            <div style="margin-top: 6px; display: flex; justify-content: space-between; align-items: center;">
+              <div class="conf-bar" style="width: 60px;"><div class="conf-segment filled"></div><div class="conf-segment filled"></div><div class="conf-segment filled"></div></div>
+              <button class="action-btn action-btn--ghost" style="font-size: 10px; padding: 3px 8px; color: #2563EB; border-color: #D4D4D4;">Stake more</button>
+            </div>
+          </div>
+        </div>
+        <div class="chip-bar" style="gap: 4px;">
+          <div class="chip chip--active" style="--chip-color: #EA580C); background: rgba(234,88,12,0.08); border-color: rgba(234,88,12,0.3); color: #EA580C; font-size: 10px; padding: 2px 6px;">Bittensor</div>
+          <div class="chip" style="background: #FFFFFF; border-color: #EBEBEB; color: #5C5C5C; font-size: 10px; padding: 2px 6px;">Delegation</div>
+        </div>
+      </div>
+      <div class="mobile-composer" style="background: #FFFFFF; border-color: #EBEBEB;">
+        <input class="mobile-composer__input" style="background: #F0F0F0; border-color: #D4D4D4; color: #0C0C0C;" placeholder="Ask about your subnets…" type="text">
+        <div class="mobile-composer__send" style="background: #2563EB; color: #FFFFFF;">↑</div>
+      </div>
+      <div class="mobile-frame__bottom" style="background: #FFFFFF; border-color: #EBEBEB;">
+        <div class="mobile-tab active">
+          <div class="mobile-tab__icon">🏠</div>
+          <div class="mobile-tab__label" style="color: #2563EB;">Home</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">⚡</div>
+          <div class="mobile-tab__label" style="color: #9CA3AF;">Bittensor</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">💎</div>
+          <div class="mobile-tab__label" style="color: #9CA3AF;">Hyper</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">📊</div>
+          <div class="mobile-tab__label" style="color: #9CA3AF;">Poly</div>
+        </div>
+        <div class="mobile-tab">
+          <div class="mobile-tab__icon">♥</div>
+          <div class="mobile-tab__label" style="color: #9CA3AF;">Wellness</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--success" style="margin-top: 16px;">
+    <div class="annotation__label">Mobile Rules</div>
+    <div class="annotation__body">
+      <strong>5 bottom tabs:</strong> Home, Bittensor, Hyperliquid, Polymarket, Wellness. "More" opens Settings/Memory/MCP.<br>
+      <strong>Profile:</strong> Top bar avatar — always visible, never in bottom bar.<br>
+      <strong>Composer:</strong> Fixed position, above keyboard. <code>visualViewport</code> API used for keyboard detection.<br>
+      <strong>Right rail:</strong> Absent on mobile — information moves into main content area.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 9: DO NOT BUILD — FORBIDDEN PATTERNS
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-forbidden">
+  <div class="screen-label">Do Not Build</div>
+  <div class="screen-title">Forbidden Patterns</div>
+  <div class="screen-subtitle">These patterns must never appear in V2. Codex must catch them in visual review.</div>
+
+  <div class="forbidden-grid">
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Generic "Crypto workspace"</strong></div>
+        <div class="forbidden-item__tag">Never</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Re-brands Matterhorn as a crypto app. Use protocol names.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>"Services" in customer nav</strong></div>
+        <div class="forbidden-item__tag">Never</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Not a customer-facing desk in V1. Settings is the administrative hub.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Seed phrase / private key input</strong></div>
+        <div class="forbidden-item__tag">Never — no exceptions</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Matterhorn never asks for secrets. Public data only.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>API secret input field</strong></div>
+        <div class="forbidden-item__tag">Never for customer-facing features</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Hyperliquid and Polymarket are preview-only. No credentials stored.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>"Submit order" / "Close position"</strong></div>
+        <div class="forbidden-item__tag">Never</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Hyperliquid and Polymarket are preview-only in V1. External signer only.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Medical diagnosis / prescription / treatment</strong></div>
+        <div class="forbidden-item__tag">Wellness: never</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Wellness must use educational framing. No clinical claims. Sensitivity: Personal or Restricted only.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Full wallet address (non-truncated)</strong></div>
+        <div class="forbidden-item__tag">Always truncate</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Always <code>5CfTC…3bX9</code>. Copy button provides full address.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Emoji as primary protocol icon</strong></div>
+        <div class="forbidden-item__tag">Nav / desk icons: never</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Use SVG icon system. Emoji acceptable in empty states only.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Glassmorphism / blur panels</strong></div>
+        <div class="forbidden-item__tag">Explicitly forbidden</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">No <code>backdrop-filter: blur()</code>. No semi-transparent overlays.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>border-radius > 4px on data cards</strong></div>
+        <div class="forbidden-item__tag">Sharp corners standard</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;"><code>--v2-radius: 4px</code> max. No curved corners on data cards.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Nested card grids</strong></div>
+        <div class="forbidden-item__tag">Card contains content, not more bordered cards</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">A card holds text, chips, and inline metrics — not another card with its own border.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Profile/wallet in bottom bar</strong></div>
+        <div class="forbidden-item__tag">Desktop: right rail. Mobile: top bar</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Bottom bar has 5 desk tabs. Profile avatar is always in the top bar.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Notification counts in left nav rail</strong></div>
+        <div class="forbidden-item__tag">Move to right rail bell</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Nav rail = icon + tooltip. Bell with badge count lives in right rail.</div>
+      </div>
+    </div>
+
+    <div class="forbidden-item">
+      <div class="forbidden-item__icon">✕</div>
+      <div>
+        <div class="forbidden-item__text"><strong>Computer Use in customer defaults</strong></div>
+        <div class="forbidden-item__tag">Developer-only feature</div>
+        <div style="font-size: 11px; color: var(--v2-text-tertiary); margin-top: 4px;">Not a default feature. Never appear in customer-facing desk defaults.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.getAttribute('data-theme');
+  const next = current === 'light' ? 'dark' : 'light';
+  html.setAttribute('data-theme', next);
+  document.getElementById('themeBtn').textContent = next === 'light' ? '◐ Dark' : '◑ Light';
+}
+</script>
+
+</body>
+</html>
