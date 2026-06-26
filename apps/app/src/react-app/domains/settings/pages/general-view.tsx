@@ -74,13 +74,13 @@ function SettingsCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className="flex items-center gap-3 rounded-2xl border border-dls-border bg-dls-surface p-4 text-left transition-colors hover:bg-dls-hover"
+      className="group flex min-w-0 items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-dls-hover/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.34)]"
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-dls-border bg-dls-hover">
-        <props.icon size={16} className="text-dls-secondary" />
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text transition-colors group-hover:bg-[rgba(var(--dls-accent-rgb),0.18)]">
+        <props.icon size={16} />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
           <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${statusClass}`}>
             {props.status}
@@ -95,13 +95,11 @@ function SettingsCard(props: {
 
 export function GeneralSettingsView(props: GeneralSettingsViewProps) {
   return (
-    <div className="w-full max-w-3xl space-y-8">
+    <div className="w-full max-w-4xl space-y-6">
       {/* Workspace settings */}
-      <div className="space-y-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-dls-secondary">
-          Workspace
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+        <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Workspace</div>
+        <div className="grid gap-1 md:grid-cols-2">
           {workspaceCards
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => (
@@ -115,14 +113,12 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
               />
             ))}
         </div>
-      </div>
+      </section>
 
       {/* Global settings */}
-      <div className="space-y-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-dls-secondary">
-          Global
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+      <section className="rounded-xl bg-dls-surface/70 p-3 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+        <div className="px-2 pb-2 text-sm font-semibold text-dls-text">Global</div>
+        <div className="grid gap-1 md:grid-cols-2">
           {globalCards
             .filter((card) => props.developerMode || !card.developerOnly)
             .map((card) => (
@@ -136,52 +132,47 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
               />
             ))}
         </div>
-      </div>
+      </section>
 
       {/* Feedback */}
-      <div className="space-y-3">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.15em] text-dls-secondary">
-          Help
-        </div>
-        <div className="rounded-2xl border border-dls-border bg-dls-surface p-4">
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <LifeBuoy size={14} className="text-dls-secondary" />
-                <div className="text-[13px] font-medium text-dls-text">{t("settings.feedback_title")}</div>
-              </div>
-              <div className="mt-1 max-w-[58ch] text-[11px] text-dls-secondary">{t("settings.feedback_desc")}</div>
+      <section className="rounded-xl bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <LifeBuoy size={14} className="text-dls-secondary" />
+              <div className="text-[13px] font-medium text-dls-text">{t("settings.feedback_title")}</div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={props.onSendFeedback}
-              >
-                <MessageCircle size={12} />
-                {t("settings.send_feedback")}
-                <ArrowUpRight size={11} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={props.onJoinDiscord}
-              >
-                {t("settings.join_discord")}
-                <ArrowUpRight size={11} />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={props.onReportIssue}
-              >
-                {t("settings.report_issue")}
-                <ArrowUpRight size={11} />
-              </Button>
-            </div>
+            <div className="mt-1 max-w-[58ch] text-[11px] leading-5 text-dls-secondary">{t("settings.feedback_desc")}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.onSendFeedback}
+            >
+              <MessageCircle size={12} />
+              {t("settings.send_feedback")}
+              <ArrowUpRight size={11} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.onJoinDiscord}
+            >
+              {t("settings.join_discord")}
+              <ArrowUpRight size={11} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.onReportIssue}
+            >
+              {t("settings.report_issue")}
+              <ArrowUpRight size={11} />
+            </Button>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
