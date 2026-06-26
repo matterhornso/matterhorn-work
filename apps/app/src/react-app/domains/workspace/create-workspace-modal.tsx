@@ -536,6 +536,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
             hasSelectedFolder={hasSelectedFolder}
             pickingFolder={pickingFolder}
             onPickFolder={() => void handlePickFolder()}
+            onManualFolderChange={(folder) => setSelectedFolder(folder.trim() || null)}
             submitting={submitting}
             localError={localError}
             onClose={props.onClose}

@@ -32,6 +32,10 @@ import {
   type CustomerBetaDemoScenario,
   type MatterhornProtocolWorkspaceManifest,
 } from "@matterhorn-work/types/matterhorn-workflows";
+import {
+  normalizeMatterhornServerUrl,
+  readMatterhornServerSettings,
+} from "../../../../app/lib/matterhorn-server";
 
 const WATCH_ADDRESS_KEY = "matterhorn:bittensor:watchAddress";
 const FAVORITES_KEY = "matterhorn:bittensor:favorites";
@@ -415,6 +419,51 @@ function protocolSignerLabel(manifest: MatterhornProtocolWorkspaceManifest): str
   return "Not required";
 }
 
+function readViteEnvValue(primary: string, legacy?: string) {
+  const env = import.meta.env as Record<string, unknown> | undefined;
+  const primaryValue = typeof env?.[primary] === "string" ? env[primary].trim() : "";
+  if (primaryValue) return primaryValue;
+  return legacy && typeof env?.[legacy] === "string" ? env[legacy].trim() : "";
+}
+
+function resolveMatterhornApiConnection() {
+  const settings = readMatterhornServerSettings();
+  const envUrl = readViteEnvValue("VITE_MATTERHORN_WORK_URL", "VITE_OPENWORK_URL");
+  const envPort = readViteEnvValue("VITE_MATTERHORN_WORK_PORT", "VITE_OPENWORK_PORT");
+  const envToken = readViteEnvValue("VITE_MATTERHORN_WORK_TOKEN", "VITE_OPENWORK_TOKEN");
+  const envHostToken = readViteEnvValue("VITE_MATTERHORN_WORK_HOST_TOKEN", "VITE_OPENWORK_HOST_TOKEN");
+  const portUrl = envPort ? `http://127.0.0.1:${envPort}` : "";
+
+  return {
+    baseUrl: normalizeMatterhornServerUrl(settings.urlOverride ?? envUrl ?? portUrl ?? "") ?? "",
+    token: settings.token ?? envToken ?? undefined,
+    hostToken: settings.hostToken ?? envHostToken ?? undefined,
+  };
+}
+
+async function fetchMatterhornApiJson<T>(path: string, init?: RequestInit): Promise<{ response: Response; json: T }> {
+  const api = resolveMatterhornApiConnection();
+  const headers = new Headers(init?.headers);
+  if (api.token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${api.token}`);
+  }
+  if (api.hostToken && !headers.has("X-Matterhorn-Host-Token")) {
+    headers.set("X-Matterhorn-Host-Token", api.hostToken);
+  }
+
+  const response = await fetch(`${api.baseUrl}${path}`, { ...init, headers });
+  const body = await response.text();
+  try {
+    return { response, json: JSON.parse(body) as T };
+  } catch {
+    const source = api.baseUrl || "current app origin";
+    const preview = body.trim().slice(0, 80) || response.statusText;
+    throw new Error(
+      `Matterhorn API returned non-JSON from ${source}${path}: ${preview}. Check the local Matterhorn server connection.`,
+    );
+  }
+}
+
 function mondayBetaScenarioMode(scenario: CustomerBetaDemoScenario): "bittensor" | "crypto" {
   return scenario.mapsToCustomerTemplateId === "bittensor_operator" ? "bittensor" : "crypto";
 }
@@ -596,6 +645,22 @@ function formatNumber(value: number | null | undefined, digits = 3): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
+function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?: boolean }) {
+  const label = venue === "bittensor" ? "τ" : venue === "hyperliquid" ? "HL" : "PM";
+  const title = VENUE_DESKS[venue].label;
+  return (
+    <span
+      aria-label={`${title} mark`}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-md border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] font-semibold text-[var(--protocol-desk-accent)]",
+        compact ? "size-5 text-[10px]" : "size-9 text-sm",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
 function readFavorites(): number[] {
   if (typeof window === "undefined") return [];
   try {
@@ -713,8 +778,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/bittensor/subnets");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; subnets?: BittensorSubnetSummary[]; error?: { message?: string } }>("/api/bittensor/subnets");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load subnets");
       const next = (json.subnets ?? []) as BittensorSubnetSummary[];
       setSubnets(next);
@@ -728,8 +792,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   const loadSidecarStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/bittensor/sidecar/health");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; health?: BittensorSubtensorSidecarHealth; error?: { message?: string } }>("/api/bittensor/sidecar/health");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load sidecar status");
       setSidecarStatus(json.health as BittensorSubtensorSidecarHealth);
     } catch {
@@ -740,8 +803,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadReadiness = useCallback(async () => {
     setReadinessLoading(true);
     try {
-      const res = await fetch("/api/bittensor/readiness");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; report?: ReadinessReport; error?: { message?: string } }>("/api/bittensor/readiness");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load Bittensor readiness");
       setReadiness(json.report as ReadinessReport);
     } catch (err) {
@@ -766,8 +828,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadCryptoReadiness = useCallback(async () => {
     setCryptoReadinessLoading(true);
     try {
-      const res = await fetch("/api/crypto/readiness");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; report?: ReadinessReport; error?: { message?: string } }>("/api/crypto/readiness");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load crypto readiness");
       setCryptoReadiness((json.report ?? json) as ReadinessReport);
     } catch (err) {
@@ -792,8 +853,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadMarketExecutionReadiness = useCallback(async () => {
     setMarketExecutionReadinessLoading(true);
     try {
-      const res = await fetch("/api/crypto/market-execution-readiness");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; report?: MarketExecutionReadinessReport; error?: { message?: string } }>("/api/crypto/market-execution-readiness");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market execution readiness");
       setMarketExecutionReadiness((json.report ?? json) as MarketExecutionReadinessReport);
     } catch (err) {
@@ -829,8 +889,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadMarketExecutionChain = useCallback(async () => {
     setMarketExecutionChainLoading(true);
     try {
-      const res = await fetch("/api/crypto/market-execution-chain");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; guide?: MarketExecutionChainGuide; error?: { message?: string } }>("/api/crypto/market-execution-chain");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market execution chain");
       setMarketExecutionChain((json.guide ?? json) as MarketExecutionChainGuide);
     } catch {
@@ -843,8 +902,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadMarketSdkValidation = useCallback(async () => {
     setMarketSdkValidationLoading(true);
     try {
-      const res = await fetch("/api/crypto/market-sdk-validation");
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; guide?: MarketSdkValidationGuide; error?: { message?: string } }>("/api/crypto/market-sdk-validation");
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load market SDK validation");
       setMarketSdkValidation((json.guide ?? json) as MarketSdkValidationGuide);
     } catch {
@@ -857,8 +915,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   const loadDetail = useCallback(async (netuid: number) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(`/api/bittensor/subnets/${netuid}`);
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; subnet?: BittensorSubnetDetail; error?: { message?: string } }>(`/api/bittensor/subnets/${netuid}`);
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load subnet");
       setDetail(json.subnet as BittensorSubnetDetail);
     } catch {
@@ -884,8 +941,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     setWalletError(null);
     try {
       window.localStorage.setItem(WATCH_ADDRESS_KEY, addr);
-      const res = await fetch(`/api/bittensor/wallet/${encodeURIComponent(addr)}`);
-      const json = await res.json();
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; wallet?: BittensorWalletSnapshot; error?: { message?: string } }>(`/api/bittensor/wallet/${encodeURIComponent(addr)}`);
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to load wallet");
       setWallet(json.wallet as BittensorWalletSnapshot);
     } catch (err) {
@@ -959,7 +1015,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     setQuoteLoading(true);
     setQuote(null);
     try {
-      const res = await fetch("/api/bittensor/actions/quote", {
+      const { response: res, json } = await fetchMatterhornApiJson<{ success?: boolean; quote?: BittensorActionQuote; error?: { message?: string } }>("/api/bittensor/actions/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -970,7 +1026,6 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           recipient,
         }),
       });
-      const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error?.message ?? "Failed to quote action");
       setQuote(json.quote as BittensorActionQuote);
     } catch (err) {
@@ -1218,9 +1273,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--protocol-desk-soft)]">
-              <BrainCircuit className="size-5 text-[var(--protocol-desk-accent)]" />
-            </div>
+            <ProtocolMark venue={venue} />
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-[-0.01em] text-dls-text">{activeVenue.workspaceTitle}</h2>
               <p className="text-[12px] leading-5 text-dls-secondary">
@@ -1239,13 +1292,13 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Refresh
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl bg-dls-surface p-1 sm:grid-cols-3">
+        <div className="mb-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface p-1 sm:grid-cols-3">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
               type="button"
               className={cn(
-                "rounded-lg px-2 py-2 text-xs font-semibold transition-colors",
+                "flex items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-semibold transition-colors",
                 venue === item ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
               )}
               onClick={() => {
@@ -1253,11 +1306,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 setTab("overview");
               }}
             >
+              <span style={venueToneStyle(item)}>
+                <ProtocolMark venue={item} compact />
+              </span>
               {VENUE_DESKS[item].label}
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.30)] bg-[var(--protocol-desk-soft)] p-3.5">
+        <div className="mb-3 rounded-lg border border-[rgba(var(--protocol-desk-rgb),0.30)] bg-[var(--protocol-desk-soft)] p-3.5">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--protocol-desk-accent)]">
             <span>Safety strip</span>
             <span>Protocol manifest</span>
@@ -1277,8 +1333,17 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Status: {activeManifestStatus}. Allowed intents: {activeManifest.allowedIntents.join(", ")}. Panel route: {activeManifest.primaryPanelRouteId}.
           </p>
         </div>
+        <UnifiedWalletPanel
+          venue={venue}
+          watchAddress={watchAddress}
+          wallet={wallet}
+          onOpenWallet={() => {
+            setVenue("bittensor");
+            setTab("wallet");
+          }}
+        />
         {venue === "bittensor" ? (
-          <div className="grid grid-cols-1 gap-1 rounded-xl bg-dls-surface p-1 sm:grid-cols-5">
+          <div className="mt-3 grid grid-cols-1 gap-1 rounded-lg bg-dls-surface p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1977,21 +2042,38 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         )}
 
         {venue === "bittensor" && tab === "subnets" && (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-2">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-dls-border bg-dls-card p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-dls-text">All Bittensor subnets</div>
+                  <div className="mt-0.5 text-xs text-dls-secondary">
+                    {filteredSubnets.length} shown from {subnets.length || "fallback"} subnets. Select a row to inspect utility, source, and next actions.
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={loadSubnets} disabled={loading}>
+                  <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+                  Refresh
+                </Button>
+              </div>
+              <label className="mt-3 flex items-center gap-2 rounded-md border border-dls-border bg-dls-surface px-3 py-2">
                 <Search className="size-4 text-dls-secondary" />
+                <span className="sr-only">Search Bittensor subnets</span>
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.currentTarget.value)}
-                  placeholder="Search netuid, name, utility"
+                  placeholder="Search by netuid, name, symbol, category, or utility"
                   className="min-w-0 flex-1 bg-transparent text-sm text-dls-text outline-none placeholder:text-dls-secondary"
                 />
-              </div>
+              </label>
               {loading ? (
                 <LoadingLabel label="Loading subnets" />
+              ) : filteredSubnets.length === 0 ? (
+                <Notice tone="info" icon={<Search className="size-4" />} title="No matching subnets">
+                  Clear the search or try a category like image, data, inference, validator, or compute.
+                </Notice>
               ) : (
-                <div className="space-y-2">
+                <div className="mt-3 divide-y divide-dls-border overflow-hidden rounded-lg border border-dls-border">
                   {filteredSubnets.map((subnet) => (
                     <SubnetRow
                       key={subnet.netuid}
@@ -2185,12 +2267,53 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dls-border bg-dls-card p-4 sm:p-5">
+    <div className="rounded-lg border border-dls-border bg-dls-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
         <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]">{icon}</span>
         {title}
       </div>
       {children}
+    </div>
+  );
+}
+
+function UnifiedWalletPanel({
+  venue,
+  watchAddress,
+  wallet,
+  onOpenWallet,
+}: {
+  venue: CryptoVenue;
+  watchAddress: string;
+  wallet: BittensorWalletSnapshot | null;
+  onOpenWallet: () => void;
+}) {
+  const label = venue === "bittensor" ? "SS58 public wallet" : "External wallet/client";
+  const value = venue === "bittensor"
+    ? (watchAddress.trim() ? shortAddress(watchAddress.trim()) : "Not connected")
+    : "Preview-only beta";
+  return (
+    <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2.5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm font-semibold text-dls-text">
+            <Wallet className="size-4 text-[var(--protocol-desk-accent)]" />
+            Matterhorn Wallet
+          </div>
+          <div className="mt-1 text-xs leading-5 text-dls-secondary">
+            {label}: <span className="font-mono text-dls-text">{value}</span>
+            {venue === "bittensor" && wallet?.providerStatus === "ok" ? (
+              <span> · {formatNumber(wallet.estimatedValueTao)} TAO tracked</span>
+            ) : null}
+          </div>
+          <div className="mt-1 text-[11px] leading-5 text-dls-secondary">
+            One wallet layer is the product direction. Today this beta uses public reads and external signer/client handoffs; Matterhorn never takes custody or secrets.
+          </div>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0 text-xs" onClick={onOpenWallet}>
+          {venue === "bittensor" ? "Open wallet" : "Wallet status"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -2244,21 +2367,21 @@ function SubnetRow({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-dls-surface p-3 transition-colors",
-        selected ? "border-sky-500/60" : "border-dls-border hover:border-sky-500/30",
+        "bg-dls-surface transition-colors",
+        selected ? "bg-[var(--protocol-desk-soft)]" : "hover:bg-dls-hover",
       )}
     >
-      <div className="flex items-start gap-2">
-        <button type="button" className="min-w-0 flex-1 text-left" onClick={onSelect}>
-          <div className="flex items-center gap-2">
-            <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] text-sky-300">#{subnet.netuid}</span>
-            <span className="truncate text-sm font-medium text-dls-text">{subnet.name}</span>
-          </div>
-          <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-dls-secondary">{subnet.benefitSummary}</div>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Pill>{subnet.category}</Pill>
-            <Pill>{subnet.symbol}</Pill>
-            <Pill>{subnet.source === "tao.app" ? "Live" : "Fallback"}</Pill>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 p-3">
+        <button type="button" className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-3 text-left" onClick={onSelect}>
+          <div className="font-mono text-xs font-semibold text-[var(--protocol-desk-accent)]">#{subnet.netuid}</div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-dls-text">{subnet.name}</div>
+            <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-dls-secondary">{subnet.benefitSummary}</div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Pill>{subnet.category}</Pill>
+              <Pill>{subnet.symbol}</Pill>
+              <Pill>{subnet.source === "tao.app" ? "Live" : "Fallback"}</Pill>
+            </div>
           </div>
         </button>
         <button
@@ -2375,7 +2498,7 @@ function SubnetDetailCard({
 
 function Pill({ children }: { children: ReactNode }) {
   return (
-    <span className="rounded-full border border-dls-border bg-dls-sidebar px-2 py-0.5 text-[10px] text-dls-secondary">
+    <span className="rounded-md border border-dls-border bg-dls-sidebar px-2 py-0.5 text-[10px] text-dls-secondary">
       {children}
     </span>
   );
