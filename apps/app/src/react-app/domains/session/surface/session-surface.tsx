@@ -1600,7 +1600,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-sm text-dls-secondary">Pick a focused workspace or start a blank chat. You can edit every prompt before sending.</p>
+                        <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -158,6 +158,7 @@ for (const phrase of [
   "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
+  "Choose a desk or start a blank chat. Every prompt stays editable before sending.",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
@@ -172,6 +173,8 @@ for (const phrase of [
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
 }
+
+assert.ok(!sessionSurface.includes("Connect MCPs"), "Home starter should not show a Connect MCPs CTA");
 
 for (const phrase of [
   '"dashboard.create_workspace_title": "Create Project"',
