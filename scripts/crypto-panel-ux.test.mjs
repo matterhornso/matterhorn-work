@@ -79,6 +79,11 @@ assert.ok(panel.includes('source: "bittensor-standard-action"'), "Standard Bitte
 assert.ok(panel.includes("they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets."), "Standard Bittensor action copy should state no auto-send and no signing");
 assert.ok(panel.includes('source: `${venue}-standard-action`'), "Standard market actions should use a dedicated handoff source");
 assert.ok(panel.includes("They do not auto-send, sign, submit, place orders, bet, or ask for private keys"), "Standard market action copy should state no auto-send, no submission, and no secrets");
+assert.ok(panel.includes("One-click prompts stay short; the full instruction is inserted into chat."), "Market action cards should show short summaries instead of full prompt walls");
+assert.ok(panel.includes("Read-only market context"), "Market desks should show a read-only context primer");
+assert.ok(panel.includes("Preview boundary: show the user what can be read"), "Market desks should explain the preview-only boundary");
+assert.ok(panel.includes("Prepare a no-submit testnet preview with hash expectations."), "Hyperliquid cards should use concise preview summaries");
+assert.ok(panel.includes("Prepare a preview-only YES/NO plan with no executable submit path."), "Polymarket cards should use concise preview summaries");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
 //     support prompt insertion plus evidence command copy.

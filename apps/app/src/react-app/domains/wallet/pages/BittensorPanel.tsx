@@ -431,7 +431,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
   liveSubmission: string;
   signer: string;
   source: string;
-  prompts: { label: string; prompt: string }[];
+  prompts: { label: string; summary: string; prompt: string }[];
 }> = {
   bittensor: {
     label: "Bittensor",
@@ -448,18 +448,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
     prompts: [
       {
         label: "Find image subnets",
+        summary: "Discover useful image-generation subnets and adapter support.",
         prompt: "Use Bittensor chat mode. Find Bittensor subnets useful for image generation. Explain each subnet in beginner language, adapter availability, live data freshness, risks, and safe next steps.",
       },
       {
         label: "Show my TAO",
+        summary: "Read a public SS58 wallet and explain balance/stake exposure.",
         prompt: "Use Bittensor chat mode. Show my TAO and where I am staked for this public SS58 coldkey: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
       },
       {
         label: "Compare validators",
+        summary: "Compare subnet 14 validators with source and freshness context.",
         prompt: "Use Bittensor chat mode. Compare validators on subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, hotkey meaning, and what is missing before a staking preview.",
       },
       {
         label: "Prepare staking",
+        summary: "Build an unsigned stake preview and external signer handoff.",
         prompt: "Use Bittensor chat mode. Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
       },
     ],
@@ -479,18 +483,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
     prompts: [
       {
         label: "BTC orderbook",
+        summary: "Read spread, depth, source, and stale-data context.",
         prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
       },
       {
         label: "Account exposure",
+        summary: "Summarize public account value, margin, positions, and funding.",
         prompt: "Use Hyperliquid chat mode. Show my Hyperliquid exposure for this public address: <paste public address>. Summarize account value, margin, positions, open orders, funding exposure, and risk notes where data exists.",
       },
       {
         label: "Preview order",
+        summary: "Prepare a no-submit testnet preview with hash expectations.",
         prompt: "Use Hyperliquid chat mode. Prepare a preview for buying 0.001 BTC with a testnet external-signer flow. Do not submit, sign, or ask for API secrets. Show Can submit: No, Live submission: Off, missing context, and preview hash expectations.",
       },
       {
         label: "Create watch",
+        summary: "Create read-only funding and orderbook movement watches.",
         prompt: "Use Hyperliquid chat mode. Create a read-only watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert card behavior, and confirm no auto-execution.",
       },
     ],
@@ -510,18 +518,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
     prompts: [
       {
         label: "Find markets",
+        summary: "Find public markets and explain outcomes as probabilities.",
         prompt: "Use Polymarket chat mode. Find and summarize Polymarket markets about this topic: <topic>. Explain outcomes, implied probabilities, liquidity/orderbook context where available, and compliance status.",
       },
       {
         label: "Compliance read",
+        summary: "Check if a market can be previewed and what gets blocked.",
         prompt: "Use Polymarket chat mode. Review whether this market can be previewed: <market id or URL>. If compliance-blocked, return no executable price, size, or share fields.",
       },
       {
         label: "Preview prediction",
+        summary: "Prepare a preview-only YES/NO plan with no executable submit path.",
         prompt: "Use Polymarket chat mode. Prepare a preview-only YES/NO prediction for this testnet/operator-owned market: <market id>. Do not sign, submit, or ask for API secrets. Show Can submit: No, Live submission: Off, and external signer requirements.",
       },
       {
         label: "Create watch",
+        summary: "Watch odds, liquidity, compliance, and public receipt changes.",
         prompt: "Use Polymarket chat mode. Create a read-only watch plan for odds/liquidity movement and compliance status on this public market: <market id>. Confirm no order signing, submission, or auto-execution.",
       },
     ],
@@ -1301,8 +1313,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title={activeVenue.workspaceTitle} icon={venue === "hyperliquid" ? <BarChart3 className="size-4" /> : <Shield className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-200">{activeVenue.eyebrow}</div>
+                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
@@ -1320,18 +1332,21 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-xs leading-5 text-dls-secondary">
-                These insert editable {activeVenue.label} prompts into chat. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+                These insert editable {activeVenue.label} prompts into chat. One-click prompts stay short; the full instruction is inserted into chat. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
               </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
                   <button
                     key={item.label}
                     type="button"
-                    className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                    className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2.5 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
                     onClick={() => void askAgentForVenuePrompt(item.prompt, { source: `${venue}-standard-action` })}
                   >
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
-                    <span className="mt-1 block break-words text-[11px] leading-5 text-dls-secondary">{item.prompt}</span>
+                    <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">{item.summary}</span>
+                    <span className="mt-2 inline-flex rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] px-2 py-0.5 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
+                      Ask in Chat -&gt;
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1339,6 +1354,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title={venue === "hyperliquid" ? "Exchange preview controls" : "Market preview controls"} icon={<Shield className="size-4" />}>
               <div className="space-y-3">
+                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] px-3 py-2.5">
+                  <p className="text-xs font-semibold text-dls-text">Read-only market context</p>
+                  <p className="mt-1 text-[11px] leading-5 text-dls-secondary">
+                    Preview boundary: show the user what can be read, what context is missing, and why no market action can submit from Matterhorn.
+                  </p>
+                </div>
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
                   <Metric label="Readiness" value={venue === "hyperliquid" ? hyperliquidReadinessState : polymarketReadinessState} compact />
                   <Metric label="Execution" value={marketVenueState(venue)} compact />
