@@ -95,6 +95,7 @@ import {
   type CustomerWorkflowStarterCard,
 } from "../workflows/customer-workflow-templates";
 import { getCustomerProtocolDeskVisual } from "../workflows/protocol-desk-ui";
+import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
@@ -112,15 +113,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconHint; size?: number }) {
   const visual = getCustomerProtocolDeskVisual(iconHint);
   if (!visual) return null;
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex items-center justify-center font-mono font-bold leading-none"
-      style={{ fontSize: Math.max(9, Math.round(size * 0.45)) }}
-    >
-      {visual.fallbackInitials}
-    </span>
-  );
+  return <ProtocolBrandLogo id={iconHint} visual={visual} size={size} />;
 }
 
 type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
@@ -166,9 +159,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   return (
     <div style={deskToneStyle(iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
           {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
-            <ProtocolLogo iconHint={copy.id} size={16} />
+            <ProtocolLogo iconHint={copy.id} size={22} />
           ) : (
             <Icon className="size-4" />
           )}
@@ -1566,7 +1559,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group flex min-h-[214px] min-w-0 flex-col rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[linear-gradient(180deg,rgba(var(--matterhorn-desk-rgb),0.09),rgba(var(--matterhorn-desk-rgb),0.025))] p-4 text-left shadow-[0_16px_36px_rgba(0,0,0,0.16)] transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.56)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)]"
+                            className="group flex min-h-[214px] min-w-0 flex-col rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[linear-gradient(180deg,rgba(var(--matterhorn-desk-rgb),0.09),rgba(var(--matterhorn-desk-rgb),0.025))] p-4 text-left shadow-sm transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.56)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
                             <span className="flex items-start gap-3">

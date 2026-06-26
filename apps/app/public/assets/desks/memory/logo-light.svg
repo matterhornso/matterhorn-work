@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">Memory</title>
+  <rect width="64" height="64" rx="18" fill="#EFF6FF"/>
+  <path d="M20 24C20 19.6 25.4 16 32 16C38.6 16 44 19.6 44 24V40C44 44.4 38.6 48 32 48C25.4 48 20 44.4 20 40V24Z" fill="#0EA5E9"/>
+  <path d="M20 24C20 28.4 25.4 32 32 32C38.6 32 44 28.4 44 24M20 32C20 36.4 25.4 40 32 40C38.6 40 44 36.4 44 32" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">Wellness</title>
+  <rect width="64" height="64" rx="18" fill="#EFFAF7"/>
+  <path d="M32 49C24 43.4 18 37 18 29.4C18 24.4 21.5 21 26 21C28.8 21 31 22.3 32 24.2C33 22.3 35.2 21 38 21C42.5 21 46 24.4 46 29.4C46 37 40 43.4 32 49Z" fill="#14B8A6"/>
+  <path d="M24 34H29L31 29L35 39L37 34H42" stroke="#0C0C0C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

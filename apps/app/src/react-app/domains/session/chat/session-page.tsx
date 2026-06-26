@@ -87,6 +87,7 @@ import {
   CUSTOMER_LAUNCHER_DESK_VISUALS,
   getCustomerProtocolDeskVisual,
 } from "../workflows/protocol-desk-ui";
+import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
@@ -112,15 +113,7 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 
 function ProtocolLogo({ venue, size = 18 }: { venue: VenueSidePanel; size?: number }) {
   const visual = getCustomerProtocolDeskVisual(venue);
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex items-center justify-center font-mono font-bold leading-none"
-      style={{ fontSize: Math.max(9, Math.round(size * 0.45)) }}
-    >
-      {visual?.fallbackInitials ?? venue.slice(0, 2).toUpperCase()}
-    </span>
-  );
+  return <ProtocolBrandLogo id={venue} visual={visual} size={size} />;
 }
 
 function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "memory" | "mcp"): CSSProperties {
@@ -167,8 +160,8 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
 
 function HomeCapabilityStatus() {
   return (
-    <section className="space-y-3" aria-label="Current capability status">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <section className="space-y-3 rounded-xl bg-dls-surface/70 p-4 shadow-sm ring-1 ring-dls-border/55" aria-label="Current capability status">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Current capability status</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
@@ -178,23 +171,23 @@ function HomeCapabilityStatus() {
             Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <span className="self-start rounded-md border border-dls-border/80 bg-dls-surface px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
+        <span className="self-start rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
           Live boundaries visible
         </span>
       </div>
-      <div className="max-h-[260px] overflow-y-auto border-y border-dls-border/70">
+      <div className="grid max-h-[260px] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
             <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="grid gap-3 border-b border-dls-border/45 px-1 py-3 text-left last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto]"
+              className="grid gap-3 rounded-xl bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb),0.14),rgba(var(--matterhorn-desk-rgb),0.035))] p-3 text-left ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.18)] sm:grid-rows-[1fr_auto]"
             >
               <div className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
                   {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
-                    <ProtocolLogo venue={item.id} size={16} />
+                    <ProtocolLogo venue={item.id} size={22} />
                   ) : (
                     <Icon className="size-4" />
                   )}
@@ -209,7 +202,7 @@ function HomeCapabilityStatus() {
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
                 </div>
               </div>
-              <p className="text-[10px] leading-4 text-dls-secondary/85 sm:max-w-[220px]">{item.proof}</p>
+              <p className="rounded-lg bg-dls-surface/60 px-2.5 py-2 text-[10px] leading-4 text-dls-secondary/90">{item.proof}</p>
             </div>
           );
         })}
@@ -1234,7 +1227,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="group flex min-h-[196px] w-full flex-col items-start rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.62)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
+                                  className="group flex min-h-[196px] w-full flex-col items-start overflow-hidden rounded-xl bg-[linear-gradient(145deg,rgba(var(--matterhorn-desk-rgb),0.16),rgba(var(--matterhorn-desk-rgb),0.045)_58%,rgba(255,255,255,0.02))] p-4 text-left shadow-sm ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1244,8 +1237,8 @@ export function SessionPage(props: SessionPageProps) {
                                   }}
                                 >
                                   <span className="flex w-full items-start gap-3">
-                                    <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.38)] bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-                                      {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={19} /> : <Icon className="size-4" />}
+                                    <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.18)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.22)]">
+                                      {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={28} /> : <Icon className="size-4" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
@@ -1297,7 +1290,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={demo.id}
                                   type="button"
                                   style={deskToneStyle(demo.iconHint)}
-                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-lg border border-dls-border bg-dls-card p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.46)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
+                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-xl bg-dls-card/80 p-4 text-left shadow-sm ring-1 ring-dls-border/65 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
                                   onClick={() => {
                                     if (demo.panel) {
                                       openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
@@ -1307,8 +1300,8 @@ export function SessionPage(props: SessionPageProps) {
                                   }}
                                 >
                                   <span className="flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.3)] bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
-                                      {demo.panel ? <ProtocolLogo venue={demo.panel} /> : <Icon className="size-4" />}
+                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.2)]">
+                                      {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
@@ -1683,7 +1676,7 @@ export function SessionPage(props: SessionPageProps) {
                   aria-label={item.title}
                   aria-pressed={item.active}
                 >
-                  <ProtocolLogo venue={item.panel} size={17} />
+                  <ProtocolLogo venue={item.panel} size={22} />
                   <span className="text-[9px] leading-none 2xl:max-w-full 2xl:truncate">{item.label}</span>
                 </Button>
               );
