@@ -62,6 +62,7 @@
     "test:minimax-memory-ui": "node scripts/minimax-memory-ui.test.mjs",
     "test:minimax-memory-producer": "node scripts/minimax-memory-producer.test.mjs",
     "test:minimax-ui-system": "node scripts/minimax-ui-system.test.mjs",
+    "test:minimax-desk-v2": "node scripts/minimax-desk-v2.test.mjs",
     "test:minimax-chat-perspectives-media-nft": "node scripts/minimax-chat-perspectives-media-nft.test.mjs",
     "test:bittensor-cli-fallback": "node scripts/bittensor-cli-fallback.test.mjs",
     "test:cli-packaging-rename": "node scripts/cli-packaging-rename.test.mjs",
