@@ -1,4 +1,5 @@
 /** @jsxImportSource react */
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
@@ -134,6 +135,106 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
     );
   }
   return null;
+}
+
+type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
+
+const MATTERHORN_DESK_MODE_COPY: Record<MatterhornDeskMode, {
+  title: string;
+  status: string;
+  summary: string;
+  boundary: string;
+  iconHint: CustomerWorkflowIconHint;
+}> = {
+  bittensor: {
+    title: "Bittensor session",
+    status: "Beta-ready",
+    summary: "TAO wallet reads, subnet discovery, validator comparison, watches, receipts, and unsigned previews.",
+    boundary: "Public SS58/coldkey/hotkey context only. External signer required for actions.",
+    iconHint: "bittensor",
+  },
+  hyperliquid: {
+    title: "Hyperliquid session",
+    status: "Preview-only",
+    summary: "Orderbooks, account exposure, funding context, watch planning, and external-client handoffs.",
+    boundary: "Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.",
+    iconHint: "hyperliquid",
+  },
+  polymarket: {
+    title: "Polymarket session",
+    status: "Preview-only",
+    summary: "Market research, outcome context, compliance checks, liquidity context, and preview handoffs.",
+    boundary: "Can submit: No. Live submission: Off. Compliance blocks must not expose executable bet fields.",
+    iconHint: "polymarket",
+  },
+  wellness: {
+    title: "Wellness workflow session",
+    status: "Workflow-ready",
+    summary: "Service offers, onboarding questionnaires, program plans, check-ins, follow-ups, and client packets.",
+    boundary: "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
+    iconHint: "wellness",
+  },
+};
+
+function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
+  const text = chunks.join("\n").toLowerCase();
+  const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
+    ["wellness", [/use the wellness workflow desk/, /start wellness workflow/, /\bwellness workflow\b/]],
+    ["bittensor", [/use the bittensor desk/, /bittensor chat mode/, /\bshow my tao\b/, /\bsubnet\b/, /\bss58\b/]],
+    ["hyperliquid", [/use the hyperliquid desk/, /hyperliquid chat mode/, /\bbtc-perp\b/, /\borderbook\b/]],
+    ["polymarket", [/use the polymarket desk/, /polymarket chat mode/, /\bpolymarket market\b/, /\bcompliance\b/]],
+  ];
+  return candidates.find(([, patterns]) => patterns.some((pattern) => pattern.test(text)))?.[0] ?? null;
+}
+
+function deskToneStyle(iconHint: CustomerWorkflowIconHint): CSSProperties {
+  const tone = (() => {
+    switch (iconHint) {
+      case "bittensor":
+        return ["--desk-bittensor", "--desk-bittensor-rgb", "--desk-bittensor-secondary"];
+      case "hyperliquid":
+        return ["--desk-hyperliquid", "--desk-hyperliquid-rgb", "--desk-hyperliquid-secondary"];
+      case "polymarket":
+        return ["--desk-polymarket", "--desk-polymarket-rgb", "--desk-polymarket-secondary"];
+      case "wellness":
+        return ["--desk-wellness", "--desk-wellness-rgb", "--desk-wellness-secondary"];
+      default:
+        return ["--matterhorn-blue", "--matterhorn-blue-rgb", "--matterhorn-sky"];
+    }
+  })();
+  return {
+    "--matterhorn-desk-color": `var(${tone[0]})`,
+    "--matterhorn-desk-rgb": `var(${tone[1]})`,
+    "--matterhorn-desk-secondary": `var(${tone[2]})`,
+  } as CSSProperties;
+}
+
+function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
+  const copy = MATTERHORN_DESK_MODE_COPY[mode];
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[copy.iconHint];
+  return (
+    <div style={deskToneStyle(copy.iconHint)} className="mb-2 rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.3)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+          {copy.iconHint === "bittensor" || copy.iconHint === "hyperliquid" || copy.iconHint === "polymarket" ? (
+            <ProtocolLogo iconHint={copy.iconHint} size={16} />
+          ) : (
+            <Icon className="size-4" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] font-semibold text-dls-text">{copy.title}</span>
+            <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.35)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+              {copy.status}
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.summary}</p>
+          <p className="mt-1 text-[10px] leading-4 text-dls-secondary/85">{copy.boundary}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type SessionError = {
@@ -720,6 +821,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const renderedMessages = useMemo(
     () => deriveRenderedSessionMessages({ transcriptState, snapshot }),
     [snapshot, transcriptState],
+  );
+  const activeDeskMode = useMemo(
+    () => deriveMatterhornDeskMode([draft, ...renderedMessages.map(messageToReadableText)]),
+    [draft, renderedMessages],
   );
   const openTargets = useMemo(() => deriveOpenTargets(renderedMessages), [renderedMessages]);
   const openTargetsFingerprint = useMemo(
@@ -1404,7 +1509,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   useControlAction(sessionReadTranscriptControlAction);
 
   const hasTodoContent = (props.todos ?? []).some((todo) => todo.content.trim());
-  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || bittensorContext || memoryContext);
+  const hasComposerTopAccessory = Boolean(props.activeQuestion || hasTodoContent || props.activePermission || activeDeskMode || bittensorContext || memoryContext);
 
   return (
     <DevProfiler id="SessionSurface">
@@ -1641,6 +1746,9 @@ export function SessionSurface(props: SessionSurfaceProps) {
                     respondPermission={props.respondPermission}
                     safeStringify={props.safeStringify}
                   />
+                ) : null}
+                {activeDeskMode ? (
+                  <MatterhornDeskSessionStrip mode={activeDeskMode} />
                 ) : null}
                 {bittensorContext ? (
                   <BittensorContextStrip
