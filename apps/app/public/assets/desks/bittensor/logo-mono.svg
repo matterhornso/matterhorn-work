@@ -1,0 +1,6 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">Bittensor</title>
+  <path d="M17 42C21.5 42 24.5 39 24.5 34.4V22H31.5V35C31.5 43.2 25.7 49 17 49V42Z" fill="currentColor"/>
+  <path d="M33 22H47V29H40V49H33V22Z" fill="currentColor"/>
+  <path d="M21 22H47V29H21V22Z" fill="currentColor"/>
+</svg>

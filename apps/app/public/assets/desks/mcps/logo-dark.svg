@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">MCP Tools</title>
+  <rect width="64" height="64" rx="18" fill="#1F2937"/>
+  <path d="M27 22L17 32L27 42" stroke="#F8FAFC" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M37 22L47 32L37 42" stroke="#F8FAFC" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M34 19L30 45" stroke="#9CA3AF" stroke-width="4" stroke-linecap="round"/>
+</svg>

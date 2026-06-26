@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const types = readFileSync("packages/types/src/matterhorn-workflows.ts", "utf8");
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -223,6 +223,14 @@ for (const key of logoAssetKeys) {
 for (const [key, block] of Object.entries(assetBlocks)) {
   for (const field of ["assetKey", "protocol", "allowedUseNote", "lightAssetPath", "darkAssetPath", "fallbackInitials"]) {
     assert.ok(block.includes(`${field}:`), `${key} brand asset must include ${field}`);
+  }
+  for (const field of ["lightAssetPath", "darkAssetPath"]) {
+    const assetPath = block.match(new RegExp(`${field}:\\s*"([^"]+)"`))?.[1];
+    assert.ok(assetPath, `${key} brand asset must include ${field} path`);
+    assert.ok(
+      existsSync(`apps/app/public${assetPath}`),
+      `${key} ${field} should resolve to a bundled app asset: ${assetPath}`,
+    );
   }
 }
 
