@@ -20,6 +20,7 @@ const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.t
 const modelSelect = read("apps/app/src/components/model-select.tsx");
 const remoteWorkspaceFields = read("apps/app/src/react-app/domains/workspace/remote-workspace-fields.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
+const protocolDeskUi = read("apps/app/src/react-app/domains/session/workflows/protocol-desk-ui.ts");
 const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
 const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
@@ -73,10 +74,10 @@ for (const phrase of [
   "Current capability status",
   "These launchers are connected to Matterhorn workflow metadata.",
   "Live boundaries visible",
-  "Public TAO reads, subnet discovery, validator comparison, watches, receipts, and unsigned staking previews.",
-  "No live market submit. Can submit: No. Live submission: Off.",
-  "No live bet placement. Can submit: No. Live submission: Off.",
-  "Standalone workflow. No Web3, medical advice, live payments, email, hosting, or token gating.",
+  "Public SS58 reads and unsigned previews only.",
+  "Can submit: No. Live submission: Off. External signer/client only.",
+  "Compliance blocks must not expose executable bet fields.",
+  "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
   "Matterhorn Desks",
   "Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness.",
   "Each desk has its own prompt context, capability status, and safety boundary.",
@@ -128,9 +129,7 @@ for (const phrase of [
   "deriveMatterhornDeskMode",
   "MatterhornDeskSessionStrip",
   "starterWorkflowCapabilityItems",
-  "Bittensor session",
-  "Hyperliquid session",
-  "Polymarket session",
+  "`${manifest.displayName} session`",
   "Wellness workflow session",
   "Public SS58/coldkey/hotkey context only. External signer required for actions.",
   "Matterhorn never stores API secrets or signs orders.",
@@ -149,7 +148,7 @@ for (const phrase of [
   "Create a wellness program for my clients",
   "MCPs & Connectors",
   "Start with a Matterhorn workflow",
-  "Wellness: standalone client programs, service offers, lifecycle packets, and safe creator workflows. Not Web3 or markets.",
+  "Wellness: standalone service workflows, program packets, progress check-ins, and client handoffs",
   "Plan trainer, yoga, or dietician service delivery without Web3, markets, medical advice, or live payment/email/hosting claims.",
   "Can submit: No",
   "Live submission: Off",
@@ -157,6 +156,10 @@ for (const phrase of [
   "Do not ask for seed phrases",
   "MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY",
   "MATTERHORN_CUSTOMER_TEMPLATE_TO_PROTOCOL_WORKSPACE",
+  "PROTOCOL_DESK_MANIFEST_REGISTRY",
+  "PROTOCOL_BRAND_ASSET_REGISTRY",
+  "CUSTOMER_LAUNCHER_DESK_VISUALS",
+  "CustomerProtocolDeskVisual",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
   "Choose a desk or start a blank chat. Every prompt stays editable before sending.",
@@ -172,7 +175,10 @@ for (const phrase of [
   "CUSTOMER_VISIBLE_TEMPLATE_IDS",
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
-  assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
+  assert.ok(
+    `${sessionPage}\n${sessionSurface}\n${workflowTemplates}\n${protocolDeskUi}`.includes(phrase),
+    `starter UI should expose Matterhorn task: ${phrase}`,
+  );
 }
 
 assert.ok(!sessionSurface.includes("Connect MCPs"), "Home starter should not show a Connect MCPs CTA");
@@ -272,9 +278,9 @@ assert.ok(workflowTemplates.includes('primaryPanelRouteId: manifest.primaryPanel
 assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'), "app launcher metadata should preserve manifest launch behavior");
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
-assert.ok(sessionPage.includes("Bittensor: TAO, subnets, validators, and staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(sessionPage.includes("Hyperliquid: account, orderbook, watches, and external-signer previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(sessionPage.includes("Polymarket: markets, outcomes, compliance, and external-signer previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, account exposure, funding, watches, and external-client previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 for (const token of [
@@ -289,8 +295,9 @@ for (const token of [
   assert.ok(sessionPage.includes(token), `customer desks should use semantic desk tone styling: ${token}`);
 }
 assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and workflow entry points as Desks");
-assert.ok(sessionPage.includes('label: "Hyperliquid"'), "right rail should spell out Hyperliquid instead of using a cryptic short label");
-assert.ok(sessionPage.includes('label: "Polymarket"'), "right rail should spell out Polymarket instead of using a cryptic short label");
+assert.ok(sessionPage.includes("getCustomerProtocolDeskVisual(panel)"), "right rail should read desk labels from the shared visual manifest");
+assert.ok(sessionPage.includes("visual?.displayName ?? panel"), "right rail should spell out protocol desk names from the manifest");
+assert.ok(sessionPage.includes('getCustomerProtocolDeskVisual("wellness")?.displayName'), "Wellness rail label should come from the shared visual manifest");
 assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail clicks should prime an editable chat prompt");
 assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
 assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
