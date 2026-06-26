@@ -12,12 +12,14 @@ assert.equal(
   "package.json should expose the protocol desk visual contract test script",
 );
 
-// 2. Required types and constants exist.
+// 2. Required types, constants, and helper exports exist.
 for (const token of [
   "ProtocolDeskManifest",
   "ProtocolDeskVisualStatus",
   "ProtocolDeskCategory",
   "ProtocolDeskWalletRequirement",
+  "ProtocolDeskWalletRailMode",
+  "ProtocolDeskStatusBadgeTone",
   "ProtocolDeskAction",
   "ProtocolDeskThemeTokenHints",
   "ProtocolDeskSafetyBoundaries",
@@ -25,6 +27,13 @@ for (const token of [
   "DEFAULT_PROTOCOL_DESK_SAFETY_BOUNDARIES",
   "PROTOCOL_DESK_MANIFEST_REGISTRY",
   "PROTOCOL_BRAND_ASSET_REGISTRY",
+  "CUSTOMER_DESK_ORDER",
+  "getProtocolDeskManifest",
+  "listCustomerProtocolDesks",
+  "getDeskLauncherPrompt",
+  "getDeskSafetySummary",
+  "getDeskWalletRequirementSummary",
+  "getDeskLogoFallback",
 ]) {
   assert.ok(types.includes(token), `types missing protocol desk visual token: ${token}`);
 }
@@ -81,8 +90,14 @@ for (const [id, block] of Object.entries(deskBlocks)) {
   for (const field of [
     "displayName",
     "shortDescription",
+    "launcherTitle",
+    "launcherDescription",
+    "launcherPrompt",
+    "rightRailSummary",
     "category",
     "status",
+    "statusBadgeLabel",
+    "statusBadgeTone",
     "routeOrPanelId",
     "logoAssetKey",
     "preferredColorToken",
@@ -91,7 +106,9 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "primaryActions",
     "secondaryActions",
     "walletRequirements",
+    "walletRailMode",
     "safetyBoundaries",
+    "customerVisible",
     "emptyStateCopy",
     "degradedStateCopy",
   ]) {
@@ -207,6 +224,46 @@ for (const [key, block] of Object.entries(assetBlocks)) {
   for (const field of ["assetKey", "protocol", "allowedUseNote", "lightAssetPath", "darkAssetPath", "fallbackInitials"]) {
     assert.ok(block.includes(`${field}:`), `${key} brand asset must include ${field}`);
   }
+}
+
+// 14. Customer desk order matches the registry and is stable.
+const customerOrderArrayMatch = types.match(/CUSTOMER_DESK_ORDER:\s*string\[\]\s*=\s*(\[[\s\S]*?\]);/);
+assert.ok(customerOrderArrayMatch, "CUSTOMER_DESK_ORDER array must be extractable");
+const customerOrderBlock = customerOrderArrayMatch[1];
+for (const id of expectedDeskIds) {
+  assert.ok(customerOrderBlock.includes(`"${id}"`), `CUSTOMER_DESK_ORDER must include ${id}`);
+}
+assert.equal(
+  (customerOrderBlock.match(/"/g) || []).length,
+  expectedDeskIds.length * 2,
+  "CUSTOMER_DESK_ORDER must contain exactly the expected desks",
+);
+
+// 15. Helper functions are exported and reference registry/brand assets.
+assert.ok(types.includes("export function getProtocolDeskManifest"), "getProtocolDeskManifest must be exported");
+assert.ok(types.includes("export function listCustomerProtocolDesks"), "listCustomerProtocolDesks must be exported");
+assert.ok(types.includes("export function getDeskLauncherPrompt"), "getDeskLauncherPrompt must be exported");
+assert.ok(types.includes("export function getDeskSafetySummary"), "getDeskSafetySummary must be exported");
+assert.ok(types.includes("export function getDeskWalletRequirementSummary"), "getDeskWalletRequirementSummary must be exported");
+assert.ok(types.includes("export function getDeskLogoFallback"), "getDeskLogoFallback must be exported");
+
+// 16. Wallet rail modes match desk posture.
+assert.ok(deskBlocks.bittensor.includes('walletRailMode: "external_signer"'), "Bittensor walletRailMode must be external_signer");
+assert.ok(deskBlocks.hyperliquid.includes('walletRailMode: "evm_preview"'), "Hyperliquid walletRailMode must be evm_preview");
+assert.ok(deskBlocks.polymarket.includes('walletRailMode: "evm_preview"'), "Polymarket walletRailMode must be evm_preview");
+for (const id of ["wellness", "memory", "mcps"]) {
+  assert.ok(deskBlocks[id].includes('walletRailMode: "none"'), `${id} walletRailMode must be none`);
+}
+
+// 17. All customer-facing desks are visible.
+for (const id of expectedDeskIds) {
+  assert.ok(deskBlocks[id].includes("customerVisible: true"), `${id} must be customerVisible`);
+}
+
+// 18. Status badge labels and tones are present.
+for (const id of expectedDeskIds) {
+  assert.ok(deskBlocks[id].includes("statusBadgeLabel:"), `${id} must include statusBadgeLabel`);
+  assert.ok(deskBlocks[id].includes("statusBadgeTone:"), `${id} must include statusBadgeTone`);
 }
 
 console.log("Protocol desk visual contract check passed.");

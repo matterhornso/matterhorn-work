@@ -2932,6 +2932,21 @@ export const PROTOCOL_DESK_WALLET_REQUIREMENTS = [
 ] as const;
 export type ProtocolDeskWalletRequirement = (typeof PROTOCOL_DESK_WALLET_REQUIREMENTS)[number];
 
+export const PROTOCOL_DESK_WALLET_RAIL_MODES = [
+  "external_signer",
+  "evm_preview",
+  "none",
+] as const;
+export type ProtocolDeskWalletRailMode = (typeof PROTOCOL_DESK_WALLET_RAIL_MODES)[number];
+
+export const PROTOCOL_DESK_STATUS_BADGE_TONES = [
+  "success",
+  "caution",
+  "info",
+  "neutral",
+] as const;
+export type ProtocolDeskStatusBadgeTone = (typeof PROTOCOL_DESK_STATUS_BADGE_TONES)[number];
+
 export interface ProtocolDeskAction {
   actionId: string;
   label: string;
@@ -2973,8 +2988,14 @@ export interface ProtocolDeskManifest {
   id: string;
   displayName: string;
   shortDescription: string;
+  launcherTitle: string;
+  launcherDescription: string;
+  launcherPrompt: string;
+  rightRailSummary: string;
   category: ProtocolDeskCategory;
   status: ProtocolDeskVisualStatus;
+  statusBadgeLabel: string;
+  statusBadgeTone: ProtocolDeskStatusBadgeTone;
   routeOrPanelId: string;
   logoAssetKey: string;
   preferredColorToken: string;
@@ -2983,7 +3004,9 @@ export interface ProtocolDeskManifest {
   primaryActions: ProtocolDeskAction[];
   secondaryActions: ProtocolDeskAction[];
   walletRequirements: ProtocolDeskWalletRequirement[];
+  walletRailMode: ProtocolDeskWalletRailMode;
   safetyBoundaries: ProtocolDeskSafetyBoundaries;
+  customerVisible: boolean;
   emptyStateCopy: {
     headline: string;
     body: string;
@@ -3028,8 +3051,14 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "bittensor",
   displayName: "Bittensor",
   shortDescription: "TAO staking, delegation, and subnet previews with external-signer handoffs.",
+  launcherTitle: "Bittensor",
+  launcherDescription: "Stake, delegate, and monitor TAO with read-only previews and external-signer handoffs.",
+  launcherPrompt: "Show my TAO or compare validators on subnet 1",
+  rightRailSummary: "External signer required. Paste a public SS58 address to preview staking and delegation handoffs.",
   category: "bittensor",
   status: "beta_ready",
+  statusBadgeLabel: "Beta",
+  statusBadgeTone: "success",
   routeOrPanelId: "/workspaces/bittensor",
   logoAssetKey: "bittensor-logo",
   preferredColorToken: "--desk-bittensor-accent",
@@ -3092,6 +3121,7 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["ss58_read_only", "ss58_external_signer"],
+  walletRailMode: "external_signer",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: true,
@@ -3106,6 +3136,7 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "Connect a Bittensor wallet",
     body: "Paste a public SS58 address or connect an external signer to preview staking and delegation. Private keys and seed phrases are never accepted.",
@@ -3123,8 +3154,14 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "hyperliquid",
   displayName: "Hyperliquid",
   shortDescription: "Read-only perp market previews and watchlists.",
+  launcherTitle: "Hyperliquid",
+  launcherDescription: "Preview perp markets and manage watchlists. No signing or submission.",
+  launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
+  rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
   category: "markets",
   status: "preview_only",
+  statusBadgeLabel: "Preview",
+  statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/hyperliquid",
   logoAssetKey: "hyperliquid-logo",
   preferredColorToken: "--desk-hyperliquid-accent",
@@ -3179,6 +3216,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["evm_read_only"],
+  walletRailMode: "evm_preview",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: false,
@@ -3193,6 +3231,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "Preview Hyperliquid markets",
     body: "Enter a public wallet address or market to generate a read-only preview. No signing or submission.",
@@ -3210,8 +3249,14 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "polymarket",
   displayName: "Polymarket",
   shortDescription: "Read-only prediction market research and previews.",
+  launcherTitle: "Polymarket",
+  launcherDescription: "Research prediction markets and preview positions. No betting or signing.",
+  launcherPrompt: "Find Polymarket markets about AI",
+  rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
   category: "markets",
   status: "preview_only",
+  statusBadgeLabel: "Preview",
+  statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/polymarket",
   logoAssetKey: "polymarket-logo",
   preferredColorToken: "--desk-polymarket-accent",
@@ -3266,6 +3311,7 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["evm_read_only"],
+  walletRailMode: "evm_preview",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: false,
@@ -3280,6 +3326,7 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "Research Polymarket",
     body: "Search markets or enter a public wallet address for read-only research. No betting or signing.",
@@ -3297,8 +3344,14 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "wellness",
   displayName: "Wellness",
   shortDescription: "Workflow-ready wellness program builder for creators and coaches.",
+  launcherTitle: "Wellness Creator",
+  launcherDescription: "Build educational, non-medical wellness programs and service packages through chat.",
+  launcherPrompt: "Create a 4-week beginner strength plan",
+  rightRailSummary: "Workflow-ready desk. No wallet required. Generates educational content only, not medical advice.",
   category: "wellness",
   status: "workflow_ready",
+  statusBadgeLabel: "Ready",
+  statusBadgeTone: "info",
   routeOrPanelId: "/workspaces/wellness",
   logoAssetKey: "wellness-logo",
   preferredColorToken: "--desk-wellness-accent",
@@ -3353,6 +3406,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["none"],
+  walletRailMode: "none",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: false,
@@ -3367,6 +3421,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "Build a wellness program",
     body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
@@ -3384,8 +3439,14 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "memory",
   displayName: "Memory",
   shortDescription: "Inspect and manage what Matterhorn remembers across desks.",
+  launcherTitle: "Memory",
+  launcherDescription: "Review and manage what Matterhorn remembers across desks. Editable and forgettable.",
+  launcherPrompt: "Show my saved memory",
+  rightRailSummary: "User-controlled memory. Confirm, edit, or dismiss suggestions. Secrets and clinical records are rejected.",
   category: "memory",
   status: "beta_ready",
+  statusBadgeLabel: "Beta",
+  statusBadgeTone: "success",
   routeOrPanelId: "/memory",
   logoAssetKey: "memory-logo",
   preferredColorToken: "--desk-memory-accent",
@@ -3440,6 +3501,7 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["none"],
+  walletRailMode: "none",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: false,
@@ -3454,6 +3516,7 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "Nothing saved yet",
     body: "As you confirm suggestions across desks, safe, editable memory will appear here. Secrets and clinical records are rejected.",
@@ -3471,8 +3534,14 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   id: "mcps",
   displayName: "MCP Tools",
   shortDescription: "Manage approved Model Context Protocol tools and their memory boundaries.",
+  launcherTitle: "MCP Tools",
+  launcherDescription: "Browse, install, and manage approved MCP tools. No custody or signing.",
+  launcherPrompt: "Browse available MCP tools",
+  rightRailSummary: "Install and use surfaces only. MCP tools run with explicit approval and cannot hold keys or sign.",
   category: "mcps",
   status: "planned_not_live",
+  statusBadgeLabel: "Soon",
+  statusBadgeTone: "neutral",
   routeOrPanelId: "/mcps",
   logoAssetKey: "mcp-logo",
   preferredColorToken: "--desk-mcps-accent",
@@ -3519,6 +3588,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
   ],
   walletRequirements: ["none"],
+  walletRailMode: "none",
   safetyBoundaries: {
     liveSubmissionEnabled: false,
     canExecute: false,
@@ -3533,6 +3603,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     allowsRealFunds: false,
     medicalClaimsAllowed: false,
   },
+  customerVisible: true,
   emptyStateCopy: {
     headline: "MCP tools coming soon",
     body: "Browse, approve, and manage MCP tool integrations once this desk goes live. No secrets or custody required.",
@@ -3553,6 +3624,73 @@ export const PROTOCOL_DESK_MANIFEST_REGISTRY: Record<string, ProtocolDeskManifes
   memory: MEMORY_PROTOCOL_DESK_MANIFEST,
   mcps: MCPS_PROTOCOL_DESK_MANIFEST,
 };
+
+export const CUSTOMER_DESK_ORDER: string[] = [
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
+  "wellness",
+  "memory",
+  "mcps",
+];
+
+export function getProtocolDeskManifest(id: string): ProtocolDeskManifest | undefined {
+  return PROTOCOL_DESK_MANIFEST_REGISTRY[id];
+}
+
+export function listCustomerProtocolDesks(): ProtocolDeskManifest[] {
+  return CUSTOMER_DESK_ORDER.map((id) => PROTOCOL_DESK_MANIFEST_REGISTRY[id]).filter(
+    (manifest): manifest is ProtocolDeskManifest => manifest?.customerVisible === true,
+  );
+}
+
+export function getDeskLauncherPrompt(id: string): string | undefined {
+  return getProtocolDeskManifest(id)?.launcherPrompt;
+}
+
+export function getDeskSafetySummary(id: string): string | undefined {
+  const manifest = getProtocolDeskManifest(id);
+  if (!manifest) return undefined;
+
+  if (manifest.safetyBoundaries.requiresExternalSigner) {
+    return "External signer required. Matterhorn never holds your keys.";
+  }
+  if (manifest.walletRailMode === "evm_preview") {
+    return "Preview-only. No live submission or signing.";
+  }
+  if (manifest.id === "wellness") {
+    return "Educational and non-medical. No wallet required.";
+  }
+  if (manifest.id === "memory") {
+    return "User-controlled memory. Nothing hidden.";
+  }
+  if (manifest.id === "mcps") {
+    return "Install and use surfaces only. No custody or signing.";
+  }
+  return "Read-only and non-custodial.";
+}
+
+export function getDeskWalletRequirementSummary(id: string): string | undefined {
+  const manifest = getProtocolDeskManifest(id);
+  if (!manifest) return undefined;
+
+  switch (manifest.walletRailMode) {
+    case "external_signer":
+      return "SS58 address + external signer";
+    case "evm_preview":
+      return "EVM address for read-only previews";
+    case "none":
+      return "No wallet needed";
+    default:
+      return undefined;
+  }
+}
+
+export function getDeskLogoFallback(id: string): string | undefined {
+  const manifest = getProtocolDeskManifest(id);
+  if (!manifest) return undefined;
+  return PROTOCOL_BRAND_ASSET_REGISTRY[manifest.logoAssetKey]?.fallbackInitials;
+}
 
 export const BITTENSOR_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   version: "matterhorn.protocol.brand.asset.v1",
