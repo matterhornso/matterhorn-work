@@ -46,6 +46,7 @@ for (const phrase of [
   '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
   '"composer.stop": "Stop generating"',
+  "Engine connected",
   "Separate workspaces",
   "one Matterhorn chat.",
   "Bittensor workspace",

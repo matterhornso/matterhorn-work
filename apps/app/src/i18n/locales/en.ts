@@ -1450,7 +1450,7 @@ export default {
   "status.matterhorn_ready": "Matterhorn Work Ready",
   "status.providers_connected_one": "{count} provider connected",
   "status.providers_connected_other": "{count} providers connected",
-  "status.ready_for_tasks": "Ready for new tasks",
+  "status.ready_for_tasks": "Engine connected",
   "status.running": "Running",
   "status.send_feedback": "Send feedback",
   "status.settings": "Settings",
