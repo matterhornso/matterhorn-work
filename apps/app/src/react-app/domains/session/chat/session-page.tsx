@@ -1204,36 +1204,66 @@ export function SessionPage(props: SessionPageProps) {
                           </div>
                         </section>
                         <section className="space-y-3">
-                          <div>
-                            <h3 className="text-sm font-semibold text-dls-text">Business workflows</h3>
-                            <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                              Use the same chat engine for real-world customer work. Wellness is a standalone business workflow, not Web3, not markets, and not medical care.
-                            </p>
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                              <h3 className="text-sm font-semibold text-dls-text">Business workflows</h3>
+                              <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+                                Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
+                              </p>
+                            </div>
+                            <span className="self-start rounded-lg border border-dls-border bg-dls-surface px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
+                              Planned services only
+                            </span>
                           </div>
-                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
+                          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-3">
                             {businessWorkflowLaunchers.map((task) => {
                               const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
                               return (
                                 <button
                                   key={task.id}
                                   type="button"
-                                  className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                                  style={deskToneStyle(task.iconHint)}
+                                  className="flex min-h-[220px] w-full flex-col gap-4 rounded-xl border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.52)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
                                   onClick={() => {
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
                                   }}
                                 >
-                                  <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                                    <Icon className="size-4" />
-                                  </span>
-                                  <span>
-                                    <span className="flex flex-wrap items-center gap-2">
-                                      <span className="text-[13px] font-medium text-dls-text">{task.title}</span>
-                                      <span className="rounded-full border border-dls-border bg-dls-hover px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
-                                        {task.statusLabel}
-                                      </span>
+                                  <span className="flex items-start gap-3">
+                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
+                                      <Icon className="size-4" />
                                     </span>
-                                    <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">{task.description}</span>
-                                    <span className="mt-2 block text-[10px] leading-relaxed text-dls-secondary/90">{task.safetySummary}</span>
+                                    <span className="min-w-0">
+                                      <span className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
+                                        <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                          {task.statusLabel}
+                                        </span>
+                                      </span>
+                                      <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{task.description}</span>
+                                    </span>
+                                  </span>
+                                  <span className="grid gap-1.5 sm:grid-cols-2">
+                                    {[
+                                      "Service offer packet",
+                                      "Onboarding questionnaire",
+                                      "Weekly program plan",
+                                      "Progress check-in",
+                                      "Renewal/follow-up note",
+                                      "Client handoff packet",
+                                    ].map((artifact) => (
+                                      <span
+                                        key={artifact}
+                                        className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.22)] bg-dls-card px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                      >
+                                        {artifact}
+                                      </span>
+                                    ))}
+                                  </span>
+                                  <span className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-[11px] leading-5 text-dls-secondary">
+                                    {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
+                                  </span>
+                                  <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                    Start wellness workflow -&gt;
                                   </span>
                                 </button>
                               );

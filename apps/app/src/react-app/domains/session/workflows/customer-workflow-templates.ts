@@ -366,12 +366,16 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "wellness_creator_workflow",
-    name: "Build a Wellness Creator business workflow",
-    summary: "Design standalone client programs, service packages, and customer-management workflows without Web3, markets, or medical advice.",
-    promise: "Plan your wellness business as a normal workflow. No medical advice, no Web3 trading, and service hooks remain planned-not-live.",
+    name: "Build a Wellness Creator service workflow",
+    summary: "Create trainer, yoga, or dietician service workflows with offer packets, onboarding, weekly plans, progress check-ins, renewal notes, and client handoffs.",
+    promise: "Plan the whole client service loop as a normal business workflow. No medical advice, no Web3 trading, and payment/email/hosting hooks remain planned-not-live.",
     category: "wellness",
     status: "workflow_ready",
-    examplePrompts: ["Create a wellness program for my clients", "Build a yoga class schedule"],
+    examplePrompts: [
+      "Create a wellness program for my clients",
+      "Build a yoga class schedule",
+      "Create a client onboarding questionnaire and weekly check-in workflow",
+    ],
     launch: {
       primaryCta: "Start wellness workflow",
       secondaryCta: "Plan a service",
@@ -382,7 +386,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "wellness",
       accent: "neutral",
-      shortDescription: "Plan trainer, yoga, or dietician service workflows without Web3, markets, or medical advice.",
+      shortDescription: "Plan trainer, yoga, or dietician service delivery without Web3, markets, medical advice, or live payment/email/hosting claims.",
     },
     routing: { chatMode: "wellness", startsSession: true },
     safetyBoundaries: {
