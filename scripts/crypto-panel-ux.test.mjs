@@ -215,7 +215,7 @@ for (const phrase of [
   "--protocol-desk-accent",
   "These are the core Bittensor workflows Matterhorn should make easy.",
   "mb-4 flex flex-wrap items-start justify-between gap-3",
-  "grid-cols-1 gap-1 rounded-full bg-dls-background/55 p-1",
+  "grid-cols-1 gap-1 rounded-xl bg-dls-surface-muted/35 p-1",
   "grid-cols-[repeat(auto-fit,minmax(132px,1fr))]",
   "break-words font-mono",
   "text-[15px]",
