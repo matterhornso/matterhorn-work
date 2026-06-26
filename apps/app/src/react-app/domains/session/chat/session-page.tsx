@@ -104,6 +104,33 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
   blank: FileText,
 };
 
+function ProtocolLogo({ venue, size = 18 }: { venue: VenueSidePanel; size?: number }) {
+  if (venue === "bittensor") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+        <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (venue === "hyperliquid") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+        <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
+      <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+      <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "memory" | "mcp"): CSSProperties {
   const tone = (() => {
     switch (iconHint) {
@@ -1058,9 +1085,6 @@ export function SessionPage(props: SessionPageProps) {
                     <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6 sm:py-14">
                       <div className="w-full max-w-5xl space-y-7">
                         <div className="mx-auto max-w-2xl space-y-3 text-center">
-                          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.26)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">
-                            Matterhorn Desk launcher
-                          </div>
                           <h2 className="text-2xl font-semibold tracking-[-0.01em] text-dls-text sm:text-3xl">
                             Choose a Desk.
                           </h2>
@@ -1103,10 +1127,10 @@ export function SessionPage(props: SessionPageProps) {
                             <div>
                               <h3 className="text-sm font-semibold text-dls-text">Matterhorn Desks</h3>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Separate interfaces for TAO, perps, prediction markets, and real-world workflows. Each opens its own rail and starts an editable prompt.
+                                Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness. Each opens its own desk and inserts an editable prompt.
                               </p>
                             </div>
-                            <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                            <span className="hidden rounded-md border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
                               No hidden auto-send
                             </span>
                           </div>
@@ -1118,7 +1142,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="flex min-h-[164px] w-full flex-col items-start gap-3 rounded-xl border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.07)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.6)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)]"
+                                  className="flex min-h-[164px] w-full flex-col items-start gap-3 rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.07)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.6)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)]"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1127,13 +1151,13 @@ export function SessionPage(props: SessionPageProps) {
                                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
                                   }}
                                 >
-                                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
-                                    <Icon className="size-4" />
+                                  <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.35)] bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+                                    {launcher.panel ? <ProtocolLogo venue={launcher.panel} /> : <Icon className="size-4" />}
                                   </span>
                                   <span className="min-w-0">
                                     <span className="flex flex-wrap items-center gap-2">
                                       <span className="text-[14px] font-semibold text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
-                                      <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                      <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-2 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
                                         {launcher.statusLabel}
                                       </span>
                                     </span>
@@ -1153,7 +1177,7 @@ export function SessionPage(props: SessionPageProps) {
                                 Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
                               </p>
                             </div>
-                            <span className="hidden rounded-full border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
+                            <span className="hidden rounded-md border border-dls-border px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
                               Public/redacted only
                             </span>
                           </div>
@@ -1165,7 +1189,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={demo.id}
                                   type="button"
                                   style={deskToneStyle(demo.iconHint)}
-                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-xl border border-dls-border bg-dls-card p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.46)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
+                                  className="group flex min-h-[174px] w-full flex-col items-start rounded-lg border border-dls-border bg-dls-card p-4 text-left shadow-[var(--dls-card-shadow)] transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.46)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"
                                   onClick={() => {
                                     if (demo.panel) {
                                       openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
@@ -1175,8 +1199,8 @@ export function SessionPage(props: SessionPageProps) {
                                   }}
                                 >
                                   <span className="flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-                                      <Icon className="size-4" />
+                                    <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.3)] bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
+                                      {demo.panel ? <ProtocolLogo venue={demo.panel} /> : <Icon className="size-4" />}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                       <span className="flex flex-wrap items-center gap-2">
@@ -1274,7 +1298,7 @@ export function SessionPage(props: SessionPageProps) {
                           {blankWorkflowLauncher ? (
                             <button
                               type="button"
-                              className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
+                              className="flex min-h-[92px] w-full items-start gap-3 rounded-lg border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
                               onClick={() => {
                                 props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
                               }}
@@ -1294,21 +1318,6 @@ export function SessionPage(props: SessionPageProps) {
                               </span>
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            className="flex min-h-[92px] w-full items-start gap-3 rounded-xl border border-dls-border bg-dls-surface p-3.5 text-left transition-colors hover:border-[rgba(var(--matterhorn-blue-rgb),0.45)] hover:bg-dls-hover"
-                            onClick={() => {
-                              props.onOpenSettings?.();
-                            }}
-                          >
-                            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
-                              <Settings2 className="size-4" />
-                            </span>
-                            <span>
-                              <span className="block text-[13px] font-medium text-dls-text">Connect MCPs</span>
-                              <span className="mt-0.5 block text-[11px] leading-relaxed text-dls-secondary">Add MCP servers, protocol tools, and wallet connectors.</span>
-                            </span>
-                          </button>
                         </section>
                       </div>
                     </div>
@@ -1442,13 +1451,13 @@ export function SessionPage(props: SessionPageProps) {
                 artifactRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
               )}
               onClick={openArtifactRailPane}
-              title={hasArtifactTargets ? `Artifacts (${artifactTargetCount})` : "No artifacts yet"}
-              aria-label={hasArtifactTargets ? `Artifacts (${artifactTargetCount})` : "No artifacts yet"}
+              title={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
+              aria-label={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
               aria-pressed={artifactRailActive}
               disabled={!hasArtifactTargets}
             >
               <FileText size={17} />
-              <span className="hidden text-[9px] leading-none 2xl:inline">Files</span>
+              <span className="hidden text-[9px] leading-none 2xl:inline">Artifacts</span>
               {artifactTargetCount > 0 ? (
                 <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                   {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
@@ -1499,24 +1508,20 @@ export function SessionPage(props: SessionPageProps) {
                 label: "Bittensor",
                 title: "Bittensor: TAO, subnets, validators, and staking previews",
                 active: bittensorRailActive,
-                icon: BrainCircuit,
               },
               {
                 panel: "hyperliquid" as const,
                 label: "Hyperliquid",
                 title: "Hyperliquid: account, orderbook, watches, and external-signer previews",
                 active: hyperliquidRailActive,
-                icon: BarChart3,
               },
               {
                 panel: "polymarket" as const,
                 label: "Polymarket",
                 title: "Polymarket: markets, outcomes, compliance, and external-signer previews",
                 active: polymarketRailActive,
-                icon: ShieldCheck,
               },
             ]).map((item) => {
-              const Icon = item.icon;
               return (
                 <Button
                   key={item.panel}
@@ -1532,7 +1537,7 @@ export function SessionPage(props: SessionPageProps) {
                   aria-label={item.title}
                   aria-pressed={item.active}
                 >
-                  <Icon size={17} />
+                  <ProtocolLogo venue={item.panel} size={17} />
                   <span className="text-[9px] leading-none 2xl:max-w-full 2xl:truncate">{item.label}</span>
                 </Button>
               );
