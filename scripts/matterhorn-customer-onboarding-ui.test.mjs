@@ -69,10 +69,28 @@ for (const phrase of [
   "One wallet surface for EVM tools.",
   "Bittensor uses public SS58 reads and external signing.",
   "Wallet details",
+  "Current capability status",
+  "These launchers are connected to Matterhorn workflow metadata.",
+  "Live boundaries visible",
+  "Public TAO reads, subnet discovery, validator comparison, watches, receipts, and unsigned staking previews.",
+  "No live market submit. Can submit: No. Live submission: Off.",
+  "No live bet placement. Can submit: No. Live submission: Off.",
+  "Standalone workflow. No Web3, medical advice, live payments, email, hosting, or token gating.",
   "Matterhorn Desks",
   "Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness.",
+  "Each desk has its own prompt context, capability status, and safety boundary.",
   "focused desk",
   "No hidden auto-send",
+  "workflowLauncherCapabilityItems",
+  "TAO wallet reads",
+  "Subnet discovery",
+  "Unsigned previews",
+  "Orderbook reads",
+  "Exposure context",
+  "External-client handoff",
+  "Market research",
+  "Compliance checks",
+  "Open desk with editable prompt",
   "Business workflows",
   "Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
   "It is not Web3, not markets, and not medical care.",
@@ -265,7 +283,7 @@ assert.equal(sessionPage.includes('label: "Services"'), false, "customer right r
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
-assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
+assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400)'), "protocol side panel should not default to an oversized rail");
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? "340px"'), "protocol side panel should keep a narrower minimum width");
