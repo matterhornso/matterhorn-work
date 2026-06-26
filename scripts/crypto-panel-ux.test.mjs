@@ -45,6 +45,12 @@ for (const phrase of [
   "Create watch or alert",
   "Explain coldkey/hotkey",
   "Prepare an unsigned preview",
+  "Unsigned action flow",
+  "Public fields only",
+  "Insert editable prompt",
+  'outcome: "Wallet snapshot"',
+  'outcome: "Unsigned stake preview"',
+  "This button creates an unsigned preview only.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose a dedicated venue desk: ${phrase}`);
 }

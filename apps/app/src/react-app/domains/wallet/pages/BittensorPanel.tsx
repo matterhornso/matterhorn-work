@@ -304,77 +304,95 @@ type ActionType = BittensorActionQuote["action"];
 const BITTENSOR_STANDARD_ACTIONS = [
   {
     id: "wallet-balance",
+    intent: "Read",
     title: "Show TAO balance",
     summary: "Read a public SS58 coldkey, TAO balance, stake positions, and provider freshness.",
     safety: "Public address only",
+    outcome: "Wallet snapshot",
     prompt:
       "Use Bittensor chat mode. Show my TAO balance from the public SS58 coldkey in context. If no address is set, ask once for a public coldkey only. Explain free TAO, staked TAO, validator exposure, provider source, freshness, and safe next steps.",
   },
   {
     id: "subnet-discovery",
+    intent: "Discover",
     title: "Find useful subnets",
     summary: "Discover subnets by goal, category, utility, adapter support, and public metagraph context.",
     safety: "Read-only discovery",
+    outcome: "Subnet shortlist",
     prompt:
       "Use Bittensor chat mode. Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
   },
   {
     id: "validator-compare",
+    intent: "Compare",
     title: "Compare validators",
     summary: "Compare validator hotkeys for a subnet using public validator/metagraph context.",
     safety: "No staking unless approved externally",
+    outcome: "Validator ranking",
     formAction: "compare",
     prompt:
       "Use Bittensor chat mode. Compare validators for the netuid in context. Explain stake, trust, rank, emissions, risks, and what I should verify before preparing any staking preview. Do not sign or broadcast anything.",
   },
   {
     id: "stake-preview",
+    intent: "Preview",
     title: "Prepare stake preview",
     summary: "Prepare an unsigned stake preview with netuid, validator hotkey, expected alpha, fee, and slippage.",
     safety: "External signer required",
+    outcome: "Unsigned stake preview",
     formAction: "stake",
     prompt:
       "Use Bittensor chat mode. Prepare a stake preview using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, warnings, and the exact external-signing handoff. Never ask for seed phrases or private keys.",
   },
   {
     id: "unstake-preview",
+    intent: "Preview",
     title: "Prepare unstake preview",
     summary: "Review an unsigned unstake preview and explain the consequence before external signing.",
     safety: "External signer required",
+    outcome: "Unsigned unstake preview",
     formAction: "unstake",
     prompt:
       "Use Bittensor chat mode. Prepare an unstake preview using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, warnings, and the external-signing step. Never ask for seed phrases or private keys.",
   },
   {
     id: "transfer-preview",
+    intent: "Preview",
     title: "Prepare transfer preview",
     summary: "Prepare a TAO transfer preview to a destination coldkey without signing or broadcasting.",
     safety: "External signer required",
+    outcome: "Unsigned transfer preview",
     formAction: "transfer",
     prompt:
       "Use Bittensor chat mode. Prepare a TAO transfer preview using the amount and recipient coldkey in context. Confirm destination meaning, fee, consequence, warnings, and external-signing requirements. Never ask for seed phrases or private keys.",
   },
   {
     id: "watch-alert",
+    intent: "Monitor",
     title: "Create watch or alert",
     summary: "Monitor a wallet, subnet, validator, emission movement, or provider freshness.",
     safety: "Read-only monitoring",
+    outcome: "Watch plan",
     prompt:
       "Use Bittensor chat mode. Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
   },
   {
     id: "keys-explainer",
+    intent: "Learn",
     title: "Explain coldkey/hotkey",
     summary: "Clarify Bittensor wallet concepts, staking exposure, and external signer boundaries.",
     safety: "No secrets requested",
+    outcome: "Plain-English explainer",
     prompt:
       "Use Bittensor chat mode. Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and external signer boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
   },
 ] satisfies Array<{
   id: string;
+  intent: "Read" | "Discover" | "Compare" | "Preview" | "Monitor" | "Learn";
   title: string;
   summary: string;
   safety: string;
+  outcome: string;
   prompt: string;
   formAction?: ActionType;
 }>;
@@ -1494,20 +1512,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               <p className="mb-3 text-sm leading-6 text-dls-secondary">
                 These are the core Bittensor workflows Matterhorn should make easy. Each one inserts an editable chat prompt with public context; nothing auto-sends, signs, broadcasts, stakes, unstakes, transfers, or asks for wallet secrets.
               </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {BITTENSOR_STANDARD_ACTIONS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="rounded-xl border border-dls-border bg-dls-surface/80 p-3 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
-                    onClick={() => void askAgentForStandardBittensorAction(item)}
-                  >
-                    <div className="text-sm font-semibold text-dls-text">{item.title}</div>
-                    <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.summary}</div>
-                    <div className="mt-2 text-[11px] font-medium text-[var(--protocol-desk-accent)]">{item.safety}</div>
-                  </button>
-                ))}
-              </div>
+              <BittensorStandardActionList onAction={(item) => void askAgentForStandardBittensorAction(item)} />
             </Section>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
               <Metric label="Subnets" value={subnets.length ? String(subnets.length) : "—"} />
@@ -2183,8 +2188,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue === "bittensor" && tab === "actions" && (
           <div className="space-y-4">
-            <Notice tone="info" icon={<Shield className="size-4" />} title="Quote-only actions">
-              Matterhorn prepares Bittensor action previews for review. External Bittensor-compatible signing is required.
+            <Notice tone="info" icon={<Shield className="size-4" />} title="Unsigned action flow">
+              Matterhorn prepares Bittensor action previews for review. External Bittensor-compatible signing is required, and nothing is broadcast from this panel.
             </Notice>
             <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
@@ -2192,42 +2197,35 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   Start from the common Bittensor workflows below. These insert an editable chat prompt with public context;
                   they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets.
                 </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {BITTENSOR_STANDARD_ACTIONS.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="group rounded-xl border border-dls-border bg-dls-surface/70 p-3 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
-                      onClick={() => void askAgentForStandardBittensorAction(item)}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-dls-text">{item.title}</div>
-                          <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.summary}</div>
-                        </div>
-                        <span className="shrink-0 rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--protocol-desk-accent)]">
-                          Chat
-                        </span>
-                      </div>
-                      <div className="mt-2 text-[11px] font-medium text-[var(--protocol-desk-accent)]">{item.safety}</div>
-                    </button>
-                  ))}
-                </div>
+                <BittensorStandardActionList onAction={(item) => void askAgentForStandardBittensorAction(item)} />
               </div>
             </Section>
             <Section title="Prepare an unsigned preview" icon={<ArrowUpDown className="size-4" />}>
               <div className="space-y-4">
-                <div className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.24)] bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
-                  Choose the action, add only public routing details, then review the quote. Matterhorn does not sign,
-                  broadcast, or move TAO; the next step is always an external Bittensor-compatible signer.
+                <div className="grid gap-3 md:grid-cols-[1fr_0.9fr]">
+                  <div className="rounded-lg border border-[rgba(var(--protocol-desk-rgb),0.24)] bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+                    <div className="font-semibold text-[var(--protocol-desk-accent)]">How this works</div>
+                    <div className="mt-1">
+                      Choose an action, add only public routing details, then review the quote. Matterhorn does not sign,
+                      broadcast, stake, unstake, transfer, or move TAO; the next step is always an external Bittensor-compatible signer.
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-dls-border bg-dls-surface px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+                    <div className="font-semibold text-dls-text">Public fields only</div>
+                    <ul className="mt-1.5 space-y-1">
+                      <li>Use netuid, amount, validator hotkey, recipient coldkey, or SS58 public address.</li>
+                      <li>Never paste seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.</li>
+                      <li>Ask Chat to review the preview before signing externally.</li>
+                    </ul>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {(["stake", "unstake", "transfer", "compare"] as ActionType[]).map((item) => (
                     <button
                       key={item}
                       type="button"
                       className={cn(
-                        "rounded-md border px-3 py-2 text-left text-xs font-semibold capitalize transition-colors",
+                        "rounded-lg border px-3 py-2.5 text-left text-xs font-semibold capitalize transition-colors",
                         action === item
                           ? "border-[rgba(var(--protocol-desk-rgb),0.58)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]"
                           : "border-dls-border bg-dls-surface text-dls-secondary hover:text-dls-text",
@@ -2252,9 +2250,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <LabeledInput label="Recipient coldkey" value={recipient} onChange={setRecipient} hint="Paste the public destination coldkey only." />
                   )}
                 </div>
-                <div className="grid gap-2 rounded-md border border-dls-border bg-dls-surface p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="grid gap-3 rounded-lg border border-dls-border bg-dls-surface p-3 sm:grid-cols-[1fr_auto] sm:items-center">
                   <div className="text-xs leading-5 text-dls-secondary">
-                    Missing context is allowed. Chat can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted.
+                    Missing context is safe. Chat can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted. This button creates an unsigned preview only.
                   </div>
                   <Button className="gap-1.5 rounded-md bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] hover:opacity-90" onClick={requestQuote} disabled={quoteLoading}>
                     {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
@@ -2303,6 +2301,47 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
         {title}
       </div>
       {children}
+    </div>
+  );
+}
+
+function BittensorStandardActionList({
+  onAction,
+}: {
+  onAction: (item: (typeof BITTENSOR_STANDARD_ACTIONS)[number]) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-dls-border bg-dls-surface">
+      {BITTENSOR_STANDARD_ACTIONS.map((item, index) => (
+        <button
+          key={item.id}
+          type="button"
+          className={cn(
+            "group grid w-full gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]",
+            index > 0 && "border-t border-dls-border",
+          )}
+          onClick={() => onAction(item)}
+        >
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.34)] bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--protocol-desk-accent)]">
+                {item.intent}
+              </span>
+              <span className="text-sm font-semibold text-dls-text">{item.title}</span>
+            </div>
+            <div className="mt-1.5 text-xs leading-5 text-dls-secondary">{item.summary}</div>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dls-secondary">
+              <span className="rounded-md bg-dls-card px-2 py-1">Outcome: {item.outcome}</span>
+              <span className="rounded-md bg-dls-card px-2 py-1">Safety: {item.safety}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
+            <span className="text-xs font-medium text-[var(--protocol-desk-accent)] group-hover:text-dls-text">
+              Insert editable prompt
+            </span>
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
