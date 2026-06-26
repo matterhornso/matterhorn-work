@@ -100,6 +100,7 @@
     "test:matterhorn-workflow-evidence-bundles": "node scripts/matterhorn-workflow-evidence-bundles.test.mjs",
     "test:matterhorn-workflow-template-registry": "node scripts/matterhorn-workflow-template-registry.test.mjs",
     "test:matterhorn-customer-workflow-template-registry": "node scripts/matterhorn-customer-workflow-template-registry.test.mjs",
+    "test:protocol-desk-visual-contract": "node scripts/protocol-desk-visual-contract.test.mjs",
     "test:customer-demo-scenarios": "node scripts/customer-demo-scenarios.test.mjs",
     "test:customer-demo-evidence-pack": "node scripts/customer-demo-evidence-pack.test.mjs",
     "test:monday-beta-launch-readiness": "node scripts/monday-beta-launch-readiness.test.mjs",

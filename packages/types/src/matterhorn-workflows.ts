@@ -2904,3 +2904,728 @@ export const MATTERHORN_CUSTOMER_TEMPLATE_TO_DESK: Record<string, MatterhornDesk
   decentralized_services_operator: "services",
   blank_chat_workflow: "settings",
 };
+
+export const PROTOCOL_DESK_VISUAL_STATUSES = [
+  "beta_ready",
+  "preview_only",
+  "workflow_ready",
+  "planned_not_live",
+] as const;
+export type ProtocolDeskVisualStatus = (typeof PROTOCOL_DESK_VISUAL_STATUSES)[number];
+
+export const PROTOCOL_DESK_CATEGORIES = [
+  "web3",
+  "bittensor",
+  "markets",
+  "wellness",
+  "memory",
+  "mcps",
+  "services",
+] as const;
+export type ProtocolDeskCategory = (typeof PROTOCOL_DESK_CATEGORIES)[number];
+
+export const PROTOCOL_DESK_WALLET_REQUIREMENTS = [
+  "none",
+  "evm_read_only",
+  "ss58_read_only",
+  "ss58_external_signer",
+] as const;
+export type ProtocolDeskWalletRequirement = (typeof PROTOCOL_DESK_WALLET_REQUIREMENTS)[number];
+
+export interface ProtocolDeskAction {
+  actionId: string;
+  label: string;
+  iconHint?: string;
+  intent: string;
+  requiresConfirmation: boolean;
+  surface: "desk_panel" | "chat" | "context_menu" | "command_palette";
+}
+
+export interface ProtocolDeskThemeTokenHints {
+  background: string;
+  surface: string;
+  accent: string;
+  accentHover: string;
+  textPrimary: string;
+  textSecondary: string;
+  border: string;
+  safetyStrip: string;
+  iconFill: string;
+}
+
+export interface ProtocolDeskSafetyBoundaries {
+  liveSubmissionEnabled: false;
+  canExecute: boolean;
+  canSubmit: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+  medicalClaimsAllowed: false;
+}
+
+export interface ProtocolDeskManifest {
+  version: "matterhorn.protocol.desk.manifest.v1";
+  id: string;
+  displayName: string;
+  shortDescription: string;
+  category: ProtocolDeskCategory;
+  status: ProtocolDeskVisualStatus;
+  routeOrPanelId: string;
+  logoAssetKey: string;
+  preferredColorToken: string;
+  lightThemeTokenHints: ProtocolDeskThemeTokenHints;
+  darkThemeTokenHints: ProtocolDeskThemeTokenHints;
+  primaryActions: ProtocolDeskAction[];
+  secondaryActions: ProtocolDeskAction[];
+  walletRequirements: ProtocolDeskWalletRequirement[];
+  safetyBoundaries: ProtocolDeskSafetyBoundaries;
+  emptyStateCopy: {
+    headline: string;
+    body: string;
+    primaryActionId?: string;
+  };
+  degradedStateCopy: {
+    headline: string;
+    body: string;
+    primaryActionId?: string;
+  };
+}
+
+export interface ProtocolBrandAssetManifest {
+  version: "matterhorn.protocol.brand.asset.v1";
+  assetKey: string;
+  protocol: string;
+  sourceUrl?: string;
+  allowedUseNote: string;
+  lightAssetPath: string;
+  darkAssetPath: string;
+  monochromeAssetPath?: string;
+  fallbackInitials: string;
+}
+
+export const DEFAULT_PROTOCOL_DESK_SAFETY_BOUNDARIES: ProtocolDeskSafetyBoundaries = {
+  liveSubmissionEnabled: false,
+  canExecute: false,
+  canSubmit: false,
+  acceptsPrivateKeys: false,
+  acceptsSeedPhrases: false,
+  acceptsApiSecrets: false,
+  acceptsRawSignatures: false,
+  acceptsSignedPayloads: false,
+  acceptsWalletExports: false,
+  requiresExternalSigner: false,
+  allowsRealFunds: false,
+  medicalClaimsAllowed: false,
+};
+
+export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "bittensor",
+  displayName: "Bittensor",
+  shortDescription: "TAO staking, delegation, and subnet previews with external-signer handoffs.",
+  category: "bittensor",
+  status: "beta_ready",
+  routeOrPanelId: "/workspaces/bittensor",
+  logoAssetKey: "bittensor-logo",
+  preferredColorToken: "--desk-bittensor-accent",
+  lightThemeTokenHints: {
+    background: "#FAF5FF",
+    surface: "#FFFFFF",
+    accent: "#7C3AED",
+    accentHover: "#6D28D9",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#F3E8FF",
+    iconFill: "#7C3AED",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#A78BFA",
+    accentHover: "#8B5CF6",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#2E1065",
+    iconFill: "#A78BFA",
+  },
+  primaryActions: [
+    {
+      actionId: "preview-stake",
+      label: "Preview stake",
+      iconHint: "stake",
+      intent: "preview stake",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "prepare-handoff",
+      label: "Prepare handoff",
+      iconHint: "external-signer",
+      intent: "prepare handoff",
+      requiresConfirmation: true,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "compare-validators",
+      label: "Compare validators",
+      iconHint: "validator",
+      intent: "compare validators",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+    {
+      actionId: "watch-subnet",
+      label: "Watch subnet",
+      iconHint: "watch",
+      intent: "watch subnet",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["ss58_read_only", "ss58_external_signer"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: true,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "Connect a Bittensor wallet",
+    body: "Paste a public SS58 address or connect an external signer to preview staking and delegation. Private keys and seed phrases are never accepted.",
+    primaryActionId: "preview-stake",
+  },
+  degradedStateCopy: {
+    headline: "Bittensor preview unavailable",
+    body: "Provider data is temporarily unreachable. You can still inspect memory or prepare a handoff from saved context.",
+    primaryActionId: "prepare-handoff",
+  },
+};
+
+export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "hyperliquid",
+  displayName: "Hyperliquid",
+  shortDescription: "Read-only perp market previews and watchlists.",
+  category: "markets",
+  status: "preview_only",
+  routeOrPanelId: "/workspaces/hyperliquid",
+  logoAssetKey: "hyperliquid-logo",
+  preferredColorToken: "--desk-hyperliquid-accent",
+  lightThemeTokenHints: {
+    background: "#F0FDF4",
+    surface: "#FFFFFF",
+    accent: "#22C55E",
+    accentHover: "#16A34A",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#DCFCE7",
+    iconFill: "#22C55E",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#4ADE80",
+    accentHover: "#22C55E",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#064E3B",
+    iconFill: "#4ADE80",
+  },
+  primaryActions: [
+    {
+      actionId: "preview-trade",
+      label: "Preview trade",
+      iconHint: "preview",
+      intent: "preview trade",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "manage-watchlist",
+      label: "Manage watchlist",
+      iconHint: "watch",
+      intent: "manage watchlist",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "show-exposure",
+      label: "Show exposure",
+      iconHint: "chart",
+      intent: "show exposure",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["evm_read_only"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "Preview Hyperliquid markets",
+    body: "Enter a public wallet address or market to generate a read-only preview. No signing or submission.",
+    primaryActionId: "preview-trade",
+  },
+  degradedStateCopy: {
+    headline: "Market preview unavailable",
+    body: "Hyperliquid market data is temporarily unreachable. Your watchlists and saved context are still available.",
+    primaryActionId: "manage-watchlist",
+  },
+};
+
+export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "polymarket",
+  displayName: "Polymarket",
+  shortDescription: "Read-only prediction market research and previews.",
+  category: "markets",
+  status: "preview_only",
+  routeOrPanelId: "/workspaces/polymarket",
+  logoAssetKey: "polymarket-logo",
+  preferredColorToken: "--desk-polymarket-accent",
+  lightThemeTokenHints: {
+    background: "#FFF7ED",
+    surface: "#FFFFFF",
+    accent: "#F97316",
+    accentHover: "#EA580C",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#FFEDD5",
+    iconFill: "#F97316",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#FB923C",
+    accentHover: "#F97316",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#7C2D12",
+    iconFill: "#FB923C",
+  },
+  primaryActions: [
+    {
+      actionId: "research-market",
+      label: "Research market",
+      iconHint: "search",
+      intent: "research market",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "preview-position",
+      label: "Preview position",
+      iconHint: "preview",
+      intent: "preview position",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "show-orderbook",
+      label: "Show orderbook",
+      iconHint: "orderbook",
+      intent: "show orderbook",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["evm_read_only"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "Research Polymarket",
+    body: "Search markets or enter a public wallet address for read-only research. No betting or signing.",
+    primaryActionId: "research-market",
+  },
+  degradedStateCopy: {
+    headline: "Market data unavailable",
+    body: "Polymarket data is temporarily unreachable. Saved watchlists and research context remain available.",
+    primaryActionId: "research-market",
+  },
+};
+
+export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "wellness",
+  displayName: "Wellness",
+  shortDescription: "Workflow-ready wellness program builder for creators and coaches.",
+  category: "wellness",
+  status: "workflow_ready",
+  routeOrPanelId: "/workspaces/wellness",
+  logoAssetKey: "wellness-logo",
+  preferredColorToken: "--desk-wellness-accent",
+  lightThemeTokenHints: {
+    background: "#F0F9FF",
+    surface: "#FFFFFF",
+    accent: "#3B82F6",
+    accentHover: "#2563EB",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#DBEAFE",
+    iconFill: "#3B82F6",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#93C5FD",
+    accentHover: "#60A5FA",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#1E3A8A",
+    iconFill: "#93C5FD",
+  },
+  primaryActions: [
+    {
+      actionId: "build-program",
+      label: "Build program",
+      iconHint: "program",
+      intent: "build program",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "package-service",
+      label: "Package service",
+      iconHint: "package",
+      intent: "package service",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "generate-artifacts",
+      label: "Generate artifacts",
+      iconHint: "document",
+      intent: "generate artifacts",
+      requiresConfirmation: false,
+      surface: "chat",
+    },
+  ],
+  walletRequirements: ["none"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "Build a wellness program",
+    body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
+    primaryActionId: "build-program",
+  },
+  degradedStateCopy: {
+    headline: "Wellness builder unavailable",
+    body: "The program builder is temporarily unavailable. Your saved program packets and memory are still accessible.",
+    primaryActionId: "build-program",
+  },
+};
+
+export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "memory",
+  displayName: "Memory",
+  shortDescription: "Inspect and manage what Matterhorn remembers across desks.",
+  category: "memory",
+  status: "beta_ready",
+  routeOrPanelId: "/memory",
+  logoAssetKey: "memory-logo",
+  preferredColorToken: "--desk-memory-accent",
+  lightThemeTokenHints: {
+    background: "#F8FAFC",
+    surface: "#FFFFFF",
+    accent: "#0EA5E9",
+    accentHover: "#0284C7",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#E0F2FE",
+    iconFill: "#0EA5E9",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#7DD3FC",
+    accentHover: "#38BDF8",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#0C4A6E",
+    iconFill: "#7DD3FC",
+  },
+  primaryActions: [
+    {
+      actionId: "review-memory",
+      label: "Review memory",
+      iconHint: "memory",
+      intent: "review memory",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+    {
+      actionId: "manage-suggestions",
+      label: "Manage suggestions",
+      iconHint: "inbox",
+      intent: "manage suggestions",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "forget-record",
+      label: "Forget record",
+      iconHint: "trash",
+      intent: "forget record",
+      requiresConfirmation: true,
+      surface: "context_menu",
+    },
+  ],
+  walletRequirements: ["none"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "Nothing saved yet",
+    body: "As you confirm suggestions across desks, safe, editable memory will appear here. Secrets and clinical records are rejected.",
+    primaryActionId: "review-memory",
+  },
+  degradedStateCopy: {
+    headline: "Memory index unavailable",
+    body: "Memory lookup is temporarily unavailable. Existing records are still stored locally and will reappear shortly.",
+    primaryActionId: "review-memory",
+  },
+};
+
+export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
+  version: "matterhorn.protocol.desk.manifest.v1",
+  id: "mcps",
+  displayName: "MCP Tools",
+  shortDescription: "Manage approved Model Context Protocol tools and their memory boundaries.",
+  category: "mcps",
+  status: "planned_not_live",
+  routeOrPanelId: "/mcps",
+  logoAssetKey: "mcp-logo",
+  preferredColorToken: "--desk-mcps-accent",
+  lightThemeTokenHints: {
+    background: "#FAFAFA",
+    surface: "#FFFFFF",
+    accent: "#6B7280",
+    accentHover: "#4B5563",
+    textPrimary: "#1F2937",
+    textSecondary: "#6B7280",
+    border: "#E5E7EB",
+    safetyStrip: "#F3F4F6",
+    iconFill: "#6B7280",
+  },
+  darkThemeTokenHints: {
+    background: "#0C0C0C",
+    surface: "#141414",
+    accent: "#9CA3AF",
+    accentHover: "#D1D5DB",
+    textPrimary: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    border: "#1F2937",
+    safetyStrip: "#1F2937",
+    iconFill: "#9CA3AF",
+  },
+  primaryActions: [
+    {
+      actionId: "browse-tools",
+      label: "Browse tools",
+      iconHint: "tools",
+      intent: "browse tools",
+      requiresConfirmation: false,
+      surface: "desk_panel",
+    },
+  ],
+  secondaryActions: [
+    {
+      actionId: "manage-permissions",
+      label: "Manage permissions",
+      iconHint: "shield",
+      intent: "manage permissions",
+      requiresConfirmation: false,
+      surface: "context_menu",
+    },
+  ],
+  walletRequirements: ["none"],
+  safetyBoundaries: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    medicalClaimsAllowed: false,
+  },
+  emptyStateCopy: {
+    headline: "MCP tools coming soon",
+    body: "Browse, approve, and manage MCP tool integrations once this desk goes live. No secrets or custody required.",
+    primaryActionId: "browse-tools",
+  },
+  degradedStateCopy: {
+    headline: "MCP tools unavailable",
+    body: "MCP tool management is not yet live. Approved tools will appear here when the desk launches.",
+    primaryActionId: "browse-tools",
+  },
+};
+
+export const PROTOCOL_DESK_MANIFEST_REGISTRY: Record<string, ProtocolDeskManifest> = {
+  bittensor: BITTENSOR_PROTOCOL_DESK_MANIFEST,
+  hyperliquid: HYPERLIQUID_PROTOCOL_DESK_MANIFEST,
+  polymarket: POLYMARKET_PROTOCOL_DESK_MANIFEST,
+  wellness: WELLNESS_PROTOCOL_DESK_MANIFEST,
+  memory: MEMORY_PROTOCOL_DESK_MANIFEST,
+  mcps: MCPS_PROTOCOL_DESK_MANIFEST,
+};
+
+export const BITTENSOR_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "bittensor-logo",
+  protocol: "bittensor",
+  sourceUrl: "https://bittensor.com/brand",
+  allowedUseNote: "Use only in Matterhorn Work UI surfaces. Do not modify colors or distort proportions.",
+  lightAssetPath: "/assets/desks/bittensor/logo-light.svg",
+  darkAssetPath: "/assets/desks/bittensor/logo-dark.svg",
+  monochromeAssetPath: "/assets/desks/bittensor/logo-mono.svg",
+  fallbackInitials: "TAO",
+};
+
+export const HYPERLIQUID_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "hyperliquid-logo",
+  protocol: "hyperliquid",
+  sourceUrl: "https://hyperliquid.xyz/about",
+  allowedUseNote: "Use only in Matterhorn Work UI surfaces. Do not modify colors or distort proportions.",
+  lightAssetPath: "/assets/desks/hyperliquid/logo-light.svg",
+  darkAssetPath: "/assets/desks/hyperliquid/logo-dark.svg",
+  fallbackInitials: "HL",
+};
+
+export const POLYMARKET_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "polymarket-logo",
+  protocol: "polymarket",
+  sourceUrl: "https://polymarket.com/press",
+  allowedUseNote: "Use only in Matterhorn Work UI surfaces. Do not modify colors or distort proportions.",
+  lightAssetPath: "/assets/desks/polymarket/logo-light.svg",
+  darkAssetPath: "/assets/desks/polymarket/logo-dark.svg",
+  fallbackInitials: "PM",
+};
+
+export const WELLNESS_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "wellness-logo",
+  protocol: "matterhorn",
+  sourceUrl: "https://matterhorn.so/brand",
+  allowedUseNote: "Matterhorn-owned asset. Free to use across Matterhorn Work UI surfaces.",
+  lightAssetPath: "/assets/desks/wellness/logo-light.svg",
+  darkAssetPath: "/assets/desks/wellness/logo-dark.svg",
+  fallbackInitials: "WL",
+};
+
+export const MEMORY_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "memory-logo",
+  protocol: "matterhorn",
+  sourceUrl: "https://matterhorn.so/brand",
+  allowedUseNote: "Matterhorn-owned asset. Free to use across Matterhorn Work UI surfaces.",
+  lightAssetPath: "/assets/desks/memory/logo-light.svg",
+  darkAssetPath: "/assets/desks/memory/logo-dark.svg",
+  fallbackInitials: "ME",
+};
+
+export const MCP_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
+  version: "matterhorn.protocol.brand.asset.v1",
+  assetKey: "mcp-logo",
+  protocol: "matterhorn",
+  sourceUrl: "https://matterhorn.so/brand",
+  allowedUseNote: "Matterhorn-owned asset. Free to use across Matterhorn Work UI surfaces.",
+  lightAssetPath: "/assets/desks/mcps/logo-light.svg",
+  darkAssetPath: "/assets/desks/mcps/logo-dark.svg",
+  fallbackInitials: "MCP",
+};
+
+export const PROTOCOL_BRAND_ASSET_REGISTRY: Record<string, ProtocolBrandAssetManifest> = {
+  "bittensor-logo": BITTENSOR_BRAND_ASSET_MANIFEST,
+  "hyperliquid-logo": HYPERLIQUID_BRAND_ASSET_MANIFEST,
+  "polymarket-logo": POLYMARKET_BRAND_ASSET_MANIFEST,
+  "wellness-logo": WELLNESS_BRAND_ASSET_MANIFEST,
+  "memory-logo": MEMORY_BRAND_ASSET_MANIFEST,
+  "mcp-logo": MCP_BRAND_ASSET_MANIFEST,
+};
