@@ -219,6 +219,14 @@ function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
   );
 }
 
+function customerModelProviderLabel(provider: ProviderListItem) {
+  const raw = provider.name?.trim() || provider.id;
+  if (/opencode/i.test(raw) || /opencode/i.test(provider.id)) {
+    return "Matterhorn Models";
+  }
+  return raw;
+}
+
 const emptyWorkspaceDisplay: WorkspaceDisplay = {
   id: "",
   name: "",
@@ -1897,7 +1905,7 @@ export function SessionRoute() {
               providerID: provider.id,
               modelID: id,
               title: model.name || id,
-              description: provider.name,
+              description: customerModelProviderLabel(provider),
               behaviorTitle: "Reasoning",
               behaviorLabel: "Default",
               behaviorDescription: "",

@@ -39,6 +39,7 @@ export type CreateWorkspaceLocalPanelProps = {
   hasSelectedFolder: boolean;
   pickingFolder: boolean;
   onPickFolder: () => void;
+  onManualFolderChange?: (folder: string) => void;
   submitting: boolean;
   localError: string | null;
   onClose: () => void;
@@ -123,7 +124,7 @@ export function CreateWorkspaceLocalPanel(
               {t("welcome.folder_drop_hint")}
             </div>
 
-            <div className="mt-4 rounded-[20px] border border-dls-border bg-dls-hover px-4 py-3">
+            <div className="mt-4 rounded-lg border border-dls-border bg-dls-hover px-4 py-3">
               {props.hasSelectedFolder ? (
                 <span className="block truncate font-mono text-[12px] text-dls-text">
                   {props.selectedFolder}
@@ -134,6 +135,21 @@ export function CreateWorkspaceLocalPanel(
                 </span>
               )}
             </div>
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-[12px] font-medium text-dls-secondary">
+                Or paste a folder path
+              </span>
+              <input
+                value={props.selectedFolder ?? ""}
+                onChange={(event) => props.onManualFolderChange?.(event.currentTarget.value)}
+                disabled={props.submitting}
+                placeholder="/Users/you/Projects/matterhorn-workspace"
+                className="h-10 w-full rounded-lg border border-dls-border bg-dls-surface px-3 font-mono text-[13px] text-dls-text outline-none placeholder:text-dls-secondary focus:border-dls-accent"
+              />
+              <span className="mt-1.5 block text-[11px] leading-4 text-dls-secondary">
+                Use this if the native folder picker does not open in browser mode.
+              </span>
+            </label>
             <div className="mt-4">
               <button
                 type="button"
