@@ -37,7 +37,7 @@ export function WebUnavailableSurface(props: WebUnavailableSurfaceProps) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>{MESSAGE}</span>
             <a
-              href="https://openworklabs.com"
+              href="https://matterhorn.work"
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"

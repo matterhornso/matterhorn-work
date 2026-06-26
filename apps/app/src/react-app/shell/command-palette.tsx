@@ -171,7 +171,7 @@ export function CommandPalette(props: CommandPaletteProps) {
       meta: t("session.cmd_settings_meta"),
       action: () => {
         props.onClose();
-        openUrl("https://matterhorn.dev/docs");
+        openUrl("https://matterhorn.work/docs");
       },
     },
     {
@@ -180,7 +180,7 @@ export function CommandPalette(props: CommandPaletteProps) {
       meta: t("session.cmd_settings_meta"),
       action: () => {
         props.onClose();
-        openUrl("https://matterhorn.dev/feedback");
+        openUrl("https://matterhorn.work/feedback");
       },
     },
     {
@@ -211,16 +211,6 @@ export function CommandPalette(props: CommandPaletteProps) {
       action: () => {
         props.onClose();
         props.onOpenSettings("/settings/appearance");
-      },
-    },
-    {
-      id: "settings-recovery",
-      title: t("settings.tab_recovery"),
-      detail: t("settings.tab_description_recovery"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/recovery");
       },
     },
     {

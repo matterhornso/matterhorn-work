@@ -20,12 +20,13 @@ import {
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
 import {
-  CLOUD_SETTINGS_TABS,
   SettingsPage,
   SettingsSidebar,
+  getCloudSettingsTabs,
   getGlobalSettingsTabs,
   getSettingsTabIcon,
   getSettingsTabLabel,
+  getSettingsTabStatus,
   getWorkspaceSettingsTabs,
 } from "./settings-page";
 import { WorkspaceIcon } from "../../../design-system/workspace-icon";
@@ -179,9 +180,9 @@ export function SettingsShell(props: SettingsShellProps) {
 function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "developerMode" | "onSelectTab">) {
   const sections: Array<{ label: string | null; tabs: SettingsTab[] }> = [
     { label: null, tabs: ["general"] },
-    { label: t("settings.group_workspace"), tabs: getWorkspaceSettingsTabs() },
+    { label: t("settings.group_workspace"), tabs: getWorkspaceSettingsTabs(props.developerMode) },
     { label: t("settings.group_global"), tabs: getGlobalSettingsTabs(props.developerMode) },
-    { label: t("settings.group_cloud"), tabs: CLOUD_SETTINGS_TABS },
+    { label: t("settings.group_cloud"), tabs: getCloudSettingsTabs(props.developerMode) },
   ];
   const ActiveIcon = getSettingsTabIcon(props.activeTab);
 
@@ -211,6 +212,11 @@ function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "
                 >
                   <Icon />
                   <span>{getSettingsTabLabel(tab)}</span>
+                  {getSettingsTabStatus(tab) ? (
+                    <span className="ml-auto rounded-full border border-dls-border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-dls-secondary">
+                      {getSettingsTabStatus(tab)}
+                    </span>
+                  ) : null}
                 </DropdownMenuItem>
               );
             })}

@@ -47,6 +47,10 @@ export function RecoveryView(props: RecoveryViewProps) {
           <AlertDescription>{t("settings.recovery_requires_desktop")}</AlertDescription>
         </Alert>
       )}
+      <SettingsNotice>
+        Preview diagnostics: reset, repair, and Docker cleanup actions are intentionally disabled in the beta UI until the
+        desktop bridge exposes safe confirmation flows.
+      </SettingsNotice>
       <LayoutSectionItem>
         <LayoutSectionItemHeader>
           <LayoutSectionItemTitle>{t("settings.workspace_config_title")}</LayoutSectionItemTitle>
