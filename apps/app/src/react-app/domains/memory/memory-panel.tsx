@@ -211,6 +211,19 @@ function suggestionActionMessage(entry: MatterhornMemorySuggestionInboxEntry) {
   return "Review first. Confirm, edit, or dismiss. Nothing is saved automatically.";
 }
 
+function suggestionAvailableActions(entry: MatterhornMemorySuggestionInboxEntry) {
+  if (entry.status === "pending" && !shouldHideSuggestionContent(entry)) {
+    return "Available actions: Confirm, edit, or dismiss.";
+  }
+  if (entry.status === "expired") {
+    return "Available action: Dismiss from view only. Ask Matterhorn again for fresh context.";
+  }
+  if (entry.status === "blocked") {
+    return "Available action: Dismiss from view only. Content remains redacted.";
+  }
+  return "Available actions: none. This card is read-only lifecycle history.";
+}
+
 function shouldHideSuggestionContent(entry: MatterhornMemorySuggestionInboxEntry) {
   return entry.status === "blocked" || entry.suggestion.policyDecision === "reject";
 }
@@ -785,7 +798,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : null}
 
-          <div className="mt-3 grid gap-2" aria-label="Memory inbox lifecycle summary">
+          <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
             <div className="rounded-xl border border-dls-border bg-dls-card px-3 py-2">
               <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
               <div className="mt-1 text-lg font-semibold">{suggestionStatusCounts.pending}</div>
@@ -920,6 +933,14 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       )}
                     </div>
 
+                    <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-dls-text">Lifecycle state:</span>
+                        <span>{statusMeta.title}</span>
+                      </div>
+                      <p className="mt-1">{suggestionAvailableActions(entry)}</p>
+                    </div>
+
                     {hidesSensitiveContent ? (
                       <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
                         <div className="flex items-center gap-2 font-semibold">
@@ -936,8 +957,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
                           <Info className="size-3.5 text-primary" />
                           Why suggested
                         </div>
-                        <p className="mt-1 break-words">{entry.reason || suggestion.reason}</p>
-                        <p className="mt-1 break-words">{suggestionDeskReason(suggestion)}</p>
+                        <p className="mt-1 break-words">
+                          <span className="font-semibold text-dls-text">Trigger:</span> {entry.reason || suggestion.reason}
+                        </p>
+                        <p className="mt-1 break-words">
+                          <span className="font-semibold text-dls-text">Boundary:</span> {suggestionDeskReason(suggestion)}
+                        </p>
+                        <p className="mt-1 break-words">
+                          <span className="font-semibold text-dls-text">Source:</span> {entry.source}; <span className="font-semibold text-dls-text">scope:</span> {entry.scope}; <span className="font-semibold text-dls-text">dismissal window:</span> {entry.dismissalWindowDays} days.
+                        </p>
                       </div>
                     )}
 
@@ -988,9 +1016,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
                     </div>
                     {showActiveSuggestionActions ? (
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                      <div className="mt-3 grid gap-2 sm:grid-cols-3">
                         <Button
                           size="sm"
+                          className="justify-center"
                           onClick={() => void handleResolveSuggestion(entry, "confirm")}
                           disabled={!props.client}
                           aria-label={`Remember visible Memory suggestion: ${suggestion.proposedRecord.title}`}
@@ -1001,6 +1030,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="justify-center"
                           onClick={() => beginSuggestionEdit(entry)}
                           disabled={!props.client || Boolean(editing)}
                           aria-label={`Edit visible Memory suggestion before saving: ${suggestion.proposedRecord.title}`}
@@ -1011,6 +1041,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="justify-center"
                           onClick={() => void handleResolveSuggestion(entry, "dismiss")}
                           disabled={!props.client}
                           aria-label={`Dismiss visible Memory suggestion: ${suggestion.proposedRecord.title}`}
