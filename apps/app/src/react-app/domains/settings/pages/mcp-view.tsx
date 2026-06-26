@@ -937,61 +937,53 @@ function MatterhornMcpProductSection(props: {
         </p>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3">
+      <div className="overflow-hidden rounded-xl bg-dls-surface/70 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
         {props.cards.map((card) => (
           <article
             key={card.id}
-            className="flex min-w-0 flex-col gap-4 rounded-xl border border-dls-border bg-dls-surface p-4"
+            className="grid min-w-0 gap-4 border-b border-dls-border/45 px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.95fr)]"
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-dls-border bg-dls-hover text-dls-text">
+              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
                 <Code2 size={16} />
               </div>
-              <div className="min-w-0 space-y-1">
-                <h4 className="text-sm font-semibold text-dls-text">{card.name}</h4>
+              <div className="min-w-0 space-y-2">
+                <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
                 <p className="text-xs leading-5 text-dls-secondary">{card.description}</p>
+                <div className="space-y-1.5 text-xs">
+                  <p className="leading-5 text-dls-secondary">
+                    <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
+                    {card.boundary}
+                  </p>
+                  <p className="leading-5 text-dls-secondary">
+                    <span className="font-medium text-dls-text">Works in:</span>{" "}
+                    {card.worksWith.join(", ")}
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-dls-text">Install command</span>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-dls-border px-2 py-1 text-xs text-dls-text hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-dls-hover px-2 py-1 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                   onClick={() => props.onCopyCommand(card.command)}
                 >
                   <Copy size={13} />
                   Copy install command
                 </button>
               </div>
-              <code className="block overflow-x-auto rounded-lg border border-dls-border bg-dls-hover px-3 py-2 text-xs text-dls-text">
+              <code className="block overflow-x-auto rounded-lg bg-dls-hover/80 px-3 py-2 text-xs text-dls-text">
                 {card.command}
               </code>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div>
-                <div className="font-medium text-dls-text">Supported tools</div>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {card.tools.map((tool) => (
-                    <span
-                      key={tool}
-                      className="rounded-md border border-dls-border bg-dls-hover px-2 py-1 font-mono text-[11px] text-dls-secondary"
-                    >
-                      {tool}
-                    </span>
-                  ))}
-                </div>
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-dls-text">Supported tools</div>
+                <p className="break-words font-mono text-[11px] leading-5 text-dls-secondary">
+                  {card.tools.join(" · ")}
+                </p>
               </div>
-              <p className="leading-5 text-dls-secondary">
-                <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
-                {card.boundary}
-              </p>
-              <p className="leading-5 text-dls-secondary">
-                <span className="font-medium text-dls-text">Works in:</span>{" "}
-                {card.worksWith.join(", ")}
-              </p>
             </div>
           </article>
         ))}
