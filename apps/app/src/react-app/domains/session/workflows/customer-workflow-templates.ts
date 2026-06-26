@@ -201,13 +201,13 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
     : "";
   switch (template.routing.chatMode) {
     case "bittensor":
-      return `Use Bittensor chat. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
+      return `Use the Bittensor desk in this session. Keep all context Bittensor-specific: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, wallet reads, staking previews, watches, and receipts. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
     case "hyperliquid":
-      return `Use Hyperliquid chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+      return `Use the Hyperliquid desk in this session. Keep all context Hyperliquid-specific: markets, orderbooks, account exposure, funding, open orders, preview-only handoffs, watches, and receipts. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
-      return `Use Polymarket chat. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+      return `Use the Polymarket desk in this session. Keep all context Polymarket-specific: market discovery, outcomes, probabilities, liquidity, compliance checks, preview-only handoffs, watches, and receipts. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
     case "wellness":
-      return `${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
+      return `Use the Wellness workflow desk in this session. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
     case "services":
       return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
     default:
