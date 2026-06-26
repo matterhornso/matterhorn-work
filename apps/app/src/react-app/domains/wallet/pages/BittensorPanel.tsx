@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -379,6 +379,20 @@ const VENUE_PROTOCOL_MANIFESTS: Record<CryptoVenue, MatterhornProtocolWorkspaceM
   hyperliquid: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.hyperliquid,
   polymarket: MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY.polymarket,
 };
+const VENUE_TONES: Record<CryptoVenue, { rgb: string; accent: string; soft: string }> = {
+  bittensor: { rgb: "35,211,245", accent: "#23d3f5", soft: "rgba(35,211,245,0.10)" },
+  hyperliquid: { rgb: "43,211,118", accent: "#2bd376", soft: "rgba(43,211,118,0.10)" },
+  polymarket: { rgb: "179,126,255", accent: "#b37eff", soft: "rgba(179,126,255,0.10)" },
+};
+
+function venueToneStyle(activeVenue: CryptoVenue): CSSProperties {
+  const tone = VENUE_TONES[activeVenue];
+  return {
+    "--protocol-desk-rgb": tone.rgb,
+    "--protocol-desk-accent": tone.accent,
+    "--protocol-desk-soft": tone.soft,
+  } as CSSProperties;
+}
 
 function protocolStatusLabel(status: MatterhornProtocolWorkspaceManifest["customerStatus"]): string {
   switch (status) {
@@ -1185,12 +1199,15 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     : `Safety strip: ${activeVenue.label} is Preview Only. Can submit: No. Live submission: Off. External signer/client required. Matterhorn never accepts private keys, API secrets, raw signatures, signed payloads, or wallet exports.`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-b from-dls-sidebar via-dls-sidebar to-dls-canvas text-[15px] animate-fade-in">
-      <div className="max-h-[52vh] shrink-0 overflow-y-auto overscroll-y-contain border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-dls-canvas text-[15px] animate-fade-in"
+      style={venueToneStyle(venue)}
+    >
+      <div className="shrink-0 border-b border-dls-border bg-dls-sidebar/95 p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex size-10 items-center justify-center rounded-2xl bg-[rgba(var(--matterhorn-blue-rgb),0.18)] shadow-[0_0_28px_rgba(var(--matterhorn-blue-rgb),0.14)]">
-              <BrainCircuit className="size-5 text-sky-400" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[var(--protocol-desk-soft)]">
+              <BrainCircuit className="size-5 text-[var(--protocol-desk-accent)]" />
             </div>
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-[-0.01em] text-dls-text">{activeVenue.workspaceTitle}</h2>
@@ -1210,14 +1227,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             Refresh
           </Button>
         </div>
-        <div className="mb-3 grid grid-cols-1 gap-1 rounded-2xl bg-dls-surface p-1.5 sm:grid-cols-3">
+        <div className="mb-3 grid grid-cols-1 gap-1 rounded-xl bg-dls-surface p-1 sm:grid-cols-3">
           {(["bittensor", "hyperliquid", "polymarket"] as const).map((item) => (
             <button
               key={item}
               type="button"
               className={cn(
-                "rounded-xl px-2 py-2 text-xs font-semibold transition-colors",
-                venue === item ? "bg-[var(--matterhorn-blue)] text-[var(--matterhorn-ink)] shadow-[0_10px_30px_rgba(var(--matterhorn-blue-rgb),0.16)]" : "text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
+                "rounded-lg px-2 py-2 text-xs font-semibold transition-colors",
+                venue === item ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
               )}
               onClick={() => {
                 setVenue(item);
@@ -1228,11 +1245,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </button>
           ))}
         </div>
-        <div className="mb-3 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200">
+        <div className="mb-3 rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.30)] bg-[var(--protocol-desk-soft)] p-3.5">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--protocol-desk-accent)]">
             <span>Safety strip</span>
             <span>Protocol manifest</span>
-            <span className="rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.25)] px-2 py-0.5 text-[9px] text-dls-secondary">
+            <span className="rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] px-2 py-0.5 text-[9px] text-dls-secondary">
               {activeSafetyBadge}
             </span>
           </div>
@@ -1249,7 +1266,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           </p>
         </div>
         {venue === "bittensor" ? (
-          <div className="grid grid-cols-1 gap-1 rounded-2xl bg-dls-surface p-1 sm:grid-cols-5">
+          <div className="grid grid-cols-1 gap-1 rounded-xl bg-dls-surface p-1 sm:grid-cols-5">
             {[
               { key: "overview" as const, label: "Overview" },
               { key: "demo" as const, label: "Demo" },
@@ -1261,8 +1278,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               key={item.key}
               type="button"
               className={cn(
-                "rounded-xl px-2 py-2 text-xs font-medium transition-colors",
-                tab === item.key ? "bg-sky-500 text-white" : "text-dls-secondary hover:text-dls-text",
+                "rounded-lg px-2 py-2 text-xs font-medium transition-colors",
+                tab === item.key ? "bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)]" : "text-dls-secondary hover:text-dls-text",
               )}
               onClick={() => setTab(item.key)}
             >
@@ -1354,8 +1371,8 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
           <div className="space-y-4">
             <Section title="Bittensor workspace" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
-                <div className="rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-200">{activeVenue.eyebrow}</div>
+                <div className="rounded-xl border border-[rgba(var(--protocol-desk-rgb),0.28)] bg-[var(--protocol-desk-soft)] p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--protocol-desk-accent)]">{activeVenue.eyebrow}</div>
                   <h3 className="mt-2 text-sm font-semibold leading-5 text-dls-text">{activeVenue.headline}</h3>
                   <p className="mt-2 text-xs leading-5 text-dls-secondary">{activeVenue.description}</p>
                 </div>
@@ -1368,6 +1385,25 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 <p className="text-xs leading-5 text-dls-secondary">
                   Use this desk for TAO balance reads, subnet discovery, validator comparison, watchlists, receipts, and unsigned staking previews. Matterhorn never asks for seed phrases, private keys, mnemonics, or wallet exports.
                 </p>
+              </div>
+            </Section>
+            <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
+              <p className="mb-3 text-sm leading-6 text-dls-secondary">
+                These are the core Bittensor workflows Matterhorn should make easy. Each one inserts an editable chat prompt with public context; nothing auto-sends, signs, broadcasts, stakes, unstakes, transfers, or asks for wallet secrets.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {BITTENSOR_STANDARD_ACTIONS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="rounded-xl border border-dls-border bg-dls-surface/80 p-3 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
+                    onClick={() => void askAgentForStandardBittensorAction(item)}
+                  >
+                    <div className="text-sm font-semibold text-dls-text">{item.title}</div>
+                    <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.summary}</div>
+                    <div className="mt-2 text-[11px] font-medium text-[var(--protocol-desk-accent)]">{item.safety}</div>
+                  </button>
+                ))}
               </div>
             </Section>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(132px,1fr))] gap-2">
@@ -2041,7 +2077,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <button
                       key={item.id}
                       type="button"
-                      className="group rounded-xl border border-dls-border bg-dls-surface/70 p-3 text-left transition-colors hover:border-sky-400/60 hover:bg-sky-500/10 focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                      className="group rounded-xl border border-dls-border bg-dls-surface/70 p-3 text-left transition-colors hover:border-[rgba(var(--protocol-desk-rgb),0.55)] hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--protocol-desk-rgb),0.30)]"
                       onClick={() => void askAgentForStandardBittensorAction(item)}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -2049,11 +2085,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                           <div className="text-sm font-semibold text-dls-text">{item.title}</div>
                           <div className="mt-1 text-xs leading-5 text-dls-secondary">{item.summary}</div>
                         </div>
-                        <span className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-200">
+                        <span className="shrink-0 rounded-md border border-[rgba(var(--protocol-desk-rgb),0.35)] bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--protocol-desk-accent)]">
                           Chat
                         </span>
                       </div>
-                      <div className="mt-2 text-[11px] font-medium text-sky-200">{item.safety}</div>
+                      <div className="mt-2 text-[11px] font-medium text-[var(--protocol-desk-accent)]">{item.safety}</div>
                     </button>
                   ))}
                 </div>
@@ -2128,9 +2164,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dls-border bg-dls-card/90 p-4 shadow-[var(--dls-card-shadow)] sm:p-5">
+    <div className="rounded-xl border border-dls-border bg-dls-card p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
-        <span className="flex size-8 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-blue-rgb),0.16)] text-sky-300">{icon}</span>
+        <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]">{icon}</span>
         {title}
       </div>
       {children}
@@ -2140,7 +2176,7 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 
 function Metric({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
-    <div className={cn("min-w-0 rounded-xl border border-dls-border bg-dls-surface p-3.5", compact && "p-3")}>
+    <div className={cn("min-w-0 rounded-lg border border-dls-border bg-dls-surface p-3.5", compact && "p-3")}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-dls-secondary">{label}</div>
       <div className={cn("mt-1.5 break-words font-mono font-semibold leading-snug text-dls-text", compact ? "text-sm" : "text-xl")}>{value}</div>
     </div>
@@ -2150,9 +2186,9 @@ function Metric({ label, value, compact = false }: { label: string; value: strin
 function Notice({ tone, icon, title, children }: { tone: "info" | "warning"; icon: ReactNode; title: string; children: ReactNode }) {
   const classes = tone === "warning"
     ? "border-amber-500/20 bg-amber-500/10 text-amber-200"
-    : "border-sky-500/20 bg-sky-500/10 text-sky-200";
+    : "border-[rgba(var(--protocol-desk-rgb),0.22)] bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]";
   return (
-    <div className={cn("mb-4 flex items-start gap-2 rounded-xl border px-3 py-2.5", classes)}>
+    <div className={cn("mb-4 flex items-start gap-2 rounded-lg border px-3 py-2.5", classes)}>
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div>
         <div className="text-xs font-semibold">{title}</div>
