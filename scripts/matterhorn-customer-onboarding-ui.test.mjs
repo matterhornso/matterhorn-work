@@ -20,6 +20,8 @@ const statusBar = read("apps/app/src/react-app/domains/session/chat/status-bar.t
 const modelSelect = read("apps/app/src/components/model-select.tsx");
 const remoteWorkspaceFields = read("apps/app/src/react-app/domains/workspace/remote-workspace-fields.tsx");
 const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows/customer-workflow-templates.ts");
+const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
+const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
@@ -59,9 +61,14 @@ for (const phrase of [
 }
 
 for (const phrase of [
-  "Choose a Desk.",
-  "Create session",
+  "Start a Matterhorn project.",
+  "New Project",
+  "New chat",
   "Open Bittensor desk",
+  "Matterhorn Wallet",
+  "One wallet surface for EVM tools.",
+  "Bittensor uses public SS58 reads and external signing.",
+  "Wallet details",
   "Matterhorn Desks",
   "Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness.",
   "focused desk",
@@ -93,9 +100,12 @@ for (const phrase of [
   "Start wellness workflow",
   "Start blank chat",
   "ProtocolLogo",
-  "Use Bittensor",
-  "Use Hyperliquid",
-  "Use Polymarket",
+  "Use the Bittensor desk in this session",
+  "Use the Hyperliquid desk in this session",
+  "Use the Polymarket desk in this session",
+  "Keep all context Bittensor-specific",
+  "Keep all context Hyperliquid-specific",
+  "Keep all context Polymarket-specific",
   "Show my TAO",
   "Compare validators",
   "Preview Hyperliquid BTC-PERP context",
@@ -128,6 +138,19 @@ for (const phrase of [
 ]) {
   assert.ok(`${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(phrase), `starter UI should expose Matterhorn task: ${phrase}`);
 }
+
+for (const phrase of [
+  '"dashboard.create_workspace_title": "Create Project"',
+  '"dashboard.create_workspace_confirm": "Create Project"',
+  '"workspace_list.add_workspace": "New project"',
+  '"workspace_list.show_more": "Show {count} more chats"',
+  '"session.untitled_chat_number": "Untitled chat {index}"',
+]) {
+  assert.ok(english.includes(phrase), `project/session copy should be customer-friendly: ${phrase}`);
+}
+
+assert.ok(sidebarUtils.includes("MAX_SESSIONS_PREVIEW = 3"), "sidebar should preview fewer sessions before showing more");
+assert.ok(appSidebar.includes("session.untitled_chat_number"), "untitled sidebar sessions should get numbered fallback titles");
 
 for (const phrase of [
   "Access Token",

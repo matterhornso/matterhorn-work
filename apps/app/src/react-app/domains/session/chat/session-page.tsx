@@ -64,11 +64,13 @@ import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
 import { WalletPanel } from "../../wallet/WalletPanel";
+import { WalletConnect } from "../../wallet/WalletConnect";
 import { MemoryPanel } from "../../memory/memory-panel";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
+import type { WalletStore, WalletStoreSnapshot } from "../../wallet/state/wallet-store";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { CommandPalette } from "../../wallet/components/CommandPalette";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -153,6 +155,49 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "me
     "--matterhorn-desk-rgb": `var(${tone[1]})`,
     "--matterhorn-desk-secondary": `var(${tone[2]})`,
   } as CSSProperties;
+}
+
+const truncateWalletAddress = (address?: string | null) => {
+  if (!address) return "";
+  if (address.length <= 12) return address;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+};
+
+function HomeWalletStrip({
+  store,
+  snapshot,
+  onOpenWallet,
+}: {
+  store: WalletStore;
+  snapshot: WalletStoreSnapshot;
+  onOpenWallet: () => void;
+}) {
+  const walletStatus = snapshot.isConnected
+    ? `${truncateWalletAddress(snapshot.address)}${snapshot.chainId ? ` · chain ${snapshot.chainId}` : ""}`
+    : "No EVM wallet connected";
+
+  return (
+    <aside className="ml-auto w-full max-w-lg rounded-lg border border-border bg-card/85 p-4 text-left shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <WalletIcon className="h-4 w-4 text-primary" />
+            Matterhorn Wallet
+          </div>
+          <div className="truncate text-xs text-muted-foreground">{walletStatus}</div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            One wallet surface for EVM tools. Bittensor uses public SS58 reads and external signing.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <WalletConnect store={store} />
+          <Button type="button" variant="outline" size="sm" onClick={onOpenWallet}>
+            Wallet details
+          </Button>
+        </div>
+      </div>
+    </aside>
+  );
 }
 
 type StatusBarOverrides = Pick<
@@ -1086,18 +1131,25 @@ export function SessionPage(props: SessionPageProps) {
                       <div className="w-full max-w-5xl space-y-7">
                         <div className="mx-auto max-w-2xl space-y-3 text-center">
                           <h2 className="text-2xl font-semibold tracking-[-0.01em] text-dls-text sm:text-3xl">
-                            Choose a Desk.
+                            Start a Matterhorn project.
                           </h2>
                           <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
-                            Start from Bittensor, Hyperliquid, Polymarket, Wellness, or blank chat. Matterhorn opens a
-                            focused desk, inserts an editable prompt, and keeps wallet, preview, and safety boundaries
-                            visible before anything runs.
+                            Create a project folder, open a focused desk, or start a blank chat. Matterhorn keeps desk
+                            context, wallet state, previews, and safety boundaries visible before anything runs.
                           </p>
                         </div>
                         <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-center">
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-full border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-medium text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff]"
+                            className="inline-flex items-center gap-2 rounded-md border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] px-4 py-2 text-sm font-semibold text-[var(--matterhorn-ink)] transition-colors hover:bg-[#e7f8ff]"
+                            onClick={props.sidebar.onOpenCreateWorkspace}
+                          >
+                            <Plus className="size-4" />
+                            New Project
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-md border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             disabled={props.sidebar.newTaskDisabled}
                             onClick={() => {
                               if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
@@ -1107,12 +1159,12 @@ export function SessionPage(props: SessionPageProps) {
                               props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
                             }}
                           >
-                            <Plus className="size-4" />
-                            Create session
+                            <FileText className="size-4" />
+                            New chat
                           </button>
                           <button
                             type="button"
-                            className="inline-flex items-center gap-2 rounded-full border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                            className="inline-flex items-center gap-2 rounded-md border border-dls-border bg-dls-surface px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             onClick={() => {
                               const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
                               if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel, { primePrompt: true });
@@ -1122,6 +1174,11 @@ export function SessionPage(props: SessionPageProps) {
                             Open Bittensor desk
                           </button>
                         </div>
+                        <HomeWalletStrip
+                          store={wallet.store}
+                          snapshot={wallet.snapshot}
+                          onOpenWallet={() => setCurrentSidePanel("wallet")}
+                        />
                         <section className="space-y-3">
                           <div className="flex items-end justify-between gap-3">
                             <div>

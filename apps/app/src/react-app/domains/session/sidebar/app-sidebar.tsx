@@ -854,10 +854,11 @@ function WorkspaceSidebarGroup({
                   </SidebarMenuSubItem>
                 ) : group.sessions.length > 0 ? (
                   <>
-                    {sessionRows.map((row) => (
+                    {sessionRows.map((row, index) => (
                       <SessionMenuItem
                         key={row.session.id}
                         session={row.session}
+                        sessionIndex={index}
                         depth={row.depth}
                         tree={tree}
                         workspaceId={workspace.id}
@@ -910,16 +911,20 @@ function WorkspaceSidebarGroup({
 
 type SessionMenuItemProps = {
   session: SessionListItem;
+  sessionIndex: number;
   depth: number;
   tree: SessionTreeState;
   workspaceId: string;
   forcedExpandedSessionIds: Set<string>;
 };
 
-function SessionMenuItem({ session, tree, workspaceId, forcedExpandedSessionIds, depth }: SessionMenuItemProps) {
+function SessionMenuItem({ session, sessionIndex, tree, workspaceId, forcedExpandedSessionIds, depth }: SessionMenuItemProps) {
   const ctx = useSidebarContext();
   const isSelected = ctx.selectedSessionId === session.id;
-  const displayTitle = getDisplaySessionTitle(session.title);
+  const displayTitle = getDisplaySessionTitle(
+    session.title,
+    t("session.untitled_chat_number", { index: sessionIndex + 1 }),
+  );
   const hasChildren = (tree.descendantCountBySessionId.get(session.id) ?? 0) > 0;
   const isExpanded = ctx.expandedSessionIds.has(session.id) || forcedExpandedSessionIds.has(session.id);
   const sessionActivityStatus = ctx.sessionStatusById?.[session.id];
