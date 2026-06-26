@@ -94,6 +94,7 @@ import {
   type CustomerWorkflowIconHint,
   type CustomerWorkflowStarterCard,
 } from "../workflows/customer-workflow-templates";
+import { getCustomerProtocolDeskVisual } from "../workflows/protocol-desk-ui";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
@@ -109,73 +110,20 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 };
 
 function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconHint; size?: number }) {
-  if (iconHint === "bittensor") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-        <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (iconHint === "hyperliquid") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-        <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (iconHint === "polymarket") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-        <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-        <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return null;
+  const visual = getCustomerProtocolDeskVisual(iconHint);
+  if (!visual) return null;
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex items-center justify-center font-mono font-bold leading-none"
+      style={{ fontSize: Math.max(9, Math.round(size * 0.45)) }}
+    >
+      {visual.fallbackInitials}
+    </span>
+  );
 }
 
 type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
-
-const MATTERHORN_DESK_MODE_COPY: Record<MatterhornDeskMode, {
-  title: string;
-  status: string;
-  summary: string;
-  boundary: string;
-  iconHint: CustomerWorkflowIconHint;
-}> = {
-  bittensor: {
-    title: "Bittensor session",
-    status: "Beta-ready",
-    summary: "TAO wallet reads, subnet discovery, validator comparison, watches, receipts, and unsigned previews.",
-    boundary: "Public SS58/coldkey/hotkey context only. External signer required for actions.",
-    iconHint: "bittensor",
-  },
-  hyperliquid: {
-    title: "Hyperliquid session",
-    status: "Preview-only",
-    summary: "Orderbooks, account exposure, funding context, watch planning, and external-client handoffs.",
-    boundary: "Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.",
-    iconHint: "hyperliquid",
-  },
-  polymarket: {
-    title: "Polymarket session",
-    status: "Preview-only",
-    summary: "Market research, outcome context, compliance checks, liquidity context, and preview handoffs.",
-    boundary: "Can submit: No. Live submission: Off. Compliance blocks must not expose executable bet fields.",
-    iconHint: "polymarket",
-  },
-  wellness: {
-    title: "Wellness workflow session",
-    status: "Workflow-ready",
-    summary: "Service offers, onboarding questionnaires, program plans, check-ins, follow-ups, and client packets.",
-    boundary: "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
-    iconHint: "wellness",
-  },
-};
 
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
@@ -211,27 +159,29 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint): CSSProperties {
 }
 
 function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
-  const copy = MATTERHORN_DESK_MODE_COPY[mode];
-  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[copy.iconHint];
+  const copy = getCustomerProtocolDeskVisual(mode);
+  if (!copy) return null;
+  const iconHint = copy.id as CustomerWorkflowIconHint;
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
   return (
-    <div style={deskToneStyle(copy.iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
+    <div style={deskToneStyle(iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
-          {copy.iconHint === "bittensor" || copy.iconHint === "hyperliquid" || copy.iconHint === "polymarket" ? (
-            <ProtocolLogo iconHint={copy.iconHint} size={16} />
+          {copy.id === "bittensor" || copy.id === "hyperliquid" || copy.id === "polymarket" ? (
+            <ProtocolLogo iconHint={copy.id} size={16} />
           ) : (
             <Icon className="size-4" />
           )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-[12px] font-semibold text-dls-text">{copy.title}</span>
+            <span className="text-[12px] font-semibold text-dls-text">{copy.sessionTitle}</span>
             <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-              {copy.status}
+              {copy.statusLabel}
             </span>
           </div>
-          <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.summary}</p>
-          <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.boundary}</p>
+          <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.shortDescription}</p>
+          <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.sessionBoundary}</p>
         </div>
       </div>
     </div>
@@ -239,6 +189,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
 }
 
 function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): string[] {
+  if (item.protocolDesk?.capabilityBullets.length) {
+    return item.protocolDesk.capabilityBullets;
+  }
   if (item.panel === "bittensor") {
     return ["TAO wallet reads", "Subnet discovery", "External-signer previews"];
   }

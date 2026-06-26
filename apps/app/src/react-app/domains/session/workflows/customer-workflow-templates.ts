@@ -6,6 +6,12 @@ import {
   type MatterhornProtocolWorkspaceId,
   type MatterhornProtocolWorkspaceLaunchBehavior,
 } from "@matterhorn-work/types/matterhorn-workflows";
+import {
+  getCustomerProtocolDeskVisual,
+  protocolDeskIdForChatMode,
+  protocolDeskIdForWorkspace,
+  type CustomerProtocolDeskVisual,
+} from "./protocol-desk-ui";
 
 export type CustomerWorkflowIconHint =
   | "bittensor"
@@ -62,6 +68,7 @@ export type CustomerWorkflowTemplate = {
     cliHint?: string;
     mcpHint?: string;
   };
+  protocolDesk?: CustomerProtocolDeskVisual;
 };
 
 export type CustomerWorkflowStarterCard = {
@@ -76,6 +83,7 @@ export type CustomerWorkflowStarterCard = {
   safetySummary: string;
   workspaceDisplayName?: string;
   launchBehavior?: MatterhornProtocolWorkspaceLaunchBehavior;
+  protocolDesk?: CustomerProtocolDeskVisual;
 };
 
 export type CustomerBetaDemoStarterCard = {
@@ -88,6 +96,7 @@ export type CustomerBetaDemoStarterCard = {
   panel?: "bittensor" | "hyperliquid" | "polymarket";
   statusLabel: string;
   safetySummary: string;
+  protocolDesk?: CustomerProtocolDeskVisual;
   artifactSummary: string;
   evidenceCommand: string;
   mapsToCustomerTemplateId: string;
@@ -221,6 +230,7 @@ function enrichCustomerWorkflowTemplate(template: CustomerWorkflowTemplate): Cus
   const manifest = MATTERHORN_PROTOCOL_WORKSPACE_MANIFEST_REGISTRY[workspaceId];
   if (!manifest) return template;
   const opensPanel = PANEL_BY_PROTOCOL_WORKSPACE[workspaceId];
+  const protocolDesk = getCustomerProtocolDeskVisual(protocolDeskIdForWorkspace(workspaceId));
   return {
     ...template,
     category: manifest.category,
@@ -261,6 +271,7 @@ function enrichCustomerWorkflowTemplate(template: CustomerWorkflowTemplate): Cus
       cliHint: manifest.mcpCliHints.cli,
       mcpHint: manifest.mcpCliHints.mcp,
     },
+    protocolDesk: protocolDesk ?? template.protocolDesk,
   };
 }
 
@@ -509,19 +520,25 @@ export function buildCustomerWorkflowPrompt(template: CustomerWorkflowTemplate):
 export function buildCustomerWorkflowStarterCards(
   templates: CustomerWorkflowTemplate[] = FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES,
 ): CustomerWorkflowStarterCard[] {
-  return templates.filter((template) => CUSTOMER_VISIBLE_TEMPLATE_IDS.has(template.id)).map((template) => ({
-    id: template.id,
-    title: template.launch.primaryCta || template.name,
-    description: template.ui.shortDescription || template.summary,
-    prompt: buildCustomerWorkflowPrompt(template),
-    iconHint: template.ui.iconHint,
-    panel: template.routing.opensPanel,
-    recommendedSurface: template.launch.recommendedSurface,
-    statusLabel: starterStatusLabel(template),
-    safetySummary: safetySummary(template),
-    workspaceDisplayName: template.protocolWorkspace?.displayName,
-    launchBehavior: template.protocolWorkspace?.launchBehavior,
-  }));
+  return templates.filter((template) => CUSTOMER_VISIBLE_TEMPLATE_IDS.has(template.id)).map((template) => {
+    const protocolDesk =
+      template.protocolDesk ??
+      getCustomerProtocolDeskVisual(protocolDeskIdForChatMode(template.routing.chatMode));
+    return {
+      id: template.id,
+      title: template.launch.primaryCta || template.name,
+      description: protocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
+      prompt: buildCustomerWorkflowPrompt(template),
+      iconHint: template.ui.iconHint,
+      panel: template.routing.opensPanel,
+      recommendedSurface: template.launch.recommendedSurface,
+      statusLabel: protocolDesk?.statusLabel ?? starterStatusLabel(template),
+      safetySummary: protocolDesk?.safetySummary ?? safetySummary(template),
+      workspaceDisplayName: protocolDesk?.displayName ?? template.protocolWorkspace?.displayName,
+      launchBehavior: template.protocolWorkspace?.launchBehavior,
+      protocolDesk: protocolDesk ?? undefined,
+    };
+  });
 }
 
 export function buildCustomerBetaDemoStarterCards(
@@ -549,8 +566,9 @@ export function buildCustomerBetaDemoStarterCards(
       prompt: buildCustomerWorkflowPromptFromText(template, scenario.entryPrompt),
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
-      statusLabel: demoStatusLabel(scenario.status),
-      safetySummary: safetySummary(template),
+      statusLabel: template.protocolDesk?.statusLabel ?? demoStatusLabel(scenario.status),
+      safetySummary: template.protocolDesk?.safetySummary ?? safetySummary(template),
+      protocolDesk: template.protocolDesk,
       artifactSummary: artifactNames,
       evidenceCommand: `node scripts/customer-demo-evidence-pack.mjs --scenario ${scenario.id} --output-dir ./tmp/monday-beta-evidence`,
       mapsToCustomerTemplateId: scenario.mapsToCustomerTemplateId,

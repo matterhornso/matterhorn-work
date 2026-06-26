@@ -83,6 +83,10 @@ import {
   type CustomerWorkflowIconHint,
   type CustomerWorkflowStarterCard,
 } from "../workflows/customer-workflow-templates";
+import {
+  CUSTOMER_LAUNCHER_DESK_VISUALS,
+  getCustomerProtocolDeskVisual,
+} from "../workflows/protocol-desk-ui";
 
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
@@ -107,29 +111,15 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 };
 
 function ProtocolLogo({ venue, size = 18 }: { venue: VenueSidePanel; size?: number }) {
-  if (venue === "bittensor") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-        <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (venue === "hyperliquid") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-        <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    );
-  }
+  const visual = getCustomerProtocolDeskVisual(venue);
   return (
-    <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-      <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-      <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
+    <span
+      aria-hidden="true"
+      className="inline-flex items-center justify-center font-mono font-bold leading-none"
+      style={{ fontSize: Math.max(9, Math.round(size * 0.45)) }}
+    >
+      {visual?.fallbackInitials ?? venue.slice(0, 2).toUpperCase()}
+    </span>
   );
 }
 
@@ -160,41 +150,20 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "me
 type HomeCapabilityStatusItem = {
   id: CustomerWorkflowIconHint;
   title: string;
-  status: string;
+  statusLabel: string;
   summary: string;
   proof: string;
 };
 
-const HOME_CAPABILITY_STATUS_ITEMS: HomeCapabilityStatusItem[] = [
-  {
-    id: "bittensor",
-    title: "Bittensor",
-    status: "Beta-ready",
-    summary: "Public TAO reads, subnet discovery, validator comparison, watches, receipts, and unsigned staking previews.",
-    proof: "Backed by the Bittensor desk, sidecar/provider reads, and external-signer handoffs.",
-  },
-  {
-    id: "hyperliquid",
-    title: "Hyperliquid",
-    status: "Preview-only",
-    summary: "Orderbooks, account exposure, funding context, watch planning, and external-client preview handoffs.",
-    proof: "No live market submit. Can submit: No. Live submission: Off.",
-  },
-  {
-    id: "polymarket",
-    title: "Polymarket",
-    status: "Preview-only",
-    summary: "Market research, outcome context, liquidity/compliance checks, watch planning, and preview handoffs.",
-    proof: "No live bet placement. Can submit: No. Live submission: Off.",
-  },
-  {
-    id: "wellness",
-    title: "Wellness",
-    status: "Workflow-ready",
-    summary: "Service offers, onboarding questionnaires, program plans, check-ins, follow-ups, and client handoff packets.",
-    proof: "Standalone workflow. No Web3, medical advice, live payments, email, hosting, or token gating.",
-  },
-];
+function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
+  return CUSTOMER_LAUNCHER_DESK_VISUALS.map((visual) => ({
+    id: visual.id as CustomerWorkflowIconHint,
+    title: visual.displayName,
+    statusLabel: visual.statusLabel,
+    summary: visual.shortDescription,
+    proof: visual.safetySummary,
+  }));
+}
 
 function HomeCapabilityStatus() {
   return (
@@ -214,7 +183,7 @@ function HomeCapabilityStatus() {
         </span>
       </div>
       <div className="max-h-[260px] overflow-y-auto border-y border-dls-border/70">
-        {HOME_CAPABILITY_STATUS_ITEMS.map((item) => {
+        {homeCapabilityStatusItems().map((item) => {
           const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
             <div
@@ -234,7 +203,7 @@ function HomeCapabilityStatus() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[12px] font-semibold text-dls-text">{item.title}</span>
                     <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-                      {item.status}
+                      {item.statusLabel}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
@@ -250,6 +219,9 @@ function HomeCapabilityStatus() {
 }
 
 function workflowLauncherCapabilityItems(launcher: CustomerWorkflowStarterCard): string[] {
+  if (launcher.protocolDesk?.capabilityBullets.length) {
+    return launcher.protocolDesk.capabilityBullets;
+  }
   switch (launcher.panel) {
     case "bittensor":
       return ["TAO wallet reads", "Subnet discovery", "Unsigned previews"];
@@ -1683,26 +1655,19 @@ export function SessionPage(props: SessionPageProps) {
             <div className="mt-1 w-full border-t border-border/70 pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
               Desks
             </div>
-            {([
-              {
-                panel: "bittensor" as const,
-                label: "Bittensor",
-                title: "Bittensor: TAO, subnets, validators, and staking previews",
-                active: bittensorRailActive,
-              },
-              {
-                panel: "hyperliquid" as const,
-                label: "Hyperliquid",
-                title: "Hyperliquid: account, orderbook, watches, and external-signer previews",
-                active: hyperliquidRailActive,
-              },
-              {
-                panel: "polymarket" as const,
-                label: "Polymarket",
-                title: "Polymarket: markets, outcomes, compliance, and external-signer previews",
-                active: polymarketRailActive,
-              },
-            ]).map((item) => {
+            {VENUE_SIDE_PANELS.map((panel) => {
+              const visual = getCustomerProtocolDeskVisual(panel);
+              const item = {
+                panel,
+                label: visual?.displayName ?? panel,
+                title: visual?.railTitle ?? `${panel}: protocol desk`,
+                active:
+                  panel === "bittensor"
+                    ? bittensorRailActive
+                    : panel === "hyperliquid"
+                      ? hyperliquidRailActive
+                      : polymarketRailActive,
+              };
               return (
                 <Button
                   key={item.panel}
@@ -1726,8 +1691,8 @@ export function SessionPage(props: SessionPageProps) {
             {([
               {
                 id: "wellness_creator_workflow",
-                label: "Wellness",
-                title: "Wellness: standalone client programs, service offers, lifecycle packets, and safe creator workflows. Not Web3 or markets.",
+                label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Wellness",
+                title: getCustomerProtocolDeskVisual("wellness")?.railTitle ?? "Wellness workflow desk",
                 icon: Dumbbell,
                 launcher: wellnessRailLauncher,
               },
