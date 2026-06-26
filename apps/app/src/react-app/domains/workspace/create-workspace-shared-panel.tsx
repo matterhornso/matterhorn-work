@@ -72,7 +72,7 @@ export function CreateWorkspaceSharedPanel(
           <div
             className={`${surfaceCardClass} w-full max-w-[420px] p-8 text-center`}
           >
-            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-dls-border bg-dls-hover text-dls-text">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-[22px] bg-[rgba(var(--matterhorn-blue-rgb),0.13)] text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <Cloud size={24} />
             </div>
             <div className="mt-5 text-[20px] font-semibold tracking-[-0.3px] text-dls-text">
@@ -143,7 +143,7 @@ export function CreateWorkspaceSharedPanel(
           </div>
 
           <div className="mt-4">
-            <label className="flex items-center gap-3 rounded-xl border border-dls-border bg-dls-surface px-4 py-3">
+            <label className="flex items-center gap-3 rounded-2xl bg-dls-hover/75 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <Search size={15} className="shrink-0 text-dls-secondary" />
               <input
                 type="text"
@@ -186,7 +186,7 @@ export function CreateWorkspaceSharedPanel(
             return (
               <div
                 key={worker.workerId}
-                className={`${surfaceCardClass} transition-all duration-150 hover:border-dls-border hover:shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06)]`}
+                className={`${surfaceCardClass} transition-all duration-150 hover:-translate-y-0.5 hover:bg-dls-surface`}
               >
                 <div className="flex items-center gap-4">
                   <div className={iconTileClass}>

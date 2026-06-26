@@ -450,7 +450,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
     >
       <DialogContent
         showCloseButton={showClose}
-        className={`flex max-h-[90vh] min-h-0 w-full flex-col overflow-hidden ${modalWidthClass}`}
+        className={`flex max-h-[90vh] min-h-0 w-full flex-col overflow-hidden border-transparent bg-[radial-gradient(circle_at_top_left,rgba(var(--matterhorn-blue-rgb),0.14),transparent_36%),var(--dls-background)] shadow-[0_28px_110px_rgba(0,0,0,0.34)] ${modalWidthClass}`}
       >
         <DialogHeader className="flex-row">
           {screen !== "chooser" ? (
