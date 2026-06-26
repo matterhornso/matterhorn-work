@@ -8,14 +8,12 @@ import {
   Plus,
   Search,
   ChevronRight,
-  Wallet,
   Play,
   Pause,
   ExternalLink,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { createWalletStore, useWalletStore } from "../../wallet/state/wallet-store"
 import {
   useMarketplaceStore,
   browseAgents,
@@ -71,6 +69,11 @@ const PROVIDERS = [
 
 const TABS = ["Browse Agents", "My Agents", "Deploy"] as const
 type Tab = (typeof TABS)[number]
+const TAB_LABELS: Record<Tab, string> = {
+  "Browse Agents": "Browse Templates",
+  "My Agents": "Saved Previews",
+  Deploy: "Deployment Preview",
+}
 
 // ── Deploy Terminal Component ───────────────────────────────────────────────
 
@@ -84,7 +87,7 @@ function DeployTerminal({ log }: { log: string[] }) {
   return (
     <div className="rounded-lg border border-gray-4 bg-gray-1 p-4 font-mono text-xs text-emerald-400 h-64 overflow-y-auto">
       {log.length === 0 ? (
-        <p className="text-gray-9">Awaiting deploy command...</p>
+        <p className="text-gray-9">Awaiting preview command...</p>
       ) : (
         log.map((line, i) => (
           <div key={i} className="flex gap-2">
@@ -104,12 +107,10 @@ function AgentCard({
   agent,
   onSelect,
   onHire,
-  isWalletConnected,
 }: {
   agent: AgentBlueprint
   onSelect: (id: string) => void
   onHire: (agent: AgentBlueprint) => void
-  isWalletConnected: boolean
 }) {
   return (
     <div
@@ -185,21 +186,14 @@ function AgentCard({
         size="sm"
         className="mt-3 w-full gap-1.5"
         variant="secondary"
-        disabled={!isWalletConnected}
         onClick={(e) => {
           e.stopPropagation()
           onHire(agent)
         }}
       >
         <Plus className="w-3.5 h-3.5" />
-        Hire Agent
+        Preview template
       </Button>
-      {!isWalletConnected && (
-        <p className="text-[10px] text-amber-400/70 text-center mt-1.5 flex items-center justify-center gap-1">
-          <Wallet className="w-3 h-3" />
-          Connect wallet to hire
-        </p>
-      )}
     </div>
   )
 }
@@ -213,8 +207,6 @@ function MyAgentRow({
   agent: DeployedAgent
   blueprint: AgentBlueprint | null
 }) {
-  const isLive = agent.status === "live"
-
   return (
     <div className="flex items-center justify-between py-3 px-1 border-b border-gray-3 last:border-0">
       <div className="flex items-center gap-3 min-w-0">
@@ -236,14 +228,9 @@ function MyAgentRow({
 
       <div className="flex items-center gap-4">
         <span
-          className={cn(
-            "text-[10px] font-medium px-2 py-0.5 rounded-full border",
-            isLive
-              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-              : "bg-amber-500/10 text-amber-400 border-amber-500/20",
-          )}
+          className="text-[10px] font-medium px-2 py-0.5 rounded-full border bg-cyan-500/10 text-cyan-300 border-cyan-500/20"
         >
-          {isLive ? "Live" : "Paused"}
+          Preview
         </span>
         <span className="text-xs text-gray-11 w-16 text-right font-mono">
           ${agent.revenue.toFixed(2)}
@@ -254,18 +241,18 @@ function MyAgentRow({
           className="h-7 px-2 gap-1 text-xs"
           onClick={(e) => {
             e.stopPropagation()
-            isLive ? pauseAgent(agent.id) : resumeAgent(agent.id)
+            agent.status === "live" ? pauseAgent(agent.id) : resumeAgent(agent.id)
           }}
         >
-          {isLive ? (
+          {agent.status === "live" ? (
             <>
               <Pause className="w-3 h-3" />
-              Pause
+              Archive
             </>
           ) : (
             <>
               <Play className="w-3 h-3" />
-              Resume
+              Restore
             </>
           )}
         </Button>
@@ -278,11 +265,6 @@ function MyAgentRow({
 
 export default function MarketplaceView() {
   const snapshot = useMarketplaceStore()
-  const walletStoreRef = useRef<ReturnType<typeof createWalletStore> | undefined>(undefined)
-  if (!walletStoreRef.current) {
-    walletStoreRef.current = createWalletStore()
-  }
-  const wallet = useWalletStore(walletStoreRef.current)
   const [activeTab, setActiveTab] = useState<Tab>("Browse Agents")
   const [searchValue, setSearchValue] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
@@ -325,10 +307,9 @@ export default function MarketplaceView() {
   )
 
   const handleHire = useCallback((agent: AgentBlueprint) => {
-    if (!wallet.isConnected) return
     hireAgent(agent.id)
     setActiveTab("My Agents")
-  }, [wallet.isConnected])
+  }, [])
 
   const handleDeploy = useCallback(() => {
     if (!deployTargetId) return
@@ -341,15 +322,14 @@ export default function MarketplaceView() {
     const steps = [
       `[BOOT] Initializing ${deployName} (blueprint: ${blueprint.id})...`,
       `[INFO] Provider resolved: ${deployProvider}`,
-      `[DOCKER] Spinning up agent runtime...`,
-      `[SKILLS] Installing ${blueprint.requiredSkillIds.length} skill contracts...`,
+      `[PREVIEW] Building a local deployment plan only...`,
+      `[SKILLS] Listing ${blueprint.requiredSkillIds.length} required skill contracts...`,
       ...blueprint.requiredSkillIds.map(
-        (sid) => `[SKILL]   ${" ".repeat(2)}${sid} linked via registry`,
+        (sid) => `[SKILL]   ${" ".repeat(2)}${sid} available in registry preview`,
       ),
-      `[WALLET] Deriving agent wallet (0x${Math.random().toString(16).slice(2, 10)}...)`,
-      `[BUDGET] Daily spend cap set to $${deployBudget}`,
-      `[HEALTH] Health check passed [200 OK]`,
-      `[DONE]  Agent "${deployName}" is now live`,
+      `[BUDGET] Proposed daily cap: $${deployBudget || "0"}`,
+      `[SAFETY] No wallet connection, payment, or on-chain deployment was attempted.`,
+      `[DONE]  Preview for "${deployName}" is ready to review.`,
     ]
 
     let step = 0
@@ -442,24 +422,18 @@ export default function MarketplaceView() {
             </div>
           </div>
           <div className="flex items-center gap-3 pt-2 border-t border-gray-3">
-            <Button size="sm" className="gap-1.5" disabled={!wallet.isConnected} onClick={() => handleHire(agent)}>
+            <Button size="sm" className="gap-1.5" onClick={() => handleHire(agent)}>
               <Plus className="w-3.5 h-3.5" />
-              Hire This Agent
+              Save preview
             </Button>
             <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => selectAgent(null)}>
               Close
             </Button>
-            {!wallet.isConnected && (
-              <span className="text-[10px] text-amber-400/70 flex items-center gap-1 ml-auto">
-                <Wallet className="w-3 h-3" />
-                Connect wallet to hire
-              </span>
-            )}
           </div>
         </div>
       </div>
     )
-  }, [snapshot.selectedAgentId, wallet.isConnected])
+  }, [snapshot.selectedAgentId, handleHire])
 
   const deployFormContent = useMemo(() => {
     if (!deployTargetId) return null
@@ -538,18 +512,12 @@ export default function MarketplaceView() {
               <Button
                 size="sm"
                 className="gap-1.5"
-                disabled={!deployName.trim() || !wallet.isConnected}
+                disabled={!deployName.trim()}
                 onClick={handleDeploy}
               >
                 <Play className="w-3.5 h-3.5" />
-                Deploy Agent
+                Generate preview
               </Button>
-              {!wallet.isConnected && (
-                <span className="text-[10px] text-amber-400/70 flex items-center gap-1">
-                  <Wallet className="w-3 h-3" />
-                  Connect wallet to deploy
-                </span>
-              )}
             </>
           ) : (
             <>
@@ -578,13 +546,13 @@ export default function MarketplaceView() {
           {snapshot.isDeploying && (
             <div className="flex items-center gap-2 ml-auto">
               <div className="w-4 h-4 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
-              <span className="text-[10px] text-purple-400">Deploying...</span>
+              <span className="text-[10px] text-purple-400">Generating preview...</span>
             </div>
           )}
         </div>
       </div>
     )
-  }, [deployTargetId, deployName, deployProvider, deployBudget, snapshot.isDeploying, snapshot.deployLog, wallet.isConnected, handleDeploy, handleCancelDeploy])
+  }, [deployTargetId, deployName, deployProvider, deployBudget, snapshot.isDeploying, snapshot.deployLog, handleDeploy, handleCancelDeploy])
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -598,10 +566,10 @@ export default function MarketplaceView() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-gray-12">
-              Agent Marketplace
+              Agent Marketplace Preview
             </h1>
             <p className="text-xs text-gray-10">
-              Hire autonomous agents to run your on-chain strategies
+              Browse future agent templates. Hiring, payment, and deployment are not live in this beta.
             </p>
           </div>
         </div>
@@ -620,17 +588,13 @@ export default function MarketplaceView() {
             )}
             onClick={() => setActiveTab(tab)}
           >
-            {tab}
+            {TAB_LABELS[tab]}
           </button>
         ))}
         <div className="flex-1" />
-        {/* Wallet gate indicator */}
-        {!wallet.isConnected && (
-          <div className="flex items-center gap-1.5 text-[10px] text-amber-400/70 self-center mb-1">
-            <Wallet className="w-3 h-3" />
-            Connect wallet to hire
-          </div>
-        )}
+        <div className="text-[10px] text-gray-9 self-center mb-1">
+          Preview-only in this beta. No wallet, payment, or live deployment.
+        </div>
       </div>
 
       {/* Tab content */}
@@ -699,7 +663,6 @@ export default function MarketplaceView() {
                     agent={agent}
                     onSelect={handleSelectAgent}
                     onHire={handleHire}
-                    isWalletConnected={wallet.isConnected}
                   />
                 ))}
               </div>
@@ -712,7 +675,7 @@ export default function MarketplaceView() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-medium text-gray-12">
-                My Deployed Agents
+                Saved Agent Previews
               </h2>
               <Button
                 size="sm"
@@ -721,16 +684,16 @@ export default function MarketplaceView() {
                 onClick={() => setActiveTab("Deploy")}
               >
                 <Plus className="w-3.5 h-3.5" />
-                Deploy New
+                New Preview
               </Button>
             </div>
 
             {snapshot.myAgents.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-9">
                 <Clock className="w-10 h-10 mb-3 opacity-30" />
-                <p className="text-sm">No agents deployed yet</p>
+                <p className="text-sm">No saved previews yet</p>
                 <p className="text-xs mt-1">
-                  Browse the marketplace and hire your first agent
+                  Browse the marketplace and save a template preview.
                 </p>
                 <Button
                   size="sm"
@@ -748,8 +711,8 @@ export default function MarketplaceView() {
                 <div className="flex items-center justify-between py-2 px-4 text-[10px] uppercase tracking-wider text-gray-9">
                   <span>Agent</span>
                   <div className="flex items-center gap-4">
-                    <span className="w-16 text-center">Status</span>
-                    <span className="w-16 text-right">Revenue</span>
+                    <span className="w-16 text-center">State</span>
+                    <span className="w-16 text-right">Estimate</span>
                     <span className="w-20" />
                   </div>
                 </div>
@@ -768,7 +731,7 @@ export default function MarketplaceView() {
           </div>
         )}
 
-        {/* ── Deploy ────────────────────────────────────────────────────── */}
+        {/* ── Deployment preview ────────────────────────────────────────── */}
         {activeTab === "Deploy" && (
           <div className="space-y-5">
             {/* Blueprint selection grid */}
@@ -779,7 +742,7 @@ export default function MarketplaceView() {
                     Choose a Blueprint
                   </h2>
                   <p className="text-xs text-gray-10">
-                    Select an agent template to configure and deploy
+                    Select an agent template to generate a local preview. Deployment is not live in this beta.
                   </p>
                 </div>
 
@@ -843,7 +806,7 @@ export default function MarketplaceView() {
               </>
             )}
 
-            {/* Deployment form */}
+            {/* Preview form */}
             {deployFormContent}
           </div>
         )}
@@ -854,4 +817,3 @@ export default function MarketplaceView() {
         </div>
       )
     }
-

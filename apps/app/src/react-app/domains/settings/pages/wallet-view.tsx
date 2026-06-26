@@ -134,9 +134,9 @@ export function WalletSettingsView({ store, onTxApprove, onTxReject }: WalletSet
       <SettingsStack>
         <SettingsSection>
           <SettingsSectionHeader>
-            <SettingsSectionHeaderTitle>Wallet</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderTitle>Matterhorn Wallet</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Connect your wallet to enable on-chain actions and Web3 skills.
+              Connect an EVM wallet for supported handoff flows. Bittensor coldkeys/hotkeys still use external Bittensor-compatible signing, and Matterhorn never asks for seed phrases or private keys.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
 
@@ -173,7 +173,10 @@ export function WalletSettingsView({ store, onTxApprove, onTxReject }: WalletSet
               <div className="rounded-lg border border-dls-border p-6 text-center">
                 <Wallet className="size-8 mx-auto mb-2 text-gray-8" />
                 <p className="text-sm text-gray-8">
-                  No wallet connectors detected. Install a browser wallet extension like MetaMask or Rabby.
+                  No EVM wallet connectors detected. Install or enable an injected browser wallet such as MetaMask or Rabby in this runtime.
+                </p>
+                <p className="mt-2 text-xs text-gray-9">
+                  Public Bittensor reads, Hyperliquid previews, and Polymarket previews still work without connecting an EVM wallet.
                 </p>
               </div>
             )}
