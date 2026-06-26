@@ -2213,14 +2213,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title="Prepare an unsigned preview" icon={<ArrowUpDown className="size-4" />}>
               <div className="space-y-4">
                 <div className="grid gap-3 md:grid-cols-[1fr_0.9fr]">
-                  <div className="rounded-xl bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+                  <div className="rounded-lg bg-[var(--protocol-desk-soft)] px-3 py-2.5 text-xs leading-5 text-dls-secondary">
                     <div className="font-semibold text-[var(--protocol-desk-accent)]">How this works</div>
                     <div className="mt-1">
                       Choose an action, add only public routing details, then review the quote. Matterhorn does not sign,
                       broadcast, stake, unstake, transfer, or move TAO; the next step is always an external Bittensor-compatible signer.
                     </div>
                   </div>
-                  <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2.5 text-xs leading-5 text-dls-secondary">
+                  <div className="rounded-lg bg-dls-surface-muted/40 px-3 py-2.5 text-xs leading-5 text-dls-secondary">
                     <div className="font-semibold text-dls-text">Public fields only</div>
                     <ul className="mt-1.5 space-y-1">
                       <li>Use netuid, amount, validator hotkey, recipient coldkey, or SS58 public address.</li>
@@ -2229,16 +2229,16 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     </ul>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-dls-border/50">
                   {(["stake", "unstake", "transfer", "compare"] as ActionType[]).map((item) => (
                     <button
                       key={item}
                       type="button"
                       className={cn(
-                        "rounded-lg px-3 py-2.5 text-left text-xs font-semibold capitalize transition-colors",
+                        "border-b-2 px-0 pb-2 pt-1 text-left text-xs font-semibold capitalize transition-colors",
                         action === item
-                          ? "bg-[var(--protocol-desk-soft)] text-[var(--protocol-desk-accent)]"
-                          : "bg-dls-surface-muted/40 text-dls-secondary hover:bg-dls-hover/60 hover:text-dls-text",
+                          ? "border-[var(--protocol-desk-accent)] text-[var(--protocol-desk-accent)]"
+                          : "border-transparent text-dls-secondary hover:text-dls-text",
                       )}
                       onClick={() => setAction(item)}
                     >
@@ -2260,7 +2260,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <LabeledInput label="Recipient coldkey" value={recipient} onChange={setRecipient} hint="Paste the public destination coldkey only." />
                   )}
                 </div>
-                <div className="grid gap-3 rounded-xl bg-dls-surface-muted/40 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="grid gap-3 rounded-lg bg-dls-surface-muted/35 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
                   <div className="text-xs leading-5 text-dls-secondary">
                     Missing context is safe. Chat can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted. This button creates an unsigned preview only.
                   </div>
@@ -2305,7 +2305,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
 function Section({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <div className="rounded-2xl bg-[linear-gradient(145deg,rgba(var(--protocol-desk-rgb),0.07),rgba(var(--protocol-desk-rgb),0.02)),var(--dls-card)] p-4 sm:p-5">
+    <div className="rounded-lg bg-[linear-gradient(145deg,rgba(var(--protocol-desk-rgb),0.06),rgba(var(--protocol-desk-rgb),0.015)),var(--dls-card)] p-4 sm:p-5">
       <div className="mb-4 flex items-center gap-2.5 text-base font-semibold tracking-[-0.01em] text-dls-text">
         <span className="flex size-8 items-center justify-center rounded-lg bg-[rgba(var(--protocol-desk-rgb),0.16)] text-[var(--protocol-desk-accent)]">{icon}</span>
         {title}
@@ -2321,12 +2321,12 @@ function BittensorStandardActionList({
   onAction: (item: (typeof BITTENSOR_STANDARD_ACTIONS)[number]) => void;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="divide-y divide-dls-border/50">
       {BITTENSOR_STANDARD_ACTIONS.map((item) => (
         <button
           key={item.id}
           type="button"
-          className="group grid w-full gap-3 rounded-xl bg-dls-surface-muted/40 px-3.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]"
+          className="group grid w-full gap-3 rounded-md px-2.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]"
           onClick={() => onAction(item)}
         >
           <div className="min-w-0">
@@ -2338,8 +2338,9 @@ function BittensorStandardActionList({
             </div>
             <div className="mt-1.5 text-xs leading-5 text-dls-secondary">{item.summary}</div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-dls-secondary">
-              <span className="rounded-md bg-dls-card/80 px-2 py-1">Outcome: {item.outcome}</span>
-              <span className="rounded-md bg-dls-card/80 px-2 py-1">Safety: {item.safety}</span>
+              <span>Outcome: {item.outcome}</span>
+              <span aria-hidden="true">·</span>
+              <span>Safety: {item.safety}</span>
             </div>
           </div>
           <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
