@@ -57,6 +57,7 @@ import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
 import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-store";
+import { BetaAuthMenu } from "../../auth";
 
 import { isElectronRuntime } from "../../../../app/utils";
 import { BrowserPanel } from "../browser/browser-panel";
@@ -64,13 +65,11 @@ import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { VoicePanel } from "../voice/voice-panel";
 import { WalletPanel } from "../../wallet/WalletPanel";
-import { WalletConnect } from "../../wallet/WalletConnect";
 import { MemoryPanel } from "../../memory/memory-panel";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
-import type { WalletStore, WalletStoreSnapshot } from "../../wallet/state/wallet-store";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { CommandPalette } from "../../wallet/components/CommandPalette";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
@@ -158,49 +157,6 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "me
   } as CSSProperties;
 }
 
-const truncateWalletAddress = (address?: string | null) => {
-  if (!address) return "";
-  if (address.length <= 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
-function HomeWalletStrip({
-  store,
-  snapshot,
-  onOpenWallet,
-}: {
-  store: WalletStore;
-  snapshot: WalletStoreSnapshot;
-  onOpenWallet: () => void;
-}) {
-  const walletStatus = snapshot.isConnected
-    ? `${truncateWalletAddress(snapshot.address)}${snapshot.chainId ? ` · chain ${snapshot.chainId}` : ""}`
-    : "No EVM wallet connected";
-
-  return (
-    <aside className="ml-auto w-full max-w-lg rounded-lg border border-border bg-card/85 p-4 text-left shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <WalletIcon className="h-4 w-4 text-primary" />
-            Matterhorn Wallet
-          </div>
-          <div className="truncate text-xs text-muted-foreground">{walletStatus}</div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            One wallet surface for EVM tools. Bittensor uses public SS58 reads and external signing.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <WalletConnect store={store} />
-          <Button type="button" variant="outline" size="sm" onClick={onOpenWallet}>
-            Wallet details
-          </Button>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
 type HomeCapabilityStatusItem = {
   id: CustomerWorkflowIconHint;
   title: string;
@@ -247,24 +203,27 @@ function HomeCapabilityStatus() {
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Current capability status</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-            These launchers are connected to Matterhorn workflow metadata. The status labels explain what works today and what remains preview-only.
+            A quick read on what each desk can do today. Open a desk for the full workflow.
+            These launchers are connected to Matterhorn workflow metadata.
+            Matterhorn Wallet lives in the right rail. One wallet surface for EVM tools.
+            Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <span className="self-start rounded-md border border-dls-border bg-dls-surface px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
+        <span className="self-start rounded-md border border-dls-border/80 bg-dls-surface px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:self-auto">
           Live boundaries visible
         </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,230px),1fr))] gap-2">
+      <div className="max-h-[260px] overflow-y-auto border-y border-dls-border/70">
         {HOME_CAPABILITY_STATUS_ITEMS.map((item) => {
           const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
-            <article
+            <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.28)] bg-[rgba(var(--matterhorn-desk-rgb),0.055)] px-3 py-3 text-left"
+              className="grid gap-3 border-b border-dls-border/45 px-1 py-3 text-left last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto]"
             >
-              <div className="flex items-start gap-3">
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
                   {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
                     <ProtocolLogo venue={item.id} size={16} />
                   ) : (
@@ -279,10 +238,10 @@ function HomeCapabilityStatus() {
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
-                  <p className="mt-2 text-[10px] leading-4 text-dls-secondary/85">{item.proof}</p>
                 </div>
               </div>
-            </article>
+              <p className="text-[10px] leading-4 text-dls-secondary/85 sm:max-w-[220px]">{item.proof}</p>
+            </div>
           );
         })}
       </div>
@@ -512,6 +471,7 @@ export function SessionPage(props: SessionPageProps) {
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const memoryRailActive = activeSidePanel === "memory";
+  const walletRailActive = activeSidePanel === "wallet";
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
@@ -1280,11 +1240,6 @@ export function SessionPage(props: SessionPageProps) {
                             Open Bittensor desk
                           </button>
                         </div>
-                        <HomeWalletStrip
-                          store={wallet.store}
-                          snapshot={wallet.snapshot}
-                          onOpenWallet={() => setCurrentSidePanel("wallet")}
-                        />
                         <HomeCapabilityStatus />
                         <section className="space-y-3">
                           <div className="flex items-end justify-between gap-3">
@@ -1307,7 +1262,7 @@ export function SessionPage(props: SessionPageProps) {
                                   key={launcher.id}
                                   type="button"
                                   style={deskToneStyle(launcher.iconHint)}
-                                  className="group flex min-h-[236px] w-full flex-col items-start rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.32)] bg-[linear-gradient(180deg,rgba(var(--matterhorn-desk-rgb),0.105),rgba(var(--matterhorn-desk-rgb),0.035))] p-4 text-left shadow-[0_18px_42px_rgba(0,0,0,0.18)] transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.62)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)]"
+                                  className="group flex min-h-[196px] w-full flex-col items-start rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.34)] bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-4 text-left transition-colors hover:border-[rgba(var(--matterhorn-desk-rgb),0.62)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)]"
                                   onClick={() => {
                                     if (launcher.panel) {
                                       openVenueRailPane(launcher.panel, { primePrompt: true });
@@ -1334,7 +1289,7 @@ export function SessionPage(props: SessionPageProps) {
                                     {capabilityItems.map((item) => (
                                       <span
                                         key={item}
-                                        className="flex items-center justify-between gap-3 rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.22)] bg-dls-card/70 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                        className="flex items-center justify-between gap-3 border-t border-[rgba(var(--matterhorn-desk-rgb),0.18)] py-1.5 text-[11px] font-medium text-dls-text first:border-t-0"
                                       >
                                         <span>{item}</span>
                                         <span className="size-1.5 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
@@ -1528,6 +1483,8 @@ export function SessionPage(props: SessionPageProps) {
               onOpenWallet={() => setCurrentSidePanel("wallet")}
               loading={props.statusBar?.loading ?? false}
               showSettingsButton={props.statusBar?.showSettingsButton}
+              showWalletButton={false}
+              showAccountActions={false}
             />
           ) : null}
               </main>
@@ -1598,6 +1555,41 @@ export function SessionPage(props: SessionPageProps) {
                 <span className="text-[9px] leading-none">Chat</span>
               </Button>
             ) : null}
+            <div className="flex w-full flex-col items-center gap-1 border-b border-border/70 pb-2">
+              {shellConfig.cloudSignin ? (
+                <div className="flex w-full flex-col items-center gap-1 rounded-md px-1 py-1 text-muted-foreground" title="Profile and account">
+                  <BetaAuthMenu compact />
+                  <span className="text-[9px] leading-none">Profile</span>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={props.onOpenSettings}
+                  title="Profile and Settings"
+                  aria-label="Profile and Settings"
+                >
+                  <Settings2 size={17} />
+                  <span className="text-[9px] leading-none">Profile</span>
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-muted hover:text-foreground",
+                  walletRailActive && "bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary",
+                )}
+                onClick={() => setCurrentSidePanel("wallet")}
+                title="Wallet details"
+                aria-label="Wallet details"
+                aria-pressed={walletRailActive}
+              >
+                <WalletIcon size={17} />
+                <span className="text-[9px] leading-none">Wallet</span>
+              </Button>
+            </div>
             {isElectronRuntime() ? (
               <Button
                 variant="ghost"

@@ -214,9 +214,9 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   const copy = MATTERHORN_DESK_MODE_COPY[mode];
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[copy.iconHint];
   return (
-    <div style={deskToneStyle(copy.iconHint)} className="mb-2 rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.3)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
+    <div style={deskToneStyle(copy.iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
       <div className="flex items-start gap-3">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
           {copy.iconHint === "bittensor" || copy.iconHint === "hyperliquid" || copy.iconHint === "polymarket" ? (
             <ProtocolLogo iconHint={copy.iconHint} size={16} />
           ) : (
@@ -224,14 +224,14 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           )}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[12px] font-semibold text-dls-text">{copy.title}</span>
-            <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.35)] bg-[rgba(var(--matterhorn-desk-rgb),0.1)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+            <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
               {copy.status}
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.summary}</p>
-          <p className="mt-1 text-[10px] leading-4 text-dls-secondary/85">{copy.boundary}</p>
+          <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.boundary}</p>
         </div>
       </div>
     </div>

@@ -156,6 +156,8 @@ export type StatusBarProps = {
   onOpenWallet?: () => void;
   loading?: boolean;
   showSettingsButton?: boolean;
+  showAccountActions?: boolean;
+  showWalletButton?: boolean;
   initializing?: boolean;
 };
 
@@ -235,7 +237,7 @@ export function StatusBar(props: StatusBarProps) {
         />
 
         <div className="flex min-w-0 shrink-0 items-center gap-1">
-          {props.onOpenWallet ? (
+          {props.showWalletButton !== false && props.onOpenWallet ? (
             <Button
               className="max-w-[210px] gap-1.5 truncate text-muted-foreground"
               variant="ghost"
@@ -249,7 +251,7 @@ export function StatusBar(props: StatusBarProps) {
               <span className="sm:hidden">Wallet</span>
             </Button>
           ) : null}
-          {shellConfig.cloudSignin ? (
+          {props.showAccountActions !== false && shellConfig.cloudSignin ? (
             <BetaAuthMenu compact={false} />
           ) : null}
           {shellConfig.docsButton ? (
