@@ -91,14 +91,74 @@ interface ProtocolBrandAssetManifest {
 
 `PROTOCOL_DESK_MANIFEST_REGISTRY` covers six customer-facing desks:
 
-| Desk | Category | Status | Route | Wallet |
-| --- | --- | --- | --- | --- |
-| Bittensor | `bittensor` | `beta_ready` | `/workspaces/bittensor` | SS58 read-only + external signer |
-| Hyperliquid | `markets` | `preview_only` | `/workspaces/hyperliquid` | EVM read-only |
-| Polymarket | `markets` | `preview_only` | `/workspaces/polymarket` | EVM read-only |
-| Wellness | `wellness` | `workflow_ready` | `/workspaces/wellness` | None |
-| Memory | `memory` | `beta_ready` | `/memory` | None |
-| MCPs | `mcps` | `planned_not_live` | `/mcps` | None |
+| Desk | Category | Status | Badge | Route | Wallet rail |
+| --- | --- | --- | --- | --- | --- |
+| Bittensor | `bittensor` | `beta_ready` | Beta | `/workspaces/bittensor` | `external_signer` |
+| Hyperliquid | `markets` | `preview_only` | Preview | `/workspaces/hyperliquid` | `evm_preview` |
+| Polymarket | `markets` | `preview_only` | Preview | `/workspaces/polymarket` | `evm_preview` |
+| Wellness | `wellness` | `workflow_ready` | Ready | `/workspaces/wellness` | `none` |
+| Memory | `memory` | `beta_ready` | Beta | `/memory` | `none` |
+| MCPs | `mcps` | `planned_not_live` | Soon | `/mcps` | `none` |
+
+### Production consumption helpers
+
+Codex should consume desks through these helpers instead of reading the raw registry:
+
+- `CUSTOMER_DESK_ORDER` — stable launchpad/rail order for customer-visible desks.
+- `getProtocolDeskManifest(id)` — returns the full `ProtocolDeskManifest` or `undefined`.
+- `listCustomerProtocolDesks()` — returns customer-visible desks in `CUSTOMER_DESK_ORDER`.
+- `getDeskLauncherPrompt(id)` — returns the suggested chat prompt for a desk launcher.
+- `getDeskSafetySummary(id)` — returns a short safety sentence for the right rail or badge tooltip.
+- `getDeskWalletRequirementSummary(id)` — returns a human-readable wallet requirement line.
+- `getDeskLogoFallback(id)` — returns the fallback initials for a desk logo.
+
+#### Example app usage
+
+```tsx
+import {
+  listCustomerProtocolDesks,
+  getDeskSafetySummary,
+  getDeskWalletRequirementSummary,
+  getDeskLogoFallback,
+} from "@matterhorn-work/types";
+
+function DeskLauncherGrid() {
+  const desks = listCustomerProtocolDesks();
+  return (
+    <div className="desk-grid">
+      {desks.map((desk) => (
+        <DeskCard
+          key={desk.id}
+          title={desk.launcherTitle}
+          description={desk.launcherDescription}
+          prompt={desk.launcherPrompt}
+          badgeLabel={desk.statusBadgeLabel}
+          badgeTone={desk.statusBadgeTone}
+          safetySummary={getDeskSafetySummary(desk.id)}
+          walletSummary={getDeskWalletRequirementSummary(desk.id)}
+          logoFallback={getDeskLogoFallback(desk.id)}
+          route={desk.routeOrPanelId}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+#### Launcher fields
+
+Each desk exposes launcher-ready copy:
+
+| Field | Purpose |
+| --- | --- |
+| `launcherTitle` | Card/launcher title |
+| `launcherDescription` | One-line value proposition |
+| `launcherPrompt` | Suggested chat prompt shown in the launcher |
+| `rightRailSummary` | Short summary for the right rail or empty state |
+| `statusBadgeLabel` | Badge text (e.g., "Beta", "Preview") |
+| `statusBadgeTone` | Badge color tone (`success`, `caution`, `info`, `neutral`) |
+| `walletRailMode` | Simplified wallet UX mode: `external_signer`, `evm_preview`, `none` |
+| `customerVisible` | Whether the desk should appear in customer-facing surfaces |
 
 ## Brand asset registry
 
@@ -125,13 +185,16 @@ interface ProtocolBrandAssetManifest {
 
 ## UI implementation guidance
 
-1. Render the desk list from `PROTOCOL_DESK_MANIFEST_REGISTRY`.
-2. Resolve logos through `PROTOCOL_BRAND_ASSET_REGISTRY` by `logoAssetKey`; fall back to `fallbackInitials` if the asset is missing.
-3. Apply theme tokens from `lightThemeTokenHints` or `darkThemeTokenHints` based on the active theme.
-4. Surface `customerSafetyStrip` or equivalent copy from `safetyBoundaries` near the desk header.
-5. Enable primary and secondary actions based on the desk manifest; respect `requiresConfirmation`.
-6. Show `emptyStateCopy` when the desk has no session context and `degradedStateCopy` when a provider or index is unavailable.
-7. Gate wallet-dependent desks by `walletRequirements` before exposing on-chain actions.
+1. Render the desk list with `listCustomerProtocolDesks()` in `CUSTOMER_DESK_ORDER`; do not hard-code desk order.
+2. Use `getProtocolDeskManifest(id)` when you need a single desk by ID.
+3. Resolve logos through `PROTOCOL_BRAND_ASSET_REGISTRY` by `logoAssetKey`; use `getDeskLogoFallback(id)` for initials fallback.
+4. Apply theme tokens from `lightThemeTokenHints` or `darkThemeTokenHints` based on the active theme.
+5. Surface `getDeskSafetySummary(id)` and `getDeskWalletRequirementSummary(id)` in the right rail or badge tooltips.
+6. Use `launcherTitle`, `launcherDescription`, `launcherPrompt`, and `rightRailSummary` for launcher cards and empty states.
+7. Render `statusBadgeLabel` with `statusBadgeTone`; tone is one of `success`, `caution`, `info`, `neutral`.
+8. Enable primary and secondary actions based on the desk manifest; respect `requiresConfirmation`.
+9. Show `emptyStateCopy` when the desk has no session context and `degradedStateCopy` when a provider or index is unavailable.
+10. Gate wallet-dependent desks by `walletRailMode` and `walletRequirements` before exposing on-chain actions.
 
 ## Verification
 
