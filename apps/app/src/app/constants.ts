@@ -160,7 +160,7 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
       try {
         return `${readDenBootstrapConfig().baseUrl.replace(/\/+$/, "")}/mcp`;
       } catch {
-        return "https://app.openworklabs.com/mcp";
+        return "https://app.matterhorn.work/mcp";
       }
     },
     type: "remote",

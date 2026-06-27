@@ -33,6 +33,8 @@ const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-vi
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
+const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
+const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
 const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx");
 const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
@@ -492,6 +494,10 @@ for (const phrase of [
   assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
 }
 assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
+assert.ok(denHelpLink.includes("support@matterhorn.work"), "remote worker help dialog should use Matterhorn support email");
+assert.ok(remoteWorkspaceDiagnostics.includes("support@matterhorn.work"), "remote workspace diagnostics should use Matterhorn support email");
+assert.equal(denHelpLink.includes("team@openworklabs.com"), false, "remote worker help dialog must not send customers to OpenWork Labs");
+assert.equal(remoteWorkspaceDiagnostics.includes("team@openworklabs.com"), false, "remote diagnostics must not send customers to OpenWork Labs");
 
 for (const phrase of [
   "VITE_MATTERHORN_CLOUD_URL",
@@ -504,6 +510,8 @@ for (const phrase of [
   assert.ok(den.includes(phrase), `cloud auth should expose Matterhorn-native config: ${phrase}`);
 }
 assert.equal(den.includes("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
+assert.ok(constants.includes("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
+assert.equal(constants.includes("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
 
 for (const phrase of [
   "Parallel Web Systems web search",

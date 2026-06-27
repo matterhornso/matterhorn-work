@@ -376,7 +376,12 @@ function isWebAppHost(hostname: string): boolean {
     }
   }
 
-  return normalized === "app.openworklabs.com" || normalized === "app.openwork.software" || normalized.startsWith("app.");
+  return (
+    normalized === "app.matterhorn.work" ||
+    normalized === "app.openworklabs.com" ||
+    normalized === "app.openwork.software" ||
+    normalized.startsWith("app.")
+  );
 }
 
 function stripDenApiBasePath(input: string | null | undefined): string | null {
