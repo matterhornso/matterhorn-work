@@ -63,6 +63,8 @@ import {
   type ConfigScope,
   type McpViewLocalState,
 } from "./mcp-view-state";
+import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
+import type { CustomerProtocolDeskId } from "../../session/workflows/protocol-desk-ui";
 
 export type ReactMcpStatus =
   | "connected"
@@ -237,12 +239,14 @@ type MatterhornMcpProductCard = {
   tools: string[];
   boundary: string;
   worksWith: string[];
+  protocolDeskId?: CustomerProtocolDeskId;
 };
 
 const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "bittensor",
     name: "Bittensor MCP",
+    protocolDeskId: "bittensor",
     description:
       "Run Bittensor chat, TAO wallet reads, subnet discovery, validator comparison, watches, receipts, and external-signer handoffs from agent clients.",
     command: "matterhorn-work mcp config --target codex --profile full",
@@ -258,6 +262,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "hyperliquid",
     name: "Hyperliquid MCP",
+    protocolDeskId: "hyperliquid",
     description:
       "Inspect Hyperliquid markets, orderbooks, funding, public account exposure, read-only watches, previews, handoffs, and public receipt evidence.",
     command: "matterhorn-work mcp config --target claude --profile full",
@@ -273,6 +278,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "polymarket",
     name: "Polymarket MCP",
+    protocolDeskId: "polymarket",
     description:
       "Search Polymarket markets, review outcomes, check compliance, inspect liquidity/orderbooks, create watches, prepare previews, and verify public receipts.",
     command: "matterhorn-work mcp config --target claude-desktop --profile full",
@@ -944,8 +950,12 @@ function MatterhornMcpProductSection(props: {
             className="grid min-w-0 gap-4 border-b border-dls-border/45 px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.95fr)]"
           >
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
-                <Code2 size={16} />
+              <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-dls-surface-muted/60 ring-1 ring-dls-border/35">
+                {card.protocolDeskId ? (
+                  <ProtocolBrandLogo id={card.protocolDeskId} size={26} />
+                ) : (
+                  <Code2 size={16} className="text-dls-text" />
+                )}
               </div>
               <div className="min-w-0 space-y-2">
                 <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
