@@ -95,6 +95,7 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "launcherDescription",
     "launcherPrompt",
     "rightRailSummary",
+    "logoAssetId",
     "officialLogoAssetId",
     "logoAlt",
     "category",
@@ -114,6 +115,8 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "walletRailMode",
     "safetyBoundaries",
     "customerVisible",
+    "capabilityBullets",
+    "safetySummary",
     "customerCapabilitySummary",
     "noCustodySafetyLine",
     "suggestedPromptTitles",
@@ -153,6 +156,8 @@ for (const id of ["hyperliquid", "polymarket"]) {
     block.match(/launcherTitle:\s*"([^"]+)"/)?.[1] ?? "",
     block.match(/launcherDescription:\s*"([^"]+)"/)?.[1] ?? "",
     block.match(/rightRailSummary:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/capabilityBullets:/) ? block.match(/capabilityBullets:\s*\[([\s\S]*?)\]/)?.[1] ?? "" : "",
+    block.match(/safetySummary:\s*"([^"]+)"/)?.[1] ?? "",
     block.match(/customerCapabilitySummary:\s*"([^"]+)"/)?.[1] ?? "",
     block.match(/noCustodySafetyLine:\s*"([^"]+)"/)?.[1] ?? "",
     ...Array.from(block.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
@@ -201,10 +206,22 @@ for (const required of ["non-medical", "educational"]) {
 const wellnessCopy = [
   wellnessBlock.match(/displayName:\s*"([^"]+)"/)?.[1] ?? "",
   wellnessBlock.match(/shortDescription:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/launcherTitle:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/launcherDescription:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/rightRailSummary:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/capabilityBullets:/) ? wellnessBlock.match(/capabilityBullets:\s*\[([\s\S]*?)\]/)?.[1] ?? "" : "",
+  wellnessBlock.match(/safetySummary:\s*"([^"]+)"/)?.[1] ?? "",
   ...Array.from(wellnessBlock.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
   ...Array.from(wellnessBlock.matchAll(/body:\s*"([^"]+)"/g)).map((m) => m[1]),
 ].join(" ").toLowerCase();
 for (const forbidden of ["wallet", "private key", "submit", "live submission"]) {
+  assert.equal(
+    wellnessCopy.includes(forbidden),
+    false,
+    `Wellness manifest copy must not mention "${forbidden}"`,
+  );
+}
+for (const forbidden of ["live payment", "live email", "live hosting"]) {
   assert.equal(
     wellnessCopy.includes(forbidden),
     false,
@@ -303,7 +320,7 @@ const expectedReadinessTones = {
   polymarket: "preview_only",
   wellness: "workflow_ready",
   memory: "beta_ready",
-  mcps: "preview_only",
+  mcps: "local_only",
 };
 for (const [id, tone] of Object.entries(expectedReadinessTones)) {
   assert.ok(
@@ -312,11 +329,18 @@ for (const [id, tone] of Object.entries(expectedReadinessTones)) {
   );
 }
 
-// 20. Every desk exposes suggested prompt titles.
+// 20. Every desk exposes capability bullets, safety summary, and suggested prompt titles.
 for (const id of expectedDeskIds) {
-  const match = deskBlocks[id].match(/suggestedPromptTitles:\s*\[([\s\S]*?)\]/);
-  assert.ok(match, `${id} must include suggestedPromptTitles`);
-  const titles = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const bulletsMatch = deskBlocks[id].match(/capabilityBullets:\s*\[([\s\S]*?)\]/);
+  assert.ok(bulletsMatch, `${id} must include capabilityBullets`);
+  const bullets = [...bulletsMatch[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(bullets.length >= 2, `${id} must have at least 2 capability bullets`);
+
+  assert.ok(deskBlocks[id].includes("safetySummary:"), `${id} must include safetySummary`);
+
+  const titlesMatch = deskBlocks[id].match(/suggestedPromptTitles:\s*\[([\s\S]*?)\]/);
+  assert.ok(titlesMatch, `${id} must include suggestedPromptTitles`);
+  const titles = [...titlesMatch[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.ok(titles.length >= 2, `${id} must have at least 2 suggested prompt titles`);
 }
 

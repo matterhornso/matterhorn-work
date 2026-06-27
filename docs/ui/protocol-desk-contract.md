@@ -28,6 +28,7 @@ interface ProtocolDeskManifest {
   launcherDescription: string;
   launcherPrompt: string;
   rightRailSummary: string;
+  logoAssetId: string;
   officialLogoAssetId: string;
   logoAlt: string;
   category: "web3" | "bittensor" | "markets" | "wellness" | "memory" | "mcps";
@@ -47,6 +48,8 @@ interface ProtocolDeskManifest {
   walletRailMode: "external_signer" | "evm_preview" | "none";
   safetyBoundaries: ProtocolDeskSafetyBoundaries;
   customerVisible: boolean;
+  capabilityBullets: string[];
+  safetySummary: string;
   customerCapabilitySummary: string;
   noCustodySafetyLine: string;
   suggestedPromptTitles: string[];
@@ -113,7 +116,7 @@ interface ProtocolBrandAssetManifest {
 | Polymarket | `markets` | `preview_only` | `preview_only` | Preview | `/workspaces/polymarket` | `evm_preview` |
 | Wellness | `wellness` | `workflow_ready` | `workflow_ready` | Ready | `/workspaces/wellness` | `none` |
 | Memory | `memory` | `beta_ready` | `beta_ready` | Beta | `/memory` | `none` |
-| MCPs | `mcps` | `planned_not_live` | `preview_only` | Soon | `/mcps` | `none` |
+| MCPs | `mcps` | `planned_not_live` | `local_only` | Soon | `/mcps` | `none` |
 
 ### Production consumption helpers
 
@@ -170,12 +173,15 @@ Each desk exposes launcher-ready copy:
 | `launcherDescription` | One-line value proposition |
 | `launcherPrompt` | Suggested chat prompt shown in the launcher |
 | `rightRailSummary` | Short summary for the right rail or empty state |
+| `logoAssetId` | Canonical logo asset identity |
 | `officialLogoAssetId` | Canonical logo asset key for the desk |
 | `logoAlt` | Alt text for the desk logo |
 | `readinessTone` | Visual readiness tone: `beta_ready`, `preview_only`, `workflow_ready`, `local_only` |
 | `statusBadgeLabel` | Badge text (e.g., "Beta", "Preview") |
 | `statusBadgeTone` | Badge color tone (`success`, `caution`, `info`, `neutral`) |
 | `primaryActionLabel` | Default CTA label for the desk's primary action |
+| `capabilityBullets` | Array of plain-language capability bullets |
+| `safetySummary` | Short safety summary emphasizing non-custodial behavior |
 | `customerCapabilitySummary` | Plain-language summary of what the desk can do |
 | `noCustodySafetyLine` | Short safety line emphasizing non-custodial behavior |
 | `suggestedPromptTitles` | Array of beginner-friendly prompt titles for the launcher |
