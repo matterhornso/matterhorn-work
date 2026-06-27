@@ -448,8 +448,12 @@ for (const phrase of [
   "Matterhorn MCPs",
   "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
   "Bittensor MCP",
+  'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
+  'protocolDeskId: "hyperliquid"',
   "Polymarket MCP",
+  'protocolDeskId: "polymarket"',
+  "ProtocolBrandLogo",
   "Memory MCP",
   "Workflow MCP",
   "UI Control MCP",
@@ -467,6 +471,17 @@ for (const phrase of [
   "No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
+}
+
+for (const phrase of [
+  'id: "bittensor"',
+  'icon: { src: "/assets/desks/bittensor/logo-light.svg" }',
+  'id: "hyperliquid"',
+  'icon: { src: "/assets/desks/hyperliquid/logo-light.svg" }',
+  'id: "polymarket"',
+  'icon: { src: "/assets/desks/polymarket/logo-light.svg" }',
+]) {
+  assert.ok(extensions.includes(phrase), `Built-in protocol extension should use protocol logo assets: ${phrase}`);
 }
 
 for (const phrase of [
