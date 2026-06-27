@@ -449,7 +449,7 @@ function DeskLauncherButton({
     <button
       type="button"
       style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group flex min-h-[116px] w-full rounded-lg border border-white/[0.08] bg-dls-surface/70 px-4 py-3 text-left transition-colors duration-150 hover:border-[rgba(var(--matterhorn-desk-rgb),0.32)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      className="matterhorn-desk-launcher group flex min-h-[104px] w-full rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)] px-4 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
       onClick={onOpen}
     >
       <span className="grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)] gap-3">
@@ -501,7 +501,7 @@ function HomeDeskLaunchers({
           No auto-send
         </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3">
         {launchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
