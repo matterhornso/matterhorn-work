@@ -24,17 +24,32 @@ interface ProtocolDeskManifest {
   id: string;
   displayName: string;
   shortDescription: string;
+  launcherTitle: string;
+  launcherDescription: string;
+  launcherPrompt: string;
+  rightRailSummary: string;
+  logoAssetId: string;
+  logoAlt: string;
   category: "web3" | "bittensor" | "markets" | "wellness" | "memory" | "mcps";
   status: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
+  readinessTone: "beta_ready" | "preview_only" | "workflow_ready" | "local_only";
+  statusBadgeLabel: string;
+  statusBadgeTone: "success" | "caution" | "info" | "neutral";
   routeOrPanelId: string;
   logoAssetKey: string;
   preferredColorToken: string;
   lightThemeTokenHints: ProtocolDeskThemeTokenHints;
   darkThemeTokenHints: ProtocolDeskThemeTokenHints;
   primaryActions: ProtocolDeskAction[];
+  primaryActionLabel: string;
   secondaryActions: ProtocolDeskAction[];
   walletRequirements: ("none" | "evm_read_only" | "ss58_read_only" | "ss58_external_signer")[];
+  walletRailMode: "external_signer" | "evm_preview" | "none";
   safetyBoundaries: ProtocolDeskSafetyBoundaries;
+  customerVisible: boolean;
+  capabilityBullets: string[];
+  safetySummary: string;
+  suggestedPromptTitles: string[];
   emptyStateCopy: {
     headline: string;
     body: string;
@@ -91,14 +106,14 @@ interface ProtocolBrandAssetManifest {
 
 `PROTOCOL_DESK_MANIFEST_REGISTRY` covers six customer-facing desks:
 
-| Desk | Category | Status | Badge | Route | Wallet rail |
-| --- | --- | --- | --- | --- | --- |
-| Bittensor | `bittensor` | `beta_ready` | Beta | `/workspaces/bittensor` | `external_signer` |
-| Hyperliquid | `markets` | `preview_only` | Preview | `/workspaces/hyperliquid` | `evm_preview` |
-| Polymarket | `markets` | `preview_only` | Preview | `/workspaces/polymarket` | `evm_preview` |
-| Wellness | `wellness` | `workflow_ready` | Ready | `/workspaces/wellness` | `none` |
-| Memory | `memory` | `beta_ready` | Beta | `/memory` | `none` |
-| MCPs | `mcps` | `planned_not_live` | Soon | `/mcps` | `none` |
+| Desk | Category | Status | Readiness tone | Badge | Route | Wallet rail |
+| --- | --- | --- | --- | --- | --- | --- |
+| Bittensor | `bittensor` | `beta_ready` | `beta_ready` | Beta | `/workspaces/bittensor` | `external_signer` |
+| Hyperliquid | `markets` | `preview_only` | `preview_only` | Preview | `/workspaces/hyperliquid` | `evm_preview` |
+| Polymarket | `markets` | `preview_only` | `preview_only` | Preview | `/workspaces/polymarket` | `evm_preview` |
+| Wellness | `wellness` | `workflow_ready` | `workflow_ready` | Ready | `/workspaces/wellness` | `none` |
+| Memory | `memory` | `beta_ready` | `beta_ready` | Beta | `/memory` | `none` |
+| MCPs | `mcps` | `planned_not_live` | `local_only` | Soon | `/mcps` | `none` |
 
 ### Production consumption helpers
 
@@ -155,8 +170,15 @@ Each desk exposes launcher-ready copy:
 | `launcherDescription` | One-line value proposition |
 | `launcherPrompt` | Suggested chat prompt shown in the launcher |
 | `rightRailSummary` | Short summary for the right rail or empty state |
+| `logoAssetId` | Canonical logo asset identity |
+| `logoAlt` | Alt text for the desk logo |
+| `readinessTone` | Visual readiness tone: `beta_ready`, `preview_only`, `workflow_ready`, `local_only` |
 | `statusBadgeLabel` | Badge text (e.g., "Beta", "Preview") |
 | `statusBadgeTone` | Badge color tone (`success`, `caution`, `info`, `neutral`) |
+| `primaryActionLabel` | Default CTA label for the desk's primary action |
+| `capabilityBullets` | Array of plain-language capability bullets |
+| `safetySummary` | Short safety summary emphasizing non-custodial behavior |
+| `suggestedPromptTitles` | Array of beginner-friendly prompt titles for the launcher |
 | `walletRailMode` | Simplified wallet UX mode: `external_signer`, `evm_preview`, `none` |
 | `customerVisible` | Whether the desk should appear in customer-facing surfaces |
 

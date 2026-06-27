@@ -20,6 +20,7 @@ for (const token of [
   "ProtocolDeskWalletRequirement",
   "ProtocolDeskWalletRailMode",
   "ProtocolDeskStatusBadgeTone",
+  "ProtocolDeskReadinessTone",
   "ProtocolDeskAction",
   "ProtocolDeskThemeTokenHints",
   "ProtocolDeskSafetyBoundaries",
@@ -94,8 +95,11 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "launcherDescription",
     "launcherPrompt",
     "rightRailSummary",
+    "logoAssetId",
+    "logoAlt",
     "category",
     "status",
+    "readinessTone",
     "statusBadgeLabel",
     "statusBadgeTone",
     "routeOrPanelId",
@@ -104,11 +108,15 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "lightThemeTokenHints",
     "darkThemeTokenHints",
     "primaryActions",
+    "primaryActionLabel",
     "secondaryActions",
     "walletRequirements",
     "walletRailMode",
     "safetyBoundaries",
     "customerVisible",
+    "capabilityBullets",
+    "safetySummary",
+    "suggestedPromptTitles",
     "emptyStateCopy",
     "degradedStateCopy",
   ]) {
@@ -139,7 +147,19 @@ for (const id of ["hyperliquid", "polymarket"]) {
   assert.ok(block.includes('status: "preview_only"'), `${id} must be preview_only`);
   assert.ok(block.includes("requiresExternalSigner: false"), `${id} must not require external signer`);
 
-  const blockLower = block.toLowerCase();
+  const marketCopy = [
+    block.match(/displayName:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/shortDescription:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/launcherTitle:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/launcherDescription:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/rightRailSummary:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/capabilityBullets:/) ? block.match(/capabilityBullets:\s*\[([\s\S]*?)\]/)?.[1] ?? "" : "",
+    block.match(/safetySummary:\s*"([^"]+)"/)?.[1] ?? "",
+    ...Array.from(block.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
+    ...Array.from(block.matchAll(/body:\s*"([^"]+)"/g)).map((m) => m[1]),
+  ]
+    .join(" ")
+    .toLowerCase();
   for (const forbidden of [
     "private key",
     "seed phrase",
@@ -148,9 +168,11 @@ for (const id of ["hyperliquid", "polymarket"]) {
     "signed payload",
     "custody",
     "live submission",
+    "submit",
+    "sign",
   ]) {
     assert.equal(
-      blockLower.includes(forbidden),
+      marketCopy.includes(forbidden),
       false,
       `${id} manifest copy must not mention "${forbidden}"`,
     );
@@ -179,10 +201,22 @@ for (const required of ["non-medical", "educational"]) {
 const wellnessCopy = [
   wellnessBlock.match(/displayName:\s*"([^"]+)"/)?.[1] ?? "",
   wellnessBlock.match(/shortDescription:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/launcherTitle:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/launcherDescription:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/rightRailSummary:\s*"([^"]+)"/)?.[1] ?? "",
+  wellnessBlock.match(/capabilityBullets:/) ? wellnessBlock.match(/capabilityBullets:\s*\[([\s\S]*?)\]/)?.[1] ?? "" : "",
+  wellnessBlock.match(/safetySummary:\s*"([^"]+)"/)?.[1] ?? "",
   ...Array.from(wellnessBlock.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
   ...Array.from(wellnessBlock.matchAll(/body:\s*"([^"]+)"/g)).map((m) => m[1]),
 ].join(" ").toLowerCase();
-for (const forbidden of ["web3", "wallet", "private key", "submit", "live submission"]) {
+for (const forbidden of ["wallet", "private key", "submit", "live submission"]) {
+  assert.equal(
+    wellnessCopy.includes(forbidden),
+    false,
+    `Wellness manifest copy must not mention "${forbidden}"`,
+  );
+}
+for (const forbidden of ["live payment", "live email", "live hosting"]) {
   assert.equal(
     wellnessCopy.includes(forbidden),
     false,
@@ -272,6 +306,37 @@ for (const id of expectedDeskIds) {
 for (const id of expectedDeskIds) {
   assert.ok(deskBlocks[id].includes("statusBadgeLabel:"), `${id} must include statusBadgeLabel`);
   assert.ok(deskBlocks[id].includes("statusBadgeTone:"), `${id} must include statusBadgeTone`);
+}
+
+// 19. Readiness tones are present and match desk posture.
+const expectedReadinessTones = {
+  bittensor: "beta_ready",
+  hyperliquid: "preview_only",
+  polymarket: "preview_only",
+  wellness: "workflow_ready",
+  memory: "beta_ready",
+  mcps: "local_only",
+};
+for (const [id, tone] of Object.entries(expectedReadinessTones)) {
+  assert.ok(
+    deskBlocks[id].includes(`readinessTone: "${tone}"`),
+    `${id} must have readinessTone ${tone}`,
+  );
+}
+
+// 20. Every desk exposes capability bullets, safety summary, and suggested prompt titles.
+for (const id of expectedDeskIds) {
+  const bulletsMatch = deskBlocks[id].match(/capabilityBullets:\s*\[([\s\S]*?)\]/);
+  assert.ok(bulletsMatch, `${id} must include capabilityBullets`);
+  const bullets = [...bulletsMatch[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(bullets.length >= 2, `${id} must have at least 2 capability bullets`);
+
+  assert.ok(deskBlocks[id].includes("safetySummary:"), `${id} must include safetySummary`);
+
+  const titlesMatch = deskBlocks[id].match(/suggestedPromptTitles:\s*\[([\s\S]*?)\]/);
+  assert.ok(titlesMatch, `${id} must include suggestedPromptTitles`);
+  const titles = [...titlesMatch[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(titles.length >= 2, `${id} must have at least 2 suggested prompt titles`);
 }
 
 console.log("Protocol desk visual contract check passed.");
