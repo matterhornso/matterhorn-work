@@ -450,6 +450,7 @@ function settingsPathForRoute(route: ReturnType<typeof parseSettingsPath>) {
 
 export type SettingsSurfaceProps = {
   embedded?: boolean;
+  hideWorkspaceSwitcher?: boolean;
   initialPath?: string;
   workspaceId?: string;
   onClose?: () => void;
@@ -2401,6 +2402,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceColor={selectedWorkspaceColor}
         workspaces={workspaceOptions}
         onSelectWorkspace={handleSelectSettingsWorkspace}
+        hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}
         headerStatus={routeOpenworkStatus}
         busyHint={loading ? t("session.loading_detail") : busyLabel}
         onClose={props.onClose ?? (() => navigate(selectedWorkspaceId ? workspaceSessionRoute(selectedWorkspaceId) : "/session"))}

@@ -285,6 +285,7 @@ type SettingsSidebarProps = Pick<SettingsPageProps, "activeTab" | "onSelectTab" 
   selectedWorkspaceColor: string;
   workspaces: Array<{ id: string; name: string; color: string }>;
   onSelectWorkspace: (workspaceId: string) => void;
+  hideWorkspaceSwitcher?: boolean;
 };
 
 export function SettingsSidebar(props: SettingsSidebarProps) {
@@ -303,31 +304,33 @@ export function SettingsSidebar(props: SettingsSidebarProps) {
               <span>{t("dashboard.back_to_app")}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <SidebarMenuButton type="button">
-                    <WorkspaceIcon seed={props.selectedWorkspaceName} sizeClass="size-4" />
-                    <span className="truncate">{props.selectedWorkspaceName}</span>
-                    <ChevronDown className="ml-auto" />
-                  </SidebarMenuButton>
-                }
-              />
-              <DropdownMenuContent className="w-(--anchor-width)">
-                {props.workspaces.map((workspace) => (
-                  <DropdownMenuItem
-                    key={workspace.id}
-                    onClick={() => props.onSelectWorkspace(workspace.id)}
-                    disabled={workspace.id === props.selectedWorkspaceId}
-                  >
-                    <WorkspaceIcon seed={workspace.name} sizeClass="size-4" />
-                    <span className="truncate">{workspace.name}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
+          {!props.hideWorkspaceSwitcher ? (
+            <SidebarMenuItem>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <SidebarMenuButton type="button">
+                      <WorkspaceIcon seed={props.selectedWorkspaceName} sizeClass="size-4" />
+                      <span className="truncate">{props.selectedWorkspaceName}</span>
+                      <ChevronDown className="ml-auto" />
+                    </SidebarMenuButton>
+                  }
+                />
+                <DropdownMenuContent className="w-(--anchor-width)">
+                  {props.workspaces.map((workspace) => (
+                    <DropdownMenuItem
+                      key={workspace.id}
+                      onClick={() => props.onSelectWorkspace(workspace.id)}
+                      disabled={workspace.id === props.selectedWorkspaceId}
+                    >
+                      <WorkspaceIcon seed={workspace.name} sizeClass="size-4" />
+                      <span className="truncate">{workspace.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>

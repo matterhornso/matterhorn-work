@@ -2706,6 +2706,7 @@ export function SessionRoute() {
     <SettingsSurface
       key={initialPath}
       embedded
+      hideWorkspaceSwitcher
       initialPath={initialPath}
       workspaceId={selectedWorkspaceId}
       onClose={() => {
