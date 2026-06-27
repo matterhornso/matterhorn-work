@@ -343,6 +343,19 @@ assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,300px
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
+assert.ok(
+  sessionPage.includes('activeSidePanel === "extensions" && props.settingsSlot'),
+  "MCP/settings rail should render through the compact settings slot",
+);
+assert.ok(
+  sessionPage.includes('className="flex h-full min-h-0 flex-col overflow-hidden bg-background"'),
+  "MCP/settings rail should avoid nested scrolling and let the compact settings surface own overflow",
+);
+assert.equal(
+  sessionPage.includes('activeSidePanel === "extensions" && props.settingsSlot ? (\n                    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background">'),
+  false,
+  "MCP/settings rail should not wrap the compact settings surface in a second scroll container",
+);
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400)'), "protocol side panel should not default to an oversized rail");
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? "340px"'), "protocol side panel should keep a narrower minimum width");
 assert.ok(sessionPage.includes('? "500px" : "70%"'), "protocol side panel should cap width so it does not consume most of the workspace");

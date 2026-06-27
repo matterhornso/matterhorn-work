@@ -1701,7 +1701,7 @@ export function SessionPage(props: SessionPageProps) {
                   className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   {activeSidePanel === "extensions" && props.settingsSlot ? (
-                    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
                       {props.settingsSlot}
                     </div>
                   ) : activeSidePanel === "voice" ? (
