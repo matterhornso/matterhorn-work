@@ -5,6 +5,8 @@ import { t } from "../../../../i18n";
 
 export const MAX_SESSIONS_PREVIEW = 3;
 
+const INTERNAL_WORKSPACE_NAME_PATTERN = /^(?:matterhorn|codex|kimi|minimax|claude)[-_].*|(?:lighthouse|uiux|ui-ux|harness|overhaul)/i;
+
 export type SessionListItem = WorkspaceSessionGroup["sessions"][number];
 export type FlattenedSessionRow = { session: SessionListItem; depth: number };
 export type SessionTreeState = {
@@ -116,12 +118,19 @@ export const flattenSessionRows = (
   return rows;
 };
 
+const customerWorkspaceLabelPart = (value: string | null | undefined) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  const leaf = trimmed.replace(/\\/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).at(-1) ?? trimmed;
+  return INTERNAL_WORKSPACE_NAME_PATTERN.test(leaf) ? "" : trimmed;
+};
+
 export const workspaceLabel = (workspace: WorkspaceInfo) =>
-  workspace.displayName?.trim() ||
-  workspace.matterhornWorkspaceName?.trim() ||
-  workspace.name?.trim() ||
-  workspace.path?.trim() ||
-  t("workspace_list.workspace_fallback");
+  customerWorkspaceLabelPart(workspace.displayName) ||
+  customerWorkspaceLabelPart(workspace.matterhornWorkspaceName) ||
+  customerWorkspaceLabelPart(workspace.name) ||
+  customerWorkspaceLabelPart(workspace.path) ||
+  "Matterhorn workspace";
 
 export const workspaceKindLabel = (workspace: WorkspaceInfo) =>
   workspace.workspaceType === "remote"

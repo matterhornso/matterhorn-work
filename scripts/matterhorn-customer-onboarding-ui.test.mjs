@@ -265,8 +265,11 @@ for (const forbidden of [
 assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), "Protocol rail should mount the venue panel");
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
 assert.equal(walletPanel.includes("EVM wallet not connected"), false, "no-wallet protocol panel should not block content with a bottom overlay");
-assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel, { primePrompt: true })"), "protocol launchers should open a dedicated desk and prime an editable prompt draft");
-assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel, { primePrompt: true })"), "Bittensor top launcher should open the Bittensor desk and prime an editable prompt draft");
+assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep right-rail panels usable before a session exists");
+assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before prompting chat");
+assert.ok(sessionPage.includes("PROTOCOL_DESK_SUGGESTED_PROMPTS"), "focused desk start states should offer protocol-specific suggested prompts");
+assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel);"), "protocol launchers should open a dedicated desk without auto-priming a mixed chat draft");
+assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel);"), "Bittensor top launcher should open the Bittensor desk without auto-priming a mixed chat draft");
 assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
 assert.ok(sessionPage.includes("{launcher.safetySummary}"), "protocol launchers should show manifest-backed safety summaries");
 assert.ok(sessionPage.includes("{task.statusLabel}"), "starter task cards should show manifest-backed status labels");
@@ -298,12 +301,12 @@ assert.ok(sessionPage.includes("Desks"), "right rail should group protocol and w
 assert.ok(sessionPage.includes("getCustomerProtocolDeskVisual(panel)"), "right rail should read desk labels from the shared visual manifest");
 assert.ok(sessionPage.includes("visual?.displayName ?? panel"), "right rail should spell out protocol desk names from the manifest");
 assert.ok(sessionPage.includes('getCustomerProtocolDeskVisual("wellness")?.displayName'), "Wellness rail label should come from the shared visual manifest");
-assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail clicks should prime an editable chat prompt");
+assert.ok(sessionPage.includes("primeProtocolRailPrompt"), "protocol rail prompt helper should remain available for explicit demo handoffs");
 assert.ok(sessionPage.includes("pendingProtocolRailPanelRef"), "protocol rail clicks should restore the selected desk after creating a prompted session");
 assert.ok(sessionPage.includes("props.selectedSessionId && props.surface"), "protocol rail prompt events should only target a rendered composer surface");
 assert.ok(sessionPage.includes('options?.source ?? "protocol-rail"'), "protocol rail prompt handoffs should default to the protocol-rail source");
 assert.ok(sessionPage.includes('new CustomEvent("matterhorn:crypto-chat-handoff"'), "protocol rail prompts should insert into the active composer without auto-sending");
-assert.ok(sessionPage.includes("openVenueRailPane(item.panel, { primePrompt: true })"), "protocol rail buttons should open the desk and prime the chat composer");
+assert.ok(sessionPage.includes("onClick={() => openVenueRailPane(item.panel)}"), "protocol rail buttons should open a focused desk without priming a mixed chat composer");
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");

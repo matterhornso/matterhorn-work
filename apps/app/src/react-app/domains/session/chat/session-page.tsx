@@ -95,6 +95,7 @@ const STARTUP_SKELETON_ROWS = [
   { id: "final", titleWidth: "36%", bodyWidth: "74%" },
 ];
 const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
+const GLOBAL_HOME_SIDE_PANEL_KEY = "__matterhorn_home__";
 const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket"] as const;
 type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
 
@@ -146,6 +147,55 @@ type HomeCapabilityStatusItem = {
   statusLabel: string;
   summary: string;
   proof: string;
+};
+
+const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: string; prompt: string }>> = {
+  bittensor: [
+    {
+      title: "Show my TAO balance",
+      prompt: "Use Bittensor chat mode. Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      title: "Find useful subnets",
+      prompt: "Use Bittensor chat mode. Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, and what data source/freshness you used.",
+    },
+    {
+      title: "Compare validators",
+      prompt: "Use Bittensor chat mode. Compare validators on subnet 14 with a balanced strategy. Show source, freshness, risks, and what extra public context is needed before staking.",
+    },
+    {
+      title: "Prepare staking preview",
+      prompt: "Use Bittensor chat mode. Prepare a staking preview for 1 TAO on subnet 14. Ask for the public validator hotkey and coldkey if missing. This must be unsigned and require an external Bittensor-compatible signer.",
+    },
+  ],
+  hyperliquid: [
+    {
+      title: "Show market context",
+      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
+    },
+    {
+      title: "Show account exposure",
+      prompt: "Use Hyperliquid chat mode. Summarize my public/read-only account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+    },
+    {
+      title: "Prepare order preview",
+      prompt: "Use Hyperliquid chat mode. Prepare a preview-only order handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+    },
+  ],
+  polymarket: [
+    {
+      title: "Research a market",
+      prompt: "Use Polymarket chat mode. Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
+    },
+    {
+      title: "Check compliance",
+      prompt: "Use Polymarket chat mode. Check whether this market can be previewed safely. If compliance blocks the preview, do not show executable price, size, share, or order fields.",
+    },
+    {
+      title: "Prepare preview handoff",
+      prompt: "Use Polymarket chat mode. Prepare a preview-only external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+    },
+  ],
 };
 
 function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
@@ -201,6 +251,63 @@ function HomeCapabilityStatus() {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function ProtocolDeskEmptyState({
+  panel,
+  onUsePrompt,
+}: {
+  panel: VenueSidePanel;
+  onUsePrompt: (prompt: string) => void;
+}) {
+  const visual = getCustomerProtocolDeskVisual(panel);
+  const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
+  const safeBoundary = panel === "bittensor"
+    ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
+    : "Read and preview only. Can submit: No. Live submission: Off. External signer/client required.";
+
+  return (
+    <section
+      className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-10"
+      style={deskToneStyle(panel)}
+      aria-label={`${visual?.displayName ?? panel} desk start`}
+    >
+      <div className="flex items-start gap-4">
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)] text-[var(--matterhorn-desk-color)]">
+          <ProtocolLogo venue={panel} size={40} />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+            {visual?.displayName ?? panel} desk
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
+            {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text">
+        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Safety boundary:</span> {safeBoundary}
+      </div>
+
+      <div className="divide-y divide-dls-border/55">
+        {prompts.map((item) => (
+          <button
+            key={item.title}
+            type="button"
+            className="group flex w-full items-center justify-between gap-4 px-1 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            onClick={() => onUsePrompt(item.prompt)}
+          >
+            <span>
+              <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
+              <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-[var(--matterhorn-desk-color)]">Use prompt</span>
+          </button>
+        ))}
       </div>
     </section>
   );
@@ -406,7 +513,7 @@ export function SessionPage(props: SessionPageProps) {
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
   const sessionSidePanel = useUiStateStore((state) => (
-    props.selectedSessionId ? state.sidePanelState[props.selectedSessionId] ?? null : null
+    state.sidePanelState[props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY] ?? null
   ));
   const voiceSidePanelOpen = useUiStateStore((state) => state.sidePanelState[GLOBAL_VOICE_SIDE_PANEL_KEY] === "voice");
   const setSidePanelState = useUiStateStore((state) => state.setSidePanelState);
@@ -436,6 +543,7 @@ export function SessionPage(props: SessionPageProps) {
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
   const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
+  const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -530,7 +638,7 @@ export function SessionPage(props: SessionPageProps) {
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
     if (panel === "voice") return;
-    setSidePanelState(props.selectedSessionId, panel);
+    setSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
   }, [props.selectedSessionId, setSidePanelState]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
@@ -539,7 +647,7 @@ export function SessionPage(props: SessionPageProps) {
       return;
     }
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, null);
-    toggleSidePanelState(props.selectedSessionId, panel);
+    toggleSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
   }, [props.selectedSessionId, setSidePanelState, toggleSidePanelState]);
 
   // Sync browser panel state with Electron main process IPC events.
@@ -807,10 +915,6 @@ export function SessionPage(props: SessionPageProps) {
     () => sessionTitleForId(props.sidebar.workspaceSessionGroups, sessionActionId),
     [props.sidebar.workspaceSessionGroups, sessionActionId],
   );
-  const workspaceName =
-    props.selectedWorkspaceDisplay.displayName?.trim() ||
-    props.selectedWorkspaceDisplay.name?.trim() ||
-    t("session.workspace_fallback");
   const providerCount = props.providerConnectedIds.length;
   const messageCountVisible = props.selectedSessionId ? 1 : 0;
   const showWorkspaceSetupEmptyState = props.workspaces.length === 0 && !props.selectedSessionId;
@@ -976,9 +1080,6 @@ export function SessionPage(props: SessionPageProps) {
                   ? t("session.create_or_connect_workspace")
                   : selectedSessionTitle || t("session.default_title")}
               </h1>
-              <span className="hidden truncate text-[13px] text-dls-secondary lg:inline">
-                {workspaceName}
-              </span>
               {props.developerMode ? (
                 <span className="hidden text-[12px] text-dls-secondary lg:inline">
                   {props.headerStatus}
@@ -1152,8 +1253,17 @@ export function SessionPage(props: SessionPageProps) {
                     <div className="px-6 py-16 text-center text-sm text-dls-secondary">
                       {t("session.loading_detail")}
                     </div>
+                  ) : focusedProtocolPanel ? (
+                    <div className="flex min-h-0 flex-1 overflow-y-auto">
+                      <ProtocolDeskEmptyState
+                        panel={focusedProtocolPanel}
+                        onUsePrompt={(prompt) => {
+                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
+                        }}
+                      />
+                    </div>
                   ) : (
-                    <div className="relative flex flex-1 items-start justify-center overflow-hidden px-4 py-7 sm:px-6 sm:py-9">
+                    <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-7 sm:px-6 sm:py-9">
                       <div className="pointer-events-none absolute left-1/2 top-8 h-40 w-[32rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.08),transparent_70%)] blur-3xl" aria-hidden="true" />
                       <div className="pointer-events-none absolute right-10 top-1/3 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.055),transparent_72%)] blur-3xl" aria-hidden="true" />
                       <div className="relative w-full max-w-5xl space-y-5">
@@ -1195,7 +1305,7 @@ export function SessionPage(props: SessionPageProps) {
                             className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
                             onClick={() => {
                               const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
-                              if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel, { primePrompt: true });
+                              if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel);
                             }}
                           >
                             <WalletIcon className="size-4" />
@@ -1227,7 +1337,7 @@ export function SessionPage(props: SessionPageProps) {
                                   className="group relative isolate flex w-full flex-col items-start overflow-hidden rounded-md px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4"
                                   onClick={() => {
                                     if (launcher.panel) {
-                                      openVenueRailPane(launcher.panel, { primePrompt: true });
+                                      openVenueRailPane(launcher.panel);
                                       return;
                                     }
                                     props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt);
@@ -1672,7 +1782,7 @@ export function SessionPage(props: SessionPageProps) {
                     "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-foreground",
                     item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.38)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
-                  onClick={() => openVenueRailPane(item.panel, { primePrompt: true })}
+                  onClick={() => openVenueRailPane(item.panel)}
                   title={item.title}
                   aria-label={item.title}
                   aria-pressed={item.active}
