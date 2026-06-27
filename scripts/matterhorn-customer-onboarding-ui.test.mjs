@@ -83,17 +83,18 @@ for (const phrase of [
   "Compliance blocks must not expose executable bet fields.",
   "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
   "Choose a desk",
-  "Protocol desks stay separate.",
-  "suggested prompts, safety copy, and context.",
+  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
   "focused desk",
   "No auto-send",
   "matterhorn-capability-overview",
   "matterhorn-capability-row",
   "matterhorn-desk-board",
+  "matterhorn-desk-command-list",
   "matterhorn-desk-launcher",
-  "grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3",
-  "line-clamp-2",
-  "hidden truncate text-[11px] leading-4 text-dls-muted sm:block",
+  "Open desk",
+  "Draft prompt",
+  "grid-cols-[32px_minmax(0,1fr)]",
+  "border-y border-dls-border/55",
   "workflowLauncherCapabilityItems",
   "TAO wallet reads",
   "Subnet discovery",
@@ -174,6 +175,7 @@ for (const phrase of [
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
   "Choose a desk or start a blank chat. Every prompt stays editable before sending.",
+  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
@@ -367,14 +369,16 @@ assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused des
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "starter workflow grid should use compact container-safe auto-fit cards");
-assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]"), "protocol desk starter cards should use compact container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
-assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), "home desk launchers should use compact tint rows instead of heavy cards");
-assert.ok(sessionPage.includes("grid-cols-[36px_minmax(0,1fr)]"), "home desk launchers should use compact logo-led rows");
-assert.ok(sessionPage.includes("hidden truncate text-[11px] leading-4 text-dls-muted sm:block"), "home desk launchers should hide dense capability rows on narrow widths");
+assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/45 border-y border-dls-border/55"), "home desk launchers should render as a command list, not a card grid");
+assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3"), "home desk launcher rows should use compact command-row spacing");
+assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
+assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
+assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
+assert.equal(sessionPage.includes("grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3"), false, "home desk launchers should not fall back to the old box grid");
 assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
 assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
 assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
