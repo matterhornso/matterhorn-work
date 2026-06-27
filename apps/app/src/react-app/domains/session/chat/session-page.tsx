@@ -361,33 +361,36 @@ function DeskLauncherButton({
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
   const capabilityItems = workflowLauncherCapabilityItems(launcher);
   const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
+  const actionLabel = launcher.panel ? "Open desk" : "Draft prompt";
   return (
     <button
       type="button"
       style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3 text-left ring-1 ring-transparent transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:ring-[rgba(var(--matterhorn-desk-rgb),0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      className="matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
       onClick={onOpen}
     >
-      <span className="grid min-w-0 flex-1 grid-cols-[36px_minmax(0,1fr)] gap-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+      <span className="grid min-w-0 flex-1 grid-cols-[32px_minmax(0,1fr)] gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
           {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={26} /> : <Icon className="size-4" />}
         </span>
-        <span className="flex min-w-0 flex-col gap-1.5">
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="grid min-w-0 gap-1">
+          <span className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] sm:items-start">
             <span className="truncate text-sm font-semibold leading-snug text-dls-text">
               {launcher.workspaceDisplayName ?? launcher.title}
             </span>
-            <span className="inline-flex rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--matterhorn-desk-color)]">
-              {launcher.statusLabel}
+            <span className="hidden truncate text-[12px] leading-5 text-dls-secondary sm:block">
+              {launcher.description}
             </span>
           </span>
-          <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
-          <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>
-          <span className="mt-auto text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-            Insert editable prompt
+          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-muted">
+            <span className="font-medium text-[var(--matterhorn-desk-color)]">{launcher.statusLabel}</span>
+            <span className="truncate">{capabilitySummary}</span>
           </span>
         </span>
         <span className="sr-only">{launcher.safetySummary}</span>
+      </span>
+      <span className="hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline">
+        {actionLabel}
       </span>
     </button>
   );
@@ -404,20 +407,19 @@ function HomeDeskLaunchers({
 }) {
   const launchers = [...protocolLaunchers, ...businessLaunchers];
   return (
-    <section className="matterhorn-desk-board space-y-3" aria-label="Matterhorn desk launchers">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section className="matterhorn-desk-board space-y-2" aria-label="Matterhorn desk launchers">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-            Protocol desks stay separate. Bittensor, Hyperliquid, Polymarket, and Wellness each open with their own
-            suggested prompts, safety copy, and context.
+            Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.
           </p>
         </div>
         <span className="hidden shrink-0 text-[11px] font-semibold text-primary sm:inline">
           No auto-send
         </span>
       </div>
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+      <div className="matterhorn-desk-command-list divide-y divide-dls-border/45 border-y border-dls-border/55">
         {launchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
