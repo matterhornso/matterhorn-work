@@ -444,45 +444,32 @@ function DeskLauncherButton({
 }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
   const capabilityItems = workflowLauncherCapabilityItems(launcher);
+  const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
   return (
     <button
       type="button"
       style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group relative flex min-h-[132px] w-full overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.09)] p-3.5 text-left shadow-[0_18px_36px_-32px_rgba(0,0,0,0.65)] transition-[background-color,transform] duration-150 hover:-translate-y-0.5 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.14)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      className="matterhorn-desk-launcher group flex min-h-[116px] w-full rounded-lg border border-white/[0.08] bg-dls-surface/70 px-4 py-3 text-left transition-colors duration-150 hover:border-[rgba(var(--matterhorn-desk-rgb),0.32)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
       onClick={onOpen}
     >
-      <span
-        className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--matterhorn-desk-color),rgba(var(--matterhorn-desk-rgb),0.18))]"
-        aria-hidden="true"
-      />
-      <span className="relative flex min-h-full w-full flex-col gap-2.5">
-        <span className="flex min-w-0 items-start gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-dls-surface/90 text-[var(--matterhorn-desk-color)] shadow-sm">
-            {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={34} /> : <Icon className="size-5" />}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-semibold leading-snug text-dls-text">
+      <span className="grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)] gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+          {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={32} /> : <Icon className="size-5" />}
+        </span>
+        <span className="flex min-w-0 flex-col gap-2">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate text-[15px] font-semibold leading-snug text-dls-text">
               {launcher.workspaceDisplayName ?? launcher.title}
             </span>
-            <span className="mt-1.5 inline-flex rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+            <span className="inline-flex rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
               {launcher.statusLabel}
             </span>
           </span>
-        </span>
-        <span className="line-clamp-2 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
-        <span className="grid gap-1.5 sm:grid-cols-2">
-          {capabilityItems.slice(0, 2).map((item) => (
-            <span
-              key={item}
-              className="inline-flex min-w-0 items-center gap-1.5 rounded-md bg-dls-surface/55 px-2 py-1 text-[10px] font-medium text-dls-text"
-            >
-              <span className="size-1.5 shrink-0 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-              <span className="truncate">{item}</span>
-            </span>
-          ))}
-        </span>
-        <span className="mt-auto text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-          Insert editable prompt
+          <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
+          <span className="text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
+          <span className="mt-auto text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+            Insert editable prompt
+          </span>
         </span>
         <span className="sr-only">{launcher.safetySummary}</span>
       </span>
@@ -514,7 +501,7 @@ function HomeDeskLaunchers({
           No auto-send
         </span>
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-3">
         {launchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
