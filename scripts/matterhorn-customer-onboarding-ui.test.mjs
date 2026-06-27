@@ -333,7 +333,8 @@ assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
-assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
+assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-6"), "empty session launcher should scroll instead of clipping beneath the composer");
+assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,230px),1fr))]"), "starter workflow grid should use container-safe auto-fit cards");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"), "protocol desk starter cards should use roomier container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");

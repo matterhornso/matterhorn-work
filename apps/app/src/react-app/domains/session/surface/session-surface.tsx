@@ -1541,15 +1541,15 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onOpenModelPicker={props.onModelClick}
                 />
               ) : shellConfig.starterCards ? (
-                <div className="flex flex-1 flex-col items-center justify-end px-6 pb-4">
-                  <div className="w-full max-w-[900px]">
-                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6 lg:justify-center">
+                  <div className="w-full max-w-[1040px]">
+                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
                         <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="grid gap-3 rounded-lg bg-dls-surface-muted/30 p-2 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,230px),1fr))] gap-3 rounded-[28px] bg-[linear-gradient(135deg,rgba(var(--dls-accent-rgb),0.08),rgba(255,255,255,0.018)_42%,rgba(var(--dls-accent-rgb),0.03))] p-3 shadow-[0_24px_72px_-56px_rgba(0,0,0,0.78)] ring-1 ring-white/[0.06]">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         const protocolLogo = ProtocolLogo({ iconHint: item.iconHint, size: 34 });
@@ -1560,7 +1560,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group flex min-h-[116px] min-w-0 rounded-lg border border-white/[0.08] bg-dls-surface/70 px-4 py-3 text-left transition-colors duration-150 hover:border-[rgba(var(--matterhorn-desk-rgb),0.32)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group flex min-h-[112px] min-w-0 rounded-3xl bg-dls-surface/72 px-4 py-3 text-left shadow-[0_18px_42px_-34px_rgba(0,0,0,0.8)] ring-1 ring-white/[0.07] transition duration-150 hover:-translate-y-0.5 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] hover:ring-[rgba(var(--matterhorn-desk-rgb),0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
                             <span className="grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)] gap-3">
