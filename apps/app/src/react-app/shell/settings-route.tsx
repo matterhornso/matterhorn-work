@@ -151,6 +151,15 @@ type RouteWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved: string;
 };
 
+const INTERNAL_WORKSPACE_NAME_PATTERN = /^(?:matterhorn|codex|kimi|minimax|claude)[-_].*|(?:lighthouse|uiux|ui-ux|harness|overhaul)/i;
+
+function customerWorkspaceLabelPart(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  const leaf = trimmed.replace(/\\/g, "/").replace(/\/+$/, "").split("/").filter(Boolean).at(-1) ?? trimmed;
+  return INTERNAL_WORKSPACE_NAME_PATTERN.test(leaf) ? "" : trimmed;
+}
+
 const ROUTE_OPENWORK_CAPABILITIES: MatterhornServerCapabilities = {
   skills: { read: true, write: true, source: "openwork" },
   plugins: { read: true, write: true },
@@ -163,10 +172,11 @@ function mapDesktopWorkspace(workspace: WorkspaceInfo): RouteWorkspace {
   return {
     ...workspace,
     displayNameResolved:
-      workspace.displayName?.trim() ||
-      workspace.name?.trim() ||
-      workspace.path?.trim() ||
-      t("session.workspace_fallback"),
+      customerWorkspaceLabelPart(workspace.displayName) ||
+      customerWorkspaceLabelPart(workspace.matterhornWorkspaceName) ||
+      customerWorkspaceLabelPart(workspace.name) ||
+      customerWorkspaceLabelPart(workspace.path) ||
+      "Matterhorn workspace",
   };
 }
 
@@ -311,11 +321,11 @@ const SETTINGS_UPDATE_AUTO_DOWNLOAD_KEY = "openwork.react.settings.update-auto-d
 
 function workspaceLabel(workspace: MatterhornWorkspaceInfo) {
   return (
-    workspace.displayName?.trim() ||
-    workspace.matterhornWorkspaceName?.trim() ||
-    workspace.name?.trim() ||
-    workspace.path?.trim() ||
-    t("session.workspace_fallback")
+    customerWorkspaceLabelPart(workspace.displayName) ||
+    customerWorkspaceLabelPart(workspace.matterhornWorkspaceName) ||
+    customerWorkspaceLabelPart(workspace.name) ||
+    customerWorkspaceLabelPart(workspace.path) ||
+    "Matterhorn workspace"
   );
 }
 
