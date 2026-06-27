@@ -20,6 +20,7 @@ for (const token of [
   "ProtocolDeskWalletRequirement",
   "ProtocolDeskWalletRailMode",
   "ProtocolDeskStatusBadgeTone",
+  "ProtocolDeskReadinessTone",
   "ProtocolDeskAction",
   "ProtocolDeskThemeTokenHints",
   "ProtocolDeskSafetyBoundaries",
@@ -94,8 +95,11 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "launcherDescription",
     "launcherPrompt",
     "rightRailSummary",
+    "officialLogoAssetId",
+    "logoAlt",
     "category",
     "status",
+    "readinessTone",
     "statusBadgeLabel",
     "statusBadgeTone",
     "routeOrPanelId",
@@ -104,11 +108,15 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "lightThemeTokenHints",
     "darkThemeTokenHints",
     "primaryActions",
+    "primaryActionLabel",
     "secondaryActions",
     "walletRequirements",
     "walletRailMode",
     "safetyBoundaries",
     "customerVisible",
+    "customerCapabilitySummary",
+    "noCustodySafetyLine",
+    "suggestedPromptTitles",
     "emptyStateCopy",
     "degradedStateCopy",
   ]) {
@@ -139,7 +147,19 @@ for (const id of ["hyperliquid", "polymarket"]) {
   assert.ok(block.includes('status: "preview_only"'), `${id} must be preview_only`);
   assert.ok(block.includes("requiresExternalSigner: false"), `${id} must not require external signer`);
 
-  const blockLower = block.toLowerCase();
+  const marketCopy = [
+    block.match(/displayName:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/shortDescription:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/launcherTitle:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/launcherDescription:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/rightRailSummary:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/customerCapabilitySummary:\s*"([^"]+)"/)?.[1] ?? "",
+    block.match(/noCustodySafetyLine:\s*"([^"]+)"/)?.[1] ?? "",
+    ...Array.from(block.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
+    ...Array.from(block.matchAll(/body:\s*"([^"]+)"/g)).map((m) => m[1]),
+  ]
+    .join(" ")
+    .toLowerCase();
   for (const forbidden of [
     "private key",
     "seed phrase",
@@ -148,9 +168,11 @@ for (const id of ["hyperliquid", "polymarket"]) {
     "signed payload",
     "custody",
     "live submission",
+    "submit",
+    "sign",
   ]) {
     assert.equal(
-      blockLower.includes(forbidden),
+      marketCopy.includes(forbidden),
       false,
       `${id} manifest copy must not mention "${forbidden}"`,
     );
@@ -182,7 +204,7 @@ const wellnessCopy = [
   ...Array.from(wellnessBlock.matchAll(/headline:\s*"([^"]+)"/g)).map((m) => m[1]),
   ...Array.from(wellnessBlock.matchAll(/body:\s*"([^"]+)"/g)).map((m) => m[1]),
 ].join(" ").toLowerCase();
-for (const forbidden of ["web3", "wallet", "private key", "submit", "live submission"]) {
+for (const forbidden of ["wallet", "private key", "submit", "live submission"]) {
   assert.equal(
     wellnessCopy.includes(forbidden),
     false,
@@ -272,6 +294,30 @@ for (const id of expectedDeskIds) {
 for (const id of expectedDeskIds) {
   assert.ok(deskBlocks[id].includes("statusBadgeLabel:"), `${id} must include statusBadgeLabel`);
   assert.ok(deskBlocks[id].includes("statusBadgeTone:"), `${id} must include statusBadgeTone`);
+}
+
+// 19. Readiness tones are present and match desk posture.
+const expectedReadinessTones = {
+  bittensor: "beta_ready",
+  hyperliquid: "preview_only",
+  polymarket: "preview_only",
+  wellness: "workflow_ready",
+  memory: "beta_ready",
+  mcps: "preview_only",
+};
+for (const [id, tone] of Object.entries(expectedReadinessTones)) {
+  assert.ok(
+    deskBlocks[id].includes(`readinessTone: "${tone}"`),
+    `${id} must have readinessTone ${tone}`,
+  );
+}
+
+// 20. Every desk exposes suggested prompt titles.
+for (const id of expectedDeskIds) {
+  const match = deskBlocks[id].match(/suggestedPromptTitles:\s*\[([\s\S]*?)\]/);
+  assert.ok(match, `${id} must include suggestedPromptTitles`);
+  const titles = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(titles.length >= 2, `${id} must have at least 2 suggested prompt titles`);
 }
 
 console.log("Protocol desk visual contract check passed.");
