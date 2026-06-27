@@ -31,6 +31,8 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const extensionCard = read("apps/app/src/react-app/design-system/extension-card.tsx");
+const extensionDetailModal = read("apps/app/src/react-app/design-system/extension-detail-modal.tsx");
 const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
@@ -232,8 +234,30 @@ for (const phrase of [
 
 assert.ok(
   composer.includes("protocolDeskIdForComposerExtension(entry)") &&
+    composer.includes("if (entry.protocolDeskId) return entry.protocolDeskId as CustomerProtocolDeskId;") &&
     composer.includes("return <ProtocolBrandLogo id={protocolDeskId} size={size} />;"),
-  "composer extension picker should render protocol logo assets before falling back to generic icons",
+  "composer extension picker should prefer catalog protocol identities before falling back to generic icons",
+);
+assert.ok(
+  constants.includes("protocolDeskId?: MatterhornProtocolDeskId") &&
+    constants.includes("protocolDeskIdForExtensionId(manifest.id)") &&
+    constants.includes('case "bittensor":') &&
+    constants.includes('case "hyperliquid":') &&
+    constants.includes('case "polymarket":'),
+  "built-in Matterhorn extension catalog entries should expose protocol desk ids for logo rendering",
+);
+assert.ok(
+  extensionCard.includes("iconNode?: ReactNode") &&
+    extensionCard.includes(") : iconNode ? (") &&
+    extensionDetailModal.includes("iconNode?: ReactNode") &&
+    extensionDetailModal.includes("{iconNode ? ("),
+  "shared extension card and detail modal should accept app-owned protocol logo nodes before URL/icon fallback",
+);
+assert.ok(
+  settingsRoute.includes("function protocolDeskLogoNode(entry: McpDirectoryInfo") &&
+    settingsRoute.includes("iconNode={protocolDeskLogoNode(entry)}") &&
+    settingsRoute.includes("iconNode={protocolDeskLogoNode(detailEntry, 28)}"),
+  "MCP settings marketplace cards and detail modal should render protocol desk logos for Matterhorn built-ins",
 );
 assert.ok(
   composer.includes("extensionIcon(entry, 14)") &&

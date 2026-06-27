@@ -29,6 +29,7 @@ import { MarkdownBlock } from "../domains/session/surface/markdown";
 import { modalBodyClass } from "../domains/workspace/modal-styles";
 import { resolveExtensionIconSrc } from "./extension-icon-src";
 import { ExtensionMeshAvatar } from "./extension-mesh-avatar";
+import type { ReactNode } from "react";
 
 export type ExtensionDetailModalProps = {
   open: boolean;
@@ -37,6 +38,7 @@ export type ExtensionDetailModalProps = {
   description: string;
   iconSlug?: string;
   iconSrc?: string;
+  iconNode?: ReactNode;
   fallbackIcon?: LucideIcon;
   kind?: ExtensionKind;
   connected?: boolean;
@@ -186,6 +188,7 @@ export function ExtensionDetailModal(props: ExtensionDetailModalProps) {
     description,
     iconSlug,
     iconSrc,
+    iconNode,
     fallbackIcon: FallbackIcon = Plug2,
     kind = "mcp",
     connected = false,
@@ -238,7 +241,11 @@ export function ExtensionDetailModal(props: ExtensionDetailModalProps) {
                   connected ? "border-green-6 bg-green-2" : "border-dls-border bg-dls-hover"
                 }`}
               >
-                {resolvedIconSrc ? (
+                {iconNode ? (
+                  <div className="flex size-8 items-center justify-center">
+                    {iconNode}
+                  </div>
+                ) : resolvedIconSrc ? (
                   <div className="flex size-8 items-center justify-center rounded-md bg-white">
                     <img src={resolvedIconSrc} alt="" width={20} height={20} loading="lazy" style={{ display: "block" }} />
                   </div>

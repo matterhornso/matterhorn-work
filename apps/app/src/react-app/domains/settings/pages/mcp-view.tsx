@@ -231,6 +231,11 @@ function isToggleOnlyExtension(entry: McpDirectoryInfo) {
   ) === true;
 }
 
+function protocolDeskLogoNode(entry: McpDirectoryInfo, size = 24) {
+  if (!entry.protocolDeskId) return undefined;
+  return <ProtocolBrandLogo id={entry.protocolDeskId as CustomerProtocolDeskId} size={size} />;
+}
+
 function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
   if (disabledReason) return "Unavailable";
   const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
@@ -844,6 +849,7 @@ export function McpView(props: McpViewProps) {
             description={detailEntry.description}
             iconSlug={detailEntry.iconSlug}
             iconSrc={detailEntry.iconSrc}
+            iconNode={protocolDeskLogoNode(detailEntry, 28)}
             fallbackIcon={serviceIcon(detailEntry.name)}
             kind={detailEntry.kind ?? "mcp"}
             connected={isConnected}
@@ -1089,6 +1095,7 @@ function McpQuickConnectSection(props: {
               description={entry.description}
               iconSlug={entry.iconSlug}
               iconSrc={entry.iconSrc}
+              iconNode={protocolDeskLogoNode(entry)}
               fallbackIcon={FallbackIcon}
               kind={entry.kind ?? "mcp"}
               connected={configured}

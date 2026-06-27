@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import { AlertCircle, CheckCircle2, Loader2, Plug2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ExtensionKind } from "../../app/constants";
 import type { EnablementResult } from "../../app/extensions";
 import { resolveExtensionIconSrc } from "./extension-icon-src";
@@ -13,6 +14,8 @@ export type ExtensionCardProps = {
   iconSlug?: string;
   /** Direct icon URL (e.g. local SVG). Takes priority over iconSlug. */
   iconSrc?: string;
+  /** Pre-rendered app-owned icon, such as a protocol desk logo. Takes priority over URL/icon slug. */
+  iconNode?: ReactNode;
   /** Lucide icon fallback when no iconSlug or iconSrc is provided. */
   fallbackIcon?: LucideIcon;
   /** Extension category badge. */
@@ -67,6 +70,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
     description,
     iconSlug,
     iconSrc,
+    iconNode,
     fallbackIcon: FallbackIcon = Plug2,
     kind = "mcp",
     connected: connectedProp = false,
@@ -111,6 +115,10 @@ export function ExtensionCard(props: ExtensionCardProps) {
           >
             {connecting ? (
               <Loader2 size={18} className="animate-spin text-dls-secondary" />
+            ) : iconNode ? (
+              <div className="flex size-8 items-center justify-center">
+                {iconNode}
+              </div>
             ) : resolvedIconSrc ? (
               <div className="flex size-8 items-center justify-center rounded-md bg-white/95">
                 <img src={resolvedIconSrc} alt="" width={24} height={24} loading="lazy" style={{ display: "block" }} />

@@ -240,9 +240,11 @@ function mcpStatusBadgeClass(status: McpServerStatus) {
   }
 }
 
-type ProtocolIconCandidate = Pick<McpDirectoryInfo, "id" | "name" | "serverName">;
+type ProtocolIconCandidate = Pick<McpDirectoryInfo, "id" | "name" | "protocolDeskId" | "serverName">;
 
 function protocolDeskIdForComposerExtension(entry: ProtocolIconCandidate): CustomerProtocolDeskId | null {
+  if (entry.protocolDeskId) return entry.protocolDeskId as CustomerProtocolDeskId;
+
   const haystack = `${entry.id ?? ""} ${entry.serverName ?? ""} ${entry.name ?? ""}`.toLowerCase();
   if (/\bbittensor\b/.test(haystack)) return "bittensor";
   if (/\bhyperliquid\b/.test(haystack)) return "hyperliquid";
