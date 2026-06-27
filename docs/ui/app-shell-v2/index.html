@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matterhorn App Shell V2 — Annotated Visual Handoff</title>
+<style>
+/* ═══════════════════════════════════════════════════════════
+   MATTERHORN APP SHELL V2 — ANNOTATED PROTOTYPE
+   Brand: #0C0C0C · #D1F2FF · JetBrains Mono · Aeonik
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  --v2-bg-base:       #0C0C0C;
+  --v2-bg-surface:    #111111;
+  --v2-bg-elevated:   #1A1A1A;
+  --v2-bg-hover:      #202020;
+  --v2-border-subtle: #1F1F1F;
+  --v2-border-default:#2A2A2A;
+  --v2-text-primary:  #F0F0F0;
+  --v2-text-secondary:#8A8A8A;
+  --v2-text-tertiary: #555555;
+  --v2-accent:        #D1F2FF;
+  --v2-accent-dim:    rgba(209,242,255,0.08);
+  --v2-desk-home:       #D1F2FF;
+  --v2-desk-bittensor:  #FF7C43;
+  --v2-desk-hyperliquid:#C084FC;
+  --v2-desk-polymarket: #FBBF24;
+  --v2-desk-wellness:   #F472B6;
+  --v2-desk-memory:     #67E8F9;
+  --v2-desk-mcp:        #34D399;
+  --v2-status-success:  #22C55E;
+  --v2-status-warning:  #F59E0B;
+  --v2-status-error:    #EF4444;
+  --v2-nav-width:  56px;
+  --v2-rail-width:260px;
+  --v2-radius:     4px;
+  --v2-font-mono: 'JetBrains Mono','Fira Code',monospace;
+  --v2-font-sans: 'Aeonik',system-ui,-apple-system,sans-serif;
+}
+[data-theme="light"] {
+  --v2-bg-base:        #F5F5F5;
+  --v2-bg-surface:    #FFFFFF;
+  --v2-bg-elevated:   #FAFAFA;
+  --v2-bg-hover:      #F0F0F0;
+  --v2-border-subtle:  #EBEBEB;
+  --v2-border-default: #D4D4D4;
+  --v2-text-primary:   #0C0C0C;
+  --v2-text-secondary: #5C5C5C;
+  --v2-text-tertiary:  #9CA3AF;
+  --v2-accent:        #2563EB;
+  --v2-accent-dim:    rgba(37,99,235,0.08);
+  --v2-desk-home:       #2563EB;
+  --v2-desk-bittensor:  #EA580C;
+  --v2-desk-hyperliquid:#7C3AED;
+  --v2-desk-polymarket: #D97706;
+  --v2-desk-wellness:   #DB2777;
+  --v2-desk-memory:     #0891B2;
+  --v2-desk-mcp:        #059669;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--v2-bg-base);color:var(--v2-text-primary);font-family:var(--v2-font-sans);font-size:13px;line-height:1.6}
+/* ── Annotation system ─── */
+.ann{position:relative;border:2px dashed var(--ann-color,var(--v2-accent));border-radius:var(--v2-radius);padding:8px 12px;margin:4px 0;background:var(--ann-bg,rgba(209,242,255,0.05))}
+.ann .ann__label{position:absolute;top:-10px;left:12px;background:var(--ann-color,var(--v2-accent));color:var(--ann-label-bg,#0C0C0C);font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.05em}
+.ann--s .ann__label{background:var(--v2-status-success);color:#fff}
+.ann--w .ann__label{background:var(--v2-status-warning);color:#fff}
+.ann--d .ann__label{background:var(--v2-status-error);color:#fff}
+.ann--i .ann__label{background:#60A5FA;color:#fff}
+/* ── Demo toolbar ─── */
+.toolbar{position:sticky;top:0;z-index:999;background:var(--v2-bg-elevated);border-bottom:1px solid var(--v2-border-default);padding:8px 16px;display:flex;gap:12px;align-items:center;font-size:12px;flex-wrap:wrap}
+.toolbar__title{font-weight:700;color:var(--v2-text-primary);margin-right:auto}
+.toolbar button{background:var(--v2-bg-surface);border:1px solid var(--v2-border-default);color:var(--v2-text-secondary);font-size:11px;padding:4px 10px;border-radius:var(--v2-radius);cursor:pointer}
+.toolbar button.active{background:var(--v2-accent-dim);border-color:var(--v2-accent);color:var(--v2-accent)}
+/* ── Screen sections ─── */
+.screen{display:none;padding:20px;min-height:100vh}
+.screen.is-active{display:block}
+.sh{padding:12px 0 8px;border-bottom:1px solid var(--v2-border-subtle)}
+.sh__t{font-size:15px;font-weight:700;color:var(--v2-text-primary)}
+.sh__s{font-size:11px;color:var(--v2-text-secondary);margin-top:4px}
+.bdg{font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;letter-spacing:.05em;display:inline-block}
+.bdg--s{background:rgba(34,197,94,.15);color:var(--v2-status-success)}
+.bdg--w{background:rgba(245,158,11,.15);color:var(--v2-status-warning)}
+.bdg--d{background:rgba(239,68,68,.15);color:var(--v2-status-error)}
+.bdg--i{background:rgba(96,165,250,.15);color:#60A5FA}
+/* ── Layout shell ─── */
+.shell{display:flex;height:100vh;overflow:hidden}
+/* ── Left nav ─── */
+.nav{width:var(--v2-nav-width);min-width:var(--v2-nav-width);background:var(--v2-bg-surface);border-right:1px solid var(--v2-border-subtle);display:flex;flex-direction:column;padding:8px 0}
+.nav__logo{display:flex;align-items:center;gap:6px;padding:8px 10px 12px;border-bottom:1px solid var(--v2-border-subtle);margin-bottom:8px}
+.nav__mark{width:28px;height:28px;background:var(--v2-accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#0C0C0C;flex-shrink:0}
+.nav__text{font-size:11px;font-weight:600;color:var(--v2-text-primary);line-height:1.2}
+.nav__items{flex:1}
+.ni{display:flex;align-items:center;justify-content:center;width:100%;height:44px;color:var(--v2-text-secondary);cursor:pointer;position:relative;transition:color .15s}
+.ni:hover{color:var(--v2-text-primary)}
+.ni.on{color:var(--na,#D1F2FF);background:var(--v2-accent-dim)}
+.ni__icon{width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.ni__tip{display:none;position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);background:var(--v2-bg-elevated);border:1px solid var(--v2-border-default);color:var(--v2-text-primary);font-size:11px;padding:4px 8px;border-radius:var(--v2-radius);white-space:nowrap;z-index:100}
+.ni:hover .ni__tip{display:block}
+.nav__div{height:1px;background:var(--v2-border-subtle);margin:4px 8px}
+/* ── Main area ─── */
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;padding-bottom:80px}
+.dhdr{padding:14px 24px 12px;border-bottom:1px solid var(--v2-border-subtle);display:flex;align-items:center;gap:10px}
+.dhdr__icon{width:30px;height:30px;border-radius:var(--v2-radius);display:flex;align-items:center;justify-content:center;background:var(--v2-accent-dim);color:var(--v2-accent)}
+.dhdr__t{font-size:15px;font-weight:700;color:var(--v2-text-primary)}
+.dhdr__a{margin-left:auto;display:flex;gap:8px;align-items:center}
+/* ── Toggle pill ─── */
+.tpill{display:flex;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-default);border-radius:20px;overflow:hidden;font-size:11px}
+.tpill__o{padding:4px 12px;color:var(--v2-text-secondary);cursor:pointer}
+.tpill__o.on{background:var(--v2-accent-dim);color:var(--v2-accent)}
+/* ── Right rail ─── */
+.rail{width:var(--v2-rail-width);min-width:var(--v2-rail-width);background:var(--v2-bg-surface);border-left:1px solid var(--v2-border-subtle);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.rprof{display:flex;flex-direction:column;gap:7px}
+.rprof__top{display:flex;align-items:center;gap:10px}
+.rprof__av{width:40px;height:40px;border-radius:50%;background:var(--v2-accent-dim);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--v2-accent);flex-shrink:0}
+.rprof__name{font-size:13px;font-weight:600;color:var(--v2-text-primary)}
+.rprof__email{font-size:11px;color:var(--v2-text-secondary)}
+.rwallet{background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);padding:6px 8px;display:flex;align-items:center;gap:6px}
+.rwallet__a{font-family:var(--v2-font-mono);font-size:11px;color:var(--v2-text-secondary);flex:1}
+.rwallet__c{background:none;border:none;color:var(--v2-text-tertiary);cursor:pointer;font-size:12px;padding:2px}
+.rconn{font-size:11px;color:var(--v2-text-tertiary)}
+.rstats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stile{background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);padding:8px;text-align:center}
+.stile__v{font-size:15px;font-weight:700;color:var(--v2-text-primary)}
+.stile__l{font-size:10px;color:var(--v2-text-tertiary);margin-top:2px}
+.rbell{display:flex;align-items:center;gap:8px;padding:8px;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);cursor:pointer}
+.rbell__i{color:var(--v2-text-secondary)}
+.rbell__l{font-size:12px;color:var(--v2-text-secondary);flex:1}
+.rbell__b{background:var(--v2-status-warning);color:#fff;font-size:10px;font-weight:700;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.cbar{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:12px;padding:3px 10px;font-size:11px;color:var(--v2-text-secondary)}
+.chip--a{background:var(--chip-a,rgba(209,242,255,.15));border-color:var(--chip-c,var(--v2-accent));color:var(--chip-c,var(--v2-accent))}
+.rlbl{font-size:10px;font-weight:700;color:var(--v2-text-tertiary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.rcta{font-size:12px;color:var(--v2-accent);cursor:pointer;display:flex;align-items:center;gap:4px}
+/* ── V2 cards ─── */
+.cgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px 24px}
+.dcard{background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);overflow:hidden}
+.dcard__bar{height:3px;background:var(--ca,var(--v2-accent))}
+.dcard__body{padding:12px}
+.dcard__title{font-size:14px;font-weight:600;color:var(--v2-text-primary);margin-bottom:4px}
+.dcard__desc{font-size:12px;color:var(--v2-text-secondary);margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dcard__a{display:flex;gap:8px;align-items:center}
+.btn-ghost{background:var(--v2-accent-dim);border:1px solid transparent;color:var(--v2-accent);font-size:12px;padding:4px 10px;border-radius:var(--v2-radius);cursor:pointer}
+.btn-text{background:none;border:none;color:var(--v2-text-tertiary);font-size:12px;cursor:pointer}
+.btn-2{background:none;border:1px solid var(--v2-border-default);color:var(--v2-text-secondary);font-size:12px;padding:5px 14px;border-radius:var(--v2-radius);cursor:pointer}
+.sbdg{font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;background:var(--sbbg,rgba(34,197,94,.15));color:var(--sbcol,var(--v2-status-success))}
+/* ── Safety strip ─── */
+.sstrip{margin:0 24px 14px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--v2-radius);padding:8px 12px;font-size:12px;color:var(--v2-status-warning);display:flex;align-items:center;gap:8px}
+/* ── Session cards ─── */
+.slist{padding:14px 24px}
+.slist__h{font-size:11px;font-weight:700;color:var(--v2-text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.sc{background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);padding:12px;margin-bottom:8px}
+.sc__h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sc__dot{width:8px;height:8px;border-radius:50%;background:var(--v2-accent);flex-shrink:0}
+.sc__dot--off{background:var(--v2-text-tertiary)}
+.sc__l{font-size:12px;font-weight:600;color:var(--v2-text-primary)}
+.sc__t{font-size:10px;color:var(--v2-text-tertiary);margin-left:auto}
+.sc__sum{font-size:12px;color:var(--v2-text-secondary);margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sc__chips{display:flex;gap:6px;flex-wrap:wrap}
+.mchip{background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:4px;padding:2px 6px;font-size:10px;color:var(--v2-text-secondary)}
+/* ── Home hero ─── */
+.hh-greeting{padding:12px 24px 0;font-size:14px;font-weight:600;color:var(--v2-text-primary)}
+.hh{margin:14px 24px;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);overflow:hidden}
+.hh__bar{height:3px;background:var(--v2-desk-home)}
+.hh__body{padding:14px;display:flex;align-items:center;justify-content:space-between}
+.hh__info{flex:1}
+.hh__title{font-size:15px;font-weight:700;color:var(--v2-text-primary);margin-bottom:4px}
+.hh__meta{font-size:12px;color:var(--v2-text-secondary)}
+.hh__cta{font-size:13px;font-weight:600;color:var(--v2-accent);cursor:pointer;display:flex;align-items:center;gap:4px}
+/* ── Confidence bar ─── */
+.cbar2{display:flex;gap:3px;height:4px;border-radius:2px;overflow:hidden}
+.cseg{flex:1;height:100%;border-radius:2px}
+.cseg--f{background:var(--v2-status-success)}
+.cseg--e{background:var(--v2-bg-elevated)}
+/* ── Position tiles ─── */
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px 24px}
+.ptile{background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);overflow:hidden}
+.ptile__bar{height:3px;background:var(--pa,var(--v2-desk-hyperliquid))}
+.ptile__body{padding:12px}
+.ptile__a{font-size:13px;font-weight:700;color:var(--v2-text-primary);margin-bottom:4px}
+.ptile__s{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;margin-bottom:6px}
+.ptile__s--lg{background:rgba(34,197,94,.15);color:var(--v2-status-success)}
+.ptile__s--sh{background:rgba(239,68,68,.15);color:var(--v2-status-error)}
+.ptile__v{font-size:16px;font-weight:700;color:var(--v2-text-primary)}
+.ptile__c{font-size:11px;color:var(--v2-text-secondary);margin-top:2px}
+/* ── Wellness toggle ─── */
+.wtoggle{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);margin:14px 24px}
+.tsw{width:36px;height:20px;border-radius:10px;background:var(--v2-border-strong);position:relative;cursor:pointer;flex-shrink:0}
+.tsw.on{background:var(--v2-desk-wellness)}
+.tsw__thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s}
+.tsw.on .tsw__thumb{left:18px}
+.wtoggle__l{font-size:13px;color:var(--v2-text-primary)}
+.lbadge{font-size:10px;font-weight:600;padding:2px 6px;border-radius:3px;background:rgba(244,114,182,.15);color:var(--v2-desk-wellness);margin-left:auto}
+/* ── Memory card ─── */
+.mcard{background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);overflow:hidden}
+.mcard__bar{height:3px;background:var(--v2-desk-memory)}
+.mcard__body{padding:12px}
+.mcard__title{font-size:13px;font-weight:600;color:var(--v2-text-primary);margin-bottom:4px}
+.mcard__why{font-size:10px;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-subtle);border-radius:4px;padding:3px 6px;color:var(--v2-desk-memory);margin-bottom:8px;display:inline-block}
+.mcard__desc{font-size:12px;color:var(--v2-text-secondary);margin-bottom:8px}
+.mcard__a{display:flex;gap:6px;flex-wrap:wrap}
+.bt-fgt{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--v2-status-error);font-size:11px;padding:3px 8px;border-radius:var(--v2-radius);cursor:pointer}
+/* ── MCP table ─── */
+.tbl{width:100%;border-collapse:collapse;margin:0 24px}
+.tbl th{text-align:left;font-size:10px;font-weight:700;color:var(--v2-text-tertiary);text-transform:uppercase;letter-spacing:.08em;padding:8px 12px;border-bottom:1px solid var(--v2-border-subtle)}
+.tbl td{font-size:12px;color:var(--v2-text-secondary);padding:10px 12px;border-bottom:1px solid var(--v2-border-subtle)}
+.tbl tr:hover td{background:var(--v2-bg-elevated)}
+.tbl__n{font-weight:600;color:var(--v2-text-primary)}
+/* ── Before/after ─── */
+.cgrid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px}
+.cpanel{border:2px solid var(--v2-border-default);border-radius:var(--v2-radius);overflow:hidden}
+.cpanel__h{padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em}
+.cpanel__h--b{background:rgba(239,68,68,.1);color:var(--v2-status-error);border-bottom:1px solid rgba(239,68,68,.3)}
+.cpanel__h--a{background:rgba(34,197,94,.1);color:var(--v2-status-success);border-bottom:1px solid rgba(34,197,94,.3)}
+.cpanel__b{padding:12px}
+.sref{display:inline-flex;align-items:center;gap:4px;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-default);border-radius:var(--v2-radius);padding:4px 8px;font-size:11px;color:var(--v2-text-secondary)}
+/* ── Mobile ─── */
+.mshell{display:none;flex-direction:column;min-height:100vh}
+.mtop{height:48px;background:var(--v2-bg-surface);border-bottom:1px solid var(--v2-border-subtle);display:flex;align-items:center;padding:0 16px;gap:12px;position:sticky;top:0;z-index:10}
+.mtop__av{width:32px;height:32px;border-radius:50%;background:var(--v2-accent-dim);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--v2-accent)}
+.mtop__wm{font-size:13px;font-weight:700;color:var(--v2-text-primary);flex:1}
+.mtop__a{display:flex;gap:12px;color:var(--v2-text-secondary)}
+.mmain{flex:1;overflow-y:auto;padding:16px}
+.mcomp{background:var(--v2-bg-surface);border-top:1px solid var(--v2-border-subtle);padding:12px 16px;position:sticky;bottom:56px}
+.mcomp__in{width:100%;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-default);border-radius:var(--v2-radius);padding:8px 12px;color:var(--v2-text-primary);font-size:13px;font-family:var(--v2-font-sans)}
+.mbtm{height:56px;background:var(--v2-bg-surface);border-top:1px solid var(--v2-border-subtle);display:flex;position:fixed;bottom:0;left:0;right:0;padding-bottom:env(safe-area-inset-bottom,0)}
+.mtab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--v2-text-tertiary);padding-bottom:4px}
+.mtab.on{color:var(--v2-accent)}
+.mtab__i{font-size:20px}
+.mtab__l{font-size:9px;font-weight:600}
+/* ── Tablet ─── */
+.tshell{display:none;flex-direction:column;min-height:100vh}
+.tfab{position:fixed;bottom:24px;right:24px;width:48px;height:48px;border-radius:50%;background:var(--v2-bg-elevated);border:1px solid var(--v2-border-default);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);z-index:50;font-size:18px}
+/* ── Empty/loading ─── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;text-align:center}
+.empty__t{font-size:14px;font-weight:600;color:var(--v2-text-primary);margin-bottom:6px}
+.empty__b{font-size:12px;color:var(--v2-text-secondary);margin-bottom:16px;max-width:280px}
+.load{display:flex;align-items:center;gap:10px;padding:16px 24px;color:var(--v2-text-secondary);font-size:13px}
+.spin{width:16px;height:16px;border:2px solid var(--v2-border-default);border-top-color:var(--v2-accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ── Responsive ─── */
+@media(max-width:1199px){
+  .shell{display:none!important}
+  .tshell{display:flex}
+  .rail{display:none!important}
+  .cgrid{grid-template-columns:repeat(2,1fr)}
+  .pgrid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:767px){
+  .tshell{display:none!important}
+  .mshell{display:flex}
+  .cgrid{grid-template-columns:1fr}
+  .pgrid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar" id="toolbar">
+  <span class="toolbar__title">App Shell V2 — Annotated Prototype</span>
+  <button onclick="showScreen('screen-shell')" data-s="screen-shell" class="active">Shell Layout</button>
+  <button onclick="showScreen('screen-home')" data-s="screen-home">Home</button>
+  <button onclick="showScreen('screen-bittensor')" data-s="screen-bittensor">Bittensor</button>
+  <button onclick="showScreen('screen-hyperliquid')" data-s="screen-hyperliquid">Hyperliquid</button>
+  <button onclick="showScreen('screen-polymarket')" data-s="screen-polymarket">Polymarket</button>
+  <button onclick="showScreen('screen-wellness')" data-s="screen-wellness">Wellness</button>
+  <button onclick="showScreen('screen-memory')" data-s="screen-memory">Memory</button>
+  <button onclick="showScreen('screen-mcps')" data-s="screen-mcps">MCPs</button>
+  <button onclick="showScreen('screen-beforeafter')" data-s="screen-beforeafter">Before/After</button>
+  <button onclick="showScreen('screen-mobile')" data-s="screen-mobile">Mobile</button>
+  <button onclick="showScreen('screen-states')" data-s="screen-states">States</button>
+  <button onclick="document.documentElement.setAttribute('data-theme','light')" style="margin-left:8px">Light</button>
+  <button onclick="document.documentElement.removeAttribute('data-theme')">Dark</button>
+</div>
+<script>
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('is-active'));
+  document.getElementById(id).classList.add('is-active');
+  document.querySelectorAll('.toolbar button').forEach(b=>b.classList.remove('active'));
+  document.querySelector('[data-s="'+id+'"]').classList.add('active');
+}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: SHELL LAYOUT
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen is-active" id="screen-shell">
+<div class="sh"><div class="sh__t">App Shell V2 — Desktop Layout</div><div class="sh__s">3-column: Left Nav 56px · Main · Right Rail 260px</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--s">P3 solved</span><span class="bdg bdg--i">P4 solved</span><span class="bdg bdg--s">Surface fills</span><span class="bdg bdg--s">Sharp corners</span>
+</div>
+</div>
+
+<div class="ann ann--s" style="margin-bottom:12px"><span class="ann__label">P3 Fix</span><strong>Right rail (260px):</strong> Profile card, truncated wallet with copy button, quick stats 2×2, bell with badge, memory chip bar. Fixed — does not scroll with main.</div>
+<div class="ann ann--i" style="margin-bottom:16px"><span class="ann__label">P4 Fix</span><strong>Left nav (56px):</strong> Icons + tooltips only. No notification counts, no memory chips — those live in right rail. Nav is clean.</div>
+<div class="ann ann--s" style="margin-bottom:16px"><span class="ann__label">P1 Fix</span><strong>Surface fills:</strong> Cards use <code>--v2-bg-surface</code> (#111111) fill. Card borders are <code>--v2-border-subtle</code> (#1F1F1F) — barely visible separators, not frames. 3px accent bar differentiates cards.</div>
+
+<div class="shell" style="height:500px;border:1px solid var(--v2-border-default)">
+  <!-- LEFT NAV -->
+  <nav class="nav" id="shell-nav">
+    <div class="nav__logo">
+      <div class="nav__mark">▲</div>
+      <div class="nav__text">Matterhorn</div>
+    </div>
+    <div class="nav__items">
+      <div class="ni on" style="--na:var(--v2-desk-home)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <span class="ni__tip">Home</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="3" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="17" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <span class="ni__tip">Bittensor</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <span class="ni__tip">Hyperliquid</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <span class="ni__tip">Polymarket</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <span class="ni__tip">Wellness</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-memory)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <span class="ni__tip">Memory</span>
+      </div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <span class="ni__tip">MCPs</span>
+      </div>
+      <div class="nav__div"></div>
+      <div class="ni">
+        <div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.1 5.1l1.4 1.4M13.5 13.5l1.4 1.4M5.1 14.9l1.4-1.4M13.5 6.5l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <span class="ni__tip">Settings</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main" id="shell-main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:var(--v2-accent-dim);color:var(--v2-accent)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <span class="dhdr__t">Home</span>
+    </div>
+    <div style="padding:14px 24px">
+      <div class="cgrid" style="padding:0">
+        <div class="dcard" style="--ca:var(--v2-desk-bittensor)">
+          <div class="dcard__bar"></div>
+          <div class="dcard__body">
+            <div class="dcard__title">Bittensor</div>
+            <div class="dcard__desc">Validator health, subnet activity, delegation management.</div>
+            <div class="dcard__a"><button class="btn-ghost" style="background:rgba(255,124,67,.12);color:var(--v2-desk-bittensor)">Open →</button></div>
+          </div>
+        </div>
+        <div class="dcard" style="--ca:var(--v2-desk-hyperliquid)">
+          <div class="dcard__bar"></div>
+          <div class="dcard__body">
+            <div class="dcard__title">Hyperliquid</div>
+            <div class="dcard__desc">Perpetual positions, funding rates, margin tracking.</div>
+            <div class="dcard__a"><button class="btn-ghost" style="background:rgba(192,132,252,.12);color:var(--v2-desk-hyperliquid)">Open →</button></div>
+          </div>
+        </div>
+        <div class="dcard" style="--ca:var(--v2-desk-polymarket)">
+          <div class="dcard__bar"></div>
+          <div class="dcard__body">
+            <div class="dcard__title">Polymarket</div>
+            <div class="dcard__desc">Tracked markets, probabilities, volume, confidence.</div>
+            <div class="dcard__a"><button class="btn-ghost" style="background:rgba(251,191,36,.12);color:var(--v2-desk-polymarket)">Open →</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT RAIL -->
+  <aside class="rail" id="shell-rail">
+    <div class="ann ann--s" style="font-size:11px"><span class="ann__label">P3 Fix</span>Right rail — profile, wallet copy, stats, bell badge, memory chips.</div>
+    <div class="rprof">
+      <div class="rprof__top">
+        <div class="rprof__av">AC</div>
+        <div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div>
+      </div>
+      <div class="rwallet">
+        <div class="rwallet__a">0x7a3B…F9d2</div>
+        <button class="rwallet__c">📋</button>
+      </div>
+      <div class="rconn">Connected: 3 min ago</div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">1,247</div><div class="stile__l">TAO staked</div></div>
+      <div class="stile"><div class="stile__v">8/11</div><div class="stile__l">Subnets</div></div>
+      <div class="stile"><div class="stile__v">3</div><div class="stile__l">Delegations</div></div>
+      <div class="stile"><div class="stile__v">2m</div><div class="stile__l">Last sync</div></div>
+    </div>
+    <div>
+      <div class="rlbl">Notifications</div>
+      <div class="rbell">
+        <div class="rbell__i">🔔</div><div class="rbell__l">Suggestions</div><div class="rbell__b">4</div>
+      </div>
+    </div>
+    <div>
+      <div class="rlbl">Active Memories</div>
+      <div class="cbar">
+        <div class="chip chip--a" style="--chip-c:var(--v2-desk-memory);--chip-a:rgba(103,232,249,.15)">Finetune rewards</div>
+        <div class="chip">Subnet 4 stake</div>
+      </div>
+    </div>
+    <div class="rcta">View full profile →</div>
+  </aside>
+</div>
+
+<div class="ann ann--w" style="margin-top:12px"><span class="ann__label">Tablet</span>Right rail hidden, FAB avatar button bottom-right toggles 260px overlay panel. No layout shift.</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: HOME
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-home">
+<div class="sh"><div class="sh__t">Home — Command Center</div><div class="sh__s">Modern product launcher — not a debug screen</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--s">Greeting + active desk</span><span class="bdg bdg--s">Recent sessions</span><span class="bdg bdg--s">Memory chips</span>
+    <span class="bdg bdg--d">No external services</span><span class="bdg bdg--d">No crypto workspace category</span>
+</div>
+</div>
+<div class="shell" style="height:560px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div><div class="nav__text">Matterhorn</div></div>
+    <div class="nav__items">
+      <div class="ni on" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="ni__tip">Home</span></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="3" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="17" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/></svg></div><span class="ni__tip">Bittensor</span></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><span class="ni__tip">Hyperliquid</span></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div><span class="ni__tip">Polymarket</span></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div><span class="ni__tip">Wellness</span></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div><span class="ni__tip">Memory</span></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div><span class="ni__tip">MCPs</span></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 3v2M10 15v2M3 10h2M15 10h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div><span class="ni__tip">Settings</span></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="hh-greeting">Good evening, Alex &nbsp;·&nbsp; Thu Jun 26</div>
+    <div class="hh">
+      <div class="hh__bar"></div>
+      <div class="hh__body">
+        <div class="hh__info">
+          <div class="hh__title">📡 Bittensor</div>
+          <div class="hh__meta">1,247 TAO staked · 8 subnets active · 3 delegations</div>
+        </div>
+        <div class="hh__cta">Open →</div>
+      </div>
+    </div>
+    <div class="slist">
+      <div class="slist__h">Recent Sessions</div>
+      <div class="sc">
+        <div class="sc__h">
+          <div class="sc__dot"></div>
+          <div class="sc__l">Bittensor</div>
+          <div class="sc__t">Today 2:34 PM</div>
+        </div>
+        <div class="sc__sum">Set a delegation ceiling of 200 TAO on Finetune subnet 4.</div>
+        <div class="sc__chips">
+          <div class="mchip">Bittensor</div>
+          <div class="mchip">Delegation set</div>
+          <div class="mchip" style="border-color:rgba(255,124,67,.4);color:var(--v2-desk-bittensor)">200 TAO · Finetune</div>
+        </div>
+      </div>
+      <div class="sc">
+        <div class="sc__h">
+          <div class="sc__dot sc__dot--off"></div>
+          <div class="sc__l">Hyperliquid</div>
+          <div class="sc__t">Yesterday 5:12 PM</div>
+        </div>
+        <div class="sc__sum">Reviewed BTC-PERP position. Funding rate alert set at 0.01%.</div>
+        <div class="sc__chips">
+          <div class="mchip">Hyperliquid</div>
+          <div class="mchip">Position reviewed</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:0 24px">
+      <div class="slist__h" style="padding:0 0 10px">Memory Chips</div>
+      <div class="cbar">
+        <div class="chip chip--a" style="--chip-c:var(--v2-desk-memory);--chip-a:rgba(103,232,249,.15)">Finetune rewards</div>
+        <div class="chip">Subnet 4 delegation</div>
+        <div class="chip">HL BTC position</div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">7</div><div class="stile__l">Desks</div></div>
+      <div class="stile"><div class="stile__v">12</div><div class="stile__l">Memories</div></div>
+      <div class="stile"><div class="stile__v">2</div><div class="stile__l">Positions</div></div>
+      <div class="stile"><div class="stile__v">4</div><div class="stile__l">Markets</div></div>
+    </div>
+    <div class="rbell"><div class="rbell__i">🔔</div><div class="rbell__l">Suggestions</div><div class="rbell__b">4</div></div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: BITTENSOR
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-bittensor">
+<div class="sh"><div class="sh__t">Bittensor Desk — Beginner View</div><div class="sh__s">Beginner-friendly: TAO amounts, no addresses. Expert toggle available.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--s">P7 solved</span><span class="bdg bdg--s">Non-custodial</span><span class="bdg bdg--w">Safety strip</span><span class="bdg bdg--d">No wallet addr in Beginner</span>
+</div>
+</div>
+<div class="shell" style="height:520px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div><div class="nav__text">Matterhorn</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="3" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="17" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(255,124,67,.12);color:var(--v2-desk-bittensor)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="3" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="17" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="17" r="1.5" stroke="currentColor" stroke-width="1.5"/><circle cx="3" cy="10" r="1.5" stroke="currentColor" stroke-width="1.5"/></svg></div>
+      <span class="dhdr__t">Bittensor</span>
+      <div class="dhdr__a">
+        <div class="tpill">
+          <div class="tpill__o on">Beginner</div>
+          <div class="tpill__o">Expert</div>
+        </div>
+        <button class="btn-2">⚙</button>
+      </div>
+    </div>
+    <div class="sstrip">🔗 Read-only. Public Subtensor data only. No seed phrases, private keys, or signing capabilities. Matterhorn never holds or manages stake.</div>
+    <div class="cgrid">
+      <div class="dcard" style="--ca:var(--v2-desk-bittensor)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Total Stake</div>
+          <div style="font-size:24px;font-weight:700;color:var(--v2-text-primary);margin:4px 0">1,247 TAO</div>
+          <div style="font-size:11px;color:var(--v2-status-success)">▲ 12.3% YTD</div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-bittensor)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Active Subnets</div>
+          <div style="font-size:24px;font-weight:700;color:var(--v2-text-primary);margin:4px 0">8 of 11</div>
+          <div style="font-size:11px;color:var(--v2-status-success)">◉ All healthy</div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-bittensor)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Delegations</div>
+          <div style="font-size:24px;font-weight:700;color:var(--v2-text-primary);margin:4px 0">3 wallets</div>
+          <div style="font-size:11px;color:var(--v2-text-secondary)">800 TAO total</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 24px 0">
+      <div class="slist__h" style="padding:0 0 8px">Your Top Subnets</div>
+      <div class="dcard" style="margin-bottom:8px;--ca:var(--v2-desk-bittensor)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="display:flex;align-items:center;gap:8px">
+          <div><div class="dcard__title" style="font-size:13px">Navion (1)</div><div style="font-size:11px;color:var(--v2-text-secondary)">Subnet 1</div></div>
+          <div style="margin-left:auto;font-size:14px;font-weight:700;color:var(--v2-text-primary)">12.4 TAO</div>
+          <button class="btn-ghost" style="background:rgba(255,124,67,.12);color:var(--v2-desk-bittensor)">Stake more</button>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-bittensor)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="display:flex;align-items:center;gap:8px">
+          <div><div class="dcard__title" style="font-size:13px">Finetune (4)</div><div style="font-size:11px;color:var(--v2-text-secondary)">Subnet 4 · your ceiling: 200 TAO</div></div>
+          <div style="margin-left:auto;font-size:14px;font-weight:700;color:var(--v2-text-primary)">8.2 TAO</div>
+          <button class="btn-ghost" style="background:rgba(255,124,67,.12);color:var(--v2-desk-bittensor)">Stake more</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+      <div class="rconn">Connected: 3 min ago</div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">1,247</div><div class="stile__l">TAO staked</div></div>
+      <div class="stile"><div class="stile__v">8/11</div><div class="stile__l">Subnets</div></div>
+      <div class="stile"><div class="stile__v">3</div><div class="stile__l">Delegations</div></div>
+      <div class="stile"><div class="stile__v">2m</div><div class="stile__l">Last sync</div></div>
+    </div>
+    <div class="rbell"><div class="rbell__i">🔔</div><div class="rbell__l">Suggestions</div><div class="rbell__b">4</div></div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: HYPERLIQUID
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-hyperliquid">
+<div class="sh"><div class="sh__t">Hyperliquid Desk — Position Preview</div><div class="sh__s">Read-only via Hyperliquid Info API. No signing, no close-position action.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--w">Safety strip</span><span class="bdg bdg--d">Position read-only</span><span class="bdg bdg--d">No close-position action</span><span class="bdg bdg--s">Long/Short badges</span>
+</div>
+</div>
+<div class="shell" style="height:480px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(192,132,252,.12);color:var(--v2-desk-hyperliquid)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div>
+      <span class="dhdr__t">Hyperliquid</span>
+      <div class="dhdr__a"><button class="btn-2">⚙</button></div>
+    </div>
+    <div class="sstrip">📖 Preview only. Read-only via Hyperliquid Info API. No signing.</div>
+    <div class="pgrid">
+      <div class="ptile" style="--pa:var(--v2-desk-hyperliquid)">
+        <div class="ptile__bar"></div>
+        <div class="ptile__body">
+          <div class="ptile__a">BTC-PERP</div>
+          <div class="ptile__s ptile__s--lg">Long</div>
+          <div class="ptile__v">0.52 BTC</div>
+          <div class="ptile__c">$31,240 · ▲ $1,234</div>
+        </div>
+      </div>
+      <div class="ptile" style="--pa:#EF4444">
+        <div class="ptile__bar" style="background:#EF4444"></div>
+        <div class="ptile__body">
+          <div class="ptile__a">ETH-PERP</div>
+          <div class="ptile__s ptile__s--sh">Short</div>
+          <div class="ptile__v">2.1 ETH</div>
+          <div class="ptile__c">$4,821 · ▼ $89</div>
+        </div>
+      </div>
+      <div class="ptile" style="--pa:var(--v2-desk-hyperliquid)">
+        <div class="ptile__bar"></div>
+        <div class="ptile__body">
+          <div class="ptile__a">SOL-PERP</div>
+          <div class="ptile__s ptile__s--lg">Long</div>
+          <div class="ptile__v">24.5 SOL</div>
+          <div class="ptile__c">$3,432 · ▲ $312</div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">10×</div><div class="stile__l">Max leverage</div></div>
+      <div class="stile"><div class="stile__v" style="font-size:12px">Cross</div><div class="stile__l">Margin mode</div></div>
+      <div class="stile"><div class="stile__v">0.005%</div><div class="stile__l">Funding rate</div></div>
+      <div class="stile"><div class="stile__v">3</div><div class="stile__l">Positions</div></div>
+    </div>
+    <div class="rbell"><div class="rbell__i">🔔</div><div class="rbell__l">Alerts</div><div class="rbell__b">1</div></div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: POLYMARKET
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-polymarket">
+<div class="sh"><div class="sh__t">Polymarket Desk — Market Tracking</div><div class="sh__s">Read-only browsing data. No bet placement.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--w">Safety strip</span><span class="bdg bdg--d">No "place bet"</span><span class="bdg bdg--s">Confidence bar</span>
+</div>
+</div>
+<div class="shell" style="height:480px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(251,191,36,.12);color:var(--v2-desk-polymarket)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div>
+      <span class="dhdr__t">Polymarket</span>
+      <div class="dhdr__a">
+        <div class="tpill"><div class="tpill__o on">All</div><div class="tpill__o">Active</div><div class="tpill__o">Resolved</div></div>
+      </div>
+    </div>
+    <div class="sstrip">📖 Preview only. Read-only browsing data. No bet placement.</div>
+    <div class="cgrid">
+      <div class="dcard" style="--ca:var(--v2-desk-polymarket)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">BTC above $100k by EOY?</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="sbdg" style="background:rgba(251,191,36,.15);color:var(--v2-desk-polymarket)">71% YES</span>
+            <span style="font-size:11px;color:var(--v2-text-tertiary)">$2.4M vol</span>
+          </div>
+          <div style="margin-bottom:8px">
+            <div class="cbar2"><div class="cseg cseg--f" style="flex:7"></div><div class="cseg cseg--e" style="flex:3"></div></div>
+            <div style="font-size:10px;color:var(--v2-text-tertiary);margin-top:2px">Confidence: High</div>
+          </div>
+          <div class="dcard__a"><button class="btn-ghost" style="background:rgba(251,191,36,.12);color:var(--v2-desk-polymarket)">Track →</button></div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-polymarket)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Fed rate cut by March 2025?</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="sbdg" style="background:rgba(251,191,36,.15);color:var(--v2-desk-polymarket)">58% YES</span>
+            <span style="font-size:11px;color:var(--v2-text-tertiary)">$1.1M vol</span>
+          </div>
+          <div style="margin-bottom:8px">
+            <div class="cbar2"><div class="cseg cseg--f" style="flex:5.8"></div><div class="cseg cseg--e" style="flex:4.2"></div></div>
+            <div style="font-size:10px;color:var(--v2-text-tertiary);margin-top:2px">Confidence: Medium</div>
+          </div>
+          <div class="dcard__a"><button class="btn-ghost" style="background:rgba(251,191,36,.12);color:var(--v2-desk-polymarket)">Track →</button></div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-polymarket)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">AI passes Turing test by 2026?</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="sbdg" style="background:rgba(251,191,36,.15);color:var(--v2-desk-polymarket)">44% YES</span>
+            <span style="font-size:11px;color:var(--v2-text-tertiary)">$890k vol</span>
+          </div>
+          <div style="margin-bottom:8px">
+            <div class="cbar2"><div class="cseg cseg--f" style="flex:4.4"></div><div class="cseg cseg--e" style="flex:5.6"></div></div>
+            <div style="font-size:10px;color:var(--v2-text-tertiary);margin-top:2px">Confidence: Low</div>
+          </div>
+          <div class="dcard__a"><button class="btn-ghost" style="background:rgba(251,191,36,.12);color:var(--v2-desk-polymarket)">Track →</button></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">4</div><div class="stile__l">Tracked</div></div>
+      <div class="stile"><div class="stile__v">1</div><div class="stile__l">Resolved</div></div>
+    </div>
+    <div class="rbell"><div class="rbell__i">🔔</div><div class="rbell__l">Price alerts</div><div class="rbell__b">2</div></div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: WELLNESS
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-wellness">
+<div class="sh"><div class="sh__t">Wellness Desk — Standalone Health</div><div class="sh__s">Toggle default OFF. Local-only. No PHI, no clinical language.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--w">Toggle OFF by default</span><span class="bdg bdg--s">Local-only badge</span><span class="bdg bdg--d">No medical claims</span>
+</div>
+</div>
+<div class="shell" style="height:500px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(244,114,182,.12);color:var(--v2-desk-wellness)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div>
+      <span class="dhdr__t">Wellness</span>
+    </div>
+    <div class="wtoggle">
+      <div class="tsw on" id="wellness-toggle"><div class="tsw__thumb"></div></div>
+      <div class="wtoggle__l">Wellness suggestions enabled</div>
+      <div class="lbadge">🔒 Local only</div>
+    </div>
+    <div class="sstrip" style="background:rgba(244,114,182,.08);border-color:rgba(244,114,182,.3);color:var(--v2-desk-wellness)">🔒 Stored locally only. Never sent to external servers.</div>
+    <div class="cgrid">
+      <div class="dcard" style="--ca:var(--v2-desk-wellness)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Daily walk goal</div>
+          <div style="font-size:20px;font-weight:700;color:var(--v2-text-primary);margin:4px 0">7,234 / 10,000 steps</div>
+          <div style="font-size:11px;color:var(--v2-status-success)">73% · 7-day streak</div>
+          <div style="margin-top:8px"><span class="lbadge">🔒 Stored locally</span></div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-wellness)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Focus time</div>
+          <div style="font-size:20px;font-weight:700;color:var(--v2-text-primary);margin:4px 0">2h 15m today</div>
+          <div style="font-size:11px;color:var(--v2-text-secondary)">5-day average: 2h 03m</div>
+          <div style="margin-top:8px"><span class="lbadge">🔒 Stored locally</span></div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-wellness)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body">
+          <div class="dcard__title">Weekly reflection</div>
+          <div class="dcard__desc">Set aside 15 minutes Sunday to review your week.</div>
+          <div class="dcard__a"><button class="btn-ghost" style="background:rgba(244,114,182,.12);color:var(--v2-desk-wellness)">Set reminder</button></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">3</div><div class="stile__l">Goals</div></div>
+      <div class="stile"><div class="stile__v">5d</div><div class="stile__l">Streak</div></div>
+    </div>
+    <div class="rbell"><div class="rbell__i">🔔</div><div class="rbell__l">Reminders</div><div class="rbell__b">1</div></div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: MEMORY
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-memory">
+<div class="sh"><div class="sh__t">Memory Desk — Remembered Context</div><div class="sh__s">All memories visible. Forget always available. Bell shows suggestions.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--s">Bell badge</span><span class="bdg bdg--s">Forget always visible</span><span class="bdg bdg--d">No "Crypto" category</span>
+</div>
+</div>
+<div class="shell" style="height:480px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 6V4M13 6V4M7 10h2M11 10h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <span class="dhdr__t">Memory</span>
+      <div class="dhdr__a">
+        <button class="btn-2" style="border-color:var(--v2-border-subtle);color:var(--v2-desk-memory)">🔔 4</button>
+        <button class="btn-ghost" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory)">Export</button>
+        <button class="btn-ghost" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory)">New</button>
+      </div>
+    </div>
+    <div class="cgrid">
+      <div class="mcard">
+        <div class="mcard__bar"></div>
+        <div class="mcard__body">
+          <div class="mcard__title">Finetune delegation ceiling</div>
+          <div class="mcard__why">Why remembered: You set this in Bittensor</div>
+          <div class="mcard__desc">200 TAO ceiling on Finetune subnet 4, set Jun 24</div>
+          <div class="mcard__a">
+            <button class="btn-ghost" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory);padding:3px 8px;font-size:11px">Use</button>
+            <button class="btn-text" style="padding:3px 8px;font-size:11px">Edit</button>
+            <button class="bt-fgt">Forget</button>
+          </div>
+        </div>
+      </div>
+      <div class="mcard">
+        <div class="mcard__bar"></div>
+        <div class="mcard__body">
+          <div class="mcard__title">BTC-PERP position size</div>
+          <div class="mcard__why">Why remembered: You reviewed this in Hyperliquid</div>
+          <div class="mcard__desc">0.52 BTC long position, opened Jun 22</div>
+          <div class="mcard__a">
+            <button class="btn-ghost" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory);padding:3px 8px;font-size:11px">Use</button>
+            <button class="btn-text" style="padding:3px 8px;font-size:11px">Edit</button>
+            <button class="bt-fgt">Forget</button>
+          </div>
+        </div>
+      </div>
+      <div class="mcard">
+        <div class="mcard__bar"></div>
+        <div class="mcard__body">
+          <div class="mcard__title">BTC above $100k market</div>
+          <div class="mcard__why">Why remembered: You tracked this in Polymarket</div>
+          <div class="mcard__desc">71% YES · $2.4M volume · tracked Jun 20</div>
+          <div class="mcard__a">
+            <button class="btn-ghost" style="background:rgba(103,232,249,.12);color:var(--v2-desk-memory);padding:3px 8px;font-size:11px">Use</button>
+            <button class="btn-text" style="padding:3px 8px;font-size:11px">Edit</button>
+            <button class="bt-fgt">Forget</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+    </div>
+    <div>
+      <div class="rlbl">Active Memory Chips</div>
+      <div class="cbar">
+        <div class="chip chip--a" style="--chip-c:var(--v2-desk-memory);--chip-a:rgba(103,232,249,.15)">Finetune rewards</div>
+        <div class="chip chip--a" style="--chip-c:var(--v2-desk-memory);--chip-a:rgba(103,232,249,.15)">BTC-PERP size</div>
+        <div class="chip">BTC $100k</div>
+      </div>
+    </div>
+    <div class="rbell" style="background:rgba(103,232,249,.08);border-color:rgba(103,232,249,.3)">
+      <div class="rbell__i">💡</div>
+      <div class="rbell__l" style="color:var(--v2-desk-memory)">Suggestions</div>
+      <div class="rbell__b" style="background:var(--v2-desk-memory);color:#0C0C0C">4</div>
+    </div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: MCPS
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-mcps">
+<div class="sh"><div class="sh__t">MCPs Desk — Tool Registry</div><div class="sh__s">Local-only tools. No credentials stored. External signer badge.</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--w">Safety strip</span><span class="bdg bdg--s">External signer badge</span>
+</div>
+</div>
+<div class="shell" style="height:480px;border:1px solid var(--v2-border-default)">
+  <nav class="nav">
+    <div class="nav__logo"><div class="nav__mark">▲</div></div>
+    <div class="nav__items">
+      <div class="ni" style="--na:var(--v2-desk-home)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 10L10 3l7 7M5 8.5V17h3.5V13h3V17H17V8.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-bittensor)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-hyperliquid)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 6C4 6 7 2 10 2s6 4 6 4-3 4-6 4-6-4-6-4z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-polymarket)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-wellness)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 17s-7-4.5-7-9a5 5 0 0 1 14 0c0 4.5-7 9-7 9z" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni" style="--na:var(--v2-desk-memory)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="6" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+      <div class="ni on" style="--na:var(--v2-desk-mcp)"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div></div>
+      <div class="nav__div"></div>
+      <div class="ni"><div class="ni__icon"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg></div></div>
+    </div>
+  </nav>
+  <main class="main">
+    <div class="dhdr">
+      <div class="dhdr__icon" style="background:rgba(52,211,153,.12);color:var(--v2-desk-mcp)"><svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <span class="dhdr__t">MCPs</span>
+      <div class="dhdr__a"><button class="btn-ghost" style="background:rgba(52,211,153,.12);color:var(--v2-desk-mcp)">+ Add server</button></div>
+    </div>
+    <div class="sstrip" style="background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3);color:var(--v2-desk-mcp)">🔌 MCP tools run locally. No credentials stored in Matterhorn.</div>
+    <div style="overflow-x:auto;margin:0 24px">
+      <table class="tbl">
+        <thead><tr><th>Tool</th><th>Agent</th><th>Status</th><th>Scope</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr><td class="tbl__n">filesystem-read</td><td>Coder</td><td><span class="bdg bdg--s">Active</span></td><td>Local files only</td><td><button class="btn-text">Configure</button></td></tr>
+          <tr><td class="tbl__n">web-search</td><td>Coder</td><td><span class="bdg bdg--s">Active</span></td><td>Read-only</td><td><button class="btn-text">Configure</button></td></tr>
+          <tr><td class="tbl__n">wallet-sign</td><td>—</td><td><span class="bdg bdg--w">External signer required</span></td><td>Sign only</td><td><button class="btn-text">Configure</button></td></tr>
+          <tr><td class="tbl__n">memory-query</td><td>Assistant</td><td><span class="bdg bdg--s">Active</span></td><td>Read own memories</td><td><button class="btn-text">Configure</button></td></tr>
+          <tr><td class="tbl__n">hyperliquid-info</td><td>—</td><td><span class="bdg bdg--s">Active</span></td><td>Read-only</td><td><button class="btn-text">Configure</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  <aside class="rail">
+    <div class="rprof">
+      <div class="rprof__top"><div class="rprof__av">AC</div><div><div class="rprof__name">Alex Chen</div><div class="rprof__email">alex@matter.io</div></div></div>
+      <div class="rwallet"><div class="rwallet__a">0x7a3B…F9d2</div><button class="rwallet__c">📋</button></div>
+    </div>
+    <div class="rstats">
+      <div class="stile"><div class="stile__v">4</div><div class="stile__l">Active</div></div>
+      <div class="stile"><div class="stile__v">1</div><div class="stile__l">Ext signer</div></div>
+    </div>
+  </aside>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: BEFORE/AFTER
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-beforeafter">
+<div class="sh"><div class="sh__t">Before / After — Visual Problem Critique</div><div class="sh__s">Reference: docs/ui/screenshots/*.png</div></div>
+
+<div class="cgrid2">
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--b">BEFORE — bittensor-desk--desktop.png</div>
+    <div class="cpanel__b">
+      <div style="font-size:11px;color:var(--v2-status-error);margin-bottom:8px;font-weight:700">Problems:</div>
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Heavy outlined cards — `border: 1px solid` on every card</li>
+        <li>Flat `#0C0C0C` background — no surface warmth</li>
+        <li>Wallet hidden in bottom bar — no desktop presence</li>
+        <li>Nav rail shows memory chips + notification count — info dump</li>
+        <li>ALL CAPS headings</li>
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:var(--v2-text-tertiary)">Screenshot: <span class="sref">bittensor-desk--desktop.png</span></div>
+    </div>
+  </div>
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--a">AFTER — V2 Shell Layout</div>
+    <div class="cpanel__b">
+      <div style="font-size:11px;color:var(--v2-status-success);margin-bottom:8px;font-weight:700">V2 fixes:</div>
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Surface fills — `--v2-bg-surface` (#111111) on cards</li>
+        <li>Warm surface hierarchy + orange `#FF7C43` accent</li>
+        <li>Right rail: profile + wallet + stats always visible</li>
+        <li>Nav clean: icons + tooltips only</li>
+        <li>Sentence case headings, inline metric chips</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="cgrid2">
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--b">BEFORE — wellness-desk--desktop.png</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Clinical color framing — feels like a health app</li>
+        <li>No local-only notice on cards</li>
+        <li>Medical framing visible</li>
+        <li>Toggle may default ON</li>
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:var(--v2-text-tertiary)">Screenshot: <span class="sref">wellness-desk--desktop.png</span></div>
+    </div>
+  </div>
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--a">AFTER — V2 Wellness</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Rose `#F472B6` — warm, personal, not clinical</li>
+        <li>🔒 "Stored locally" badge on every card</li>
+        <li>Toggle defaults OFF</li>
+        <li>No medical language, no "patient", no "condition"</li>
+        <li>Safety strip: "Never sent to external servers"</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="cgrid2">
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--b">BEFORE — session-hub--desktop.png</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Debug/log output feel — sessions look like activity logs</li>
+        <li>Nested bordered sub-cards</li>
+        <li>No product polish — feels like internal tooling</li>
+        <li>Heavy border-radius or flat rows</li>
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:var(--v2-text-tertiary)">Screenshot: <span class="sref">session-hub--desktop.png</span></div>
+    </div>
+  </div>
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--a">AFTER — V2 Session Cards</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>Product launcher feel — sessions as meaningful moments</li>
+        <li>Sharp corners (4px), surface fills, no nested cards</li>
+        <li>8px solid accent dot — no animation/pulse</li>
+        <li>Inline metric chips — not bordered sub-cards</li>
+        <li>Summary text, not JSON-like log entries</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="cgrid2">
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--b">BEFORE — welcome--desktop.png</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>"Services" desk visible</li>
+        <li>"Crypto workspace" framing</li>
+        <li>Onboarding-first — not a product launcher</li>
+        <li>No session cards, no memory chips visible</li>
+      </ul>
+      <div style="margin-top:8px;font-size:11px;color:var(--v2-text-tertiary)">Screenshot: <span class="sref">welcome--desktop.png</span></div>
+    </div>
+  </div>
+  <div class="cpanel">
+    <div class="cpanel__h cpanel__h--a">AFTER — V2 Home</div>
+    <div class="cpanel__b">
+      <ul style="font-size:11px;color:var(--v2-text-secondary);padding-left:16px;line-height:1.8">
+        <li>No "Services" — only 7 desks from SPEC §9</li>
+        <li>"Crypto workspace" absent</li>
+        <li>Greeting + active desk hero + recent sessions + memory chips</li>
+        <li>Modern desk grid with surface fills and accent bars</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: MOBILE
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-mobile">
+<div class="sh"><div class="sh__t">Mobile Responsive — 390×844</div><div class="sh__s">Top bar (profile), 5-tab bottom bar, composer above keyboard</div>
+<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+  <span class="bdg bdg--s">Top bar profile</span><span class="bdg bdg--s">5-tab bottom bar</span><span class="bdg bdg--s">Right rail absent</span>
+</div>
+</div>
+<div class="mshell" style="border:1px solid var(--v2-border-default);border-radius:var(--v2-radius);overflow:hidden;max-width:420px;margin:0 auto;height:600px">
+  <!-- Top bar -->
+  <div class="mtop">
+    <div class="mtop__av">AC</div>
+    <div class="mtop__wm">Matterhorn</div>
+    <div class="mtop__a"><span>⚙</span><span>🔔</span></div>
+  </div>
+  <!-- Main -->
+  <div class="mmain" style="flex:1;overflow-y:auto">
+    <div class="hh" style="margin:0 0 12px">
+      <div class="hh__bar"></div>
+      <div class="hh__body">
+        <div class="hh__info">
+          <div class="hh__title">📡 Bittensor</div>
+          <div class="hh__meta">1,247 TAO · 8 subnets</div>
+        </div>
+        <div class="hh__cta">Open →</div>
+      </div>
+    </div>
+    <div class="slist" style="padding:0 0 16px">
+      <div class="slist__h">Recent</div>
+      <div class="sc">
+        <div class="sc__h">
+          <div class="sc__dot"></div>
+          <div class="sc__l">Bittensor</div>
+          <div class="sc__t">Today</div>
+        </div>
+        <div class="sc__sum">Set delegation ceiling 200 TAO.</div>
+      </div>
+    </div>
+    <div class="cgrid" style="grid-template-columns:1fr 1fr;padding:0">
+      <div class="dcard" style="--ca:var(--v2-desk-hyperliquid)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="padding:10px">
+          <div class="dcard__title" style="font-size:12px">Hyperliquid</div>
+          <div class="dcard__desc">3 positions</div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-polymarket)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="padding:10px">
+          <div class="dcard__title" style="font-size:12px">Polymarket</div>
+          <div class="dcard__desc">4 markets</div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-wellness)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="padding:10px">
+          <div class="dcard__title" style="font-size:12px">Wellness</div>
+          <div class="dcard__desc">5-day streak</div>
+        </div>
+      </div>
+      <div class="dcard" style="--ca:var(--v2-desk-memory)">
+        <div class="dcard__bar"></div>
+        <div class="dcard__body" style="padding:10px">
+          <div class="dcard__title" style="font-size:12px">Memory</div>
+          <div class="dcard__desc">12 memories</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Composer -->
+  <div class="mcomp">
+    <input class="mcomp__in" placeholder="Ask Matterhorn…" />
+  </div>
+  <!-- Bottom tabs -->
+  <div class="mbtm">
+    <div class="mtab on"><div class="mtab__i">🏠</div><div class="mtab__l">Home</div></div>
+    <div class="mtab"><div class="mtab__i">⚡</div><div class="mtab__l">Bitt</div></div>
+    <div class="mtab"><div class="mtab__i">💎</div><div class="mtab__l">Hyper</div></div>
+    <div class="mtab"><div class="mtab__i">📊</div><div class="mtab__l">Poly</div></div>
+    <div class="mtab"><div class="mtab__i">♥</div><div class="mtab__l">Well</div></div>
+  </div>
+</div>
+<div class="ann ann--w" style="margin-top:12px"><span class="ann__label">Tablet</span>48px nav, right rail hidden, FAB bottom-right. Screenshot: <span class="sref">bittensor-desk--tablet.png</span></div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCREEN: STATES (EMPTY / LOADING / DEGRADED)
+     ═══════════════════════════════════════════════════════════════ -->
+<section class="screen" id="screen-states">
+<div class="sh"><div class="sh__t">Empty / Loading / Degraded States</div><div class="sh__s">All desks must define these states</div></div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;padding:16px">
+  <div>
+    <div class="sh__t" style="font-size:12px;margin-bottom:10px">Loading</div>
+    <div class="load">
+      <div class="spin"></div>
+      <span>Loading subnet data…</span>
+    </div>
+    <div class="sstrip" style="margin:0">Spinner + context label. No skeleton on first render.</div>
+  </div>
+  <div>
+    <div class="sh__t" style="font-size:12px;margin-bottom:10px">Degraded</div>
+    <div style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:var(--v2-radius);padding:8px 12px;font-size:12px;color:var(--v2-status-warning);display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span>Subtensor unreachable. Last known from 14:32.</span>
+      <button class="btn-2" style="padding:3px 8px;font-size:11px">Retry</button>
+    </div>
+    <div style="font-size:11px;color:var(--v2-text-tertiary)">Amber strip + Retry button. Never silently fail.</div>
+  </div>
+  <div>
+    <div class="sh__t" style="font-size:12px;margin-bottom:10px">Empty</div>
+    <div class="empty" style="background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);padding:24px">
+      <div style="font-size:28px;margin-bottom:8px;color:var(--v2-text-tertiary)">📭</div>
+      <div class="empty__t">No memories yet</div>
+      <div class="empty__b">Start chatting and Matterhorn will surface suggestions.</div>
+      <button class="btn-ghost">New memory</button>
+    </div>
+    <div style="font-size:11px;color:var(--v2-text-tertiary);margin-top:8px">Icon + heading + body + CTA.</div>
+  </div>
+</div>
+
+<div style="padding:16px">
+  <div class="sh__t" style="font-size:12px;margin-bottom:10px">Wellness OFF (default)</div>
+  <div class="empty" style="background:var(--v2-bg-surface);border:1px solid var(--v2-border-subtle);border-radius:var(--v2-radius);padding:24px;text-align:left">
+    <div class="wtoggle">
+      <div class="tsw"><div class="tsw__thumb"></div></div>
+      <div class="wtoggle__l">Wellness suggestions enabled</div>
+      <div class="lbadge">🔒 Local only</div>
+    </div>
+    <div style="padding:16px 0 0;font-size:12px;color:var(--v2-text-secondary)">
+      Wellness suggestions are paused. <a href="#" style="color:var(--v2-accent)">Enable in Privacy & Forget Center →</a>
+    </div>
+  </div>
+</div>
+</section>
+
+</body>
+</html>
