@@ -91,6 +91,9 @@ for (const phrase of [
   "matterhorn-capability-row",
   "matterhorn-desk-board",
   "matterhorn-desk-launcher",
+  "grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3",
+  "line-clamp-2",
+  "hidden truncate text-[11px] leading-4 text-dls-muted sm:block",
   "workflowLauncherCapabilityItems",
   "TAO wallet reads",
   "Subnet discovery",
@@ -369,7 +372,9 @@ assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
-assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[104px] w-full rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), "home desk launchers should use compact tint rows instead of heavy cards");
+assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), "home desk launchers should use compact tint rows instead of heavy cards");
+assert.ok(sessionPage.includes("grid-cols-[36px_minmax(0,1fr)]"), "home desk launchers should use compact logo-led rows");
+assert.ok(sessionPage.includes("hidden truncate text-[11px] leading-4 text-dls-muted sm:block"), "home desk launchers should hide dense capability rows on narrow widths");
 assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
 assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
 assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
@@ -451,6 +456,10 @@ for (const phrase of [
 assert.ok(sessionRoute.includes("const renderEmbeddedSettingsSurface"), "session route should expose reusable embedded settings panels to the right rail");
 assert.ok(sessionRoute.includes('settingsSlot={renderEmbeddedSettingsSurface("extensions")}'), "MCP rail should keep using embedded extensions settings");
 assert.ok(sessionRoute.includes("settingsSlotForPath={renderEmbeddedSettingsSurface}"), "Profile and Wallet rail buttons should open compact settings pages");
+assert.ok(sessionRoute.includes("hideWorkspaceSwitcher"), "embedded Profile/Wallet/MCP settings panels should hide duplicate workspace switching");
+assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher?: boolean"), "settings surface should accept an embedded workspace-switcher suppression flag");
+assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}"), "settings surface should pass workspace-switcher suppression into the shell");
+assert.ok(read("apps/app/src/react-app/domains/settings/shell/settings-page.tsx").includes("!props.hideWorkspaceSwitcher"), "settings sidebar should keep workspace switching only when not explicitly hidden");
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
 assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
