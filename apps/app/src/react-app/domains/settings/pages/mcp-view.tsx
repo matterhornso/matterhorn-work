@@ -229,6 +229,21 @@ function isToggleOnlyExtension(entry: McpDirectoryInfo) {
   ) === true;
 }
 
+function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
+  if (disabledReason) return "Unavailable";
+  const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
+  if (id === "bittensor") return "Built-in beta";
+  if (id === "hyperliquid" || id === "polymarket") return "Built-in preview";
+  if (id === "matterhorn-memory" || id === "matterhorn-crypto") return "Built-in";
+  if (id === "openai-image-gen" || id === "matterhorn-voice") return "Needs API key";
+  if (isBuiltInMatterhornExtension(entry)) return entry.preview ? "Built-in preview" : "Built-in";
+  if (entry.oauth) return configured ? "Connected" : "Connect account";
+  if (entry.kind === "mcp" || entry.kind === "ui-control" || entry.command?.length || entry.url) {
+    return configured ? "Configured" : "Requires setup";
+  }
+  return configured ? "Installed" : "Available";
+}
+
 type ExtensionFilter = "all" | "mcp" | "skill" | "plugin";
 
 type MatterhornMcpProductCard = {
@@ -941,6 +956,9 @@ function MatterhornMcpProductSection(props: {
         <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
           Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
         </p>
+        <p className="max-w-2xl text-xs leading-5 text-dls-secondary">
+          Matterhorn MCP cards are real installable command profiles. Marketplace connectors below may require account auth, local config, or API keys before their tools are active.
+        </p>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -1075,6 +1093,7 @@ function McpQuickConnectSection(props: {
               connecting={connecting}
               hidden={hidden}
               preview={entry.preview}
+              statusHint={availabilityLabelForEntry(entry, configured, disabledReason)}
               disabledReason={disabledReason}
               disabled={props.busy}
               actionLabel={configured ? "View details" : t("mcp.tap_to_connect")}
@@ -1094,6 +1113,7 @@ function McpQuickConnectSection(props: {
               kind="skill"
               connected={true}
               hidden={hidden}
+              statusHint="Installed"
               actionLabel="View details"
               onClick={() => props.onSkillDetail?.(skill)}
             />
@@ -1111,6 +1131,7 @@ function McpQuickConnectSection(props: {
               kind="extension"
               connected={true}
               hidden={hidden}
+              statusHint="Installed"
               actionLabel="View details"
               onClick={() => props.onPluginDetail?.(plugin)}
             />
