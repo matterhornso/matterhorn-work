@@ -943,16 +943,16 @@ function MatterhornMcpProductSection(props: {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-dls-surface/70 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <div className="grid gap-3 lg:grid-cols-2">
         {props.cards.map((card) => (
           <article
             key={card.id}
-            className="grid min-w-0 gap-4 border-b border-dls-border/45 px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.95fr)]"
+            className="min-w-0 rounded-xl bg-dls-surface/70 p-4 shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)] ring-1 ring-dls-border/30"
           >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-dls-surface-muted/60 ring-1 ring-dls-border/35">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-xl bg-dls-surface-muted/60 ring-1 ring-dls-border/25">
                 {card.protocolDeskId ? (
-                  <ProtocolBrandLogo id={card.protocolDeskId} size={26} />
+                  <ProtocolBrandLogo id={card.protocolDeskId} size={32} />
                 ) : (
                   <Code2 size={16} className="text-dls-text" />
                 )}
@@ -960,20 +960,10 @@ function MatterhornMcpProductSection(props: {
               <div className="min-w-0 space-y-2">
                 <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
                 <p className="text-xs leading-5 text-dls-secondary">{card.description}</p>
-                <div className="space-y-1.5 text-xs">
-                  <p className="leading-5 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
-                    {card.boundary}
-                  </p>
-                  <p className="leading-5 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Works in:</span>{" "}
-                    {card.worksWith.join(", ")}
-                  </p>
-                </div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-dls-text">Install command</span>
                 <button
@@ -985,15 +975,30 @@ function MatterhornMcpProductSection(props: {
                   Copy install command
                 </button>
               </div>
-              <code className="block overflow-x-auto rounded-lg bg-dls-hover/80 px-3 py-2 text-xs text-dls-text">
+              <code className="block max-w-full overflow-x-auto rounded-lg bg-dls-hover/80 px-3 py-2 text-[11px] text-dls-text">
                 {card.command}
               </code>
               <div className="space-y-1">
                 <div className="text-xs font-medium text-dls-text">Supported tools</div>
-                <p className="break-words font-mono text-[11px] leading-5 text-dls-secondary">
-                  {card.tools.join(" · ")}
-                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {card.tools.map((tool) => (
+                    <span
+                      key={tool}
+                      className="max-w-full truncate rounded-md bg-dls-surface-muted/70 px-2 py-1 font-mono text-[10px] text-dls-secondary"
+                    >
+                      {tool}
+                    </span>
+                  ))}
+                </div>
               </div>
+              <p className="text-xs leading-5 text-dls-secondary">
+                <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
+                {card.boundary}
+              </p>
+              <p className="text-xs leading-5 text-dls-secondary">
+                <span className="font-medium text-dls-text">Works in:</span>{" "}
+                {card.worksWith.join(", ")}
+              </p>
             </div>
           </article>
         ))}

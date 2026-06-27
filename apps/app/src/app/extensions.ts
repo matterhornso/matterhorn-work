@@ -238,7 +238,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Bittensor",
     description: "Explain subnets, read public SS58 wallets, compare validators, prepare unsigned TAO staking previews, and create watches.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/assets/desks/bittensor/logo-light.svg" },
+    icon: { src: "/assets/desks/bittensor/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Bittensor, " },
     setup: {
       instructions: "Bittensor support is public-read and external-signer-first. Paste public SS58 coldkeys only; never paste seed phrases, private keys, or mnemonics.",
@@ -263,7 +263,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Hyperliquid",
     description: "Read markets, orderbooks, account exposure, watches, and preview external-signer order flows with live submission off.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/assets/desks/hyperliquid/logo-light.svg" },
+    icon: { src: "/assets/desks/hyperliquid/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Hyperliquid, " },
     setup: {
       instructions: "Hyperliquid is preview-only in this build. Matterhorn does not accept API secrets, raw signatures, signed payloads, or live order submission.",
@@ -287,7 +287,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     name: "Polymarket",
     description: "Discover prediction markets, inspect compliance, read orderbooks, create watches, and prepare non-custodial preview-only flows.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
-    icon: { src: "/assets/desks/polymarket/logo-light.svg" },
+    icon: { src: "/assets/desks/polymarket/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Polymarket, " },
     setup: {
       instructions: "Polymarket support is read/preview-only. Compliance-blocked markets must not expose executable price, size, or share terms.",
