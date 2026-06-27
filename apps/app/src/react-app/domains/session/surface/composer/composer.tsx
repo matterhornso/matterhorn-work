@@ -11,6 +11,7 @@ import { isMatterhornExtensionEnabled, isMatterhornExtensionHidden, MATTERHORN_E
 import { useDesktopRestriction } from "../../../cloud/desktop-config-provider";
 import { ModelBehaviorSelect } from "../../../../../components/model-behavior-select";
 import { ModelSelect } from "../../../../../components/model-select";
+import { resolveExtensionIconSrc } from "../../../../design-system/extension-icon-src";
 import { LexicalPromptEditor } from "./editor";
 import {
   ReactComposerNotice,
@@ -239,7 +240,16 @@ function mcpStatusBadgeClass(status: McpServerStatus) {
 
 function extensionIcon(entry: McpDirectoryInfo, size = 16) {
   if (entry.iconSrc) {
-    return <img src={entry.iconSrc} alt="" width={size} height={size} loading="lazy" style={{ display: "block" }} />;
+    return (
+      <img
+        src={resolveExtensionIconSrc(entry.iconSrc)}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        style={{ display: "block" }}
+      />
+    );
   }
   if (entry.iconSlug) {
     return <img src={`https://cdn.simpleicons.org/${entry.iconSlug}`} alt="" width={size} height={size} loading="lazy" style={{ display: "block" }} />;

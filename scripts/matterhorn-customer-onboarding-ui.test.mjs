@@ -477,11 +477,11 @@ for (const phrase of [
 
 for (const phrase of [
   'id: "bittensor"',
-  'icon: { src: "/assets/desks/bittensor/logo-light.svg" }',
+  'icon: { src: "/assets/desks/bittensor/logo-dark.svg" }',
   'id: "hyperliquid"',
-  'icon: { src: "/assets/desks/hyperliquid/logo-light.svg" }',
+  'icon: { src: "/assets/desks/hyperliquid/logo-dark.svg" }',
   'id: "polymarket"',
-  'icon: { src: "/assets/desks/polymarket/logo-light.svg" }',
+  'icon: { src: "/assets/desks/polymarket/logo-dark.svg" }',
 ]) {
   assert.ok(extensions.includes(phrase), `Built-in protocol extension should use protocol logo assets: ${phrase}`);
 }
