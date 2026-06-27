@@ -475,6 +475,8 @@ for (const phrase of [
   "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
   "Matterhorn MCP cards are real installable command profiles.",
   "Marketplace connectors below may require account auth, local config, or API keys before their tools are active.",
+  "@container/matterhorn-mcps",
+  "@4xl/matterhorn-mcps:grid-cols-2",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
@@ -500,6 +502,11 @@ for (const phrase of [
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
 }
+assert.equal(
+  settingsRoute.includes("lg:grid-cols-2"),
+  false,
+  "MCP product cards should use container width, not viewport width, so the right rail remains single-column.",
+);
 
 for (const phrase of [
   "statusHint",
