@@ -21,6 +21,9 @@ for (const token of [
   "ProtocolDeskWalletRailMode",
   "ProtocolDeskStatusBadgeTone",
   "ProtocolDeskReadinessTone",
+  "ProtocolDeskBackendStatus",
+  "ProtocolDeskActionStatus",
+  "ProtocolDeskExtensionStatus",
   "ProtocolDeskAction",
   "ProtocolDeskThemeTokenHints",
   "ProtocolDeskSafetyBoundaries",
@@ -101,6 +104,9 @@ for (const [id, block] of Object.entries(deskBlocks)) {
     "category",
     "status",
     "readinessTone",
+    "backendStatus",
+    "actionStatus",
+    "extensionStatus",
     "statusBadgeLabel",
     "statusBadgeTone",
     "routeOrPanelId",
@@ -329,7 +335,88 @@ for (const [id, tone] of Object.entries(expectedReadinessTones)) {
   );
 }
 
-// 20. Every desk exposes capability bullets, safety summary, and suggested prompt titles.
+// 20. Truth labels are present and match desk/backend/extension posture.
+const expectedStatusLabels = {
+  bittensor: {
+    backendStatus: "partial",
+    actionStatus: "external_signer",
+    extensionStatus: "built_in_partial",
+  },
+  hyperliquid: {
+    backendStatus: "preview",
+    actionStatus: "preview_only",
+    extensionStatus: "built_in_live",
+  },
+  polymarket: {
+    backendStatus: "preview",
+    actionStatus: "preview_only",
+    extensionStatus: "built_in_live",
+  },
+  wellness: {
+    backendStatus: "static_catalog",
+    actionStatus: "workflow_only",
+    extensionStatus: "static_catalog",
+  },
+  memory: {
+    backendStatus: "live",
+    actionStatus: "read_only",
+    extensionStatus: "built_in_live",
+  },
+  mcps: {
+    backendStatus: "disabled",
+    actionStatus: "workflow_only",
+    extensionStatus: "requires_setup",
+  },
+};
+for (const [id, expected] of Object.entries(expectedStatusLabels)) {
+  for (const [field, value] of Object.entries(expected)) {
+    assert.ok(
+      deskBlocks[id].includes(`${field}: "${value}"`),
+      `${id} must have ${field} ${value}`,
+    );
+  }
+}
+
+// 21. Bittensor remains beta-ready and external-signer only.
+assert.ok(deskBlocks.bittensor.includes('status: "beta_ready"'), "Bittensor must be beta_ready");
+assert.ok(deskBlocks.bittensor.includes('actionStatus: "external_signer"'), "Bittensor actionStatus must be external_signer");
+assert.ok(deskBlocks.bittensor.includes('backendStatus: "partial"'), "Bittensor backendStatus must be partial");
+assert.ok(deskBlocks.bittensor.includes("requiresExternalSigner: true"), "Bittensor must require external signer");
+
+// 22. Hyperliquid and Polymarket are preview-only/external-client and never claim live submit/sign/custody.
+for (const id of ["hyperliquid", "polymarket"]) {
+  assert.ok(deskBlocks[id].includes('status: "preview_only"'), `${id} must be preview_only`);
+  assert.ok(deskBlocks[id].includes('actionStatus: "preview_only"'), `${id} actionStatus must be preview_only`);
+  assert.ok(deskBlocks[id].includes('backendStatus: "preview"'), `${id} backendStatus must be preview`);
+  assert.ok(deskBlocks[id].includes("liveSubmissionEnabled: false"), `${id} must disable live submission`);
+  assert.ok(deskBlocks[id].includes("acceptsPrivateKeys: false"), `${id} must not accept private keys`);
+  assert.ok(deskBlocks[id].includes("acceptsApiSecrets: false"), `${id} must not accept API secrets`);
+  assert.ok(deskBlocks[id].includes("acceptsRawSignatures: false"), `${id} must not accept raw signatures`);
+  assert.ok(deskBlocks[id].includes("acceptsSignedPayloads: false"), `${id} must not accept signed payloads`);
+}
+
+// 23. Wellness is workflow-only and not Web3/medical/payment/email/hosting live.
+assert.ok(deskBlocks.wellness.includes('status: "workflow_ready"'), "Wellness must be workflow_ready");
+assert.ok(deskBlocks.wellness.includes('actionStatus: "workflow_only"'), "Wellness actionStatus must be workflow_only");
+assert.ok(deskBlocks.wellness.includes('backendStatus: "static_catalog"'), "Wellness backendStatus must be static_catalog");
+assert.ok(deskBlocks.wellness.includes('walletRailMode: "none"'), "Wellness must require no wallet");
+const wellnessStatusLower = deskBlocks.wellness.toLowerCase();
+for (const phrase of ["non-medical", "educational"]) {
+  assert.ok(wellnessStatusLower.includes(phrase), `Wellness must include "${phrase}"`);
+}
+for (const forbidden of ["live payment", "live email", "live hosting"]) {
+  assert.equal(
+    wellnessStatusLower.includes(forbidden),
+    false,
+    `Wellness must not mention "${forbidden}"`,
+  );
+}
+
+// 24. MCPs desk is disabled as a backend and requires user setup for extensions.
+assert.ok(deskBlocks.mcps.includes('backendStatus: "disabled"'), "MCPs backendStatus must be disabled");
+assert.ok(deskBlocks.mcps.includes('extensionStatus: "requires_setup"'), "MCPs extensionStatus must be requires_setup");
+
+// 25. Every desk exposes capability bullets, safety summary, and suggested prompt titles.
 for (const id of expectedDeskIds) {
   const bulletsMatch = deskBlocks[id].match(/capabilityBullets:\s*\[([\s\S]*?)\]/);
   assert.ok(bulletsMatch, `${id} must include capabilityBullets`);
