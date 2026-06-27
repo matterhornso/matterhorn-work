@@ -29,6 +29,7 @@ interface ProtocolDeskManifest {
   launcherPrompt: string;
   rightRailSummary: string;
   logoAssetId: string;
+  officialLogoAssetId: string;
   logoAlt: string;
   category: "web3" | "bittensor" | "markets" | "wellness" | "memory" | "mcps";
   status: "beta_ready" | "preview_only" | "workflow_ready" | "planned_not_live";
@@ -49,6 +50,8 @@ interface ProtocolDeskManifest {
   customerVisible: boolean;
   capabilityBullets: string[];
   safetySummary: string;
+  customerCapabilitySummary: string;
+  noCustodySafetyLine: string;
   suggestedPromptTitles: string[];
   emptyStateCopy: {
     headline: string;
@@ -171,6 +174,7 @@ Each desk exposes launcher-ready copy:
 | `launcherPrompt` | Suggested chat prompt shown in the launcher |
 | `rightRailSummary` | Short summary for the right rail or empty state |
 | `logoAssetId` | Canonical logo asset identity |
+| `officialLogoAssetId` | Canonical logo asset key for the desk |
 | `logoAlt` | Alt text for the desk logo |
 | `readinessTone` | Visual readiness tone: `beta_ready`, `preview_only`, `workflow_ready`, `local_only` |
 | `statusBadgeLabel` | Badge text (e.g., "Beta", "Preview") |
@@ -178,6 +182,8 @@ Each desk exposes launcher-ready copy:
 | `primaryActionLabel` | Default CTA label for the desk's primary action |
 | `capabilityBullets` | Array of plain-language capability bullets |
 | `safetySummary` | Short safety summary emphasizing non-custodial behavior |
+| `customerCapabilitySummary` | Plain-language summary of what the desk can do |
+| `noCustodySafetyLine` | Short safety line emphasizing non-custodial behavior |
 | `suggestedPromptTitles` | Array of beginner-friendly prompt titles for the launcher |
 | `walletRailMode` | Simplified wallet UX mode: `external_signer`, `evm_preview`, `none` |
 | `customerVisible` | Whether the desk should appear in customer-facing surfaces |

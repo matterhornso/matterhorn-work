@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const SUPPORT_EMAIL = "team@openworklabs.com";
+const SUPPORT_EMAIL = "support@matterhorn.work";
 const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}?subject=Matterhorn%20Den%20remote%20worker%20upgrade`;
 
 /**

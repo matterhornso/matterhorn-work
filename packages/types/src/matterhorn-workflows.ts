@@ -3001,6 +3001,7 @@ export interface ProtocolDeskManifest {
   launcherPrompt: string;
   rightRailSummary: string;
   logoAssetId: string;
+  officialLogoAssetId: string;
   logoAlt: string;
   category: ProtocolDeskCategory;
   status: ProtocolDeskVisualStatus;
@@ -3021,6 +3022,8 @@ export interface ProtocolDeskManifest {
   customerVisible: boolean;
   capabilityBullets: string[];
   safetySummary: string;
+  customerCapabilitySummary: string;
+  noCustodySafetyLine: string;
   suggestedPromptTitles: string[];
   emptyStateCopy: {
     headline: string;
@@ -3071,6 +3074,7 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Show my TAO or compare validators on subnet 1",
   rightRailSummary: "External signer required. Paste a public SS58 address to preview staking and delegation handoffs.",
   logoAssetId: "bittensor-logo",
+  officialLogoAssetId: "bittensor-logo",
   logoAlt: "Bittensor TAO logo",
   category: "bittensor",
   status: "beta_ready",
@@ -3163,6 +3167,8 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Watch subnets and import public receipts",
   ],
   safetySummary: "External signer required. Matterhorn never holds your coldkey, hotkey, or seed phrase.",
+  customerCapabilitySummary: "Read TAO balances, stake allocations, subnet data, and validator comparisons. Prepare stake, unstake, and transfer handoffs for external signing.",
+  noCustodySafetyLine: "Matterhorn never holds your coldkey, hotkey, or seed phrase. All on-chain actions are signed outside the app.",
   suggestedPromptTitles: [
     "Show my TAO",
     "Where am I staked?",
@@ -3191,6 +3197,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
   rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
   logoAssetId: "hyperliquid-logo",
+  officialLogoAssetId: "hyperliquid-logo",
   logoAlt: "Hyperliquid logo",
   category: "markets",
   status: "preview_only",
@@ -3275,6 +3282,8 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Manage market watches and receipts",
   ],
   safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
   suggestedPromptTitles: [
     "Show BTC-PERP on Hyperliquid",
     "Preview a BTC long",
@@ -3303,6 +3312,7 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Find Polymarket markets about AI",
   rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
   logoAssetId: "polymarket-logo",
+  officialLogoAssetId: "polymarket-logo",
   logoAlt: "Polymarket logo",
   category: "markets",
   status: "preview_only",
@@ -3387,6 +3397,8 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Manage market watches and receipts",
   ],
   safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
   suggestedPromptTitles: [
     "Find markets about AI",
     "Show probabilities for this market",
@@ -3415,6 +3427,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Create a 4-week beginner strength plan",
   rightRailSummary: "Workflow-ready desk. No account or keys required. Generates educational content only, not medical advice.",
   logoAssetId: "wellness-logo",
+  officialLogoAssetId: "wellness-logo",
   logoAlt: "Wellness Creator logo",
   category: "wellness",
   status: "workflow_ready",
@@ -3499,6 +3512,8 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Plan future live-service integrations",
   ],
   safetySummary: "Educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
+  customerCapabilitySummary: "Build educational, non-medical wellness programs, generate client artifacts, and package services through chat. No Web3 trading required.",
+  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process live payments, send email, host sites, or access external accounts.",
   suggestedPromptTitles: [
     "Create a 4-week strength plan",
     "Draft a yoga class for lower backs",
@@ -3527,6 +3542,7 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Show my saved memory",
   rightRailSummary: "User-controlled memory. Confirm, edit, or dismiss suggestions. Secrets and clinical records are rejected.",
   logoAssetId: "memory-logo",
+  officialLogoAssetId: "memory-logo",
   logoAlt: "Memory logo",
   category: "memory",
   status: "beta_ready",
@@ -3611,6 +3627,8 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Reject secrets and clinical records automatically",
   ],
   safetySummary: "User-controlled and visible. Nothing is hidden, auto-captured, or stored without explicit confirmation.",
+  customerCapabilitySummary: "Inspect, edit, and delete memory records and suggestions across desks. Export safe records and reject secrets or clinical data.",
+  noCustodySafetyLine: "Memory is user-controlled and visible. Nothing is hidden, auto-captured, or stored without explicit confirmation.",
   suggestedPromptTitles: [
     "Show my memory",
     "Review my suggestions",
@@ -3639,6 +3657,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherPrompt: "Browse available MCP tools",
   rightRailSummary: "Install and use surfaces only. MCP tools run with explicit approval and cannot hold keys or sign.",
   logoAssetId: "mcp-logo",
+  officialLogoAssetId: "mcp-logo",
   logoAlt: "MCP Tools logo",
   category: "mcps",
   status: "planned_not_live",
@@ -3715,6 +3734,8 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Run tools only with explicit approval",
   ],
   safetySummary: "Install-and-use only. Matterhorn does not grant tools keys, signing ability, or access to secrets.",
+  customerCapabilitySummary: "Browse, install, and manage approved MCP tools and their permissions. Tool execution requires explicit approval; no custody or signing.",
+  noCustodySafetyLine: "MCP tools are install-and-use only. Matterhorn does not grant them keys, signing ability, or access to secrets.",
   suggestedPromptTitles: [
     "Browse MCP tools",
     "Install an MCP tool",

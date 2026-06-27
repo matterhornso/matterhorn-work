@@ -470,7 +470,7 @@ V1 uses heavy `border-radius: 12px` on session cards with nested card grids insi
 ### Tablet 768–1199px
 
 - Left nav: 48px rail, icons only
-- Right rail: hidden, toggled as overlay panel
+- Right rail: hidden, toggled as overlay panel. No trapped right rail — overlay does not reflow main content or cause horizontal overflow.
 - Floating profile button: bottom-right corner
 - Stat tiles: 2-column wrap
 - Tables: horizontal scroll, first column sticky
@@ -478,12 +478,13 @@ V1 uses heavy `border-radius: 12px` on session cards with nested card grids insi
 ### Mobile <768px
 
 - Left nav: hidden
-- Right rail: absent
+- Right rail: absent — never present on mobile
 - Bottom tab bar: 5 tabs (Home, Bittensor, Hyperliquid, Polymarket, Wellness) + More (Settings)
 - Profile: avatar in top bar
 - Stat tiles: 1-column stack
 - Tables: horizontal scroll, first column sticky
-- Composer: fixed position, always above keyboard
+- Composer: fixed position, always above keyboard. Uses `visualViewport` API to detect keyboard open/close and avoid overlap.
+- No horizontal overflow: all content respects viewport width
 
 ---
 

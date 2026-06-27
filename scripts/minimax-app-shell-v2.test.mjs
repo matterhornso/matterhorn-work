@@ -383,6 +383,8 @@ const responsiveItems = [
   "2-column",
   "3-column",
   "visualViewport",
+  "overflow",
+  "trapped",
 ];
 for (const item of responsiveItems) {
   if (spec.includes(item)) {
@@ -483,6 +485,8 @@ const uiForbidden = [
   "treatment recommendation",
   "openwork",
   "opencodec",
+  "lighthouse",    // internal harness name — never customer-facing
+  "harness",      // internal framework name — never customer-facing
 ];
 for (const phrase of uiForbidden) {
   if (htmlForScan.toLowerCase().includes(phrase.toLowerCase())) {

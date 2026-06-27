@@ -364,23 +364,16 @@ function DeskLauncherButton({
     <button
       type="button"
       style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group relative isolate flex min-h-[188px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-4 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      className="matterhorn-desk-launcher group relative flex min-h-[164px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-4 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
       onClick={onOpen}
     >
-      <span
-        className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--matterhorn-desk-color),transparent)] opacity-80"
-        aria-hidden="true"
-      />
-      <span className="pointer-events-none absolute -right-8 -top-10 opacity-[0.055]" aria-hidden="true">
-        {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={160} /> : <Icon className="size-36 text-[var(--matterhorn-desk-color)]" />}
-      </span>
       <span className="relative flex min-h-full w-full flex-col">
         <span className="flex items-start gap-3">
-          <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-lg bg-dls-surface/85 text-[var(--matterhorn-desk-color)] shadow-sm">
-            {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={34} /> : <Icon className="size-5" />}
+          <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-md bg-dls-surface/85 text-[var(--matterhorn-desk-color)] shadow-sm">
+            {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={30} /> : <Icon className="size-4" />}
           </span>
           <span className="min-w-0">
-            <span className="block text-lg font-semibold leading-tight text-dls-text">
+            <span className="block text-base font-semibold leading-snug text-dls-text">
               {launcher.workspaceDisplayName ?? launcher.title}
             </span>
             <span className="mt-2 inline-flex rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
@@ -388,19 +381,19 @@ function DeskLauncherButton({
             </span>
           </span>
         </span>
-        <span className="mt-4 line-clamp-4 block text-[13px] leading-6 text-dls-secondary">{launcher.description}</span>
-        <span className="mt-4 grid gap-1.5">
+        <span className="mt-3 line-clamp-3 block text-[13px] leading-5 text-dls-secondary">{launcher.description}</span>
+        <span className="mt-3 flex flex-wrap gap-1.5">
           {capabilityItems.slice(0, 3).map((item) => (
             <span
               key={item}
-              className="flex items-center gap-2 text-[12px] font-medium text-dls-text"
+              className="inline-flex items-center gap-1.5 rounded-md bg-dls-surface/55 px-2 py-1 text-[11px] font-medium text-dls-text"
             >
               <span className="size-1.5 shrink-0 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
               <span>{item}</span>
             </span>
           ))}
         </span>
-        <span className="mt-auto pt-5 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+        <span className="mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
           Insert editable prompt
         </span>
         <span className="sr-only">{launcher.safetySummary}</span>
@@ -432,7 +425,7 @@ function HomeDeskLaunchers({
           No auto-send
         </span>
       </div>
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3">
         {protocolLaunchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
@@ -441,7 +434,7 @@ function HomeDeskLaunchers({
           />
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3">
         {businessLaunchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
@@ -1386,8 +1379,6 @@ export function SessionPage(props: SessionPageProps) {
                     </div>
                   ) : (
                     <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-7 sm:px-6 sm:py-9">
-                      <div className="pointer-events-none absolute left-1/2 top-8 h-40 w-[32rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.08),transparent_70%)] blur-3xl" aria-hidden="true" />
-                      <div className="pointer-events-none absolute right-10 top-1/3 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.055),transparent_72%)] blur-3xl" aria-hidden="true" />
                       <div className="relative w-full max-w-5xl space-y-5">
                         <div className="mx-auto max-w-2xl space-y-2 text-center">
                           <h2 className="text-2xl font-semibold text-dls-text sm:text-[1.72rem]">
