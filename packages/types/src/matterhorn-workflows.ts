@@ -2955,6 +2955,31 @@ export const PROTOCOL_DESK_READINESS_TONES = [
 ] as const;
 export type ProtocolDeskReadinessTone = (typeof PROTOCOL_DESK_READINESS_TONES)[number];
 
+export const PROTOCOL_DESK_BACKEND_STATUSES = [
+  "live",
+  "partial",
+  "preview",
+  "static_catalog",
+  "disabled",
+] as const;
+export type ProtocolDeskBackendStatus = (typeof PROTOCOL_DESK_BACKEND_STATUSES)[number];
+
+export const PROTOCOL_DESK_ACTION_STATUSES = [
+  "read_only",
+  "preview_only",
+  "external_signer",
+  "workflow_only",
+] as const;
+export type ProtocolDeskActionStatus = (typeof PROTOCOL_DESK_ACTION_STATUSES)[number];
+
+export const PROTOCOL_DESK_EXTENSION_STATUSES = [
+  "built_in_live",
+  "built_in_partial",
+  "static_catalog",
+  "requires_setup",
+] as const;
+export type ProtocolDeskExtensionStatus = (typeof PROTOCOL_DESK_EXTENSION_STATUSES)[number];
+
 export interface ProtocolDeskAction {
   actionId: string;
   label: string;
@@ -3006,6 +3031,9 @@ export interface ProtocolDeskManifest {
   category: ProtocolDeskCategory;
   status: ProtocolDeskVisualStatus;
   readinessTone: ProtocolDeskReadinessTone;
+  backendStatus: ProtocolDeskBackendStatus;
+  actionStatus: ProtocolDeskActionStatus;
+  extensionStatus: ProtocolDeskExtensionStatus;
   statusBadgeLabel: string;
   statusBadgeTone: ProtocolDeskStatusBadgeTone;
   routeOrPanelId: string;
@@ -3079,6 +3107,9 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "bittensor",
   status: "beta_ready",
   readinessTone: "beta_ready",
+  backendStatus: "partial",
+  actionStatus: "external_signer",
+  extensionStatus: "built_in_partial",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/workspaces/bittensor",
@@ -3202,6 +3233,9 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "markets",
   status: "preview_only",
   readinessTone: "preview_only",
+  backendStatus: "preview",
+  actionStatus: "preview_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/hyperliquid",
@@ -3317,6 +3351,9 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "markets",
   status: "preview_only",
   readinessTone: "preview_only",
+  backendStatus: "preview",
+  actionStatus: "preview_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/polymarket",
@@ -3432,6 +3469,9 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "wellness",
   status: "workflow_ready",
   readinessTone: "workflow_ready",
+  backendStatus: "static_catalog",
+  actionStatus: "workflow_only",
+  extensionStatus: "static_catalog",
   statusBadgeLabel: "Ready",
   statusBadgeTone: "info",
   routeOrPanelId: "/workspaces/wellness",
@@ -3513,7 +3553,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   ],
   safetySummary: "Educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
   customerCapabilitySummary: "Build educational, non-medical wellness programs, generate client artifacts, and package services through chat. No Web3 trading required.",
-  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process live payments, send email, host sites, or access external accounts.",
+  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
   suggestedPromptTitles: [
     "Create a 4-week strength plan",
     "Draft a yoga class for lower backs",
@@ -3547,6 +3587,9 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "memory",
   status: "beta_ready",
   readinessTone: "beta_ready",
+  backendStatus: "live",
+  actionStatus: "read_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/memory",
@@ -3662,6 +3705,9 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   category: "mcps",
   status: "planned_not_live",
   readinessTone: "local_only",
+  backendStatus: "disabled",
+  actionStatus: "workflow_only",
+  extensionStatus: "requires_setup",
   statusBadgeLabel: "Soon",
   statusBadgeTone: "neutral",
   routeOrPanelId: "/mcps",
