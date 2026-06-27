@@ -67,6 +67,7 @@
     "test:minimax-desk-system": "node scripts/minimax-desk-system.test.mjs",
     "test:minimax-ui-system": "node scripts/minimax-ui-system.test.mjs",
     "test:minimax-desk-v2": "node scripts/minimax-desk-v2.test.mjs",
+    "test:minimax-app-shell-v2": "node scripts/minimax-app-shell-v2.test.mjs",
     "test:minimax-customer-beta-qa-pack": "node scripts/minimax-customer-beta-qa-pack.test.mjs",
     "test:use-case-demo-pack": "node scripts/use-case-demo-pack.test.mjs",
     "test:minimax-chat-perspectives-media-nft": "node scripts/minimax-chat-perspectives-media-nft.test.mjs",

@@ -517,7 +517,7 @@ Set via `data-theme="light"` on `<html>`. Background `#F5F5F5`, surface `#FFFFFF
 | Element | Behavior |
 |---------|----------|
 | Left nav | 48px, icons only |
-| Right rail | Hidden, FAB toggles overlay |
+| Right rail | Hidden, FAB toggles overlay. No trapped right rail — overlay does not reflow main content or cause horizontal overflow. |
 | Cards | 2-column grid |
 | Tables | Horizontal scroll, first column sticky |
 

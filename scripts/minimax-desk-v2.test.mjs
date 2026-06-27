@@ -454,6 +454,25 @@ if (rubric.includes("Right Rail") || rubric.includes("right rail")) {
   fail("QA Rubric: right rail checks present", "missing");
 }
 
+// Responsive layout checks — no overflow, no trapped rail, no composer overlap
+const responsiveChecks = [
+  ["overflow",              "SPEC.md: no horizontal overflow documented"],
+  ["trapped",              "SPEC.md: no trapped right rail documented"],
+  ["right rail",           "SPEC.md: right rail responsive behavior documented"],
+  ["768px",                "SPEC.md: 768px breakpoint documented"],
+  ["390",                  "SPEC.md: mobile viewport (390px) documented"],
+  ["visualViewport",       "SPEC.md: visualViewport API documented"],
+  ["composer",             "SPEC.md: bottom composer documented"],
+  ["mobile",               "SPEC.md: mobile responsive documented"],
+];
+for (const [needle, label] of responsiveChecks) {
+  if (spec.includes(needle)) {
+    pass(`Responsive: ${label}`);
+  } else {
+    fail(`Responsive: ${label}`, "missing");
+  }
+}
+
 // ── 11. Forbidden copy scan ─────────────────────────────────────
 // The "Do Not Build" screen intentionally lists forbidden phrases as
 // documentation text. We strip that screen before scanning.
@@ -485,6 +504,8 @@ const strictForbidden = [
   "medical diagnosis",
   "prescription",
   "treatment recommendation",
+  "lighthouse",     // internal harness name — never customer-facing
+  "harness",        // internal framework name — never customer-facing
 ];
 for (const phrase of strictForbidden) {
   if (htmlClean.toLowerCase().includes(phrase.toLowerCase())) {
