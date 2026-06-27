@@ -290,41 +290,41 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-10"
+      className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-7 sm:px-6 sm:py-9"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="flex items-start gap-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)] text-[var(--matterhorn-desk-color)]">
+      <div className="flex items-start gap-3">
+        <span className="flex size-11 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
           <ProtocolLogo venue={panel} size={40} />
         </span>
         <div className="min-w-0">
-          <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+          <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">
             {visual?.displayName ?? panel} desk
           </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
             {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
           </p>
         </div>
       </div>
 
-      <div className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text">
-        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Safety boundary:</span> {safeBoundary}
-      </div>
+      <p className="matterhorn-focused-desk-boundary border-y border-dls-border/55 py-3 text-sm leading-6 text-dls-secondary">
+        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
+      </p>
 
-      <div className="divide-y divide-dls-border/55">
+      <div className="matterhorn-focused-desk-prompt-list divide-y divide-dls-border/45">
         {prompts.map((item) => (
           <button
             key={item.title}
             type="button"
-            className="group flex w-full items-center justify-between gap-4 px-1 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-1 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             onClick={() => onUsePrompt(item.prompt)}
           >
-            <span>
+            <span className="min-w-0">
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="shrink-0 text-xs font-semibold text-[var(--matterhorn-desk-color)]">Use prompt</span>
+            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Draft in chat</span>
           </button>
         ))}
       </div>

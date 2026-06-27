@@ -367,6 +367,10 @@ assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-6"), "empty session l
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
 assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary border-y border-dls-border/55"), "focused desk safety copy should use a compact boundary line instead of a nested card");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list divide-y divide-dls-border/45"), "focused desk prompts should render as command rows");
+assert.ok(sessionPage.includes("Draft in chat"), "focused desk prompt rows should clarify that prompts are drafted, not auto-sent");
+assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "starter workflow grid should use compact container-safe auto-fit cards");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
