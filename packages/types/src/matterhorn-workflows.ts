@@ -2947,6 +2947,14 @@ export const PROTOCOL_DESK_STATUS_BADGE_TONES = [
 ] as const;
 export type ProtocolDeskStatusBadgeTone = (typeof PROTOCOL_DESK_STATUS_BADGE_TONES)[number];
 
+export const PROTOCOL_DESK_READINESS_TONES = [
+  "beta_ready",
+  "preview_only",
+  "workflow_ready",
+  "local_only",
+] as const;
+export type ProtocolDeskReadinessTone = (typeof PROTOCOL_DESK_READINESS_TONES)[number];
+
 export interface ProtocolDeskAction {
   actionId: string;
   label: string;
@@ -2992,8 +3000,11 @@ export interface ProtocolDeskManifest {
   launcherDescription: string;
   launcherPrompt: string;
   rightRailSummary: string;
+  officialLogoAssetId: string;
+  logoAlt: string;
   category: ProtocolDeskCategory;
   status: ProtocolDeskVisualStatus;
+  readinessTone: ProtocolDeskReadinessTone;
   statusBadgeLabel: string;
   statusBadgeTone: ProtocolDeskStatusBadgeTone;
   routeOrPanelId: string;
@@ -3002,11 +3013,15 @@ export interface ProtocolDeskManifest {
   lightThemeTokenHints: ProtocolDeskThemeTokenHints;
   darkThemeTokenHints: ProtocolDeskThemeTokenHints;
   primaryActions: ProtocolDeskAction[];
+  primaryActionLabel: string;
   secondaryActions: ProtocolDeskAction[];
   walletRequirements: ProtocolDeskWalletRequirement[];
   walletRailMode: ProtocolDeskWalletRailMode;
   safetyBoundaries: ProtocolDeskSafetyBoundaries;
   customerVisible: boolean;
+  customerCapabilitySummary: string;
+  noCustodySafetyLine: string;
+  suggestedPromptTitles: string[];
   emptyStateCopy: {
     headline: string;
     body: string;
@@ -3055,8 +3070,11 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Stake, delegate, and monitor TAO with read-only previews and external-signer handoffs.",
   launcherPrompt: "Show my TAO or compare validators on subnet 1",
   rightRailSummary: "External signer required. Paste a public SS58 address to preview staking and delegation handoffs.",
+  officialLogoAssetId: "bittensor-logo",
+  logoAlt: "Bittensor TAO logo",
   category: "bittensor",
   status: "beta_ready",
+  readinessTone: "beta_ready",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/workspaces/bittensor",
@@ -3102,6 +3120,7 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Preview or hand off",
   secondaryActions: [
     {
       actionId: "compare-validators",
@@ -3137,6 +3156,14 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Read TAO balances, stake allocations, subnet data, and validator comparisons. Prepare stake, unstake, and transfer handoffs for external signing.",
+  noCustodySafetyLine: "Matterhorn never holds your coldkey, hotkey, or seed phrase. All on-chain actions are signed outside the app.",
+  suggestedPromptTitles: [
+    "Show my TAO",
+    "Where am I staked?",
+    "Compare validators on subnet 1",
+    "Prepare staking 1 TAO",
+  ],
   emptyStateCopy: {
     headline: "Connect a Bittensor wallet",
     body: "Paste a public SS58 address or connect an external signer to preview staking and delegation. Private keys and seed phrases are never accepted.",
@@ -3155,11 +3182,14 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   displayName: "Hyperliquid",
   shortDescription: "Read-only perp market previews and watchlists.",
   launcherTitle: "Hyperliquid",
-  launcherDescription: "Preview perp markets and manage watchlists. No signing or submission.",
+  launcherDescription: "Preview perp markets and manage watchlists. Read-only.",
   launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
   rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
+  officialLogoAssetId: "hyperliquid-logo",
+  logoAlt: "Hyperliquid logo",
   category: "markets",
   status: "preview_only",
+  readinessTone: "preview_only",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/hyperliquid",
@@ -3205,6 +3235,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Preview market",
   secondaryActions: [
     {
       actionId: "show-exposure",
@@ -3232,9 +3263,17 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  suggestedPromptTitles: [
+    "Show BTC-PERP on Hyperliquid",
+    "Preview a BTC long",
+    "Show my Hyperliquid exposure",
+    "Watch BTC funding",
+  ],
   emptyStateCopy: {
     headline: "Preview Hyperliquid markets",
-    body: "Enter a public wallet address or market to generate a read-only preview. No signing or submission.",
+    body: "Enter a public wallet address or market to generate a read-only preview.",
     primaryActionId: "preview-trade",
   },
   degradedStateCopy: {
@@ -3250,11 +3289,14 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   displayName: "Polymarket",
   shortDescription: "Read-only prediction market research and previews.",
   launcherTitle: "Polymarket",
-  launcherDescription: "Research prediction markets and preview positions. No betting or signing.",
+  launcherDescription: "Research prediction markets and preview positions. Read-only.",
   launcherPrompt: "Find Polymarket markets about AI",
   rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
+  officialLogoAssetId: "polymarket-logo",
+  logoAlt: "Polymarket logo",
   category: "markets",
   status: "preview_only",
+  readinessTone: "preview_only",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/polymarket",
@@ -3300,6 +3342,7 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Research market",
   secondaryActions: [
     {
       actionId: "show-orderbook",
@@ -3327,9 +3370,17 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  suggestedPromptTitles: [
+    "Find markets about AI",
+    "Show probabilities for this market",
+    "Preview a yes position",
+    "Watch this market",
+  ],
   emptyStateCopy: {
     headline: "Research Polymarket",
-    body: "Search markets or enter a public wallet address for read-only research. No betting or signing.",
+    body: "Search markets or enter a public wallet address for read-only research.",
     primaryActionId: "research-market",
   },
   degradedStateCopy: {
@@ -3348,8 +3399,11 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Build educational, non-medical wellness programs and service packages through chat.",
   launcherPrompt: "Create a 4-week beginner strength plan",
   rightRailSummary: "Workflow-ready desk. No wallet required. Generates educational content only, not medical advice.",
+  officialLogoAssetId: "wellness-logo",
+  logoAlt: "Wellness Creator logo",
   category: "wellness",
   status: "workflow_ready",
+  readinessTone: "workflow_ready",
   statusBadgeLabel: "Ready",
   statusBadgeTone: "info",
   routeOrPanelId: "/workspaces/wellness",
@@ -3395,6 +3449,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Build program",
   secondaryActions: [
     {
       actionId: "generate-artifacts",
@@ -3422,6 +3477,14 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Build educational, non-medical wellness programs, generate client artifacts, and package services through chat. No wallet or Web3 required.",
+  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process live payments, send email, host sites, or access external accounts.",
+  suggestedPromptTitles: [
+    "Create a 4-week strength plan",
+    "Draft a yoga class for lower backs",
+    "Generate a meal-planning template",
+    "Package this as a service offer",
+  ],
   emptyStateCopy: {
     headline: "Build a wellness program",
     body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
@@ -3443,8 +3506,11 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Review and manage what Matterhorn remembers across desks. Editable and forgettable.",
   launcherPrompt: "Show my saved memory",
   rightRailSummary: "User-controlled memory. Confirm, edit, or dismiss suggestions. Secrets and clinical records are rejected.",
+  officialLogoAssetId: "memory-logo",
+  logoAlt: "Memory logo",
   category: "memory",
   status: "beta_ready",
+  readinessTone: "beta_ready",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/memory",
@@ -3490,6 +3556,7 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Review memory",
   secondaryActions: [
     {
       actionId: "forget-record",
@@ -3517,6 +3584,14 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Inspect, edit, and delete memory records and suggestions across desks. Export safe records and reject secrets or clinical data.",
+  noCustodySafetyLine: "Memory is user-controlled and visible. Nothing is hidden, auto-captured, or stored without explicit confirmation.",
+  suggestedPromptTitles: [
+    "Show my memory",
+    "Review my suggestions",
+    "Forget my wallet labels",
+    "Export my safe memory",
+  ],
   emptyStateCopy: {
     headline: "Nothing saved yet",
     body: "As you confirm suggestions across desks, safe, editable memory will appear here. Secrets and clinical records are rejected.",
@@ -3538,8 +3613,11 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Browse, install, and manage approved MCP tools. No custody or signing.",
   launcherPrompt: "Browse available MCP tools",
   rightRailSummary: "Install and use surfaces only. MCP tools run with explicit approval and cannot hold keys or sign.",
+  officialLogoAssetId: "mcp-logo",
+  logoAlt: "MCP Tools logo",
   category: "mcps",
   status: "planned_not_live",
+  readinessTone: "preview_only",
   statusBadgeLabel: "Soon",
   statusBadgeTone: "neutral",
   routeOrPanelId: "/mcps",
@@ -3577,6 +3655,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Browse tools",
   secondaryActions: [
     {
       actionId: "manage-permissions",
@@ -3604,6 +3683,14 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  customerCapabilitySummary: "Browse, install, and manage approved MCP tools and their permissions. Tool execution requires explicit approval; no custody or signing.",
+  noCustodySafetyLine: "MCP tools are install-and-use only. Matterhorn does not grant them keys, signing ability, or access to secrets.",
+  suggestedPromptTitles: [
+    "Browse MCP tools",
+    "Install an MCP tool",
+    "Show my MCP permissions",
+    "How do MCP tools work?",
+  ],
   emptyStateCopy: {
     headline: "MCP tools coming soon",
     body: "Browse, approve, and manage MCP tool integrations once this desk goes live. No secrets or custody required.",
