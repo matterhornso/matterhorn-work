@@ -30,6 +30,8 @@ export type ExtensionCardProps = {
   hidden?: boolean;
   /** Whether this extension is still in preview. */
   preview?: boolean;
+  /** Honest availability/readiness label, e.g. Built-in beta, Preview-only, Requires setup. */
+  statusHint?: string;
   /** Reason this item is visible but unavailable. */
   disabledReason?: string | null;
   /** Action label shown at bottom. */
@@ -74,6 +76,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
     disabled = false,
     hidden = false,
     preview = false,
+    statusHint,
     disabledReason = null,
     actionLabel,
     onClick,
@@ -109,8 +112,8 @@ export function ExtensionCard(props: ExtensionCardProps) {
             {connecting ? (
               <Loader2 size={18} className="animate-spin text-dls-secondary" />
             ) : resolvedIconSrc ? (
-              <div className="flex size-6 items-center justify-center rounded-md bg-white">
-                <img src={resolvedIconSrc} alt="" width={16} height={16} loading="lazy" style={{ display: "block" }} />
+              <div className="flex size-8 items-center justify-center rounded-md bg-white/95">
+                <img src={resolvedIconSrc} alt="" width={24} height={24} loading="lazy" style={{ display: "block" }} />
               </div>
             ) : iconSlug ? (
               <div className="flex size-6 items-center justify-center rounded-md bg-white">
@@ -158,6 +161,11 @@ export function ExtensionCard(props: ExtensionCardProps) {
             {preview ? (
               <span className="rounded-md bg-blue-3 px-1.5 py-0.5 text-[10px] font-medium text-blue-11">
                 Preview
+              </span>
+            ) : null}
+            {statusHint ? (
+              <span className="shrink-0 rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
+                {statusHint}
               </span>
             ) : null}
             {disabledReason ? (

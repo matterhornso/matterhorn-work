@@ -449,6 +449,8 @@ for (const phrase of [
 for (const phrase of [
   "Matterhorn MCPs",
   "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
+  "Matterhorn MCP cards are real installable command profiles.",
+  "Marketplace connectors below may require account auth, local config, or API keys before their tools are active.",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
@@ -473,6 +475,16 @@ for (const phrase of [
   "No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
+}
+
+for (const phrase of [
+  "statusHint",
+  "Built-in beta",
+  "Built-in preview",
+  "Needs API key",
+  "Requires setup",
+]) {
+  assert.ok(`${settingsRoute}\n${read("apps/app/src/react-app/design-system/extension-card.tsx")}`.includes(phrase), `MCP connector cards should expose honest availability labels: ${phrase}`);
 }
 
 for (const phrase of [
