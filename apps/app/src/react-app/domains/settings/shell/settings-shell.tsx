@@ -29,7 +29,6 @@ import {
   getSettingsTabStatus,
   getWorkspaceSettingsTabs,
 } from "./settings-page";
-import { WorkspaceIcon } from "../../../design-system/workspace-icon";
 
 type SettingsPageFrameProps = Omit<React.ComponentProps<typeof SettingsPage>, "children">;
 
@@ -63,12 +62,6 @@ export function SettingsShell(props: SettingsShellProps) {
               activeTab={props.activeTab}
               developerMode={props.developerMode}
               onSelectTab={props.onSelectTab}
-            />
-            <WorkspaceMenu
-              selectedWorkspaceId={props.selectedWorkspaceId}
-              selectedWorkspaceName={props.selectedWorkspaceName}
-              workspaces={props.workspaces}
-              onSelectWorkspace={props.onSelectWorkspace}
             />
           </div>
           <Button
@@ -221,34 +214,6 @@ function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "
               );
             })}
           </DropdownMenuGroup>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function WorkspaceMenu(props: Pick<SettingsShellProps, "selectedWorkspaceId" | "selectedWorkspaceName" | "workspaces" | "onSelectWorkspace">) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={(
-          <Button variant="ghost" size="sm" className="min-w-0 max-w-36 justify-start gap-2 text-dls-secondary">
-            <WorkspaceIcon seed={props.selectedWorkspaceName} sizeClass="size-4" />
-            <span className="truncate">{props.selectedWorkspaceName}</span>
-            <ChevronDown className="ml-auto size-4 shrink-0" />
-          </Button>
-        )}
-      />
-      <DropdownMenuContent className="w-56">
-        {props.workspaces.map((workspace) => (
-          <DropdownMenuItem
-            key={workspace.id}
-            onClick={() => props.onSelectWorkspace(workspace.id)}
-            disabled={workspace.id === props.selectedWorkspaceId}
-          >
-            <WorkspaceIcon seed={workspace.name} sizeClass="size-4" />
-            <span className="truncate">{workspace.name}</span>
-          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
