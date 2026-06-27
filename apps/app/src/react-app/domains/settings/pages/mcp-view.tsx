@@ -961,39 +961,35 @@ function MatterhornMcpProductSection(props: {
         </p>
       </div>
 
-      <div className="grid gap-3 @4xl/matterhorn-mcps:grid-cols-2">
+      <div className="grid gap-3 @5xl/matterhorn-mcps:grid-cols-2">
         {props.cards.map((card) => (
           <article
             key={card.id}
-            className="min-w-0 rounded-xl bg-dls-surface/70 p-4 shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)] ring-1 ring-dls-border/30"
+            className="min-w-0 rounded-2xl bg-dls-surface/72 p-4 shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)] ring-1 ring-dls-border/25"
           >
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-xl bg-dls-surface-muted/60 ring-1 ring-dls-border/25">
-                {card.protocolDeskId ? (
-                  <ProtocolBrandLogo id={card.protocolDeskId} size={32} />
-                ) : (
-                  <Code2 size={16} className="text-dls-text" />
-                )}
+            <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-dls-surface-muted/70 ring-1 ring-dls-border/20">
+                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={34} /> : <Code2 size={16} className="text-dls-text" />}
               </div>
-              <div className="min-w-0 space-y-2">
+              <div className="min-w-0 space-y-1.5">
                 <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
                 <p className="text-xs leading-5 text-dls-secondary">{card.description}</p>
               </div>
             </div>
 
             <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-col gap-2 @lg/matterhorn-mcps:flex-row @lg/matterhorn-mcps:items-center @lg/matterhorn-mcps:justify-between">
                 <span className="text-xs font-medium text-dls-text">Install command</span>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-dls-hover px-2 py-1 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-dls-hover px-2.5 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                   onClick={() => props.onCopyCommand(card.command)}
                 >
                   <Copy size={13} />
-                  Copy install command
+                  <span className="truncate">Copy install command</span>
                 </button>
               </div>
-              <code className="block max-w-full overflow-x-auto rounded-lg bg-dls-hover/80 px-3 py-2 text-[11px] text-dls-text">
+              <code className="block max-w-full whitespace-pre-wrap break-words rounded-xl bg-dls-hover/80 px-3 py-2 text-[11px] leading-5 text-dls-text">
                 {card.command}
               </code>
               <div className="space-y-1">
