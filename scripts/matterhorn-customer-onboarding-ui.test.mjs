@@ -334,6 +334,10 @@ assert.equal(sessionPage.includes('label: "Services"'), false, "customer right r
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-6"), "empty session launcher should scroll instead of clipping beneath the composer");
+assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
+assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
+assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
+assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,230px),1fr))]"), "starter workflow grid should use container-safe auto-fit cards");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"), "protocol desk starter cards should use roomier container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");

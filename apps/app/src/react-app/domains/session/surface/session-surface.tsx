@@ -118,6 +118,88 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
 
 type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
 
+type MatterhornDeskPrompt = {
+  title: string;
+  detail: string;
+  prompt: string;
+};
+
+const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPrompt[]> = {
+  bittensor: [
+    {
+      title: "Show TAO balance",
+      detail: "Read a public SS58 coldkey balance and explain what the user can safely share.",
+      prompt: "Use Bittensor chat mode. Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      title: "Browse useful subnets",
+      detail: "Explain useful subnets in plain language, including image-generation options.",
+      prompt: "Use Bittensor chat mode. Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, source/freshness, and what public context would help narrow the choice.",
+    },
+    {
+      title: "Compare validators",
+      detail: "Compare validators on a subnet before staking, with risk notes and missing public context.",
+      prompt: "Use Bittensor chat mode. Compare validators on subnet 14. Show source, freshness, risks, and what public validator/coldkey context is needed before staking.",
+    },
+    {
+      title: "Prepare unsigned staking preview",
+      detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
+      prompt: "Use Bittensor chat mode. Prepare a staking preview for 1 TAO on subnet 14. Ask for public coldkey and validator hotkey if missing. This must stay unsigned and require an external Bittensor-compatible signer.",
+    },
+  ],
+  hyperliquid: [
+    {
+      title: "Read orderbook context",
+      detail: "Summarize spread, depth, and stale-data warnings without submission.",
+      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain this is read/preview-only with Can submit: No and Live submission: Off.",
+    },
+    {
+      title: "Summarize exposure",
+      detail: "Use public/read-only account context only; never ask for exchange secrets.",
+      prompt: "Use Hyperliquid chat mode. Summarize my read-only account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+    },
+    {
+      title: "Prepare preview handoff",
+      detail: "Create an external-client preview with submission disabled.",
+      prompt: "Use Hyperliquid chat mode. Prepare a preview-only order handoff for BTC. Keep Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+    },
+  ],
+  polymarket: [
+    {
+      title: "Research a market",
+      detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
+      prompt: "Use Polymarket chat mode. Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
+    },
+    {
+      title: "Check compliance",
+      detail: "If blocked, do not expose executable price, size, share, or order fields.",
+      prompt: "Use Polymarket chat mode. Check whether this market can be previewed safely. If compliance blocks the preview, do not show executable price, size, share, or order fields.",
+    },
+    {
+      title: "Prepare preview handoff",
+      detail: "Build a non-custodial wallet handoff while live submission stays off.",
+      prompt: "Use Polymarket chat mode. Prepare a preview-only external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+    },
+  ],
+  wellness: [
+    {
+      title: "Create service offer",
+      detail: "Package a trainer, yoga, or dietician offer without medical or live-service claims.",
+      prompt: "Use the Wellness workflow desk. Create a client-safe service offer packet for a personal trainer, yoga instructor, or dietician. Keep it educational, non-medical, and do not claim live payments, email, hosting, or token-gated access.",
+    },
+    {
+      title: "Build weekly plan",
+      detail: "Draft a safe weekly program artifact with boundaries and client check-in prompts.",
+      prompt: "Use the Wellness workflow desk. Draft a weekly client program plan and progress check-in packet. Include a non-medical disclaimer and avoid diagnosis, prescription, treatment claims, or guaranteed outcomes.",
+    },
+    {
+      title: "Prepare handoff packet",
+      detail: "Create a client handoff packet ready for review and export.",
+      prompt: "Use the Wellness workflow desk. Prepare a client handoff packet with onboarding notes, weekly plan, progress check-in, and follow-up message. Keep payments, email, storage, hosting, and access control planned-not-live.",
+    },
+  ],
+};
+
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
   const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
@@ -177,6 +259,65 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.sessionBoundary}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MatterhornDeskFocusedEmptyState({
+  mode,
+  onUsePrompt,
+}: {
+  mode: MatterhornDeskMode;
+  onUsePrompt: (prompt: string) => void | Promise<void>;
+}) {
+  const visual = getCustomerProtocolDeskVisual(mode);
+  const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
+  const prompts = MATTERHORN_DESK_EMPTY_PROMPTS[mode];
+  const boundary = mode === "bittensor"
+    ? "Public SS58/coldkey/hotkey context only. External signing is required for every action."
+    : mode === "wellness"
+      ? "Standalone wellness workflow. Educational only, non-medical, and no live payments/email/hosting."
+      : "Read and preview only. Can submit: No. Live submission: Off. External client required.";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6" style={deskToneStyle(iconHint)}>
+      <section className="w-full max-w-[920px] space-y-4">
+        <div className="flex items-start gap-4 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-4 py-4 ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.18)]">
+          <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.15)] text-[var(--matterhorn-desk-color)]">
+            {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text">{visual?.displayName ?? mode} session</h2>
+              <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2 py-1 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+                {visual?.statusLabel ?? "Focused"}
+              </span>
+            </div>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
+              {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a suggested prompt below, edit it in chat, then send when ready.
+            </p>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">{boundary}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
+          {prompts.map((item) => (
+            <button
+              key={item.title}
+              type="button"
+              className="group flex min-h-[126px] flex-col rounded-lg border border-white/[0.07] bg-dls-surface/72 px-4 py-4 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] hover:border-[rgba(var(--matterhorn-desk-rgb),0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              onClick={() => void onUsePrompt(item.prompt)}
+            >
+              <span className="text-[15px] font-semibold text-dls-text">{item.title}</span>
+              <span className="mt-2 text-[12px] leading-5 text-dls-secondary">{item.detail}</span>
+              <span className="mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                Insert editable prompt
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1539,6 +1680,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onDismiss={handleDismissError}
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
+                />
+              ) : activeDeskMode ? (
+                <MatterhornDeskFocusedEmptyState
+                  mode={activeDeskMode}
+                  onUsePrompt={typeComposerText}
                 />
               ) : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6 lg:justify-center">
