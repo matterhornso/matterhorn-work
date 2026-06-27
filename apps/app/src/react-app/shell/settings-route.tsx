@@ -2130,6 +2130,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 quickConnect={connectionsStore.quickConnect}
                 enablementContext={enablementContext}
                 builtInExtensionsDisabled={checkDesktopRestriction({ restriction: "allowBuiltInExtensions" })}
+                compact={props.embedded}
                 connectMcp={(entry) => {
                   void connectionsStore.connectMcp(entry);
                 }}

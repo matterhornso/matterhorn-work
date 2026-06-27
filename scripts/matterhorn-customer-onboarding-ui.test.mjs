@@ -31,6 +31,7 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
@@ -353,6 +354,10 @@ assert.ok(
   "MCP/settings rail should render through the compact settings slot",
 );
 assert.ok(
+  settingsSurfaceRoute.includes("compact={props.embedded}"),
+  "embedded settings should tell the MCP view to use compact right-rail layout",
+);
+assert.ok(
   sessionPage.includes('className="flex h-full min-h-0 flex-col overflow-hidden bg-background"'),
   "MCP/settings rail should avoid nested scrolling and let the compact settings surface own overflow",
 );
@@ -547,6 +552,41 @@ assert.equal(
   settingsRoute.includes("lg:grid-cols-2"),
   false,
   "MCP product cards should use container width, not viewport width, so the right rail remains single-column.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact ? "space-y-6" : "space-y-8 max-w-3xl"'),
+  "MCP view should remove full-page max-width spacing when it is embedded in the right rail.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact ? "grid min-w-0 gap-3"'),
+  "MCP product cards should force a single compact column inside the right rail.",
+);
+assert.ok(
+  settingsRoute.includes("compact={props.compact}"),
+  "MCP product cards should inherit the compact right-rail rendering mode.",
+);
+assert.equal(
+  settingsRoute.includes("shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)]"),
+  false,
+  "MCP product cards should not use dramatic card shadows in the right rail.",
+);
+assert.equal(
+  settingsRoute.includes("rounded-2xl bg-dls-surface/72"),
+  false,
+  "MCP product cards should avoid oversized boxy card radii.",
+);
+assert.ok(
+  settingsRoute.includes("break-all rounded-lg"),
+  "MCP install command blocks should wrap long commands instead of overflowing.",
+);
+assert.ok(
+  settingsRoute.includes("whitespace-normal break-all"),
+  "MCP tool chips should wrap long tool names instead of overlapping card content.",
+);
+assert.equal(
+  settingsRoute.includes("max-w-full truncate rounded-md"),
+  false,
+  "MCP tool chips should not truncate or collide in compact rail cards.",
 );
 
 for (const phrase of [

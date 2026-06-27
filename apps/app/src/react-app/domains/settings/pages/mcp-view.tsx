@@ -120,6 +120,8 @@ export type McpViewProps = {
   enablementContext?: import("../../../../app/enablement").EnablementContext;
   /** Organization policy restriction for Matterhorn Work-provided built-in extensions. */
   builtInExtensionsDisabled?: boolean;
+  /** Rendered inside the session right rail instead of the full Settings page. */
+  compact?: boolean;
 };
 
 const builtInExtensionDisabledReason = "Disabled by organization";
@@ -614,7 +616,7 @@ export function McpView(props: McpViewProps) {
   };
 
   return (
-    <section className="space-y-8 max-w-3xl w-full animate-in fade-in duration-300">
+    <section className={`${props.compact ? "space-y-6" : "space-y-8 max-w-3xl"} w-full animate-in fade-in duration-300`}>
       {showHeader ? (
         <McpViewHeader connectedCount={connectedCount} />
       ) : null}
@@ -634,6 +636,7 @@ export function McpView(props: McpViewProps) {
       <MatterhornMcpProductSection
         cards={MATTERHORN_MCP_PRODUCT_CARDS}
         onCopyCommand={copyMatterhornMcpCommand}
+        compact={props.compact}
       />
 
       <McpCustomAppCard onOpen={() => setAddMcpModalOpen(true)} />
@@ -948,6 +951,7 @@ function McpViewHeader(props: { connectedCount: number }) {
 function MatterhornMcpProductSection(props: {
   cards: MatterhornMcpProductCard[];
   onCopyCommand: (command: string) => void;
+  compact?: boolean;
 }) {
   return (
     <section className="@container/matterhorn-mcps space-y-4">
@@ -961,15 +965,18 @@ function MatterhornMcpProductSection(props: {
         </p>
       </div>
 
-      <div className="grid gap-3 @5xl/matterhorn-mcps:grid-cols-2">
+      <div className={props.compact ? "grid min-w-0 gap-3" : "grid min-w-0 gap-3 @5xl/matterhorn-mcps:grid-cols-2"}>
         {props.cards.map((card) => (
           <article
             key={card.id}
-            className="min-w-0 rounded-2xl bg-dls-surface/72 p-4 shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)] ring-1 ring-dls-border/25"
+            className={props.compact
+              ? "min-w-0 rounded-xl bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"
+              : "min-w-0 rounded-xl bg-dls-surface/72 p-4 ring-1 ring-dls-border/25"
+            }
           >
-            <div className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-dls-surface-muted/70 ring-1 ring-dls-border/20">
-                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={34} /> : <Code2 size={16} className="text-dls-text" />}
+            <div className={props.compact ? "grid min-w-0 grid-cols-[36px_minmax(0,1fr)] gap-2.5" : "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3"}>
+              <div className={props.compact ? "flex size-9 shrink-0 items-center justify-center rounded-lg bg-dls-surface-muted/70 ring-1 ring-dls-border/20" : "flex size-11 shrink-0 items-center justify-center rounded-lg bg-dls-surface-muted/70 ring-1 ring-dls-border/20"}>
+                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={props.compact ? 28 : 34} /> : <Code2 size={16} className="text-dls-text" />}
               </div>
               <div className="min-w-0 space-y-1.5">
                 <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
@@ -982,14 +989,14 @@ function MatterhornMcpProductSection(props: {
                 <span className="text-xs font-medium text-dls-text">Install command</span>
                 <button
                   type="button"
-                  className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-dls-hover px-2.5 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                  className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-md bg-dls-hover px-2.5 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                   onClick={() => props.onCopyCommand(card.command)}
                 >
                   <Copy size={13} />
                   <span className="truncate">Copy install command</span>
                 </button>
               </div>
-              <code className="block max-w-full whitespace-pre-wrap break-words rounded-xl bg-dls-hover/80 px-3 py-2 text-[11px] leading-5 text-dls-text">
+              <code className="block max-w-full whitespace-pre-wrap break-all rounded-lg bg-dls-hover/80 px-3 py-2 text-[11px] leading-5 text-dls-text">
                 {card.command}
               </code>
               <div className="space-y-1">
@@ -998,7 +1005,7 @@ function MatterhornMcpProductSection(props: {
                   {card.tools.map((tool) => (
                     <span
                       key={tool}
-                      className="max-w-full truncate rounded-md bg-dls-surface-muted/70 px-2 py-1 font-mono text-[10px] text-dls-secondary"
+                      className="max-w-full whitespace-normal break-all rounded-md bg-dls-surface-muted/70 px-2 py-1 font-mono text-[10px] text-dls-secondary"
                     >
                       {tool}
                     </span>
