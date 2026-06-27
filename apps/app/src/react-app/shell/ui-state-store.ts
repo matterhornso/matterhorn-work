@@ -19,6 +19,7 @@ export const SIDE_PANEL_ITEMS = [
   "artifacts",
   "extensions",
   "voice",
+  "profile",
   "memory",
   "wallet",
   "bittensor",

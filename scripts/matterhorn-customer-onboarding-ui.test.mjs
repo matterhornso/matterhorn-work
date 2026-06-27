@@ -23,6 +23,7 @@ const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows
 const protocolDeskUi = read("apps/app/src/react-app/domains/session/workflows/protocol-desk-ui.ts");
 const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
 const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
+const uiStateStore = read("apps/app/src/react-app/shell/ui-state-store.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
@@ -356,6 +357,27 @@ for (const phrase of [
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
 assert.ok(sessionPage.includes("onOpenWallet={() => setCurrentSidePanel(\"wallet\")}"), "status bar wallet button should open the real wallet panel");
+for (const phrase of [
+  '"profile"',
+  '"wallet"',
+]) {
+  assert.ok(uiStateStore.includes(phrase), `right rail side-panel state should persist ${phrase}`);
+}
+for (const phrase of [
+  "ProfileRailPanel",
+  'activeSidePanel === "profile"',
+  "profileRailActive",
+  'onClick={() => setCurrentSidePanel("profile")}',
+  'aria-pressed={profileRailActive}',
+  "Profile and account",
+  "Matterhorn Cloud account and local workspace status.",
+  "Account auth is separate from wallet signing.",
+  "Local desks, chats, and public protocol reads remain available offline.",
+  'activeSidePanel === "wallet"',
+  '<WalletPanel',
+]) {
+  assert.ok(sessionPage.includes(phrase), `right rail should expose real profile/wallet panels: ${phrase}`);
+}
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");
