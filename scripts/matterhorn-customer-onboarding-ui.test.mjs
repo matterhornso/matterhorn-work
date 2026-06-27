@@ -217,12 +217,28 @@ for (const phrase of [
   'aria-label={tooltipLabel}',
   'aria-label={`${t("composer.assistant_identity")} ${label}`}',
   'font-medium text-dls-text">{t("composer.assistant_identity")}',
+  "protocolDeskIdForComposerExtension",
+  "ProtocolBrandLogo",
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
 ]) {
   assert.ok(
     `${composer}\n${modelSelect}\n${sessionSurface}`.includes(phrase),
     `chat chrome should show Matterhorn identity while keeping model controls technical: ${phrase}`,
   );
 }
+
+assert.ok(
+  composer.includes("protocolDeskIdForComposerExtension(entry)") &&
+    composer.includes("return <ProtocolBrandLogo id={protocolDeskId} size={size} />;"),
+  "composer extension picker should render protocol logo assets before falling back to generic icons",
+);
+assert.ok(
+  composer.includes("extensionIcon({ name: entry.name }, 14)") &&
+    !composer.includes("<Plug size={14} className=\"mt-0.5 shrink-0 text-gray-9\" />"),
+  "active MCP rows should not hardcode generic plug icons when protocol logos can be inferred",
+);
 
 for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
