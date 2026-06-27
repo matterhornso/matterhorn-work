@@ -235,9 +235,9 @@ assert.ok(
   "composer extension picker should render protocol logo assets before falling back to generic icons",
 );
 assert.ok(
-  composer.includes("extensionIcon({ name: entry.name }, 14)") &&
+  composer.includes("extensionIcon(entry, 14)") &&
     !composer.includes("<Plug size={14} className=\"mt-0.5 shrink-0 text-gray-9\" />"),
-  "active MCP rows should not hardcode generic plug icons when protocol logos can be inferred",
+  "active MCP rows should pass the full entry instead of hardcoding generic plug icons",
 );
 
 for (const phrase of [
@@ -338,11 +338,16 @@ assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty des
 assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
-assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,230px),1fr))]"), "starter workflow grid should use container-safe auto-fit cards");
-assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"), "protocol desk starter cards should use roomier container-safe auto-fit columns");
+assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "starter workflow grid should use compact container-safe auto-fit cards");
+assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]"), "protocol desk starter cards should use compact container-safe auto-fit columns");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
+assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
+assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[104px] w-full rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), "home desk launchers should use compact tint rows instead of heavy cards");
+assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
+assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
+assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
 assert.ok(
   sessionPage.includes('activeSidePanel === "extensions" && props.settingsSlot'),
   "MCP/settings rail should render through the compact settings slot",

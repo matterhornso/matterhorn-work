@@ -1311,7 +1311,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                                 {activeMcpItems.map(({ entry, status }) => (
                                   <div key={entry.name} className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-gray-11">
                                     <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                                      {extensionIcon({ name: entry.name }, 14)}
+                                      {extensionIcon(entry, 14)}
                                     </div>
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
