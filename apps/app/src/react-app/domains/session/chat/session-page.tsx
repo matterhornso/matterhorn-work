@@ -12,15 +12,11 @@ import {
   Dumbbell,
   FileText,
   Globe,
-  LogIn,
-  LogOut,
   Mic2,
   PanelRightClose,
   Plus,
   Settings2,
   ShieldCheck,
-  User,
-  UserPlus,
   Wallet as WalletIcon,
   Zap,
 } from "lucide-react";
@@ -62,7 +58,6 @@ import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
 import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-store";
-import { useBetaAuth } from "../../auth";
 
 import { isElectronRuntime } from "../../../../app/utils";
 import { BrowserPanel } from "../browser/browser-panel";
@@ -120,85 +115,6 @@ const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof
 function ProtocolLogo({ venue, size = 18 }: { venue: VenueSidePanel; size?: number }) {
   const visual = getCustomerProtocolDeskVisual(venue);
   return <ProtocolBrandLogo id={venue} visual={visual} size={size} />;
-}
-
-function ProfileRailPanel({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const auth = useBetaAuth();
-  const displayName = auth.user?.name?.trim() || auth.user?.email?.trim() || "Matterhorn account";
-  const subtitle = auth.user?.email?.trim() ?? "Local workspaces stay available without signing in.";
-
-  return (
-    <section className="flex h-full min-h-0 flex-col overflow-y-auto bg-background px-6 py-6">
-      <div className="space-y-2">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-foreground">
-            {auth.isSignedIn ? <User size={18} /> : <Cloud size={18} />}
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Profile</h2>
-            <p className="text-sm text-muted-foreground">Matterhorn Cloud account and local workspace status.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-white/[0.08] bg-white/[0.03] p-4">
-        {!auth.isLoaded ? (
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <Cloud className="size-4 animate-pulse" />
-            Checking account state...
-          </div>
-        ) : auth.isSignedIn ? (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-foreground">{displayName}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
-            </div>
-            <div className="grid gap-2">
-              <Button variant="secondary" size="sm" className="justify-start" onClick={onOpenSettings}>
-                <Settings2 className="size-4" />
-                Open account settings
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start" onClick={auth.openSignIn}>
-                <Cloud className="size-4" />
-                Switch account
-              </Button>
-              <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => void auth.signOut()}>
-                <LogOut className="size-4" />
-                Sign out
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-medium text-foreground">Signed out</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Sign in to sync cloud workers and organization access. Local desks, chats, and public protocol reads remain available offline.
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Button variant="secondary" size="sm" className="justify-start" onClick={auth.openSignIn}>
-                <LogIn className="size-4" />
-                Sign in
-              </Button>
-              <Button variant="outline" size="sm" className="justify-start" onClick={auth.openSignUp}>
-                <UserPlus className="size-4" />
-                Create account
-              </Button>
-              <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={onOpenSettings}>
-                <Settings2 className="size-4" />
-                Account settings
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 rounded-lg border border-white/[0.08] bg-white/[0.025] p-4 text-xs leading-relaxed text-muted-foreground">
-        Account auth is separate from wallet signing. Matterhorn never asks for seed phrases, private keys, raw signatures, signed payloads, or wallet exports.
-      </div>
-    </section>
-  );
 }
 
 function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "memory" | "mcp"): CSSProperties {
@@ -614,6 +530,8 @@ export type SessionPageProps = {
   onAccessibleTargetsChange?: (targets: OpenTarget[]) => void;
   /** Settings content rendered inside the right pane when the settings rail icon is active. */
   settingsSlot?: React.ReactNode;
+  /** Settings content rendered inside the right pane for a specific compact settings route. */
+  settingsSlotForPath?: (initialPath: "cloud-account" | "wallet" | "extensions") => React.ReactNode;
 };
 
 function getSidebarInitialLoading(props: SessionPageSidebarProps) {
@@ -727,6 +645,15 @@ export function SessionPage(props: SessionPageProps) {
   const polymarketRailActive = activeSidePanel === "polymarket";
   const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
   const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const renderCompactSettingsRail = (initialPath: "cloud-account" | "wallet" | "extensions") => {
+    const slot = props.settingsSlotForPath?.(initialPath)
+      ?? (initialPath === "extensions" ? props.settingsSlot : null);
+    return slot ? (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        {slot}
+      </div>
+    ) : null;
+  };
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -1700,18 +1627,18 @@ export function SessionPage(props: SessionPageProps) {
                   maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
                   className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
-                  {activeSidePanel === "extensions" && props.settingsSlot ? (
-                    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-                      {props.settingsSlot}
-                    </div>
+                  {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+                    renderCompactSettingsRail("extensions")
                   ) : activeSidePanel === "voice" ? (
                     <VoicePanel
                       client={props.matterhornServerClient}
                       sessionId={props.selectedSessionId}
                       onClose={closeRightPane}
                     />
-                  ) : activeSidePanel === "profile" ? (
-                    <ProfileRailPanel onOpenSettings={props.onOpenSettings} />
+                  ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
+                    renderCompactSettingsRail("cloud-account")
+                  ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
+                    renderCompactSettingsRail("wallet")
                   ) : activeSidePanel === "memory" ? (
                     <MemoryPanel
                       client={props.matterhornServerClient}
@@ -1730,12 +1657,12 @@ export function SessionPage(props: SessionPageProps) {
                       onSelectTarget={openTarget}
                       onClose={closeRightPane}
                     />
-                  ) : activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel) ? (
+                  ) : isVenueSidePanel(activeSidePanel) ? (
                     <WalletPanel
                       store={wallet.store}
                       gasPriceGwei={sessionWallet.gasPriceGwei}
                       blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                      initialVenue={isVenueSidePanel(activeSidePanel) ? activeSidePanel : "bittensor"}
+                      initialVenue={activeSidePanel}
                     />
                   ) : (
                     <BrowserPanel onClose={closeRightPane} />

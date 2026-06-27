@@ -350,8 +350,8 @@ assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matt
 assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
 assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
 assert.ok(
-  sessionPage.includes('activeSidePanel === "extensions" && props.settingsSlot'),
-  "MCP/settings rail should render through the compact settings slot",
+  sessionPage.includes('activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot)'),
+  "MCP/settings rail should render through the compact path-aware settings slot",
 );
 assert.ok(
   settingsSurfaceRoute.includes("compact={props.embedded}"),
@@ -410,20 +410,26 @@ for (const phrase of [
   assert.ok(uiStateStore.includes(phrase), `right rail side-panel state should persist ${phrase}`);
 }
 for (const phrase of [
-  "ProfileRailPanel",
+  "settingsSlotForPath?:",
   'activeSidePanel === "profile"',
   "profileRailActive",
   'onClick={() => setCurrentSidePanel("profile")}',
   'aria-pressed={profileRailActive}',
   "Profile and account",
-  "Matterhorn Cloud account and local workspace status.",
-  "Account auth is separate from wallet signing.",
-  "Local desks, chats, and public protocol reads remain available offline.",
+  'renderCompactSettingsRail("cloud-account")',
   'activeSidePanel === "wallet"',
+  'renderCompactSettingsRail("wallet")',
+  'renderCompactSettingsRail("extensions")',
   '<WalletPanel',
 ]) {
   assert.ok(sessionPage.includes(phrase), `right rail should expose real profile/wallet panels: ${phrase}`);
 }
+assert.ok(sessionRoute.includes("const renderEmbeddedSettingsSurface"), "session route should expose reusable embedded settings panels to the right rail");
+assert.ok(sessionRoute.includes('settingsSlot={renderEmbeddedSettingsSurface("extensions")}'), "MCP rail should keep using embedded extensions settings");
+assert.ok(sessionRoute.includes("settingsSlotForPath={renderEmbeddedSettingsSurface}"), "Profile and Wallet rail buttons should open compact settings pages");
+assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
+assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
+assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");
