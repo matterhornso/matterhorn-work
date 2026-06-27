@@ -950,7 +950,7 @@ function MatterhornMcpProductSection(props: {
   onCopyCommand: (command: string) => void;
 }) {
   return (
-    <section className="space-y-4">
+    <section className="@container/matterhorn-mcps space-y-4">
       <div className="flex flex-col gap-1">
         <h3 className="text-lg font-semibold text-dls-text">Matterhorn MCPs</h3>
         <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
@@ -961,7 +961,7 @@ function MatterhornMcpProductSection(props: {
         </p>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-3 @4xl/matterhorn-mcps:grid-cols-2">
         {props.cards.map((card) => (
           <article
             key={card.id}
