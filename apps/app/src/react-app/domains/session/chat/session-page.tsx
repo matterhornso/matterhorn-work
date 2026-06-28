@@ -288,34 +288,46 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-7 sm:px-6 sm:py-9"
+      className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-10"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
-          <ProtocolLogo venue={panel} size={40} />
+      <div className="matterhorn-focused-desk-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
+        <span className="pointer-events-none absolute -right-9 -top-12 opacity-[0.08]" aria-hidden="true">
+          <ProtocolLogo venue={panel} size={170} />
         </span>
-        <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">
-            {visual?.displayName ?? panel} desk
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-            {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
-          </p>
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+              <ProtocolLogo venue={panel} size={52} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+                {visual?.displayName ?? panel} desk
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
+                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
+              </p>
+            </div>
+          </div>
+          <div className="matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+            <span>External signer</span>
+            <span>Editable prompts</span>
+            <span>No auto-send</span>
+          </div>
         </div>
       </div>
 
-      <p className="matterhorn-focused-desk-boundary border-y border-dls-border/55 py-3 text-sm leading-6 text-dls-secondary">
+      <p className="text-sm leading-6 text-dls-secondary">
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list divide-y divide-dls-border/45">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl bg-dls-surface/48">
         {prompts.map((item) => (
           <button
             key={item.title}
             type="button"
-            className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-1 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+            className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             onClick={() => onUsePrompt(item.prompt)}
           >
             <span className="min-w-0">

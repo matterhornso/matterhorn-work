@@ -282,36 +282,50 @@ function MatterhornDeskFocusedEmptyState({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6" style={deskToneStyle(iconHint)}>
-      <section className="w-full max-w-[920px] space-y-4">
-        <div className="flex items-start gap-4 rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-4 py-4 ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.18)]">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.15)] text-[var(--matterhorn-desk-color)]">
-            {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
+      <section className="w-full max-w-[960px] space-y-5">
+        <div className="matterhorn-desk-session-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
+          <span className="pointer-events-none absolute -right-10 -top-12 opacity-[0.08]" aria-hidden="true">
+            {visual ? <ProtocolLogo iconHint={iconHint} size={172} /> : <Icon className="size-40 text-[var(--matterhorn-desk-color)]" />}
           </span>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text">{visual?.displayName ?? mode} session</h2>
-              <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2 py-1 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
-                {visual?.statusLabel ?? "Focused"}
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+                {visual ? <ProtocolLogo iconHint={iconHint} size={52} /> : <Icon className="size-6" />}
               </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">{visual?.displayName ?? mode} session</h2>
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {visual?.statusLabel ?? "Focused"}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary">
+                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a suggested prompt below, edit it in chat, then send when ready.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">{boundary}</p>
+              </div>
             </div>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-              {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a suggested prompt below, edit it in chat, then send when ready.
-            </p>
-            <p className="mt-1 text-xs leading-5 text-dls-secondary">{boundary}</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+              <span>Desk-specific</span>
+              <span>Editable</span>
+              <span>No auto-send</span>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
+        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-2xl bg-dls-surface/48">
           {prompts.map((item) => (
             <button
               key={item.title}
               type="button"
-              className="group flex min-h-[126px] flex-col rounded-lg border border-white/[0.07] bg-dls-surface/72 px-4 py-4 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] hover:border-[rgba(var(--matterhorn-desk-rgb),0.28)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               onClick={() => void onUsePrompt(item.prompt)}
             >
-              <span className="text-[15px] font-semibold text-dls-text">{item.title}</span>
-              <span className="mt-2 text-[12px] leading-5 text-dls-secondary">{item.detail}</span>
-              <span className="mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+              <span className="min-w-0">
+                <span className="block text-[15px] font-semibold text-dls-text">{item.title}</span>
+                <span className="mt-1 block text-[12px] leading-5 text-dls-secondary">{item.detail}</span>
+              </span>
+              <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
                 Insert editable prompt
               </span>
             </button>
