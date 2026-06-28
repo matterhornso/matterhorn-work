@@ -3951,3 +3951,289 @@ export const PROTOCOL_BRAND_ASSET_REGISTRY: Record<string, ProtocolBrandAssetMan
   "memory-logo": MEMORY_BRAND_ASSET_MANIFEST,
   "mcp-logo": MCP_BRAND_ASSET_MANIFEST,
 };
+
+
+// --- Matterhorn MCP catalog contract ---
+// Data-driven contract for customer-facing MCP cards. Production UI should render
+// Matterhorn MCPs from this registry instead of hardcoding copy islands.
+
+export const MATTERHORN_MCP_STATUSES = [
+  "live",
+  "preview",
+  "requires_setup",
+  "planned",
+] as const;
+export type MatterhornMcpStatus = (typeof MATTERHORN_MCP_STATUSES)[number];
+
+export const MATTERHORN_MCP_COMPATIBLE_CLIENTS = [
+  "codex",
+  "claude_code",
+  "claude_desktop",
+  "cursor",
+  "windsurf",
+  "generic_sse",
+] as const;
+export type MatterhornMcpCompatibleClient = (typeof MATTERHORN_MCP_COMPATIBLE_CLIENTS)[number];
+
+export interface MatterhornMcpToolDescriptor {
+  name: string;
+  description: string;
+  isReadOnly: boolean;
+}
+
+export interface MatterhornMcpSafetyBoundary {
+  liveSubmissionEnabled: false;
+  canExecute: boolean;
+  canSubmit: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+  requiresUserConfirmation: boolean;
+  operatesOnPublicDataOnly: boolean;
+}
+
+export interface MatterhornMcpCatalogItem {
+  version: "matterhorn.mcp.catalog.item.v1";
+  id: string;
+  displayName: string;
+  deskId: string;
+  description: string;
+  installCommand: string;
+  supportedTools: MatterhornMcpToolDescriptor[];
+  safetyBoundary: MatterhornMcpSafetyBoundary;
+  compatibleClients: MatterhornMcpCompatibleClient[];
+  status: MatterhornMcpStatus;
+  documentationUrl?: string;
+  isBuiltIn: boolean;
+}
+
+export const BITTENSOR_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-bittensor",
+  displayName: "Matterhorn Bittensor",
+  deskId: "bittensor",
+  description:
+    "Read Bittensor subnet, stake, and balance data. Prepare unsigned previews and external-signer handoffs for stake, unstake, and transfer.",
+  installCommand: "matterhorn-work mcp install matterhorn-bittensor",
+  supportedTools: [
+    { name: "bittensor_read_balance", description: "Read a public SS58 balance.", isReadOnly: true },
+    { name: "bittensor_read_stake", description: "Read stake and delegate state.", isReadOnly: true },
+    { name: "bittensor_list_subnets", description: "List subnets and validators.", isReadOnly: true },
+    { name: "bittensor_compare_validators", description: "Compare validator yields.", isReadOnly: true },
+    { name: "bittensor_preview_stake", description: "Preview a stake action without signing.", isReadOnly: true },
+    { name: "bittensor_prepare_stake_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "bittensor_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "preview",
+  isBuiltIn: true,
+};
+
+export const HYPERLIQUID_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-hyperliquid",
+  displayName: "Matterhorn Hyperliquid",
+  deskId: "hyperliquid",
+  description:
+    "Read Hyperliquid market data and preview trades. Prepare external-signer handoffs and verify receipts. No live submission or signing.",
+  installCommand: "matterhorn-work mcp install matterhorn-hyperliquid",
+  supportedTools: [
+    { name: "hyperliquid_read_market", description: "Read perp market metadata.", isReadOnly: true },
+    { name: "hyperliquid_read_orderbook", description: "Read the orderbook.", isReadOnly: true },
+    { name: "hyperliquid_read_exposure", description: "Read account exposure for a public address.", isReadOnly: true },
+    { name: "hyperliquid_preview_order", description: "Preview an order without signing.", isReadOnly: true },
+    { name: "hyperliquid_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "hyperliquid_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-polymarket",
+  displayName: "Matterhorn Polymarket",
+  deskId: "polymarket",
+  description:
+    "Search Polymarket markets, read probabilities, and preview positions. Prepare external-signer handoffs and verify receipts. No live bet placement.",
+  installCommand: "matterhorn-work mcp install matterhorn-polymarket",
+  supportedTools: [
+    { name: "polymarket_search_markets", description: "Search prediction markets.", isReadOnly: true },
+    { name: "polymarket_read_probabilities", description: "Read outcome probabilities.", isReadOnly: true },
+    { name: "polymarket_read_orderbook", description: "Read market orderbook.", isReadOnly: true },
+    { name: "polymarket_preview_trade", description: "Preview a trade without signing.", isReadOnly: true },
+    { name: "polymarket_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "polymarket_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const MEMORY_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-memory",
+  displayName: "Matterhorn Memory",
+  deskId: "memory",
+  description:
+    "Read, manage, and export user-confirmed memory records. No hidden saves or access to secrets.",
+  installCommand: "matterhorn-work mcp install matterhorn-memory",
+  supportedTools: [
+    { name: "memory_review", description: "Review saved memory records.", isReadOnly: true },
+    { name: "memory_manage_suggestions", description: "Manage pending memory suggestions.", isReadOnly: false },
+    { name: "memory_forget_record", description: "Forget a saved memory record.", isReadOnly: false },
+    { name: "memory_export", description: "Export safe memory records.", isReadOnly: true },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const WORKFLOW_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-workflow",
+  displayName: "Matterhorn Workflow",
+  deskId: "workflow",
+  description:
+    "Invoke customer workflow templates and evidence bundles. Workflow output is local and reviewed before any external step.",
+  installCommand: "matterhorn-work mcp install matterhorn-workflow",
+  supportedTools: [
+    { name: "workflow_list_templates", description: "List available workflow templates.", isReadOnly: true },
+    { name: "workflow_run_template", description: "Run a workflow template and return artifacts.", isReadOnly: false },
+    { name: "workflow_show_evidence", description: "Show evidence bundle for a workflow.", isReadOnly: true },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
+  status: "preview",
+  isBuiltIn: true,
+};
+
+export const UI_CONTROL_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-ui-control",
+  displayName: "Matterhorn UI Control",
+  deskId: "ui_control",
+  description:
+    "Control local Matterhorn UI surfaces such as desk focus, panel state, and prompt input. No backend execution.",
+  installCommand: "matterhorn-work mcp install matterhorn-ui-control",
+  supportedTools: [
+    { name: "ui_focus_desk", description: "Focus a desk in the UI.", isReadOnly: false },
+    { name: "ui_set_prompt", description: "Set the chat prompt input.", isReadOnly: false },
+    { name: "ui_toggle_panel", description: "Toggle a side panel.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: false,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code"],
+  status: "planned",
+  isBuiltIn: true,
+};
+
+export const MATTERHORN_MCP_CATALOG_REGISTRY: Record<string, MatterhornMcpCatalogItem> = {
+  "matterhorn-bittensor": BITTENSOR_MCP_CATALOG_ITEM,
+  "matterhorn-hyperliquid": HYPERLIQUID_MCP_CATALOG_ITEM,
+  "matterhorn-polymarket": POLYMARKET_MCP_CATALOG_ITEM,
+  "matterhorn-memory": MEMORY_MCP_CATALOG_ITEM,
+  "matterhorn-workflow": WORKFLOW_MCP_CATALOG_ITEM,
+  "matterhorn-ui-control": UI_CONTROL_MCP_CATALOG_ITEM,
+};
+
+export function getMatterhornMcpCatalogItem(id: string): MatterhornMcpCatalogItem | undefined {
+  return MATTERHORN_MCP_CATALOG_REGISTRY[id];
+}
+
+export function listMatterhornMcpCatalogItems(): MatterhornMcpCatalogItem[] {
+  return Object.values(MATTERHORN_MCP_CATALOG_REGISTRY);
+}
