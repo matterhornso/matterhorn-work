@@ -380,11 +380,13 @@ assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidd
 assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfaces should avoid oversized card radii");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
-assert.ok(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), "starter workflow grid should use compact container-safe auto-fit cards");
+assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
-assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
+assert.ok(sessionSurface.includes("group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)]"), "starter workflow rows should use compact logo-led command rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
+assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
+assert.equal(sessionSurface.includes("rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), false, "starter workflow rows should not use the old boxed card treatment");
 assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/35"), "home desk launchers should render as a lightweight command list, not a card grid");
 assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3"), "home desk launcher rows should use compact command-row spacing");
 assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");

@@ -1709,10 +1709,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
+                    <div className="matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
-                        const protocolLogo = ProtocolLogo({ iconHint: item.iconHint, size: 34 });
+                        const protocolLogo = ProtocolLogo({ iconHint: item.iconHint, size: 30 });
                         const capabilityItems = starterWorkflowCapabilityItems(item);
                         const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
                         return (
@@ -1720,25 +1720,23 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group flex min-h-[104px] min-w-0 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)] px-4 py-3 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-3 rounded-lg bg-dls-surface-muted/55 px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)] gap-3">
-                              <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
-                                {protocolLogo ?? <Icon className="size-5" />}
+                            <span className="flex size-10 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+                              {protocolLogo ?? <Icon className="size-5" />}
+                            </span>
+                            <span className="grid min-w-0 gap-1">
+                              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="min-w-0 truncate text-sm font-semibold leading-tight text-dls-text">{item.title}</span>
+                                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                  {item.statusLabel}
+                                </span>
                               </span>
-                              <span className="flex min-w-0 flex-col gap-2">
-                                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                                  <span className="truncate text-[15px] font-semibold leading-tight text-dls-text">{item.title}</span>
-                                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                    {item.statusLabel}
-                                  </span>
-                                </span>
-                                <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
-                                <span className="text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
-                                <span className="mt-auto text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                  Insert editable prompt
-                                </span>
+                              <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
+                              <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
+                              <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                Insert editable prompt
                               </span>
                             </span>
                             <span className="sr-only">{item.safetySummary}</span>
