@@ -44,9 +44,35 @@ export type WalletSettingsViewProps = {
   store: WalletStore;
   onTxApprove?: (tx: { to: string; value: string; data?: string; chainId: number }) => void;
   onTxReject?: () => void;
+  compact?: boolean;
 };
 
-export function WalletSettingsView({ store, onTxApprove, onTxReject }: WalletSettingsViewProps) {
+function WalletBoundaryList() {
+  return (
+    <div className="divide-y divide-dls-border/45 text-xs leading-5 text-dls-secondary">
+      <p className="py-2">
+        <span className="font-medium text-dls-text">Bittensor:</span> public SS58 reads and external Bittensor-compatible signing only.
+      </p>
+      <p className="py-2">
+        <span className="font-medium text-dls-text">Hyperliquid and Polymarket:</span> read, preview, receipt, and handoff flows; live submission stays off.
+      </p>
+      <p className="py-2">
+        <span className="font-medium text-dls-text">Never paste:</span> seed phrases, private keys, raw signatures, signed payloads, API secrets, or wallet exports.
+      </p>
+    </div>
+  );
+}
+
+function WalletRailMetric(props: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] font-medium text-dls-secondary">{props.label}</div>
+      <div className="mt-1 truncate font-mono text-sm text-dls-text">{props.value}</div>
+    </div>
+  );
+}
+
+export function WalletSettingsView({ compact = false, store, onTxApprove, onTxReject }: WalletSettingsViewProps) {
   const state = useWalletStore(store);
   const { address: wagmiAddress } = useAccount();
   const { connect, connectors } = useConnect();
@@ -129,6 +155,98 @@ export function WalletSettingsView({ store, onTxApprove, onTxReject }: WalletSet
     }
   }, [wagmiAddress]);
 
+  if (compact) {
+    return (
+      <SettingsStack className="matterhorn-wallet-rail max-w-none gap-4">
+        <section className="flex flex-col gap-3 border-b border-dls-border/45 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-dls-text">Matterhorn Wallet</h3>
+              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                One wallet surface for EVM handoffs. Bittensor still uses public SS58 reads and external signing.
+              </p>
+            </div>
+            <span className={cn(
+              "shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium",
+              state.isConnected
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : "border-sky-500/30 bg-sky-500/10 text-sky-300",
+            )}>
+              {state.isConnected ? "Connected" : "Needs setup"}
+            </span>
+          </div>
+        </section>
+
+        {error ? (
+          <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-400">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        ) : null}
+
+        {state.isConnected ? (
+          <section className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3">
+              <WalletRailMetric label="Address" value={wagmiAddress ? truncateAddress(wagmiAddress) : "—"} />
+              <WalletRailMetric label="Network" value={state.chainId ? CHAIN_NAMES[state.chainId] ?? "Unknown" : "Unknown"} />
+              <WalletRailMetric label="ETH" value={ethBalance ? Number(formatUnits(ethBalance.value, 18)).toFixed(4) : state.ethBalance ?? "—"} />
+              <WalletRailMetric label="USDC" value={state.usdcBalance ?? "—"} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={copyAddress} disabled={!wagmiAddress}>
+                <Copy className="size-3" />
+                Copy address
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing}>
+                <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
+                Refresh
+              </Button>
+              <Button variant="ghost" size="sm" className="text-red-400 hover:bg-red-500/10 hover:text-red-300" onClick={handleDisconnect}>
+                <Unplug className="size-3" />
+                Disconnect
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <section className="flex flex-col gap-3">
+            {connectors.length > 0 ? (
+              connectors.map((connector) => (
+                <Button
+                  key={connector.id}
+                  variant="outline"
+                  className="h-auto justify-start gap-3 rounded-lg px-3 py-3"
+                  disabled={state.isConnecting}
+                  onClick={() => handleConnect(connector.id)}
+                >
+                  <Plug className="size-4" />
+                  <span className="min-w-0 text-left">
+                    <span className="block truncate text-sm font-medium">{connector.name}</span>
+                    <span className="block truncate text-xs text-dls-secondary">
+                      {connector.id.includes("injected") ? "Browser wallet extension" : "WalletConnect"}
+                    </span>
+                  </span>
+                  {state.isConnecting ? <RefreshCw className="ml-auto size-3.5 animate-spin" /> : null}
+                </Button>
+              ))
+            ) : (
+              <div className="rounded-lg bg-dls-surface-muted/55 px-3 py-3 text-sm leading-6 text-dls-secondary">
+                <div className="flex items-center gap-2 font-medium text-dls-text">
+                  <Wallet className="size-4" />
+                  No EVM wallet connector detected
+                </div>
+                <p className="mt-2 text-xs leading-5">
+                  Install or enable MetaMask, Rabby, or another injected wallet in this runtime. You can still use public Bittensor reads and market previews without connecting one.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+        <WalletBoundaryList />
+      </SettingsStack>
+    );
+  }
+
   if (!state.isConnected) {
     return (
       <SettingsStack>
@@ -181,6 +299,15 @@ export function WalletSettingsView({ store, onTxApprove, onTxReject }: WalletSet
               </div>
             )}
           </div>
+        </SettingsSection>
+        <SettingsSection>
+          <SettingsSectionHeader>
+            <SettingsSectionHeaderTitle>Safety boundaries</SettingsSectionHeaderTitle>
+            <SettingsSectionHeaderDescription>
+              What this wallet surface can and cannot do today.
+            </SettingsSectionHeaderDescription>
+          </SettingsSectionHeader>
+          <WalletBoundaryList />
         </SettingsSection>
       </SettingsStack>
     );

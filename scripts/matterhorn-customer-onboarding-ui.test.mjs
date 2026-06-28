@@ -37,6 +37,7 @@ const extensionCard = read("apps/app/src/react-app/design-system/extension-card.
 const extensionDetailModal = read("apps/app/src/react-app/design-system/extension-detail-modal.tsx");
 const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
+const cloudAccountSettings = read("apps/app/src/react-app/domains/settings/pages/cloud-account-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
 const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
@@ -492,6 +493,25 @@ assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "spa
 assert.ok(extensionsView.includes('props.compact ? "w-full" : "w-fit"'), "embedded extensions tabs should fill the narrow rail instead of crowding content");
 assert.ok(extensionsView.includes('className={props.compact ? "flex-1" : undefined}'), "embedded extensions tabs should stay tappable in the narrow rail");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
+assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
+assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
+for (const phrase of [
+  "matterhorn-profile-rail max-w-none gap-4",
+  "<DenSignedOutPanel\n            compact",
+  "session.summaryTone",
+]) {
+  assert.ok(cloudAccountSettings.includes(phrase), `profile rail should have a compact first-class account state: ${phrase}`);
+}
+for (const phrase of [
+  "matterhorn-wallet-rail max-w-none gap-4",
+  "No EVM wallet connector detected",
+  "Install or enable MetaMask, Rabby, or another injected wallet in this runtime.",
+  "public SS58 reads and external Bittensor-compatible signing only.",
+  "Hyperliquid and Polymarket",
+  "Never paste:",
+]) {
+  assert.ok(walletSettings.includes(phrase), `wallet rail should have compact, honest wallet state: ${phrase}`);
+}
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
 assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");

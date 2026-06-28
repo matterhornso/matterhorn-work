@@ -2225,6 +2225,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "cloud-account":
         return (
           <CloudAccountView
+            compact={props.embedded}
             developerMode={developerMode}
             session={denSession}
           />
@@ -2380,6 +2381,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "wallet":
         return (
           <WalletSettingsView
+            compact={props.embedded}
             store={walletProvider.store}
             onTxApprove={() => {}}
             onTxReject={() => {}}
