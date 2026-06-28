@@ -75,8 +75,8 @@ for (const phrase of [
   "Open Bittensor desk",
   "Bittensor uses public SS58 reads and external signing.",
   "Wallet details",
-  "What works today",
-  "Every desk keeps its own context",
+  "Capability status",
+  "Each desk keeps its own context",
   "Wallet stays external",
   "Public SS58 reads and unsigned previews only.",
   "Can submit: No. Live submission: Off. External signer/client only.",
@@ -88,6 +88,7 @@ for (const phrase of [
   "No auto-send",
   "matterhorn-capability-overview",
   "matterhorn-capability-row",
+  "md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)]",
   "matterhorn-desk-board",
   "matterhorn-desk-command-list",
   "matterhorn-desk-launcher",
@@ -377,14 +378,18 @@ assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px
 assert.ok(sessionSurface.includes("grid min-w-0 flex-1 grid-cols-[44px_minmax(0,1fr)]"), "starter workflow cards should use compact logo-led rows");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
-assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/45 border-y border-dls-border/55"), "home desk launchers should render as a command list, not a card grid");
+assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/35"), "home desk launchers should render as a lightweight command list, not a card grid");
 assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3"), "home desk launcher rows should use compact command-row spacing");
 assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
 assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
+assert.ok(sessionPage.includes("matterhorn-capability-row grid gap-3 py-3 text-left"), "home capability status should use compact list rows");
+assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)]"), false, "home capability status should not use icon tiles");
+assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
 assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
 assert.equal(sessionPage.includes("grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3"), false, "home desk launchers should not fall back to the old box grid");
 assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
 assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
+assert.ok(sessionPage.includes("props.developerMode ? ("), "customer home should keep beta/demo QA launchers behind developer mode");
 assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
 assert.ok(
   sessionPage.includes('activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot)'),

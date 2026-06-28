@@ -223,20 +223,20 @@ function DeskBrandMark({
 
 function HomeCapabilityOverview() {
   return (
-    <section className="matterhorn-capability-overview space-y-4" aria-label="Desk capability overview">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <section className="matterhorn-capability-overview space-y-3" aria-label="Desk capability overview">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-dls-text">What works today</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-            Every desk keeps its own context, wallet needs, previews, and safety boundary visible. Markets stay
-            preview-only; Bittensor uses public SS58 reads and external signing.
+          <h3 className="text-sm font-semibold text-dls-text">Capability status</h3>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary text-pretty">
+            Each desk keeps its own context, wallet needs, previews, and safety boundary. Markets stay preview-only;
+            Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
-          <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.13)] px-2 py-1 text-primary">
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-dls-secondary">
+          <span className="text-primary">
             Wallet stays external
           </span>
-          <span className="rounded-md bg-dls-surface-muted px-2 py-1 text-dls-secondary">
+          <span>
             No hidden auto-send
           </span>
         </div>
@@ -247,22 +247,20 @@ function HomeCapabilityOverview() {
             <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-row grid gap-3 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.045)] sm:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.8fr)]"
+              className="matterhorn-capability-row grid gap-3 py-3 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.035)] md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)] md:items-start"
             >
-              <div className="flex min-w-0 items-start gap-3 px-0.5">
-                <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)] text-[var(--matterhorn-desk-color)]">
-                  <DeskBrandMark id={item.id} size={28} />
-                </span>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                    <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-                      {item.statusLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1 max-w-xl text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                  <p className="sr-only">{item.proof}</p>
+              <span className="hidden text-[var(--matterhorn-desk-color)] md:flex md:size-7 md:items-center md:justify-center">
+                <DeskBrandMark id={item.id} size={22} />
+              </span>
+              <div className="min-w-0 px-0.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
+                  <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
+                    {item.statusLabel}
+                  </span>
                 </div>
+                <p className="mt-1 max-w-xl text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
+                <p className="sr-only">{item.proof}</p>
               </div>
               <p className="px-0.5 text-[11px] leading-5 text-dls-secondary sm:pt-1">
                 {item.proof}
@@ -407,7 +405,7 @@ function HomeDeskLaunchers({
 }) {
   const launchers = [...protocolLaunchers, ...businessLaunchers];
   return (
-    <section className="matterhorn-desk-board space-y-2" aria-label="Matterhorn desk launchers">
+    <section className="matterhorn-desk-board space-y-3" aria-label="Matterhorn desk launchers">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
@@ -419,7 +417,7 @@ function HomeDeskLaunchers({
           No auto-send
         </span>
       </div>
-      <div className="matterhorn-desk-command-list divide-y divide-dls-border/45 border-y border-dls-border/55">
+      <div className="matterhorn-desk-command-list divide-y divide-dls-border/35">
         {launchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}
@@ -1434,132 +1432,136 @@ export function SessionPage(props: SessionPageProps) {
                             props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt);
                           }}
                         />
-                        <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
-                            <span>Monday beta demos</span>
-                            <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
-                              Public/redacted only
-                            </span>
-                          </summary>
-                          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                            Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
-                          </p>
-                          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
-                            {mondayBetaDemoCards.map((demo) => {
-                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
-                              return (
-                                <button
-                                  key={demo.id}
-                                  type="button"
-                                  style={deskToneStyle(demo.iconHint)}
-                                  className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-                                  onClick={() => {
-                                    if (demo.panel) {
-                                      openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
-                                      return;
-                                    }
-                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
-                                  }}
-                                >
-                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
-                                  <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
-                                    {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
-                                  </span>
-                                  <span className="relative flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
-                                      {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
-                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
-                                          {demo.statusLabel}
+                        {props.developerMode ? (
+                          <>
+                            <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
+                                <span>Monday beta demos</span>
+                                <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                                  Public/redacted only
+                                </span>
+                              </summary>
+                              <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                                Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
+                              </p>
+                              <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
+                                {mondayBetaDemoCards.map((demo) => {
+                                  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
+                                  return (
+                                    <button
+                                      key={demo.id}
+                                      type="button"
+                                      style={deskToneStyle(demo.iconHint)}
+                                      className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      onClick={() => {
+                                        if (demo.panel) {
+                                          openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
+                                          return;
+                                        }
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
+                                      }}
+                                    >
+                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                                      <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
+                                        {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
+                                      </span>
+                                      <span className="relative flex w-full items-start gap-3">
+                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
+                                          {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
+                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                              {demo.statusLabel}
+                                            </span>
+                                          </span>
+                                          <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
                                         </span>
                                       </span>
-                                      <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
-                                    </span>
-                                  </span>
-                                  <span className="relative mt-3 block text-[11px] leading-5 text-dls-secondary">
-                                    <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
-                                  </span>
-                                  <span className="relative mt-2 block text-[11px] leading-5 text-dls-secondary">
-                                    <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
-                                  </span>
-                                  <span className="sr-only">{demo.safetySummary}</span>
-                                  <span className="relative mt-3 block max-w-full truncate rounded-md bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
-                                    {demo.evidenceCommand}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </details>
-                        <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
-                            <span>Business workflows</span>
-                            <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
-                              Planned services only
-                            </span>
-                          </summary>
-                          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-                            Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
-                          </p>
-                          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
-                            {businessWorkflowLaunchers.map((task) => {
-                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
-                              return (
-                                <button
-                                  key={task.id}
-                                  type="button"
-                                  style={deskToneStyle(task.iconHint)}
-                                  className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-                                  onClick={() => {
-                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
-                                  }}
-                                >
-                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
-                                  <span className="flex items-start gap-3">
-                                      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
-                                      <Icon className="size-4" />
-                                    </span>
-                                    <span className="min-w-0">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
-                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
-                                          {task.statusLabel}
+                                      <span className="relative mt-3 block text-[11px] leading-5 text-dls-secondary">
+                                        <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
+                                      </span>
+                                      <span className="relative mt-2 block text-[11px] leading-5 text-dls-secondary">
+                                        <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
+                                      </span>
+                                      <span className="sr-only">{demo.safetySummary}</span>
+                                      <span className="relative mt-3 block max-w-full truncate rounded-md bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
+                                        {demo.evidenceCommand}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                            <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
+                                <span>Business workflows</span>
+                                <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                                  Planned services only
+                                </span>
+                              </summary>
+                              <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+                                Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
+                              </p>
+                              <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
+                                {businessWorkflowLaunchers.map((task) => {
+                                  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
+                                  return (
+                                    <button
+                                      key={task.id}
+                                      type="button"
+                                      style={deskToneStyle(task.iconHint)}
+                                      className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      onClick={() => {
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
+                                      }}
+                                    >
+                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
+                                      <span className="flex items-start gap-3">
+                                        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
+                                          <Icon className="size-4" />
+                                        </span>
+                                        <span className="min-w-0">
+                                          <span className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
+                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                              {task.statusLabel}
+                                            </span>
+                                          </span>
+                                          <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{task.description}</span>
                                         </span>
                                       </span>
-                                      <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{task.description}</span>
-                                    </span>
-                                  </span>
-                                  <span className="grid gap-1.5 sm:grid-cols-2">
-                                    {[
-                                      "Service offer packet",
-                                      "Onboarding questionnaire",
-                                      "Weekly program plan",
-                                      "Progress check-in",
-                                      "Renewal/follow-up note",
-                                      "Client handoff packet",
-                                    ].map((artifact) => (
-                                      <span
-                                        key={artifact}
-                                        className="rounded-md bg-dls-surface/52 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
-                                      >
-                                        {artifact}
+                                      <span className="grid gap-1.5 sm:grid-cols-2">
+                                        {[
+                                          "Service offer packet",
+                                          "Onboarding questionnaire",
+                                          "Weekly program plan",
+                                          "Progress check-in",
+                                          "Renewal/follow-up note",
+                                          "Client handoff packet",
+                                        ].map((artifact) => (
+                                          <span
+                                            key={artifact}
+                                            className="rounded-md bg-dls-surface/52 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                          >
+                                            {artifact}
+                                          </span>
+                                        ))}
                                       </span>
-                                    ))}
-                                  </span>
-                                  <span className="rounded-lg bg-dls-surface/60 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
-                                    {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
-                                  </span>
-                                  <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                    Start wellness workflow -&gt;
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </details>
+                                      <span className="rounded-lg bg-dls-surface/60 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
+                                        {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
+                                      </span>
+                                      <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                        Start wellness workflow -&gt;
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                          </>
+                        ) : null}
                         <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
                           {blankWorkflowLauncher ? (
                             <button
