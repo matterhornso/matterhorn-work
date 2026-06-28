@@ -644,7 +644,7 @@ export function McpView(props: McpViewProps) {
         compact={props.compact}
       />
 
-      <McpCustomAppCard onOpen={() => setAddMcpModalOpen(true)} />
+      <McpCustomAppCard compact={props.compact} onOpen={() => setAddMcpModalOpen(true)} />
 
       {/* Search + filter */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1067,15 +1067,20 @@ function MatterhornMcpProductSection(props: {
   );
 }
 
-function McpCustomAppCard(props: { onOpen: () => void }) {
+function McpCustomAppCard(props: { compact?: boolean; onOpen: () => void }) {
   return (
-    <div className="rounded-2xl border border-blue-6/30 bg-[linear-gradient(180deg,rgba(59,130,246,0.08),rgba(59,130,246,0.03))] p-5 sm:px-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={props.compact
+        ? "rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"
+        : "rounded-xl bg-dls-surface/80 p-5 ring-1 ring-dls-border/35 sm:px-6"
+      }
+    >
+      <div className={props.compact ? "flex flex-col gap-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>
         <div className="space-y-1">
-          <div className="text-base font-semibold text-dls-text">{t("mcp.add_modal_title")}</div>
-          <div className="text-sm text-dls-secondary">{t("mcp.custom_app_cta_hint")}</div>
+          <div className={props.compact ? "text-sm font-semibold text-dls-text" : "text-base font-semibold text-dls-text"}>{t("mcp.add_modal_title")}</div>
+          <div className={props.compact ? "text-xs leading-5 text-dls-secondary" : "text-sm text-dls-secondary"}>{t("mcp.custom_app_cta_hint")}</div>
         </div>
-        <Button onClick={props.onOpen}>
+        <Button className={props.compact ? "h-8 w-fit px-2.5 text-xs" : undefined} onClick={props.onOpen}>
           <Plus size={14} />
           {t("mcp.add_modal_title")}
         </Button>

@@ -31,6 +31,8 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const extensionsView = read("apps/app/src/react-app/domains/settings/pages/extensions-view.tsx");
+const settingsShell = read("apps/app/src/react-app/domains/settings/shell/settings-shell.tsx");
 const extensionCard = read("apps/app/src/react-app/design-system/extension-card.tsx");
 const extensionDetailModal = read("apps/app/src/react-app/design-system/extension-detail-modal.tsx");
 const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
@@ -478,6 +480,16 @@ assert.ok(sessionRoute.includes("hideWorkspaceSwitcher"), "embedded Profile/Wall
 assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher?: boolean"), "settings surface should accept an embedded workspace-switcher suppression flag");
 assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}"), "settings surface should pass workspace-switcher suppression into the shell");
 assert.ok(read("apps/app/src/react-app/domains/settings/shell/settings-page.tsx").includes("!props.hideWorkspaceSwitcher"), "settings sidebar should keep workspace switching only when not explicitly hidden");
+assert.ok(settingsShell.includes("const ActiveIcon = getSettingsTabIcon(props.activeTab);"), "compact settings rail should show the active page title directly instead of a duplicate workspace selector");
+assert.ok(settingsShell.includes('title={props.compact ? "Switch settings section" : undefined}'), "compact settings rail should keep section switching as a small utility control");
+assert.ok(settingsShell.includes('aria-label={props.compact ? "Switch settings section" : undefined}'), "compact settings section switcher should remain accessible when icon-only");
+assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "compact settings switcher should not duplicate the visible active page label");
+assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
+assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
+assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
+assert.ok(extensionsView.includes('props.compact ? "w-full" : "w-fit"'), "embedded extensions tabs should fill the narrow rail instead of crowding content");
+assert.ok(extensionsView.includes('className={props.compact ? "flex-1" : undefined}'), "embedded extensions tabs should stay tappable in the narrow rail");
+assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
 assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
@@ -635,6 +647,24 @@ assert.equal(
   settingsRoute.includes("rounded-2xl bg-dls-surface/72"),
   false,
   "MCP product cards should avoid oversized boxy card radii.",
+);
+assert.equal(
+  settingsRoute.includes("border-blue-6/30"),
+  false,
+  "MCP custom app card should not use the old blue outlined callout treatment.",
+);
+assert.equal(
+  settingsRoute.includes("bg-[linear-gradient(180deg,rgba(59,130,246"),
+  false,
+  "MCP custom app card should not use decorative blue gradient backgrounds.",
+);
+assert.ok(
+  settingsRoute.includes('McpCustomAppCard compact={props.compact}'),
+  "MCP custom app card should inherit the compact right-rail rendering mode.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact\n        ? "rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"'),
+  "MCP custom app card should use a compact, non-boxy rail treatment.",
 );
 assert.ok(
   settingsRoute.includes("break-all rounded-lg"),
