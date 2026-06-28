@@ -674,6 +674,30 @@ assert.ok(
   "MCP product cards should use tight stream spacing instead of bulky card gaps.",
 );
 assert.ok(
+  settingsRoute.includes("mcp-marketplace-stream"),
+  "MCP marketplace connectors should render as a soft stream below the Matterhorn MCP cards.",
+);
+assert.ok(
+  settingsRoute.includes('presentation="stream"'),
+  "MCP marketplace entries should use the non-boxy stream presentation.",
+);
+assert.equal(
+  settingsRoute.includes("grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3"),
+  false,
+  "MCP marketplace connectors should not render as the old repeated card grid.",
+);
+assert.equal(
+  settingsRoute.includes("col-span-full rounded-xl border border-dashed"),
+  false,
+  "MCP marketplace empty state should avoid the old dashed boxed-card treatment.",
+);
+assert.ok(
+  extensionCard.includes('presentation?: "card" | "stream"') &&
+    extensionCard.includes('presentation = "card"') &&
+    extensionCard.includes("sm:grid-cols-[minmax(0,1fr)_auto]"),
+  "ExtensionCard should keep the legacy card default while exposing a responsive stream presentation.",
+);
+assert.ok(
   settingsRoute.includes("compact={props.compact}"),
   "MCP product cards should inherit the compact right-rail rendering mode.",
 );
