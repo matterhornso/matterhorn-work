@@ -4,6 +4,7 @@ import { Cpu } from "lucide-react";
 
 import { t } from "../../../../i18n";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 import { PluginsView, type PluginsExtensionsStore } from "./plugins-view";
 
@@ -44,6 +45,7 @@ export type ExtensionsViewProps = {
   initialSection?: ExtensionsSection;
   setSectionRoute?: (tab: "mcp" | "skills" | "plugins") => void;
   showHeader?: boolean;
+  compact?: boolean;
 };
 
 export function ExtensionsView(props: ExtensionsViewProps) {
@@ -54,27 +56,44 @@ export function ExtensionsView(props: ExtensionsViewProps) {
   );
 
   return (
-    <section className="space-y-6 max-w-3xl w-full animate-in fade-in duration-300">
-      <div className="flex items-center justify-between">
+    <section className={cn(
+      "w-full animate-in fade-in duration-300",
+      props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl",
+    )}>
+      <div className={cn(
+        "flex items-center justify-between",
+        props.compact && "gap-2",
+      )}>
         <div className="flex flex-wrap items-center gap-2">
           {props.mcpConnectedAppsCount > 0 ? (
-            <div className="inline-flex items-center gap-2 rounded-full bg-green-3 px-3 py-1">
+            <div className={cn(
+              "inline-flex items-center gap-2 rounded-full bg-green-3 px-3 py-1",
+              props.compact && "px-2 py-0.5",
+            )}>
               <div className="size-2 rounded-full bg-green-9" />
-              <span className="text-xs font-medium text-green-11">
+              <span className={cn("text-xs font-medium text-green-11", props.compact && "text-[11px]")}>
                 {t("extensions.app_count", { count: props.mcpConnectedAppsCount })}
               </span>
             </div>
           ) : null}
         </div>
-        <Button variant="outline" onClick={props.onRefresh}>
+        <Button
+          variant="outline"
+          className={props.compact ? "h-8 px-2 text-xs" : undefined}
+          onClick={props.onRefresh}
+        >
           {t("common.refresh")}
         </Button>
       </div>
 
-      <div className="flex w-fit rounded-xl border border-dls-border bg-dls-surface p-1">
+      <div className={cn(
+        "flex rounded-lg border border-dls-border bg-dls-surface p-1",
+        props.compact ? "w-full" : "w-fit",
+      )}>
         <Button
           variant={view === "my" ? "secondary" : "ghost"}
           size="sm"
+          className={props.compact ? "flex-1" : undefined}
           onClick={() => setView("my")}
         >
           My Extensions
@@ -82,6 +101,7 @@ export function ExtensionsView(props: ExtensionsViewProps) {
         <Button
           variant={view === "marketplace" ? "secondary" : "ghost"}
           size="sm"
+          className={props.compact ? "flex-1" : undefined}
           onClick={() => setView("marketplace")}
         >
           Marketplace

@@ -2107,6 +2107,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             extensions={extensionsStore}
             mcpConnectedAppsCount={mcpConnectedAppsCount}
             initialSection={route.extensionsSection}
+            compact={props.embedded}
             setSectionRoute={(section) => {
               const path = `extensions/${section}`;
               navigateSettingsPath(path);

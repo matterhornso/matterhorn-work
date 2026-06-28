@@ -55,26 +55,32 @@ export function SettingsShell(props: SettingsShellProps) {
   const title = getSettingsTabLabel(props.activeTab);
 
   if (props.compact) {
+    const ActiveIcon = getSettingsTabIcon(props.activeTab);
     return (
       <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
         <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-dls-border px-3 mac:titlebar-drag">
           <div className="flex min-w-0 items-center gap-2 mac:titlebar-no-drag">
+            <ActiveIcon className="size-4 shrink-0 text-dls-secondary" />
+            <span className="truncate text-sm font-semibold text-dls-text">{title}</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5 mac:titlebar-no-drag">
             <SettingsSectionMenu
               activeTab={props.activeTab}
               developerMode={props.developerMode}
               onSelectTab={props.onSelectTab}
+              compact
             />
+            <Button
+              variant="ghost"
+              type="button"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-2/70 hover:text-dls-text"
+              onClick={props.onClose}
+              title={t("dashboard.close_settings")}
+              aria-label={t("dashboard.close_settings")}
+            >
+              <X size={17} />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            type="button"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-2/70 hover:text-dls-text mac:titlebar-no-drag"
-            onClick={props.onClose}
-            title={t("dashboard.close_settings")}
-            aria-label={t("dashboard.close_settings")}
-          >
-            <X size={17} />
-          </Button>
         </header>
 
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -172,7 +178,7 @@ export function SettingsShell(props: SettingsShellProps) {
   );
 }
 
-function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "developerMode" | "onSelectTab">) {
+function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "developerMode" | "onSelectTab"> & { compact?: boolean }) {
   const sections: Array<{ label: string | null; tabs: SettingsTab[] }> = [
     { label: null, tabs: ["general"] },
     { label: t("settings.group_workspace"), tabs: getWorkspaceSettingsTabs(props.developerMode) },
@@ -185,10 +191,19 @@ function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "
     <DropdownMenu>
       <DropdownMenuTrigger
         render={(
-          <Button variant="outline" size="sm" className="min-w-0 max-w-46 justify-start gap-2">
+          <Button
+            variant={props.compact ? "ghost" : "outline"}
+            size="sm"
+            className={props.compact
+              ? "size-8 justify-center rounded-md p-0 text-gray-10 hover:bg-gray-2/70 hover:text-dls-text"
+              : "min-w-0 max-w-46 justify-start gap-2"
+            }
+            title={props.compact ? "Switch settings section" : undefined}
+            aria-label={props.compact ? "Switch settings section" : undefined}
+          >
             <ActiveIcon className="size-4 shrink-0" />
-            <span className="truncate">{getSettingsTabLabel(props.activeTab)}</span>
-            <ChevronDown className="ml-auto size-4 shrink-0" />
+            <span className={props.compact ? "sr-only" : "truncate"}>{getSettingsTabLabel(props.activeTab)}</span>
+            <ChevronDown className={props.compact ? "size-3.5 shrink-0" : "ml-auto size-4 shrink-0"} />
           </Button>
         )}
       />
