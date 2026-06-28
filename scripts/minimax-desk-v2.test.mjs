@@ -54,6 +54,7 @@ const requiredFiles = [
   "docs/ui/matterhorn-desk-v2/SPEC.md",
   "docs/ui/matterhorn-desk-v2/index.html",
   "docs/ui/matterhorn-desk-v2/QA-RUBRIC.md",
+  "docs/ui/matterhorn-desk-v2/BOXINESS-PUNCHLIST.md",
 ];
 for (const f of requiredFiles) {
   if (fileExists(f)) pass(`File exists: ${f}`);
@@ -578,6 +579,34 @@ for (const [needle, label] of v2VisualRules) {
     pass(`V2 visual rule: ${label}`);
   } else {
     fail(`V2 visual rule: ${label}`, "missing");
+  }
+}
+
+// ── 11b. Boxiness Punch List coverage ──────────────────────────
+
+const punchlist = fileExists("docs/ui/matterhorn-desk-v2/BOXINESS-PUNCHLIST.md")
+  ? read("docs/ui/matterhorn-desk-v2/BOXINESS-PUNCHLIST.md")
+  : "";
+
+const punchlistSections = [
+  ["Home Launcher",         "Home launcher visual hierarchy"],
+  ["Logo",                  "Logo treatment section"],
+  ["Wallet",                "Wallet / profile rail section"],
+  ["Dark Mode",             "Dark mode notes"],
+  ["Light Mode",            "Light mode notes"],
+  ["Mobile",                "Mobile responsive section"],
+  ["Tablet",                "Tablet responsive section"],
+  ["Desktop",               "Desktop responsive section"],
+  ["Before",               "Before/after recommendations"],
+  ["P0",                    "P0 items (must-fix)"],
+  ["P1",                    "P1 items (polish)"],
+  ["P2",                    "P2 items (responsive)"],
+];
+for (const [needle, label] of punchlistSections) {
+  if (punchlist.includes(needle)) {
+    pass(`Boxiness punchlist: ${label}`);
+  } else {
+    fail(`Boxiness punchlist: ${label}`, "missing");
   }
 }
 
