@@ -1111,15 +1111,15 @@ function McpQuickConnectSection(props: {
   onPluginDetail?: (plugin: CloudImportedPlugin) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-dls-secondary">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h3 className="text-sm font-semibold text-dls-text">
           {t("mcp.available_apps")}
         </h3>
-        <span className="text-[11px] text-dls-secondary">{t("mcp.one_click_connect")}</span>
+        <span className="text-xs text-dls-secondary">{t("mcp.one_click_connect")}</span>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
+      <div className="mcp-marketplace-stream min-w-0 overflow-hidden rounded-[18px] bg-dls-surface-muted/18 px-3 py-1">
         {/* MCP entries */}
         {props.entries.map((entry) => {
           const configured = props.isConfigured(entry);
@@ -1139,6 +1139,7 @@ function McpQuickConnectSection(props: {
               iconNode={protocolDeskLogoNode(entry)}
               fallbackIcon={FallbackIcon}
               kind={entry.kind ?? "mcp"}
+              presentation="stream"
               connected={configured}
               enablement={enablement?.results}
               connecting={connecting}
@@ -1162,6 +1163,7 @@ function McpQuickConnectSection(props: {
               name={skill.name}
               description={skill.description ?? "Installed skill"}
               kind="skill"
+              presentation="stream"
               connected={true}
               hidden={hidden}
               statusHint="Installed"
@@ -1180,6 +1182,7 @@ function McpQuickConnectSection(props: {
               name={plugin.name}
               description={plugin.description ?? `Marketplace extension with ${fileCount} installed file${fileCount === 1 ? "" : "s"}.`}
               kind="extension"
+              presentation="stream"
               connected={true}
               hidden={hidden}
               statusHint="Installed"
@@ -1190,7 +1193,7 @@ function McpQuickConnectSection(props: {
         })}
 
         {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 ? (
-          <div className="col-span-full rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
+          <div className="px-4 py-9 text-center">
             <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
             <div className="text-sm font-medium text-dls-secondary">No MCPs or connectors found</div>
             <div className="mt-1 text-xs text-dls-secondary/60">Try a different search, filter, or add a custom MCP.</div>

@@ -39,6 +39,8 @@ export type ExtensionCardProps = {
   disabledReason?: string | null;
   /** Action label shown at bottom. */
   actionLabel?: string;
+  /** Visual presentation. Card is the legacy catalog tile; stream is for softer desk lists. */
+  presentation?: "card" | "stream";
   /** Click handler. */
   onClick?: () => void;
 };
@@ -83,6 +85,7 @@ export function ExtensionCard(props: ExtensionCardProps) {
     statusHint,
     disabledReason = null,
     actionLabel,
+    presentation = "card",
     onClick,
   } = props;
 
@@ -91,27 +94,36 @@ export function ExtensionCard(props: ExtensionCardProps) {
   const someMet = enablement ? enablement.some((r) => r.met) && !allMet : false;
   const connected = allMet;
   const resolvedIconSrc = iconSrc ? resolveExtensionIconSrc(iconSrc) : undefined;
+  const isStream = presentation === "stream";
+  const stateTone = connected
+    ? "border-green-6 bg-green-2"
+    : someMet
+    ? "border-amber-6 bg-amber-2"
+    : "border-dls-border bg-dls-surface hover:bg-dls-hover";
+  const streamStateTone = connected
+    ? "bg-green-3/55"
+    : someMet
+    ? "bg-amber-3/55"
+    : "bg-dls-surface-muted/36 group-hover:bg-dls-hover/65";
 
   return (
     <button
       type="button"
       disabled={disabled || connecting}
       onClick={onClick}
-      className={`group w-full rounded-xl border p-4 text-left transition-all ${
-        connected
-          ? "border-green-6 bg-green-2"
-          : someMet
-          ? "border-amber-6 bg-amber-2"
-          : "border-dls-border bg-dls-surface hover:bg-dls-hover"
-      } ${hidden ? "border-dashed opacity-70" : ""}`}
+      className={isStream
+        ? `group w-full border-b border-dls-border/30 px-1 py-3 text-left transition-colors last:border-b-0 hover:bg-dls-hover/35 disabled:cursor-not-allowed disabled:opacity-60 ${hidden ? "opacity-70" : ""}`
+        : `group w-full rounded-xl border p-4 text-left transition-all ${stateTone} ${hidden ? "border-dashed opacity-70" : ""}`
+      }
     >
-      <div className="flex items-start gap-3">
+      <div className={isStream ? "flex items-start gap-3 sm:gap-4" : "flex items-start gap-3"}>
         {/* Icon */}
         <div className="relative shrink-0">
           <div
-            className={`flex size-10 items-center justify-center rounded-lg border ${
-              connected ? "border-green-6 bg-green-2" : someMet ? "border-amber-6 bg-amber-2" : "border-dls-border bg-dls-hover"
-            }`}
+            className={isStream
+              ? `flex size-9 items-center justify-center rounded-lg ${streamStateTone}`
+              : `flex size-10 items-center justify-center rounded-lg border ${stateTone}`
+            }
           >
             {connecting ? (
               <Loader2 size={18} className="animate-spin text-dls-secondary" />
@@ -145,51 +157,53 @@ export function ExtensionCard(props: ExtensionCardProps) {
         </div>
 
         {/* Content */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <h4 className="min-w-0 break-words text-sm font-semibold text-dls-text">{name}</h4>
-            {connected ? (
-              <span className="shrink-0 rounded-md bg-green-3 px-1.5 py-0.5 text-[10px] font-medium text-green-11">
-                {connectedLabel}
-              </span>
-            ) : someMet ? (
-              <span className="shrink-0 rounded-md bg-amber-3 px-1.5 py-0.5 text-[10px] font-medium text-amber-11">
-                Partially set up
-              </span>
-            ) : (
-              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${kindStyle[kind]}`}>
-                {kindLabel[kind]}
-              </span>
-            )}
-            {hidden ? (
-              <span className="shrink-0 rounded-md bg-gray-3 px-1.5 py-0.5 text-[10px] font-medium text-gray-11">
-                Hidden
-              </span>
-            ) : null}
-            {preview ? (
-              <span className="rounded-md bg-blue-3 px-1.5 py-0.5 text-[10px] font-medium text-blue-11">
-                Preview
-              </span>
-            ) : null}
-            {statusHint ? (
-              <span className="shrink-0 rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
-                {statusHint}
-              </span>
-            ) : null}
+        <div className={isStream ? "min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-4" : "min-w-0 flex-1"}>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h4 className="min-w-0 break-words text-sm font-semibold text-dls-text">{name}</h4>
+              {connected ? (
+                <span className="shrink-0 rounded-md bg-green-3 px-1.5 py-0.5 text-[10px] font-medium text-green-11">
+                  {connectedLabel}
+                </span>
+              ) : someMet ? (
+                <span className="shrink-0 rounded-md bg-amber-3 px-1.5 py-0.5 text-[10px] font-medium text-amber-11">
+                  Partially set up
+                </span>
+              ) : (
+                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium ${kindStyle[kind]}`}>
+                  {kindLabel[kind]}
+                </span>
+              )}
+              {hidden ? (
+                <span className="shrink-0 rounded-md bg-gray-3 px-1.5 py-0.5 text-[10px] font-medium text-gray-11">
+                  Hidden
+                </span>
+              ) : null}
+              {preview ? (
+                <span className="rounded-md bg-blue-3 px-1.5 py-0.5 text-[10px] font-medium text-blue-11">
+                  Preview
+                </span>
+              ) : null}
+              {statusHint ? (
+                <span className="shrink-0 rounded-md bg-dls-hover px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
+                  {statusHint}
+                </span>
+              ) : null}
+              {disabledReason ? (
+                <span className="shrink-0 rounded-md bg-amber-3 px-1.5 py-0.5 text-[10px] font-medium text-amber-11">
+                  Disabled
+                </span>
+              ) : null}
+            </div>
+            <p className={isStream ? "mt-0.5 line-clamp-2 max-w-[64ch] text-xs leading-5 text-dls-secondary" : "mt-0.5 line-clamp-2 text-xs text-dls-secondary"}>{description}</p>
             {disabledReason ? (
-              <span className="shrink-0 rounded-md bg-amber-3 px-1.5 py-0.5 text-[10px] font-medium text-amber-11">
-                Disabled
-              </span>
+              <div className="mt-2 text-[11px] font-medium text-amber-11">
+                {disabledReason}
+              </div>
             ) : null}
           </div>
-          <p className="mt-0.5 line-clamp-2 text-xs text-dls-secondary">{description}</p>
-          {disabledReason ? (
-            <div className="mt-2 text-[11px] font-medium text-amber-11">
-              {disabledReason}
-            </div>
-          ) : null}
           {!disabledReason && !connecting && actionLabel ? (
-            <div className="mt-2 text-[11px] font-medium text-dls-text transition-colors group-hover:opacity-80">
+            <div className={isStream ? "mt-2 shrink-0 text-xs font-medium text-dls-text transition-colors group-hover:opacity-80 sm:mt-0 sm:text-right" : "mt-2 text-[11px] font-medium text-dls-text transition-colors group-hover:opacity-80"}>
               {actionLabel}
             </div>
           ) : null}
