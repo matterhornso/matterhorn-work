@@ -960,108 +960,111 @@ function MatterhornMcpProductSection(props: {
   compact?: boolean;
 }) {
   const visibleToolCount = props.compact ? 3 : Number.POSITIVE_INFINITY;
+  const clientLabels = ["Codex", "Claude Code", "Claude Desktop", "Cursor"];
   return (
-    <section className={`@container/matterhorn-mcps ${props.compact ? "space-y-3" : "space-y-4"}`}>
-      <div className="flex flex-col gap-1">
-        <h3 className={props.compact ? "text-base font-semibold text-dls-text" : "text-lg font-semibold text-dls-text"}>Matterhorn MCPs</h3>
-        <p className={props.compact ? "max-w-full text-xs leading-5 text-dls-secondary" : "max-w-2xl text-sm leading-6 text-dls-secondary"}>
+    <section className={`@container/matterhorn-mcps ${props.compact ? "space-y-4" : "space-y-5"}`}>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
+          <h3 className={props.compact ? "text-base font-semibold text-dls-text" : "text-lg font-semibold text-dls-text"}>Matterhorn MCPs</h3>
+          <p className={props.compact ? "max-w-full text-xs leading-5 text-dls-secondary" : "max-w-2xl text-sm leading-6 text-dls-secondary"}>
           Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
-        </p>
-        <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
-          Matterhorn MCP cards are real installable command profiles. Marketplace connectors below may require account auth, local config, or API keys before their tools are active.
-        </p>
+          </p>
+          <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
+            Matterhorn MCP cards are real installable command profiles. Marketplace connectors below may require account auth, local config, or API keys before their tools are active.
+          </p>
+        </div>
+        <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
+          <span className={props.compact ? "mr-1 text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary" : "mr-1 text-[11px] font-medium uppercase tracking-[0.16em] text-dls-secondary"}>
+            Install by client
+          </span>
+          {clientLabels.map((client) => (
+            <span
+              key={client}
+              className={props.compact
+                ? "rounded-full bg-dls-surface-muted/45 px-2 py-0.5 text-[10px] text-dls-secondary"
+                : "rounded-full bg-dls-surface-muted/45 px-2.5 py-1 text-[11px] text-dls-secondary"
+              }
+            >
+              {client}
+            </span>
+          ))}
+        </div>
       </div>
 
-      <div className={props.compact ? "grid min-w-0 gap-3" : "grid min-w-0 gap-3 @5xl/matterhorn-mcps:grid-cols-2"}>
-        {props.cards.map((card) => (
-          <article
-            key={card.id}
-            className={props.compact
-              ? "min-w-0 overflow-hidden rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"
-              : "min-w-0 rounded-xl bg-dls-surface/72 p-4 ring-1 ring-dls-border/25"
-            }
-          >
-            <div className={props.compact ? "grid min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5" : "grid min-w-0 grid-cols-[44px_minmax(0,1fr)] gap-3"}>
-              <div className={props.compact ? "flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-surface-muted/70 ring-1 ring-dls-border/20" : "flex size-11 shrink-0 items-center justify-center rounded-lg bg-dls-surface-muted/70 ring-1 ring-dls-border/20"}>
-                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={props.compact ? 24 : 34} /> : <Code2 size={16} className="text-dls-text" />}
+      <div className="matterhorn-mcp-stream min-w-0 overflow-hidden rounded-[20px] bg-dls-surface-muted/18">
+        {props.cards.map((card) => {
+          const visibleTools = card.tools.slice(0, visibleToolCount);
+          const hiddenToolCount = Math.max(card.tools.length - visibleTools.length, 0);
+          const isProtocol = Boolean(card.protocolDeskId);
+          return (
+            <article
+              key={card.id}
+              className={props.compact
+                ? "grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 border-b border-dls-border/25 px-1 py-3 last:border-b-0"
+                : "grid min-w-0 grid-cols-[48px_minmax(0,1fr)] gap-4 border-b border-dls-border/25 px-3 py-4 last:border-b-0"
+              }
+            >
+              <div className={props.compact ? "flex size-8 shrink-0 items-center justify-center rounded-xl bg-dls-surface/55" : "flex size-12 shrink-0 items-center justify-center rounded-2xl bg-dls-surface/55"}>
+                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={props.compact ? 26 : 38} /> : <Code2 size={props.compact ? 16 : 18} className="text-dls-text" />}
               </div>
-              <div className={props.compact ? "min-w-0 space-y-1" : "min-w-0 space-y-1.5"}>
-                <h4 className={props.compact ? "truncate text-sm font-semibold text-dls-text" : "text-[15px] font-semibold text-dls-text"}>{card.name}</h4>
-                <p className={props.compact ? "line-clamp-2 text-[11px] leading-4 text-dls-secondary" : "text-xs leading-5 text-dls-secondary"}>{card.description}</p>
-              </div>
-            </div>
-
-            <div className={props.compact ? "mt-3 space-y-2.5" : "mt-4 space-y-3"}>
-              <div className={props.compact ? "flex items-center justify-between gap-2" : "flex flex-col gap-2 @lg/matterhorn-mcps:flex-row @lg/matterhorn-mcps:items-center @lg/matterhorn-mcps:justify-between"}>
-                <span className="text-xs font-medium text-dls-text">Install command</span>
-                <button
-                  type="button"
-                  className={props.compact
-                    ? "inline-flex shrink-0 items-center gap-1 rounded-md bg-dls-hover px-2 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-                    : "inline-flex w-fit max-w-full items-center gap-1.5 rounded-md bg-dls-hover px-2.5 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-                  }
-                  onClick={() => props.onCopyCommand(card.command)}
-                >
-                  <Copy size={props.compact ? 12 : 13} />
-                  <span className="truncate">{props.compact ? "Copy" : "Copy install command"}</span>
-                </button>
-              </div>
-              <code className={props.compact
-                ? "block max-h-14 max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md bg-dls-hover/80 px-2 py-1.5 text-[10px] leading-4 text-dls-text"
-                : "block max-w-full whitespace-pre-wrap break-all rounded-lg bg-dls-hover/80 px-3 py-2 text-[11px] leading-5 text-dls-text"
-              }>
-                {card.command}
-              </code>
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-dls-text">Supported tools</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {card.tools.slice(0, visibleToolCount).map((tool) => (
-                    <span
-                      key={tool}
-                      className={props.compact
-                        ? "max-w-full whitespace-normal break-all rounded-md bg-dls-surface-muted/70 px-2 py-1 font-mono text-[9px] leading-3 text-dls-secondary"
-                        : "max-w-full whitespace-normal break-all rounded-md bg-dls-surface-muted/70 px-2 py-1 font-mono text-[10px] text-dls-secondary"
-                      }
-                    >
-                      {tool}
-                    </span>
-                  ))}
-                  {props.compact && card.tools.length > visibleToolCount ? (
-                    <span className="rounded-md bg-dls-surface-muted/50 px-2 py-1 text-[9px] text-dls-secondary">
-                      +{card.tools.length - visibleToolCount} more
-                    </span>
-                  ) : null}
+              <div className="min-w-0">
+                <div className={props.compact ? "flex min-w-0 items-start justify-between gap-2" : "flex min-w-0 flex-wrap items-start justify-between gap-3"}>
+                  <div className="min-w-0">
+                    <h4 className={props.compact ? "truncate text-sm font-semibold text-dls-text" : "text-[15px] font-semibold text-dls-text"}>{card.name}</h4>
+                    <p className={props.compact ? "mt-0.5 line-clamp-2 text-[11px] leading-4 text-dls-secondary" : "mt-1 max-w-2xl text-xs leading-5 text-dls-secondary"}>{card.description}</p>
+                  </div>
+                  <span className={props.compact ? "shrink-0 rounded-full bg-dls-hover/45 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-dls-secondary" : "shrink-0 rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
+                    {isProtocol ? "Protocol MCP" : "Matterhorn core"}
+                  </span>
                 </div>
-              </div>
-              {props.compact ? (
-                <details className="group rounded-md bg-dls-surface-muted/40 px-2.5 py-2 text-[11px] leading-4 text-dls-secondary">
+
+                <div className={props.compact ? "mt-3 space-y-2" : "mt-4 grid gap-3 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_auto]"}>
+                  <div className={props.compact ? "min-w-0 border-l border-dls-border/30 pl-3" : "min-w-0 border-l border-dls-border/30 pl-3"}>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Install command</div>
+                    <code className={props.compact
+                      ? "mt-1 block max-w-full break-words font-mono text-[10px] leading-4 text-dls-text"
+                      : "mt-1 block max-w-full break-words font-mono text-[11px] leading-5 text-dls-text"
+                    }>
+                      {card.command}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    className={props.compact
+                      ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                      : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 self-start rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                    }
+                    onClick={() => props.onCopyCommand(card.command)}
+                  >
+                    <Copy size={props.compact ? 12 : 13} />
+                    <span className="truncate">{props.compact ? "Copy" : "Copy install command"}</span>
+                  </button>
+                </div>
+
+                <div className={props.compact ? "mt-3 space-y-1.5" : "mt-4 grid gap-2 text-xs @lg/matterhorn-mcps:grid-cols-2"}>
+                  <p className="min-w-0 text-dls-secondary">
+                    <span className="font-medium text-dls-text">Supported tools:</span>{" "}
+                    <span className="break-words font-mono text-[10px] leading-4">
+                      {visibleTools.join(", ")}
+                      {hiddenToolCount > 0 ? `, +${hiddenToolCount} more` : ""}
+                    </span>
+                  </p>
+                  <p className="min-w-0 text-dls-secondary">
+                    <span className="font-medium text-dls-text">Works in:</span>{" "}
+                    {card.worksWith.join(", ")}
+                  </p>
+                </div>
+
+                <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
                   <summary className="cursor-pointer list-none font-medium text-dls-text">
-                    Safety and compatibility
+                    Safety boundary
                   </summary>
-                  <p className="mt-2">
-                    <span className="font-medium text-dls-text">Safety:</span>{" "}
-                    {card.boundary}
-                  </p>
-                  <p className="mt-1">
-                    <span className="font-medium text-dls-text">Works in:</span>{" "}
-                    {card.worksWith.join(", ")}
-                  </p>
+                  <p className="mt-1.5">{card.boundary}</p>
                 </details>
-              ) : (
-                <>
-                  <p className="text-xs leading-5 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
-                    {card.boundary}
-                  </p>
-                  <p className="text-xs leading-5 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Works in:</span>{" "}
-                    {card.worksWith.join(", ")}
-                  </p>
-                </>
-              )}
-            </div>
-          </article>
-        ))}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
@@ -1071,8 +1074,8 @@ function McpCustomAppCard(props: { compact?: boolean; onOpen: () => void }) {
   return (
     <div
       className={props.compact
-        ? "rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"
-        : "rounded-xl bg-dls-surface/80 p-5 ring-1 ring-dls-border/35 sm:px-6"
+        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"
+        : "rounded-[24px] bg-dls-surface-muted/24 p-5 sm:px-6"
       }
     >
       <div className={props.compact ? "flex flex-col gap-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>

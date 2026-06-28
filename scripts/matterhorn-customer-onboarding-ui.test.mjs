@@ -611,13 +611,15 @@ for (const phrase of [
   "Matterhorn MCP cards are real installable command profiles.",
   "Marketplace connectors below may require account auth, local config, or API keys before their tools are active.",
   "@container/matterhorn-mcps",
-  "@5xl/matterhorn-mcps:grid-cols-2",
-  "grid-cols-[32px_minmax(0,1fr)]",
-  "max-h-14 max-w-full overflow-auto",
-  "Safety and compatibility",
-  "+{card.tools.length - visibleToolCount} more",
-  "grid-cols-[44px_minmax(0,1fr)]",
-  "whitespace-pre-wrap break-words",
+  "matterhorn-mcp-stream",
+  "Install by client",
+  "Protocol MCP",
+  "Matterhorn core",
+  "grid-cols-[34px_minmax(0,1fr)]",
+  "grid-cols-[48px_minmax(0,1fr)]",
+  "border-l border-dls-border/30 pl-3",
+  "Safety boundary",
+  "+${hiddenToolCount} more",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
@@ -648,13 +650,28 @@ assert.equal(
   false,
   "MCP product cards should use container width, not viewport width, so the right rail remains single-column.",
 );
+assert.equal(
+  settingsRoute.includes("@5xl/matterhorn-mcps:grid-cols-2"),
+  false,
+  "MCP product cards should use a divider stream instead of the old two-column boxed grid.",
+);
+assert.equal(
+  settingsRoute.includes("min-w-0 overflow-hidden rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"),
+  false,
+  "Compact MCP cards should not reintroduce the old right-rail boxed-card treatment.",
+);
+assert.equal(
+  settingsRoute.includes("max-h-14 max-w-full overflow-auto"),
+  false,
+  "MCP install commands should not be trapped inside tiny nested scroll boxes.",
+);
 assert.ok(
   settingsRoute.includes('props.compact ? "space-y-6" : "space-y-8 max-w-3xl"'),
   "MCP view should remove full-page max-width spacing when it is embedded in the right rail.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact ? "grid min-w-0 gap-3"'),
-  "MCP product cards should force a single compact column inside the right rail.",
+  settingsRoute.includes('props.compact ? "space-y-4" : "space-y-5"'),
+  "MCP product cards should use tight stream spacing instead of bulky card gaps.",
 );
 assert.ok(
   settingsRoute.includes("compact={props.compact}"),
@@ -685,16 +702,16 @@ assert.ok(
   "MCP custom app card should inherit the compact right-rail rendering mode.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact\n        ? "rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"'),
-  "MCP custom app card should use a compact, non-boxy rail treatment.",
+  settingsRoute.includes('props.compact\n        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"'),
+  "MCP custom app card should use a compact, soft rail treatment.",
 );
 assert.ok(
-  settingsRoute.includes("break-all rounded-lg"),
-  "MCP install command blocks should wrap long commands instead of overflowing.",
+  settingsRoute.includes("break-words font-mono"),
+  "MCP install command rows should wrap long commands instead of overflowing.",
 );
 assert.ok(
-  settingsRoute.includes("whitespace-normal break-all"),
-  "MCP tool chips should wrap long tool names instead of overlapping card content.",
+  settingsRoute.includes("<span className=\"font-medium text-dls-text\">Supported tools:</span>"),
+  "MCP tools should render as compact readable summaries instead of overlapping chip piles.",
 );
 assert.equal(
   settingsRoute.includes("max-w-full truncate rounded-md"),
