@@ -1713,7 +1713,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                         <p className="text-xs leading-5 text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <div className="matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
                         const protocolLogo = ProtocolLogo({ iconHint: item.iconHint, size: 30 });
@@ -1724,21 +1724,21 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group grid min-h-[78px] min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-2.5 rounded-lg bg-dls-surface-muted/55 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)] gap-2.5 rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
                             <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
                               {protocolLogo ?? <Icon className="size-4" />}
                             </span>
-                            <span className="grid min-w-0 gap-1">
+                            <span className="grid min-w-0 gap-0.5">
                               <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                 <span className="min-w-0 truncate text-[13px] font-semibold leading-tight text-dls-text">{item.title}</span>
                                 <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
                                   {item.statusLabel}
                                 </span>
                               </span>
-                              <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-2">{item.description}</span>
-                              <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
+                              <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
+                              <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>
                               <span className="text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
                                 Insert editable prompt
                               </span>

@@ -408,29 +408,27 @@ function DeskLauncherButton({
     <button
       type="button"
       style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      className="matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)] items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.075)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[32px_minmax(0,1fr)_auto]"
       onClick={onOpen}
     >
-      <span className="grid min-w-0 flex-1 grid-cols-[32px_minmax(0,1fr)] gap-3">
-        <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
-          {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={26} /> : <Icon className="size-4" />}
-        </span>
-        <span className="grid min-w-0 gap-1">
-          <span className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] sm:items-start">
-            <span className="truncate text-sm font-semibold leading-snug text-dls-text">
-              {launcher.workspaceDisplayName ?? launcher.title}
-            </span>
-            <span className="hidden truncate text-[12px] leading-5 text-dls-secondary sm:block">
-              {launcher.description}
-            </span>
-          </span>
-          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-muted">
-            <span className="font-medium text-[var(--matterhorn-desk-color)]">{launcher.statusLabel}</span>
-            <span className="truncate">{capabilitySummary}</span>
-          </span>
-        </span>
-        <span className="sr-only">{launcher.safetySummary}</span>
+      <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+        {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={26} /> : <Icon className="size-4" />}
       </span>
+      <span className="grid min-w-0 gap-0.5">
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="truncate text-[13px] font-semibold leading-snug text-dls-text">
+            {launcher.workspaceDisplayName ?? launcher.title}
+          </span>
+          <span className="shrink-0 text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
+            {launcher.statusLabel}
+          </span>
+        </span>
+        <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">
+          {launcher.description}
+        </span>
+        <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
+      </span>
+      <span className="sr-only">{launcher.safetySummary}</span>
       <span className="hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline">
         {actionLabel}
       </span>
@@ -450,11 +448,11 @@ function HomeDeskLaunchers({
   const launchers = [...protocolLaunchers, ...businessLaunchers];
   return (
     <section
-      className="matterhorn-desk-board space-y-3"
-      style={{ contentVisibility: "auto", containIntrinsicSize: "480px" } as CSSProperties}
+      className="matterhorn-desk-board space-y-2"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "280px" } as CSSProperties}
       aria-label="Matterhorn desk launchers"
     >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
@@ -465,7 +463,7 @@ function HomeDeskLaunchers({
           No auto-send
         </span>
       </div>
-      <div className="matterhorn-desk-command-list divide-y divide-dls-border/35">
+      <div className="matterhorn-desk-command-list grid gap-1">
         {launchers.map((launcher) => (
           <DeskLauncherButton
             key={launcher.id}

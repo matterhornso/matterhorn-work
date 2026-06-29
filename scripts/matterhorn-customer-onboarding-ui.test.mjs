@@ -47,6 +47,7 @@ const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/
 const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
 const serverProvider = read("apps/app/src/react-app/kernel/server-provider.tsx");
 const globalSdkProvider = read("apps/app/src/react-app/kernel/global-sdk-provider.tsx");
+const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-checklist.md");
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
@@ -98,7 +99,7 @@ for (const phrase of [
   "Open desk",
   "Draft prompt",
   "grid-cols-[32px_minmax(0,1fr)]",
-  "divide-y divide-dls-border/35",
+  "matterhorn-desk-command-list grid gap-1",
   "workflowLauncherCapabilityItems",
   "TAO wallet reads",
   "Subnet discovery",
@@ -381,16 +382,16 @@ assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidd
 assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfaces should avoid oversized card radii");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
-assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
+assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
-assert.ok(sessionSurface.includes("group grid min-h-[78px] min-w-0 grid-cols-[34px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
+assert.ok(sessionSurface.includes("group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
 assert.ok(sessionSurface.includes("hasTranscriptJumpTarget && (!sessionScroll.isAtBottom"), "empty workflow launchers should not show transcript jump controls over the content");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
 assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
 assert.equal(sessionSurface.includes("rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), false, "starter workflow rows should not use the old boxed card treatment");
-assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/35"), "home desk launchers should render as a lightweight command list, not a card grid");
-assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3"), "home desk launcher rows should use compact command-row spacing");
+assert.ok(sessionPage.includes("matterhorn-desk-command-list grid gap-1"), "home desk launchers should render as a lightweight command list, not a card grid");
+assert.ok(sessionPage.includes("matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact command-row spacing");
 assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
 assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
 assert.ok(sessionPage.includes("matterhorn-capability-row grid gap-3 py-3 text-left"), "home capability status should use compact list rows");
@@ -398,6 +399,21 @@ assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb
 assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
 assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
 assert.equal(sessionPage.includes("grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3"), false, "home desk launchers should not fall back to the old box grid");
+
+for (const phrase of [
+  "Matterhorn Work Beta Go-Live Checklist For First 10 Users",
+  "Bittensor Desk",
+  "Hyperliquid Desk",
+  "Polymarket Desk",
+  "Wellness Desk",
+  "MCPs, Memory, Profile, Wallet, And Settings",
+  "Security Negative Tests",
+  "Stop Criteria",
+  "Developer-only names such as lighthouse, harness, OpenWork, OpenCode, Computer Use, and Services must not appear",
+  "Settings cards must show honest readiness states",
+]) {
+  assert.ok(betaGoLiveChecklist.includes(phrase), `beta go-live checklist should cover: ${phrase}`);
+}
 assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
 assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
 assert.ok(sessionPage.includes("props.developerMode ? ("), "customer home should keep beta/demo QA launchers behind developer mode");
