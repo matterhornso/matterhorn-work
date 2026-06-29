@@ -18,7 +18,7 @@ Source: [`apps/app/src/react-app/domains/settings/pages/overview-view.tsx`](../a
 
 ## Safety invariants (gate-enforced)
 
-`pnpm test:settings-overview-ui` asserts: all nine sections present; the non-custodial / external-signer / preview-only / no-secret-storage copy is present; **no** affirmative live-submission/custody/secret-storage claims; and **no** OpenWork/OpenCode visible copy (the `VITE_OPENWORK_APP_VERSION` env identifier is not user-visible).
+`pnpm test:settings-overview-ui` asserts: all nine sections present; the non-custodial / external-signer / preview-only / no-secret-storage copy is present; readiness badges include `Ready`, `Needs setup`, `Preview`, `Desktop only`, `Cloud only`, and `Developer`; Advanced, Environment, Recovery, Cloud Workers, and Agent Marketplace stay gated behind developer/cloud/preview framing; **no** affirmative live-submission/custody/secret-storage claims; and **no** OpenWork/OpenCode visible copy (the `VITE_OPENWORK_APP_VERSION` env identifier is not user-visible).
 
 ## Wiring
 

@@ -33,7 +33,7 @@ type SettingsHubCard = {
   icon: typeof Sparkles;
   title: string;
   desc: string;
-  status: "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only";
+  status: "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only" | "Developer";
   developerOnly?: boolean;
 };
 
@@ -41,7 +41,7 @@ const workspaceCards: SettingsHubCard[] = [
   { tab: "preferences", icon: Cog, title: "Preferences", desc: "Default model, reasoning, and compaction.", status: "Ready" },
   { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Authorized folders and file access.", status: "Ready" },
   { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers, protocol tools, connectors, and plugins.", status: "Ready" },
-  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime, engine, and developer options.", status: "Desktop only" },
+  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime, engine, and developer options.", status: "Developer", developerOnly: true },
 ];
 
 const globalCards: SettingsHubCard[] = [
@@ -50,7 +50,7 @@ const globalCards: SettingsHubCard[] = [
   { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme, font size, and display.", status: "Ready" },
   { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "App version and update channel.", status: "Desktop only" },
   { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud-only worker instances after Matterhorn Cloud sign-in.", status: "Cloud only", developerOnly: true },
-  { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables. Requires server token.", status: "Preview", developerOnly: true },
+  { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables. Requires server token.", status: "Developer", developerOnly: true },
   { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Disabled reset/repair diagnostics preview.", status: "Preview", developerOnly: true },
 ];
 
@@ -68,6 +68,8 @@ function SettingsCard(props: {
         ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
         : props.status === "Preview"
           ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          : props.status === "Developer"
+            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
           : "border-slate-500/40 bg-slate-500/10 text-slate-300";
 
   return (
@@ -82,7 +84,7 @@ function SettingsCard(props: {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="min-w-0 truncate text-[13px] font-medium text-dls-text">{props.title}</div>
-          <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${statusClass}`}>
+          <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium tracking-normal ${statusClass}`}>
             {props.status}
           </span>
         </div>

@@ -196,7 +196,13 @@ export function getSettingsTabDescription(tab: SettingsTab) {
   }
 }
 
-export type SettingsReadinessStatus = "Ready" | "Needs setup" | "Preview" | "Desktop only" | "Cloud only";
+export type SettingsReadinessStatus =
+  | "Ready"
+  | "Needs setup"
+  | "Preview"
+  | "Desktop only"
+  | "Cloud only"
+  | "Developer";
 
 export function getSettingsTabStatus(tab: SettingsTab): SettingsReadinessStatus | null {
   switch (tab) {
@@ -219,17 +225,17 @@ export function getSettingsTabStatus(tab: SettingsTab): SettingsReadinessStatus 
       return "Cloud only";
     case "environment":
     case "debug":
-      return "Preview";
+      return "Developer";
     case "advanced":
-      return "Desktop only";
+      return "Developer";
     default:
       return null;
   }
 }
 
 export function getWorkspaceSettingsTabs(developerMode = false): SettingsTab[] {
-  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "extensions", "advanced"];
-  if (developerMode) tabs.splice(4, 0, "marketplace");
+  const tabs: SettingsTab[] = ["preferences", "permissions", "wallet", "extensions"];
+  if (developerMode) tabs.push("marketplace", "advanced");
   return tabs;
 }
 
@@ -253,10 +259,12 @@ function SettingsTabReadinessBadge(props: { status: SettingsReadinessStatus | nu
         ? "border-sky-500/30 bg-sky-500/10 text-sky-300"
         : props.status === "Preview"
           ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-          : "border-slate-500/40 bg-slate-500/10 text-slate-300";
+          : props.status === "Developer"
+            ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+            : "border-slate-500/40 bg-slate-500/10 text-slate-300";
 
   return (
-    <span className={`ml-auto hidden shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] xl:inline-flex ${tone}`}>
+    <span className={`ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-medium tracking-normal xl:inline-flex ${tone}`}>
       {props.status}
     </span>
   );

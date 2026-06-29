@@ -223,7 +223,7 @@ function SettingsSectionMenu(props: Pick<SettingsPageFrameProps, "activeTab" | "
                   <Icon />
                   <span>{getSettingsTabLabel(tab)}</span>
                   {getSettingsTabStatus(tab) ? (
-                    <span className="ml-auto rounded-full border border-dls-border px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-dls-secondary">
+                    <span className="ml-auto rounded-md border border-dls-border px-1.5 py-0.5 text-[9px] font-medium tracking-normal text-dls-secondary">
                       {getSettingsTabStatus(tab)}
                     </span>
                   ) : null}
