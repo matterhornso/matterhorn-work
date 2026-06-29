@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   BrainCircuit,
+  Cloud,
   Database,
   Dumbbell,
   FileText,
@@ -57,7 +58,6 @@ import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import { useShellConfig } from "../../../shell/shell-config";
 import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-store";
-import { BetaAuthMenu } from "../../auth";
 
 import { isElectronRuntime } from "../../../../app/utils";
 import { BrowserPanel } from "../browser/browser-panel";
@@ -208,46 +208,63 @@ function homeCapabilityStatusItems(): HomeCapabilityStatusItem[] {
   }));
 }
 
-function HomeCapabilityStatus() {
+function DeskBrandMark({
+  id,
+  size = 24,
+}: {
+  id: CustomerWorkflowIconHint | VenueSidePanel | "memory" | "mcp";
+  size?: number;
+}) {
+  const visual = getCustomerProtocolDeskVisual(id);
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[id as CustomerWorkflowIconHint] ?? FileText;
+  if (visual) return <ProtocolBrandLogo id={visual.id} visual={visual} size={size} />;
+  return <Icon className="size-4" />;
+}
+
+function HomeCapabilityOverview() {
   return (
-    <section className="space-y-2" aria-label="Current capability status">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <section className="matterhorn-capability-overview space-y-3" aria-label="Desk capability overview">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-dls-text">Current capability status</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-            A quick read on what each desk can do today. Open a desk for the full workflow. These launchers are connected to Matterhorn workflow metadata. Matterhorn Wallet lives in the right rail. One wallet surface for EVM tools. Bittensor uses public SS58 reads and external signing.
+          <h3 className="text-sm font-semibold text-dls-text">Capability status</h3>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary text-pretty">
+            Each desk keeps its own context, wallet needs, previews, and safety boundary. Markets stay preview-only;
+            Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
-        <span className="self-start rounded-md bg-dls-surface-muted/70 px-2.5 py-1 text-[10px] font-semibold text-primary sm:self-auto">
-          Live boundaries visible
-        </span>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-dls-secondary">
+          <span className="text-primary">
+            Wallet stays external
+          </span>
+          <span>
+            No hidden auto-send
+          </span>
+        </div>
       </div>
-      <div className="grid gap-x-5 gap-y-1 sm:grid-cols-2">
+      <div className="divide-y divide-dls-border/45">
         {homeCapabilityStatusItems().map((item) => {
-          const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.id];
           return (
             <div
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="group flex items-start gap-3 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)]"
+              className="matterhorn-capability-row grid gap-3 py-3 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.035)] md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)] md:items-start"
             >
-              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] text-[var(--matterhorn-desk-color)]">
-                {item.id === "bittensor" || item.id === "hyperliquid" || item.id === "polymarket" ? (
-                  <ProtocolLogo venue={item.id} size={23} />
-                ) : (
-                  <Icon className="size-4" />
-                )}
+              <span className="hidden text-[var(--matterhorn-desk-color)] md:flex md:size-7 md:items-center md:justify-center">
+                <DeskBrandMark id={item.id} size={22} />
               </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[12px] font-semibold text-dls-text">{item.title}</span>
-                  <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
+              <div className="min-w-0 px-0.5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
+                  <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
                     {item.statusLabel}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{item.summary}</p>
+                <p className="mt-1 max-w-xl text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
                 <p className="sr-only">{item.proof}</p>
               </div>
+              <p className="px-0.5 text-[11px] leading-5 text-dls-secondary sm:pt-1">
+                {item.proof}
+              </p>
             </div>
           );
         })}
@@ -271,41 +288,53 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-8 sm:px-6 sm:py-10"
+      className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-10"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="flex items-start gap-4">
-        <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)] text-[var(--matterhorn-desk-color)]">
-          <ProtocolLogo venue={panel} size={40} />
+      <div className="matterhorn-focused-desk-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
+        <span className="pointer-events-none absolute -right-9 -top-12 opacity-[0.08]" aria-hidden="true">
+          <ProtocolLogo venue={panel} size={170} />
         </span>
-        <div className="min-w-0">
-          <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
-            {visual?.displayName ?? panel} desk
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
-            {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
-          </p>
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+              <ProtocolLogo venue={panel} size={52} />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+                {visual?.displayName ?? panel} desk
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
+                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
+              </p>
+            </div>
+          </div>
+          <div className="matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+            <span>External signer</span>
+            <span>Editable prompts</span>
+            <span>No auto-send</span>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text">
-        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Safety boundary:</span> {safeBoundary}
-      </div>
+      <p className="text-sm leading-6 text-dls-secondary">
+        <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
+      </p>
 
-      <div className="divide-y divide-dls-border/55">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl bg-dls-surface/48">
         {prompts.map((item) => (
           <button
             key={item.title}
             type="button"
-            className="group flex w-full items-center justify-between gap-4 px-1 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             onClick={() => onUsePrompt(item.prompt)}
           >
-            <span>
+            <span className="min-w-0">
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="shrink-0 text-xs font-semibold text-[var(--matterhorn-desk-color)]">Use prompt</span>
+            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Draft in chat</span>
           </button>
         ))}
       </div>
@@ -330,6 +359,87 @@ function workflowLauncherCapabilityItems(launcher: CustomerWorkflowStarterCard):
       }
       return ["Editable prompt", "Safe context", "No auto-send"];
   }
+}
+
+function DeskLauncherButton({
+  launcher,
+  onOpen,
+}: {
+  launcher: CustomerWorkflowStarterCard;
+  onOpen: () => void;
+}) {
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
+  const capabilityItems = workflowLauncherCapabilityItems(launcher);
+  const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
+  const actionLabel = launcher.panel ? "Open desk" : "Draft prompt";
+  return (
+    <button
+      type="button"
+      style={deskToneStyle(launcher.iconHint)}
+      className="matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.06)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+      onClick={onOpen}
+    >
+      <span className="grid min-w-0 flex-1 grid-cols-[32px_minmax(0,1fr)] gap-3">
+        <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+          {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={26} /> : <Icon className="size-4" />}
+        </span>
+        <span className="grid min-w-0 gap-1">
+          <span className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1fr)] sm:items-start">
+            <span className="truncate text-sm font-semibold leading-snug text-dls-text">
+              {launcher.workspaceDisplayName ?? launcher.title}
+            </span>
+            <span className="hidden truncate text-[12px] leading-5 text-dls-secondary sm:block">
+              {launcher.description}
+            </span>
+          </span>
+          <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-4 text-dls-muted">
+            <span className="font-medium text-[var(--matterhorn-desk-color)]">{launcher.statusLabel}</span>
+            <span className="truncate">{capabilitySummary}</span>
+          </span>
+        </span>
+        <span className="sr-only">{launcher.safetySummary}</span>
+      </span>
+      <span className="hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline">
+        {actionLabel}
+      </span>
+    </button>
+  );
+}
+
+function HomeDeskLaunchers({
+  protocolLaunchers,
+  businessLaunchers,
+  onOpenLauncher,
+}: {
+  protocolLaunchers: CustomerWorkflowStarterCard[];
+  businessLaunchers: CustomerWorkflowStarterCard[];
+  onOpenLauncher: (launcher: CustomerWorkflowStarterCard) => void;
+}) {
+  const launchers = [...protocolLaunchers, ...businessLaunchers];
+  return (
+    <section className="matterhorn-desk-board space-y-3" aria-label="Matterhorn desk launchers">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
+          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+            Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.
+          </p>
+        </div>
+        <span className="hidden shrink-0 text-[11px] font-semibold text-primary sm:inline">
+          No auto-send
+        </span>
+      </div>
+      <div className="matterhorn-desk-command-list divide-y divide-dls-border/35">
+        {launchers.map((launcher) => (
+          <DeskLauncherButton
+            key={launcher.id}
+            launcher={launcher}
+            onOpen={() => onOpenLauncher(launcher)}
+          />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 type StatusBarOverrides = Pick<
@@ -432,6 +542,8 @@ export type SessionPageProps = {
   onAccessibleTargetsChange?: (targets: OpenTarget[]) => void;
   /** Settings content rendered inside the right pane when the settings rail icon is active. */
   settingsSlot?: React.ReactNode;
+  /** Settings content rendered inside the right pane for a specific compact settings route. */
+  settingsSlotForPath?: (initialPath: "cloud-account" | "wallet" | "extensions") => React.ReactNode;
 };
 
 function getSidebarInitialLoading(props: SessionPageSidebarProps) {
@@ -537,6 +649,7 @@ export function SessionPage(props: SessionPageProps) {
   const artifactRailActive = activeSidePanel === "artifacts";
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
+  const profileRailActive = activeSidePanel === "profile";
   const memoryRailActive = activeSidePanel === "memory";
   const walletRailActive = activeSidePanel === "wallet";
   const bittensorRailActive = activeSidePanel === "bittensor";
@@ -544,6 +657,15 @@ export function SessionPage(props: SessionPageProps) {
   const polymarketRailActive = activeSidePanel === "polymarket";
   const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
   const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const renderCompactSettingsRail = (initialPath: "cloud-account" | "wallet" | "extensions") => {
+    const slot = props.settingsSlotForPath?.(initialPath)
+      ?? (initialPath === "extensions" ? props.settingsSlot : null);
+    return slot ? (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        {slot}
+      </div>
+    ) : null;
+  };
   const voiceExtension = useMemo(
     () => OPENWORK_EXTENSION_CATALOG.find((entry) => getExtensionId(entry) === "matterhorn-voice") ?? null,
     [],
@@ -1263,12 +1385,10 @@ export function SessionPage(props: SessionPageProps) {
                       />
                     </div>
                   ) : (
-                    <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-7 sm:px-6 sm:py-9">
-                      <div className="pointer-events-none absolute left-1/2 top-8 h-40 w-[32rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(var(--matterhorn-blue-rgb),0.08),transparent_70%)] blur-3xl" aria-hidden="true" />
-                      <div className="pointer-events-none absolute right-10 top-1/3 h-52 w-52 rounded-full bg-[radial-gradient(circle,rgba(168,85,247,0.055),transparent_72%)] blur-3xl" aria-hidden="true" />
-                      <div className="relative w-full max-w-5xl space-y-5">
+                    <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
+                      <div className="relative w-full max-w-4xl space-y-5">
                         <div className="mx-auto max-w-2xl space-y-2 text-center">
-                          <h2 className="text-2xl font-semibold text-dls-text sm:text-[1.72rem]">
+                          <h2 className="text-2xl font-semibold leading-tight text-dls-text">
                             Start a Matterhorn project.
                           </h2>
                           <p className="mx-auto max-w-xl text-sm leading-6 text-dls-secondary">
@@ -1312,200 +1432,148 @@ export function SessionPage(props: SessionPageProps) {
                             Open Bittensor desk
                           </button>
                         </div>
-                        <HomeCapabilityStatus />
-                        <section className="space-y-3">
-                          <div className="flex items-end justify-between gap-3">
-                            <div>
-                              <h3 className="text-sm font-semibold text-dls-text">Matterhorn Desks</h3>
+                        <HomeCapabilityOverview />
+                        <HomeDeskLaunchers
+                          protocolLaunchers={protocolWorkflowLaunchers}
+                          businessLaunchers={businessWorkflowLaunchers}
+                          onOpenLauncher={(launcher) => {
+                            if (launcher.panel) {
+                              openVenueRailPane(launcher.panel);
+                              return;
+                            }
+                            props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt);
+                          }}
+                        />
+                        {props.developerMode ? (
+                          <>
+                            <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
+                                <span>Monday beta demos</span>
+                                <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                                  Public/redacted only
+                                </span>
+                              </summary>
                               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                                Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness. Each desk has its own prompt context, capability status, and safety boundary.
+                                Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
                               </p>
-                            </div>
-                            <span className="hidden rounded-md bg-dls-surface-muted px-2.5 py-1 text-[10px] font-medium text-dls-secondary sm:inline-flex">
-                              No hidden auto-send
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            {[...protocolWorkflowLaunchers, ...businessWorkflowLaunchers].map((launcher) => {
-                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
-                              const capabilityItems = workflowLauncherCapabilityItems(launcher);
-                              return (
-                                <button
-                                  key={launcher.id}
-                                  type="button"
-                                  style={deskToneStyle(launcher.iconHint)}
-                                  className="group relative isolate flex w-full flex-col items-start overflow-hidden rounded-md px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4"
-                                  onClick={() => {
-                                    if (launcher.panel) {
-                                      openVenueRailPane(launcher.panel);
-                                      return;
-                                    }
-                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt);
-                                  }}
-                                >
-                                  <span className="pointer-events-none absolute -right-4 -top-5 opacity-[0.06]" aria-hidden="true">
-                                    {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={96} /> : <Icon className="size-20 text-[var(--matterhorn-desk-color)]" />}
-                                  </span>
-                                  <span className="relative flex w-full min-w-0 items-start gap-3">
-                                    <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.15)] text-[var(--matterhorn-desk-color)]">
-                                      {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={30} /> : <Icon className="size-4" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-sm font-semibold leading-tight text-dls-text">{launcher.workspaceDisplayName ?? launcher.title}</span>
-                                        <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.15)] px-2 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                          {launcher.statusLabel}
+                              <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
+                                {mondayBetaDemoCards.map((demo) => {
+                                  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
+                                  return (
+                                    <button
+                                      key={demo.id}
+                                      type="button"
+                                      style={deskToneStyle(demo.iconHint)}
+                                      className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      onClick={() => {
+                                        if (demo.panel) {
+                                          openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
+                                          return;
+                                        }
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
+                                      }}
+                                    >
+                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                                      <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
+                                        {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
+                                      </span>
+                                      <span className="relative flex w-full items-start gap-3">
+                                        <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
+                                          {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
+                                        </span>
+                                        <span className="min-w-0 flex-1">
+                                          <span className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
+                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                              {demo.statusLabel}
+                                            </span>
+                                          </span>
+                                          <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
                                         </span>
                                       </span>
-                                      <span className="mt-1.5 line-clamp-3 block text-[12px] leading-5 text-dls-secondary">{launcher.description}</span>
-                                    </span>
-                                  </span>
-                                  <span className="relative mt-3 flex w-full flex-wrap gap-x-3 gap-y-1 sm:mt-0 sm:max-w-[360px] sm:justify-end">
-                                    {capabilityItems.slice(0, 3).map((item) => (
-                                      <span
-                                        key={item}
-                                        className="flex items-center gap-1.5 text-[11px] font-medium text-dls-text"
-                                      >
-                                        <span className="size-1.5 shrink-0 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-                                        <span>{item}</span>
+                                      <span className="relative mt-3 block text-[11px] leading-5 text-dls-secondary">
+                                        <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
                                       </span>
-                                    ))}
-                                    <span className="basis-full pt-1 text-left text-[12px] font-semibold text-[var(--matterhorn-desk-color)] sm:text-right">
-                                      Open desk with editable prompt
-                                    </span>
-                                  </span>
-                                  <span className="sr-only">{launcher.safetySummary}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </section>
-                        <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
-                            <span>Monday beta demos</span>
-                            <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
-                              Public/redacted only
-                            </span>
-                          </summary>
-                          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                            Guided runs for the first 10 test customers. Each inserts an editable prompt and points to an evidence command.
-                          </p>
-                          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-2">
-                            {mondayBetaDemoCards.map((demo) => {
-                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[demo.iconHint];
-                              return (
-                                <button
-                                  key={demo.id}
-                                  type="button"
-                                  style={deskToneStyle(demo.iconHint)}
-                                  className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-                                  onClick={() => {
-                                    if (demo.panel) {
-                                      openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
-                                      return;
-                                    }
-                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
-                                  }}
-                                >
-                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
-                                  <span className="pointer-events-none absolute -right-4 -top-4 opacity-[0.07]" aria-hidden="true">
-                                    {demo.panel ? <ProtocolLogo venue={demo.panel} size={92} /> : <Icon className="size-24 text-[var(--matterhorn-desk-color)]" />}
-                                  </span>
-                                  <span className="relative flex w-full items-start gap-3">
-                                    <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
-                                      {demo.panel ? <ProtocolLogo venue={demo.panel} size={25} /> : <Icon className="size-4" />}
-                                    </span>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-[13px] font-semibold text-dls-text">{demo.title}</span>
-                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
-                                          {demo.statusLabel}
+                                      <span className="relative mt-2 block text-[11px] leading-5 text-dls-secondary">
+                                        <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
+                                      </span>
+                                      <span className="sr-only">{demo.safetySummary}</span>
+                                      <span className="relative mt-3 block max-w-full truncate rounded-md bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
+                                        {demo.evidenceCommand}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                            <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
+                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
+                                <span>Business workflows</span>
+                                <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                                  Planned services only
+                                </span>
+                              </summary>
+                              <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
+                                Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
+                              </p>
+                              <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
+                                {businessWorkflowLaunchers.map((task) => {
+                                  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
+                                  return (
+                                    <button
+                                      key={task.id}
+                                      type="button"
+                                      style={deskToneStyle(task.iconHint)}
+                                      className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                                      onClick={() => {
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
+                                      }}
+                                    >
+                                      <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
+                                      <span className="flex items-start gap-3">
+                                        <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
+                                          <Icon className="size-4" />
+                                        </span>
+                                        <span className="min-w-0">
+                                          <span className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
+                                            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
+                                              {task.statusLabel}
+                                            </span>
+                                          </span>
+                                          <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{task.description}</span>
                                         </span>
                                       </span>
-                                      <span className="mt-1 block text-[11px] leading-relaxed text-dls-secondary">{demo.persona}</span>
-                                    </span>
-                                  </span>
-                                  <span className="relative mt-3 block text-[11px] leading-5 text-dls-secondary">
-                                    <span className="font-medium text-dls-text">Customers:</span> {demo.customers}
-                                  </span>
-                                  <span className="relative mt-2 block text-[11px] leading-5 text-dls-secondary">
-                                    <span className="font-medium text-dls-text">Expected:</span> {demo.artifactSummary}
-                                  </span>
-                                  <span className="sr-only">{demo.safetySummary}</span>
-                                  <span className="relative mt-3 block max-w-full truncate rounded-md bg-dls-surface px-2.5 py-1.5 font-mono text-[10px] text-dls-secondary">
-                                    {demo.evidenceCommand}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </details>
-                        <details className="group rounded-lg bg-dls-surface-muted/35 px-3.5 py-3">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-dls-text marker:hidden">
-                            <span>Business workflows</span>
-                            <span className="rounded-md bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
-                              Planned services only
-                            </span>
-                          </summary>
-                          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-                            Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
-                          </p>
-                          <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
-                            {businessWorkflowLaunchers.map((task) => {
-                              const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[task.iconHint];
-                              return (
-                                <button
-                                  key={task.id}
-                                  type="button"
-                                  style={deskToneStyle(task.iconHint)}
-                                  className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-                                  onClick={() => {
-                                    props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
-                                  }}
-                                >
-                                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
-                                  <span className="flex items-start gap-3">
-                                      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--matterhorn-desk-color)] text-white shadow-sm">
-                                      <Icon className="size-4" />
-                                    </span>
-                                    <span className="min-w-0">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
-                                        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
-                                          {task.statusLabel}
-                                        </span>
+                                      <span className="grid gap-1.5 sm:grid-cols-2">
+                                        {[
+                                          "Service offer packet",
+                                          "Onboarding questionnaire",
+                                          "Weekly program plan",
+                                          "Progress check-in",
+                                          "Renewal/follow-up note",
+                                          "Client handoff packet",
+                                        ].map((artifact) => (
+                                          <span
+                                            key={artifact}
+                                            className="rounded-md bg-dls-surface/52 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
+                                          >
+                                            {artifact}
+                                          </span>
+                                        ))}
                                       </span>
-                                      <span className="mt-1.5 block text-[12px] leading-5 text-dls-secondary">{task.description}</span>
-                                    </span>
-                                  </span>
-                                  <span className="grid gap-1.5 sm:grid-cols-2">
-                                    {[
-                                      "Service offer packet",
-                                      "Onboarding questionnaire",
-                                      "Weekly program plan",
-                                      "Progress check-in",
-                                      "Renewal/follow-up note",
-                                      "Client handoff packet",
-                                    ].map((artifact) => (
-                                      <span
-                                        key={artifact}
-                                        className="rounded-md bg-dls-surface/52 px-2.5 py-1.5 text-[11px] font-medium text-dls-text"
-                                      >
-                                        {artifact}
+                                      <span className="rounded-lg bg-dls-surface/60 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
+                                        {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
                                       </span>
-                                    ))}
-                                  </span>
-                                  <span className="rounded-lg bg-dls-surface/60 px-3 py-2 text-[11px] leading-5 text-dls-secondary">
-                                    {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
-                                  </span>
-                                  <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                    Start wellness workflow -&gt;
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </details>
+                                      <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                        Start wellness workflow -&gt;
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </details>
+                          </>
+                        ) : null}
                         <section className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-2">
                           {blankWorkflowLauncher ? (
                             <button
@@ -1575,16 +1643,18 @@ export function SessionPage(props: SessionPageProps) {
                   maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
                   className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
-                  {activeSidePanel === "extensions" && props.settingsSlot ? (
-                    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background">
-                      {props.settingsSlot}
-                    </div>
+                  {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+                    renderCompactSettingsRail("extensions")
                   ) : activeSidePanel === "voice" ? (
                     <VoicePanel
                       client={props.matterhornServerClient}
                       sessionId={props.selectedSessionId}
                       onClose={closeRightPane}
                     />
+                  ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
+                    renderCompactSettingsRail("cloud-account")
+                  ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
+                    renderCompactSettingsRail("wallet")
                   ) : activeSidePanel === "memory" ? (
                     <MemoryPanel
                       client={props.matterhornServerClient}
@@ -1603,12 +1673,12 @@ export function SessionPage(props: SessionPageProps) {
                       onSelectTarget={openTarget}
                       onClose={closeRightPane}
                     />
-                  ) : activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel) ? (
+                  ) : isVenueSidePanel(activeSidePanel) ? (
                     <WalletPanel
                       store={wallet.store}
                       gasPriceGwei={sessionWallet.gasPriceGwei}
                       blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                      initialVenue={isVenueSidePanel(activeSidePanel) ? activeSidePanel : "bittensor"}
+                      initialVenue={activeSidePanel}
                     />
                   ) : (
                     <BrowserPanel onClose={closeRightPane} />
@@ -1632,24 +1702,21 @@ export function SessionPage(props: SessionPageProps) {
               </Button>
             ) : null}
             <div className="flex w-full flex-col items-center gap-1 border-b border-white/[0.06] pb-2">
-              {shellConfig.cloudSignin ? (
-                <div className="flex w-full flex-col items-center gap-1 rounded-md px-1 py-1 text-muted-foreground" title="Profile and account">
-                  <BetaAuthMenu compact />
-                  <span className="text-[9px] leading-none">Profile</span>
-                </div>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground"
-                  onClick={props.onOpenSettings}
-                  title="Profile and Settings"
-                  aria-label="Profile and Settings"
-                >
-                  <Settings2 size={17} />
-                  <span className="text-[9px] leading-none">Profile</span>
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  profileRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                )}
+                onClick={() => setCurrentSidePanel("profile")}
+                title={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
+                aria-label={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
+                aria-pressed={profileRailActive}
+              >
+                {shellConfig.cloudSignin ? <Cloud size={17} /> : <Settings2 size={17} />}
+                <span className="text-[9px] leading-none">Profile</span>
+              </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"

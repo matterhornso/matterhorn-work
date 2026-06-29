@@ -63,6 +63,8 @@ import {
   type ConfigScope,
   type McpViewLocalState,
 } from "./mcp-view-state";
+import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
+import type { CustomerProtocolDeskId } from "../../session/workflows/protocol-desk-ui";
 
 export type ReactMcpStatus =
   | "connected"
@@ -118,6 +120,8 @@ export type McpViewProps = {
   enablementContext?: import("../../../../app/enablement").EnablementContext;
   /** Organization policy restriction for Matterhorn Work-provided built-in extensions. */
   builtInExtensionsDisabled?: boolean;
+  /** Rendered inside the session right rail instead of the full Settings page. */
+  compact?: boolean;
 };
 
 const builtInExtensionDisabledReason = "Disabled by organization";
@@ -227,6 +231,38 @@ function isToggleOnlyExtension(entry: McpDirectoryInfo) {
   ) === true;
 }
 
+function hasRunnableConnectorTarget(entry: McpDirectoryInfo) {
+  return Boolean(entry.oauth || entry.type || entry.command?.length || entry.url);
+}
+
+function protocolDeskLogoNode(entry: McpDirectoryInfo, size = 24) {
+  if (!entry.protocolDeskId) return undefined;
+  return <ProtocolBrandLogo id={entry.protocolDeskId as CustomerProtocolDeskId} size={size} />;
+}
+
+function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
+  if (disabledReason) return "Unavailable";
+  const id = entry.id ?? entry.serverName ?? getMcpServerName(entry);
+  if (id === "bittensor") return "Built-in beta";
+  if (id === "hyperliquid" || id === "polymarket") return "Built-in preview";
+  if (id === "matterhorn-memory" || id === "matterhorn-crypto") return "Built-in";
+  if (id === "openai-image-gen" || id === "matterhorn-voice") return "Needs API key";
+  if (isBuiltInMatterhornExtension(entry)) return entry.preview ? "Built-in preview" : "Built-in";
+  if (entry.oauth) return configured ? "Connected" : "Connect account";
+  if (entry.kind === "mcp" || entry.kind === "ui-control" || entry.command?.length || entry.url) {
+    return configured ? "Configured" : "Requires setup";
+  }
+  if (!hasRunnableConnectorTarget(entry)) return configured ? "Configured" : "Catalog only";
+  return configured ? "Installed" : "Requires setup";
+}
+
+function actionLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
+  if (disabledReason) return "View details";
+  if (configured) return "View details";
+  if (!hasRunnableConnectorTarget(entry)) return "View setup";
+  return t("mcp.tap_to_connect");
+}
+
 type ExtensionFilter = "all" | "mcp" | "skill" | "plugin";
 
 type MatterhornMcpProductCard = {
@@ -237,12 +273,14 @@ type MatterhornMcpProductCard = {
   tools: string[];
   boundary: string;
   worksWith: string[];
+  protocolDeskId?: CustomerProtocolDeskId;
 };
 
 const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "bittensor",
     name: "Bittensor MCP",
+    protocolDeskId: "bittensor",
     description:
       "Run Bittensor chat, TAO wallet reads, subnet discovery, validator comparison, watches, receipts, and external-signer handoffs from agent clients.",
     command: "matterhorn-work mcp config --target codex --profile full",
@@ -258,6 +296,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "hyperliquid",
     name: "Hyperliquid MCP",
+    protocolDeskId: "hyperliquid",
     description:
       "Inspect Hyperliquid markets, orderbooks, funding, public account exposure, read-only watches, previews, handoffs, and public receipt evidence.",
     command: "matterhorn-work mcp config --target claude --profile full",
@@ -273,6 +312,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "polymarket",
     name: "Polymarket MCP",
+    protocolDeskId: "polymarket",
     description:
       "Search Polymarket markets, review outcomes, check compliance, inspect liquidity/orderbooks, create watches, prepare previews, and verify public receipts.",
     command: "matterhorn-work mcp config --target claude-desktop --profile full",
@@ -593,7 +633,7 @@ export function McpView(props: McpViewProps) {
   };
 
   return (
-    <section className="space-y-8 max-w-3xl w-full animate-in fade-in duration-300">
+    <section className={`${props.compact ? "space-y-6" : "space-y-8 max-w-3xl"} w-full animate-in fade-in duration-300`}>
       {showHeader ? (
         <McpViewHeader connectedCount={connectedCount} />
       ) : null}
@@ -613,9 +653,10 @@ export function McpView(props: McpViewProps) {
       <MatterhornMcpProductSection
         cards={MATTERHORN_MCP_PRODUCT_CARDS}
         onCopyCommand={copyMatterhornMcpCommand}
+        compact={props.compact}
       />
 
-      <McpCustomAppCard onOpen={() => setAddMcpModalOpen(true)} />
+      <McpCustomAppCard compact={props.compact} onOpen={() => setAddMcpModalOpen(true)} />
 
       {/* Search + filter */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -820,6 +861,7 @@ export function McpView(props: McpViewProps) {
             description={detailEntry.description}
             iconSlug={detailEntry.iconSlug}
             iconSrc={detailEntry.iconSrc}
+            iconNode={protocolDeskLogoNode(detailEntry, 28)}
             fallbackIcon={serviceIcon(detailEntry.name)}
             kind={detailEntry.kind ?? "mcp"}
             connected={isConnected}
@@ -927,80 +969,133 @@ function McpViewHeader(props: { connectedCount: number }) {
 function MatterhornMcpProductSection(props: {
   cards: MatterhornMcpProductCard[];
   onCopyCommand: (command: string) => void;
+  compact?: boolean;
 }) {
+  const visibleToolCount = props.compact ? 3 : Number.POSITIVE_INFINITY;
+  const clientLabels = ["Codex", "Claude Code", "Claude Desktop", "Cursor"];
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-lg font-semibold text-dls-text">Matterhorn MCPs</h3>
-        <p className="max-w-2xl text-sm leading-6 text-dls-secondary">
+    <section className={`@container/matterhorn-mcps ${props.compact ? "space-y-4" : "space-y-5"}`}>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
+          <h3 className={props.compact ? "text-base font-semibold text-dls-text" : "text-lg font-semibold text-dls-text"}>Matterhorn MCPs</h3>
+          <p className={props.compact ? "max-w-full text-xs leading-5 text-dls-secondary" : "max-w-2xl text-sm leading-6 text-dls-secondary"}>
           Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
-        </p>
+          </p>
+          <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
+            Matterhorn MCP cards are real installable command profiles. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
+          </p>
+        </div>
+        <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
+          <span className={props.compact ? "mr-1 text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary" : "mr-1 text-[11px] font-medium uppercase tracking-[0.16em] text-dls-secondary"}>
+            Install by client
+          </span>
+          {clientLabels.map((client) => (
+            <span
+              key={client}
+              className={props.compact
+                ? "rounded-full bg-dls-surface-muted/45 px-2 py-0.5 text-[10px] text-dls-secondary"
+                : "rounded-full bg-dls-surface-muted/45 px-2.5 py-1 text-[11px] text-dls-secondary"
+              }
+            >
+              {client}
+            </span>
+          ))}
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl bg-dls-surface/70 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
-        {props.cards.map((card) => (
-          <article
-            key={card.id}
-            className="grid min-w-0 gap-4 border-b border-dls-border/45 px-4 py-4 last:border-b-0 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.95fr)]"
-          >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
-                <Code2 size={16} />
+      <div className="matterhorn-mcp-stream min-w-0 overflow-hidden rounded-[20px] bg-dls-surface-muted/18">
+        {props.cards.map((card) => {
+          const visibleTools = card.tools.slice(0, visibleToolCount);
+          const hiddenToolCount = Math.max(card.tools.length - visibleTools.length, 0);
+          const isProtocol = Boolean(card.protocolDeskId);
+          return (
+            <article
+              key={card.id}
+              className={props.compact
+                ? "grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3 border-b border-dls-border/25 px-1 py-3 last:border-b-0"
+                : "grid min-w-0 grid-cols-[48px_minmax(0,1fr)] gap-4 border-b border-dls-border/25 px-3 py-4 last:border-b-0"
+              }
+            >
+              <div className={props.compact ? "flex size-8 shrink-0 items-center justify-center rounded-xl bg-dls-surface/55" : "flex size-12 shrink-0 items-center justify-center rounded-2xl bg-dls-surface/55"}>
+                {card.protocolDeskId ? <ProtocolBrandLogo id={card.protocolDeskId} size={props.compact ? 26 : 38} /> : <Code2 size={props.compact ? 16 : 18} className="text-dls-text" />}
               </div>
-              <div className="min-w-0 space-y-2">
-                <h4 className="text-[15px] font-semibold text-dls-text">{card.name}</h4>
-                <p className="text-xs leading-5 text-dls-secondary">{card.description}</p>
-                <div className="space-y-1.5 text-xs">
-                  <p className="leading-5 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Safety boundary:</span>{" "}
-                    {card.boundary}
+              <div className="min-w-0">
+                <div className={props.compact ? "flex min-w-0 items-start justify-between gap-2" : "flex min-w-0 flex-wrap items-start justify-between gap-3"}>
+                  <div className="min-w-0">
+                    <h4 className={props.compact ? "truncate text-sm font-semibold text-dls-text" : "text-[15px] font-semibold text-dls-text"}>{card.name}</h4>
+                    <p className={props.compact ? "mt-0.5 line-clamp-2 text-[11px] leading-4 text-dls-secondary" : "mt-1 max-w-2xl text-xs leading-5 text-dls-secondary"}>{card.description}</p>
+                  </div>
+                  <span className={props.compact ? "shrink-0 rounded-full bg-dls-hover/45 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-dls-secondary" : "shrink-0 rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
+                    {isProtocol ? "Protocol MCP" : "Matterhorn core"}
+                  </span>
+                </div>
+
+                <div className={props.compact ? "mt-3 space-y-2" : "mt-4 grid gap-3 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_auto]"}>
+                  <div className={props.compact ? "min-w-0 border-l border-dls-border/30 pl-3" : "min-w-0 border-l border-dls-border/30 pl-3"}>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Install command</div>
+                    <code className={props.compact
+                      ? "mt-1 block max-w-full break-words font-mono text-[10px] leading-4 text-dls-text"
+                      : "mt-1 block max-w-full break-words font-mono text-[11px] leading-5 text-dls-text"
+                    }>
+                      {card.command}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    className={props.compact
+                      ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                      : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 self-start rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                    }
+                    onClick={() => props.onCopyCommand(card.command)}
+                  >
+                    <Copy size={props.compact ? 12 : 13} />
+                    <span className="truncate">{props.compact ? "Copy" : "Copy install command"}</span>
+                  </button>
+                </div>
+
+                <div className={props.compact ? "mt-3 space-y-1.5" : "mt-4 grid gap-2 text-xs @lg/matterhorn-mcps:grid-cols-2"}>
+                  <p className="min-w-0 text-dls-secondary">
+                    <span className="font-medium text-dls-text">Supported tools:</span>{" "}
+                    <span className="break-words font-mono text-[10px] leading-4">
+                      {visibleTools.join(", ")}
+                      {hiddenToolCount > 0 ? `, +${hiddenToolCount} more` : ""}
+                    </span>
                   </p>
-                  <p className="leading-5 text-dls-secondary">
+                  <p className="min-w-0 text-dls-secondary">
                     <span className="font-medium text-dls-text">Works in:</span>{" "}
                     {card.worksWith.join(", ")}
                   </p>
                 </div>
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-dls-text">Install command</span>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md bg-dls-hover px-2 py-1 text-xs text-dls-text transition-colors hover:bg-dls-hover/70 focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
-                  onClick={() => props.onCopyCommand(card.command)}
-                >
-                  <Copy size={13} />
-                  Copy install command
-                </button>
+                <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
+                  <summary className="cursor-pointer list-none font-medium text-dls-text">
+                    Safety boundary
+                  </summary>
+                  <p className="mt-1.5">{card.boundary}</p>
+                </details>
               </div>
-              <code className="block overflow-x-auto rounded-lg bg-dls-hover/80 px-3 py-2 text-xs text-dls-text">
-                {card.command}
-              </code>
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-dls-text">Supported tools</div>
-                <p className="break-words font-mono text-[11px] leading-5 text-dls-secondary">
-                  {card.tools.join(" · ")}
-                </p>
-              </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
 }
 
-function McpCustomAppCard(props: { onOpen: () => void }) {
+function McpCustomAppCard(props: { compact?: boolean; onOpen: () => void }) {
   return (
-    <div className="rounded-2xl border border-blue-6/30 bg-[linear-gradient(180deg,rgba(59,130,246,0.08),rgba(59,130,246,0.03))] p-5 sm:px-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={props.compact
+        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"
+        : "rounded-[24px] bg-dls-surface-muted/24 p-5 sm:px-6"
+      }
+    >
+      <div className={props.compact ? "flex flex-col gap-3" : "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"}>
         <div className="space-y-1">
-          <div className="text-base font-semibold text-dls-text">{t("mcp.add_modal_title")}</div>
-          <div className="text-sm text-dls-secondary">{t("mcp.custom_app_cta_hint")}</div>
+          <div className={props.compact ? "text-sm font-semibold text-dls-text" : "text-base font-semibold text-dls-text"}>{t("mcp.add_modal_title")}</div>
+          <div className={props.compact ? "text-xs leading-5 text-dls-secondary" : "text-sm text-dls-secondary"}>{t("mcp.custom_app_cta_hint")}</div>
         </div>
-        <Button onClick={props.onOpen}>
+        <Button className={props.compact ? "h-8 w-fit px-2.5 text-xs" : undefined} onClick={props.onOpen}>
           <Plus size={14} />
           {t("mcp.add_modal_title")}
         </Button>
@@ -1028,15 +1123,15 @@ function McpQuickConnectSection(props: {
   onPluginDetail?: (plugin: CloudImportedPlugin) => void;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold uppercase tracking-widest text-dls-secondary">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h3 className="text-sm font-semibold text-dls-text">
           {t("mcp.available_apps")}
         </h3>
-        <span className="text-[11px] text-dls-secondary">{t("mcp.one_click_connect")}</span>
+        <span className="text-xs text-dls-secondary">{t("mcp.one_click_connect")}</span>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3">
+      <div className="mcp-marketplace-stream min-w-0 overflow-hidden rounded-[18px] bg-dls-surface-muted/18 px-3 py-1">
         {/* MCP entries */}
         {props.entries.map((entry) => {
           const configured = props.isConfigured(entry);
@@ -1053,16 +1148,19 @@ function McpQuickConnectSection(props: {
               description={entry.description}
               iconSlug={entry.iconSlug}
               iconSrc={entry.iconSrc}
+              iconNode={protocolDeskLogoNode(entry)}
               fallbackIcon={FallbackIcon}
               kind={entry.kind ?? "mcp"}
+              presentation="stream"
               connected={configured}
               enablement={enablement?.results}
               connecting={connecting}
               hidden={hidden}
               preview={entry.preview}
+              statusHint={availabilityLabelForEntry(entry, configured, disabledReason)}
               disabledReason={disabledReason}
               disabled={props.busy}
-              actionLabel={configured ? "View details" : t("mcp.tap_to_connect")}
+              actionLabel={actionLabelForEntry(entry, configured, disabledReason)}
               onClick={() => props.onDetail(entry)}
             />
           );
@@ -1077,8 +1175,10 @@ function McpQuickConnectSection(props: {
               name={skill.name}
               description={skill.description ?? "Installed skill"}
               kind="skill"
+              presentation="stream"
               connected={true}
               hidden={hidden}
+              statusHint="Installed"
               actionLabel="View details"
               onClick={() => props.onSkillDetail?.(skill)}
             />
@@ -1094,8 +1194,10 @@ function McpQuickConnectSection(props: {
               name={plugin.name}
               description={plugin.description ?? `Marketplace extension with ${fileCount} installed file${fileCount === 1 ? "" : "s"}.`}
               kind="extension"
+              presentation="stream"
               connected={true}
               hidden={hidden}
+              statusHint="Installed"
               actionLabel="View details"
               onClick={() => props.onPluginDetail?.(plugin)}
             />
@@ -1103,7 +1205,7 @@ function McpQuickConnectSection(props: {
         })}
 
         {props.entries.length === 0 && (props.installedSkills ?? []).length === 0 && (props.installedPlugins ?? []).length === 0 ? (
-          <div className="col-span-full rounded-xl border border-dashed border-dls-border px-5 py-10 text-center">
+          <div className="px-4 py-9 text-center">
             <Unplug size={24} className="mx-auto mb-3 text-dls-secondary/30" />
             <div className="text-sm font-medium text-dls-secondary">No MCPs or connectors found</div>
             <div className="mt-1 text-xs text-dls-secondary/60">Try a different search, filter, or add a custom MCP.</div>

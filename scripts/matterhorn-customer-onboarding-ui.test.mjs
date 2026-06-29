@@ -23,6 +23,7 @@ const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows
 const protocolDeskUi = read("apps/app/src/react-app/domains/session/workflows/protocol-desk-ui.ts");
 const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
 const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
+const uiStateStore = read("apps/app/src/react-app/shell/ui-state-store.ts");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
@@ -30,9 +31,17 @@ const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx"
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
 const settingsRoute = read("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx");
+const extensionsView = read("apps/app/src/react-app/domains/settings/pages/extensions-view.tsx");
+const settingsShell = read("apps/app/src/react-app/domains/settings/shell/settings-shell.tsx");
+const extensionCard = read("apps/app/src/react-app/design-system/extension-card.tsx");
+const extensionDetailModal = read("apps/app/src/react-app/design-system/extension-detail-modal.tsx");
+const settingsSurfaceRoute = read("apps/app/src/react-app/shell/settings-route.tsx");
 const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/overview-view.tsx");
+const cloudAccountSettings = read("apps/app/src/react-app/domains/settings/pages/cloud-account-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
+const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
+const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
 const marketplaceSettings = read("apps/app/src/react-app/domains/settings/pages/marketplace-view.tsx");
 const walletSettings = read("apps/app/src/react-app/domains/settings/pages/wallet-view.tsx");
@@ -67,22 +76,29 @@ for (const phrase of [
   "New Project",
   "New chat",
   "Open Bittensor desk",
-  "Matterhorn Wallet",
-  "One wallet surface for EVM tools.",
   "Bittensor uses public SS58 reads and external signing.",
   "Wallet details",
-  "Current capability status",
-  "These launchers are connected to Matterhorn workflow metadata.",
-  "Live boundaries visible",
+  "Capability status",
+  "Each desk keeps its own context",
+  "Wallet stays external",
   "Public SS58 reads and unsigned previews only.",
   "Can submit: No. Live submission: Off. External signer/client only.",
   "Compliance blocks must not expose executable bet fields.",
   "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
-  "Matterhorn Desks",
-  "Separate interfaces for Bittensor, Hyperliquid, Polymarket, and Wellness.",
-  "Each desk has its own prompt context, capability status, and safety boundary.",
+  "Choose a desk",
+  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
   "focused desk",
-  "No hidden auto-send",
+  "No auto-send",
+  "matterhorn-capability-overview",
+  "matterhorn-capability-row",
+  "md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)]",
+  "matterhorn-desk-board",
+  "matterhorn-desk-command-list",
+  "matterhorn-desk-launcher",
+  "Open desk",
+  "Draft prompt",
+  "grid-cols-[32px_minmax(0,1fr)]",
+  "divide-y divide-dls-border/35",
   "workflowLauncherCapabilityItems",
   "TAO wallet reads",
   "Subnet discovery",
@@ -92,7 +108,7 @@ for (const phrase of [
   "External-client handoff",
   "Market research",
   "Compliance checks",
-  "Open desk with editable prompt",
+  "Insert editable prompt",
   "Business workflows",
   "Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
   "It is not Web3, not markets, and not medical care.",
@@ -163,6 +179,7 @@ for (const phrase of [
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
   "Choose a desk or start a blank chat. Every prompt stays editable before sending.",
+  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
@@ -212,12 +229,50 @@ for (const phrase of [
   'aria-label={tooltipLabel}',
   'aria-label={`${t("composer.assistant_identity")} ${label}`}',
   'font-medium text-dls-text">{t("composer.assistant_identity")}',
+  "protocolDeskIdForComposerExtension",
+  "ProtocolBrandLogo",
+  "bittensor",
+  "hyperliquid",
+  "polymarket",
 ]) {
   assert.ok(
     `${composer}\n${modelSelect}\n${sessionSurface}`.includes(phrase),
     `chat chrome should show Matterhorn identity while keeping model controls technical: ${phrase}`,
   );
 }
+
+assert.ok(
+  composer.includes("protocolDeskIdForComposerExtension(entry)") &&
+    composer.includes("if (entry.protocolDeskId) return entry.protocolDeskId as CustomerProtocolDeskId;") &&
+    composer.includes("return <ProtocolBrandLogo id={protocolDeskId} size={size} />;"),
+  "composer extension picker should prefer catalog protocol identities before falling back to generic icons",
+);
+assert.ok(
+  constants.includes("protocolDeskId?: MatterhornProtocolDeskId") &&
+    constants.includes("protocolDeskIdForExtensionId(manifest.id)") &&
+    constants.includes('case "bittensor":') &&
+    constants.includes('case "hyperliquid":') &&
+    constants.includes('case "polymarket":'),
+  "built-in Matterhorn extension catalog entries should expose protocol desk ids for logo rendering",
+);
+assert.ok(
+  extensionCard.includes("iconNode?: ReactNode") &&
+    extensionCard.includes(") : iconNode ? (") &&
+    extensionDetailModal.includes("iconNode?: ReactNode") &&
+    extensionDetailModal.includes("{iconNode ? ("),
+  "shared extension card and detail modal should accept app-owned protocol logo nodes before URL/icon fallback",
+);
+assert.ok(
+  settingsRoute.includes("function protocolDeskLogoNode(entry: McpDirectoryInfo") &&
+    settingsRoute.includes("iconNode={protocolDeskLogoNode(entry)}") &&
+    settingsRoute.includes("iconNode={protocolDeskLogoNode(detailEntry, 28)}"),
+  "MCP settings marketplace cards and detail modal should render protocol desk logos for Matterhorn built-ins",
+);
+assert.ok(
+  composer.includes("extensionIcon(entry, 14)") &&
+    !composer.includes("<Plug size={14} className=\"mt-0.5 shrink-0 text-gray-9\" />"),
+  "active MCP rows should pass the full entry instead of hardcoding generic plug icons",
+);
 
 for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
@@ -312,9 +367,57 @@ assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
-assert.ok(sessionSurface.includes("xl:grid-cols-3"), "starter workflow grid should avoid cramped four-column cards");
-assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "protocol desk starter cards should use container-safe auto-fit columns");
+assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-6"), "empty session launcher should scroll instead of clipping beneath the composer");
+assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
+assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
+assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-hero relative overflow-hidden"), "focused desk start should render a protocol-logo hero instead of a plain block");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1"), "focused desk safety copy should use compact metadata labels");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl"), "focused desk prompts should render as a soft command list");
+assert.ok(sessionPage.includes("Draft in chat"), "focused desk prompt rows should clarify that prompts are drafted, not auto-sent");
+assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
+assert.ok(sessionSurface.includes("matterhorn-desk-session-hero relative overflow-hidden"), "desk-specific empty sessions should use the same logo-led hero treatment");
+assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidden rounded-2xl"), "desk-specific empty sessions should use soft prompt lists instead of boxed cards");
+assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfaces should avoid oversized card radii");
+assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
+assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
+assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
+assert.ok(sessionSurface.includes("group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)]"), "starter workflow rows should use compact logo-led command rows");
+assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
+assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
+assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
+assert.equal(sessionSurface.includes("rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), false, "starter workflow rows should not use the old boxed card treatment");
+assert.ok(sessionPage.includes("matterhorn-desk-command-list divide-y divide-dls-border/35"), "home desk launchers should render as a lightweight command list, not a card grid");
+assert.ok(sessionPage.includes("matterhorn-desk-launcher group flex w-full items-center gap-3 px-1 py-3"), "home desk launcher rows should use compact command-row spacing");
+assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
+assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
+assert.ok(sessionPage.includes("matterhorn-capability-row grid gap-3 py-3 text-left"), "home capability status should use compact list rows");
+assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)]"), false, "home capability status should not use icon tiles");
+assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
+assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
+assert.equal(sessionPage.includes("grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3"), false, "home desk launchers should not fall back to the old box grid");
+assert.equal(sessionSurface.includes("bg-[linear-gradient(135deg,rgba(var(--matterhorn-desk-rgb)"), false, "starter workflow cards should avoid decorative gradient card backgrounds");
+assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]"), false, "home desk launchers should avoid dramatic card shadows");
+assert.ok(sessionPage.includes("props.developerMode ? ("), "customer home should keep beta/demo QA launchers behind developer mode");
+assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
+assert.ok(
+  sessionPage.includes('activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot)'),
+  "MCP/settings rail should render through the compact path-aware settings slot",
+);
+assert.ok(
+  settingsSurfaceRoute.includes("compact={props.embedded}"),
+  "embedded settings should tell the MCP view to use compact right-rail layout",
+);
+assert.ok(
+  sessionPage.includes('className="flex h-full min-h-0 flex-col overflow-hidden bg-background"'),
+  "MCP/settings rail should avoid nested scrolling and let the compact settings surface own overflow",
+);
+assert.equal(
+  sessionPage.includes('activeSidePanel === "extensions" && props.settingsSlot ? (\n                    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background">'),
+  false,
+  "MCP/settings rail should not wrap the compact settings surface in a second scroll container",
+);
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400)'), "protocol side panel should not default to an oversized rail");
 assert.ok(sessionPage.includes('protocolSidePanelOpen ? "340px"'), "protocol side panel should keep a narrower minimum width");
 assert.ok(sessionPage.includes('? "500px" : "70%"'), "protocol side panel should cap width so it does not consume most of the workspace");
@@ -352,6 +455,76 @@ for (const phrase of [
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
 assert.ok(sessionPage.includes("onOpenWallet={() => setCurrentSidePanel(\"wallet\")}"), "status bar wallet button should open the real wallet panel");
+for (const phrase of [
+  '"profile"',
+  '"wallet"',
+]) {
+  assert.ok(uiStateStore.includes(phrase), `right rail side-panel state should persist ${phrase}`);
+}
+for (const phrase of [
+  "settingsSlotForPath?:",
+  'activeSidePanel === "profile"',
+  "profileRailActive",
+  'onClick={() => setCurrentSidePanel("profile")}',
+  'aria-pressed={profileRailActive}',
+  "Profile and account",
+  'renderCompactSettingsRail("cloud-account")',
+  'activeSidePanel === "wallet"',
+  'renderCompactSettingsRail("wallet")',
+  'renderCompactSettingsRail("extensions")',
+  '<WalletPanel',
+]) {
+  assert.ok(sessionPage.includes(phrase), `right rail should expose real profile/wallet panels: ${phrase}`);
+}
+assert.ok(sessionRoute.includes("const renderEmbeddedSettingsSurface"), "session route should expose reusable embedded settings panels to the right rail");
+assert.ok(sessionRoute.includes('settingsSlot={renderEmbeddedSettingsSurface("extensions")}'), "MCP rail should keep using embedded extensions settings");
+assert.ok(sessionRoute.includes("settingsSlotForPath={renderEmbeddedSettingsSurface}"), "Profile and Wallet rail buttons should open compact settings pages");
+assert.ok(sessionRoute.includes("hideWorkspaceSwitcher"), "embedded Profile/Wallet/MCP settings panels should hide duplicate workspace switching");
+assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher?: boolean"), "settings surface should accept an embedded workspace-switcher suppression flag");
+assert.ok(settingsSurfaceRoute.includes("hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}"), "settings surface should pass workspace-switcher suppression into the shell");
+assert.ok(read("apps/app/src/react-app/domains/settings/shell/settings-page.tsx").includes("!props.hideWorkspaceSwitcher"), "settings sidebar should keep workspace switching only when not explicitly hidden");
+assert.ok(settingsShell.includes("const ActiveIcon = getSettingsTabIcon(props.activeTab);"), "compact settings rail should show the active page title directly instead of a duplicate workspace selector");
+assert.ok(settingsShell.includes('title={props.compact ? "Switch settings section" : undefined}'), "compact settings rail should keep section switching as a small utility control");
+assert.ok(settingsShell.includes('aria-label={props.compact ? "Switch settings section" : undefined}'), "compact settings section switcher should remain accessible when icon-only");
+assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "compact settings switcher should not duplicate the visible active page label");
+assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
+assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
+assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
+assert.ok(extensionsView.includes('props.compact ? "w-full" : "w-fit"'), "embedded extensions tabs should fill the narrow rail instead of crowding content");
+assert.ok(extensionsView.includes('className={props.compact ? "flex-1" : undefined}'), "embedded extensions tabs should stay tappable in the narrow rail");
+assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
+assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
+assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
+for (const phrase of [
+  "matterhorn-profile-rail max-w-none gap-4",
+  "Profile readiness",
+  "Local workspace",
+  "Matterhorn Cloud",
+  "Matterhorn-owned",
+  "Beta support",
+  "support@matterhorn.work",
+  "<DenSignedOutPanel\n            compact",
+  "session.summaryTone",
+]) {
+  assert.ok(cloudAccountSettings.includes(phrase), `profile rail should have a compact first-class account state: ${phrase}`);
+}
+for (const phrase of [
+  "matterhorn-wallet-rail max-w-none gap-4",
+  "Protocol support",
+  "EVM tools",
+  "External signer",
+  "Preview only",
+  "No EVM wallet connector detected",
+  "Install or enable MetaMask, Rabby, or another injected wallet in this runtime.",
+  "public SS58 reads and external Bittensor-compatible signing only.",
+  "Hyperliquid and Polymarket",
+  "Never paste:",
+]) {
+  assert.ok(walletSettings.includes(phrase), `wallet rail should have compact, honest wallet state: ${phrase}`);
+}
+assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
+assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
+assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");
@@ -445,9 +618,25 @@ for (const phrase of [
 for (const phrase of [
   "Matterhorn MCPs",
   "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
+  "Matterhorn MCP cards are real installable command profiles.",
+  "Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.",
+  "@container/matterhorn-mcps",
+  "matterhorn-mcp-stream",
+  "Install by client",
+  "Protocol MCP",
+  "Matterhorn core",
+  "grid-cols-[34px_minmax(0,1fr)]",
+  "grid-cols-[48px_minmax(0,1fr)]",
+  "border-l border-dls-border/30 pl-3",
+  "Safety boundary",
+  "+${hiddenToolCount} more",
   "Bittensor MCP",
+  'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
+  'protocolDeskId: "hyperliquid"',
   "Polymarket MCP",
+  'protocolDeskId: "polymarket"',
+  "ProtocolBrandLogo",
   "Memory MCP",
   "Workflow MCP",
   "UI Control MCP",
@@ -466,6 +655,128 @@ for (const phrase of [
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
 }
+assert.equal(
+  settingsRoute.includes("lg:grid-cols-2"),
+  false,
+  "MCP product cards should use container width, not viewport width, so the right rail remains single-column.",
+);
+assert.equal(
+  settingsRoute.includes("@5xl/matterhorn-mcps:grid-cols-2"),
+  false,
+  "MCP product cards should use a divider stream instead of the old two-column boxed grid.",
+);
+assert.equal(
+  settingsRoute.includes("min-w-0 overflow-hidden rounded-lg bg-dls-surface/80 p-3 ring-1 ring-dls-border/35"),
+  false,
+  "Compact MCP cards should not reintroduce the old right-rail boxed-card treatment.",
+);
+assert.equal(
+  settingsRoute.includes("max-h-14 max-w-full overflow-auto"),
+  false,
+  "MCP install commands should not be trapped inside tiny nested scroll boxes.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact ? "space-y-6" : "space-y-8 max-w-3xl"'),
+  "MCP view should remove full-page max-width spacing when it is embedded in the right rail.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact ? "space-y-4" : "space-y-5"'),
+  "MCP product cards should use tight stream spacing instead of bulky card gaps.",
+);
+assert.ok(
+  settingsRoute.includes("mcp-marketplace-stream"),
+  "MCP marketplace connectors should render as a soft stream below the Matterhorn MCP cards.",
+);
+assert.ok(
+  settingsRoute.includes('presentation="stream"'),
+  "MCP marketplace entries should use the non-boxy stream presentation.",
+);
+assert.equal(
+  settingsRoute.includes("grid grid-cols-[repeat(auto-fill,minmax(min(100%,20rem),1fr))] gap-3"),
+  false,
+  "MCP marketplace connectors should not render as the old repeated card grid.",
+);
+assert.equal(
+  settingsRoute.includes("col-span-full rounded-xl border border-dashed"),
+  false,
+  "MCP marketplace empty state should avoid the old dashed boxed-card treatment.",
+);
+assert.ok(
+  extensionCard.includes('presentation?: "card" | "stream"') &&
+    extensionCard.includes('presentation = "card"') &&
+    extensionCard.includes("sm:grid-cols-[minmax(0,1fr)_auto]"),
+  "ExtensionCard should keep the legacy card default while exposing a responsive stream presentation.",
+);
+assert.ok(
+  settingsRoute.includes("compact={props.compact}"),
+  "MCP product cards should inherit the compact right-rail rendering mode.",
+);
+assert.equal(
+  settingsRoute.includes("shadow-[0_18px_42px_-34px_rgba(0,0,0,0.7)]"),
+  false,
+  "MCP product cards should not use dramatic card shadows in the right rail.",
+);
+assert.equal(
+  settingsRoute.includes("rounded-2xl bg-dls-surface/72"),
+  false,
+  "MCP product cards should avoid oversized boxy card radii.",
+);
+assert.equal(
+  settingsRoute.includes("border-blue-6/30"),
+  false,
+  "MCP custom app card should not use the old blue outlined callout treatment.",
+);
+assert.equal(
+  settingsRoute.includes("bg-[linear-gradient(180deg,rgba(59,130,246"),
+  false,
+  "MCP custom app card should not use decorative blue gradient backgrounds.",
+);
+assert.ok(
+  settingsRoute.includes('McpCustomAppCard compact={props.compact}'),
+  "MCP custom app card should inherit the compact right-rail rendering mode.",
+);
+assert.ok(
+  settingsRoute.includes('props.compact\n        ? "rounded-[20px] bg-dls-surface-muted/22 p-3"'),
+  "MCP custom app card should use a compact, soft rail treatment.",
+);
+assert.ok(
+  settingsRoute.includes("break-words font-mono"),
+  "MCP install command rows should wrap long commands instead of overflowing.",
+);
+assert.ok(
+  settingsRoute.includes("<span className=\"font-medium text-dls-text\">Supported tools:</span>"),
+  "MCP tools should render as compact readable summaries instead of overlapping chip piles.",
+);
+assert.equal(
+  settingsRoute.includes("max-w-full truncate rounded-md"),
+  false,
+  "MCP tool chips should not truncate or collide in compact rail cards.",
+);
+
+for (const phrase of [
+  "statusHint",
+  "Built-in beta",
+  "Built-in preview",
+  "Needs API key",
+  "Requires setup",
+  "Catalog only",
+  "View setup",
+  "hasRunnableConnectorTarget",
+  "actionLabelForEntry",
+]) {
+  assert.ok(`${settingsRoute}\n${read("apps/app/src/react-app/design-system/extension-card.tsx")}`.includes(phrase), `MCP connector cards should expose honest availability labels: ${phrase}`);
+}
+
+for (const phrase of [
+  'id: "bittensor"',
+  'icon: { src: "/assets/desks/bittensor/logo-dark.svg" }',
+  'id: "hyperliquid"',
+  'icon: { src: "/assets/desks/hyperliquid/logo-dark.svg" }',
+  'id: "polymarket"',
+  'icon: { src: "/assets/desks/polymarket/logo-dark.svg" }',
+]) {
+  assert.ok(extensions.includes(phrase), `Built-in protocol extension should use protocol logo assets: ${phrase}`);
+}
 
 for (const phrase of [
   "VITE_MATTERHORN_WORK_FEEDBACK_URL",
@@ -475,6 +786,10 @@ for (const phrase of [
   assert.ok(feedback.includes(phrase), `feedback URLs should be Matterhorn-first: ${phrase}`);
 }
 assert.equal(feedback.includes("https://openworklabs.com/feedback"), false, "feedback default must not send customers to OpenWork Labs");
+assert.ok(denHelpLink.includes("support@matterhorn.work"), "remote worker help dialog should use Matterhorn support email");
+assert.ok(remoteWorkspaceDiagnostics.includes("support@matterhorn.work"), "remote workspace diagnostics should use Matterhorn support email");
+assert.equal(denHelpLink.includes("team@openworklabs.com"), false, "remote worker help dialog must not send customers to OpenWork Labs");
+assert.equal(remoteWorkspaceDiagnostics.includes("team@openworklabs.com"), false, "remote diagnostics must not send customers to OpenWork Labs");
 
 for (const phrase of [
   "VITE_MATTERHORN_CLOUD_URL",
@@ -487,6 +802,8 @@ for (const phrase of [
   assert.ok(den.includes(phrase), `cloud auth should expose Matterhorn-native config: ${phrase}`);
 }
 assert.equal(den.includes("https://app.openworklabs.com"), false, "cloud auth default must not open OpenWork Labs");
+assert.ok(constants.includes("https://app.matterhorn.work/mcp"), "Matterhorn Cloud MCP quick-connect fallback should be Matterhorn-owned");
+assert.equal(constants.includes("https://app.openworklabs.com/mcp"), false, "Matterhorn Cloud MCP fallback must not open OpenWork Labs");
 
 for (const phrase of [
   "Parallel Web Systems web search",

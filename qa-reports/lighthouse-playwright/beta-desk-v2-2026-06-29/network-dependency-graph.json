@@ -1,0 +1,60 @@
+{
+  "nodes": [
+    {
+      "id": "matterhorn-page",
+      "label": "Matterhorn page",
+      "type": "root"
+    },
+    {
+      "id": "http://127.0.0.1:54022",
+      "label": "http://127.0.0.1:54022",
+      "requests": 998,
+      "transferSizeBytes": 56574780,
+      "resourceTypes": {
+        "Document": 2,
+        "Script": 980,
+        "Image": 8,
+        "Fetch": 8
+      }
+    },
+    {
+      "id": "http://127.0.0.1:54021",
+      "label": "http://127.0.0.1:54021",
+      "requests": 120,
+      "transferSizeBytes": 7738558,
+      "resourceTypes": {
+        "Fetch": 76,
+        "Preflight": 44
+      }
+    },
+    {
+      "id": "null",
+      "label": "null",
+      "requests": 1,
+      "transferSizeBytes": 17418,
+      "resourceTypes": {
+        "Image": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "matterhorn-page",
+      "to": "http://127.0.0.1:54022",
+      "requests": 998,
+      "transferSizeBytes": 56574780
+    },
+    {
+      "from": "matterhorn-page",
+      "to": "http://127.0.0.1:54021",
+      "requests": 120,
+      "transferSizeBytes": 7738558
+    },
+    {
+      "from": "matterhorn-page",
+      "to": "null",
+      "requests": 1,
+      "transferSizeBytes": 17418
+    }
+  ]
+}

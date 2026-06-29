@@ -11,6 +11,9 @@ import { isMatterhornExtensionEnabled, isMatterhornExtensionHidden, MATTERHORN_E
 import { useDesktopRestriction } from "../../../cloud/desktop-config-provider";
 import { ModelBehaviorSelect } from "../../../../../components/model-behavior-select";
 import { ModelSelect } from "../../../../../components/model-select";
+import { resolveExtensionIconSrc } from "../../../../design-system/extension-icon-src";
+import { ProtocolBrandLogo } from "../../workflows/protocol-brand-logo";
+import type { CustomerProtocolDeskId } from "../../workflows/protocol-desk-ui";
 import { LexicalPromptEditor } from "./editor";
 import {
   ReactComposerNotice,
@@ -237,9 +240,35 @@ function mcpStatusBadgeClass(status: McpServerStatus) {
   }
 }
 
-function extensionIcon(entry: McpDirectoryInfo, size = 16) {
+type ProtocolIconCandidate = Pick<McpDirectoryInfo, "id" | "name" | "protocolDeskId" | "serverName">;
+
+function protocolDeskIdForComposerExtension(entry: ProtocolIconCandidate): CustomerProtocolDeskId | null {
+  if (entry.protocolDeskId) return entry.protocolDeskId as CustomerProtocolDeskId;
+
+  const haystack = `${entry.id ?? ""} ${entry.serverName ?? ""} ${entry.name ?? ""}`.toLowerCase();
+  if (/\bbittensor\b/.test(haystack)) return "bittensor";
+  if (/\bhyperliquid\b/.test(haystack)) return "hyperliquid";
+  if (/\bpolymarket\b/.test(haystack)) return "polymarket";
+  if (/\bmatterhorn-memory\b|\bmemory\b/.test(haystack)) return "memory";
+  return null;
+}
+
+function extensionIcon(entry: ProtocolIconCandidate & Pick<McpDirectoryInfo, "iconSlug" | "iconSrc">, size = 16) {
+  const protocolDeskId = protocolDeskIdForComposerExtension(entry);
+  if (protocolDeskId) {
+    return <ProtocolBrandLogo id={protocolDeskId} size={size} />;
+  }
   if (entry.iconSrc) {
-    return <img src={entry.iconSrc} alt="" width={size} height={size} loading="lazy" style={{ display: "block" }} />;
+    return (
+      <img
+        src={resolveExtensionIconSrc(entry.iconSrc)}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        style={{ display: "block" }}
+      />
+    );
   }
   if (entry.iconSlug) {
     return <img src={`https://cdn.simpleicons.org/${entry.iconSlug}`} alt="" width={size} height={size} loading="lazy" style={{ display: "block" }} />;
@@ -1283,7 +1312,9 @@ export function ReactSessionComposer(props: ComposerProps) {
                               <div className="grid gap-1">
                                 {activeMcpItems.map(({ entry, status }) => (
                                   <div key={entry.name} className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-gray-11">
-                                    <Plug size={14} className="mt-0.5 shrink-0 text-gray-9" />
+                                    <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+                                      {extensionIcon(entry, 14)}
+                                    </div>
                                     <div className="min-w-0 flex-1">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="truncate text-xs font-semibold text-gray-11">{entry.name}</div>

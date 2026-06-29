@@ -1,0 +1,11 @@
+digraph MatterhornLighthouseNetwork {
+  rankdir=LR;
+  node [shape=box, style="rounded,filled", fillcolor="#0C0C0C", fontcolor="#D1F2FF", color="#D1F2FF"];
+  "matterhorn-page" [label="Matterhorn page\n0 requests"];
+  "http://127.0.0.1:54022" [label="http://127.0.0.1:54022\n998 requests"];
+  "http://127.0.0.1:54021" [label="http://127.0.0.1:54021\n120 requests"];
+  "null" [label="null\n1 requests"];
+  "matterhorn-page" -> "http://127.0.0.1:54022" [label="998 req / 55249 KB"];
+  "matterhorn-page" -> "http://127.0.0.1:54021" [label="120 req / 7557 KB"];
+  "matterhorn-page" -> "null" [label="1 req / 17 KB"];
+}

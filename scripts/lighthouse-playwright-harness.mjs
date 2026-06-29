@@ -304,7 +304,11 @@ async function runOne({ url, formFactor, outputDir, thresholds }) {
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
-    const response = await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+    // Matterhorn's dev app keeps long-lived HMR and agent connections open, so
+    // networkidle is not a reliable readiness signal for screenshots.
+    const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.waitForLoadState("load", { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(1000);
     httpStatus = response?.status() ?? null;
     await page.screenshot({
       path: join(outputDir, `${slug}-screenshot.png`),

@@ -450,6 +450,7 @@ function settingsPathForRoute(route: ReturnType<typeof parseSettingsPath>) {
 
 export type SettingsSurfaceProps = {
   embedded?: boolean;
+  hideWorkspaceSwitcher?: boolean;
   initialPath?: string;
   workspaceId?: string;
   onClose?: () => void;
@@ -2106,6 +2107,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             extensions={extensionsStore}
             mcpConnectedAppsCount={mcpConnectedAppsCount}
             initialSection={route.extensionsSection}
+            compact={props.embedded}
             setSectionRoute={(section) => {
               const path = `extensions/${section}`;
               navigateSettingsPath(path);
@@ -2130,6 +2132,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
                 quickConnect={connectionsStore.quickConnect}
                 enablementContext={enablementContext}
                 builtInExtensionsDisabled={checkDesktopRestriction({ restriction: "allowBuiltInExtensions" })}
+                compact={props.embedded}
                 connectMcp={(entry) => {
                   void connectionsStore.connectMcp(entry);
                 }}
@@ -2222,6 +2225,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "cloud-account":
         return (
           <CloudAccountView
+            compact={props.embedded}
             developerMode={developerMode}
             session={denSession}
           />
@@ -2377,6 +2381,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       case "wallet":
         return (
           <WalletSettingsView
+            compact={props.embedded}
             store={walletProvider.store}
             onTxApprove={() => {}}
             onTxReject={() => {}}
@@ -2400,6 +2405,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
         selectedWorkspaceColor={selectedWorkspaceColor}
         workspaces={workspaceOptions}
         onSelectWorkspace={handleSelectSettingsWorkspace}
+        hideWorkspaceSwitcher={props.hideWorkspaceSwitcher}
         headerStatus={routeOpenworkStatus}
         busyHint={loading ? t("session.loading_detail") : busyLabel}
         onClose={props.onClose ?? (() => navigate(selectedWorkspaceId ? workspaceSessionRoute(selectedWorkspaceId) : "/session"))}

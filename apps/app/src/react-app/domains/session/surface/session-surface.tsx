@@ -118,6 +118,88 @@ function ProtocolLogo({ iconHint, size = 18 }: { iconHint: CustomerWorkflowIconH
 
 type MatterhornDeskMode = "bittensor" | "hyperliquid" | "polymarket" | "wellness";
 
+type MatterhornDeskPrompt = {
+  title: string;
+  detail: string;
+  prompt: string;
+};
+
+const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPrompt[]> = {
+  bittensor: [
+    {
+      title: "Show TAO balance",
+      detail: "Read a public SS58 coldkey balance and explain what the user can safely share.",
+      prompt: "Use Bittensor chat mode. Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+    },
+    {
+      title: "Browse useful subnets",
+      detail: "Explain useful subnets in plain language, including image-generation options.",
+      prompt: "Use Bittensor chat mode. Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, source/freshness, and what public context would help narrow the choice.",
+    },
+    {
+      title: "Compare validators",
+      detail: "Compare validators on a subnet before staking, with risk notes and missing public context.",
+      prompt: "Use Bittensor chat mode. Compare validators on subnet 14. Show source, freshness, risks, and what public validator/coldkey context is needed before staking.",
+    },
+    {
+      title: "Prepare unsigned staking preview",
+      detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
+      prompt: "Use Bittensor chat mode. Prepare a staking preview for 1 TAO on subnet 14. Ask for public coldkey and validator hotkey if missing. This must stay unsigned and require an external Bittensor-compatible signer.",
+    },
+  ],
+  hyperliquid: [
+    {
+      title: "Read orderbook context",
+      detail: "Summarize spread, depth, and stale-data warnings without submission.",
+      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain this is read/preview-only with Can submit: No and Live submission: Off.",
+    },
+    {
+      title: "Summarize exposure",
+      detail: "Use public/read-only account context only; never ask for exchange secrets.",
+      prompt: "Use Hyperliquid chat mode. Summarize my read-only account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+    },
+    {
+      title: "Prepare preview handoff",
+      detail: "Create an external-client preview with submission disabled.",
+      prompt: "Use Hyperliquid chat mode. Prepare a preview-only order handoff for BTC. Keep Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+    },
+  ],
+  polymarket: [
+    {
+      title: "Research a market",
+      detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
+      prompt: "Use Polymarket chat mode. Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
+    },
+    {
+      title: "Check compliance",
+      detail: "If blocked, do not expose executable price, size, share, or order fields.",
+      prompt: "Use Polymarket chat mode. Check whether this market can be previewed safely. If compliance blocks the preview, do not show executable price, size, share, or order fields.",
+    },
+    {
+      title: "Prepare preview handoff",
+      detail: "Build a non-custodial wallet handoff while live submission stays off.",
+      prompt: "Use Polymarket chat mode. Prepare a preview-only external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+    },
+  ],
+  wellness: [
+    {
+      title: "Create service offer",
+      detail: "Package a trainer, yoga, or dietician offer without medical or live-service claims.",
+      prompt: "Use the Wellness workflow desk. Create a client-safe service offer packet for a personal trainer, yoga instructor, or dietician. Keep it educational, non-medical, and do not claim live payments, email, hosting, or token-gated access.",
+    },
+    {
+      title: "Build weekly plan",
+      detail: "Draft a safe weekly program artifact with boundaries and client check-in prompts.",
+      prompt: "Use the Wellness workflow desk. Draft a weekly client program plan and progress check-in packet. Include a non-medical disclaimer and avoid diagnosis, prescription, treatment claims, or guaranteed outcomes.",
+    },
+    {
+      title: "Prepare handoff packet",
+      detail: "Create a client handoff packet ready for review and export.",
+      prompt: "Use the Wellness workflow desk. Prepare a client handoff packet with onboarding notes, weekly plan, progress check-in, and follow-up message. Keep payments, email, storage, hosting, and access control planned-not-live.",
+    },
+  ],
+};
+
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
   const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
@@ -177,6 +259,79 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           <p className="mt-0.5 text-[10px] leading-4 text-dls-secondary/85">{copy.sessionBoundary}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MatterhornDeskFocusedEmptyState({
+  mode,
+  onUsePrompt,
+}: {
+  mode: MatterhornDeskMode;
+  onUsePrompt: (prompt: string) => void | Promise<void>;
+}) {
+  const visual = getCustomerProtocolDeskVisual(mode);
+  const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
+  const prompts = MATTERHORN_DESK_EMPTY_PROMPTS[mode];
+  const boundary = mode === "bittensor"
+    ? "Public SS58/coldkey/hotkey context only. External signing is required for every action."
+    : mode === "wellness"
+      ? "Standalone wellness workflow. Educational only, non-medical, and no live payments/email/hosting."
+      : "Read and preview only. Can submit: No. Live submission: Off. External client required.";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6" style={deskToneStyle(iconHint)}>
+      <section className="w-full max-w-[960px] space-y-5">
+        <div className="matterhorn-desk-session-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
+          <span className="pointer-events-none absolute -right-10 -top-12 opacity-[0.08]" aria-hidden="true">
+            {visual ? <ProtocolLogo iconHint={iconHint} size={172} /> : <Icon className="size-40 text-[var(--matterhorn-desk-color)]" />}
+          </span>
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-4">
+              <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+                {visual ? <ProtocolLogo iconHint={iconHint} size={52} /> : <Icon className="size-6" />}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">{visual?.displayName ?? mode} session</h2>
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {visual?.statusLabel ?? "Focused"}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary">
+                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a suggested prompt below, edit it in chat, then send when ready.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">{boundary}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+              <span>Desk-specific</span>
+              <span>Editable</span>
+              <span>No auto-send</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-2xl bg-dls-surface/48">
+          {prompts.map((item) => (
+            <button
+              key={item.title}
+              type="button"
+              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              onClick={() => void onUsePrompt(item.prompt)}
+            >
+              <span className="min-w-0">
+                <span className="block text-[15px] font-semibold text-dls-text">{item.title}</span>
+                <span className="mt-1 block text-[12px] leading-5 text-dls-secondary">{item.detail}</span>
+              </span>
+              <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
+                Insert editable prompt
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1540,58 +1695,49 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onChangeModel={props.onChangeModel}
                   onOpenModelPicker={props.onModelClick}
                 />
+              ) : activeDeskMode ? (
+                <MatterhornDeskFocusedEmptyState
+                  mode={activeDeskMode}
+                  onUsePrompt={typeComposerText}
+                />
               ) : shellConfig.starterCards ? (
-                <div className="flex flex-1 flex-col items-center justify-end px-6 pb-4">
-                  <div className="w-full max-w-[900px]">
-                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6 lg:justify-center">
+                  <div className="w-full max-w-[1040px]">
+                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
                         <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
-                    <div className="grid gap-2 rounded-2xl bg-dls-surface-muted/30 p-2 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2">
                       {customerWorkflowStarterCards.map((item) => {
                         const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[item.iconHint];
-                        const protocolLogo = ProtocolLogo({ iconHint: item.iconHint });
+                        const protocolLogo = ProtocolLogo({ iconHint: item.iconHint, size: 30 });
                         const capabilityItems = starterWorkflowCapabilityItems(item);
+                        const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
                         return (
                           <button
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group relative isolate flex min-h-[186px] min-w-0 flex-col overflow-hidden rounded-xl bg-transparent p-4 text-left transition-colors duration-200 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.105)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-3 rounded-lg bg-dls-surface-muted/55 px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="pointer-events-none absolute -right-6 -top-7 opacity-[0.055]" aria-hidden="true">
-                              {protocolLogo ?? <Icon className="size-28 text-[var(--matterhorn-desk-color)]" />}
+                            <span className="flex size-10 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+                              {protocolLogo ?? <Icon className="size-5" />}
                             </span>
-                            <span className="relative flex items-start gap-4">
-                              <span className="mt-0.5 flex size-12 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.16)] text-[var(--matterhorn-desk-color)]">
-                                {protocolLogo ? ProtocolLogo({ iconHint: item.iconHint, size: 36 }) : <Icon className="size-5" />}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <span className="text-base font-semibold leading-tight text-dls-text">{item.title}</span>
-                                  <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.18)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                    {item.statusLabel}
-                                  </span>
+                            <span className="grid min-w-0 gap-1">
+                              <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span className="min-w-0 truncate text-sm font-semibold leading-tight text-dls-text">{item.title}</span>
+                                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                  {item.statusLabel}
                                 </span>
-                                <span className="mt-2 block text-[13px] leading-6 text-dls-secondary">{item.description}</span>
                               </span>
-                            </span>
-                            <span className="relative mt-4 flex flex-wrap gap-x-4 gap-y-2">
-                              {capabilityItems.map((capability) => (
-                                <span
-                                  key={capability}
-                                  className="flex items-center gap-2 text-[12px] font-medium text-dls-text"
-                                >
-                                  <span className="size-1.5 shrink-0 rounded-full bg-[var(--matterhorn-desk-color)]" aria-hidden="true" />
-                                  <span>{capability}</span>
-                                </span>
-                              ))}
-                            </span>
-                            <span className="relative mt-auto pt-4 text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                              Insert editable prompt
+                              <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
+                              <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
+                              <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                                Insert editable prompt
+                              </span>
                             </span>
                             <span className="sr-only">{item.safetySummary}</span>
                           </button>

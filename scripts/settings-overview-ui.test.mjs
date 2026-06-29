@@ -72,22 +72,22 @@ for (const phrase of ["setThemeMode", "Matterhorn accent", "matterhorn-blue", "V
 
 // 5b. Settings directory tells the truth about readiness instead of implying
 // every scaffolded surface is production-ready.
-for (const status of ["Ready", "Needs setup", "Preview", "Desktop only", "Cloud only"]) {
+for (const status of ["Ready", "Needs setup", "Preview", "Desktop only", "Cloud only", "Developer"]) {
   assert.ok(settingsPage.includes(status), `Settings navigation should include status badge: ${status}`);
   assert.ok(generalView.includes(status), `Settings hub should include status badge: ${status}`);
 }
 assert.ok(settingsShell.includes("getSettingsTabStatus"), "Compact settings menu should show readiness badges");
 assert.ok(settingsPage.includes("getWorkspaceSettingsTabs(developerMode = false)"), "Workspace settings should be gated by developer mode");
-assert.ok(settingsPage.includes('if (developerMode) tabs.splice(4, 0, "marketplace");'), "Agent templates should be developer-gated");
+assert.ok(settingsPage.includes('if (developerMode) tabs.push("marketplace", "advanced");'), "Agent templates and Advanced should be developer-gated");
 assert.ok(settingsPage.includes('return developerMode ? ["cloud-account", "cloud-workers"] : ["cloud-account"];'), "Cloud Workers should be developer-gated");
 assert.ok(generalView.includes("developerOnly: true"), "Demo/developer settings cards should be hidden unless developer mode is on");
 assert.ok(generalView.includes('title: "Matterhorn Cloud"'), "Settings hub should use Matterhorn Cloud branding");
-assert.ok(generalView.includes('title: "Advanced"'), "Advanced settings should remain available as a desktop-only technical surface");
+assert.ok(generalView.includes('title: "Advanced"'), "Advanced settings should remain documented as a developer-only technical surface");
 assert.ok(generalView.includes('title: "Cloud Workers Preview"'), "Cloud Workers should remain documented as a developer-gated cloud-only surface");
 assert.ok(generalView.includes('title: "Environment"'), "Environment settings should remain documented for developer mode");
 assert.ok(generalView.includes('title: "Recovery"'), "Recovery settings should remain documented for developer mode");
-assert.ok(!settingsPage.includes('"Developer"'), "Settings readiness badges should use the approved customer-facing status vocabulary only");
-assert.ok(!generalView.includes('"Developer"'), "Settings hub badges should use the approved customer-facing status vocabulary only");
+assert.ok(settingsPage.includes('case "advanced":'), "Advanced should have an explicit readiness status");
+assert.ok(settingsPage.includes('return "Developer";'), "Developer-only surfaces should be labeled explicitly");
 assert.ok(!settingsPage.includes('Agent Marketplace"'), "Customer-facing settings nav should not advertise Agent Marketplace as live");
 
 // 5c. Environment and Recovery should be honest about token/desktop/preview limits.

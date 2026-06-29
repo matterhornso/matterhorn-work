@@ -2702,6 +2702,23 @@ export function SessionRoute() {
     }
   }, [local, refreshRouteState]);
 
+  const renderEmbeddedSettingsSurface = useCallback((initialPath: "cloud-account" | "wallet" | "extensions") => (
+    <SettingsSurface
+      key={initialPath}
+      embedded
+      hideWorkspaceSwitcher
+      initialPath={initialPath}
+      workspaceId={selectedWorkspaceId}
+      onClose={() => {
+        try {
+          window.dispatchEvent(new CustomEvent("openwork-close-right-pane"));
+        } catch {
+          // ignore
+        }
+      }}
+    />
+  ), [selectedWorkspaceId]);
+
   return (
     <WorkspaceProvider
       client={opencodeClient}
@@ -2778,20 +2795,8 @@ export function SessionRoute() {
         onRefreshProviders: sessionProviderAuthStore.refreshProviders,
         onClose: () => sessionProviderAuthStore.closeProviderAuthModal(),
       } : null}
-      settingsSlot={
-        <SettingsSurface
-          embedded
-          initialPath="extensions"
-          workspaceId={selectedWorkspaceId}
-          onClose={() => {
-            try {
-              window.dispatchEvent(new CustomEvent("openwork-close-right-pane"));
-            } catch {
-              // ignore
-            }
-          }}
-        />
-      }
+      settingsSlot={renderEmbeddedSettingsSurface("extensions")}
+      settingsSlotForPath={renderEmbeddedSettingsSurface}
       sidebar={{
         workspaceSessionGroups,
         selectedWorkspaceId,

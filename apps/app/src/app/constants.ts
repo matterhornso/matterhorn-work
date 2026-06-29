@@ -25,6 +25,14 @@ export const SUGGESTED_PLUGINS: SuggestedPlugin[] = [];
 
 export type ExtensionKind = "mcp" | "plugin" | "skill" | "ui-control" | "extension";
 
+export type MatterhornProtocolDeskId =
+  | "bittensor"
+  | "hyperliquid"
+  | "polymarket"
+  | "wellness"
+  | "memory"
+  | "mcps";
+
 export type McpDirectoryInfo = {
   id?: string;
   /** Display name shown in the UI. */
@@ -42,6 +50,8 @@ export type McpDirectoryInfo = {
   iconSlug?: string;
   /** Direct icon URL (e.g. local SVG). Takes priority over iconSlug. */
   iconSrc?: string;
+  /** Matterhorn desk identity used by app surfaces to render official desk logos. */
+  protocolDeskId?: MatterhornProtocolDeskId;
   /** Prompt inserted from the composer extension picker. */
   composerPrompt?: string;
   /** Whether Matterhorn should show this extension as enabled before user setup. */
@@ -53,6 +63,24 @@ export type McpDirectoryInfo = {
   /** Normalized extension manifest backing this catalog entry. */
   extensionManifest?: MatterhornExtensionManifest;
 };
+
+function protocolDeskIdForExtensionId(id: string): MatterhornProtocolDeskId | undefined {
+  switch (id) {
+    case "bittensor":
+      return "bittensor";
+    case "hyperliquid":
+      return "hyperliquid";
+    case "polymarket":
+      return "polymarket";
+    case "matterhorn-memory":
+      return "memory";
+    case "matterhorn-ui":
+    case "matterhorn-workflow":
+      return "mcps";
+    default:
+      return undefined;
+  }
+}
 
 function extensionManifestToDirectoryInfo(manifest: MatterhornExtensionManifest): McpDirectoryInfo {
   const mcpResource = extensionResource(manifest, "mcp");
@@ -67,6 +95,7 @@ function extensionManifestToDirectoryInfo(manifest: MatterhornExtensionManifest)
     kind: "extension",
     iconSlug: manifest.icon?.simpleIconSlug,
     iconSrc: manifest.icon?.src,
+    protocolDeskId: protocolDeskIdForExtensionId(manifest.id),
     composerPrompt: extensionContribution(manifest, "composer-prompt")?.prompt ?? manifest.composer?.prompt,
     defaultEnabled: manifest.defaultEnabled,
     defaultHidden: manifest.defaultHidden,
@@ -160,7 +189,7 @@ export const MCP_QUICK_CONNECT: McpDirectoryInfo[] = [
       try {
         return `${readDenBootstrapConfig().baseUrl.replace(/\/+$/, "")}/mcp`;
       } catch {
-        return "https://app.openworklabs.com/mcp";
+        return "https://app.matterhorn.work/mcp";
       }
     },
     type: "remote",

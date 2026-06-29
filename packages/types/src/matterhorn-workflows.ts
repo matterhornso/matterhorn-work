@@ -2947,6 +2947,39 @@ export const PROTOCOL_DESK_STATUS_BADGE_TONES = [
 ] as const;
 export type ProtocolDeskStatusBadgeTone = (typeof PROTOCOL_DESK_STATUS_BADGE_TONES)[number];
 
+export const PROTOCOL_DESK_READINESS_TONES = [
+  "beta_ready",
+  "preview_only",
+  "workflow_ready",
+  "local_only",
+] as const;
+export type ProtocolDeskReadinessTone = (typeof PROTOCOL_DESK_READINESS_TONES)[number];
+
+export const PROTOCOL_DESK_BACKEND_STATUSES = [
+  "live",
+  "partial",
+  "preview",
+  "static_catalog",
+  "disabled",
+] as const;
+export type ProtocolDeskBackendStatus = (typeof PROTOCOL_DESK_BACKEND_STATUSES)[number];
+
+export const PROTOCOL_DESK_ACTION_STATUSES = [
+  "read_only",
+  "preview_only",
+  "external_signer",
+  "workflow_only",
+] as const;
+export type ProtocolDeskActionStatus = (typeof PROTOCOL_DESK_ACTION_STATUSES)[number];
+
+export const PROTOCOL_DESK_EXTENSION_STATUSES = [
+  "built_in_live",
+  "built_in_partial",
+  "static_catalog",
+  "requires_setup",
+] as const;
+export type ProtocolDeskExtensionStatus = (typeof PROTOCOL_DESK_EXTENSION_STATUSES)[number];
+
 export interface ProtocolDeskAction {
   actionId: string;
   label: string;
@@ -2992,8 +3025,15 @@ export interface ProtocolDeskManifest {
   launcherDescription: string;
   launcherPrompt: string;
   rightRailSummary: string;
+  logoAssetId: string;
+  officialLogoAssetId: string;
+  logoAlt: string;
   category: ProtocolDeskCategory;
   status: ProtocolDeskVisualStatus;
+  readinessTone: ProtocolDeskReadinessTone;
+  backendStatus: ProtocolDeskBackendStatus;
+  actionStatus: ProtocolDeskActionStatus;
+  extensionStatus: ProtocolDeskExtensionStatus;
   statusBadgeLabel: string;
   statusBadgeTone: ProtocolDeskStatusBadgeTone;
   routeOrPanelId: string;
@@ -3002,11 +3042,17 @@ export interface ProtocolDeskManifest {
   lightThemeTokenHints: ProtocolDeskThemeTokenHints;
   darkThemeTokenHints: ProtocolDeskThemeTokenHints;
   primaryActions: ProtocolDeskAction[];
+  primaryActionLabel: string;
   secondaryActions: ProtocolDeskAction[];
   walletRequirements: ProtocolDeskWalletRequirement[];
   walletRailMode: ProtocolDeskWalletRailMode;
   safetyBoundaries: ProtocolDeskSafetyBoundaries;
   customerVisible: boolean;
+  capabilityBullets: string[];
+  safetySummary: string;
+  customerCapabilitySummary: string;
+  noCustodySafetyLine: string;
+  suggestedPromptTitles: string[];
   emptyStateCopy: {
     headline: string;
     body: string;
@@ -3055,8 +3101,15 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Stake, delegate, and monitor TAO with read-only previews and external-signer handoffs.",
   launcherPrompt: "Show my TAO or compare validators on subnet 1",
   rightRailSummary: "External signer required. Paste a public SS58 address to preview staking and delegation handoffs.",
+  logoAssetId: "bittensor-logo",
+  officialLogoAssetId: "bittensor-logo",
+  logoAlt: "Bittensor TAO logo",
   category: "bittensor",
   status: "beta_ready",
+  readinessTone: "beta_ready",
+  backendStatus: "partial",
+  actionStatus: "external_signer",
+  extensionStatus: "built_in_partial",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/workspaces/bittensor",
@@ -3102,6 +3155,7 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Preview or hand off",
   secondaryActions: [
     {
       actionId: "compare-validators",
@@ -3137,6 +3191,21 @@ export const BITTENSOR_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Read TAO balances and stake allocations",
+    "Discover subnets and compare validators",
+    "Prepare stake, unstake, and transfer handoffs",
+    "Watch subnets and import public receipts",
+  ],
+  safetySummary: "External signer required. Matterhorn never holds your coldkey, hotkey, or seed phrase.",
+  customerCapabilitySummary: "Read TAO balances, stake allocations, subnet data, and validator comparisons. Prepare stake, unstake, and transfer handoffs for external signing.",
+  noCustodySafetyLine: "Matterhorn never holds your coldkey, hotkey, or seed phrase. All on-chain actions are signed outside the app.",
+  suggestedPromptTitles: [
+    "Show my TAO",
+    "Where am I staked?",
+    "Compare validators on subnet 1",
+    "Prepare staking 1 TAO",
+  ],
   emptyStateCopy: {
     headline: "Connect a Bittensor wallet",
     body: "Paste a public SS58 address or connect an external signer to preview staking and delegation. Private keys and seed phrases are never accepted.",
@@ -3155,11 +3224,18 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   displayName: "Hyperliquid",
   shortDescription: "Read-only perp market previews and watchlists.",
   launcherTitle: "Hyperliquid",
-  launcherDescription: "Preview perp markets and manage watchlists. No signing or submission.",
+  launcherDescription: "Preview perp markets and manage watchlists. Read-only.",
   launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
   rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
+  logoAssetId: "hyperliquid-logo",
+  officialLogoAssetId: "hyperliquid-logo",
+  logoAlt: "Hyperliquid logo",
   category: "markets",
   status: "preview_only",
+  readinessTone: "preview_only",
+  backendStatus: "preview",
+  actionStatus: "preview_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/hyperliquid",
@@ -3205,6 +3281,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Preview market",
   secondaryActions: [
     {
       actionId: "show-exposure",
@@ -3232,9 +3309,24 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Read perp market data, orderbooks, and funding",
+    "Show account exposure and open orders",
+    "Preview trades without order placement",
+    "Manage market watches and receipts",
+  ],
+  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  suggestedPromptTitles: [
+    "Show BTC-PERP on Hyperliquid",
+    "Preview a BTC long",
+    "Show my Hyperliquid exposure",
+    "Watch BTC funding",
+  ],
   emptyStateCopy: {
     headline: "Preview Hyperliquid markets",
-    body: "Enter a public wallet address or market to generate a read-only preview. No signing or submission.",
+    body: "Enter a public wallet address or market to generate a read-only preview.",
     primaryActionId: "preview-trade",
   },
   degradedStateCopy: {
@@ -3250,11 +3342,18 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   displayName: "Polymarket",
   shortDescription: "Read-only prediction market research and previews.",
   launcherTitle: "Polymarket",
-  launcherDescription: "Research prediction markets and preview positions. No betting or signing.",
+  launcherDescription: "Research prediction markets and preview positions. Read-only.",
   launcherPrompt: "Find Polymarket markets about AI",
   rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
+  logoAssetId: "polymarket-logo",
+  officialLogoAssetId: "polymarket-logo",
+  logoAlt: "Polymarket logo",
   category: "markets",
   status: "preview_only",
+  readinessTone: "preview_only",
+  backendStatus: "preview",
+  actionStatus: "preview_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Preview",
   statusBadgeTone: "caution",
   routeOrPanelId: "/workspaces/polymarket",
@@ -3300,6 +3399,7 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Research market",
   secondaryActions: [
     {
       actionId: "show-orderbook",
@@ -3327,9 +3427,24 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Search and filter prediction markets",
+    "View outcome probabilities and orderbooks",
+    "Preview trades without order placement",
+    "Manage market watches and receipts",
+  ],
+  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  suggestedPromptTitles: [
+    "Find markets about AI",
+    "Show probabilities for this market",
+    "Preview a yes position",
+    "Watch this market",
+  ],
   emptyStateCopy: {
     headline: "Research Polymarket",
-    body: "Search markets or enter a public wallet address for read-only research. No betting or signing.",
+    body: "Search markets or enter a public wallet address for read-only research.",
     primaryActionId: "research-market",
   },
   degradedStateCopy: {
@@ -3347,9 +3462,16 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherTitle: "Wellness Creator",
   launcherDescription: "Build educational, non-medical wellness programs and service packages through chat.",
   launcherPrompt: "Create a 4-week beginner strength plan",
-  rightRailSummary: "Workflow-ready desk. No wallet required. Generates educational content only, not medical advice.",
+  rightRailSummary: "Workflow-ready desk. No account or keys required. Generates educational content only, not medical advice.",
+  logoAssetId: "wellness-logo",
+  officialLogoAssetId: "wellness-logo",
+  logoAlt: "Wellness Creator logo",
   category: "wellness",
   status: "workflow_ready",
+  readinessTone: "workflow_ready",
+  backendStatus: "static_catalog",
+  actionStatus: "workflow_only",
+  extensionStatus: "static_catalog",
   statusBadgeLabel: "Ready",
   statusBadgeTone: "info",
   routeOrPanelId: "/workspaces/wellness",
@@ -3395,6 +3517,7 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Build program",
   secondaryActions: [
     {
       actionId: "generate-artifacts",
@@ -3422,6 +3545,21 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Build educational, non-medical wellness programs",
+    "Generate intake forms, schedules, and packets",
+    "Package services without live execution",
+    "Plan future live-service integrations",
+  ],
+  safetySummary: "Educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
+  customerCapabilitySummary: "Build educational, non-medical wellness programs, generate client artifacts, and package services through chat. No Web3 trading required.",
+  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
+  suggestedPromptTitles: [
+    "Create a 4-week strength plan",
+    "Draft a yoga class for lower backs",
+    "Generate a meal-planning template",
+    "Package this as a service offer",
+  ],
   emptyStateCopy: {
     headline: "Build a wellness program",
     body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
@@ -3443,8 +3581,15 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Review and manage what Matterhorn remembers across desks. Editable and forgettable.",
   launcherPrompt: "Show my saved memory",
   rightRailSummary: "User-controlled memory. Confirm, edit, or dismiss suggestions. Secrets and clinical records are rejected.",
+  logoAssetId: "memory-logo",
+  officialLogoAssetId: "memory-logo",
+  logoAlt: "Memory logo",
   category: "memory",
   status: "beta_ready",
+  readinessTone: "beta_ready",
+  backendStatus: "live",
+  actionStatus: "read_only",
+  extensionStatus: "built_in_live",
   statusBadgeLabel: "Beta",
   statusBadgeTone: "success",
   routeOrPanelId: "/memory",
@@ -3490,6 +3635,7 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Review memory",
   secondaryActions: [
     {
       actionId: "forget-record",
@@ -3517,6 +3663,21 @@ export const MEMORY_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Inspect and edit saved memory records",
+    "Confirm, edit, or dismiss suggestions",
+    "Export safe records for backup",
+    "Reject secrets and clinical records automatically",
+  ],
+  safetySummary: "User-controlled and visible. Nothing is hidden, auto-captured, or stored without explicit confirmation.",
+  customerCapabilitySummary: "Inspect, edit, and delete memory records and suggestions across desks. Export safe records and reject secrets or clinical data.",
+  noCustodySafetyLine: "Memory is user-controlled and visible. Nothing is hidden, auto-captured, or stored without explicit confirmation.",
+  suggestedPromptTitles: [
+    "Show my memory",
+    "Review my suggestions",
+    "Forget my wallet labels",
+    "Export my safe memory",
+  ],
   emptyStateCopy: {
     headline: "Nothing saved yet",
     body: "As you confirm suggestions across desks, safe, editable memory will appear here. Secrets and clinical records are rejected.",
@@ -3538,8 +3699,15 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   launcherDescription: "Browse, install, and manage approved MCP tools. No custody or signing.",
   launcherPrompt: "Browse available MCP tools",
   rightRailSummary: "Install and use surfaces only. MCP tools run with explicit approval and cannot hold keys or sign.",
+  logoAssetId: "mcp-logo",
+  officialLogoAssetId: "mcp-logo",
+  logoAlt: "MCP Tools logo",
   category: "mcps",
   status: "planned_not_live",
+  readinessTone: "local_only",
+  backendStatus: "disabled",
+  actionStatus: "workflow_only",
+  extensionStatus: "requires_setup",
   statusBadgeLabel: "Soon",
   statusBadgeTone: "neutral",
   routeOrPanelId: "/mcps",
@@ -3577,6 +3745,7 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
+  primaryActionLabel: "Browse tools",
   secondaryActions: [
     {
       actionId: "manage-permissions",
@@ -3604,6 +3773,21 @@ export const MCPS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     medicalClaimsAllowed: false,
   },
   customerVisible: true,
+  capabilityBullets: [
+    "Browse approved MCP tools",
+    "Install and manage tool permissions",
+    "Review memory access granted to tools",
+    "Run tools only with explicit approval",
+  ],
+  safetySummary: "Install-and-use only. Matterhorn does not grant tools keys, signing ability, or access to secrets.",
+  customerCapabilitySummary: "Browse, install, and manage approved MCP tools and their permissions. Tool execution requires explicit approval; no custody or signing.",
+  noCustodySafetyLine: "MCP tools are install-and-use only. Matterhorn does not grant them keys, signing ability, or access to secrets.",
+  suggestedPromptTitles: [
+    "Browse MCP tools",
+    "Install an MCP tool",
+    "Show my MCP permissions",
+    "How do MCP tools work?",
+  ],
   emptyStateCopy: {
     headline: "MCP tools coming soon",
     body: "Browse, approve, and manage MCP tool integrations once this desk goes live. No secrets or custody required.",
@@ -3767,3 +3951,610 @@ export const PROTOCOL_BRAND_ASSET_REGISTRY: Record<string, ProtocolBrandAssetMan
   "memory-logo": MEMORY_BRAND_ASSET_MANIFEST,
   "mcp-logo": MCP_BRAND_ASSET_MANIFEST,
 };
+
+
+// --- Matterhorn MCP catalog contract ---
+// Data-driven contract for customer-facing MCP cards. Production UI should render
+// Matterhorn MCPs from this registry instead of hardcoding copy islands.
+
+export const MATTERHORN_MCP_STATUSES = [
+  "live",
+  "preview",
+  "requires_setup",
+  "planned",
+] as const;
+export type MatterhornMcpStatus = (typeof MATTERHORN_MCP_STATUSES)[number];
+
+export const MATTERHORN_MCP_COMPATIBLE_CLIENTS = [
+  "codex",
+  "claude_code",
+  "claude_desktop",
+  "cursor",
+  "windsurf",
+  "generic_sse",
+] as const;
+export type MatterhornMcpCompatibleClient = (typeof MATTERHORN_MCP_COMPATIBLE_CLIENTS)[number];
+
+export interface MatterhornMcpToolDescriptor {
+  name: string;
+  description: string;
+  isReadOnly: boolean;
+}
+
+export interface MatterhornMcpSafetyBoundary {
+  liveSubmissionEnabled: false;
+  canExecute: boolean;
+  canSubmit: false;
+  acceptsPrivateKeys: false;
+  acceptsSeedPhrases: false;
+  acceptsApiSecrets: false;
+  acceptsRawSignatures: false;
+  acceptsSignedPayloads: false;
+  acceptsWalletExports: false;
+  requiresExternalSigner: boolean;
+  allowsRealFunds: false;
+  requiresUserConfirmation: boolean;
+  operatesOnPublicDataOnly: boolean;
+}
+
+export interface MatterhornMcpCatalogItem {
+  version: "matterhorn.mcp.catalog.item.v1";
+  id: string;
+  displayName: string;
+  deskId: string;
+  description: string;
+  installCommand: string;
+  supportedTools: MatterhornMcpToolDescriptor[];
+  safetyBoundary: MatterhornMcpSafetyBoundary;
+  compatibleClients: MatterhornMcpCompatibleClient[];
+  status: MatterhornMcpStatus;
+  documentationUrl?: string;
+  isBuiltIn: boolean;
+}
+
+export const BITTENSOR_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-bittensor",
+  displayName: "Matterhorn Bittensor",
+  deskId: "bittensor",
+  description:
+    "Read Bittensor subnet, stake, and balance data. Prepare unsigned previews and external-signer handoffs for stake, unstake, and transfer.",
+  installCommand: "matterhorn-work mcp install matterhorn-bittensor",
+  supportedTools: [
+    { name: "bittensor_read_balance", description: "Read a public SS58 balance.", isReadOnly: true },
+    { name: "bittensor_read_stake", description: "Read stake and delegate state.", isReadOnly: true },
+    { name: "bittensor_list_subnets", description: "List subnets and validators.", isReadOnly: true },
+    { name: "bittensor_compare_validators", description: "Compare validator yields.", isReadOnly: true },
+    { name: "bittensor_preview_stake", description: "Preview a stake action without signing.", isReadOnly: true },
+    { name: "bittensor_prepare_stake_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "bittensor_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: true,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "preview",
+  isBuiltIn: true,
+};
+
+export const HYPERLIQUID_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-hyperliquid",
+  displayName: "Matterhorn Hyperliquid",
+  deskId: "hyperliquid",
+  description:
+    "Read Hyperliquid market data and preview trades. Prepare external-signer handoffs and verify receipts. No live submission or signing.",
+  installCommand: "matterhorn-work mcp install matterhorn-hyperliquid",
+  supportedTools: [
+    { name: "hyperliquid_read_market", description: "Read perp market metadata.", isReadOnly: true },
+    { name: "hyperliquid_read_orderbook", description: "Read the orderbook.", isReadOnly: true },
+    { name: "hyperliquid_read_exposure", description: "Read account exposure for a public address.", isReadOnly: true },
+    { name: "hyperliquid_preview_order", description: "Preview an order without signing.", isReadOnly: true },
+    { name: "hyperliquid_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "hyperliquid_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-polymarket",
+  displayName: "Matterhorn Polymarket",
+  deskId: "polymarket",
+  description:
+    "Search Polymarket markets, read probabilities, and preview positions. Prepare external-signer handoffs and verify receipts. No live bet placement.",
+  installCommand: "matterhorn-work mcp install matterhorn-polymarket",
+  supportedTools: [
+    { name: "polymarket_search_markets", description: "Search prediction markets.", isReadOnly: true },
+    { name: "polymarket_read_probabilities", description: "Read outcome probabilities.", isReadOnly: true },
+    { name: "polymarket_read_orderbook", description: "Read market orderbook.", isReadOnly: true },
+    { name: "polymarket_preview_trade", description: "Preview a trade without signing.", isReadOnly: true },
+    { name: "polymarket_prepare_handoff", description: "Build an external-signer handoff packet.", isReadOnly: false },
+    { name: "polymarket_import_receipt", description: "Import a signed receipt for record-keeping.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: true,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const MEMORY_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-memory",
+  displayName: "Matterhorn Memory",
+  deskId: "memory",
+  description:
+    "Read, manage, and export user-confirmed memory records. No hidden saves or access to secrets.",
+  installCommand: "matterhorn-work mcp install matterhorn-memory",
+  supportedTools: [
+    { name: "memory_review", description: "Review saved memory records.", isReadOnly: true },
+    { name: "memory_manage_suggestions", description: "Manage pending memory suggestions.", isReadOnly: false },
+    { name: "memory_forget_record", description: "Forget a saved memory record.", isReadOnly: false },
+    { name: "memory_export", description: "Export safe memory records.", isReadOnly: true },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
+  status: "live",
+  isBuiltIn: true,
+};
+
+export const WORKFLOW_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-workflow",
+  displayName: "Matterhorn Workflow",
+  deskId: "workflow",
+  description:
+    "Invoke customer workflow templates and evidence bundles. Workflow output is local and reviewed before any external step.",
+  installCommand: "matterhorn-work mcp install matterhorn-workflow",
+  supportedTools: [
+    { name: "workflow_list_templates", description: "List available workflow templates.", isReadOnly: true },
+    { name: "workflow_run_template", description: "Run a workflow template and return artifacts.", isReadOnly: false },
+    { name: "workflow_show_evidence", description: "Show evidence bundle for a workflow.", isReadOnly: true },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: true,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
+  status: "preview",
+  isBuiltIn: true,
+};
+
+export const UI_CONTROL_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
+  version: "matterhorn.mcp.catalog.item.v1",
+  id: "matterhorn-ui-control",
+  displayName: "Matterhorn UI Control",
+  deskId: "ui_control",
+  description:
+    "Control local Matterhorn UI surfaces such as desk focus, panel state, and prompt input. No backend execution.",
+  installCommand: "matterhorn-work mcp install matterhorn-ui-control",
+  supportedTools: [
+    { name: "ui_focus_desk", description: "Focus a desk in the UI.", isReadOnly: false },
+    { name: "ui_set_prompt", description: "Set the chat prompt input.", isReadOnly: false },
+    { name: "ui_toggle_panel", description: "Toggle a side panel.", isReadOnly: false },
+  ],
+  safetyBoundary: {
+    liveSubmissionEnabled: false,
+    canExecute: false,
+    canSubmit: false,
+    acceptsPrivateKeys: false,
+    acceptsSeedPhrases: false,
+    acceptsApiSecrets: false,
+    acceptsRawSignatures: false,
+    acceptsSignedPayloads: false,
+    acceptsWalletExports: false,
+    requiresExternalSigner: false,
+    allowsRealFunds: false,
+    requiresUserConfirmation: false,
+    operatesOnPublicDataOnly: false,
+  },
+  compatibleClients: ["codex", "claude_code"],
+  status: "planned",
+  isBuiltIn: true,
+};
+
+export const MATTERHORN_MCP_CATALOG_REGISTRY: Record<string, MatterhornMcpCatalogItem> = {
+  "matterhorn-bittensor": BITTENSOR_MCP_CATALOG_ITEM,
+  "matterhorn-hyperliquid": HYPERLIQUID_MCP_CATALOG_ITEM,
+  "matterhorn-polymarket": POLYMARKET_MCP_CATALOG_ITEM,
+  "matterhorn-memory": MEMORY_MCP_CATALOG_ITEM,
+  "matterhorn-workflow": WORKFLOW_MCP_CATALOG_ITEM,
+  "matterhorn-ui-control": UI_CONTROL_MCP_CATALOG_ITEM,
+};
+
+export function getMatterhornMcpCatalogItem(id: string): MatterhornMcpCatalogItem | undefined {
+  return MATTERHORN_MCP_CATALOG_REGISTRY[id];
+}
+
+export function listMatterhornMcpCatalogItems(): MatterhornMcpCatalogItem[] {
+  return Object.values(MATTERHORN_MCP_CATALOG_REGISTRY);
+}
+
+
+// --- Matterhorn surface readiness contract ---
+// Feature-linkage matrix: one typed row per customer-facing surface declaring
+// its readiness status, backend linkage, safety posture, and owner.
+
+export const MATTERHORN_SURFACE_STATUSES = [
+  "ready",
+  "needs_setup",
+  "preview",
+  "desktop_only",
+  "cloud_only",
+  "developer",
+] as const;
+export type MatterhornSurfaceStatus = (typeof MATTERHORN_SURFACE_STATUSES)[number];
+
+export const MATTERHORN_SURFACE_KINDS = [
+  "desk",
+  "setting",
+  "mcp",
+  "wallet",
+  "memory",
+  "workflow",
+] as const;
+export type MatterhornSurfaceKind = (typeof MATTERHORN_SURFACE_KINDS)[number];
+
+export const MATTERHORN_SURFACE_OWNERS = [
+  "matterhorn",
+  "protocol",
+  "customer",
+  "third_party",
+] as const;
+export type MatterhornSurfaceOwner = (typeof MATTERHORN_SURFACE_OWNERS)[number];
+
+export interface MatterhornSurfaceSafetyPosture {
+  canSubmit: boolean;
+  liveSubmissionEnabled: boolean;
+  custody: boolean;
+  secretInputsAllowed: boolean;
+}
+
+export interface MatterhornSurfaceReadinessEntry {
+  version: "matterhorn.surface.readiness.v1";
+  id: string;
+  displayName: string;
+  kind: MatterhornSurfaceKind;
+  status: MatterhornSurfaceStatus;
+  routeOrPanelId: string;
+  backendRouteOrTool?: string;
+  mcpEquivalent?: string;
+  cliEquivalent?: string;
+  owner: MatterhornSurfaceOwner;
+  safetyPosture: MatterhornSurfaceSafetyPosture;
+  notes?: string;
+}
+
+export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadinessEntry> = {
+  bittensor_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "bittensor_desk",
+    displayName: "Bittensor Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/bittensor",
+    backendRouteOrTool: "GET /api/bittensor/subnets, POST /api/bittensor/handoff",
+    mcpEquivalent: "matterhorn-bittensor",
+    cliEquivalent: "matterhorn-work bittensor handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Read previews and external-signer handoffs only. External signer required.",
+  },
+  hyperliquid_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "hyperliquid_desk",
+    displayName: "Hyperliquid Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/hyperliquid",
+    backendRouteOrTool: "GET /api/hyperliquid/markets, POST /api/hyperliquid/orders/handoff",
+    mcpEquivalent: "matterhorn-hyperliquid",
+    cliEquivalent: "matterhorn-work hyperliquid handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Read-only previews and handoffs. No live order submission.",
+  },
+  polymarket_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "polymarket_desk",
+    displayName: "Polymarket Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/polymarket",
+    backendRouteOrTool: "GET /api/polymarket/markets, POST /api/polymarket/orders/handoff",
+    mcpEquivalent: "matterhorn-polymarket",
+    cliEquivalent: "matterhorn-work polymarket handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Market research, previews, and handoffs. No live bet placement.",
+  },
+  wellness_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "wellness_desk",
+    displayName: "Wellness Creator Desk",
+    kind: "desk",
+    status: "ready",
+    routeOrPanelId: "/workspaces/wellness",
+    backendRouteOrTool: "Local workflow generation; no live provider execution",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work workflow run wellness_creator_services",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Educational, non-medical, static-catalog workflows. No live payments/email/hosting.",
+  },
+  memory_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "memory_desk",
+    displayName: "Memory Desk",
+    kind: "memory",
+    status: "ready",
+    routeOrPanelId: "/memory",
+    backendRouteOrTool: "Local memory store + memory API",
+    mcpEquivalent: "matterhorn-memory",
+    cliEquivalent: "matterhorn-work memory review",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "User-confirmed memory only. No hidden saves or secrets.",
+  },
+  mcps_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "mcps_desk",
+    displayName: "MCP Tools Desk",
+    kind: "mcp",
+    status: "needs_setup",
+    routeOrPanelId: "/mcps",
+    backendRouteOrTool: "MCP catalog registry only; execution happens in client MCP host",
+    mcpEquivalent: "MATTERHORN_MCP_CATALOG_REGISTRY",
+    cliEquivalent: "matterhorn-work mcps browse",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Catalog and permission management. Real MCPs require user setup in a compatible client.",
+  },
+  wallet_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "wallet_settings",
+    displayName: "Wallet Settings",
+    kind: "wallet",
+    status: "needs_setup",
+    routeOrPanelId: "/settings/wallet",
+    backendRouteOrTool: "Wallet rail state + external signer adapter config",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config wallet",
+    owner: "customer",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Matterhorn never holds keys. User connects external signer or read-only address.",
+  },
+  profile_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "profile_settings",
+    displayName: "Profile Settings",
+    kind: "setting",
+    status: "ready",
+    routeOrPanelId: "/settings/profile",
+    backendRouteOrTool: "User profile API",
+    mcpEquivalent: undefined,
+    cliEquivalent: undefined,
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Basic profile and preferences.",
+  },
+  ai_providers_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "ai_providers_settings",
+    displayName: "AI Providers Settings",
+    kind: "setting",
+    status: "cloud_only",
+    routeOrPanelId: "/settings/ai-providers",
+    backendRouteOrTool: "Provider key metadata stored encrypted in cloud; keys never exposed to UI",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config providers",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Keys are cloud-managed and never returned to the client.",
+  },
+  environment_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "environment_settings",
+    displayName: "Environment Settings",
+    kind: "setting",
+    status: "developer",
+    routeOrPanelId: "/settings/environment",
+    backendRouteOrTool: "Local env store / CLI config",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config env",
+    owner: "customer",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Desktop-only developer surface.",
+  },
+  agent_marketplace: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "agent_marketplace",
+    displayName: "Agent Marketplace",
+    kind: "setting",
+    status: "preview",
+    routeOrPanelId: "/marketplace",
+    backendRouteOrTool: "Static catalog API; install triggers local setup",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work marketplace list",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Browse static catalog. Installed agents may require setup.",
+  },
+  feedback_surface: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "feedback_surface",
+    displayName: "Feedback",
+    kind: "setting",
+    status: "ready",
+    routeOrPanelId: "/feedback",
+    backendRouteOrTool: "Feedback API",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work feedback",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "User feedback submission. No credentials or custody.",
+  },
+  subscribetome_future: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "subscribetome_future",
+    displayName: "SubscribeToMe Integration",
+    kind: "workflow",
+    status: "needs_setup",
+    routeOrPanelId: "/workflows/subscribetome",
+    backendRouteOrTool: "Planned: SubscribeToMe webhook handler",
+    mcpEquivalent: undefined,
+    cliEquivalent: undefined,
+    owner: "third_party",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Future integration. Requires user OAuth/setup when available.",
+  },
+};
+
+export function getMatterhornSurfaceReadinessEntry(id: string): MatterhornSurfaceReadinessEntry | undefined {
+  return SURFACE_READINESS_REGISTRY[id];
+}
+
+export function listMatterhornSurfaceReadinessEntries(): MatterhornSurfaceReadinessEntry[] {
+  return Object.values(SURFACE_READINESS_REGISTRY);
+}
+
+export function listSurfacesByKind(kind: MatterhornSurfaceKind): MatterhornSurfaceReadinessEntry[] {
+  return listMatterhornSurfaceReadinessEntries().filter((entry) => entry.kind === kind);
+}
+
+export function listSurfacesByStatus(status: MatterhornSurfaceStatus): MatterhornSurfaceReadinessEntry[] {
+  return listMatterhornSurfaceReadinessEntries().filter((entry) => entry.status === status);
+}
