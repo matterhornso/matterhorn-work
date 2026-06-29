@@ -63,6 +63,57 @@ function WalletBoundaryList() {
   );
 }
 
+function WalletProtocolSupportMap(props: { connected: boolean }) {
+  const rows = [
+    {
+      label: "EVM tools",
+      status: props.connected ? "Connected" : "Needs setup",
+      detail: "MetaMask, Rabby, or another injected wallet can support EVM handoffs when available in this runtime.",
+      tone: props.connected ? "text-emerald-300 bg-emerald-500/10" : "text-sky-300 bg-sky-500/10",
+    },
+    {
+      label: "Bittensor",
+      status: "External signer",
+      detail: "Use public SS58/coldkey reads here; stake, transfer, and receipt flows stay unsigned until you review elsewhere.",
+      tone: "text-cyan-300 bg-cyan-500/10",
+    },
+    {
+      label: "Hyperliquid",
+      status: "Preview only",
+      detail: "Read orderbooks, exposure, and funding context. Live market submission remains off in Matterhorn.",
+      tone: "text-blue-300 bg-blue-500/10",
+    },
+    {
+      label: "Polymarket",
+      status: "Preview only",
+      detail: "Research markets, compliance, liquidity, and handoff context. Bet placement stays outside Matterhorn.",
+      tone: "text-violet-300 bg-violet-500/10",
+    },
+  ];
+
+  return (
+    <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/30 px-3 py-3">
+      <div>
+        <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Protocol support</h4>
+        <p className="mt-1 text-xs leading-5 text-dls-secondary">
+          One wallet surface, different safety boundary per desk. Matterhorn never stores keys, API secrets, raw signatures, signed payloads, or wallet exports.
+        </p>
+      </div>
+      <div className="divide-y divide-dls-border/35">
+        {rows.map((row) => (
+          <div key={row.label} className="grid gap-1 py-2 text-xs leading-5">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-medium text-dls-text">{row.label}</span>
+              <span className={`shrink-0 rounded-md px-2 py-0.5 font-medium ${row.tone}`}>{row.status}</span>
+            </div>
+            <p className="text-dls-secondary">{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function WalletRailMetric(props: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -242,6 +293,8 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
           </section>
         )}
 
+        <WalletProtocolSupportMap connected={state.isConnected} />
+
         <WalletBoundaryList />
       </SettingsStack>
     );
@@ -307,6 +360,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               What this wallet surface can and cannot do today.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
+          <WalletProtocolSupportMap connected={state.isConnected} />
           <WalletBoundaryList />
         </SettingsSection>
       </SettingsStack>
