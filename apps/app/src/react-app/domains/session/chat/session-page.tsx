@@ -284,7 +284,7 @@ function HomeCapabilityOverview({
               type="button"
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-3 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.075)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.095)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3.5 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
               aria-label={`Open ${item.title}`}
               onClick={() => onOpenCapability?.(item.id)}
             >
@@ -301,8 +301,9 @@ function HomeCapabilityOverview({
                   </div>
                   <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
                   <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-dls-secondary/90">{item.proof}</p>
-                  <span className="mt-3 inline-flex text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                  <span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
                     {item.id === "wellness" ? "Start workflow" : "Open desk"}
+                    <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
                   </span>
                 </div>
               </div>
@@ -331,19 +332,25 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex min-w-0 w-full max-w-[min(54rem,100%)] flex-col gap-4 px-4 py-7 sm:px-6 sm:py-10"
+      className="mx-auto flex min-w-0 w-full max-w-[min(56rem,100%)] flex-col gap-4 px-4 py-5 sm:px-6 sm:py-7"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <button
-        type="button"
-        className="inline-flex w-fit items-center gap-2 rounded-full bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-        onClick={onBackHome}
-      >
-        <span aria-hidden="true">←</span>
-        Home
-      </button>
-      <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 sm:px-5 sm:py-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          type="button"
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+          onClick={onBackHome}
+          aria-label="Back to Home"
+        >
+          <span aria-hidden="true">←</span>
+          Back to Home
+        </button>
+        <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-3 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+          Choose a prompt, then review it in chat
+        </span>
+      </div>
+      <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.09)] sm:px-5 sm:py-6">
         <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
@@ -359,7 +366,7 @@ function ProtocolDeskEmptyState({
               </p>
             </div>
           </div>
-          <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-48 lg:justify-end lg:text-right">
+          <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-56 lg:justify-end lg:text-right">
             <span>Starts a chat draft</span>
             <span>External signer</span>
             <span>Editable prompts</span>
@@ -372,7 +379,7 @@ function ProtocolDeskEmptyState({
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48" aria-label="Chat starters">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" aria-label="Chat starters">
         {prompts.map((item) => (
           <button
             key={item.title}
@@ -384,8 +391,8 @@ function ProtocolDeskEmptyState({
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]" title="Open chat draft">
-              Start in chat
+            <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open chat draft" title="Open chat draft">
+              Draft in chat →
             </span>
           </button>
         ))}
@@ -1441,6 +1448,7 @@ export function SessionPage(props: SessionPageProps) {
                         onBackHome={() => setCurrentSidePanel(null)}
                         onUsePrompt={(prompt) => {
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
+                          setCurrentSidePanel(null);
                         }}
                       />
                     </div>
@@ -1739,7 +1747,7 @@ export function SessionPage(props: SessionPageProps) {
                     ) : isVenueSidePanel(visibleSidePanel) ? (
                       <div
                         data-testid="protocol-side-panel-scroll-root"
-                        className="flex h-full min-h-0 max-h-full flex-col overflow-hidden"
+                        className="flex h-full min-h-0 max-h-full flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain"
                       >
                         <WalletPanel
                           store={wallet.store}
@@ -1845,13 +1853,13 @@ export function SessionPage(props: SessionPageProps) {
                   artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
                 )}
                 onClick={openArtifactRailPane}
-                title={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
-                aria-label={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
+                title={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
+                aria-label={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
                 aria-pressed={artifactRailActive}
                 disabled={!hasArtifactTargets}
               >
                 <FileText size={17} />
-                <span className="text-[9px] leading-none">Files</span>
+                <span className="text-[9px] leading-none">Artifacts</span>
                 {artifactTargetCount > 0 ? (
                   <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                     {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
