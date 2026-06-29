@@ -688,6 +688,7 @@ export function SessionPage(props: SessionPageProps) {
   const activeSidePanel = voiceSidePanelOpen ? "voice" : sessionSidePanel;
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
+  const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
@@ -1811,27 +1812,29 @@ export function SessionPage(props: SessionPageProps) {
                 <span className="hidden text-[9px] leading-none 2xl:inline">Voice</span>
               </Button>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
-              )}
-              onClick={openArtifactRailPane}
-              title={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
-              aria-label={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
-              aria-pressed={artifactRailActive}
-              disabled={!hasArtifactTargets}
-            >
-              <FileText size={17} />
-              <span className="hidden text-[9px] leading-none 2xl:inline">Artifacts</span>
-              {artifactTargetCount > 0 ? (
-                <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
-                  {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
-                </span>
-              ) : null}
-            </Button>
+            {showArtifactRailItem ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                )}
+                onClick={openArtifactRailPane}
+                title={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
+                aria-label={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
+                aria-pressed={artifactRailActive}
+                disabled={!hasArtifactTargets}
+              >
+                <FileText size={17} />
+                <span className="text-[9px] leading-none">Files</span>
+                {artifactTargetCount > 0 ? (
+                  <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
+                    {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="icon-sm"
