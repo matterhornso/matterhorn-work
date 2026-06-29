@@ -1687,7 +1687,7 @@ export function SessionPage(props: SessionPageProps) {
                   defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
                   minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
                   maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "extensions" ? "500px" : "70%"}
-                  className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
+                  className="hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
                     {visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
@@ -1721,12 +1721,17 @@ export function SessionPage(props: SessionPageProps) {
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (
-                      <WalletPanel
-                        store={wallet.store}
-                        gasPriceGwei={sessionWallet.gasPriceGwei}
-                        blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                        initialVenue={visibleSidePanel}
-                      />
+                      <div
+                        data-testid="protocol-side-panel-scroll-root"
+                        className="flex h-full min-h-0 max-h-full flex-col overflow-hidden"
+                      >
+                        <WalletPanel
+                          store={wallet.store}
+                          gasPriceGwei={sessionWallet.gasPriceGwei}
+                          blockExplorerUrl={sessionWallet.blockExplorerUrl}
+                          initialVenue={visibleSidePanel}
+                        />
+                      </div>
                     ) : (
                       <BrowserPanel onClose={closeRightPane} />
                     )}

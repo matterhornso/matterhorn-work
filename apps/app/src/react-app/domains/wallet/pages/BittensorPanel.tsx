@@ -1335,7 +1335,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain bg-dls-canvas text-[15px] animate-fade-in"
+      className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain max-h-full bg-dls-canvas text-[15px] animate-fade-in [scrollbar-gutter:stable]"
       style={venueToneStyle(venue)}
     >
       <div className="bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
