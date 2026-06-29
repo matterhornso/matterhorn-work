@@ -317,9 +317,11 @@ function HomeCapabilityOverview({
 function ProtocolDeskEmptyState({
   panel,
   onUsePrompt,
+  onBackHome,
 }: {
   panel: VenueSidePanel;
   onUsePrompt: (prompt: string) => void;
+  onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
@@ -333,6 +335,14 @@ function ProtocolDeskEmptyState({
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
+      <button
+        type="button"
+        className="inline-flex w-fit items-center gap-2 rounded-full bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+        onClick={onBackHome}
+      >
+        <span aria-hidden="true">←</span>
+        Home
+      </button>
       <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 sm:px-5 sm:py-6">
         <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
@@ -350,7 +360,7 @@ function ProtocolDeskEmptyState({
             </div>
           </div>
           <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-48 lg:justify-end lg:text-right">
-            <span>Chat draft opens next</span>
+            <span>Starts a chat draft</span>
             <span>External signer</span>
             <span>Editable prompts</span>
             <span>No auto-send</span>
@@ -374,7 +384,9 @@ function ProtocolDeskEmptyState({
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Open chat draft</span>
+            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]" title="Open chat draft">
+              Start in chat
+            </span>
           </button>
         ))}
       </div>
@@ -1420,9 +1432,13 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : focusedProtocolPanel ? (
-                    <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain pb-24 sm:pb-28">
+                    <div
+                      className="flex min-h-0 min-w-0 w-full flex-1 justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain pb-24 sm:pb-28"
+                      style={{ scrollbarGutter: "stable" } as CSSProperties}
+                    >
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
+                        onBackHome={() => setCurrentSidePanel(null)}
                         onUsePrompt={(prompt) => {
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
                         }}

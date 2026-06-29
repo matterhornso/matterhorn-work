@@ -1108,7 +1108,7 @@ function MatterhornMcpProductSection(props: {
           Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, evidence, and agent-control loops outside the desktop app.
           </p>
           <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
-            Matterhorn MCP cards are real installable command profiles backed by the local Matterhorn MCP server. UI Control is marked preview until the desktop bridge publishes its local actions. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
+            Matterhorn core MCP setup starts here. Matterhorn MCP cards are real installable command profiles. They are backed by the local Matterhorn MCP server. UI Control is marked preview until the desktop bridge publishes its local actions. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
           </p>
         </div>
         <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
