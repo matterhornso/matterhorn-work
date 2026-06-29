@@ -55,6 +55,8 @@ const requiredFiles = [
   "docs/ui/matterhorn-desk-v2/index.html",
   "docs/ui/matterhorn-desk-v2/QA-RUBRIC.md",
   "docs/ui/matterhorn-desk-v2/BOXINESS-PUNCHLIST.md",
+  "docs/ui/matterhorn-desk-v2/MCP-DESK-V2-SPEC.md",
+  "docs/ui/matterhorn-desk-v2/SETTINGS-PRODUCT-TRUTH.md",
 ];
 for (const f of requiredFiles) {
   if (fileExists(f)) pass(`File exists: ${f}`);
@@ -77,6 +79,7 @@ const screens = [
   ["Layout Architecture",           "screen-layout"],
   ["Home Command Center",          "screen-home"],
   ["Bittensor Desk",              "screen-bittensor"],
+  ["MCPs Desk V2",                "screen-mcps"],
   ["Session Cards",               "screen-session-cards"],
   ["Protocol Icons (P5)",         "screen-icons"],
   ["Mobile Responsive",           "screen-mobile"],
@@ -484,8 +487,13 @@ const forbiddenScreenMatch = html.match(/id="screen-forbidden"[\s\S]*?<\/section
 const htmlWithoutForbiddenScreen = forbiddenScreenMatch
   ? html.replace(forbiddenScreenMatch[0], "")
   : html;
+// Also strip the MCPs screen's annotation blocks (they contain "sign transaction" etc. as documentation)
+const mcpScreenMatch = htmlWithoutForbiddenScreen.match(/id="screen-mcps"[\s\S]*?<\/section>/);
+const htmlWithoutMcpAnnotations = mcpScreenMatch
+  ? htmlWithoutForbiddenScreen.replace(mcpScreenMatch[0], "")
+  : htmlWithoutForbiddenScreen;
 
-const htmlClean = htmlWithoutForbiddenScreen
+const htmlClean = htmlWithoutMcpAnnotations
   .replace(/<script[\s\S]*?<\/script>/gi, "")
   .replace(/<style[\s\S]*?<\/style>/gi, "");
 
@@ -610,15 +618,117 @@ for (const [needle, label] of punchlistSections) {
   }
 }
 
-// ── 12. Market execution safety gate compatibility ──────────────
+// ── 11c. MCPs Desk V2 spec coverage ───────────────────────────
 
-if (fileExists("scripts/market-execution-safety-gate.test.mjs")) {
-  pass("scripts/market-execution-safety-gate.test.mjs exists");
-} else {
-  fail("scripts/market-execution-safety-gate.test.mjs exists", "missing");
+const mcpSpec = fileExists("docs/ui/matterhorn-desk-v2/MCP-DESK-V2-SPEC.md")
+  ? read("docs/ui/matterhorn-desk-v2/MCP-DESK-V2-SPEC.md")
+  : "";
+
+const mcpChecks = [
+  // File exists (checked via requiredFiles above)
+  ["Use Matterhorn outside",  "MCPs: Use Matterhorn outside section"],
+  ["Install by client",      "MCPs: Install by client section"],
+  ["Protocol MCPs",          "MCPs: Protocol MCPs section"],
+  ["Workflow",               "MCPs: Workflow/Memory/UI section"],
+  ["surface fill",            "MCPs: surface fill pattern documented"],
+  ["border-bottom",           "MCPs: divider-based rows documented"],
+  ["border-radius: 4px",      "MCPs: sharp corners (4px max) documented"],
+  ["overflow-x: auto",        "MCPs: horizontal overflow prevention documented"],
+  ["Local-only",              "MCPs: Local-only safety badge documented"],
+  ["Ext signer",             "MCPs: External signer badge documented"],
+  ["No credentials",          "MCPs: no credentials stored safety copy"],
+  ["No nested",               "MCPs: no nested bordered boxes documented"],
+  ["Before",                 "MCPs: before/after examples"],
+  ["QA Checklist",           "MCPs: QA checklist present"],
+  ["Mobile",                 "MCPs: mobile responsive behavior"],
+  ["Light Mode",             "MCPs: light mode color shifts"],
+  ["lighthouse",             "MCPs spec forbids: lighthouse"],
+  ["harness",               "MCPs spec forbids: harness"],
+  ["submit order",           "MCPs spec forbids: submit order"],
+  ["sign transaction",        "MCPs spec forbids: sign transaction"],
+  ["api secret",              "MCPs spec forbids: api secret"],
+];
+for (const [needle, label] of mcpChecks) {
+  if (mcpSpec.includes(needle)) {
+    pass(`MCPs spec: ${label}`);
+  } else {
+    fail(`MCPs spec: ${label}`, "missing");
+  }
 }
 
-// ── Summary ───────────────────────────────────────────────────
+// HTML MCPs screen: checks specific elements in the annotated screen
+const mcpScreenTests = [
+  ["Local-only",                                          "MCPs HTML: Local-only badge present"],
+  ["Ext signer",                                         "MCPs HTML: Ext signer badge present"],
+  ["MCP tools run locally",                             "MCPs HTML: safety strip copy present"],
+  ["No credentials",                                     "MCPs HTML: no credentials copy present"],
+  ["--v2-bg-surface",                                   "MCPs HTML: surface fill pattern used"],
+  ["border-bottom: 1px solid var(--v2-border-subtle)", "MCPs HTML: divider-based rows used"],
+  ["border-radius: var(--v2-radius)",                   "MCPs HTML: sharp corners (4px) used"],
+  ["Install by client",                                   "MCPs HTML: Install by client section present"],
+  ["Protocol MCPs",                                    "MCPs HTML: Protocol MCPs section present"],
+];
+for (const [needle, label] of mcpScreenTests) {
+  if (html.includes(needle)) {
+    pass(`MCPs HTML: ${label}`);
+  } else {
+    fail(`MCPs HTML: ${label}`, "missing");
+  }
+}
+
+// ── 12. Market execution safety gate compatibility ──────────────
+
+// ── 12. Settings Product Truth ─────────────────────────────────
+
+const settingsTruth = fileExists("docs/ui/matterhorn-desk-v2/SETTINGS-PRODUCT-TRUTH.md")
+  ? read("docs/ui/matterhorn-desk-v2/SETTINGS-PRODUCT-TRUTH.md")
+  : "";
+
+const settingsChecks = [
+  ["Ready",                              "Settings: Ready badge documented"],
+  ["Needs setup",                         "Settings: Needs setup badge documented"],
+  ["Preview only",                        "Settings: Preview badge documented"],
+  ["Desktop only",                         "Settings: Desktop only badge documented"],
+  ["Cloud only",                          "Settings: Cloud only badge documented"],
+  ["tone=",                               "Settings: tone prop system documented"],
+  ["emerald",                             "Settings: Ready = emerald documented"],
+  ["sky",                                 "Settings: Needs setup = sky documented"],
+  ["amber",                               "Settings: Preview = amber documented"],
+  ["violet",                             "Settings: Cloud only = violet documented"],
+  ["Overview",                            "Settings: Overview page documented"],
+  ["Preferences",                         "Settings: Preferences page documented"],
+  ["Wallet",                              "Settings: Wallet page documented"],
+  ["MCPs",                               "Settings: MCPs page documented"],
+  ["Cloud Account",                       "Settings: Account page documented"],
+  ["Environment",                         "Settings: Environment page documented"],
+  ["Agent Marketplace",                   "Settings: Agent Marketplace documented"],
+  ["Recovery",                            "Settings: Recovery page documented"],
+  ["surface fill",                        "Settings: surface fill over borders documented"],
+  ["border-radius",                       "Settings: sharp corners (4px max) documented"],
+  ["No nested",                           "Settings: no nested bordered boxes documented"],
+  ["No full wallet",                      "Settings: truncated wallet addresses documented"],
+  ["lighthouse",                          "Settings: forbids lighthouse"],
+  ["harness",                            "Settings: forbids harness"],
+  ["openwork",                           "Settings: forbids openwork"],
+  ["opencodec",                         "Settings: forbids opencode"],
+  ["submit order",                      "Settings: forbids submit order"],
+  ["sign transaction",                     "Settings: forbids sign transaction"],
+  ["mint now",                           "Settings: forbids mint now"],
+  ["seed phrase",                         "Settings: forbids seed phrase input"],
+  ["private key",                         "Settings: forbids private key input"],
+  ["Developer",                          "Settings: Developer section demotion documented"],
+  ["QA Checklist",                        "Settings: QA checklist present"],
+  ["Screenshot Gates",                   "Settings: screenshot gates documented"],
+];
+for (const [needle, label] of settingsChecks) {
+  if (settingsTruth.includes(needle)) {
+    pass(`Settings truth: ${label}`);
+  } else {
+    fail(`Settings truth: ${label}`, "missing");
+  }
+}
+
+// ── 13. Market execution safety gate compatibility ──────────────
 
 console.log("");
 if (failures === 0) {

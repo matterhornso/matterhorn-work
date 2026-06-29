@@ -191,6 +191,12 @@ body {
 }
 .annotation--success .annotation__label { color: var(--v2-status-success); }
 
+.annotation--info {
+  border-color: var(--v2-status-info);
+  background: rgba(96,165,250,0.08);
+}
+.annotation--info .annotation__label { color: var(--v2-status-info); }
+
 .annotation--p1 { border-color: #FF6B6B; background: rgba(255,107,107,0.08); }
 .annotation--p1 .annotation__label { color: #FF6B6B; }
 .annotation--p2 { border-color: #FFB84D; background: rgba(255,184,77,0.08); }
@@ -1360,6 +1366,7 @@ body {
   <button class="nav-btn" onclick="showScreen('screen-layout')">Layout</button>
   <button class="nav-btn" onclick="showScreen('screen-home')">Home</button>
   <button class="nav-btn" onclick="showScreen('screen-bittensor')">Bittensor</button>
+  <button class="nav-btn" onclick="showScreen('screen-mcps')">MCPs</button>
   <button class="nav-btn" onclick="showScreen('screen-session-cards')">Session Cards</button>
   <button class="nav-btn" onclick="showScreen('screen-icons')">Icons</button>
   <button class="nav-btn" onclick="showScreen('screen-mobile')">Mobile</button>
@@ -1639,7 +1646,7 @@ body {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
         <div class="nav-item__tooltip">Memory</div>
       </div>
-      <div class="nav-item">
+      <div class="nav-item nav-item--clickable" onclick="showScreen('screen-mcps')" style="cursor:pointer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
         <div class="nav-item__tooltip">MCPs</div>
       </div>
@@ -2035,6 +2042,175 @@ body {
   <div class="annotation annotation--warning" style="margin-top: 12px;">
     <div class="annotation__label">Address Truncation (Always)</div>
     <div class="annotation__body">Expert mode still shows truncated addresses: <code>5CfTC…3bX9</code>. No full wallet address is ever displayed. Copy button on the right rail provides the full address when needed.</div>
+   </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN: MCPS DESK V2
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section class="screen" id="screen-mcps">
+  <div class="screen-label">Desk: MCPs</div>
+  <div class="screen-title">MCPs Desk V2 — Less-Boxy Tool Registry</div>
+  <div class="screen-subtitle">Compact grouped rows, no nested bordered boxes. Four sections: External, Install, Protocol, Core. Each row = logo + one-liner + copy/install action + safety badge.</div>
+
+  <!-- V2 Solution annotation -->
+  <div class="annotation annotation--success">
+    <div class="annotation__label">V2 Pattern: Grouped Surface Rows</div>
+    <div class="annotation__body">
+      Instead of nested bordered tables or stacked cards, V2 uses <strong>surface fill rows with subtle dividers</strong>.
+      No card border around each tool. No nested sub-cards inside command blocks.
+      Safety badge (Active / External signer / Local-only) is inline, not a nested box.
+    </div>
+  </div>
+
+  <!-- Safety strip -->
+  <div style="background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.3); border-radius: var(--v2-radius); padding: 10px 14px; margin: 0 0 16px; font-size: 12px; color: #34D399; display: flex; align-items: center; gap: 8px;">
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    MCP tools run locally. No credentials stored in Matterhorn.
+  </div>
+
+  <!-- Section header: External (Matterhorn outside the app) -->
+  <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-desk-mcp); margin-bottom: 8px;">Use Matterhorn outside the app</div>
+
+  <!-- Tool row: CLI -->
+  <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+    <div style="width: 32px; height: 32px; background: rgba(52,211,153,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-mcp); flex-shrink: 0;">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M6 4v12M14 4v12M6 10h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">matterhorn-work</div>
+      <div style="font-size: 11px; color: var(--v2-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Run AI agents locally. hyperliquid handoff, polymarket receipt, bittensor reads.</div>
+    </div>
+    <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(52,211,153,0.15); color: var(--v2-desk-mcp); flex-shrink: 0;">Local-only</span>
+    <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; flex-shrink: 0; font-family: var(--v2-font-mono);" title="Copy install command">npm install</button>
+  </div>
+
+  <!-- Tool row: Desktop MCP -->
+  <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+    <div style="width: 32px; height: 32px; background: rgba(52,211,153,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-mcp); flex-shrink: 0;">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 9l3 3-3 3M10 15h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </div>
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">Desktop MCP client</div>
+      <div style="font-size: 11px; color: var(--v2-text-secondary);">Attach Matterhorn to any desktop app. Local install, no server required.</div>
+    </div>
+    <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(52,211,153,0.15); color: var(--v2-desk-mcp); flex-shrink: 0;">Local-only</span>
+    <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; flex-shrink: 0;">Download</button>
+  </div>
+
+  <!-- Section header: Install by client -->
+  <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-desk-mcp); margin: 16px 0 8px;">Install by client</div>
+
+  <!-- Install rows: these show the command inline without a bordered box -->
+  <div style="display: flex; flex-direction: column; gap: 0;">
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 10px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="font-size: 11px; font-weight: 700; color: var(--v2-text-secondary); width: 80px; flex-shrink: 0; font-family: var(--v2-font-mono);">npm</div>
+      <div style="flex: 1; min-width: 0;">
+        <code style="font-size: 11px; font-family: var(--v2-font-mono); color: var(--v2-text-secondary); background: var(--v2-bg-elevated); padding: 2px 6px; border-radius: 3px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">npx matterhorn-work hyperliquid handoff</code>
+      </div>
+      <button style="font-size: 11px; padding: 3px 8px; background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-subtle); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; flex-shrink: 0;" title="Copy command">Copy</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 10px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="font-size: 11px; font-weight: 700; color: var(--v2-text-secondary); width: 80px; flex-shrink: 0; font-family: var(--v2-font-mono);">brew</div>
+      <div style="flex: 1; min-width: 0;">
+        <code style="font-size: 11px; font-family: var(--v2-font-mono); color: var(--v2-text-secondary); background: var(--v2-bg-elevated); padding: 2px 6px; border-radius: 3px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">brew install matterhornso/tap/matterhorn-work</code>
+      </div>
+      <button style="font-size: 11px; padding: 3px 8px; background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-subtle); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; flex-shrink: 0;" title="Copy command">Copy</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 10px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="font-size: 11px; font-weight: 700; color: var(--v2-text-secondary); width: 80px; flex-shrink: 0; font-family: var(--v2-font-mono);">pip</div>
+      <div style="flex: 1; min-width: 0;">
+        <code style="font-size: 11px; font-family: var(--v2-font-mono); color: var(--v2-text-secondary); background: var(--v2-bg-elevated); padding: 2px 6px; border-radius: 3px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">pip install matterhorn-work</code>
+      </div>
+      <button style="font-size: 11px; padding: 3px 8px; background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-subtle); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; flex-shrink: 0;" title="Copy command">Copy</button>
+    </div>
+  </div>
+
+  <!-- Section header: Protocol MCPs -->
+  <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-desk-mcp); margin: 16px 0 8px;">Protocol MCPs</div>
+
+  <!-- Protocol tool rows -->
+  <div style="display: flex; flex-direction: column; gap: 0;">
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(255,124,67,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-bittensor); flex-shrink: 0; font-size: 12px; font-weight: 700;">B</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">bittensor-subnet</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Subnet discovery, stake reads, delegation. Public Subtensor API only.</div>
+      </div>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(34,197,94,0.15); color: var(--v2-status-success); flex-shrink: 0;">Active</span>
+      <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent-dim); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; flex-shrink: 0;">Configure</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(192,132,252,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-hyperliquid); flex-shrink: 0; font-size: 12px; font-weight: 700;">H</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">hyperliquid-info</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Read-only position and market data via Hyperliquid Info API.</div>
+      </div>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(34,197,94,0.15); color: var(--v2-status-success); flex-shrink: 0;">Active</span>
+      <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent-dim); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; flex-shrink: 0;">Configure</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(192,132,252,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-hyperliquid); flex-shrink: 0; font-size: 12px; font-weight: 700;">H</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">hyperliquid-sign</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Sign transactions via your own wallet. External signer only.</div>
+      </div>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(245,158,11,0.15); color: var(--v2-status-warning); flex-shrink: 0;">Ext signer</span>
+      <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent-dim); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; flex-shrink: 0;">Configure</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(251,191,36,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-polymarket); flex-shrink: 0; font-size: 12px; font-weight: 700;">P</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">polymarket</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Browse markets and track positions. Read-only via public API.</div>
+      </div>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(34,197,94,0.15); color: var(--v2-status-success); flex-shrink: 0;">Active</span>
+      <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent-dim); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; flex-shrink: 0;">Configure</button>
+    </div>
+  </div>
+
+  <!-- Section header: Core -->
+  <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--v2-desk-mcp); margin: 16px 0 8px;">Workflow · Memory · UI</div>
+
+  <div style="display: flex; flex-direction: column; gap: 0;">
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(103,232,249,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-memory); flex-shrink: 0;">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><rect x="3" y="5" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 5V3M10 5V3M13 5V3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--v2-text-primary);">memory-query</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Read your memories. Never writes without your confirmation.</div>
+      </div>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(52,211,153,0.15); color: var(--v2-desk-mcp); flex-shrink: 0;">Local-only</span>
+      <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent-dim); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; flex-shrink: 0;">Configure</button>
+    </div>
+    <div style="background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); padding: 12px 16px; display: flex; align-items: center; gap: 12px;">
+      <div style="width: 28px; height: 28px; background: rgba(103,232,249,0.12); border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; color: var(--v2-desk-memory); flex-shrink: 0;">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none"><path d="M3 6h14M3 10h14M3 14h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 700; color: var(--v2-text-primary);">+ Add MCP server</div>
+        <div style="font-size: 11px; color: var(--v2-text-secondary);">Connect your own tools. Credentials stored locally, never sent to Matterhorn servers.</div>
+      </div>
+      <button style="font-size: 11px; padding: 4px 10px; background: rgba(52,211,153,0.15); border: 1px solid transparent; border-radius: var(--v2-radius); color: var(--v2-desk-mcp); cursor: pointer; flex-shrink: 0; font-weight: 600;">Add server</button>
+    </div>
+  </div>
+
+  <!-- Mobile annotation -->
+  <div class="annotation annotation--info" style="margin-top: 16px;">
+    <div class="annotation__label">Mobile Responsive</div>
+    <div class="annotation__body">
+      On mobile, the command rows wrap: <code>npm</code> label drops below the code block, keeping the Copy button on the same row. No horizontal overflow. Supported tools description truncates with ellipsis, not clipping.
+    </div>
+  </div>
+
+  <!-- Forbidden patterns annotation -->
+  <div class="annotation annotation--warning" style="margin-top: 8px;">
+    <div class="annotation__label">Forbidden in MCPs Desk</div>
+    <div class="annotation__body">
+      No API key input fields. No secret storage UI. No nested bordered boxes inside command blocks. No "submit order", "sign transaction", "mint now", or "hire agent" anywhere in the MCPs desk. Credentials are always scoped to the local MCP client, never stored in Matterhorn.
+    </div>
   </div>
 </section>
 
