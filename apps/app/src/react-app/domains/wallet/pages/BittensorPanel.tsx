@@ -1335,10 +1335,10 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-dls-canvas text-[15px] animate-fade-in"
+      className="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain bg-dls-canvas text-[15px] animate-fade-in"
       style={venueToneStyle(venue)}
     >
-      <div className="shrink-0 bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
+      <div className="bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))] p-4 shadow-[0_1px_0_rgba(var(--protocol-desk-rgb),0.14)] sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <ProtocolMark venue={venue} />
@@ -1435,7 +1435,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-4 pb-8 sm:p-5">
+      <div className="min-h-0 p-4 pb-8 sm:p-5">
         {venue === "bittensor" && error && (
           <Notice tone="warning" icon={<AlertTriangle className="size-4" />} title="Bittensor provider">
             {error}

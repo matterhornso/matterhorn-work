@@ -215,8 +215,9 @@ for (const forbidden of [
 // 9b. Customer-reported layout fixes: no bottom wallet overlay, wider mobile-safe
 // metrics, and protocol panels scroll vertically.
 for (const phrase of [
-  "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
-  "shrink-0 bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
+  "flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain",
+  "bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
+  "min-h-0 p-4 pb-8 sm:p-5",
   "style={venueToneStyle(venue)}",
   "--protocol-desk-accent",
   "These are the core Bittensor workflows Matterhorn should make easy.",
