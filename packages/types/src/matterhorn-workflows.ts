@@ -4237,3 +4237,324 @@ export function getMatterhornMcpCatalogItem(id: string): MatterhornMcpCatalogIte
 export function listMatterhornMcpCatalogItems(): MatterhornMcpCatalogItem[] {
   return Object.values(MATTERHORN_MCP_CATALOG_REGISTRY);
 }
+
+
+// --- Matterhorn surface readiness contract ---
+// Feature-linkage matrix: one typed row per customer-facing surface declaring
+// its readiness status, backend linkage, safety posture, and owner.
+
+export const MATTERHORN_SURFACE_STATUSES = [
+  "ready",
+  "needs_setup",
+  "preview",
+  "desktop_only",
+  "cloud_only",
+  "developer",
+] as const;
+export type MatterhornSurfaceStatus = (typeof MATTERHORN_SURFACE_STATUSES)[number];
+
+export const MATTERHORN_SURFACE_KINDS = [
+  "desk",
+  "setting",
+  "mcp",
+  "wallet",
+  "memory",
+  "workflow",
+] as const;
+export type MatterhornSurfaceKind = (typeof MATTERHORN_SURFACE_KINDS)[number];
+
+export const MATTERHORN_SURFACE_OWNERS = [
+  "matterhorn",
+  "protocol",
+  "customer",
+  "third_party",
+] as const;
+export type MatterhornSurfaceOwner = (typeof MATTERHORN_SURFACE_OWNERS)[number];
+
+export interface MatterhornSurfaceSafetyPosture {
+  canSubmit: boolean;
+  liveSubmissionEnabled: boolean;
+  custody: boolean;
+  secretInputsAllowed: boolean;
+}
+
+export interface MatterhornSurfaceReadinessEntry {
+  version: "matterhorn.surface.readiness.v1";
+  id: string;
+  displayName: string;
+  kind: MatterhornSurfaceKind;
+  status: MatterhornSurfaceStatus;
+  routeOrPanelId: string;
+  backendRouteOrTool?: string;
+  mcpEquivalent?: string;
+  cliEquivalent?: string;
+  owner: MatterhornSurfaceOwner;
+  safetyPosture: MatterhornSurfaceSafetyPosture;
+  notes?: string;
+}
+
+export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadinessEntry> = {
+  bittensor_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "bittensor_desk",
+    displayName: "Bittensor Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/bittensor",
+    backendRouteOrTool: "GET /api/bittensor/subnets, POST /api/bittensor/handoff",
+    mcpEquivalent: "matterhorn-bittensor",
+    cliEquivalent: "matterhorn-work bittensor handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Read previews and external-signer handoffs only. External signer required.",
+  },
+  hyperliquid_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "hyperliquid_desk",
+    displayName: "Hyperliquid Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/hyperliquid",
+    backendRouteOrTool: "GET /api/hyperliquid/markets, POST /api/hyperliquid/orders/handoff",
+    mcpEquivalent: "matterhorn-hyperliquid",
+    cliEquivalent: "matterhorn-work hyperliquid handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Read-only previews and handoffs. No live order submission.",
+  },
+  polymarket_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "polymarket_desk",
+    displayName: "Polymarket Desk",
+    kind: "desk",
+    status: "preview",
+    routeOrPanelId: "/workspaces/polymarket",
+    backendRouteOrTool: "GET /api/polymarket/markets, POST /api/polymarket/orders/handoff",
+    mcpEquivalent: "matterhorn-polymarket",
+    cliEquivalent: "matterhorn-work polymarket handoff",
+    owner: "protocol",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Market research, previews, and handoffs. No live bet placement.",
+  },
+  wellness_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "wellness_desk",
+    displayName: "Wellness Creator Desk",
+    kind: "desk",
+    status: "ready",
+    routeOrPanelId: "/workspaces/wellness",
+    backendRouteOrTool: "Local workflow generation; no live provider execution",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work workflow run wellness_creator_services",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Educational, non-medical, static-catalog workflows. No live payments/email/hosting.",
+  },
+  memory_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "memory_desk",
+    displayName: "Memory Desk",
+    kind: "memory",
+    status: "ready",
+    routeOrPanelId: "/memory",
+    backendRouteOrTool: "Local memory store + memory API",
+    mcpEquivalent: "matterhorn-memory",
+    cliEquivalent: "matterhorn-work memory review",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "User-confirmed memory only. No hidden saves or secrets.",
+  },
+  mcps_desk: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "mcps_desk",
+    displayName: "MCP Tools Desk",
+    kind: "mcp",
+    status: "needs_setup",
+    routeOrPanelId: "/mcps",
+    backendRouteOrTool: "MCP catalog registry only; execution happens in client MCP host",
+    mcpEquivalent: "MATTERHORN_MCP_CATALOG_REGISTRY",
+    cliEquivalent: "matterhorn-work mcps browse",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Catalog and permission management. Real MCPs require user setup in a compatible client.",
+  },
+  wallet_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "wallet_settings",
+    displayName: "Wallet Settings",
+    kind: "wallet",
+    status: "needs_setup",
+    routeOrPanelId: "/settings/wallet",
+    backendRouteOrTool: "Wallet rail state + external signer adapter config",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config wallet",
+    owner: "customer",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Matterhorn never holds keys. User connects external signer or read-only address.",
+  },
+  profile_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "profile_settings",
+    displayName: "Profile Settings",
+    kind: "setting",
+    status: "ready",
+    routeOrPanelId: "/settings/profile",
+    backendRouteOrTool: "User profile API",
+    mcpEquivalent: undefined,
+    cliEquivalent: undefined,
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Basic profile and preferences.",
+  },
+  ai_providers_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "ai_providers_settings",
+    displayName: "AI Providers Settings",
+    kind: "setting",
+    status: "cloud_only",
+    routeOrPanelId: "/settings/ai-providers",
+    backendRouteOrTool: "Provider key metadata stored encrypted in cloud; keys never exposed to UI",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config providers",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Keys are cloud-managed and never returned to the client.",
+  },
+  environment_settings: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "environment_settings",
+    displayName: "Environment Settings",
+    kind: "setting",
+    status: "developer",
+    routeOrPanelId: "/settings/environment",
+    backendRouteOrTool: "Local env store / CLI config",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work config env",
+    owner: "customer",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Desktop-only developer surface.",
+  },
+  agent_marketplace: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "agent_marketplace",
+    displayName: "Agent Marketplace",
+    kind: "setting",
+    status: "preview",
+    routeOrPanelId: "/marketplace",
+    backendRouteOrTool: "Static catalog API; install triggers local setup",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work marketplace list",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Browse static catalog. Installed agents may require setup.",
+  },
+  feedback_surface: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "feedback_surface",
+    displayName: "Feedback",
+    kind: "setting",
+    status: "ready",
+    routeOrPanelId: "/feedback",
+    backendRouteOrTool: "Feedback API",
+    mcpEquivalent: undefined,
+    cliEquivalent: "matterhorn-work feedback",
+    owner: "matterhorn",
+    safetyPosture: {
+      canSubmit: true,
+      liveSubmissionEnabled: true,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "User feedback submission. No credentials or custody.",
+  },
+  subscribetome_future: {
+    version: "matterhorn.surface.readiness.v1",
+    id: "subscribetome_future",
+    displayName: "SubscribeToMe Integration",
+    kind: "workflow",
+    status: "needs_setup",
+    routeOrPanelId: "/workflows/subscribetome",
+    backendRouteOrTool: "Planned: SubscribeToMe webhook handler",
+    mcpEquivalent: undefined,
+    cliEquivalent: undefined,
+    owner: "third_party",
+    safetyPosture: {
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    notes: "Future integration. Requires user OAuth/setup when available.",
+  },
+};
+
+export function getMatterhornSurfaceReadinessEntry(id: string): MatterhornSurfaceReadinessEntry | undefined {
+  return SURFACE_READINESS_REGISTRY[id];
+}
+
+export function listMatterhornSurfaceReadinessEntries(): MatterhornSurfaceReadinessEntry[] {
+  return Object.values(SURFACE_READINESS_REGISTRY);
+}
+
+export function listSurfacesByKind(kind: MatterhornSurfaceKind): MatterhornSurfaceReadinessEntry[] {
+  return listMatterhornSurfaceReadinessEntries().filter((entry) => entry.kind === kind);
+}
+
+export function listSurfacesByStatus(status: MatterhornSurfaceStatus): MatterhornSurfaceReadinessEntry[] {
+  return listMatterhornSurfaceReadinessEntries().filter((entry) => entry.status === status);
+}
