@@ -262,7 +262,7 @@ export function StatusBar(props: StatusBarProps) {
               size="xs"
               onClick={() => platform.openLink(DOCS_URL)}
               title={t("status.open_docs")}
-              aria-label={t("status.open_docs")}
+              aria-label={`${t("status.docs")} - ${t("status.open_docs")}`}
             >
               <BookOpen className="size-3.5" />
               <span className="hidden sm:inline">{t("status.docs")}</span>

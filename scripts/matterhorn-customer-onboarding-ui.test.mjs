@@ -383,7 +383,8 @@ assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty su
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
-assert.ok(sessionSurface.includes("group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)]"), "starter workflow rows should use compact logo-led command rows");
+assert.ok(sessionSurface.includes("group grid min-h-[78px] min-w-0 grid-cols-[34px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
+assert.ok(sessionSurface.includes("hasTranscriptJumpTarget && (!sessionScroll.isAtBottom"), "empty workflow launchers should not show transcript jump controls over the content");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
 assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");

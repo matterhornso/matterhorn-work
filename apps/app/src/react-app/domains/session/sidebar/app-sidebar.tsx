@@ -128,7 +128,13 @@ function SessionActions({ className, sessionId }: SessionActionsProps) {
     <DropdownMenu>
       <DropdownMenuTrigger className="size-6 text-muted-foreground"
         render={
-          <Button variant="ghost" size="icon-sm" className={cn("size-6", className)}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={cn("size-6", className)}
+            title={t("workspace_list.workspace_options")}
+            aria-label={t("workspace_list.workspace_options")}
+          >
             <MoreHorizontal className="size-4" />
           </Button>
         }
