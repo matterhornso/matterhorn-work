@@ -199,4 +199,49 @@ for (const [id, block] of Object.entries(mcpBlocks)) {
   assert.ok(block.includes("isBuiltIn: true"), `${id} must be marked as built-in`);
 }
 
+// 16. The production MCP settings page must advertise only backend-registered Matterhorn tools.
+const appMcpView = readFileSync("apps/app/src/react-app/domains/settings/pages/mcp-view.tsx", "utf8");
+const backendMcpServer = readFileSync("packages/matterhorn-work-mcp/index.mjs", "utf8");
+const backendTools = new Set(
+  [...backendMcpServer.matchAll(/["'](matterhorn_[a-z0-9_]+)["']/g)].map((match) => match[1]),
+);
+const mcpViewStart = appMcpView.indexOf("const MATTERHORN_MCP_PRODUCT_CARDS");
+const mcpViewEnd = appMcpView.indexOf("export function McpView");
+assert.ok(mcpViewStart >= 0 && mcpViewEnd > mcpViewStart, "MCP settings UI product-card registry should be findable");
+const mcpViewBlock = appMcpView.slice(mcpViewStart, mcpViewEnd);
+const uiToolNames = [
+  ...new Set([...mcpViewBlock.matchAll(/["'](matterhorn_[a-z0-9_]+)["']/g)].map((match) => match[1])),
+];
+assert.ok(
+  uiToolNames.length > 40,
+  "MCP settings UI should advertise the real backend Matterhorn MCP tool surface",
+);
+for (const tool of uiToolNames) {
+  assert.ok(
+    backendTools.has(tool),
+    `MCP settings UI advertises ${tool}, but packages/matterhorn-work-mcp does not register it`,
+  );
+}
+for (const staleTool of [
+  "matterhorn_ui_get_state",
+  "matterhorn_ui_list_actions",
+  "matterhorn_ui_run_action",
+]) {
+  assert.equal(
+    appMcpView.includes(staleTool),
+    false,
+    `MCP settings UI must not advertise unregistered UI bridge tool ${staleTool}`,
+  );
+}
+assert.ok(
+  appMcpView.includes("No external workspace MCP servers connected yet."),
+  "MCP page should clarify empty status means no external workspace MCP servers",
+);
+assert.ok(
+  appMcpView.includes("server-backed and installable"),
+  "MCP page should tell users built-in Matterhorn MCPs are backend-backed and installable",
+);
+assert.ok(appMcpView.includes("Core Agent MCP"), "MCP page should expose the backend core agent MCP tools");
+assert.ok(appMcpView.includes("Evidence MCP"), "MCP page should expose the backend evidence MCP tools");
+
 console.log("MCP catalog contract check passed.");
