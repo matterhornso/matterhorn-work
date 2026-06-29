@@ -249,7 +249,11 @@ function DeskBrandMark({
   return <Icon className="size-4" />;
 }
 
-function HomeCapabilityOverview() {
+function HomeCapabilityOverview({
+  onOpenCapability,
+}: {
+  onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
+}) {
   return (
     <section
       className="matterhorn-capability-overview space-y-3"
@@ -273,31 +277,36 @@ function HomeCapabilityOverview() {
           </span>
         </div>
       </div>
-      <div className="divide-y divide-dls-border/45">
+      <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           return (
-            <div
+            <button
+              type="button"
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-row grid gap-3 py-3 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.035)] md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)] md:items-start"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-3 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.075)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.095)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
+              aria-label={`Open ${item.title}`}
+              onClick={() => onOpenCapability?.(item.id)}
             >
-              <span className="hidden text-[var(--matterhorn-desk-color)] md:flex md:size-7 md:items-center md:justify-center">
-                <DeskBrandMark id={item.id} size={22} />
-              </span>
-              <div className="min-w-0 px-0.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                  <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
-                    {item.statusLabel}
+              <div className="grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-dls-surface/55 text-[var(--matterhorn-desk-color)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+                  <DeskBrandMark id={item.id} size={24} />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
+                    <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
+                      {item.statusLabel}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
+                  <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-dls-secondary/90">{item.proof}</p>
+                  <span className="mt-3 inline-flex text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {item.id === "wellness" ? "Start workflow" : "Open desk"}
                   </span>
                 </div>
-                <p className="mt-1 max-w-xl text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                <p className="sr-only">{item.proof}</p>
               </div>
-              <p className="px-0.5 text-[11px] leading-5 text-dls-secondary sm:pt-1">
-                {item.proof}
-              </p>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -1455,7 +1464,17 @@ export function SessionPage(props: SessionPageProps) {
                             New chat
                           </button>
                         </div>
-                        <HomeCapabilityOverview />
+                        <HomeCapabilityOverview
+                          onOpenCapability={(id) => {
+                            if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
+                              openVenueRailPane(id);
+                              return;
+                            }
+                            if (id === "wellness" && wellnessRailLauncher) {
+                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt);
+                            }
+                          }}
+                        />
                         <HomeDeskLaunchers
                           protocolLaunchers={protocolWorkflowLaunchers}
                           businessLaunchers={businessWorkflowLaunchers}

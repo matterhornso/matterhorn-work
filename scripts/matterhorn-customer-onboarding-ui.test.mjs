@@ -91,8 +91,8 @@ for (const phrase of [
   "focused desk",
   "No auto-send",
   "matterhorn-capability-overview",
-  "matterhorn-capability-row",
-  "md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)]",
+  "matterhorn-capability-card",
+  "grid gap-2 sm:grid-cols-2",
   "matterhorn-desk-board",
   "matterhorn-desk-command-list",
   "matterhorn-desk-launcher",
@@ -399,7 +399,9 @@ assert.ok(sessionPage.includes("matterhorn-desk-command-list grid gap-1"), "home
 assert.ok(sessionPage.includes("matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact command-row spacing");
 assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
 assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
-assert.ok(sessionPage.includes("matterhorn-capability-row grid gap-3 py-3 text-left"), "home capability status should use compact list rows");
+assert.ok(sessionPage.includes("matterhorn-capability-card group grid min-w-0 gap-3"), "home capability status should render clickable destination cards");
+assert.ok(sessionPage.includes("onOpenCapability?.(item.id)"), "home capability status cards should open their matching desk or workflow");
+assert.ok(sessionPage.includes("item.id === \"wellness\" ? \"Start workflow\" : \"Open desk\""), "home capability cards should label protocol desks separately from wellness workflows");
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)]"), false, "home capability status should not use icon tiles");
 assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
 assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
