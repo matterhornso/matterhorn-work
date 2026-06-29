@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
@@ -50,7 +50,6 @@ import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
 import type { ReactComposerNotice } from "./composer/notice";
 import { SessionDebugPanel } from "./debug-panel";
 import { deriveRenderedSessionMessages, resolveRenderedSessionSnapshot } from "./session-render-state";
-import { SessionTranscript } from "./message-list";
 import { useLocal } from "../../../kernel/local-provider";
 import { deriveSessionRenderModel } from "../sync/transition-controller";
 import { useSessionScrollController } from "./scroll-controller";
@@ -88,6 +87,10 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+
+const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
+  default: module.SessionTranscript,
+})));
 import {
   buildCustomerWorkflowStarterCards,
   fetchCustomerWorkflowTemplates,
@@ -1749,7 +1752,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
               ) : null
             ) : (
               <DevProfiler id="SessionTranscript">
-                <>
+                <Suspense fallback={<div className="px-6 py-8 text-sm text-muted-foreground">Loading transcript...</div>}>
                   <SessionTranscript
                     messages={renderedMessages}
                     isStreaming={chatStreaming}
@@ -1770,7 +1773,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                       onOpenModelPicker={props.onModelClick}
                     />
                   ) : null}
-                </>
+                </Suspense>
               </DevProfiler>
             )}
           </div>

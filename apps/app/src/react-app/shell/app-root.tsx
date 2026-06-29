@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { readDenBootstrapConfig, readDenSettings } from "../../app/lib/den";
@@ -15,15 +15,30 @@ import { DevProfiler, DevProfilerOverlay } from "./dev-profiler";
 import { ReactRenderWatchdogOverlay } from "./react-render-watchdog-overlay";
 import { AppMenuProvider } from "./app-menu";
 import { MatterhornControlProvider, MatterhornRouteControlActions } from "./control/control-provider";
-import { SessionRoute } from "./session-route";
-import { SettingsRoute } from "./settings-route";
 import { ShellConfigProvider } from "./shell-config";
-import { WelcomeRoute } from "./welcome-route";
 
+const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
+  default: module.OrgOnboardingPage,
+})));
+const SessionRoute = lazy(() => import("./session-route").then((module) => ({ default: module.SessionRoute })));
+const SettingsRoute = lazy(() => import("./settings-route").then((module) => ({ default: module.SettingsRoute })));
+const WelcomeRoute = lazy(() => import("./welcome-route").then((module) => ({ default: module.WelcomeRoute })));
 
 type DenSigninGateProps = {
   children: ReactNode;
 };
+
+function RouteFallback() {
+  return (
+    <div
+      className="flex min-h-dvh items-center justify-center bg-background text-sm text-muted-foreground"
+      role="status"
+      aria-live="polite"
+    >
+      Loading Matterhorn Work...
+    </div>
+  );
+}
 
 const readRequireSigninSnapshot = () => readDenBootstrapConfig().requireSignin;
 
@@ -146,7 +161,9 @@ export function AppRoot() {
                 path="/onboarding"
                 element={
                   <DevProfiler id="OrgOnboarding">
-                    <OrgOnboardingPage />
+                    <Suspense fallback={<RouteFallback />}>
+                      <OrgOnboardingPageRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -154,7 +171,9 @@ export function AppRoot() {
                 path="/welcome"
                 element={
                   <DevProfiler id="WelcomeRoute">
-                    <WelcomeRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <WelcomeRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -162,7 +181,9 @@ export function AppRoot() {
                 path="/session"
                 element={
                   <DevProfiler id="SessionRoute">
-                    <SessionRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SessionRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -170,7 +191,9 @@ export function AppRoot() {
                 path="/session/:sessionId"
                 element={
                   <DevProfiler id="SessionRoute">
-                    <SessionRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SessionRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -178,7 +201,9 @@ export function AppRoot() {
                 path="/workspace/:workspaceId/session"
                 element={
                   <DevProfiler id="SessionRoute">
-                    <SessionRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SessionRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -186,7 +211,9 @@ export function AppRoot() {
                 path="/workspace/:workspaceId/session/:sessionId"
                 element={
                   <DevProfiler id="SessionRoute">
-                    <SessionRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SessionRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -194,7 +221,9 @@ export function AppRoot() {
                 path="/workspace/:workspaceId/settings/*"
                 element={
                   <DevProfiler id="SettingsRoute">
-                    <SettingsRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SettingsRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />
@@ -202,7 +231,9 @@ export function AppRoot() {
                 path="/settings/*"
                 element={
                   <DevProfiler id="SettingsRoute">
-                    <SettingsRoute />
+                    <Suspense fallback={<RouteFallback />}>
+                      <SettingsRoute />
+                    </Suspense>
                   </DevProfiler>
                 }
               />

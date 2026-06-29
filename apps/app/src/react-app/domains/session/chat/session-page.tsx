@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
@@ -38,7 +38,7 @@ import type {
 import type { ShareWorkspaceModalProps } from "../../workspace/types";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
-import ProviderAuthModal, { type ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
+import type { ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
 import { RenameSessionModal } from "../modals/rename-session-modal";
 import { AppSidebar } from "../sidebar/app-sidebar";
 import { SessionSurface, type SessionSurfaceProps } from "../surface/session-surface";
@@ -52,7 +52,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { ShareWorkspaceModal } from "../../workspace/share-workspace-modal";
 import { StatusBar, type StatusBarProps } from "./status-bar";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
@@ -60,18 +59,12 @@ import { useShellConfig } from "../../../shell/shell-config";
 import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-store";
 
 import { isElectronRuntime } from "../../../../app/utils";
-import { BrowserPanel } from "../browser/browser-panel";
-import { ArtifactPanel } from "../artifacts/artifact-panel";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
-import { VoicePanel } from "../voice/voice-panel";
-import { WalletPanel } from "../../wallet/WalletPanel";
-import { MemoryPanel } from "../../memory/memory-panel";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
-import { CommandPalette } from "../../wallet/components/CommandPalette";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
@@ -89,6 +82,29 @@ import {
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 
+const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
+const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
+  default: module.ShareWorkspaceModal,
+})));
+const BrowserPanel = lazy(() => import("../browser/browser-panel").then((module) => ({
+  default: module.BrowserPanel,
+})));
+const ArtifactPanel = lazy(() => import("../artifacts/artifact-panel").then((module) => ({
+  default: module.ArtifactPanel,
+})));
+const VoicePanel = lazy(() => import("../voice/voice-panel").then((module) => ({
+  default: module.VoicePanel,
+})));
+const WalletPanel = lazy(() => import("../../wallet/WalletPanel").then((module) => ({
+  default: module.WalletPanel,
+})));
+const MemoryPanel = lazy(() => import("../../memory/memory-panel").then((module) => ({
+  default: module.MemoryPanel,
+})));
+const CommandPalette = lazy(() => import("../../wallet/components/CommandPalette").then((module) => ({
+  default: module.CommandPalette,
+})));
+
 const STARTUP_SKELETON_ROWS = [
   { id: "intro", titleWidth: "42%", bodyWidth: "88%" },
   { id: "middle", titleWidth: "56%", bodyWidth: "88%" },
@@ -101,6 +117,18 @@ type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
+}
+
+function LazyPanelFallback({ label = "Loading panel" }: { label?: string }) {
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center bg-background px-4 text-center text-sm text-dls-secondary" role="status">
+      {label}
+    </div>
+  );
+}
+
+function LazyModalBoundary({ children }: { children: ReactNode }) {
+  return <Suspense fallback={null}>{children}</Suspense>;
 }
 
 const CUSTOMER_WORKFLOW_ICON_COMPONENTS: Record<CustomerWorkflowIconHint, typeof BrainCircuit> = {
@@ -223,7 +251,11 @@ function DeskBrandMark({
 
 function HomeCapabilityOverview() {
   return (
-    <section className="matterhorn-capability-overview space-y-3" aria-label="Desk capability overview">
+    <section
+      className="matterhorn-capability-overview space-y-3"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
+      aria-label="Desk capability overview"
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Capability status</h3>
@@ -417,7 +449,11 @@ function HomeDeskLaunchers({
 }) {
   const launchers = [...protocolLaunchers, ...businessLaunchers];
   return (
-    <section className="matterhorn-desk-board space-y-3" aria-label="Matterhorn desk launchers">
+    <section
+      className="matterhorn-desk-board space-y-3"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "480px" } as CSSProperties}
+      aria-label="Matterhorn desk launchers"
+    >
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
@@ -1643,46 +1679,48 @@ export function SessionPage(props: SessionPageProps) {
                   maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
                   className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
-                  {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
-                    renderCompactSettingsRail("extensions")
-                  ) : activeSidePanel === "voice" ? (
-                    <VoicePanel
-                      client={props.matterhornServerClient}
-                      sessionId={props.selectedSessionId}
-                      onClose={closeRightPane}
-                    />
-                  ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
-                    renderCompactSettingsRail("cloud-account")
-                  ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
-                    renderCompactSettingsRail("wallet")
-                  ) : activeSidePanel === "memory" ? (
-                    <MemoryPanel
-                      client={props.matterhornServerClient}
-                      sessionId={props.selectedSessionId}
-                      workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
-                      onClose={closeRightPane}
-                    />
-                  ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
-                    <ArtifactPanel
-                      client={props.matterhornServerClient}
-                      workspaceId={props.runtimeWorkspaceId}
-                      workspaceRoot={props.selectedWorkspaceRoot}
-                      isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
-                      target={visibleArtifactTarget}
-                      targets={artifactFileTargets}
-                      onSelectTarget={openTarget}
-                      onClose={closeRightPane}
-                    />
-                  ) : isVenueSidePanel(activeSidePanel) ? (
-                    <WalletPanel
-                      store={wallet.store}
-                      gasPriceGwei={sessionWallet.gasPriceGwei}
-                      blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                      initialVenue={activeSidePanel}
-                    />
-                  ) : (
-                    <BrowserPanel onClose={closeRightPane} />
-                  )}
+                  <Suspense fallback={<LazyPanelFallback />}>
+                    {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+                      renderCompactSettingsRail("extensions")
+                    ) : activeSidePanel === "voice" ? (
+                      <VoicePanel
+                        client={props.matterhornServerClient}
+                        sessionId={props.selectedSessionId}
+                        onClose={closeRightPane}
+                      />
+                    ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
+                      renderCompactSettingsRail("cloud-account")
+                    ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
+                      renderCompactSettingsRail("wallet")
+                    ) : activeSidePanel === "memory" ? (
+                      <MemoryPanel
+                        client={props.matterhornServerClient}
+                        sessionId={props.selectedSessionId}
+                        workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
+                        onClose={closeRightPane}
+                      />
+                    ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                      <ArtifactPanel
+                        client={props.matterhornServerClient}
+                        workspaceId={props.runtimeWorkspaceId}
+                        workspaceRoot={props.selectedWorkspaceRoot}
+                        isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
+                        target={visibleArtifactTarget}
+                        targets={artifactFileTargets}
+                        onSelectTarget={openTarget}
+                        onClose={closeRightPane}
+                      />
+                    ) : isVenueSidePanel(activeSidePanel) ? (
+                      <WalletPanel
+                        store={wallet.store}
+                        gasPriceGwei={sessionWallet.gasPriceGwei}
+                        blockExplorerUrl={sessionWallet.blockExplorerUrl}
+                        initialVenue={activeSidePanel}
+                      />
+                    ) : (
+                      <BrowserPanel onClose={closeRightPane} />
+                    )}
+                  </Suspense>
                 </ResizablePanel>
               </>
             ) : null}
@@ -1823,7 +1861,7 @@ export function SessionPage(props: SessionPageProps) {
                 </span>
               ) : null}
             </Button>
-            <div className="mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[8px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+            <div className="mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
               Desks
             </div>
             {VENUE_SIDE_PANELS.map((panel) => {
@@ -1908,7 +1946,11 @@ export function SessionPage(props: SessionPageProps) {
         {shellConfig.sidebar ? <SidebarTrigger className="hidden mac:absolute mac:left-[64px] top-[3px] z-50 mac:flex titlebar-no-drag" /> : null}
       </SidebarProvider>
 
-      {props.providerAuthModal ? <ProviderAuthModal {...props.providerAuthModal} /> : null}
+      {props.providerAuthModal ? (
+        <LazyModalBoundary>
+          <ProviderAuthModal {...props.providerAuthModal} />
+        </LazyModalBoundary>
+      ) : null}
 
       {props.onRenameSession ? (
         <RenameSessionModal
@@ -1943,7 +1985,11 @@ export function SessionPage(props: SessionPageProps) {
         />
       ) : null}
 
-      {props.shareWorkspaceModal ? <ShareWorkspaceModal {...props.shareWorkspaceModal} /> : null}
+      {props.shareWorkspaceModal ? (
+        <LazyModalBoundary>
+          <ShareWorkspaceModal {...props.shareWorkspaceModal} />
+        </LazyModalBoundary>
+      ) : null}
 
       {/* Feature 3: TX Pipeline — modal overlay for transaction approval */}
       <TransactionApproval
@@ -1953,18 +1999,21 @@ export function SessionPage(props: SessionPageProps) {
         onExecuteBatchStep={sessionWallet.executeBatchStep}
       />
 
-      {/* Command Palette */}
-      <CommandPalette
-        open={commandOpen}
-        onClose={() => setCommandOpen(false)}
-        commands={[
-          { id: "send", label: "Send tokens", shortcut: "→ Send", action: () => {/* open send panel */} },
-          { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
-          { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
-          { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },
-          { id: "agent", label: "Agent workspace", shortcut: "→ Agent", action: () => {/* open agent panel */} },
-        ]}
-      />
+      {commandOpen ? (
+        <LazyModalBoundary>
+          <CommandPalette
+            open={commandOpen}
+            onClose={() => setCommandOpen(false)}
+            commands={[
+              { id: "send", label: "Send tokens", shortcut: "→ Send", action: () => {/* open send panel */} },
+              { id: "swap", label: "Swap tokens (CoW)", shortcut: "→ Swap", action: () => {/* open swap panel */} },
+              { id: "aave", label: "Aave deposits", shortcut: "→ Aave", action: () => {/* open aave panel */} },
+              { id: "bridge", label: "Bridge assets", shortcut: "→ Bridge", action: () => {/* open bridge panel */} },
+              { id: "agent", label: "Agent workspace", shortcut: "→ Agent", action: () => {/* open agent panel */} },
+            ]}
+          />
+        </LazyModalBoundary>
+      ) : null}
 
       {/* Cloud provider notifications are now handled globally by CloudProvidersToast in app-root.tsx */}
     </div>

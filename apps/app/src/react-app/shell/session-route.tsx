@@ -1,5 +1,7 @@
 /** @jsxImportSource react */
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useEffectEvent,
@@ -149,7 +151,7 @@ import { useSessionControlActions } from "../domains/session/control/session-con
 import { legacySessionRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
-import { SettingsSurface } from "./settings-route";
+import type { SettingsSurfaceProps } from "./settings-route";
 import {
   ensureProviderListQuery,
   getConnectedProviderItems,
@@ -158,9 +160,29 @@ import {
   useProviderListQuery,
 } from "../domains/connections/provider-list-query";
 
+const EmbeddedSettingsSurface = lazy(() => import("./settings-route").then((module) => ({
+  default: module.SettingsSurface,
+})));
+
 type RouteWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved: string;
 };
+
+function EmbeddedSettingsFallback() {
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center bg-background px-6 text-sm text-muted-foreground">
+      Loading settings...
+    </div>
+  );
+}
+
+function LazyEmbeddedSettingsSurface(props: SettingsSurfaceProps) {
+  return (
+    <Suspense fallback={<EmbeddedSettingsFallback />}>
+      <EmbeddedSettingsSurface {...props} />
+    </Suspense>
+  );
+}
 
 const INTERNAL_WORKSPACE_NAME_PATTERN = /^(?:matterhorn|codex|kimi|minimax|claude)[-_].*|(?:lighthouse|uiux|ui-ux|harness|overhaul)/i;
 
@@ -2703,7 +2725,7 @@ export function SessionRoute() {
   }, [local, refreshRouteState]);
 
   const renderEmbeddedSettingsSurface = useCallback((initialPath: "cloud-account" | "wallet" | "extensions") => (
-    <SettingsSurface
+    <LazyEmbeddedSettingsSurface
       key={initialPath}
       embedded
       hideWorkspaceSwitcher
