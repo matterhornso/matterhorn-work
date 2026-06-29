@@ -497,6 +497,12 @@ assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact=
 assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
 for (const phrase of [
   "matterhorn-profile-rail max-w-none gap-4",
+  "Profile readiness",
+  "Local workspace",
+  "Matterhorn Cloud",
+  "Matterhorn-owned",
+  "Beta support",
+  "support@matterhorn.work",
   "<DenSignedOutPanel\n            compact",
   "session.summaryTone",
 ]) {
@@ -504,6 +510,10 @@ for (const phrase of [
 }
 for (const phrase of [
   "matterhorn-wallet-rail max-w-none gap-4",
+  "Protocol support",
+  "EVM tools",
+  "External signer",
+  "Preview only",
   "No EVM wallet connector detected",
   "Install or enable MetaMask, Rabby, or another injected wallet in this runtime.",
   "public SS58 reads and external Bittensor-compatible signing only.",

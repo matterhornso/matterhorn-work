@@ -199,6 +199,31 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
           ) : null}
         </section>
 
+        <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/35 px-3 py-3">
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Profile readiness</h4>
+            <p className="mt-1 text-xs leading-5 text-dls-secondary">
+              Local work is available now. Cloud sync, shared workspaces, and organization controls need Matterhorn account setup.
+            </p>
+          </div>
+          <div className="divide-y divide-dls-border/35 text-xs leading-5">
+            <div className="flex items-center justify-between gap-3 py-2">
+              <span className="text-dls-secondary">Local workspace</span>
+              <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-300">Ready</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 py-2">
+              <span className="text-dls-secondary">Matterhorn Cloud</span>
+              <span className="rounded-md bg-sky-500/10 px-2 py-0.5 font-medium text-sky-300">
+                {isSignedIn ? "Connected" : "Needs sign in"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 py-2">
+              <span className="text-dls-secondary">Support</span>
+              <span className="rounded-md bg-violet-500/10 px-2 py-0.5 font-medium text-violet-300">Matterhorn-owned</span>
+            </div>
+          </div>
+        </section>
+
         {statusMessage && !session.authError && !session.orgsError ? (
           <SettingsNotice>{statusMessage}</SettingsNotice>
         ) : null}
@@ -241,6 +266,19 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
             sessionBusy={session.sessionBusy}
           />
         ) : null}
+
+        <section className="flex flex-col gap-2 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
+          <h4 className="font-semibold text-dls-text">Beta support</h4>
+          <p>Use these if sign-in, cloud workers, wallet connectors, or desk setup feels rough.</p>
+          <div className="flex flex-wrap gap-2">
+            <a className="rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href="https://matterhorn.work/feedback" target="_blank" rel="noreferrer">
+              Send feedback
+            </a>
+            <a className="rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href="mailto:support@matterhorn.work">
+              support@matterhorn.work
+            </a>
+          </div>
+        </section>
       </SettingsStack>
     );
   }
