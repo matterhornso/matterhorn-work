@@ -29,7 +29,7 @@ Purpose: keep one customer-readiness ledger for backend features, frontend linka
 | Updates | Desktop only | Electron updater state is used in packaged desktop. | Browser/dev builds should stay informational. |
 | Advanced | Developer | Runtime reconnect/restart/config paths are real. | Keep out of default customer mode; expose only when developer mode is enabled. |
 | Wallet | Needs setup | Uses real wallet state plumbing and a wallet side panel. | Desktop/browser runtime currently often shows no EVM connectors. Needs a wallet bridge plan for MetaMask/Rabby plus SS58 identity support. |
-| MCPs and Tools | Ready | Matterhorn MCP cards, install commands, and MCP server state/config are visible. | Marketplace entries still need clear catalog/installed/configured labels. Add live install/config probes per MCP card. |
+| MCPs and Tools | Ready | Matterhorn MCP cards, install commands, and MCP server state/config are visible. Marketplace connectors are labeled as connected/configured/requires setup/needs API key/catalog only. | Add live install/config probes per MCP card. |
 | AI Providers | Needs setup | Provider connect/disconnect paths exist. | Backend auth/404 states need clearer UI and remaining legacy naming cleanup. |
 | Environment | Developer | Intended to manage local environment variables through the server. | Current local runs can hit host-token/auth errors. Hide from default customer mode until auth is reliable. |
 | Account | Needs setup | Matterhorn Cloud sign-in/create account shell exists. | Verify Matterhorn-owned URLs and cloud config in packaged beta. |
