@@ -1454,17 +1454,6 @@ export function SessionPage(props: SessionPageProps) {
                             <FileText className="size-4" />
                             New chat
                           </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                            onClick={() => {
-                              const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
-                              if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel);
-                            }}
-                          >
-                            <WalletIcon className="size-4" />
-                            Open Bittensor desk
-                          </button>
                         </div>
                         <HomeCapabilityOverview />
                         <HomeDeskLaunchers

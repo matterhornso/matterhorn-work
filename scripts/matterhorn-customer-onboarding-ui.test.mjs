@@ -200,6 +200,11 @@ for (const phrase of [
 }
 
 assert.ok(!sessionSurface.includes("Connect MCPs"), "Home starter should not show a Connect MCPs CTA");
+assert.equal(
+  /<WalletIcon className="size-4" \/>[\s\S]{0,320}Open Bittensor desk/.test(sessionPage),
+  false,
+  "Home hero should not duplicate the Bittensor desk shortcut; Bittensor belongs in the desk launcher",
+);
 
 for (const phrase of [
   '"dashboard.create_workspace_title": "Create Project"',
@@ -325,7 +330,7 @@ assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep 
 assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before prompting chat");
 assert.ok(sessionPage.includes("PROTOCOL_DESK_SUGGESTED_PROMPTS"), "focused desk start states should offer protocol-specific suggested prompts");
 assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel);"), "protocol launchers should open a dedicated desk without auto-priming a mixed chat draft");
-assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel);"), "Bittensor top launcher should open the Bittensor desk without auto-priming a mixed chat draft");
+assert.equal(sessionPage.includes("bittensorLauncher"), false, "home hero should not keep a duplicate Bittensor-only shortcut above the desk launcher");
 assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
 assert.ok(sessionPage.includes("{launcher.safetySummary}"), "protocol launchers should show manifest-backed safety summaries");
 assert.ok(sessionPage.includes("{task.statusLabel}"), "starter task cards should show manifest-backed status labels");
