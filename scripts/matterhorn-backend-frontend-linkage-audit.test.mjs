@@ -19,10 +19,12 @@ for (const section of [
 for (const status of [
   "Ready",
   "Mostly ready",
+  "Needs setup",
   "Partial",
   "Preview",
   "Cloud only",
   "Desktop only",
+  "Developer",
   "Not linked",
 ]) {
   assert.ok(doc.includes(`| ${status} |`), `audit doc should define status: ${status}`);

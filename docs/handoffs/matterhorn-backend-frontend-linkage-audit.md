@@ -1,8 +1,8 @@
 # Matterhorn Backend To Frontend Linkage Audit
 
-Last updated: 2026-06-27
+Last updated: 2026-06-29
 
-Purpose: keep one customer-readiness ledger for backend features, frontend linkages, settings behavior, and test coverage. This is the source of truth for deciding what to wire next and what must be labeled as Ready, Needs setup, Preview, Desktop only, or Cloud only.
+Purpose: keep one customer-readiness ledger for backend features, frontend linkages, settings behavior, and test coverage. This is the source of truth for deciding what to wire next and what must be labeled as Ready, Needs setup, Preview, Desktop only, Cloud only, or Developer.
 
 ## Status Rubric
 
@@ -10,10 +10,12 @@ Purpose: keep one customer-readiness ledger for backend features, frontend linka
 |---|---|
 | Ready | User can operate the surface end to end in the current app with expected local or public-data inputs. |
 | Mostly ready | Core path works, but depends on local runtime, provider availability, or a known setup step. |
+| Needs setup | The surface is real, but the user must connect an account, wallet, provider, server, folder, or token before it works. |
 | Partial | Backend and UI exist, but at least one major linkage, auth state, or action path is incomplete. |
 | Preview | Product contract, fixtures, or UI shell exists, but it must not be presented as a finished customer workflow. |
 | Cloud only | Requires Matterhorn Cloud sign-in, organization selection, or a cloud worker. |
 | Desktop only | Depends on Electron desktop runtime or packaged app APIs. |
+| Developer | Intended for technical/debug use; hidden from default customer navigation unless developer mode is enabled. |
 | Not linked | Backend or docs exist, but there is no production UI entry point yet. |
 
 ## Settings Reality Check
@@ -25,12 +27,12 @@ Purpose: keep one customer-readiness ledger for backend features, frontend linka
 | Permissions | Mostly ready | Authorized-folder UI is backed by local Matterhorn server/config state. | Needs degraded state when the local server cannot read permissions. |
 | Appearance | Mostly ready | Theme, language, and titlebar controls are wired. | Needs complete light-mode visual QA after Desk V2 polish. |
 | Updates | Desktop only | Electron updater state is used in packaged desktop. | Browser/dev builds should stay informational. |
-| Advanced | Partial | Runtime reconnect/restart/config paths are real. | Keep developer terminology out of customer mode. |
-| Wallet | Partial | Uses real wallet state plumbing and a wallet side panel. | Desktop/browser runtime currently often shows no EVM connectors. Needs a wallet bridge plan for MetaMask/Rabby plus SS58 identity support. |
-| MCPs and Tools | Partial | Matterhorn MCP cards, install commands, and MCP server state/config are visible. | Some marketplace entries are static/catalog entries. Add live install/config probes per MCP card. |
-| AI Providers | Partial | Provider connect/disconnect paths exist. | Backend auth/404 states need clearer UI and remaining legacy naming cleanup. |
-| Environment | Partial | Intended to manage local environment variables through the server. | Current local runs can hit host-token/auth errors. Hide or label as Advanced until auth is reliable. |
-| Account | Partial | Matterhorn Cloud sign-in/create account shell exists. | Verify Matterhorn-owned URLs and cloud config in packaged beta. |
+| Advanced | Developer | Runtime reconnect/restart/config paths are real. | Keep out of default customer mode; expose only when developer mode is enabled. |
+| Wallet | Needs setup | Uses real wallet state plumbing and a wallet side panel. | Desktop/browser runtime currently often shows no EVM connectors. Needs a wallet bridge plan for MetaMask/Rabby plus SS58 identity support. |
+| MCPs and Tools | Ready | Matterhorn MCP cards, install commands, and MCP server state/config are visible. | Marketplace entries still need clear catalog/installed/configured labels. Add live install/config probes per MCP card. |
+| AI Providers | Needs setup | Provider connect/disconnect paths exist. | Backend auth/404 states need clearer UI and remaining legacy naming cleanup. |
+| Environment | Developer | Intended to manage local environment variables through the server. | Current local runs can hit host-token/auth errors. Hide from default customer mode until auth is reliable. |
+| Account | Needs setup | Matterhorn Cloud sign-in/create account shell exists. | Verify Matterhorn-owned URLs and cloud config in packaged beta. |
 | Cloud Workers | Cloud only | Code paths exist for cloud workers. | Not useful without cloud sign-in/org selection. Hide from default customer mode. |
 | Customization | Preview | Some layout toggles exist. | Branding/name edits are not fully available. Keep as Preview. |
 | Agent Marketplace | Preview | Demo marketplace UI renders. | Agent blueprints are local/static. Hire/deploy/payment/execution are not live. |
