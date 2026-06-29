@@ -231,6 +231,10 @@ function isToggleOnlyExtension(entry: McpDirectoryInfo) {
   ) === true;
 }
 
+function hasRunnableConnectorTarget(entry: McpDirectoryInfo) {
+  return Boolean(entry.oauth || entry.type || entry.command?.length || entry.url);
+}
+
 function protocolDeskLogoNode(entry: McpDirectoryInfo, size = 24) {
   if (!entry.protocolDeskId) return undefined;
   return <ProtocolBrandLogo id={entry.protocolDeskId as CustomerProtocolDeskId} size={size} />;
@@ -248,7 +252,15 @@ function availabilityLabelForEntry(entry: McpDirectoryInfo, configured: boolean,
   if (entry.kind === "mcp" || entry.kind === "ui-control" || entry.command?.length || entry.url) {
     return configured ? "Configured" : "Requires setup";
   }
-  return configured ? "Installed" : "Available";
+  if (!hasRunnableConnectorTarget(entry)) return configured ? "Configured" : "Catalog only";
+  return configured ? "Installed" : "Requires setup";
+}
+
+function actionLabelForEntry(entry: McpDirectoryInfo, configured: boolean, disabledReason: string | null) {
+  if (disabledReason) return "View details";
+  if (configured) return "View details";
+  if (!hasRunnableConnectorTarget(entry)) return "View setup";
+  return t("mcp.tap_to_connect");
 }
 
 type ExtensionFilter = "all" | "mcp" | "skill" | "plugin";
@@ -970,7 +982,7 @@ function MatterhornMcpProductSection(props: {
           Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
           </p>
           <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
-            Matterhorn MCP cards are real installable command profiles. Marketplace connectors below may require account auth, local config, or API keys before their tools are active.
+            Matterhorn MCP cards are real installable command profiles. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
           </p>
         </div>
         <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
@@ -1148,7 +1160,7 @@ function McpQuickConnectSection(props: {
               statusHint={availabilityLabelForEntry(entry, configured, disabledReason)}
               disabledReason={disabledReason}
               disabled={props.busy}
-              actionLabel={configured ? "View details" : t("mcp.tap_to_connect")}
+              actionLabel={actionLabelForEntry(entry, configured, disabledReason)}
               onClick={() => props.onDetail(entry)}
             />
           );

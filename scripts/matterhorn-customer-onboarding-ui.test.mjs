@@ -609,7 +609,7 @@ for (const phrase of [
   "Matterhorn MCPs",
   "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
   "Matterhorn MCP cards are real installable command profiles.",
-  "Marketplace connectors below may require account auth, local config, or API keys before their tools are active.",
+  "Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.",
   "@container/matterhorn-mcps",
   "matterhorn-mcp-stream",
   "Install by client",
@@ -749,6 +749,10 @@ for (const phrase of [
   "Built-in preview",
   "Needs API key",
   "Requires setup",
+  "Catalog only",
+  "View setup",
+  "hasRunnableConnectorTarget",
+  "actionLabelForEntry",
 ]) {
   assert.ok(`${settingsRoute}\n${read("apps/app/src/react-app/design-system/extension-card.tsx")}`.includes(phrase), `MCP connector cards should expose honest availability labels: ${phrase}`);
 }
