@@ -42,6 +42,7 @@ for (const required of [
   "summary.md",
   "summary.json",
   "screenshot.png",
+  'waitUntil: "domcontentloaded"',
   "runLighthousePlaywrightHarness",
 ]) {
   assert(script.includes(required), `harness script includes ${required}`);
