@@ -215,8 +215,11 @@ for (const forbidden of [
 // 9b. Customer-reported layout fixes: no bottom wallet overlay, wider mobile-safe
 // metrics, and protocol panels scroll vertically.
 for (const phrase of [
-  "min-h-0 flex-1 overflow-y-auto overscroll-y-contain",
-  "shrink-0 bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
+  "flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain",
+  "overflow-y-auto overscroll-y-contain max-h-full",
+  "[scrollbar-gutter:stable]",
+  "bg-[radial-gradient(circle_at_18%_0%,rgba(var(--protocol-desk-rgb),0.18),transparent_42%),linear-gradient(180deg,var(--dls-sidebar),var(--dls-surface))]",
+  "min-h-0 p-4 pb-8 sm:p-5",
   "style={venueToneStyle(venue)}",
   "--protocol-desk-accent",
   "These are the core Bittensor workflows Matterhorn should make easy.",
@@ -228,6 +231,15 @@ for (const phrase of [
   "text-base font-semibold",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should include resilient protocol layout treatment: ${phrase}`);
+}
+
+const sessionPage = readFileSync("apps/app/src/react-app/domains/session/chat/session-page.tsx", "utf8");
+for (const phrase of [
+  'data-testid="protocol-side-panel-scroll-root"',
+  "flex h-full min-h-0 max-h-full flex-col overflow-hidden",
+  "hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col",
+]) {
+  assert.ok(sessionPage.includes(phrase), `Session page should keep protocol rail scroll bounded: ${phrase}`);
 }
 
 // 10. No copy asks for secrets.

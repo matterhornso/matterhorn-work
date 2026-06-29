@@ -249,7 +249,11 @@ function DeskBrandMark({
   return <Icon className="size-4" />;
 }
 
-function HomeCapabilityOverview() {
+function HomeCapabilityOverview({
+  onOpenCapability,
+}: {
+  onOpenCapability?: (id: CustomerWorkflowIconHint) => void;
+}) {
   return (
     <section
       className="matterhorn-capability-overview space-y-3"
@@ -273,31 +277,36 @@ function HomeCapabilityOverview() {
           </span>
         </div>
       </div>
-      <div className="divide-y divide-dls-border/45">
+      <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
           return (
-            <div
+            <button
+              type="button"
               key={item.id}
               style={deskToneStyle(item.id)}
-              className="matterhorn-capability-row grid gap-3 py-3 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.035)] md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)] md:items-start"
+              className="matterhorn-capability-card group grid min-w-0 gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.055)] p-3 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.075)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.095)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--matterhorn-desk-color)]"
+              aria-label={`Open ${item.title}`}
+              onClick={() => onOpenCapability?.(item.id)}
             >
-              <span className="hidden text-[var(--matterhorn-desk-color)] md:flex md:size-7 md:items-center md:justify-center">
-                <DeskBrandMark id={item.id} size={22} />
-              </span>
-              <div className="min-w-0 px-0.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
-                  <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
-                    {item.statusLabel}
+              <div className="grid min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-3">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-dls-surface/55 text-[var(--matterhorn-desk-color)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+                  <DeskBrandMark id={item.id} size={24} />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
+                    <span className="text-[11px] font-medium text-[var(--matterhorn-desk-color)]">
+                      {item.statusLabel}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
+                  <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-dls-secondary/90">{item.proof}</p>
+                  <span className="mt-3 inline-flex text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {item.id === "wellness" ? "Start workflow" : "Open desk"}
                   </span>
                 </div>
-                <p className="mt-1 max-w-xl text-[12px] leading-5 text-dls-secondary">{item.summary}</p>
-                <p className="sr-only">{item.proof}</p>
               </div>
-              <p className="px-0.5 text-[11px] leading-5 text-dls-secondary sm:pt-1">
-                {item.proof}
-              </p>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -308,9 +317,11 @@ function HomeCapabilityOverview() {
 function ProtocolDeskEmptyState({
   panel,
   onUsePrompt,
+  onBackHome,
 }: {
   panel: VenueSidePanel;
   onUsePrompt: (prompt: string) => void;
+  onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
@@ -320,29 +331,36 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-10"
+      className="mx-auto flex min-w-0 w-full max-w-[min(54rem,100%)] flex-col gap-4 px-4 py-7 sm:px-6 sm:py-10"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="matterhorn-focused-desk-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
-        <span className="pointer-events-none absolute -right-9 -top-12 opacity-[0.08]" aria-hidden="true">
-          <ProtocolLogo venue={panel} size={170} />
-        </span>
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <button
+        type="button"
+        className="inline-flex w-fit items-center gap-2 rounded-full bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+        onClick={onBackHome}
+      >
+        <span aria-hidden="true">←</span>
+        Home
+      </button>
+      <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 sm:px-5 sm:py-6">
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
               <ProtocolLogo venue={panel} size={52} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
                 {visual?.displayName ?? panel} desk
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a starter below to open a chat draft.
+                You can edit it before anything is sent.
               </p>
             </div>
           </div>
-          <div className="matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+          <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-48 lg:justify-end lg:text-right">
+            <span>Starts a chat draft</span>
             <span>External signer</span>
             <span>Editable prompts</span>
             <span>No auto-send</span>
@@ -354,7 +372,7 @@ function ProtocolDeskEmptyState({
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl bg-dls-surface/48">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48" aria-label="Chat starters">
         {prompts.map((item) => (
           <button
             key={item.title}
@@ -366,7 +384,9 @@ function ProtocolDeskEmptyState({
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Draft in chat</span>
+            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]" title="Open chat draft">
+              Start in chat
+            </span>
           </button>
         ))}
       </div>
@@ -678,9 +698,9 @@ export function SessionPage(props: SessionPageProps) {
   const artifactTargetCount = artifactFileTargets.length;
   const hasArtifactTargets = artifactTargetCount > 0;
   const activeSidePanel = voiceSidePanelOpen ? "voice" : sessionSidePanel;
-  const sidePanelOpen = activeSidePanel !== null;
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
+  const showArtifactRailItem = hasArtifactTargets || artifactRailActive;
   const extensionsRailActive = activeSidePanel === "extensions";
   const voiceRailActive = activeSidePanel === "voice";
   const profileRailActive = activeSidePanel === "profile";
@@ -689,8 +709,10 @@ export function SessionPage(props: SessionPageProps) {
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
-  const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
   const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
+  const sidePanelOpen = visibleSidePanel !== null;
+  const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
   const renderCompactSettingsRail = (initialPath: "cloud-account" | "wallet" | "extensions") => {
     const slot = props.settingsSlotForPath?.(initialPath)
       ?? (initialPath === "extensions" ? props.settingsSlot : null);
@@ -1410,16 +1432,23 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : focusedProtocolPanel ? (
-                    <div className="flex min-h-0 flex-1 overflow-y-auto">
+                    <div
+                      className="flex min-h-0 min-w-0 w-full flex-1 justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain pb-24 sm:pb-28"
+                      style={{ scrollbarGutter: "stable" } as CSSProperties}
+                    >
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
+                        onBackHome={() => setCurrentSidePanel(null)}
                         onUsePrompt={(prompt) => {
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
                         }}
                       />
                     </div>
                   ) : (
-                    <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
+                    <div
+                      className="relative flex min-h-0 flex-1 items-start justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-24 pt-6 sm:px-6 sm:pb-28 sm:pt-8"
+                      style={{ scrollbarGutter: "stable" } as CSSProperties}
+                    >
                       <div className="relative w-full max-w-4xl space-y-5">
                         <div className="mx-auto max-w-2xl space-y-2 text-center">
                           <h2 className="text-2xl font-semibold leading-tight text-dls-text">
@@ -1454,19 +1483,18 @@ export function SessionPage(props: SessionPageProps) {
                             <FileText className="size-4" />
                             New chat
                           </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-md bg-dls-surface-muted px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
-                            onClick={() => {
-                              const bittensorLauncher = customerWorkflowLaunchers.find((launcher) => launcher.panel === "bittensor");
-                              if (bittensorLauncher?.panel) openVenueRailPane(bittensorLauncher.panel);
-                            }}
-                          >
-                            <WalletIcon className="size-4" />
-                            Open Bittensor desk
-                          </button>
                         </div>
-                        <HomeCapabilityOverview />
+                        <HomeCapabilityOverview
+                          onOpenCapability={(id) => {
+                            if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
+                              openVenueRailPane(id);
+                              return;
+                            }
+                            if (id === "wellness" && wellnessRailLauncher) {
+                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt);
+                            }
+                          }}
+                        />
                         <HomeDeskLaunchers
                           protocolLaunchers={protocolWorkflowLaunchers}
                           businessLaunchers={businessWorkflowLaunchers}
@@ -1672,32 +1700,32 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
-                  className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "extensions" ? "500px" : "70%"}
+                  className="hidden h-full min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
-                    {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+                    {visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
                       renderCompactSettingsRail("extensions")
-                    ) : activeSidePanel === "voice" ? (
+                    ) : visibleSidePanel === "voice" ? (
                       <VoicePanel
                         client={props.matterhornServerClient}
                         sessionId={props.selectedSessionId}
                         onClose={closeRightPane}
                       />
-                    ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
+                    ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
                       renderCompactSettingsRail("cloud-account")
-                    ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
+                    ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
                       renderCompactSettingsRail("wallet")
-                    ) : activeSidePanel === "memory" ? (
+                    ) : visibleSidePanel === "memory" ? (
                       <MemoryPanel
                         client={props.matterhornServerClient}
                         sessionId={props.selectedSessionId}
                         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
                         onClose={closeRightPane}
                       />
-                    ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                    ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
                       <ArtifactPanel
                         client={props.matterhornServerClient}
                         workspaceId={props.runtimeWorkspaceId}
@@ -1708,13 +1736,18 @@ export function SessionPage(props: SessionPageProps) {
                         onSelectTarget={openTarget}
                         onClose={closeRightPane}
                       />
-                    ) : isVenueSidePanel(activeSidePanel) ? (
-                      <WalletPanel
-                        store={wallet.store}
-                        gasPriceGwei={sessionWallet.gasPriceGwei}
-                        blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                        initialVenue={activeSidePanel}
-                      />
+                    ) : isVenueSidePanel(visibleSidePanel) ? (
+                      <div
+                        data-testid="protocol-side-panel-scroll-root"
+                        className="flex h-full min-h-0 max-h-full flex-col overflow-hidden"
+                      >
+                        <WalletPanel
+                          store={wallet.store}
+                          gasPriceGwei={sessionWallet.gasPriceGwei}
+                          blockExplorerUrl={sessionWallet.blockExplorerUrl}
+                          initialVenue={visibleSidePanel}
+                        />
+                      </div>
                     ) : (
                       <BrowserPanel onClose={closeRightPane} />
                     )}
@@ -1803,27 +1836,29 @@ export function SessionPage(props: SessionPageProps) {
                 <span className="hidden text-[9px] leading-none 2xl:inline">Voice</span>
               </Button>
             ) : null}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={cn(
-                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
-              )}
-              onClick={openArtifactRailPane}
-              title={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
-              aria-label={hasArtifactTargets ? `Workspace files and artifacts (${artifactTargetCount})` : "Workspace files and artifacts"}
-              aria-pressed={artifactRailActive}
-              disabled={!hasArtifactTargets}
-            >
-              <FileText size={17} />
-              <span className="hidden text-[9px] leading-none 2xl:inline">Artifacts</span>
-              {artifactTargetCount > 0 ? (
-                <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
-                  {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
-                </span>
-              ) : null}
-            </Button>
+            {showArtifactRailItem ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
+                  artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                )}
+                onClick={openArtifactRailPane}
+                title={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
+                aria-label={hasArtifactTargets ? `Files and artifacts (${artifactTargetCount})` : "Files and artifacts"}
+                aria-pressed={artifactRailActive}
+                disabled={!hasArtifactTargets}
+              >
+                <FileText size={17} />
+                <span className="text-[9px] leading-none">Files</span>
+                {artifactTargetCount > 0 ? (
+                  <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
+                    {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
+                  </span>
+                ) : null}
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="icon-sm"

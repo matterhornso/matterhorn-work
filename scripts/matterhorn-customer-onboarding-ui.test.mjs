@@ -91,8 +91,8 @@ for (const phrase of [
   "focused desk",
   "No auto-send",
   "matterhorn-capability-overview",
-  "matterhorn-capability-row",
-  "md:grid-cols-[28px_minmax(0,0.9fr)_minmax(0,1fr)]",
+  "matterhorn-capability-card",
+  "grid gap-2 sm:grid-cols-2",
   "matterhorn-desk-board",
   "matterhorn-desk-command-list",
   "matterhorn-desk-launcher",
@@ -200,6 +200,11 @@ for (const phrase of [
 }
 
 assert.ok(!sessionSurface.includes("Connect MCPs"), "Home starter should not show a Connect MCPs CTA");
+assert.equal(
+  /<WalletIcon className="size-4" \/>[\s\S]{0,320}Open Bittensor desk/.test(sessionPage),
+  false,
+  "Home hero should not duplicate the Bittensor desk shortcut; Bittensor belongs in the desk launcher",
+);
 
 for (const phrase of [
   '"dashboard.create_workspace_title": "Create Project"',
@@ -325,7 +330,7 @@ assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep 
 assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before prompting chat");
 assert.ok(sessionPage.includes("PROTOCOL_DESK_SUGGESTED_PROMPTS"), "focused desk start states should offer protocol-specific suggested prompts");
 assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel);"), "protocol launchers should open a dedicated desk without auto-priming a mixed chat draft");
-assert.ok(sessionPage.includes("openVenueRailPane(bittensorLauncher.panel);"), "Bittensor top launcher should open the Bittensor desk without auto-priming a mixed chat draft");
+assert.equal(sessionPage.includes("bittensorLauncher"), false, "home hero should not keep a duplicate Bittensor-only shortcut above the desk launcher");
 assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
 assert.ok(sessionPage.includes("{launcher.safetySummary}"), "protocol launchers should show manifest-backed safety summaries");
 assert.ok(sessionPage.includes("{task.statusLabel}"), "starter task cards should show manifest-backed status labels");
@@ -368,24 +373,24 @@ assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
-assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-6"), "empty session launcher should scroll instead of clipping beneath the composer");
+assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session launcher should scroll instead of clipping beneath the composer");
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
 assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-hero relative overflow-hidden"), "focused desk start should render a protocol-logo hero instead of a plain block");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1"), "focused desk safety copy should use compact metadata labels");
-assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl"), "focused desk prompts should render as a soft command list");
-assert.ok(sessionPage.includes("Draft in chat"), "focused desk prompt rows should clarify that prompts are drafted, not auto-sent");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-hero overflow-hidden rounded-xl"), "focused desk start should render a compact protocol-logo hero instead of a plain block");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary flex max-w-full flex-wrap"), "focused desk safety copy should use compact metadata labels without overflowing");
+assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl"), "focused desk prompts should render as a compact command list");
+assert.ok(sessionPage.includes("Open chat draft"), "focused desk prompt rows should clarify that prompts are drafted, not auto-sent");
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
-assert.ok(sessionSurface.includes("matterhorn-desk-session-hero relative overflow-hidden"), "desk-specific empty sessions should use the same logo-led hero treatment");
-assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidden rounded-2xl"), "desk-specific empty sessions should use soft prompt lists instead of boxed cards");
+assert.ok(sessionSurface.includes("matterhorn-desk-session-hero overflow-hidden rounded-xl"), "desk-specific empty sessions should use the same compact logo-led hero treatment");
+assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidden rounded-xl"), "desk-specific empty sessions should use soft prompt lists instead of boxed cards");
 assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfaces should avoid oversized card radii");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
 assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
-assert.ok(sessionSurface.includes("hasTranscriptJumpTarget && (!sessionScroll.isAtBottom"), "empty workflow launchers should not show transcript jump controls over the content");
+assert.ok(sessionSurface.includes("renderedMessages.length > 0 && hasTranscriptJumpTarget"), "empty workflow launchers should not show transcript jump controls over the content");
 assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards should not render oversized ghost icons behind the content");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
 assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
@@ -394,7 +399,9 @@ assert.ok(sessionPage.includes("matterhorn-desk-command-list grid gap-1"), "home
 assert.ok(sessionPage.includes("matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact command-row spacing");
 assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
 assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
-assert.ok(sessionPage.includes("matterhorn-capability-row grid gap-3 py-3 text-left"), "home capability status should use compact list rows");
+assert.ok(sessionPage.includes("matterhorn-capability-card group grid min-w-0 gap-3"), "home capability status should render clickable destination cards");
+assert.ok(sessionPage.includes("onOpenCapability?.(item.id)"), "home capability status cards should open their matching desk or workflow");
+assert.ok(sessionPage.includes("item.id === \"wellness\" ? \"Start workflow\" : \"Open desk\""), "home capability cards should label protocol desks separately from wellness workflows");
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)]"), false, "home capability status should not use icon tiles");
 assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
 assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
@@ -419,7 +426,7 @@ assert.equal(sessionPage.includes("shadow-[0_18px_46px_-38px_rgba(0,0,0,0.82)]")
 assert.ok(sessionPage.includes("props.developerMode ? ("), "customer home should keep beta/demo QA launchers behind developer mode");
 assert.ok(composer.includes("{extensionIcon(entry, 14)}"), "MCP tool menu rows should pass the full entry so protocol logo detection can use ids and icon assets");
 assert.ok(
-  sessionPage.includes('activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot)'),
+  sessionPage.includes('visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot)'),
   "MCP/settings rail should render through the compact path-aware settings slot",
 );
 assert.ok(
@@ -541,7 +548,7 @@ for (const phrase of [
 }
 assert.equal(sessionPage.includes("ProfileRailPanel"), false, "Profile rail should use the real Account settings page, not a custom mini-panel");
 assert.equal(sessionPage.includes('activeSidePanel === "wallet" || isVenueSidePanel(activeSidePanel)'), false, "Wallet rail should not be merged with protocol action panels");
-assert.ok(sessionPage.includes("isVenueSidePanel(activeSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
+assert.ok(sessionPage.includes("isVenueSidePanel(visibleSidePanel) ? ("), "protocol desks should still render the action/wallet panel");
 assert.equal(statusBar.includes("openworklabs.com/docs"), false, "status bar docs should not point customers to OpenWork docs");
 assert.equal(cryptoPrompt.includes("wallet_signTypedData"), false, "prompt should not push direct signing as default");
 assert.equal(sessionRoute.includes("wallet.snapshot.isConnected && shouldInjectCryptoPrompt"), false, "crypto prompt injection must not require connected EVM wallet");

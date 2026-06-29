@@ -274,6 +274,9 @@ type MatterhornMcpProductCard = {
   boundary: string;
   worksWith: string[];
   protocolDeskId?: CustomerProtocolDeskId;
+  statusLabel?: string;
+  setupNote?: string;
+  backendBacked?: boolean;
 };
 
 const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
@@ -286,12 +289,29 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     command: "matterhorn-work mcp config --target codex --profile full",
     tools: [
       "matterhorn_bittensor_chat",
+      "matterhorn_bittensor_readiness",
+      "matterhorn_bittensor_customer_evidence_bundle",
+      "matterhorn_bittensor_list_capabilities",
+      "matterhorn_bittensor_get_subnet_capability",
+      "matterhorn_bittensor_adapter_canary_gate",
       "matterhorn_bittensor_prepare_extrinsic",
+      "matterhorn_bittensor_create_signing_handoff",
+      "matterhorn_bittensor_import_receipt",
+      "matterhorn_bittensor_check_receipt",
+      "matterhorn_bittensor_check_signing_handoff",
+      "matterhorn_bittensor_submit_signed_extrinsic",
+      "matterhorn_bittensor_preview_subnet_invocation",
+      "matterhorn_bittensor_invoke_subnet",
+      "matterhorn_bittensor_create_watch",
+      "matterhorn_bittensor_list_watches",
+      "matterhorn_bittensor_check_watches",
       "matterhorn_bittensor_watch_digest",
+      "matterhorn_bittensor_act_on_watch_alert",
     ],
     boundary:
       "Public SS58/coldkey reads and unsigned previews only. External Bittensor-compatible signer required. No seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    backendBacked: true,
   },
   {
     id: "hyperliquid",
@@ -302,12 +322,26 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     command: "matterhorn-work mcp config --target claude --profile full",
     tools: [
       "matterhorn_hyperliquid_chat",
+      "matterhorn_hyperliquid_list_markets",
+      "matterhorn_hyperliquid_get_account",
+      "matterhorn_hyperliquid_get_positions",
+      "matterhorn_hyperliquid_get_open_orders",
+      "matterhorn_hyperliquid_get_funding",
       "matterhorn_hyperliquid_get_orderbook",
+      "matterhorn_hyperliquid_create_watch",
+      "matterhorn_hyperliquid_check_watches",
+      "matterhorn_hyperliquid_watch_digest",
+      "matterhorn_hyperliquid_act_on_watch_alert",
       "matterhorn_hyperliquid_preview_order",
+      "matterhorn_hyperliquid_prepare_handoff",
+      "matterhorn_hyperliquid_create_sign_request",
+      "matterhorn_hyperliquid_validate_external_artifact",
+      "matterhorn_hyperliquid_verify_receipt",
     ],
     boundary:
       "Preview only. Can submit: No. Live submission: Off. External signer/client required. No API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    backendBacked: true,
   },
   {
     id: "polymarket",
@@ -318,12 +352,25 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     command: "matterhorn-work mcp config --target claude-desktop --profile full",
     tools: [
       "matterhorn_polymarket_chat",
+      "matterhorn_polymarket_search_markets",
+      "matterhorn_polymarket_search_events",
+      "matterhorn_polymarket_get_market",
+      "matterhorn_polymarket_get_orderbook",
       "matterhorn_polymarket_check_compliance",
+      "matterhorn_polymarket_create_watch",
+      "matterhorn_polymarket_check_watches",
+      "matterhorn_polymarket_watch_digest",
+      "matterhorn_polymarket_act_on_watch_alert",
       "matterhorn_polymarket_preview_order",
+      "matterhorn_polymarket_prepare_handoff",
+      "matterhorn_polymarket_create_sign_request",
+      "matterhorn_polymarket_validate_external_artifact",
+      "matterhorn_polymarket_verify_receipt",
     ],
     boundary:
       "Preview only. Can submit: No. Live submission: Off. Compliance-blocked previews expose no executable price, size, or share fields.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    backendBacked: true,
   },
   {
     id: "memory",
@@ -333,12 +380,76 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     command: "matterhorn-work mcp config --target cursor --profile full",
     tools: [
       "matterhorn_memory_search",
+      "matterhorn_memory_list",
+      "matterhorn_memory_get",
       "matterhorn_memory_capture",
+      "matterhorn_memory_update",
       "matterhorn_memory_forget",
+      "matterhorn_memory_export",
     ],
     boundary:
       "No hidden memory saves. Memory capture is explicit and user-confirmed; forbidden secrets and restricted wellness records are rejected or kept local by policy.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    statusLabel: "Memory MCP",
+    backendBacked: true,
+  },
+  {
+    id: "core-agent",
+    name: "Core Agent MCP",
+    description:
+      "Run Matterhorn doctor/status checks, workspace and session control, file sessions, approvals, and event watches from external agent clients.",
+    command: "matterhorn-work mcp config --target codex --profile full",
+    tools: [
+      "matterhorn_doctor",
+      "matterhorn_status",
+      "matterhorn_list_workspaces",
+      "matterhorn_create_session",
+      "matterhorn_list_sessions",
+      "matterhorn_get_session",
+      "matterhorn_get_session_messages",
+      "matterhorn_submit_session_prompt",
+      "matterhorn_get_session_status",
+      "matterhorn_watch_session_events",
+      "matterhorn_get_session_snapshot",
+      "matterhorn_delete_session",
+      "matterhorn_create_file_session",
+      "matterhorn_file_catalog",
+      "matterhorn_watch_file_events",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+      "matterhorn_close_file_session",
+      "matterhorn_list_approvals",
+      "matterhorn_reply_approval",
+    ],
+    boundary:
+      "Agent-control only. File writes and approval replies stay explicit; no wallet custody, no signing, and no hidden market submission.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    statusLabel: "Core MCP",
+    backendBacked: true,
+  },
+  {
+    id: "evidence",
+    name: "Evidence MCP",
+    description:
+      "Generate customer-safe crypto evidence packets, live public QA bundles, execution-readiness checks, and receipt validation for beta reviews.",
+    command: "matterhorn-work mcp config --target claude --profile full",
+    tools: [
+      "matterhorn_crypto_chat",
+      "matterhorn_crypto_readiness",
+      "matterhorn_crypto_live_public_qa",
+      "matterhorn_market_execution_readiness",
+      "matterhorn_market_execution_chain",
+      "matterhorn_market_sdk_validation",
+      "matterhorn_market_customer_evidence_verify",
+      "matterhorn_market_artifact_reconcile",
+      "matterhorn_bittensor_customer_evidence_verify",
+      "matterhorn_crypto_customer_packet",
+    ],
+    boundary:
+      "Public or redacted evidence only. No private keys, exchange secrets, raw signatures, signed payload imports, or live market submission.",
+    worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    statusLabel: "Evidence MCP",
+    backendBacked: true,
   },
   {
     id: "workflow",
@@ -347,6 +458,8 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "Expose customer workflow templates, prompt packs, wellness creator workflows, and evidence bundles to external coding and agent environments.",
     command: "matterhorn-work mcp config --target json --profile full",
     tools: [
+      "matterhorn_services_get_capabilities",
+      "matterhorn_services_chat_plan",
       "matterhorn_workflows_catalog",
       "matterhorn_workflows_prompt_pack",
       "matterhorn_workflows_customer_templates",
@@ -354,21 +467,23 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Discovery and planning only. No provider execution, no live payments, no email sending, no hosting publish, and no token-gated access enforcement.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    statusLabel: "Workflow MCP",
+    backendBacked: true,
   },
   {
     id: "ui-control",
     name: "UI Control MCP",
     description:
-      "Let a compatible agent inspect the local Matterhorn desktop UI, open desks, read action metadata, and run safe browser/control smoke checks.",
+      "Preview the local desktop UI bridge for opening desks, setting prompts, and reading panel state once the desktop bridge publishes its actions.",
     command: "matterhorn-work mcp config --target env --profile full",
-    tools: [
-      "matterhorn_ui_get_state",
-      "matterhorn_ui_list_actions",
-      "matterhorn_ui_run_action",
-    ],
+    tools: [],
     boundary:
-      "Local desktop control only. No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
+      "Desktop bridge preview only. No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    statusLabel: "Desktop bridge preview",
+    setupNote:
+      "This is not registered by the backend MCP server yet. It becomes available when the local desktop UI bridge publishes matterhorn UI actions.",
+    backendBacked: false,
   },
 ];
 
@@ -574,6 +689,8 @@ export function McpView(props: McpViewProps) {
     ? customerQuickConnectList.filter((entry) => isBuiltInMatterhornExtension(entry) && !isMatterhornExtensionHidden(entry)).length
     : 0;
   const hiddenOrPolicyCount = hiddenCount + policyHiddenBuiltInCount;
+  const mcpStatusIsEmpty =
+    props.mcpStatus?.toLowerCase().includes("no mcp servers configured") ?? false;
 
   const requestLogout = (name: string) => {
     if (!name.trim()) return;
@@ -639,8 +756,17 @@ export function McpView(props: McpViewProps) {
       ) : null}
 
       {props.mcpStatus ? (
-        <div className="whitespace-pre-wrap break-words rounded-xl border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary">
-          {props.mcpStatus}
+        <div className="break-words rounded-xl border border-dls-border bg-dls-hover px-4 py-3 text-xs text-dls-secondary">
+          <div className="font-medium text-dls-text">
+            {mcpStatusIsEmpty ? "No external workspace MCP servers connected yet." : props.mcpStatus}
+          </div>
+          {mcpStatusIsEmpty ? (
+            <p className="mt-2 text-xs leading-5 text-dls-secondary">
+              The built-in Matterhorn MCPs below are server-backed and installable in Codex, Claude Code,
+              Claude Desktop, Cursor, and compatible MCP clients. Copy an install command to add one to
+              another agent client.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -979,10 +1105,10 @@ function MatterhornMcpProductSection(props: {
         <div className="flex flex-col gap-1">
           <h3 className={props.compact ? "text-base font-semibold text-dls-text" : "text-lg font-semibold text-dls-text"}>Matterhorn MCPs</h3>
           <p className={props.compact ? "max-w-full text-xs leading-5 text-dls-secondary" : "max-w-2xl text-sm leading-6 text-dls-secondary"}>
-          Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, and UI-control loops outside the desktop app.
+          Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor. These MCPs expose the same Bittensor, Hyperliquid, Polymarket, Memory, Workflow, evidence, and agent-control loops outside the desktop app.
           </p>
           <p className={props.compact ? "hidden" : "max-w-2xl text-xs leading-5 text-dls-secondary"}>
-            Matterhorn MCP cards are real installable command profiles. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
+            Matterhorn core MCP setup starts here. Matterhorn MCP cards are real installable command profiles. They are backed by the local Matterhorn MCP server. UI Control is marked preview until the desktop bridge publishes its local actions. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
           </p>
         </div>
         <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
@@ -1026,7 +1152,7 @@ function MatterhornMcpProductSection(props: {
                     <p className={props.compact ? "mt-0.5 line-clamp-2 text-[11px] leading-4 text-dls-secondary" : "mt-1 max-w-2xl text-xs leading-5 text-dls-secondary"}>{card.description}</p>
                   </div>
                   <span className={props.compact ? "shrink-0 rounded-full bg-dls-hover/45 px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-dls-secondary" : "shrink-0 rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
-                    {isProtocol ? "Protocol MCP" : "Matterhorn core"}
+                    {card.statusLabel ?? (card.backendBacked === false ? "Preview" : isProtocol ? "Protocol MCP" : "Server-backed")}
                   </span>
                 </div>
 
@@ -1054,18 +1180,28 @@ function MatterhornMcpProductSection(props: {
                 </div>
 
                 <div className={props.compact ? "mt-3 space-y-1.5" : "mt-4 grid gap-2 text-xs @lg/matterhorn-mcps:grid-cols-2"}>
-                  <p className="min-w-0 text-dls-secondary">
-                    <span className="font-medium text-dls-text">Supported tools:</span>{" "}
-                    <span className="break-words font-mono text-[10px] leading-4">
-                      {visibleTools.join(", ")}
-                      {hiddenToolCount > 0 ? `, +${hiddenToolCount} more` : ""}
-                    </span>
-                  </p>
+                  {card.tools.length > 0 ? (
+                    <p className="min-w-0 text-dls-secondary">
+                      <span className="font-medium text-dls-text">Supported tools:</span>{" "}
+                      <span className="break-words font-mono text-[10px] leading-4">
+                        {visibleTools.join(", ")}
+                        {hiddenToolCount > 0 ? `, +${hiddenToolCount} more` : ""}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="min-w-0 text-dls-secondary">
+                      <span className="font-medium text-dls-text">Supported tools:</span>{" "}
+                      Published by the desktop bridge after setup.
+                    </p>
+                  )}
                   <p className="min-w-0 text-dls-secondary">
                     <span className="font-medium text-dls-text">Works in:</span>{" "}
                     {card.worksWith.join(", ")}
                   </p>
                 </div>
+                {card.setupNote ? (
+                  <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{card.setupNote}</p>
+                ) : null}
 
                 <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
                   <summary className="cursor-pointer list-none font-medium text-dls-text">

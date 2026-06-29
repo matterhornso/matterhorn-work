@@ -150,7 +150,7 @@ afterEach(async () => {
 });
 
 describe("Matterhorn memory API routes", () => {
-  test("plans Bittensor and Wellness suggestions without writing memory", async () => {
+  test("plans desk suggestions without writing memory", async () => {
     const { base } = await boot();
 
     const planned = await jsonFetch(base, "/api/memory/suggestions/plan", {
@@ -215,6 +215,66 @@ describe("Matterhorn memory API routes", () => {
     expect(wellness.payload.suggestions[0].desk).toBe("wellness");
     expect(wellness.payload.suggestions[0].proposedRecord.sensitivity).toBe("restricted");
     expect(wellness.payload.suggestions[0].canAutoCapture).toBe(false);
+
+    const hyperliquid = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "hyperliquid",
+          prompt: "Use Hyperliquid desk. Watch BTC funding and orderbook context only. No API keys or signed payloads.",
+          sourceId: "memory-market-test",
+        },
+      }),
+    });
+    expect(hyperliquid.response.status).toBe(200);
+    expect(hyperliquid.payload.success).toBe(true);
+    expect(hyperliquid.payload.writesMemory).toBe(false);
+    expect(hyperliquid.payload.count).toBe(1);
+    const hyperliquidSuggestion = hyperliquid.payload.suggestions[0];
+    expect(hyperliquidSuggestion.desk).toBe("hyperliquid");
+    expect(hyperliquidSuggestion.useCase).toBe("hyperliquid_watched_market");
+    expect(hyperliquidSuggestion.canAutoCapture).toBe(false);
+    expect(hyperliquidSuggestion.requiresExplicitConsent).toBe(true);
+    expect(hyperliquidSuggestion.proposedRecord.kind).toBe("watchlist");
+    expect(hyperliquidSuggestion.proposedRecord.canExport).toBe(false);
+    expect(hyperliquidSuggestion.proposedRecord.body).toMatchObject({
+      venue: "hyperliquid",
+      asset: "BTC",
+      readOnly: true,
+      previewOnly: true,
+      externalSignerRequired: true,
+    });
+    expect(JSON.stringify(hyperliquidSuggestion.proposedRecord.body)).not.toMatch(/canSubmit|liveSubmissionEnabled|apiKey|privateKey|signature/i);
+
+    const polymarket = await jsonFetch(base, "/api/memory/suggestions/plan", {
+      method: "POST",
+      body: JSON.stringify({
+        input: {
+          desk: "polymarket",
+          prompt: "Use Polymarket desk. Remember Polymarket: ETH ETF approval odds and compliance state for read-only follow-up.",
+          sourceId: "memory-market-test",
+        },
+      }),
+    });
+    expect(polymarket.response.status).toBe(200);
+    expect(polymarket.payload.success).toBe(true);
+    expect(polymarket.payload.writesMemory).toBe(false);
+    expect(polymarket.payload.count).toBe(1);
+    const polymarketSuggestion = polymarket.payload.suggestions[0];
+    expect(polymarketSuggestion.desk).toBe("polymarket");
+    expect(polymarketSuggestion.useCase).toBe("polymarket_watched_market");
+    expect(polymarketSuggestion.canAutoCapture).toBe(false);
+    expect(polymarketSuggestion.requiresExplicitConsent).toBe(true);
+    expect(polymarketSuggestion.proposedRecord.kind).toBe("watchlist");
+    expect(polymarketSuggestion.proposedRecord.canExport).toBe(false);
+    expect(polymarketSuggestion.proposedRecord.body).toMatchObject({
+      venue: "polymarket",
+      readOnly: true,
+      previewOnly: true,
+      externalSignerRequired: true,
+    });
+    expect(polymarketSuggestion.proposedRecord.body.topic).toContain("ETH ETF");
+    expect(JSON.stringify(polymarketSuggestion.proposedRecord.body)).not.toMatch(/price|size|share|canSubmit|liveSubmissionEnabled|apiKey|privateKey|signature/i);
   });
 
   test("rejects secret-shaped suggestion planning input", async () => {
