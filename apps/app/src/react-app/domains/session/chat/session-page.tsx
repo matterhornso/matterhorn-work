@@ -320,29 +320,28 @@ function ProtocolDeskEmptyState({
 
   return (
     <section
-      className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-7 sm:px-6 sm:py-10"
+      className="mx-auto flex min-w-0 w-full max-w-[min(54rem,100%)] flex-col gap-4 px-4 py-7 sm:px-6 sm:py-10"
       style={deskToneStyle(panel)}
       aria-label={`${visual?.displayName ?? panel} desk start`}
     >
-      <div className="matterhorn-focused-desk-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
-        <span className="pointer-events-none absolute -right-9 -top-12 opacity-[0.08]" aria-hidden="true">
-          <ProtocolLogo venue={panel} size={170} />
-        </span>
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 sm:px-5 sm:py-6">
+        <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
               <ProtocolLogo venue={panel} size={52} />
             </span>
             <div className="min-w-0">
-              <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">
+              <h2 className="text-xl font-semibold tracking-[-0.02em] text-dls-text sm:text-2xl">
                 {visual?.displayName ?? panel} desk
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a suggested prompt below; nothing is sent until you review it in chat.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a starter below to open a chat draft.
+                You can edit it before anything is sent.
               </p>
             </div>
           </div>
-          <div className="matterhorn-focused-desk-boundary flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
+          <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-48 lg:justify-end lg:text-right">
+            <span>Chat draft opens next</span>
             <span>External signer</span>
             <span>Editable prompts</span>
             <span>No auto-send</span>
@@ -354,7 +353,7 @@ function ProtocolDeskEmptyState({
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-2xl bg-dls-surface/48">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48" aria-label="Chat starters">
         {prompts.map((item) => (
           <button
             key={item.title}
@@ -366,7 +365,7 @@ function ProtocolDeskEmptyState({
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Draft in chat</span>
+            <span className="text-xs font-medium text-[var(--matterhorn-desk-color)]">Open chat draft</span>
           </button>
         ))}
       </div>
@@ -678,7 +677,6 @@ export function SessionPage(props: SessionPageProps) {
   const artifactTargetCount = artifactFileTargets.length;
   const hasArtifactTargets = artifactTargetCount > 0;
   const activeSidePanel = voiceSidePanelOpen ? "voice" : sessionSidePanel;
-  const sidePanelOpen = activeSidePanel !== null;
   const browserRailActive = activeSidePanel === "browser";
   const artifactRailActive = activeSidePanel === "artifacts";
   const extensionsRailActive = activeSidePanel === "extensions";
@@ -689,8 +687,10 @@ export function SessionPage(props: SessionPageProps) {
   const bittensorRailActive = activeSidePanel === "bittensor";
   const hyperliquidRailActive = activeSidePanel === "hyperliquid";
   const polymarketRailActive = activeSidePanel === "polymarket";
-  const protocolSidePanelOpen = isVenueSidePanel(activeSidePanel);
   const focusedProtocolPanel = !props.selectedSessionId && isVenueSidePanel(activeSidePanel) ? activeSidePanel : null;
+  const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
+  const sidePanelOpen = visibleSidePanel !== null;
+  const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
   const renderCompactSettingsRail = (initialPath: "cloud-account" | "wallet" | "extensions") => {
     const slot = props.settingsSlotForPath?.(initialPath)
       ?? (initialPath === "extensions" ? props.settingsSlot : null);
@@ -1410,7 +1410,7 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : focusedProtocolPanel ? (
-                    <div className="flex min-h-0 flex-1 overflow-y-auto">
+                    <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden">
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
                         onUsePrompt={(prompt) => {
@@ -1672,32 +1672,32 @@ export function SessionPage(props: SessionPageProps) {
                 <ResizableHandle withHandle className="hidden lg:flex" />
                 <ResizablePanel
                   panelRef={browserPanelRef}
-                  defaultSize={`${activeSidePanel === "extensions" || activeSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
-                  minSize={activeSidePanel === "extensions" || activeSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
-                  maxSize={protocolSidePanelOpen || activeSidePanel === "memory" || activeSidePanel === "extensions" ? "500px" : "70%"}
+                  defaultSize={`${visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? Math.max(browserPanelDefaultWidth, 400) : protocolSidePanelOpen ? Math.max(browserPanelDefaultWidth, 400) : browserPanelDefaultWidth}px`}
+                  minSize={visibleSidePanel === "extensions" || visibleSidePanel === "memory" ? "340px" : protocolSidePanelOpen ? "340px" : "320px"}
+                  maxSize={protocolSidePanelOpen || visibleSidePanel === "memory" || visibleSidePanel === "extensions" ? "500px" : "70%"}
                   className="hidden min-h-0 overflow-hidden lg:flex lg:flex-col"
                 >
                   <Suspense fallback={<LazyPanelFallback />}>
-                    {activeSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
+                    {visibleSidePanel === "extensions" && (props.settingsSlotForPath || props.settingsSlot) ? (
                       renderCompactSettingsRail("extensions")
-                    ) : activeSidePanel === "voice" ? (
+                    ) : visibleSidePanel === "voice" ? (
                       <VoicePanel
                         client={props.matterhornServerClient}
                         sessionId={props.selectedSessionId}
                         onClose={closeRightPane}
                       />
-                    ) : activeSidePanel === "profile" && props.settingsSlotForPath ? (
+                    ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
                       renderCompactSettingsRail("cloud-account")
-                    ) : activeSidePanel === "wallet" && props.settingsSlotForPath ? (
+                    ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
                       renderCompactSettingsRail("wallet")
-                    ) : activeSidePanel === "memory" ? (
+                    ) : visibleSidePanel === "memory" ? (
                       <MemoryPanel
                         client={props.matterhornServerClient}
                         sessionId={props.selectedSessionId}
                         workspaceId={props.runtimeWorkspaceId ?? props.selectedWorkspaceId}
                         onClose={closeRightPane}
                       />
-                    ) : activeSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                    ) : visibleSidePanel === "artifacts" && visibleArtifactTarget && props.matterhornServerClient && props.runtimeWorkspaceId ? (
                       <ArtifactPanel
                         client={props.matterhornServerClient}
                         workspaceId={props.runtimeWorkspaceId}
@@ -1708,12 +1708,12 @@ export function SessionPage(props: SessionPageProps) {
                         onSelectTarget={openTarget}
                         onClose={closeRightPane}
                       />
-                    ) : isVenueSidePanel(activeSidePanel) ? (
+                    ) : isVenueSidePanel(visibleSidePanel) ? (
                       <WalletPanel
                         store={wallet.store}
                         gasPriceGwei={sessionWallet.gasPriceGwei}
                         blockExplorerUrl={sessionWallet.blockExplorerUrl}
-                        initialVenue={activeSidePanel}
+                        initialVenue={visibleSidePanel}
                       />
                     ) : (
                       <BrowserPanel onClose={closeRightPane} />

@@ -62,6 +62,7 @@ import {
   statusKey as reactStatusKey,
   transcriptKey as reactTranscriptKey,
 } from "../sync/session-sync";
+import { useSessionDraftSnapshot } from "../sync/draft-store";
 import {
   getComposerAttachments,
   getComposerDraft,
@@ -284,57 +285,97 @@ function MatterhornDeskFocusedEmptyState({
       : "Read and preview only. Can submit: No. Live submission: Off. External client required.";
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6" style={deskToneStyle(iconHint)}>
-      <section className="w-full max-w-[960px] space-y-5">
-        <div className="matterhorn-desk-session-hero relative overflow-hidden rounded-2xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-5 py-5 sm:px-6 sm:py-6">
-          <span className="pointer-events-none absolute -right-10 -top-12 opacity-[0.08]" aria-hidden="true">
-            {visual ? <ProtocolLogo iconHint={iconHint} size={172} /> : <Icon className="size-40 text-[var(--matterhorn-desk-color)]" />}
-          </span>
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-4">
-              <span className="flex size-14 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
-                {visual ? <ProtocolLogo iconHint={iconHint} size={52} /> : <Icon className="size-6" />}
+    <div
+      className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4"
+      style={deskToneStyle(iconHint)}
+    >
+      <section className="w-full space-y-3">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+                {visual ? <ProtocolLogo iconHint={iconHint} size={34} /> : <Icon className="size-5" />}
               </span>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-2xl font-semibold tracking-[-0.02em] text-dls-text">{visual?.displayName ?? mode} session</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-dls-text sm:text-lg">
+                    {visual?.displayName ?? mode} session
+                  </h2>
                   <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
                     {visual?.statusLabel ?? "Focused"}
                   </span>
                 </div>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary">
-                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a suggested prompt below, edit it in chat, then send when ready.
+                <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-dls-secondary">
+                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to open the chat composer
+                  with an editable draft. Nothing sends until you press Ask.
                 </p>
-                <p className="mt-1 text-xs leading-5 text-dls-secondary">{boundary}</p>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">{boundary}</p>
               </div>
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] sm:justify-end">
-              <span>Desk-specific</span>
-              <span>Editable</span>
-              <span>No auto-send</span>
+            <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
+              {["Opens in chat", "Editable", "No auto-send"].map((label) => (
+                <span
+                  key={label}
+                  className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
+                >
+                  {label}
+                </span>
+              ))}
             </div>
           </div>
         </div>
 
-        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-2xl bg-dls-surface/48">
+        <div className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44" aria-label="Chat starters">
           {prompts.map((item) => (
             <button
               key={item.title}
               type="button"
-              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-3.5 py-3 text-left transition duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
               onClick={() => void onUsePrompt(item.prompt)}
             >
               <span className="min-w-0">
-                <span className="block text-[15px] font-semibold text-dls-text">{item.title}</span>
-                <span className="mt-1 block text-[12px] leading-5 text-dls-secondary">{item.detail}</span>
+                <span className="block text-[13px] font-semibold text-dls-text">{item.title}</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">{item.detail}</span>
               </span>
               <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                Insert editable prompt
+                Open chat draft
               </span>
             </button>
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
+  const visual = getCustomerProtocolDeskVisual(mode);
+  const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
+
+  return (
+    <div
+      className="w-full px-2 py-3 sm:px-3 sm:py-4"
+      style={deskToneStyle(iconHint)}
+    >
+      <div className="flex min-w-0 items-start gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+          {visual ? <ProtocolLogo iconHint={iconHint} size={30} /> : <Icon className="size-5" />}
+        </span>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[14px] font-semibold text-dls-text">
+              {visual?.displayName ?? "Matterhorn"} draft ready
+            </span>
+            <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
+              Review before sending
+            </span>
+          </div>
+          <p className="mt-1 text-[12px] leading-5 text-dls-secondary">
+            The chat draft is in the composer below. Edit it, add any public context, then press Ask when you are ready.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -781,6 +822,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     (state) => state.statusesByWorkspaceId[props.workspaceId]?.[props.sessionId] ?? "idle",
   );
   const draft = useComposerStateStore((state) => getComposerDraft(state, props.sessionId));
+  const savedSessionDraft = useSessionDraftSnapshot(props.workspaceId, props.sessionId);
   const attachments = useComposerStateStore((state) => getComposerAttachments(state, props.sessionId));
   const mentions = useComposerStateStore((state) => getComposerMentions(state, props.sessionId));
   const pasteParts = useComposerStateStore((state) => getComposerPasteParts(state, props.sessionId));
@@ -810,6 +852,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const [verifiedOpenTargets, setVerifiedOpenTargets] = useState<OpenTarget[]>([]);
   const composerShellRef = useRef<HTMLDivElement>(null);
   const hydratedKeyRef = useRef<string | null>(null);
+  const hydratedSavedDraftKeyRef = useRef<string | null>(null);
   const autoOpenedTargetRef = useRef<string | null>(null);
   const initializedAutoOpenSessionRef = useRef<string | null>(null);
   const opencodeClient = useMemo(
@@ -855,6 +898,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
 
   useEffect(() => {
     hydratedKeyRef.current = null;
+    hydratedSavedDraftKeyRef.current = null;
     setError(null);
     setSending(false);
     setShowDelayedLoading(false);
@@ -1120,6 +1164,27 @@ export function SessionSurface(props: SessionSurfaceProps) {
   const handleComposerDraftChange = useCallback((value: string) => {
     setComposerDraft(props.sessionId, value);
   }, [props.sessionId, setComposerDraft]);
+
+  useEffect(() => {
+    const text = savedSessionDraft?.text?.trim();
+    if (!text) return;
+    if (draft.trim()) return;
+    const key = `${props.workspaceId}:${props.sessionId}:${text}`;
+    if (hydratedSavedDraftKeyRef.current === key) return;
+    hydratedSavedDraftKeyRef.current = key;
+    setComposerDraft(props.sessionId, text);
+    props.onDraftChange(buildDraft(text, attachments));
+    window.setTimeout(() => window.dispatchEvent(new Event("openwork:focusPrompt")), 0);
+  }, [
+    attachments,
+    buildDraft,
+    draft,
+    props.onDraftChange,
+    props.sessionId,
+    props.workspaceId,
+    savedSessionDraft,
+    setComposerDraft,
+  ]);
 
   const handleCopyTranscript = async () => {
     try {
@@ -1700,10 +1765,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onOpenModelPicker={props.onModelClick}
                 />
               ) : activeDeskMode ? (
-                <MatterhornDeskFocusedEmptyState
-                  mode={activeDeskMode}
-                  onUsePrompt={typeComposerText}
-                />
+                draft.trim() ? (
+                  <MatterhornDeskDraftReadyState mode={activeDeskMode} />
+                ) : (
+                  <MatterhornDeskFocusedEmptyState
+                    mode={activeDeskMode}
+                    onUsePrompt={typeComposerText}
+                  />
+                )
               ) : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">
@@ -1779,7 +1848,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
-        {hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
+        {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center">
             <div className="pointer-events-auto flex items-center gap-2 rounded-md bg-dls-surface/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-md">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
