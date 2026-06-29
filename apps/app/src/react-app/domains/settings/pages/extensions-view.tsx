@@ -101,10 +101,13 @@ export function ExtensionsView(props: ExtensionsViewProps) {
         <Button
           variant={view === "marketplace" ? "secondary" : "ghost"}
           size="sm"
-          className={props.compact ? "flex-1" : undefined}
+          className={cn(props.compact ? "flex-1" : undefined, "gap-1.5")}
           onClick={() => setView("marketplace")}
         >
           Marketplace
+          <span className="text-xs font-normal text-dls-secondary">
+            post-go-live
+          </span>
         </Button>
       </div>
 
@@ -135,9 +138,27 @@ export function ExtensionsView(props: ExtensionsViewProps) {
             </details>
           ) : null}
         </>
-      ) : props.cloudMarketplaceView ?? (
-        <div className="rounded-xl border border-dashed border-dls-border px-5 py-10 text-center text-sm text-dls-secondary">
-          Marketplace is unavailable.
+      ) : (
+        <div
+          className={cn(
+            "space-y-3 rounded-lg border border-dls-border bg-dls-surface px-4 py-5",
+            props.compact && "px-3 py-4",
+          )}
+        >
+          <div className="space-y-1">
+            <h3 className="text-sm font-semibold text-dls-text">
+              Marketplace extensions are post-go-live
+            </h3>
+            <p className="text-sm leading-6 text-dls-secondary">
+              The built-in Matterhorn MCPs are the beta-ready extension path
+              today. Organization marketplace extensions require Matterhorn
+              Cloud marketplace setup, so this catalog is parked until after
+              go-live.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setView("my")}>
+            View Matterhorn MCPs
+          </Button>
         </div>
       )}
     </section>
