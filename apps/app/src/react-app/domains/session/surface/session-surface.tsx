@@ -1555,6 +1555,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
     containerRef: scrollRef,
     contentRef,
   });
+  const hasTranscriptJumpTarget = renderedMessages.length > 0;
 
   const sessionScrollTopControlAction = useMemo<MatterhornControlAction>(() => ({
     id: "session.scroll_top",
@@ -1704,12 +1705,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onUsePrompt={typeComposerText}
                 />
               ) : shellConfig.starterCards ? (
-                <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-6 sm:px-6 lg:justify-center">
-                  <div className="w-full max-w-[1040px]">
-                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
+                  <div className="w-full max-w-[880px]">
+                    <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                       <div>
-                        <p className="text-lg font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
-                        <p className="text-sm text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
+                        <p className="text-base font-semibold tracking-[-0.01em] text-dls-text">Start with a Matterhorn workflow</p>
+                        <p className="text-xs leading-5 text-dls-secondary">Choose a desk or start a blank chat. Every prompt stays editable before sending.</p>
                       </div>
                     </div>
                     <div className="matterhorn-session-start-list grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -1723,22 +1724,22 @@ export function SessionSurface(props: SessionSurfaceProps) {
                             key={item.id}
                             type="button"
                             style={deskToneStyle(item.iconHint)}
-                            className="group grid min-h-[88px] min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-3 rounded-lg bg-dls-surface-muted/55 px-3 py-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+                            className="group grid min-h-[78px] min-w-0 grid-cols-[34px_minmax(0,1fr)] gap-2.5 rounded-lg bg-dls-surface-muted/55 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                             onClick={() => void typeComposerText(item.prompt)}
                           >
-                            <span className="flex size-10 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
-                              {protocolLogo ?? <Icon className="size-5" />}
+                            <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
+                              {protocolLogo ?? <Icon className="size-4" />}
                             </span>
                             <span className="grid min-w-0 gap-1">
                               <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                                <span className="min-w-0 truncate text-sm font-semibold leading-tight text-dls-text">{item.title}</span>
+                                <span className="min-w-0 truncate text-[13px] font-semibold leading-tight text-dls-text">{item.title}</span>
                                 <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
                                   {item.statusLabel}
                                 </span>
                               </span>
-                              <span className="line-clamp-2 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
+                              <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary sm:line-clamp-2">{item.description}</span>
                               <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
-                              <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                              <span className="text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
                                 Insert editable prompt
                               </span>
                             </span>
@@ -1778,7 +1779,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
             )}
           </div>
         </div>
-        {!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId) ? (
+        {hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
           <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center">
             <div className="pointer-events-auto flex items-center gap-2 rounded-md bg-dls-surface/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-md">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
