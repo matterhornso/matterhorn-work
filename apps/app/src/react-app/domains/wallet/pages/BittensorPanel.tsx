@@ -17,6 +17,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ProtocolBrandLogo } from "../../session/workflows/protocol-brand-logo";
 import type {
   BittensorActionQuote,
   BittensorSubnetDetail,
@@ -304,6 +305,7 @@ type ActionType = BittensorActionQuote["action"];
 const BITTENSOR_STANDARD_ACTIONS = [
   {
     id: "wallet-balance",
+    step: "1",
     intent: "Read",
     title: "Show TAO balance",
     summary: "Read a public SS58 coldkey, TAO balance, stake positions, and provider freshness.",
@@ -313,9 +315,21 @@ const BITTENSOR_STANDARD_ACTIONS = [
       "Use Bittensor chat mode. Show my TAO balance from the public SS58 coldkey in context. If no address is set, ask once for a public coldkey only. Explain free TAO, staked TAO, validator exposure, provider source, freshness, and safe next steps.",
   },
   {
+    id: "stake-positions",
+    step: "2",
+    intent: "Read",
+    title: "Where am I staked?",
+    summary: "Read current subnet stake positions for a public SS58 coldkey and explain exposure in plain language.",
+    safety: "Public address only",
+    outcome: "Stake position summary",
+    prompt:
+      "Use Bittensor chat mode. Show where this public SS58 coldkey is staked. If no address is set, ask once for a public coldkey only. Explain subnet exposure, validator hotkeys, estimated TAO value, source/freshness, and safe next steps without asking for wallet secrets.",
+  },
+  {
     id: "subnet-discovery",
+    step: "3",
     intent: "Discover",
-    title: "Find useful subnets",
+    title: "Browse all subnets",
     summary: "Discover subnets by goal, category, utility, adapter support, and public metagraph context.",
     safety: "Read-only discovery",
     outcome: "Subnet shortlist",
@@ -324,6 +338,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
   {
     id: "validator-compare",
+    step: "4",
     intent: "Compare",
     title: "Compare validators",
     summary: "Compare validator hotkeys for a subnet using public validator/metagraph context.",
@@ -335,6 +350,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
   {
     id: "stake-preview",
+    step: "5",
     intent: "Preview",
     title: "Prepare stake preview",
     summary: "Prepare an unsigned stake preview with netuid, validator hotkey, expected alpha, fee, and slippage.",
@@ -346,6 +362,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
   {
     id: "unstake-preview",
+    step: "6",
     intent: "Preview",
     title: "Prepare unstake preview",
     summary: "Review an unsigned unstake preview and explain the consequence before external signing.",
@@ -357,6 +374,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
   {
     id: "transfer-preview",
+    step: "7",
     intent: "Preview",
     title: "Prepare transfer preview",
     summary: "Prepare a TAO transfer preview to a destination coldkey without signing or broadcasting.",
@@ -368,6 +386,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
   {
     id: "watch-alert",
+    step: "8",
     intent: "Monitor",
     title: "Create watch or alert",
     summary: "Monitor a wallet, subnet, validator, emission movement, or provider freshness.",
@@ -377,7 +396,19 @@ const BITTENSOR_STANDARD_ACTIONS = [
       "Use Bittensor chat mode. Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
   },
   {
+    id: "receipt-import",
+    step: "9",
+    intent: "Read",
+    title: "Import receipt",
+    summary: "Review a public Bittensor receipt and attach it to the session evidence trail.",
+    safety: "Public receipt only",
+    outcome: "Receipt status",
+    prompt:
+      "Use Bittensor chat mode. Import and explain a public Bittensor receipt. Verify the public transaction evidence, summarize what changed, link it to the active watch or wallet context if possible, and do not ask for raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.",
+  },
+  {
     id: "keys-explainer",
+    step: "10",
     intent: "Learn",
     title: "Explain coldkey/hotkey",
     summary: "Clarify Bittensor wallet concepts, staking exposure, and external signer boundaries.",
@@ -388,6 +419,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
   },
 ] satisfies Array<{
   id: string;
+  step: string;
   intent: "Read" | "Discover" | "Compare" | "Preview" | "Monitor" | "Learn";
   title: string;
   summary: string;
@@ -669,6 +701,18 @@ function formatNumber(value: number | null | undefined, digits = 3): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
+function formatBittensorProviderError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  const message = raw.trim();
+  if (/unexpected token|not valid json|doctype|html/i.test(message)) {
+    return "Matterhorn server did not answer the Bittensor request with JSON. Reconnect the Matterhorn Work server, then refresh the Bittensor desk.";
+  }
+  if (/failed to fetch|network|load failed|econnrefused|timeout/i.test(message)) {
+    return "Matterhorn could not reach the Bittensor provider. Check the local server connection, then refresh the Bittensor desk.";
+  }
+  return message || "Matterhorn could not load Bittensor data. Refresh this desk after reconnecting the local server.";
+}
+
 function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?: boolean }) {
   const title = VENUE_DESKS[venue].label;
   const size = compact ? 20 : 36;
@@ -680,24 +724,7 @@ function ProtocolMark({ venue, compact = false }: { venue: CryptoVenue; compact?
         compact ? "size-5" : "size-9",
       )}
     >
-      {venue === "bittensor" ? (
-        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-          <path d="M7 18.5c0-6.2 4.3-10.5 9-10.5s9 4.3 9 10.5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          <path d="M16 8v17" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          <path d="M8 25h16" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-        </svg>
-      ) : venue === "hyperliquid" ? (
-        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-          <path d="M7 23V9M25 23V9M7 16h18" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          <path d="M10 11c2.8 3.2 5 4.7 7.1 4.6 2.3-.1 3.9-2.2 4.9-5.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      ) : (
-        <svg aria-hidden="true" viewBox="0 0 32 32" width={size} height={size} fill="none">
-          <path d="M9 8h14v16H9z" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-          <path d="M9 16h14M16 8v16" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          <path d="M11.5 12.2h3M17.5 20h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      )}
+      <ProtocolBrandLogo id={venue} size={compact ? 16 : 28} />
     </span>
   );
 }
@@ -825,7 +852,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       setSubnets(next);
       setSelectedNetuid((current) => current ?? next[0]?.netuid ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load Bittensor subnets");
+      setError(formatBittensorProviderError(err));
     } finally {
       setLoading(false);
     }
@@ -987,7 +1014,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       setWallet(json.wallet as BittensorWalletSnapshot);
     } catch (err) {
       setWallet(null);
-      setWalletError(err instanceof Error ? err.message : "Failed to load wallet");
+      setWalletError(formatBittensorProviderError(err));
     } finally {
       setWalletLoading(false);
     }
@@ -2326,9 +2353,15 @@ function BittensorStandardActionList({
         <button
           key={item.id}
           type="button"
-          className="group grid w-full gap-3 rounded-md px-2.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[minmax(0,1fr)_auto]"
+          className="group grid w-full gap-3 rounded-md px-2.5 py-3 text-left transition-colors hover:bg-[var(--protocol-desk-soft)] focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[rgba(var(--protocol-desk-rgb),0.32)] sm:grid-cols-[auto_minmax(0,1fr)_auto]"
           onClick={() => onAction(item)}
         >
+          <span
+            aria-label={`Step ${item.step}`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--protocol-desk-soft)] text-xs font-semibold text-[var(--protocol-desk-accent)]"
+          >
+            {item.step}
+          </span>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--protocol-desk-accent)]">
