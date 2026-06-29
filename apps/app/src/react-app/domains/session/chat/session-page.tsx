@@ -1420,7 +1420,7 @@ export function SessionPage(props: SessionPageProps) {
                       {t("session.loading_detail")}
                     </div>
                   ) : focusedProtocolPanel ? (
-                    <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden">
+                    <div className="flex min-h-0 min-w-0 flex-1 justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain pb-24 sm:pb-28">
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
                         onUsePrompt={(prompt) => {
@@ -1429,7 +1429,10 @@ export function SessionPage(props: SessionPageProps) {
                       />
                     </div>
                   ) : (
-                    <div className="relative flex flex-1 items-start justify-center overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8">
+                    <div
+                      className="relative flex min-h-0 flex-1 items-start justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-24 pt-6 sm:px-6 sm:pb-28 sm:pt-8"
+                      style={{ scrollbarGutter: "stable" } as CSSProperties}
+                    >
                       <div className="relative w-full max-w-4xl space-y-5">
                         <div className="mx-auto max-w-2xl space-y-2 text-center">
                           <h2 className="text-2xl font-semibold leading-tight text-dls-text">
