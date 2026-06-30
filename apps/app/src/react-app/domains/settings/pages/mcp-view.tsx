@@ -279,6 +279,92 @@ type MatterhornMcpProductCard = {
   backendBacked?: boolean;
 };
 
+type MatterhornMcpClientId = "codex" | "claude-code" | "claude-desktop" | "cursor";
+
+type MatterhornMcpClientInstallGuide = {
+  id: MatterhornMcpClientId;
+  label: string;
+  command: string;
+  configSurface: string;
+  summary: string;
+  steps: string[];
+  verifyTools: string[];
+  safetyNote: string;
+};
+
+const DEFAULT_MATTERHORN_MCP_CLIENT_ID: MatterhornMcpClientId = "codex";
+
+const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = [
+  {
+    id: "codex",
+    label: "Codex",
+    command: "matterhorn-work mcp config --target codex --profile full",
+    configSurface: "Codex MCP profile",
+    summary:
+      "Install the full Matterhorn MCP profile into Codex so Codex can call Bittensor, market preview, memory, workflow, and UI-control tools.",
+    steps: [
+      "Run the command from a terminal where matterhorn-work is available.",
+      "Restart or refresh Codex so it reloads the MCP profile.",
+      "Open Codex tools and confirm the Matterhorn MCP tools are listed.",
+    ],
+    verifyTools: ["matterhorn_bittensor_chat", "matterhorn_crypto_chat", "matterhorn_memory_list"],
+    safetyNote:
+      "Market tools remain preview/external-signer only. Never paste seed phrases, private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+  },
+  {
+    id: "claude-code",
+    label: "Claude Code",
+    command: "matterhorn-work mcp config --target claude --profile full",
+    configSurface: "Claude Code MCP config",
+    summary:
+      "Adds Matterhorn MCP tools to Claude Code for protocol desks, public reads, memory review, and workflow evidence without live custody.",
+    steps: [
+      "Run the command in the same shell you use for Claude Code.",
+      "Restart Claude Code after the config is written.",
+      "Ask Claude Code to list MCP tools and confirm Matterhorn entries appear.",
+    ],
+    verifyTools: ["matterhorn_hyperliquid_chat", "matterhorn_polymarket_chat", "matterhorn_crypto_chat"],
+    safetyNote:
+      "No custody, live market submit, API secrets, or signed payloads are accepted by Matterhorn MCP tools.",
+  },
+  {
+    id: "claude-desktop",
+    label: "Claude Desktop",
+    command: "matterhorn-work mcp config --target claude-desktop --profile full",
+    configSurface: "Claude Desktop MCP config JSON",
+    summary:
+      "Writes the Claude Desktop MCP server entry so desktop Claude can use Matterhorn desk tools outside the app.",
+    steps: [
+      "Run the command, then quit and reopen Claude Desktop.",
+      "Open Claude Desktop settings and verify the Matterhorn MCP server is enabled.",
+      "Start a new chat and test one public/read-only Matterhorn tool.",
+    ],
+    verifyTools: [
+      "matterhorn_bittensor_prepare_extrinsic",
+      "matterhorn_hyperliquid_preview_order",
+      "matterhorn_polymarket_preview_order",
+    ],
+    safetyNote:
+      "Generated handoffs stay unsigned. Use your external wallet or protocol client to review anything before action.",
+  },
+  {
+    id: "cursor",
+    label: "Cursor",
+    command: "matterhorn-work mcp config --target cursor --profile full",
+    configSurface: "Cursor MCP settings",
+    summary:
+      "Installs the full Matterhorn MCP profile for Cursor so code agents can call protocol, workflow, memory, and UI-control tools.",
+    steps: [
+      "Run the command from your repo shell or global terminal.",
+      "Restart Cursor and reopen the project.",
+      "Use Cursor MCP settings to confirm the Matterhorn server is active.",
+    ],
+    verifyTools: ["matterhorn_crypto_chat", "matterhorn_memory_search", "matterhorn_ui_control"],
+    safetyNote:
+      "Cursor receives public/redacted context only. Do not paste wallet exports, private keys, API secrets, raw signatures, or signed payloads.",
+  },
+];
+
 const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
   {
     id: "bittensor",
@@ -1122,7 +1208,13 @@ function MatterhornMcpProductSection(props: {
   compact?: boolean;
 }) {
   const visibleToolCount = props.compact ? 3 : Number.POSITIVE_INFINITY;
-  const clientLabels = ["Codex", "Claude Code", "Claude Desktop", "Cursor"];
+  const [selectedClientId, setSelectedClientId] = useState<MatterhornMcpClientId>(
+    DEFAULT_MATTERHORN_MCP_CLIENT_ID,
+  );
+  const selectedClient =
+    MATTERHORN_MCP_CLIENT_INSTALL_GUIDES.find((client) => client.id === selectedClientId) ??
+    MATTERHORN_MCP_CLIENT_INSTALL_GUIDES[0]!;
+  const selectedInstallCommand = selectedClient.command;
   return (
     <section className={`@container/matterhorn-mcps ${props.compact ? "space-y-4" : "space-y-5"}`}>
       <div className="flex flex-col gap-2">
@@ -1135,23 +1227,111 @@ function MatterhornMcpProductSection(props: {
             Matterhorn core MCP setup starts here. Matterhorn MCP cards are real installable command profiles. They are backed by the local Matterhorn MCP server. UI Control is marked preview until the desktop bridge publishes its local actions. Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.
           </p>
         </div>
-        <div className={props.compact ? "flex flex-wrap gap-1.5" : "flex flex-wrap gap-2"}>
-          <span className={props.compact ? "mr-1 text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary" : "mr-1 text-[11px] font-medium uppercase tracking-[0.16em] text-dls-secondary"}>
+        <div className="space-y-2">
+          <span className={props.compact ? "text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary" : "text-[11px] font-medium uppercase tracking-[0.16em] text-dls-secondary"}>
             Install by client
           </span>
-          {clientLabels.map((client) => (
-            <span
-              key={client}
-              className={props.compact
-                ? "rounded-full bg-dls-surface-muted/45 px-2 py-0.5 text-[10px] text-dls-secondary"
-                : "rounded-full bg-dls-surface-muted/45 px-2.5 py-1 text-[11px] text-dls-secondary"
-              }
-            >
-              {client}
-            </span>
-          ))}
+          <div
+            role="tablist"
+            aria-label="MCP install client"
+            className="grid grid-cols-2 gap-1 rounded-2xl bg-dls-surface-muted/35 p-1 @md/matterhorn-mcps:grid-cols-4"
+          >
+            {MATTERHORN_MCP_CLIENT_INSTALL_GUIDES.map((client) => {
+              const selected = client.id === selectedClient.id;
+              return (
+                <button
+                  key={client.id}
+                  id={`matterhorn-mcp-client-tab-${client.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`matterhorn-mcp-client-panel-${client.id}`}
+                  onClick={() => setSelectedClientId(client.id)}
+                  className={props.compact
+                    ? `min-w-0 rounded-xl px-2 py-1 text-[10px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)] ${selected ? "bg-[rgba(var(--dls-accent-rgb),0.18)] text-dls-text shadow-sm ring-1 ring-[rgba(var(--dls-accent-rgb),0.35)]" : "text-dls-secondary hover:bg-dls-hover/65 hover:text-dls-text"}`
+                    : `min-w-0 rounded-xl px-2.5 py-1.5 text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)] ${selected ? "bg-[rgba(var(--dls-accent-rgb),0.18)] text-dls-text shadow-sm ring-1 ring-[rgba(var(--dls-accent-rgb),0.35)]" : "text-dls-secondary hover:bg-dls-hover/65 hover:text-dls-text"}`
+                  }
+                >
+                  <span className="block truncate">{client.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      <section
+        id={`matterhorn-mcp-client-panel-${selectedClient.id}`}
+        role="tabpanel"
+        aria-labelledby={`matterhorn-mcp-client-tab-${selectedClient.id}`}
+        className={props.compact ? "space-y-3 rounded-[20px] bg-dls-surface-muted/20 p-3" : "space-y-4 rounded-[24px] bg-dls-surface-muted/22 p-4 sm:p-5"}
+      >
+        <div className="flex flex-col gap-2 @md/matterhorn-mcps:flex-row @md/matterhorn-mcps:items-start @md/matterhorn-mcps:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Selected client guide</p>
+            <h3 className={props.compact ? "mt-1 text-sm font-semibold text-dls-text" : "mt-1 text-base font-semibold text-dls-text"}>
+              Install guide: {selectedClient.label}
+            </h3>
+            <p className={props.compact ? "mt-1 text-xs leading-5 text-dls-secondary" : "mt-1 max-w-2xl text-sm leading-6 text-dls-secondary"}>
+              {selectedClient.summary}
+            </p>
+          </div>
+          <span className={props.compact ? "w-fit rounded-full bg-dls-hover/45 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-dls-secondary" : "w-fit rounded-full bg-dls-hover/45 px-2.5 py-1 text-[10px] uppercase tracking-[0.12em] text-dls-secondary"}>
+            {selectedClient.configSurface}
+          </span>
+        </div>
+
+        <div className="min-w-0 border-l border-dls-border/30 pl-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Install command</div>
+            <button
+              type="button"
+              className={props.compact
+                ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+                : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+              }
+              onClick={() => props.onCopyCommand(selectedInstallCommand)}
+            >
+              <Copy size={props.compact ? 12 : 13} />
+              <span className="truncate">Copy client command</span>
+            </button>
+          </div>
+          <code className={props.compact
+            ? "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[10px] leading-4 text-dls-text"
+            : "mt-2 block max-w-full break-words rounded-xl bg-dls-surface/45 px-3 py-2 font-mono text-[11px] leading-5 text-dls-text"
+          }>
+            {selectedInstallCommand}
+          </code>
+        </div>
+
+        <div className={props.compact ? "space-y-3" : "grid gap-4 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]"}>
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Setup steps</p>
+            <ol className={props.compact ? "mt-2 space-y-1.5 text-xs leading-5 text-dls-secondary" : "mt-2 space-y-1.5 text-sm leading-6 text-dls-secondary"}>
+              {selectedClient.steps.map((step, index) => (
+                <li key={step} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-2">
+                  <span className="font-mono text-[10px] text-dls-text">{index + 1}.</span>
+                  <span className="min-w-0">{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-dls-secondary">Verify in client</p>
+            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+              {selectedClient.verifyTools.map((tool) => (
+                <code key={tool} className={props.compact ? "max-w-full break-words rounded-md bg-dls-hover/45 px-1.5 py-0.5 font-mono text-[10px] text-dls-text" : "max-w-full break-words rounded-md bg-dls-hover/45 px-2 py-1 font-mono text-[10px] text-dls-text"}>
+                  {tool}
+                </code>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className={props.compact ? "text-[11px] leading-4 text-dls-secondary" : "text-xs leading-5 text-dls-secondary"}>
+          {selectedClient.safetyNote}
+        </p>
+      </section>
 
       <div className="matterhorn-mcp-stream min-w-0 overflow-hidden rounded-[20px] bg-dls-surface-muted/18">
         {props.cards.map((card) => {
@@ -1188,7 +1368,7 @@ function MatterhornMcpProductSection(props: {
                       ? "mt-1 block max-w-full break-words font-mono text-[10px] leading-4 text-dls-text"
                       : "mt-1 block max-w-full break-words font-mono text-[11px] leading-5 text-dls-text"
                     }>
-                      {card.command}
+                      {selectedInstallCommand}
                     </code>
                   </div>
                   <button
@@ -1197,7 +1377,7 @@ function MatterhornMcpProductSection(props: {
                       ? "inline-flex w-fit items-center gap-1 rounded-full bg-dls-hover/55 px-2.5 py-1 text-[11px] text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                       : "inline-flex h-8 w-fit max-w-full items-center gap-1.5 self-start rounded-full bg-dls-hover/55 px-3 text-xs text-dls-text transition-colors hover:bg-dls-hover focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                     }
-                    onClick={() => props.onCopyCommand(card.command)}
+                    onClick={() => props.onCopyCommand(selectedInstallCommand)}
                   >
                     <Copy size={props.compact ? 12 : 13} />
                     <span className="truncate">{props.compact ? "Copy" : "Copy install command"}</span>
