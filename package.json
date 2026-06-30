@@ -112,6 +112,7 @@
     "test:desk-action-manifest": "node scripts/desk-action-manifest.test.mjs",
     "test:mcp-catalog-contract": "node scripts/mcp-catalog-contract.test.mjs",
     "test:surface-readiness-contract": "node scripts/surface-readiness-contract.test.mjs",
+    "test:wallet-profile-mcp-readiness-contract": "node scripts/wallet-profile-mcp-readiness-contract.test.mjs",
     "test:customer-demo-scenarios": "node scripts/customer-demo-scenarios.test.mjs",
     "test:customer-demo-evidence-pack": "node scripts/customer-demo-evidence-pack.test.mjs",
     "test:monday-beta-launch-readiness": "node scripts/monday-beta-launch-readiness.test.mjs",
