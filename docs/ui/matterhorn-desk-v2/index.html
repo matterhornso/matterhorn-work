@@ -1371,6 +1371,10 @@ body {
   <button class="nav-btn" onclick="showScreen('screen-icons')">Icons</button>
   <button class="nav-btn" onclick="showScreen('screen-mobile')">Mobile</button>
   <button class="nav-btn" onclick="showScreen('screen-forbidden')">Do Not Build</button>
+  <button class="nav-btn" onclick="showScreen('screen-wallet')">Wallet</button>
+  <button class="nav-btn" onclick="showScreen('screen-profile')">Profile</button>
+  <button class="nav-btn" onclick="showScreen('screen-mcp-card')">MCP Cards</button>
+  <button class="nav-btn" onclick="showScreen('screen-chat-draft')">Draft State</button>
 
   <button class="nav-btn nav-btn--theme" onclick="toggleTheme()" id="themeBtn">
     ◐ Dark
@@ -2672,8 +2676,750 @@ body {
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════
-     JAVASCRIPT
+     WALLET SCREEN
      ═══════════════════════════════════════════════════════════════════ -->
+
+/* Wallet panel styles */
+.wallet-runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--v2-radius);
+  background: var(--v2-bg-elevated);
+  color: var(--v2-text-secondary);
+  border: 1px solid var(--v2-border-default);
+}
+.wallet-runtime-badge--web { border-color: var(--v2-status-info); color: var(--v2-status-info); background: rgba(96,165,250,0.08); }
+.wallet-runtime-badge--desktop { border-color: var(--v2-border-strong); color: var(--v2-text-secondary); }
+
+.wallet-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+.wallet-address-row__addr {
+  flex: 1;
+  font-family: var(--v2-font-mono);
+  font-size: 13px;
+  color: var(--v2-text-primary);
+}
+.wallet-address-row__copy {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  color: var(--v2-text-secondary);
+  cursor: pointer;
+}
+.wallet-address-row__copy:hover { background: var(--v2-bg-hover); color: var(--v2-text-primary); }
+
+.wallet-safety-strip {
+  background: rgba(245,158,11,0.06);
+  border-left: 3px solid var(--v2-status-warning);
+  border-radius: var(--v2-radius);
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--v2-text-secondary);
+  line-height: 1.5;
+  margin: 12px 0;
+}
+.wallet-safety-strip::before { content: "🔒  "; }
+
+.protocol-map { display: flex; flex-direction: column; gap: 0; }
+.protocol-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--v2-bg-surface);
+  border-bottom: 1px solid var(--v2-border-subtle);
+  padding: 10px 16px;
+}
+.protocol-row:last-child { border-bottom: none; }
+.protocol-row__icon {
+  width: 28px; height: 28px;
+  border-radius: var(--v2-radius);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  flex-shrink: 0;
+}
+.protocol-row__body { flex: 1; min-width: 0; }
+.protocol-row__name { font-size: 13px; font-weight: 600; color: var(--v2-text-primary); }
+.protocol-row__scope { font-size: 11px; color: var(--v2-text-secondary); }
+.protocol-row__badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 20px;
+  flex-shrink: 0;
+}
+.protocol-row__badge--active { background: rgba(34,197,94,0.12); color: var(--v2-status-success); }
+.protocol-row__badge--ext { background: rgba(245,158,11,0.12); color: var(--v2-status-warning); }
+.protocol-row__badge--planned { background: var(--v2-bg-elevated); color: var(--v2-text-tertiary); border: 1px solid var(--v2-border-subtle); }
+.protocol-row__action {
+  font-size: 11px; padding: 3px 10px;
+  background: transparent;
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  color: var(--v2-accent); cursor: pointer;
+  flex-shrink: 0;
+}
+.protocol-row__action:disabled { color: var(--v2-text-tertiary); border-color: var(--v2-border-subtle); cursor: not-allowed; }
+
+.wallet-section {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.wallet-section__header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--v2-border-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v2-text-secondary);
+}
+.wallet-section__body { padding: 12px 16px; }
+
+/* Profile styles */
+.profile-avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--v2-bg-elevated);
+  border: 1px solid var(--v2-border-default);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700;
+  color: var(--v2-text-primary);
+  flex-shrink: 0;
+}
+.profile-avatar--signed-out {
+  background: var(--v2-bg-surface);
+  border-style: dashed;
+  color: var(--v2-text-tertiary);
+}
+.cloud-status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; padding: 2px 8px;
+  border-radius: 20px;
+  margin-top: 4px;
+}
+.cloud-status-badge--active { background: rgba(34,197,94,0.1); color: var(--v2-status-success); }
+.cloud-status-badge--local { background: var(--v2-bg-elevated); color: var(--v2-text-secondary); border: 1px solid var(--v2-border-subtle); }
+.cloud-status-badge--setup { background: rgba(96,165,250,0.1); color: var(--v2-status-info); }
+.cloud-status-badge--unconfigured { background: rgba(245,158,11,0.1); color: var(--v2-status-warning); }
+.cloud-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.cloud-dot--emerald { background: var(--v2-status-success); }
+.cloud-dot--gray { background: var(--v2-text-tertiary); }
+.cloud-dot--blue { background: var(--v2-status-info); }
+.cloud-dot--amber { background: var(--v2-status-warning); }
+
+.profile-rail-card { padding: 16px; }
+.profile-rail-card__header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.profile-rail-card__name { font-size: 13px; font-weight: 600; color: var(--v2-text-primary); }
+.profile-rail-card__email { font-size: 11px; color: var(--v2-text-secondary); margin-top: 2px; }
+.profile-rail-card__meta { font-size: 11px; color: var(--v2-text-secondary); margin: 8px 0; }
+.profile-rail-card__actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* MCP card styles */
+.mcp-card { border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden; margin-bottom: 12px; }
+.mcp-card__header { padding: 12px 16px; background: var(--v2-bg-surface); border-bottom: 1px solid var(--v2-border-subtle); display: flex; align-items: center; gap: 10px; }
+.mcp-card__icon { width: 32px; height: 32px; border-radius: var(--v2-radius); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; background: rgba(52,211,153,0.12); color: var(--v2-desk-mcp); }
+.mcp-card__icon--catalog { background: rgba(52,211,153,0.08); color: var(--v2-text-secondary); }
+.mcp-card__body { padding: 12px 16px; background: var(--v2-bg-surface); }
+.mcp-card__name { font-size: 13px; font-weight: 600; color: var(--v2-text-primary); }
+.mcp-card__desc { font-size: 11px; color: var(--v2-text-secondary); margin-top: 4px; }
+.mcp-card__meta { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.mcp-card__meta-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--v2-text-secondary); }
+.mcp-card__runs-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 20px; }
+.mcp-card__runs-badge--inside { background: rgba(34,197,94,0.12); color: var(--v2-status-success); }
+.mcp-card__runs-badge--outside { background: rgba(96,165,250,0.12); color: var(--v2-status-info); }
+.mcp-card__runs-badge--external { background: rgba(245,158,11,0.12); color: var(--v2-status-warning); }
+.mcp-card__footer { padding: 10px 16px; background: var(--v2-bg-elevated); border-top: 1px solid var(--v2-border-subtle); display: flex; gap: 8px; }
+.mcp-card__action { font-size: 11px; padding: 4px 12px; border-radius: var(--v2-radius); cursor: pointer; border: 1px solid; }
+.mcp-card__action--primary { background: var(--v2-accent-dim); border-color: var(--v2-accent); color: var(--v2-accent); }
+.mcp-card__action--ghost { background: transparent; border-color: var(--v2-border-default); color: var(--v2-text-secondary); }
+.mcp-card__action--danger { background: transparent; border-color: rgba(239,68,68,0.3); color: var(--v2-status-error); }
+.mcp-card__action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Chat draft styles */
+.composer-draft {
+  background: var(--v2-bg-surface);
+  border: 1px solid var(--v2-border-default);
+  border-radius: var(--v2-radius);
+  overflow: hidden;
+}
+.composer-draft__chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--v2-accent-dim);
+  border-bottom: 1px solid rgba(209,242,255,0.15);
+  padding: 6px 12px;
+  font-size: 11px;
+}
+.composer-draft__chip-label { color: var(--v2-text-secondary); }
+.composer-draft__chip-desk { color: var(--v2-desk-bittensor); font-weight: 600; margin-left: 4px; }
+.composer-draft__chip-clear { font-size: 11px; color: var(--v2-text-tertiary); background: transparent; border: none; cursor: pointer; padding: 0; }
+.composer-draft__body { padding: 12px 16px; }
+.composer-draft__textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--v2-font-sans);
+  font-size: 13px;
+  color: var(--v2-text-primary);
+  resize: none;
+  min-height: 80px;
+  line-height: 1.5;
+}
+.composer-draft__textarea::placeholder { color: var(--v2-text-tertiary); }
+.composer-draft__footer { padding: 10px 16px; border-top: 1px solid var(--v2-border-subtle); display: flex; justify-content: space-between; align-items: center; }
+.composer-draft__cancel { font-size: 11px; padding: 4px 12px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer; }
+.composer-draft__send { font-size: 12px; padding: 6px 16px; background: var(--v2-accent); border: none; border-radius: var(--v2-radius); color: #0C0C0C; font-weight: 600; cursor: pointer; }
+.composer-draft__send--cross-desk { background: var(--v2-bg-elevated); color: var(--v2-accent); border: 1px solid var(--v2-accent); }
+
+.draft-rail-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--v2-accent-dim);
+  border: 1px solid rgba(209,242,255,0.2);
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--v2-text-secondary);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+     SCREEN 10: WALLET PANEL
+     ═══════════════════════════════════════════════════════════════════ */
+
+#screen-wallet { display: none; }
+#screen-wallet.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════════
+     SCREEN 11: PROFILE PANEL
+     ═══════════════════════════════════════════════════════════════════ */
+
+#screen-profile { display: none; }
+#screen-profile.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════════
+     SCREEN 12: MCP CARD ANATOMY
+     ═══════════════════════════════════════════════════════════════════ */
+
+#screen-mcp-card { display: none; }
+#screen-mcp-card.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════════
+     SCREEN 13: CHAT DRAFT STATE
+     ═══════════════════════════════════════════════════════════════════ */
+
+#screen-chat-draft { display: none; }
+#screen-chat-draft.active { display: block; }
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 10: WALLET PANEL
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section id="screen-wallet" class="screen">
+
+  <div class="screen-label">Annotated Screen</div>
+  <div class="screen-title">Wallet Panel</div>
+  <div class="screen-subtitle">Right rail card + Settings / Wallet page — web vs desktop runtime honest</div>
+
+  <div class="section-header"><div class="section-title">Web Runtime (Browser)</div></div>
+
+  <div class="wallet-section">
+    <div class="wallet-section__header">Web Wallets</div>
+    <div class="wallet-section__body">
+      <div class="annotation annotation--info" style="margin-bottom: 12px;">
+        <div class="annotation__label">Runtime</div>
+        <div class="annotation__body">
+          <span class="wallet-runtime-badge wallet-runtime-badge--web">Web · Browser</span>
+          Injected wallets available via window.ethereum
+        </div>
+      </div>
+      <div class="protocol-map">
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(255,124,67,0.15); color: #FF7C43;">B</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Bittensor</div><div class="protocol-row__scope">Browse Subtensor · Read-only</div></div>
+          <span class="protocol-row__badge protocol-row__badge--active">Active</span>
+          <button class="protocol-row__action">Browse</button>
+        </div>
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(192,132,252,0.15); color: #C084FC;">H</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Hyperliquid</div><div class="protocol-row__scope">Market data · Read-only</div></div>
+          <span class="protocol-row__badge protocol-row__badge--active">Active</span>
+          <button class="protocol-row__action">Browse</button>
+        </div>
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(192,132,252,0.15); color: #C084FC;">H</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Hyperliquid</div><div class="protocol-row__scope">Sign intent · External signer required</div></div>
+          <span class="protocol-row__badge protocol-row__badge--ext">Ext signer</span>
+          <button class="protocol-row__action">Set up</button>
+        </div>
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(251,191,36,0.15); color: #FBBF24;">P</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Polymarket</div><div class="protocol-row__scope">Browse markets · Read-only</div></div>
+          <span class="protocol-row__badge protocol-row__badge--active">Active</span>
+          <button class="protocol-row__action">Browse</button>
+        </div>
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: var(--v2-bg-elevated); color: var(--v2-text-tertiary);">P</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Polymarket</div><div class="protocol-row__scope">Place market · Not wired in beta</div></div>
+          <span class="protocol-row__badge protocol-row__badge--planned">Planned</span>
+          <button class="protocol-row__action" disabled>—</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wallet-safety-strip">Matterhorn never holds your keys, seed phrases, API secrets, or signed payloads.</div>
+
+  <div class="section-header"><div class="section-title">Desktop Runtime (Electron)</div></div>
+
+  <div class="wallet-section">
+    <div class="wallet-section__header">Desktop Wallet</div>
+    <div class="wallet-section__body">
+      <div class="annotation annotation--info" style="margin-bottom: 12px;">
+        <div class="annotation__label">Runtime</div>
+        <div class="annotation__body">
+          <span class="wallet-runtime-badge wallet-runtime-badge--desktop">Desktop · Electron</span>
+          No browser extensions — external signer required
+        </div>
+      </div>
+      <div class="wallet-safety-strip" style="margin: 0 0 12px 0;">
+        Matterhorn sends intent to your signer. Your signer broadcasts the transaction. Matterhorn never sees your private key.
+      </div>
+      <div class="protocol-map">
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(192,132,252,0.15); color: #C084FC;">H</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">External Signer (MCP)</div><div class="protocol-row__scope">Hyperliquid intent signing via MCP handoff</div></div>
+          <span class="protocol-row__badge protocol-row__badge--active">Ready</span>
+          <button class="protocol-row__action">Configure</button>
+        </div>
+        <div class="protocol-row">
+          <div class="protocol-row__icon" style="background: rgba(251,191,36,0.15); color: #FBBF24;">P</div>
+          <div class="protocol-row__body"><div class="protocol-row__name">Polymarket</div><div class="protocol-row__scope">Browse markets · Read-only in beta</div></div>
+          <span class="protocol-row__badge protocol-row__badge--active">Active</span>
+          <button class="protocol-row__action">Browse</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">Right Rail Wallet Card</div></div>
+
+  <div style="max-width: 280px; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden; background: var(--v2-bg-surface);">
+    <div style="padding: 12px 16px; border-bottom: 1px solid var(--v2-border-subtle); display: flex; align-items: center; gap: 8px;">
+      <div style="font-size: 13px; color: var(--v2-text-primary); font-weight: 600;">Wallet</div>
+      <span class="wallet-runtime-badge wallet-runtime-badge--web">Web</span>
+    </div>
+    <div style="padding: 16px;">
+      <div class="wallet-address-row">
+        <div class="wallet-address-row__addr">5CfTC…3bX9</div>
+        <button class="wallet-address-row__copy">Copy</button>
+      </div>
+      <div style="font-size: 10px; color: var(--v2-text-tertiary); margin: 4px 0 10px;">Truncated · Ethereum mainnet</div>
+      <div style="font-size: 11px; color: var(--v2-text-secondary); display: flex; align-items: center; gap: 6px;">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--v2-status-success); display: inline-block;"></span>
+        Connected · Synced 3s ago
+      </div>
+      <div style="margin-top: 12px;">
+        <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">Manage Wallet</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--warning" style="margin-top: 16px;">
+    <div class="annotation__label">Button Copy Rules</div>
+    <div class="annotation__body">
+      <strong>Correct:</strong> Browse, Set up, Configure, Manage Wallet<br>
+      <strong>Never:</strong> Sign, Confirm, Submit order, Place bet on your behalf<br>
+      <strong>Never:</strong> Full wallet address — always truncate: <code>5CfTC…3bX9</code>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 11: PROFILE PANEL
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section id="screen-profile" class="screen">
+
+  <div class="screen-label">Annotated Screen</div>
+  <div class="screen-title">Profile Panel</div>
+  <div class="screen-subtitle">Four states: signed-out · local · cloud-active · cloud-unconfigured</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+
+    <div style="border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden;">
+      <div style="padding: 8px 12px; background: var(--v2-bg-elevated); border-bottom: 1px solid var(--v2-border-subtle); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary);">State: Signed Out</div>
+      <div class="profile-rail-card">
+        <div class="profile-rail-card__header">
+          <div class="profile-avatar profile-avatar--signed-out">?</div>
+          <div><div class="profile-rail-card__name" style="color: var(--v2-text-tertiary);">Not signed in</div></div>
+        </div>
+        <div class="profile-rail-card__meta">
+          <span class="cloud-status-badge cloud-status-badge--local"><span class="cloud-dot cloud-dot--gray"></span>Local session</span>
+        </div>
+        <div class="profile-rail-card__actions">
+          <button style="font-size: 11px; padding: 4px 12px; background: var(--v2-accent); border: none; border-radius: var(--v2-radius); color: #0C0C0C; font-weight: 600; cursor: pointer;">Sign In</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden;">
+      <div style="padding: 8px 12px; background: var(--v2-bg-elevated); border-bottom: 1px solid var(--v2-border-subtle); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary);">State: Signed In · Local Only</div>
+      <div class="profile-rail-card">
+        <div class="profile-rail-card__header">
+          <div class="profile-avatar">AC</div>
+          <div><div class="profile-rail-card__name">Alex Chen</div><div class="profile-rail-card__email">alex@example.com</div></div>
+        </div>
+        <div class="profile-rail-card__meta">
+          <span class="cloud-status-badge cloud-status-badge--local"><span class="cloud-dot cloud-dot--gray"></span>Signed in · Local only</span>
+        </div>
+        <div class="profile-rail-card__actions">
+          <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">View Profile</button>
+          <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden;">
+      <div style="padding: 8px 12px; background: var(--v2-bg-elevated); border-bottom: 1px solid var(--v2-border-subtle); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary);">State: Signed In · Cloud Active</div>
+      <div class="profile-rail-card">
+        <div class="profile-rail-card__header">
+          <div class="profile-avatar" style="background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3);">AC</div>
+          <div><div class="profile-rail-card__name">Alex Chen</div><div class="profile-rail-card__email">alex@example.com</div></div>
+        </div>
+        <div class="profile-rail-card__meta">
+          <span class="cloud-status-badge cloud-status-badge--active"><span class="cloud-dot cloud-dot--emerald"></span>Cloud active</span>
+          <div style="font-size: 11px; color: var(--v2-text-secondary); margin-top: 4px;">Organization: Acme Corp</div>
+        </div>
+        <div class="profile-rail-card__actions">
+          <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">View Profile</button>
+          <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); overflow: hidden;">
+      <div style="padding: 8px 12px; background: var(--v2-bg-elevated); border-bottom: 1px solid var(--v2-border-subtle); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary);">State: Cloud Unconfigured</div>
+      <div class="profile-rail-card">
+        <div class="profile-rail-card__header">
+          <div class="profile-avatar">AC</div>
+          <div><div class="profile-rail-card__name">Alex Chen</div><div class="profile-rail-card__email">alex@example.com</div></div>
+        </div>
+        <div class="profile-rail-card__meta">
+          <span class="cloud-status-badge cloud-status-badge--unconfigured"><span class="cloud-dot cloud-dot--amber"></span>Cloud not configured</span>
+          <div style="font-size: 11px; color: var(--v2-text-secondary); margin-top: 4px;">Set up cloud sync to use Matterhorn across devices.</div>
+        </div>
+        <div class="profile-rail-card__actions">
+          <button style="font-size: 11px; padding: 4px 10px; background: var(--v2-accent); border: none; border-radius: var(--v2-radius); color: #0C0C0C; font-weight: 600; cursor: pointer;">Set Up Cloud</button>
+          <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">Profile Settings Page</div></div>
+
+  <div class="wallet-section">
+    <div class="wallet-section__header">Account</div>
+    <div class="wallet-section__body">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div class="profile-avatar" style="width: 48px; height: 48px; font-size: 16px; background: rgba(34,197,94,0.1); border-color: rgba(34,197,94,0.3);">AC</div>
+        <div>
+          <div style="font-size: 15px; font-weight: 600; color: var(--v2-text-primary);">Alex Chen</div>
+          <div style="font-size: 12px; color: var(--v2-text-secondary);">alex@example.com · Joined Jan 2024</div>
+        </div>
+      </div>
+      <div style="border-top: 1px solid var(--v2-border-subtle); padding-top: 16px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Cloud Status</div>
+        <div style="background: var(--v2-bg-elevated); border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); padding: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <span class="cloud-status-badge cloud-status-badge--active"><span class="cloud-dot cloud-dot--emerald"></span>Cloud active</span>
+            <div style="font-size: 11px; color: var(--v2-text-secondary); margin-top: 4px;">Last synced: 2 minutes ago</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">Sync Now</button>
+            <button style="font-size: 11px; padding: 4px 10px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-secondary); cursor: pointer;">View Cloud Settings</button>
+          </div>
+        </div>
+      </div>
+      <div style="border-top: 1px solid var(--v2-border-subtle); padding-top: 16px; margin-top: 12px;">
+        <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Links</div>
+        <div style="display: flex; gap: 12px;">
+          <a href="#" style="font-size: 11px; color: var(--v2-accent); text-decoration: none;">Documentation</a>
+          <a href="#" style="font-size: 11px; color: var(--v2-accent); text-decoration: none;">Support</a>
+          <a href="#" style="font-size: 11px; color: var(--v2-accent); text-decoration: none;">Privacy Policy</a>
+        </div>
+      </div>
+      <div style="border-top: 1px solid var(--v2-border-subtle); padding-top: 16px; margin-top: 12px;">
+        <button style="font-size: 11px; padding: 6px 14px; background: transparent; border: 1px solid rgba(239,68,68,0.3); border-radius: var(--v2-radius); color: var(--v2-status-error); cursor: pointer;">Sign Out</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--danger" style="margin-top: 16px;">
+    <div class="annotation__label">Brand Rules</div>
+    <div class="annotation__body">
+      <strong>Never appear in Profile surfaces:</strong> "OpenWork", "OpenCode", "lighthouse", "harness" — forbidden in all UI copy and labels.<br>
+      <strong>Always allowed:</strong> "Matterhorn Docs", "Documentation", "Support", "Privacy Policy", "Terms of Service"
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 12: MCP CARD ANATOMY
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section id="screen-mcp-card" class="screen">
+
+  <div class="screen-label">Annotated Screen</div>
+  <div class="screen-title">MCP Card Anatomy</div>
+  <div class="screen-subtitle">Catalog card vs installed card — "Can I use this outside?" always answered</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+
+    <div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Catalog Card (Not Installed)</div>
+      <div class="mcp-card">
+        <div class="mcp-card__header">
+          <div class="mcp-card__icon mcp-card__icon--catalog">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect width="16" height="16" rx="2" fill="currentColor" opacity="0.2"/><path d="M4 6h8M4 8h5M4 10h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <div class="mcp-card__name">memory-query</div>
+            <div class="mcp-card__desc">Read and write memories from the Matterhorn memory store.</div>
+          </div>
+        </div>
+        <div class="mcp-card__body">
+          <div class="mcp-card__meta">
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 72px; flex-shrink: 0;">Tools:</span><span>3 tools supported</span></div>
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 72px; flex-shrink: 0;">Scope:</span><span>Local only · No credentials required</span></div>
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 72px; flex-shrink: 0;">Runs:</span><span class="mcp-card__runs-badge mcp-card__runs-badge--inside">Inside Matterhorn</span></div>
+          </div>
+        </div>
+        <div class="mcp-card__footer">
+          <button class="mcp-card__action mcp-card__action--primary">Install</button>
+          <button class="mcp-card__action mcp-card__action--ghost">View Documentation</button>
+        </div>
+      </div>
+      <div class="annotation annotation--success" style="margin-top: 8px;">
+        <div class="annotation__label">"Can I use this outside?"</div>
+        <div class="annotation__body"><strong>Runs: Inside Matterhorn</strong> — always present on catalog cards. Alternatives: <em>Outside Matterhorn</em> (blue) for CLI tools, <em>Sends intent externally</em> (amber) for protocol MCPs.</div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Installed Card (Configured)</div>
+      <div class="mcp-card">
+        <div class="mcp-card__header">
+          <div class="mcp-card__icon" style="background: rgba(192,132,252,0.15); color: #C084FC;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3 3.5.5-2.5 2.5.5 3.5L8 10l-3 1.5.5-3.5L3 5.5 6.5 5 8 2z" fill="currentColor"/></svg>
+          </div>
+          <div>
+            <div class="mcp-card__name">hyperliquid-sign</div>
+            <div class="mcp-card__desc">Sign Hyperliquid intent via external signer.</div>
+          </div>
+        </div>
+        <div class="mcp-card__body">
+          <div class="mcp-card__meta">
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 80px; flex-shrink: 0;">Status:</span><span class="mcp-card__runs-badge mcp-card__runs-badge--external">● Active · Ext signer required</span></div>
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 80px; flex-shrink: 0;">Tools:</span><span>2 tools running</span></div>
+            <div class="mcp-card__meta-row"><span style="color: var(--v2-text-tertiary); width: 80px; flex-shrink: 0;">Last used:</span><span>5 minutes ago</span></div>
+            <div class="mcp-card__meta-row" style="margin-top: 6px;"><span style="font-size: 10px; color: var(--v2-status-warning);">⚡ Sends intent externally · External signer required</span></div>
+          </div>
+        </div>
+        <div class="mcp-card__footer">
+          <button class="mcp-card__action mcp-card__action--primary">Test</button>
+          <button class="mcp-card__action mcp-card__action--ghost">Configure</button>
+          <button class="mcp-card__action mcp-card__action--danger">Remove</button>
+        </div>
+      </div>
+      <div class="annotation annotation--warning" style="margin-top: 8px;">
+        <div class="annotation__label">Safety Boundary</div>
+        <div class="annotation__body">"Matterhorn sends intent. [Signer] signs.<br>Matterhorn never sees your private key."<br>— appears on all protocol MCP installed cards.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">MCP Catalog Grid (3-col on desktop)</div></div>
+
+  <div style="display: grid; grid-template-columns: repeat(3,1fr); gap: 12px;">
+    <div class="mcp-card">
+      <div class="mcp-card__header">
+        <div class="mcp-card__icon mcp-card__icon--catalog"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/></svg></div>
+        <div><div class="mcp-card__name" style="font-size: 12px;">memory-query</div><span class="mcp-card__runs-badge mcp-card__runs-badge--inside" style="font-size: 9px;">Inside</span></div>
+      </div>
+      <div class="mcp-card__footer" style="padding: 8px 12px;"><button class="mcp-card__action mcp-card__action--primary" style="font-size: 10px; padding: 2px 8px;">Install</button></div>
+    </div>
+    <div class="mcp-card">
+      <div class="mcp-card__header">
+        <div class="mcp-card__icon mcp-card__icon--catalog"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M7 2l5 5-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><div class="mcp-card__name" style="font-size: 12px;">matterhorn-work</div><span class="mcp-card__runs-badge mcp-card__runs-badge--outside" style="font-size: 9px;">Outside</span></div>
+      </div>
+      <div class="mcp-card__footer" style="padding: 8px 12px;"><button class="mcp-card__action mcp-card__action--primary" style="font-size: 10px; padding: 2px 8px;">Install</button></div>
+    </div>
+    <div class="mcp-card">
+      <div class="mcp-card__header">
+        <div class="mcp-card__icon mcp-card__icon--catalog"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+        <div><div class="mcp-card__name" style="font-size: 12px;">bittensor-subnet</div><span class="mcp-card__runs-badge mcp-card__runs-badge--external" style="font-size: 9px;">Intent</span></div>
+      </div>
+      <div class="mcp-card__footer" style="padding: 8px 12px;"><button class="mcp-card__action mcp-card__action--primary" style="font-size: 10px; padding: 2px 8px;">Install</button></div>
+    </div>
+  </div>
+
+  <div class="annotation annotation--danger" style="margin-top: 16px;">
+    <div class="annotation__label">Forbidden on MCP Cards</div>
+    <div class="annotation__body"><strong>Never:</strong> API key input · Secret input · Private key input<br><strong>Never:</strong> "submit order", "sign transaction", "mint now", "hire agent"<br><strong>Never:</strong> "lighthouse", "harness", "openwork", "opencodec"<br><strong>Never:</strong> Full wallet address</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     SCREEN 13: CHAT DRAFT STATE
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<section id="screen-chat-draft" class="screen">
+
+  <div class="screen-label">Annotated Screen</div>
+  <div class="screen-title">Chat Draft State</div>
+  <div class="screen-subtitle">Draft in chat · No auto-send · Desk context preserved · Session-scoped only</div>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+
+    <div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Prompt Actions</div>
+      <div style="background: var(--v2-bg-surface); border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+          <span style="color: var(--v2-text-tertiary); width: 60px; flex-shrink: 0;">Action:</span>
+          <button style="font-size: 11px; padding: 4px 12px; background: var(--v2-accent-dim); border: 1px solid rgba(209,242,255,0.3); border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer; font-weight: 600;">Draft in chat</button>
+          <span style="font-size: 10px; color: var(--v2-text-tertiary);">✓ correct</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+          <span style="color: var(--v2-text-tertiary); width: 60px; flex-shrink: 0;">Action:</span>
+          <button style="font-size: 11px; padding: 4px 12px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-text-tertiary); cursor: pointer; text-decoration: line-through;">Send</button>
+          <span style="font-size: 10px; color: var(--v2-status-error);">✕ forbidden</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
+          <span style="color: var(--v2-text-tertiary); width: 60px; flex-shrink: 0;">Action:</span>
+          <button style="font-size: 11px; padding: 4px 12px; background: transparent; border: 1px solid var(--v2-border-default); border-radius: var(--v2-radius); color: var(--v2-accent); cursor: pointer;">Insert draft</button>
+          <span style="font-size: 10px; color: var(--v2-text-tertiary);">✓ also correct</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--v2-text-tertiary); margin-bottom: 8px;">Draft Chip Anatomy</div>
+      <div style="display: inline-flex; align-items: center; gap: 4px; background: var(--v2-accent-dim); border: 1px solid rgba(209,242,255,0.2); border-radius: 20px; padding: 6px 12px; font-size: 11px;">
+        <span style="color: var(--v2-text-secondary);">📝 Draft ready</span>
+        <span style="color: var(--v2-desk-bittensor); font-weight: 600; margin: 0 4px;">·</span>
+        <span style="color: var(--v2-desk-bittensor); font-weight: 600;">Bittensor desk</span>
+        <span style="color: var(--v2-text-tertiary); margin: 0 4px;">·</span>
+        <button style="background: transparent; border: none; color: var(--v2-text-tertiary); cursor: pointer; font-size: 11px; padding: 0;">[× Clear]</button>
+      </div>
+      <div style="margin-top: 12px;">
+        <div class="annotation annotation--success">
+          <div class="annotation__label">Draft Chip Parts</div>
+          <div class="annotation__body"><strong>📝 Draft ready</strong> label, `--v2-text-secondary`<br><strong>· Bittensor desk</strong> context, `--v2-desk-bittensor` color<br><strong>[× Clear]</strong> clears draft + resets composer</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">Composer — Draft State (Same Desk)</div></div>
+
+  <div style="max-width: 640px;">
+    <div class="composer-draft">
+      <div class="composer-draft__chip">
+        <span>
+          <span class="composer-draft__chip-label">📝 Draft ready</span>
+          <span class="composer-draft__chip-desk">· Bittensor desk</span>
+        </span>
+        <button class="composer-draft__chip-clear">[× Clear]</button>
+      </div>
+      <div class="composer-draft__body">
+        <textarea class="composer-draft__textarea" rows="4" style="width:100%;background:transparent;border:none;outline:none;font-family:var(--v2-font-sans);font-size:13px;color:var(--v2-text-primary);resize:none;min-height:80px;line-height:1.5;" placeholder="Ask about your subnets…">What is the current TAO price and my delegation status across all hotkeys?</textarea>
+      </div>
+      <div class="composer-draft__footer">
+        <button class="composer-draft__cancel">Cancel</button>
+        <button class="composer-draft__send">Send →</button>
+      </div>
+    </div>
+    <div class="annotation annotation--warning" style="margin-top: 8px;">
+      <div class="annotation__label">No Auto-Send</div>
+      <div class="annotation__body">Enter key does NOT send — only clicking <strong>[Send →]</strong> sends.<br>Test: DevTools → Network → click any action → verify no <code>POST</code> until [Send →] clicked.</div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">Composer — Draft State (Cross-Desk)</div></div>
+
+  <div style="max-width: 640px;">
+    <div class="composer-draft">
+      <div class="composer-draft__chip">
+        <span>
+          <span class="composer-draft__chip-label">📝 Draft from</span>
+          <span class="composer-draft__chip-desk" style="color: var(--v2-desk-bittensor);">Bittensor</span>
+          <span style="font-size: 10px; color: var(--v2-status-warning); margin-left: 8px;">[Switch to Bittensor to send]</span>
+        </span>
+        <button class="composer-draft__chip-clear">[× Clear]</button>
+      </div>
+      <div class="composer-draft__body">
+        <textarea class="composer-draft__textarea" rows="3" style="width:100%;background:transparent;border:none;outline:none;font-family:var(--v2-font-sans);font-size:13px;color:var(--v2-text-primary);resize:none;min-height:60px;line-height:1.5;">What is the current TAO price and my delegation status?</textarea>
+      </div>
+      <div class="composer-draft__footer">
+        <button class="composer-draft__cancel">Cancel</button>
+        <button class="composer-draft__send composer-draft__send--cross-desk">Go to Bittensor →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-header"><div class="section-title">Draft Persistence Rules</div></div>
+
+  <div style="max-width: 600px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--v2-border-default);">
+          <th style="text-align: left; padding: 8px 12px; color: var(--v2-text-tertiary); font-weight: 600;">Scenario</th>
+          <th style="text-align: left; padding: 8px 12px; color: var(--v2-text-tertiary); font-weight: 600;">Draft behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom: 1px solid var(--v2-border-subtle);">
+          <td style="padding: 8px 12px; color: var(--v2-text-secondary);">Navigate away</td>
+          <td style="padding: 8px 12px; color: var(--v2-status-warning);">Cleared — not persisted</td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--v2-border-subtle);">
+          <td style="padding: 8px 12px; color: var(--v2-text-secondary);">Switch desk</td>
+          <td style="padding: 8px 12px; color: var(--v2-status-success);">Persists — desk chip updates to origin</td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--v2-border-subtle);">
+          <td style="padding: 8px 12px; color: var(--v2-text-secondary);">Page refresh</td>
+          <td style="padding: 8px 12px; color: var(--v2-status-warning);">Cleared — session-scoped only</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; color: var(--v2-text-secondary);">Send →</td>
+          <td style="padding: 8px 12px; color: var(--v2-status-warning);">Cleared on send</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</style>
 
 <script>
 function showScreen(id) {
