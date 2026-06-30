@@ -57,6 +57,7 @@ const requiredFiles = [
   "docs/ui/matterhorn-desk-v2/BOXINESS-PUNCHLIST.md",
   "docs/ui/matterhorn-desk-v2/MCP-DESK-V2-SPEC.md",
   "docs/ui/matterhorn-desk-v2/SETTINGS-PRODUCT-TRUTH.md",
+  "docs/ui/matterhorn-desk-v2/WALLET-PROFILE-MCP-DRAFT-SPEC.md",
 ];
 for (const f of requiredFiles) {
   if (fileExists(f)) pass(`File exists: ${f}`);
@@ -84,6 +85,10 @@ const screens = [
   ["Protocol Icons (P5)",         "screen-icons"],
   ["Mobile Responsive",           "screen-mobile"],
   ["Do Not Build Patterns",       "screen-forbidden"],
+  ["Wallet Panel",                "screen-wallet"],
+  ["Profile Panel",               "screen-profile"],
+  ["MCP Card Anatomy",            "screen-mcp-card"],
+  ["Chat Draft State",            "screen-chat-draft"],
 ];
 for (const [label, id] of screens) {
   if (html.includes(`id="${id}"`)) {
@@ -493,7 +498,16 @@ const htmlWithoutMcpAnnotations = mcpScreenMatch
   ? htmlWithoutForbiddenScreen.replace(mcpScreenMatch[0], "")
   : htmlWithoutForbiddenScreen;
 
-const htmlClean = htmlWithoutMcpAnnotations
+// Strip Wallet, Profile, MCP Card, and Chat Draft screens — they are annotated specs,
+// not real UI, and contain forbidden phrases as documentation/copy examples
+const annotatedScreens = ["screen-wallet", "screen-profile", "screen-mcp-card", "screen-chat-draft"];
+let htmlForStrictScan = htmlWithoutMcpAnnotations;
+for (const screenId of annotatedScreens) {
+  const match = htmlForStrictScan.match(new RegExp(`id="${screenId}"[\\s\\S]*?<\\/section>`));
+  if (match) htmlForStrictScan = htmlForStrictScan.replace(match[0], "");
+}
+
+const htmlClean = htmlForStrictScan
   .replace(/<script[\s\S]*?<\/script>/gi, "")
   .replace(/<style[\s\S]*?<\/style>/gi, "");
 
@@ -725,6 +739,127 @@ for (const [needle, label] of settingsChecks) {
     pass(`Settings truth: ${label}`);
   } else {
     fail(`Settings truth: ${label}`, "missing");
+  }
+}
+
+// ── 14. Wallet + Profile + MCP Cards + Draft State spec ─────────
+
+const wpSpec = fileExists("docs/ui/matterhorn-desk-v2/WALLET-PROFILE-MCP-DRAFT-SPEC.md")
+  ? read("docs/ui/matterhorn-desk-v2/WALLET-PROFILE-MCP-DRAFT-SPEC.md")
+  : "";
+
+const wpChecks = [
+  // Wallet panel
+  ["Web (browser)",                         "Wallet: web runtime documented"],
+  ["Desktop (Electron)",                     "Wallet: desktop runtime documented"],
+  ["window.ethereum",                       "Wallet: injected wallet API documented"],
+  ["external signer",                        "Wallet: external signer pattern documented"],
+  ["5CfTC",                                 "Wallet: address truncation documented"],
+  ["5CfTC…3bX9",                           "Wallet: truncated address format"],
+  ["Matterhorn never holds",                 "Wallet: no-custody statement"],
+  ["never holds your keys",                  "Wallet: keys never held statement"],
+  ["seed phrases",                          "Wallet: seed phrase no-custody"],
+  ["Bittensor",                             "Wallet: Bittensor protocol map"],
+  ["Hyperliquid",                           "Wallet: Hyperliquid protocol map"],
+  ["Polymarket",                            "Wallet: Polymarket protocol map"],
+  ["Browse",                                "Wallet: Browse button copy"],
+  ["Set up",                                "Wallet: Set up button copy"],
+  ["planned",                               "Wallet: Planned badge for unwired actions"],
+  ["Submit order",                         "Wallet: forbids submit order"],
+  ["confirm trade",                         "Wallet: forbids confirm trade"],
+  ["sign transaction",                       "Wallet: forbids sign transaction"],
+  ["place bet on your behalf",               "Wallet: forbids place bet"],
+  // Profile panel
+  ["Signed out",                            "Profile: signed-out state documented"],
+  ["Local only",                            "Profile: local-only state documented"],
+  ["Cloud active",                         "Profile: cloud-active state documented"],
+  ["Cloud not configured",                   "Profile: cloud-unconfigured state documented"],
+  ["Documentation",                         "Profile: Documentation link"],
+  ["Support",                              "Profile: Support link"],
+  ["Privacy Policy",                        "Profile: Privacy Policy link"],
+  ["openwork",                             "Profile: forbids openwork"],
+  ["opencodec",                           "Profile: forbids opencode"],
+  ["lighthouse",                           "Profile: forbids lighthouse"],
+  ["harness",                             "Profile: forbids harness"],
+  // MCP cards
+  ["Inside Matterhorn",                     "MCP: Inside Matterhorn run statement"],
+  ["Outside Matterhorn",                    "MCP: Outside Matterhorn run statement"],
+  ["Sends intent externally",               "MCP: external intent statement"],
+  ["Catalog Card",                          "MCP: catalog card type documented"],
+  ["Installed Card",                        "MCP: installed card type documented"],
+  ["No credentials required",               "MCP: no credentials safety copy"],
+  ["api secret",                            "MCP: forbids api secret in card"],
+  ["private key",                           "MCP: forbids private key in card"],
+  ["submit order",                         "MCP card: forbids submit order"],
+  ["sign transaction",                       "MCP card: forbids sign transaction"],
+  // Draft state
+  ["Draft in chat",                         "Draft: correct action copy"],
+  ["Insert draft",                         "Draft: Insert draft copy"],
+  ["Draft ready",                           "Draft: Draft ready state label"],
+  ["Draft from",                            "Draft: cross-desk draft copy"],
+  ["Go to",                                 "Draft: cross-desk navigation copy"],
+  ["Send",                                  "Draft: explicit Send button"],
+  ["No hidden auto-send",                    "Draft: no auto-send documented"],
+  ["session-scoped",                        "Draft: session-scoped only"],
+  ["page refresh",                          "Draft: clears on refresh rule"],
+  ["Enter key does NOT send",                "Draft: Enter does not send rule"],
+  // Responsive
+  ["768px",                                 "Wallet: tablet responsive documented"],
+  ["390px",                                "Wallet: mobile responsive documented"],
+  ["bottom sheet",                          "Wallet: mobile bottom sheet"],
+  ["visualViewport",                        "Draft: visualViewport keyboard API"],
+  // QA checklist
+  ["QA Checklist",                          "W/P spec: QA checklist present"],
+  ["Screenshot Gates",                      "W/P spec: screenshot gates present"],
+  ["pnpm test:minimax-ui-system",           "Gate: ui-system gate documented"],
+  ["pnpm test:market-execution-safety-gate", "Gate: market execution gate documented"],
+];
+
+for (const [needle, label] of wpChecks) {
+  if (wpSpec.toLowerCase().includes(needle.toLowerCase())) {
+    pass(`W/P spec: ${label}`);
+  } else {
+    fail(`W/P spec: ${label}`, "missing");
+  }
+}
+
+// HTML: new screen elements
+const wpHtmlChecks = [
+  ["wallet-runtime-badge--web",           "Wallet HTML: web runtime badge"],
+  ["wallet-runtime-badge--desktop",      "Wallet HTML: desktop runtime badge"],
+  ["wallet-address-row",                  "Wallet HTML: truncated address row"],
+  ["wallet-safety-strip",                "Wallet HTML: no-custody safety strip"],
+  ["protocol-map",                       "Wallet HTML: protocol map"],
+  ["protocol-row",                       "Wallet HTML: protocol row"],
+  ["protocol-row__badge--active",         "Wallet HTML: Active badge"],
+  ["protocol-row__badge--ext",            "Wallet HTML: Ext signer badge"],
+  ["protocol-row__badge--planned",        "Wallet HTML: Planned badge"],
+  ["cloud-status-badge",                 "Profile HTML: cloud status badge"],
+  ["cloud-status-badge--active",         "Profile HTML: active cloud badge"],
+  ["cloud-status-badge--local",          "Profile HTML: local badge"],
+  ["cloud-status-badge--unconfigured",   "Profile HTML: unconfigured badge"],
+  ["profile-avatar",                     "Profile HTML: avatar component"],
+  ["profile-avatar--signed-out",         "Profile HTML: signed-out avatar"],
+  ["mcp-card",                           "MCP card HTML: card component"],
+  ["mcp-card__runs-badge--inside",        "MCP card HTML: Inside badge"],
+  ["mcp-card__runs-badge--outside",       "MCP card HTML: Outside badge"],
+  ["mcp-card__runs-badge--external",      "MCP card HTML: external badge"],
+  ["composer-draft",                     "Draft HTML: composer component"],
+  ["composer-draft__chip",               "Draft HTML: draft chip"],
+  ["composer-draft__chip-desk",          "Draft HTML: desk context in chip"],
+  ["composer-draft__send",               "Draft HTML: Send button"],
+  ["composer-draft__send--cross-desk",   "Draft HTML: cross-desk Send button"],
+  ["Draft in chat",                      "Draft HTML: correct prompt action copy"],
+  ["Insert draft",                       "Draft HTML: Insert draft copy"],
+  ["Draft ready",                        "Draft HTML: draft ready state label"],
+  ["5CfTC…3bX9",                        "Wallet HTML: truncated address visible"],
+];
+
+for (const [needle, label] of wpHtmlChecks) {
+  if (html.includes(needle)) {
+    pass(`W/P HTML: ${label}`);
+  } else {
+    fail(`W/P HTML: ${label}`, "missing");
   }
 }
 
