@@ -744,7 +744,7 @@ export function LexicalPromptEditor(props: EditorProps) {
         <PlainTextPlugin
           contentEditable={
             <ContentEditable
-              className="min-h-[60px] max-h-[280px] w-full resize-none overflow-y-auto bg-transparent text-[15px] leading-6 text-dls-text outline-none placeholder:text-dls-secondary [&_p]:min-h-[1.5rem] [&_p]:m-0"
+              className="min-h-[96px] max-h-[320px] w-full resize-none overflow-y-auto bg-transparent text-[16px] leading-7 text-dls-text outline-none placeholder:text-dls-secondary [&_p]:min-h-[1.75rem] [&_p]:m-0"
               aria-placeholder={props.placeholder}
               placeholder={<span />}
               onPaste={props.onPaste}
@@ -754,7 +754,7 @@ export function LexicalPromptEditor(props: EditorProps) {
             />
           }
           placeholder={
-            <div className="pointer-events-none absolute left-0 top-0 text-[15px] leading-6 text-dls-secondary/70">
+            <div className="pointer-events-none absolute left-0 top-0 text-[16px] leading-7 text-dls-secondary/68">
               {props.placeholder}
             </div>
           }

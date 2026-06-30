@@ -895,7 +895,7 @@ export function ReactSessionComposer(props: ComposerProps) {
 
   const panelRoundedClass =
     mentionOpen || slashOpen
-      ? "rounded-t-lg"
+      ? "rounded-t-[24px]"
       : "";
 
   const renderSlashMenu = () => {
@@ -1004,7 +1004,7 @@ export function ReactSessionComposer(props: ComposerProps) {
   return (
     <div
       ref={rootRef}
-      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/95 to-transparent px-4 pb-5 md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-3"}`}
+      className={`sticky bottom-0 ${toolMenuOpen ? "z-50" : "z-20"} bg-gradient-to-t from-dls-surface via-dls-surface/98 to-transparent px-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] md:px-8 ${props.compactTopSpacing ? "pt-0" : "pt-4"}`}
       style={{ contain: "layout style" }}
       onKeyDownCapture={handleKeyDownCapture}
       onCompositionStart={() => {
@@ -1014,19 +1014,20 @@ export function ReactSessionComposer(props: ComposerProps) {
         imeComposingRef.current = false;
       }}
     >
-      <div className="max-w-[800px] mx-auto">
+      <div className="mx-auto max-w-[920px]">
         {/* Main composer panel */}
         <div
-          className={`relative overflow-visible rounded-lg bg-dls-surface/96 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.14)] ring-1 ring-dls-border/18 transition-all ${panelRoundedClass}`}
+          data-testid="session-composer-shell"
+          className={`relative overflow-visible rounded-[24px] border border-[rgba(var(--matterhorn-blue-rgb),0.34)] bg-dls-surface/98 shadow-[0_18px_44px_rgba(0,0,0,0.28)] ring-1 ring-white/5 transition-[border-color,box-shadow] focus-within:border-[rgba(var(--matterhorn-blue-rgb),0.62)] focus-within:shadow-[0_20px_54px_rgba(0,0,0,0.34),0_0_0_1px_rgba(var(--matterhorn-blue-rgb),0.20)] ${panelRoundedClass}`}
         >
-          {props.topAccessory ? <div className="relative z-10">{props.topAccessory}</div> : null}
+          {props.topAccessory ? <div className="relative z-10 border-b border-dls-border/25 px-4 py-3 sm:px-5">{props.topAccessory}</div> : null}
           <ReactComposerNotice notice={props.notice} />
 
           {renderMentionMenu()}
           {renderSlashMenu()}
 
           {props.attachments.length > 0 ? (
-            <div className="mx-5 mt-5 flex flex-wrap gap-2 md:mx-6">
+            <div className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-5">
               {props.attachments.map((attachment) => (
                 <div key={attachment.id} className="flex items-center gap-2 rounded-lg bg-gray-2/80 px-3 py-2 text-xs text-gray-10 ring-1 ring-gray-6/45">
                   {isImageAttachment(attachment) && attachment.previewUrl ? (
@@ -1066,7 +1067,7 @@ export function ReactSessionComposer(props: ComposerProps) {
           */}
 
           {dropzoneActive ? (
-            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-lg border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
+            <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-[20px] border border-dashed border-dls-accent bg-[color:color-mix(in_oklab,var(--dls-accent)_10%,transparent)]">
               <div className="rounded-lg bg-dls-surface/95 px-5 py-4 text-center shadow-[0_8px_22px_rgba(0,0,0,0.14)] backdrop-blur-sm">
                 <div className="text-sm font-medium text-dls-text">{t("composer.attach_files")}</div>
                 <div className="mt-1 text-xs text-dls-secondary">{t("composer.any_file_type_supported")}</div>
@@ -1074,7 +1075,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             </div>
           ) : null}
 
-          <div className="px-4 pt-3 pb-2">
+          <div className="px-4 pb-3 pt-4 sm:px-5 sm:pb-4">
             {/* Editor */}
             <LexicalPromptEditor
               value={props.draft}
@@ -1167,7 +1168,7 @@ export function ReactSessionComposer(props: ComposerProps) {
             />
 
             {/* Action row — attach/inbox/tools on the left, send on the right */}
-            <div className="mt-2 flex items-end justify-between gap-2">
+            <div className="mt-3 flex items-end justify-between gap-3">
               <div className="flex items-center gap-1.5">
                 <input
                   ref={(element) => {
@@ -1184,7 +1185,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 />
                 <button
                   type="button"
-                  className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-md text-gray-10 transition-colors hover:bg-gray-3 ${
+                  className={`inline-flex h-10 max-h-10 w-10 items-center justify-center rounded-full bg-gray-2/45 text-gray-10 ring-1 ring-dls-border/25 transition-colors hover:bg-gray-3 hover:text-gray-12 ${
                     !props.attachmentsEnabled ? "cursor-not-allowed opacity-60" : ""
                   }`}
                   onClick={() => {
@@ -1199,7 +1200,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                 <div ref={toolMenuRef} className="relative">
                   <button
                     type="button"
-                    className={`inline-flex h-9 max-h-9 w-9 items-center justify-center rounded-md transition-colors ${toolMenuOpen ? "bg-gray-3 text-gray-12" : "text-gray-10 hover:bg-gray-3"}`}
+                    className={`inline-flex h-10 max-h-10 w-10 items-center justify-center rounded-full ring-1 ring-dls-border/25 transition-colors ${toolMenuOpen ? "bg-gray-3 text-gray-12" : "bg-gray-2/45 text-gray-10 hover:bg-gray-3 hover:text-gray-12"}`}
                     onClick={() => {
                       setMentionOpen(false);
                       setMentionItems([]);
@@ -1410,7 +1411,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                   <button
                     type="button"
                     onClick={props.onStop}
-                    className="inline-flex h-9 max-h-9 items-center gap-2 rounded-md bg-gray-12 px-4 text-[13px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
+                    className="inline-flex h-11 max-h-11 items-center gap-2 rounded-full bg-gray-12 px-5 text-[14px] font-medium text-gray-1 transition-colors hover:bg-gray-11"
                     title={t("composer.stop")}
                   >
                     <Square size={12} fill="currentColor" />
@@ -1421,7 +1422,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     type="button"
                     onClick={canSend ? props.onSend : props.busy ? props.onStop : undefined}
                     disabled={props.disabled || (!canSend && !props.busy)}
-                    className={`inline-flex h-9 max-h-9 items-center gap-2 rounded-md px-4 text-[13px] font-medium transition-colors ${
+                    className={`inline-flex h-11 max-h-11 items-center gap-2 rounded-full px-5 text-[14px] font-semibold shadow-[0_8px_24px_rgba(var(--matterhorn-blue-rgb),0.16)] transition-colors ${
                       !canSend || props.disabled
                         ? "bg-gray-4 text-gray-10"
                         : "bg-[var(--dls-accent)] text-[var(--dls-accent-fg)] hover:bg-[var(--dls-accent-hover)]"
@@ -1438,7 +1439,7 @@ export function ReactSessionComposer(props: ComposerProps) {
         </div>
 
         {/* Below-panel control strip: agent + model + behavior variant */}
-        <div className="mt-1 flex items-center justify-between px-1">
+        <div className="mt-2 flex items-center justify-between px-2">
           <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
             {/* TODO: Decide what to do with agent selection before showing this control again.
             <div ref={agentMenuRef} className="relative">
