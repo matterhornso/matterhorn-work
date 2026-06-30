@@ -1092,6 +1092,30 @@ function McpViewHeader(props: { connectedCount: number }) {
   );
 }
 
+function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; compact?: boolean }) {
+  const facts = [
+    "Install command available",
+    props.card.backendBacked === false ? "UI Control is marked preview" : "Backend tools available",
+    "Not connected until configured",
+  ];
+
+  return (
+    <div className={props.compact ? "mt-3 flex flex-wrap gap-1.5" : "mt-3 flex flex-wrap gap-2"}>
+      {facts.map((fact) => (
+        <span
+          key={fact}
+          className={props.compact
+            ? "rounded-full bg-dls-hover/45 px-2 py-0.5 text-[10px] text-dls-secondary"
+            : "rounded-full bg-dls-hover/45 px-2.5 py-1 text-[11px] text-dls-secondary"
+          }
+        >
+          {fact}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function MatterhornMcpProductSection(props: {
   cards: MatterhornMcpProductCard[];
   onCopyCommand: (command: string) => void;
@@ -1155,6 +1179,7 @@ function MatterhornMcpProductSection(props: {
                     {card.statusLabel ?? (card.backendBacked === false ? "Preview" : isProtocol ? "Protocol MCP" : "Server-backed")}
                   </span>
                 </div>
+                <MatterhornMcpReadinessFacts card={card} compact={props.compact} />
 
                 <div className={props.compact ? "mt-3 space-y-2" : "mt-4 grid gap-3 @lg/matterhorn-mcps:grid-cols-[minmax(0,1fr)_auto]"}>
                   <div className={props.compact ? "min-w-0 border-l border-dls-border/30 pl-3" : "min-w-0 border-l border-dls-border/30 pl-3"}>

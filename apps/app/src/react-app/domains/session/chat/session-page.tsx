@@ -321,11 +321,12 @@ function ProtocolDeskEmptyState({
   onBackHome,
 }: {
   panel: VenueSidePanel;
-  onUsePrompt: (prompt: string) => void;
+  onUsePrompt: (prompt: string, title?: string) => void;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
+  const [draftedPromptTitle, setDraftedPromptTitle] = useState<string | null>(null);
   const safeBoundary = panel === "bittensor"
     ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
     : "Read and preview only. Can submit: No. Live submission: Off. External signer/client required.";
@@ -385,18 +386,44 @@ function ProtocolDeskEmptyState({
             key={item.title}
             type="button"
             className="group grid w-full grid-cols-[minmax(0,1fr)] gap-2 px-4 py-4 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-            onClick={() => onUsePrompt(item.prompt)}
+            onClick={() => {
+              setDraftedPromptTitle(item.title);
+              onUsePrompt(item.prompt, item.title);
+            }}
           >
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
             <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open chat draft" title="Open chat draft">
-              Draft in chat →
+              Create editable draft
             </span>
           </button>
         ))}
       </div>
+      {draftedPromptTitle ? (
+        <div
+          aria-live="polite"
+          className="flex flex-col gap-2 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-4 py-3 text-xs leading-5 text-dls-secondary shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.16)] sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="min-w-0">
+            <span className="font-semibold uppercase tracking-[0.14em] text-[var(--matterhorn-desk-color)]">
+              Draft ready
+            </span>
+            <p className="mt-1">
+              <span className="font-medium text-dls-text">{draftedPromptTitle}</span> is in the composer. Nothing has
+              been sent. Review or edit it, then press Ask.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="w-fit rounded-full bg-dls-surface/70 px-3 py-1.5 font-semibold text-dls-secondary transition-colors hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            onClick={() => setDraftedPromptTitle(null)}
+          >
+            Hide
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1448,7 +1475,6 @@ export function SessionPage(props: SessionPageProps) {
                         onBackHome={() => setCurrentSidePanel(null)}
                         onUsePrompt={(prompt) => {
                           props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
-                          setCurrentSidePanel(null);
                         }}
                       />
                     </div>

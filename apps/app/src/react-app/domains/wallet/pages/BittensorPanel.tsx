@@ -2378,7 +2378,7 @@ function BittensorStandardActionList({
           </div>
           <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
             <span className="text-xs font-medium text-[var(--protocol-desk-accent)] group-hover:text-dls-text">
-              Insert editable prompt
+              Create chat draft
             </span>
           </div>
         </button>
