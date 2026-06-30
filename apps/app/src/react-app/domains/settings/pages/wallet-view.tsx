@@ -68,7 +68,7 @@ function WalletProtocolSupportMap(props: { connected: boolean }) {
     {
       label: "EVM tools",
       status: props.connected ? "Connected" : "Needs setup",
-      detail: "MetaMask, Rabby, or another injected wallet can support EVM handoffs when available in this runtime.",
+      detail: "Web browser builds can use MetaMask, Rabby, or another injected wallet when the extension injects into the page. Desktop app builds do not get browser extension injection; use an external signer now, with WalletConnect or deep-link bridge support as the next wallet path.",
       tone: props.connected ? "text-emerald-300 bg-emerald-500/10" : "text-sky-300 bg-sky-500/10",
     },
     {
@@ -107,6 +107,48 @@ function WalletProtocolSupportMap(props: { connected: boolean }) {
               <span className={`shrink-0 rounded-md px-2 py-0.5 font-medium ${row.tone}`}>{row.status}</span>
             </div>
             <p className="text-dls-secondary">{row.detail}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WalletRuntimeExplainer(props: { compact?: boolean }) {
+  const rows = [
+    {
+      label: "Web browser",
+      detail: "Injected wallets such as MetaMask or Rabby can appear when their extension is installed and allowed on the Matterhorn page.",
+    },
+    {
+      label: "Desktop app",
+      detail: "Browser wallet extensions do not inject into Electron. Desktop users should use the external signer flow today; WalletConnect or deep-link bridge support is the planned native wallet path.",
+    },
+    {
+      label: "Remote worker",
+      detail: "A remote worker can read public data and prepare previews, but signing still happens in the user's own wallet or protocol client.",
+    },
+  ];
+
+  return (
+    <section className={cn(
+      "rounded-xl bg-sky-500/10",
+      props.compact ? "px-3 py-3" : "px-4 py-4",
+    )}>
+      <div className="flex items-start gap-2">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-sky-300" />
+        <div className="min-w-0">
+          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">Wallet runtime behavior</h4>
+          <p className="mt-1 text-xs leading-5 text-dls-secondary">
+            Matterhorn keeps wallet behavior explicit so web and desktop users know where signing actually happens.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 divide-y divide-sky-400/15">
+        {rows.map((row) => (
+          <div key={row.label} className="grid gap-1 py-2 text-xs leading-5">
+            <span className="font-medium text-dls-text">{row.label}</span>
+            <span className="text-dls-secondary">{row.detail}</span>
           </div>
         ))}
       </div>
@@ -294,6 +336,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
         )}
 
         <WalletProtocolSupportMap connected={state.isConnected} />
+        <WalletRuntimeExplainer compact />
 
         <WalletBoundaryList />
       </SettingsStack>
@@ -361,6 +404,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
           <WalletProtocolSupportMap connected={state.isConnected} />
+          <WalletRuntimeExplainer />
           <WalletBoundaryList />
         </SettingsSection>
       </SettingsStack>
