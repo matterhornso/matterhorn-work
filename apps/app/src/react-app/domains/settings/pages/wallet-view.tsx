@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId, useSwitchChain } from "wagmi";
 import { formatUnits } from "viem";
 import {
@@ -14,18 +14,26 @@ import {
   ChevronDown,
   Clock,
   ShieldCheck,
+  MonitorSmartphone,
+  Globe,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import type { WalletStore, WalletStoreSnapshot } from "../../wallet/state/wallet-store";
+import type { WalletStore } from "../../wallet/state/wallet-store";
 import { useWalletStore } from "../../wallet/state/wallet-store";
 import { CHAIN_NAMES, CHAIN_LIST } from "../../../infra/chains";
-import { USDC_BY_CHAIN } from "../../../infra/contracts";
 import { SettingsSection, SettingsSectionHeader, SettingsSectionHeaderTitle, SettingsSectionHeaderDescription, SettingsStack } from "../settings-section";
+import {
+  getWalletRuntimeCapability,
+  type WalletRuntimeCapability,
+  type WalletRuntime,
+  type WalletProtocol,
+  type WalletProtocolCapability,
+} from "@matterhorn-work/types";
+import { isDesktopRuntime, isElectronRuntime } from "../../../../app/utils";
 
 function truncateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -47,48 +55,92 @@ export type WalletSettingsViewProps = {
   compact?: boolean;
 };
 
-function WalletBoundaryList() {
+function WalletBoundaryList({ safetyCopy }: {
+  safetyCopy: WalletRuntimeCapability["safetyCopy"];
+}) {
   return (
     <div className="divide-y divide-dls-border/45 text-xs leading-5 text-dls-secondary">
-      <p className="py-2">
-        <span className="font-medium text-dls-text">Bittensor:</span> public SS58 reads and external Bittensor-compatible signing only.
-      </p>
-      <p className="py-2">
-        <span className="font-medium text-dls-text">Hyperliquid and Polymarket:</span> read, preview, receipt, and handoff flows; live submission stays off.
-      </p>
-      <p className="py-2">
-        <span className="font-medium text-dls-text">Never paste:</span> seed phrases, private keys, raw signatures, signed payloads, API secrets, or wallet exports.
-      </p>
+      <p className="py-2">{safetyCopy.publicAddressLine}</p>
+      <p className="py-2">{safetyCopy.externalSignerLine}</p>
+      <p className="py-2">{safetyCopy.forbiddenSecretsLine}</p>
     </div>
   );
 }
 
-function WalletProtocolSupportMap(props: { connected: boolean }) {
-  const rows = [
+function protocolLabelAndDetail(
+  protocol: WalletProtocol,
+  cap: WalletProtocolCapability,
+): { label: string; detail: string; tone: string } {
+  const readLabel = cap.canRead ? "Read" : "—";
+  const previewLabel = cap.canPreview ? "Preview" : "—";
+  const submitLabel = cap.canSubmit ? "Submit" : cap.canPreview ? "Preview only" : "—";
+  const signerNote =
+    cap.signerRequirement === "external_signer"
+      ? " External signer required for writes."
+      : cap.signerRequirement === "client_signer"
+        ? " Client signer required."
+        : "";
+
+  switch (protocol) {
+    case "bittensor":
+      return {
+        label: "Bittensor",
+        detail: `${readLabel} public SS58/coldkey data. ${previewLabel} extrinsics and receipt evidence. ${submitLabel}.${signerNote}`,
+        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
+      };
+    case "hyperliquid":
+      return {
+        label: "Hyperliquid",
+        detail: `${readLabel} markets, orderbooks, and funding. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
+        tone: cap.canRead ? "text-blue-300 bg-blue-500/10" : "text-gray-500 bg-gray-500/10",
+      };
+    case "polymarket":
+      return {
+        label: "Polymarket",
+        detail: `${readLabel} markets, compliance, and liquidity. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
+        tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-gray-500 bg-gray-500/10",
+      };
+  }
+}
+
+function evmConnectorStatusLabel(state: string, connected: boolean): { label: string; tone: string } {
+  if (connected) return { label: "Connected", tone: "text-emerald-300 bg-emerald-500/10" };
+  switch (state) {
+    case "available": return { label: "Needs setup", tone: "text-sky-300 bg-sky-500/10" };
+    case "needs_extension": return { label: "Extension needed", tone: "text-amber-300 bg-amber-500/10" };
+    case "unsupported_runtime": return { label: "Not supported here", tone: "text-gray-400 bg-gray-500/10" };
+    default: return { label: "Unavailable", tone: "text-gray-500 bg-gray-500/10" };
+  }
+}
+
+function WalletProtocolSupportMap(props: {
+  capability: WalletRuntimeCapability;
+  connected: boolean;
+}) {
+  const evm = evmConnectorStatusLabel(props.capability.evmConnectorState, props.connected);
+  const rows: { label: string; status: string; detail: string; tone: string }[] = [
     {
-      label: "EVM tools",
-      status: props.connected ? "Connected" : "Needs setup",
-      detail: "Web browser builds can use MetaMask, Rabby, or another injected wallet when the extension injects into the page. Desktop app builds do not get browser extension injection; use an external signer now, with WalletConnect or deep-link bridge support as the next wallet path.",
-      tone: props.connected ? "text-emerald-300 bg-emerald-500/10" : "text-sky-300 bg-sky-500/10",
+      label: "EVM wallet",
+      status: evm.label,
+      detail: props.capability.supportsInjectedEvm
+        ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
+        : "Injected wallets are not available in this runtime. Use the external signer flow.",
+      tone: evm.tone,
     },
-    {
-      label: "Bittensor",
-      status: "External signer",
-      detail: "Use public SS58/coldkey reads here; stake, transfer, and receipt flows stay unsigned until you review elsewhere.",
-      tone: "text-cyan-300 bg-cyan-500/10",
-    },
-    {
-      label: "Hyperliquid",
-      status: "Preview only",
-      detail: "Read orderbooks, exposure, and funding context. Live market submission remains off in Matterhorn.",
-      tone: "text-blue-300 bg-blue-500/10",
-    },
-    {
-      label: "Polymarket",
-      status: "Preview only",
-      detail: "Research markets, compliance, liquidity, and handoff context. Bet placement stays outside Matterhorn.",
-      tone: "text-violet-300 bg-violet-500/10",
-    },
+    ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][]).map(
+      ([protocol, cap]) => {
+        const { label, detail, tone } = protocolLabelAndDetail(protocol, cap);
+        const submitStatus =
+          cap.canSubmit
+            ? "Submit"
+            : cap.canPreview
+              ? "Preview only"
+              : cap.canRead
+                ? "Read only"
+                : "Unavailable";
+        return { label, status: submitStatus, detail, tone };
+      },
+    ),
   ];
 
   return (
@@ -114,21 +166,39 @@ function WalletProtocolSupportMap(props: { connected: boolean }) {
   );
 }
 
-function WalletRuntimeExplainer(props: { compact?: boolean }) {
-  const rows = [
-    {
-      label: "Web browser",
-      detail: "Injected wallets such as MetaMask or Rabby can appear when their extension is installed and allowed on the Matterhorn page.",
-    },
-    {
-      label: "Desktop app",
-      detail: "Browser wallet extensions do not inject into Electron. Desktop users should use the external signer flow today; WalletConnect or deep-link bridge support is the planned native wallet path.",
-    },
-    {
-      label: "Remote worker",
-      detail: "A remote worker can read public data and prepare previews, but signing still happens in the user's own wallet or protocol client.",
-    },
-  ];
+const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe; detail: string }> = {
+  web: {
+    label: "Web browser",
+    icon: Globe,
+    detail: "Injected wallets such as MetaMask or Rabby can appear when their extension is installed and allowed on the Matterhorn page.",
+  },
+  desktop: {
+    label: "Desktop app",
+    icon: MonitorSmartphone,
+    detail: "Browser wallet extensions do not inject into Electron. Desktop users should use the external signer flow today; WalletConnect or deep-link bridge support is the planned native wallet path.",
+  },
+  electron: {
+    label: "Desktop app",
+    icon: MonitorSmartphone,
+    detail: "Electron builds do not support injected wallets. Use external-signer handoffs for any on-chain action.",
+  },
+  unknown: {
+    label: "Unknown runtime",
+    icon: MonitorSmartphone,
+    detail: "Wallet capabilities are unknown for this runtime. Use the web or desktop app for the full feature set.",
+  },
+};
+
+function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; compact?: boolean }) {
+  const { label, icon: RuntimeIcon, detail } = RUNTIME_LABELS[props.capability.runtime];
+  const strategyNote = (() => {
+    switch (props.capability.desktopWalletStrategy) {
+      case "external_signer": return "External signer handoffs are available in this runtime.";
+      case "walletconnect_planned": return "WalletConnect integration is planned for this runtime.";
+      case "deep_link_planned": return "Deep-link bridge support is planned for this runtime.";
+      default: return "Native wallet strategy is not yet available in this runtime.";
+    }
+  })();
 
   return (
     <section className={cn(
@@ -144,13 +214,15 @@ function WalletRuntimeExplainer(props: { compact?: boolean }) {
           </p>
         </div>
       </div>
-      <div className="mt-3 divide-y divide-sky-400/15">
-        {rows.map((row) => (
-          <div key={row.label} className="grid gap-1 py-2 text-xs leading-5">
-            <span className="font-medium text-dls-text">{row.label}</span>
-            <span className="text-dls-secondary">{row.detail}</span>
+      <div className="mt-3 space-y-2 divide-y divide-sky-400/15">
+        <div className="flex items-start gap-2 py-2 text-xs leading-5">
+          <RuntimeIcon className="mt-0.5 size-3.5 shrink-0 text-sky-300" />
+          <div>
+            <span className="font-medium text-dls-text">{label}</span>
+            <span className="text-dls-secondary"> — {detail}</span>
           </div>
-        ))}
+        </div>
+        <div className="py-2 text-xs leading-5 text-dls-secondary">{strategyNote}</div>
       </div>
     </section>
   );
@@ -248,6 +320,20 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
     }
   }, [wagmiAddress]);
 
+  const runtime: WalletRuntime = isElectronRuntime()
+    ? "electron"
+    : isDesktopRuntime()
+      ? "desktop"
+      : "web";
+  const capability = useMemo(() => getWalletRuntimeCapability(runtime), [runtime]);
+
+  const runtimeBadgeLabel: Record<WalletRuntime, string> = {
+    web: "Web",
+    desktop: "Desktop",
+    electron: "Desktop",
+    unknown: "Unknown",
+  };
+
   if (compact) {
     return (
       <SettingsStack className="matterhorn-wallet-rail max-w-none gap-4">
@@ -259,14 +345,19 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
                 One wallet surface for EVM handoffs. Bittensor still uses public SS58 reads and external signing.
               </p>
             </div>
-            <span className={cn(
-              "shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium",
-              state.isConnected
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                : "border-sky-500/30 bg-sky-500/10 text-sky-300",
-            )}>
-              {state.isConnected ? "Connected" : "Needs setup"}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 rounded-md border border-dls-border/30 bg-dls-surface-muted/30 px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                {runtimeBadgeLabel[runtime]}
+              </span>
+              <span className={cn(
+                "shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium",
+                state.isConnected
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  : "border-sky-500/30 bg-sky-500/10 text-sky-300",
+              )}>
+                {state.isConnected ? "Connected" : "Needs setup"}
+              </span>
+            </div>
           </div>
         </section>
 
@@ -335,10 +426,10 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
           </section>
         )}
 
-        <WalletProtocolSupportMap connected={state.isConnected} />
-        <WalletRuntimeExplainer compact />
+        <WalletProtocolSupportMap capability={capability} connected={state.isConnected} />
+        <WalletRuntimeExplainer capability={capability} compact />
 
-        <WalletBoundaryList />
+        <WalletBoundaryList safetyCopy={capability.safetyCopy} />
       </SettingsStack>
     );
   }
@@ -403,9 +494,9 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               What this wallet surface can and cannot do today.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
-          <WalletProtocolSupportMap connected={state.isConnected} />
-          <WalletRuntimeExplainer />
-          <WalletBoundaryList />
+          <WalletProtocolSupportMap capability={capability} connected={state.isConnected} />
+          <WalletRuntimeExplainer capability={capability} />
+          <WalletBoundaryList safetyCopy={capability.safetyCopy} />
         </SettingsSection>
       </SettingsStack>
     );
@@ -423,15 +514,20 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               <ShieldCheck className="size-4 text-green-500" />
               Connected
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
-              onClick={handleDisconnect}
-            >
-              <Unplug className="size-3 mr-1" />
-              Disconnect
-            </Button>
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 rounded-md border border-dls-border/30 bg-dls-surface-muted/30 px-2 py-0.5 text-[10px] font-medium text-dls-secondary">
+                {runtimeBadgeLabel[runtime]}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={handleDisconnect}
+              >
+                <Unplug className="size-3 mr-1" />
+                Disconnect
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">

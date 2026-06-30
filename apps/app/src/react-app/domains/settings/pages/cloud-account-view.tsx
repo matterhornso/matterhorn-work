@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import * as React from "react";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ExternalLink } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,11 @@ import {
   SettingsStack,
   SettingsStatusBadge,
 } from "../settings-section";
+import {
+  getProfileReadiness,
+  type ProfileAuthState,
+  type ProfileReadiness,
+} from "@matterhorn-work/types";
 
 type CloudAccountSession = Pick<
   ReturnType<typeof useDenSession>,
@@ -172,9 +177,54 @@ function DenSignedOutPanel({
   );
 }
 
+function cloudAuthState(isSignedIn: boolean, authError: string | null | undefined): ProfileAuthState {
+  if (authError) return "unavailable";
+  if (!isSignedIn) return "signed_out";
+  // cloud_unconfigured when signed in but cloud sync is paused is not exposed via current session interface;
+  // default to signed_in for the happy path.
+  return "signed_in";
+}
+
+function ProfileReadinessSupportSection({ readiness }: { readiness: ProfileReadiness }) {
+  const { docsUrl, feedbackUrl, issueUrl, accountUrl } = readiness.supportLinks;
+  return (
+    <section className="flex flex-col gap-2 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
+      <h4 className="font-semibold text-dls-text">{readiness.stateCopy.headline}</h4>
+      <p>{readiness.stateCopy.body}</p>
+      <div className="flex flex-wrap gap-2">
+        {feedbackUrl ? (
+          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={feedbackUrl} target="_blank" rel="noreferrer">
+            Send feedback <ExternalLink size={10} />
+          </a>
+        ) : null}
+        {docsUrl ? (
+          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={docsUrl} target="_blank" rel="noreferrer">
+            Docs <ExternalLink size={10} />
+          </a>
+        ) : null}
+        {issueUrl ? (
+          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={issueUrl} target="_blank" rel="noreferrer">
+            Report issue <ExternalLink size={10} />
+          </a>
+        ) : null}
+        {accountUrl ? (
+          <a className="flex items-center gap-1 rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href={accountUrl} target="_blank" rel="noreferrer">
+            Account settings <ExternalLink size={10} />
+          </a>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 export function CloudAccountView({ compact = false, developerMode, session }: CloudAccountViewProps) {
   const { activeOrganization, isSignedIn, statusMessage } = useCloudSession();
   const navigate = useNavigate();
+
+  const profileReadiness = React.useMemo(
+    () => getProfileReadiness(cloudAuthState(isSignedIn, session.authError)),
+    [isSignedIn, session.authError],
+  );
 
   React.useEffect(() => {
     if (!isSignedIn || !session.needsOrgSelection) return;
@@ -203,7 +253,7 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Profile readiness</h4>
             <p className="mt-1 text-xs leading-5 text-dls-secondary">
-              Local work is available now. Cloud sync, shared workspaces, and organization controls need Matterhorn account setup.
+              {profileReadiness.stateCopy.body}
             </p>
           </div>
           <div className="divide-y divide-dls-border/35 text-xs leading-5">
@@ -267,18 +317,7 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
           />
         ) : null}
 
-        <section className="flex flex-col gap-2 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
-          <h4 className="font-semibold text-dls-text">Beta support</h4>
-          <p>Use these if sign-in, cloud workers, wallet connectors, or desk setup feels rough.</p>
-          <div className="flex flex-wrap gap-2">
-            <a className="rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href="https://matterhorn.work/feedback" target="_blank" rel="noreferrer">
-              Send feedback
-            </a>
-            <a className="rounded-lg border border-dls-border/60 px-2.5 py-1.5 text-dls-text hover:bg-dls-hover" href="mailto:support@matterhorn.work">
-              support@matterhorn.work
-            </a>
-          </div>
-        </section>
+        <ProfileReadinessSupportSection readiness={profileReadiness} />
       </SettingsStack>
     );
   }
