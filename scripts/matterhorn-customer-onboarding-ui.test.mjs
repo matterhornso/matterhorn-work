@@ -647,6 +647,16 @@ for (const phrase of [
   "@container/matterhorn-mcps",
   "matterhorn-mcp-stream",
   "Install by client",
+  'aria-label="MCP install client"',
+  'role="tablist"',
+  'role="tab"',
+  "aria-selected={selected}",
+  'role="tabpanel"',
+  "Selected client guide",
+  "Install guide: {selectedClient.label}",
+  "Copy client command",
+  "matterhorn-mcp-client-tab-",
+  "matterhorn-mcp-client-panel-",
   "Protocol MCP",
   "Matterhorn core",
   "grid-cols-[34px_minmax(0,1fr)]",
@@ -679,6 +689,11 @@ for (const phrase of [
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
 }
+assert.equal(
+  settingsRoute.includes("aria-pressed={selected}"),
+  false,
+  "MCP client selector should use accessible tabs instead of pressed pill toggles.",
+);
 assert.equal(
   settingsRoute.includes("lg:grid-cols-2"),
   false,
