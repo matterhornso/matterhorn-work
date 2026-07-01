@@ -26,7 +26,14 @@ for (const phrase of [
 
 const unsignedPackageIndex = workflow.indexOf("Package Electron alpha tester artifact (macOS, unsigned)");
 assert.ok(unsignedPackageIndex >= 0, "alpha workflow should include the unsigned package step");
-const unsignedPackageBlock = workflow.slice(unsignedPackageIndex, unsignedPackageIndex + 650);
+const unsignedPackageBlockEnd = workflow.indexOf(
+  "Upload unsigned Electron alpha tester artifact",
+  unsignedPackageIndex,
+);
+const unsignedPackageBlock = workflow.slice(
+  unsignedPackageIndex,
+  unsignedPackageBlockEnd >= 0 ? unsignedPackageBlockEnd : unsignedPackageIndex + 700,
+);
 assert.ok(
   unsignedPackageBlock.includes("--mac dmg zip"),
   "unsigned tester artifact packaging should request the same macOS DMG/ZIP targets used by release packaging",
@@ -34,6 +41,18 @@ assert.ok(
 assert.ok(
   unsignedPackageBlock.includes("--publish never"),
   "unsigned tester artifact packaging must not publish release assets",
+);
+assert.ok(
+  unsignedPackageBlock.includes("CSC_IDENTITY_AUTO_DISCOVERY: false"),
+  "unsigned tester artifact packaging must not auto-discover a signing identity",
+);
+assert.ok(
+  unsignedPackageBlock.includes("MACOS_NOTARIZE: false"),
+  "unsigned tester artifact packaging must explicitly disable notarization so the afterSign hook does not require a Developer ID signature",
+);
+assert.ok(
+  !unsignedPackageBlock.includes("MACOS_NOTARIZE: true"),
+  "unsigned tester artifact packaging must not pass MACOS_NOTARIZE=true",
 );
 
 for (const phrase of [
@@ -50,6 +69,14 @@ for (const phrase of [
     `${phrase} must remain gated behind configured Apple signing secrets`,
   );
 }
+
+const signedPackageIndex = workflow.indexOf("Package Electron alpha (macOS, signed + notarized)");
+assert.ok(signedPackageIndex >= 0, "alpha workflow should include the signed package step");
+const signedPackageBlock = workflow.slice(signedPackageIndex, signedPackageIndex + 350);
+assert.ok(
+  signedPackageBlock.includes("MACOS_NOTARIZE: true"),
+  "signed/notarized alpha packaging must explicitly enable notarization",
+);
 
 for (const forbidden of [
   "gh release upload \"$ALPHA_RELEASE_TAG\"",
