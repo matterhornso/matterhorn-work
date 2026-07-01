@@ -252,7 +252,7 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
               <span className="font-medium text-dls-text">Bittensor:</span> actions are prepared as previews. Anything on-chain is signed in your own external Bittensor-compatible signer — Matterhorn Work cannot sign or broadcast.
             </li>
             <li className="px-1 py-3">
-              <span className="font-medium text-dls-text">Hyperliquid &amp; Polymarket:</span> read and preview only. Live submission is off; Matterhorn Work does not submit live market trades.
+              <span className="font-medium text-dls-text">Hyperliquid &amp; Polymarket:</span> reads and external handoffs only. Live submission is off; your own eligible client executes trades.
             </li>
             <li className="px-1 py-3">
               <span className="font-medium text-dls-text">No secret storage:</span> Matterhorn Work never asks for or stores seed phrases, private keys, or API secrets.
@@ -268,8 +268,8 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
           status={<StatusBadge tone="ready">Boundaries visible</StatusBadge>}
         >
           <Row label="Bittensor" hint="TAO, subnets, validators, and staking previews (external signer required)." value={<StatusBadge tone="ready">Beta ready</StatusBadge>} />
-          <Row label="Hyperliquid" hint="Account, orderbook, and order previews. Live submission off." value={<StatusBadge tone="preview">Preview only</StatusBadge>} />
-          <Row label="Polymarket" hint="Market discovery, odds, and compliance previews. Live submission off." value={<StatusBadge tone="preview">Preview only</StatusBadge>} />
+          <Row label="Hyperliquid" hint="Account, orderbook, and trade handoffs. Your client executes." value={<StatusBadge tone="preview">External handoff</StatusBadge>} />
+          <Row label="Polymarket" hint="Market discovery, odds, compliance, and gated handoffs." value={<StatusBadge tone="preview">Compliance gated</StatusBadge>} />
           <p className="text-xs leading-5 text-dls-secondary">
             Open a protocol workspace from the sidebar to explore its desk.
           </p>

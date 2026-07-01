@@ -3222,11 +3222,11 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "hyperliquid",
   displayName: "Hyperliquid",
-  shortDescription: "Perp reads, watches, and external trade handoffs.",
+  shortDescription: "Read-only perp market previews and watchlists.",
   launcherTitle: "Hyperliquid",
-  launcherDescription: "Read perp markets, manage watchlists, and prepare external trade handoffs.",
-  launcherPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
-  rightRailSummary: "External handoff desk. Enter a public EVM wallet address or market before preparing a handoff.",
+  launcherDescription: "Preview perp markets and manage watchlists. Read-only.",
+  launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
+  rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
   logoAssetId: "hyperliquid-logo",
   officialLogoAssetId: "hyperliquid-logo",
   logoAlt: "Hyperliquid logo",
@@ -3266,9 +3266,9 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   primaryActions: [
     {
       actionId: "preview-trade",
-      label: "Prepare handoff",
+      label: "Preview trade",
       iconHint: "preview",
-      intent: "prepare trade handoff",
+      intent: "preview trade",
       requiresConfirmation: false,
       surface: "desk_panel",
     },
@@ -3281,7 +3281,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
-  primaryActionLabel: "Prepare handoff",
+  primaryActionLabel: "Preview market",
   secondaryActions: [
     {
       actionId: "show-exposure",
@@ -3312,21 +3312,21 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   capabilityBullets: [
     "Read perp market data, orderbooks, and funding",
     "Show account exposure and open orders",
-    "Prepare external trade handoffs",
+    "Preview trades without order placement",
     "Manage market watches and receipts",
   ],
-  safetySummary: "Matterhorn never holds your credentials or submits orders. Trade execution stays in your external client.",
-  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Prepare external trade handoffs without Matterhorn submission.",
-  noCustodySafetyLine: "Matterhorn never holds your credentials or submits orders. Trade execution stays in your external client.",
+  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
   suggestedPromptTitles: [
     "Show BTC-PERP on Hyperliquid",
-    "Prepare a BTC long handoff",
+    "Preview a BTC long",
     "Show my Hyperliquid exposure",
     "Watch BTC funding",
   ],
   emptyStateCopy: {
-    headline: "Prepare Hyperliquid handoffs",
-    body: "Enter a public wallet address or market to review terms before using your external client.",
+    headline: "Preview Hyperliquid markets",
+    body: "Enter a public wallet address or market to generate a read-only preview.",
     primaryActionId: "preview-trade",
   },
   degradedStateCopy: {
@@ -3335,16 +3335,15 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     primaryActionId: "manage-watchlist",
   },
 };
-
 export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "polymarket",
   displayName: "Polymarket",
-  shortDescription: "Prediction market research and compliance-gated handoffs.",
+  shortDescription: "Read-only prediction market research and previews.",
   launcherTitle: "Polymarket",
-  launcherDescription: "Research prediction markets and prepare compliance-gated handoffs.",
+  launcherDescription: "Research prediction markets and preview positions. Read-only.",
   launcherPrompt: "Find Polymarket markets about AI",
-  rightRailSummary: "Compliance-gated handoff desk. Search markets before preparing any external handoff.",
+  rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
   logoAssetId: "polymarket-logo",
   officialLogoAssetId: "polymarket-logo",
   logoAlt: "Polymarket logo",
@@ -3392,9 +3391,9 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
     {
       actionId: "preview-position",
-      label: "Prepare handoff",
+      label: "Preview position",
       iconHint: "preview",
-      intent: "prepare trade handoff",
+      intent: "preview position",
       requiresConfirmation: false,
       surface: "desk_panel",
     },
@@ -3430,21 +3429,21 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   capabilityBullets: [
     "Search and filter prediction markets",
     "View outcome probabilities and orderbooks",
-    "Prepare compliance-gated trade handoffs",
+    "Preview trades without order placement",
     "Manage market watches and receipts",
   ],
-  safetySummary: "Matterhorn never holds your credentials or submits bets. Compliance-blocked users get no executable order fields.",
-  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Prepare trade handoffs only when allowed.",
-  noCustodySafetyLine: "Matterhorn never holds your credentials or submits bets. Compliance-blocked users get no executable order fields.",
+  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
+  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Preview trades without order placement.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
   suggestedPromptTitles: [
     "Find markets about AI",
     "Show probabilities for this market",
-    "Prepare a yes handoff",
+    "Preview a yes position",
     "Watch this market",
   ],
   emptyStateCopy: {
     headline: "Research Polymarket",
-    body: "Search markets and check eligibility before preparing an external handoff.",
+    body: "Search markets or enter a public wallet address for read-only research.",
     primaryActionId: "research-market",
   },
   degradedStateCopy: {
@@ -3453,7 +3452,6 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     primaryActionId: "research-market",
   },
 };
-
 export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "wellness",

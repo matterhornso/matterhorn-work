@@ -90,7 +90,7 @@ The HTTP routes used by these tools are documented in [`docs/agent-control-api.m
 - `matterhorn_memory_export` — export explicit memory records into a local evidence bundle path on the Matterhorn server
 - `matterhorn_services_get_capabilities` — read future decentralized service capability contracts for hosting, storage, email, payments, and identity/access; discovery only, no live provider execution
 - `matterhorn_services_chat_plan` — plan future hosting, storage, email, payments, or identity/access workflows from ordinary chat; planning only, no live provider execution
-- `matterhorn_workflows_catalog` — read the catalog-only registry for wellness creator, Bittensor, market read/preview, decentralized service, and future workflows; discovery only, no provider execution
+- `matterhorn_workflows_catalog` — read the catalog-only registry for longevity creator, Bittensor, market read/preview, decentralized service, and future workflows; discovery only, no provider execution
 - `matterhorn_workflows_prompt_pack` — read copy-pasteable staged prompts from the Matterhorn workflow registry; prompt-pack only, no provider execution
 - `matterhorn_hyperliquid_chat` — run the read/preview-only Hyperliquid workflow
 - `matterhorn_hyperliquid_list_markets` — list Hyperliquid markets through Matterhorn server reads

@@ -1412,7 +1412,7 @@ export function createWellnessMemorySuggestionLifecycleFixture(
       id: `rec-wellness-fixture-${status}`,
       kind: "user_preference",
       scope: "user",
-      title: "Wellness preference",
+      title: "Longevity preference",
       summary: "Educational opt-in preference",
       body: { interest: "sleep education" },
       tags: ["wellness", "opt-in"],

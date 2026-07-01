@@ -87,25 +87,31 @@ export function ExtensionsView(props: ExtensionsViewProps) {
       </div>
 
       <div className={cn(
-        "flex rounded-lg border border-dls-border bg-dls-surface p-1",
-        props.compact ? "w-full" : "w-fit",
+        "rounded-lg border border-dls-border bg-dls-surface p-1",
+        props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit",
       )}>
         <Button
           variant={view === "my" ? "secondary" : "ghost"}
           size="sm"
-          className={props.compact ? "flex-1" : undefined}
+          className={cn(
+            props.compact && "h-auto min-w-0 whitespace-normal px-2 py-2 text-sm leading-5",
+          )}
           onClick={() => setView("my")}
         >
-          My Extensions
+          <span className="min-w-0 truncate">My Extensions</span>
         </Button>
         <Button
           variant={view === "marketplace" ? "secondary" : "ghost"}
           size="sm"
-          className={cn(props.compact ? "flex-1" : undefined, "gap-1.5")}
+          className={cn(
+            props.compact
+              ? "h-auto min-w-0 flex-col items-center gap-0.5 whitespace-normal px-2 py-2 text-sm leading-5"
+              : "gap-1.5",
+          )}
           onClick={() => setView("marketplace")}
         >
-          Marketplace
-          <span className="text-xs font-normal text-dls-secondary">
+          <span className="min-w-0 max-w-full truncate">Marketplace</span>
+          <span className="min-w-0 max-w-full truncate text-[11px] font-normal leading-4 text-dls-secondary">
             post-go-live
           </span>
         </Button>

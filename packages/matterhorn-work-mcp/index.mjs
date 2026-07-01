@@ -512,7 +512,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_catalog",
-    description: "Read the catalog-only Matterhorn Work workflow registry for wellness creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read the catalog-only Matterhorn Work workflow registry for longevity creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -562,7 +562,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_customer_templates",
-    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, wellness creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {

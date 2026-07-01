@@ -45,7 +45,7 @@ export const WELLNESS_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "wellness",
   promptAction: "send_after_confirm",
-  draftStateLabel: "Draft ready — Wellness program builder",
+  draftStateLabel: "Draft ready — Longevity program builder",
   confirmCtaLabel: "Build program",
 };
 

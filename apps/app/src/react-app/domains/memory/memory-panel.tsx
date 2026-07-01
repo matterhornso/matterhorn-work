@@ -195,7 +195,7 @@ function suggestionDeskReason(suggestion: MatterhornMemorySuggestion) {
     return "Market memory is read/preview/watch context only. It cannot enable live submission, custody, exchange API secrets, raw signatures, or signed payloads.";
   }
   if (suggestion.desk === "wellness") {
-    return "Wellness memory stays opt-in and restricted by default. It should describe preferences or workflow context, not hidden medical or clinical records.";
+    return "Longevity memory stays opt-in and restricted by default. It should describe preferences or workflow context, not hidden medical or clinical records.";
   }
   return "This suggestion came from visible workflow context. Confirming it stores only the shown record.";
 }
@@ -1179,7 +1179,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
           <div className="mt-3 grid gap-2">
             <div className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
-              Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Wellness becomes restricted by default; market memories cannot be exported or shared with MCP/API.
+              Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Longevity becomes restricted by default; market memories cannot be exported or shared with MCP/API.
             </div>
             <input
               value={draft.title}
@@ -1253,7 +1253,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Export only policy-approved public-safe memory bundle metadata. Restricted, market, wellness, and forbidden-secret records stay out.
+                Export only policy-approved public-safe memory bundle metadata. Restricted, market, longevity, and forbidden-secret records stay out.
               </p>
             </div>
             <Button className="w-full justify-center rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>

@@ -246,7 +246,7 @@ const COMMON_SAFETY = {
 } as const;
 
 const WELLNESS_PROMPTS = [
-  "Start a new wellness program - here is my audience, goal, constraints, session type, duration, equipment, and level",
+  "Start a new longevity program - here is my audience, goal, constraints, session type, duration, equipment, and level",
   "Design the program with safety disclaimers",
   "Generate the client artifacts: weekly plan, video script, checklist, FAQ, and progress tracker",
   "Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text",
@@ -258,13 +258,13 @@ const WELLNESS_PROMPTS = [
 const WORKFLOWS: MatterhornWorkflowCatalogItem[] = [
   {
     workflowId: "wellness_creator_workflow",
-    name: "Wellness Creator Workflow",
+    name: "Longevity Creator Workflow",
     category: "wellness",
     status: "live_local",
     source: "offline_helper",
     targetUserPersona: "personal trainer, gym instructor, yoga instructor, or dietician",
     summary:
-      "Runs a seven-stage chat workflow for creating wellness programs, client artifacts, service packaging, customer management, and MCP/artifact export.",
+      "Runs a seven-stage chat workflow for creating longevity programs, client artifacts, service packaging, customer management, and MCP/artifact export.",
     localArtifactsAvailable: true,
     canExecuteLocalWorkflow: true,
     canExecuteProviderActions: false,
@@ -312,17 +312,17 @@ const WORKFLOWS: MatterhornWorkflowCatalogItem[] = [
   },
   {
     workflowId: "wellness_creator_services",
-    name: "Wellness Creator Services",
+    name: "Longevity Creator Services",
     category: "wellness",
     status: "planned_not_live",
     source: "typed_fixture",
-    targetUserPersona: "wellness creator or coach",
+    targetUserPersona: "longevity creator or coach",
     summary:
-      "Plans future service hooks for wellness creators without executing live storage, hosting, email, payment, or access-provider actions.",
+      "Plans future service hooks for longevity creators without executing live storage, hosting, email, payment, or access-provider actions.",
     localArtifactsAvailable: false,
     canExecuteLocalWorkflow: false,
     canExecuteProviderActions: false,
-    canonicalPrompts: ["Plan a wellness creator service with content, audience, and delivery format"],
+    canonicalPrompts: ["Plan a longevity creator service with content, audience, and delivery format"],
     generatedArtifacts: ["service_plan", "content_calendar"],
     serviceHooks: [
       { hook: "email", status: "planned_not_live" },
@@ -643,13 +643,13 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
   },
   {
     id: "wellness_creator_workflow",
-    name: "Build a Wellness Creator business workflow",
-    summary: "Design wellness programs, service packages, and client management workflows without giving medical advice.",
+    name: "Build a Longevity Creator business workflow",
+    summary: "Design longevity programs, service packages, and client management workflows without giving medical advice.",
     promise:
-      "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+      "Plan your longevity business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
     category: "wellness",
     examplePrompts: [
-      "Create a wellness program for my clients",
+      "Create a longevity program for my clients",
       "Design a nutrition plan",
       "Build a yoga class schedule",
       "Package my training services",
@@ -688,16 +688,16 @@ const CUSTOMER_TEMPLATES: MatterhornCustomerWorkflowTemplate[] = [
     ],
     chatMode: "workflow chat",
     launch: {
-      primaryCta: "Start wellness workflow",
+      primaryCta: "Start longevity workflow",
       secondaryCta: "Plan a service",
-      defaultPrompt: "Create a wellness program for my clients",
+      defaultPrompt: "Create a longevity program for my clients",
       handoffContextLabel: "Audience and goal",
       recommendedSurface: "workflow_chat",
     },
     ui: {
       iconHint: "wellness",
       accent: "neutral",
-      shortDescription: "Design wellness programs and service packages without medical advice.",
+      shortDescription: "Design longevity programs and service packages without medical advice.",
     },
     routing: {
       chatMode: "wellness",
@@ -897,7 +897,7 @@ export function buildMatterhornWorkflowCatalog(input: MatterhornWorkflowCatalogF
     generatedAt: new Date(0).toISOString(),
     source: "matterhorn_server_workflow_catalog",
     summary:
-      "Safe, chat-first Matterhorn Work workflow catalog across wellness, Bittensor, markets, decentralized services, and future verticals.",
+      "Safe, chat-first Matterhorn Work workflow catalog across longevity, Bittensor, markets, decentralized services, and future verticals.",
     commands: {
       catalog: "matterhorn-work workflows catalog --json",
       workflowFilter: "matterhorn-work workflows catalog --workflow wellness_creator_workflow --include-prompts --json",

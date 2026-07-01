@@ -318,8 +318,8 @@ function buildWellnessSuggestions(input: MatterhornMemorySuggestionPlanInput): M
     id: safeId("mem_wellness_preference", [templateId ?? "workflow"]),
     kind: "client_profile",
     scope: "user",
-    title: "Wellness workflow preference",
-    summary: "Opt-in preference for safe, educational wellness creator workflows.",
+    title: "Longevity workflow preference",
+    summary: "Opt-in preference for safe, educational longevity creator workflows.",
     body: {
       workflow: templateId ?? "wellness_creator_workflow",
       educationalOnly: true,
@@ -336,7 +336,7 @@ function buildWellnessSuggestions(input: MatterhornMemorySuggestionPlanInput): M
     "wellness",
     record,
     "wellness_client_preference",
-    "This wellness workflow preference can be remembered only after explicit confirmation. It remains restricted and educational.",
+    "This longevity workflow preference can be remembered only after explicit confirmation. It remains restricted and educational.",
     0.7,
   );
   return candidate ? [candidate] : [];

@@ -145,7 +145,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "App opens with first-class desks",
     owner: "Operator",
     commandKey: "mondayBetaUiGate",
-    proof: "Bittensor, Hyperliquid, Polymarket, and Wellness are visible as separate customer paths; desktop automation is not a default beta task.",
+    proof: "Bittensor, Hyperliquid, Polymarket, and Longevity are visible as separate customer paths; desktop automation is not a default beta task.",
   },
   {
     id: "beta-safety-smoke",
@@ -170,10 +170,10 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
   },
   {
     id: "beta-wellness-proof",
-    title: "Wellness workflow remains safe",
+    title: "Longevity workflow remains safe",
     owner: "Operator",
     commandKey: "mondayBetaWellnessProof",
-    proof: "Wellness artifacts stay educational, non-medical, and do not claim live payments, email, hosting, storage, or token-gated access.",
+    proof: "Longevity artifacts stay educational, non-medical, and do not claim live payments, email, hosting, storage, or token-gated access.",
   },
 ] as const satisfies ReadonlyArray<{
   id: string;
@@ -1709,7 +1709,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 })}
               </div>
               <Notice tone="info" icon={<Shield className="size-4" />} title="Monday beta promise">
-                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Wellness is a standalone workflow surface, not Web3 and not medical care.
+                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Longevity is a standalone workflow surface, not Web3 and not medical care.
               </Notice>
             </Section>
 
@@ -1821,7 +1821,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
                   </div>
                   <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Wellness workflow: Standalone</p>
+                    <p className="text-xs font-semibold text-dls-text">Longevity workflow: Standalone</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Client-safe plans and packets. Not Web3, not medical advice, and no live payments or email.</p>
                   </div>
                 </div>

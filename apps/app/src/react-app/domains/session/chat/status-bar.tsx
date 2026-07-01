@@ -249,7 +249,7 @@ export function StatusBar(props: StatusBarProps) {
               variant="ghost"
               size="xs"
               onClick={props.onOpenWallet}
-              title={`${walletButtonLabel}. Bittensor uses public SS58 reads and external signing; market desks remain preview-only.`}
+              title={`${walletButtonLabel}. Bittensor uses public SS58 reads and external signing; market desks prepare external handoffs only.`}
               aria-label={`${walletButtonLabel}. Open Matterhorn Wallet.`}
             >
               <Wallet className="size-3.5" />

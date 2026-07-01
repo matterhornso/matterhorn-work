@@ -747,7 +747,7 @@ const server = createServer(async (req, res) => {
         category: "wellness",
         status: "live_local",
         canExecuteProviderActions: false,
-        canonicalPrompts: ["Start a new wellness program", "Design the program"],
+        canonicalPrompts: ["Start a new longevity program", "Design the program"],
         safety: {
           acceptsSecrets: false,
           canSubmit: false,
@@ -780,9 +780,9 @@ const server = createServer(async (req, res) => {
         workflowId: "wellness_creator_workflow",
         category: "wellness",
         status: "live_local",
-        starterPrompt: "Start a new wellness program",
+        starterPrompt: "Start a new longevity program",
         prompts: [
-          { step: 1, prompt: "Start a new wellness program" },
+          { step: 1, prompt: "Start a new longevity program" },
           { step: 2, prompt: "Design the program with safety disclaimers" },
         ],
         safety: {
