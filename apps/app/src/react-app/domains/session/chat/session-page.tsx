@@ -1789,6 +1789,7 @@ export function SessionPage(props: SessionPageProps) {
                         client={props.matterhornServerClient}
                         workspaceId={props.runtimeWorkspaceId}
                         workspaceRoot={props.selectedWorkspaceRoot}
+                        workspaceName={props.selectedWorkspaceDisplay.displayName ?? props.selectedWorkspaceDisplay.name ?? ""}
                         isRemoteWorkspace={props.surface?.isRemoteWorkspace ?? false}
                         target={visibleArtifactTarget}
                         targets={artifactFileTargets}
