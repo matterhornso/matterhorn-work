@@ -401,6 +401,8 @@ assert.equal(sessionPage.includes('label: "Services"'), false, "customer right r
 assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, { title: item.launcher.title })"), "workflow rail launchers should create editable prompt drafts with human chat titles");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session launcher should scroll instead of clipping beneath the composer");
+assert.ok(sessionPage.includes("absolute inset-0 flex items-start justify-center overflow-y-auto"), "home starter launcher should be viewport-constrained and scroll inside the main pane");
+assert.equal(sessionPage.includes("relative flex min-h-0 flex-1 items-start justify-center overflow-y-auto"), false, "home starter launcher must not size to full content height inside an overflow-hidden parent");
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
 assert.ok(sessionSurface.includes("MATTERHORN_DESK_EMPTY_PROMPTS"), "focused desk prompt state should use desk-specific suggestions");
 assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty state should suggest TAO balance reads");
