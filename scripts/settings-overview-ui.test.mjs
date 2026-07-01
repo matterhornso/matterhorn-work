@@ -14,6 +14,7 @@ const recoveryView = readFileSync("apps/app/src/react-app/domains/settings/pages
 const types = readFileSync("apps/app/src/app/types.ts", "utf8");
 const settingsPage = readFileSync("apps/app/src/react-app/domains/settings/shell/settings-page.tsx", "utf8");
 const settingsShell = readFileSync("apps/app/src/react-app/domains/settings/shell/settings-shell.tsx", "utf8");
+const settingsPanel = readFileSync("apps/app/src/react-app/domains/settings/shell/panel.tsx", "utf8");
 const settingsRoute = readFileSync("apps/app/src/react-app/shell/settings-route.tsx", "utf8");
 const appMenu = readFileSync("apps/app/src/react-app/shell/app-menu.tsx", "utf8");
 const commandPalette = readFileSync("apps/app/src/react-app/shell/command-palette.tsx", "utf8");
@@ -89,6 +90,12 @@ assert.ok(generalView.includes('title: "Recovery"'), "Recovery settings should r
 assert.ok(settingsPage.includes('case "advanced":'), "Advanced should have an explicit readiness status");
 assert.ok(settingsPage.includes('return "Developer";'), "Developer-only surfaces should be labeled explicitly");
 assert.ok(!settingsPage.includes('Agent Marketplace"'), "Customer-facing settings nav should not advertise Agent Marketplace as live");
+assert.ok(generalView.includes('desc: "Model and reasoning controls."'), "Settings hub copy should be short and direct");
+assert.ok(generalView.includes('text-[12px] leading-5 text-dls-text'), "Settings hub descriptions should be readable, not tiny muted text");
+assert.equal(generalView.includes("text-[11px] text-dls-secondary"), false, "Settings hub descriptions should not use low-contrast 11px text");
+assert.ok(settingsPanel.includes("text-sm leading-5 text-dls-text"), "Settings panel subtitles should use readable text color");
+assert.ok(settingsShell.includes("text-[13px] font-medium text-dls-text"), "Settings header workspace label should be readable");
+assert.ok(locale.includes('"settings.feedback_desc": "Tell us what worked or felt rough."'), "Feedback copy should stay succinct");
 
 // 5c. Environment and Recovery should be honest about token/desktop/preview limits.
 for (const phrase of [

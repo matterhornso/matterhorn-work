@@ -13,6 +13,7 @@ assert.equal(
 
 const welcome = read("apps/app/src/react-app/domains/onboarding/welcome-page.tsx");
 const english = read("apps/app/src/i18n/locales/en.ts");
+const appCss = read("apps/app/src/app/index.css");
 const sessionPage = read("apps/app/src/react-app/domains/session/chat/session-page.tsx");
 const sessionSurface = read("apps/app/src/react-app/domains/session/surface/session-surface.tsx");
 const composer = read("apps/app/src/react-app/domains/session/surface/composer/composer.tsx");
@@ -57,7 +58,6 @@ for (const phrase of [
   '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
   '"composer.stop": "Stop generating"',
-  "Engine connected",
   "Separate workspaces",
   "one Matterhorn chat.",
   "Bittensor workspace",
@@ -71,6 +71,11 @@ for (const phrase of [
 ]) {
   assert.ok(`${welcome}\n${english}`.includes(phrase), `welcome experience should include Matterhorn-native copy: ${phrase}`);
 }
+assert.equal(
+  `${welcome}\n${english}\n${statusBar}`.includes("Engine connected"),
+  false,
+  "customer UI should not show a generic hard-coded engine-connected label",
+);
 
 for (const phrase of [
   "Start a Matterhorn project.",
@@ -130,7 +135,7 @@ for (const phrase of [
   "source: \"monday-beta-demo\"",
   "demo.evidenceCommand",
   "demo.artifactSummary",
-  "openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: \"monday-beta-demo\" })",
+  "openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: \"monday-beta-demo\", title: demo.title })",
   "Open Bittensor desk",
   "Open Hyperliquid desk",
   "Open Polymarket desk",
@@ -210,14 +215,31 @@ for (const phrase of [
   '"dashboard.create_workspace_title": "Create Project"',
   '"dashboard.create_workspace_confirm": "Create Project"',
   '"workspace_list.add_workspace": "New project"',
+  '"workspace_list.rename_session": "Rename chat"',
   '"workspace_list.show_more": "Show {count} more chats"',
   '"session.untitled_chat_number": "Untitled chat {index}"',
+  '"session.rename_title": "Rename chat"',
+  '"session.rename_label": "Chat name"',
 ]) {
   assert.ok(english.includes(phrase), `project/session copy should be customer-friendly: ${phrase}`);
 }
 
 assert.ok(sidebarUtils.includes("MAX_SESSIONS_PREVIEW = 3"), "sidebar should preview fewer sessions before showing more");
 assert.ok(appSidebar.includes("session.untitled_chat_number"), "untitled sidebar sessions should get numbered fallback titles");
+assert.ok(
+  sessionPage.includes("PencilLine") &&
+    sessionPage.includes("openRenameModal(props.selectedSessionId!)") &&
+    sessionPage.includes('aria-label={t("session.rename_title")}'),
+  "active chat title should expose a header rename action, not hide naming in the sidebar only",
+);
+assert.ok(
+  sessionPage.includes("onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string }) => void") &&
+    sessionPage.includes("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, { title })") &&
+    sessionRoute.includes("const title = options?.title?.trim()") &&
+    sessionRoute.includes("workspaceClient.session.update({") &&
+    sessionRoute.includes("[displaySession as any, ...(current[workspaceId] ?? [])]"),
+  "launcher-created chats should start with human launcher titles instead of internal protocol prompt titles",
+);
 
 for (const phrase of [
   "Access Token",
@@ -347,6 +369,11 @@ assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, account exposure, fu
 assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
+assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");
+assert.ok(appCss.includes("--nav-rail-width: 120px;"), "wide right rail should leave room for readable customer desk labels");
+assert.ok(sessionPage.includes('RAIL_LABEL_CLASS = "max-w-full truncate text-[11px] font-medium leading-4 text-current"'), "right rail labels should use readable 11px medium text");
+assert.ok(sessionPage.includes("RAIL_SECTION_LABEL_CLASS"), "right rail section label should not duplicate faint tracked text styles");
+assert.equal(sessionPage.includes("text-[9px] leading-none"), false, "right rail labels should not regress to tiny blurred 9px text");
 for (const token of [
   "deskToneStyle",
   "--matterhorn-desk-color",
@@ -371,7 +398,7 @@ assert.ok(sessionPage.includes("onClick={() => openVenueRailPane(item.panel)}"),
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
-assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt)"), "workflow rail launchers should create editable prompt drafts");
+assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, { title: item.launcher.title })"), "workflow rail launchers should create editable prompt drafts with human chat titles");
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session launcher should scroll instead of clipping beneath the composer");
 assert.ok(sessionSurface.includes("MatterhornDeskFocusedEmptyState"), "empty desk sessions should render a focused desk prompt state");
@@ -387,6 +414,12 @@ assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidd
 assert.equal(sessionPage.includes("rounded-[28px]"), false, "focused desk surfaces should avoid oversized card radii");
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "session empty surfaces should avoid oversized card radii");
 assert.ok(sessionSurface.includes("activeDeskMode ? ("), "generic starter grid should be bypassed when a protocol desk session is active");
+assert.ok(sessionSurface.includes("ArrowDown"), "Jump to latest should use a visible down-arrow icon");
+assert.ok(sessionSurface.includes("bottom-4 left-1/2 z-40"), "Jump to latest should sit visibly above the composer edge");
+assert.ok(sessionSurface.includes("border border-dls-border bg-dls-surface px-1.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.28)]"), "Jump controls should use a visible bordered surface");
+assert.ok(sessionSurface.includes("border border-dls-text bg-dls-text"), "Jump to latest should be the high-contrast primary action");
+assert.ok(sessionSurface.includes('aria-label="Jump to the latest message"'), "Jump to latest should expose a clear accessible label");
+assert.equal(sessionSurface.includes("rounded-full px-3 py-1.5 text-xs text-dls-text"), false, "Jump to latest should not regress to the hidden low-contrast pill");
 assert.ok(sessionSurface.includes("matterhorn-session-start-list grid grid-cols-1 gap-1.5 lg:grid-cols-2"), "starter workflow grid should use compact two-column command rows instead of a crowded card wall");
 assert.ok(sessionPage.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]"), "beta demo starter cards should use container-safe auto-fit columns");
 assert.ok(sessionSurface.includes("group grid min-h-[64px] min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "starter workflow rows should use tighter logo-led command rows");
@@ -548,11 +581,12 @@ for (const phrase of [
   "External signer",
   "Preview only",
   "No EVM wallet connector detected",
-  "Install or enable MetaMask, Rabby, or another injected wallet in this runtime.",
+  "Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.",
   "public SS58/coldkey data",
   "Hyperliquid",
   "Polymarket",
   "safetyCopy.forbiddenSecretsLine",
+  "Never paste",
 ]) {
   assert.ok(walletSettings.includes(phrase), `wallet rail should have compact, honest wallet state: ${phrase}`);
 }
@@ -651,29 +685,28 @@ for (const phrase of [
 
 for (const phrase of [
   "Matterhorn MCPs",
-  "Use Matterhorn desks from Codex, Claude Code, Claude Desktop, and Cursor.",
-  "Matterhorn MCP cards are real installable command profiles.",
-  "Marketplace connectors below are labeled as Connected, Requires setup, Needs API key, or Catalog only so static entries never look active until they are actually configured.",
+  "Install Matterhorn MCPs for Codex, Claude Code, Claude Desktop, and Cursor.",
+  "Use them for protocol reads, previews, memory, workflow, evidence, and agent control.",
+  "Cards show command, clients, tools, and safety limits.",
   "@container/matterhorn-mcps",
   "matterhorn-mcp-stream",
-  "Install by client",
+  "Client",
   'aria-label="MCP install client"',
   'role="tablist"',
   'role="tab"',
   "aria-selected={selected}",
   'role="tabpanel"',
-  "Selected client guide",
-  "Install guide: {selectedClient.label}",
-  "Copy client command",
+  "Selected client",
+  "Setup and verify",
+  "Copy command",
   "matterhorn-mcp-client-tab-",
   "matterhorn-mcp-client-panel-",
   "Protocol MCP",
-  "Matterhorn core",
   "grid-cols-[34px_minmax(0,1fr)]",
-  "grid-cols-[48px_minmax(0,1fr)]",
+  "grid-cols-[44px_minmax(0,1fr)]",
   "border-l border-dls-border/30 pl-3",
-  "Safety boundary",
-  "+${hiddenToolCount} more",
+  "Safety",
+  "plus {hiddenToolCount} more.",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
   "Hyperliquid MCP",
@@ -684,18 +717,18 @@ for (const phrase of [
   "Memory MCP",
   "Workflow MCP",
   "UI Control MCP",
-  "Copy install command",
   "matterhorn-work mcp config --target codex --profile full",
   "matterhorn-work mcp config --target claude --profile full",
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
-  "Can submit: No. Live submission: Off.",
-  "External signer/client required.",
-  "No seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
-  "No API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
-  "No hidden memory saves.",
-  "No provider execution, no live payments, no email sending, no hosting publish, and no token-gated access enforcement.",
-  "No wallet custody, no signing, no market submission, and no secret collection through UI-control actions.",
+  "Public reads and unsigned previews only.",
+  "Preview only. No live submit.",
+  "Use an external signer/client.",
+  "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
+  "Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
+  "No hidden saves.",
+  "No provider execution, payments, email sending, publishing, or token gates.",
+  "No custody, signing, market submit, or secret collection.",
 ]) {
   assert.ok(settingsRoute.includes(phrase), `MCP desk product cards should expose safe Matterhorn MCP setup copy: ${phrase}`);
 }
@@ -725,7 +758,7 @@ assert.equal(
   "MCP install commands should not be trapped inside tiny nested scroll boxes.",
 );
 assert.ok(
-  settingsRoute.includes('props.compact ? "space-y-6" : "space-y-8 max-w-3xl"'),
+  settingsRoute.includes('props.compact ? "space-y-5" : "space-y-6 max-w-3xl"'),
   "MCP view should remove full-page max-width spacing when it is embedded in the right rail.",
 );
 assert.ok(
@@ -793,7 +826,7 @@ assert.ok(
   "MCP install command rows should wrap long commands instead of overflowing.",
 );
 assert.ok(
-  settingsRoute.includes("<span className=\"font-medium text-dls-text\">Supported tools:</span>"),
+  settingsRoute.includes("<span className=\"font-medium text-dls-text\">Tools:</span>"),
   "MCP tools should render as compact readable summaries instead of overlapping chip piles.",
 );
 assert.equal(
@@ -887,9 +920,10 @@ for (const forbidden of [
 for (const phrase of [
   "Matterhorn Wallet",
   "EVM wallet",
-  "Bittensor coldkeys/hotkeys",
-  "seed phrases or private keys",
-  "Public Bittensor reads, Hyperliquid previews, and Polymarket previews still work without connecting an EVM wallet.",
+  "Bittensor actions stay external-signer only.",
+  "WalletBoundaryList",
+  "safetyCopy.forbiddenSecretsLine",
+  "Public Bittensor reads and market previews still work.",
 ]) {
   assert.ok(walletSettings.includes(phrase), `wallet settings should clearly explain current wallet boundaries: ${phrase}`);
 }

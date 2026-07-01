@@ -234,12 +234,12 @@ for (const staleTool of [
   );
 }
 assert.ok(
-  appMcpView.includes("No external workspace MCP servers connected yet."),
-  "MCP page should clarify empty status means no external workspace MCP servers",
+  appMcpView.includes("No external MCPs connected."),
+  "MCP page should clarify empty status means no external MCP servers",
 );
 assert.ok(
-  appMcpView.includes("server-backed and installable"),
-  "MCP page should tell users built-in Matterhorn MCPs are backend-backed and installable",
+  appMcpView.includes("server-backed and ready to install below"),
+  "MCP page should tell users built-in Matterhorn MCPs are backend-backed and ready to install",
 );
 assert.ok(appMcpView.includes("Core Agent MCP"), "MCP page should expose the backend core agent MCP tools");
 assert.ok(appMcpView.includes("Evidence MCP"), "MCP page should expose the backend evidence MCP tools");

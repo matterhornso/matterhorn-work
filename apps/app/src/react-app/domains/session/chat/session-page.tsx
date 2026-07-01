@@ -14,6 +14,7 @@ import {
   Globe,
   Mic2,
   PanelRightClose,
+  PencilLine,
   Plus,
   Settings2,
   ShieldCheck,
@@ -115,6 +116,15 @@ const GLOBAL_VOICE_SIDE_PANEL_KEY = "__matterhorn_voice__";
 const GLOBAL_HOME_SIDE_PANEL_KEY = "__matterhorn_home__";
 const VENUE_SIDE_PANELS = ["bittensor", "hyperliquid", "polymarket"] as const;
 type VenueSidePanel = (typeof VENUE_SIDE_PANELS)[number];
+const RAIL_BUTTON_CLASS =
+  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-white/[0.06] hover:text-dls-text";
+const RAIL_ACTIVE_CLASS = "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary";
+const RAIL_DESK_BUTTON_CLASS =
+  "h-auto min-h-12 w-full flex-col gap-1 rounded-md px-1 py-2 text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-[var(--matterhorn-desk-color)]";
+const RAIL_LABEL_CLASS = "max-w-full truncate text-[11px] font-medium leading-4 text-current";
+const RAIL_OPTIONAL_LABEL_CLASS = `hidden ${RAIL_LABEL_CLASS} 2xl:inline`;
+const RAIL_SECTION_LABEL_CLASS =
+  "mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[10px] font-bold uppercase tracking-normal text-dls-text";
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
@@ -562,7 +572,7 @@ export type SessionPageSidebarProps = {
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
-  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string) => void;
+  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string }) => void;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
@@ -1017,10 +1027,11 @@ export function SessionPage(props: SessionPageProps) {
   }, [toggleCurrentSidePanel]);
   const primeProtocolRailPrompt = useCallback((
     panel: VenueSidePanel,
-    options?: { prompt?: string; source?: string },
+    options?: { prompt?: string; source?: string; title?: string },
   ) => {
     const launcher = protocolWorkflowLaunchers.find((item) => item.panel === panel);
     const prompt = options?.prompt ?? launcher?.prompt;
+    const title = options?.title ?? launcher?.title;
     if (!prompt) return;
     const source = options?.source ?? "protocol-rail";
     if (props.selectedSessionId && props.surface && typeof window !== "undefined") {
@@ -1036,12 +1047,12 @@ export function SessionPage(props: SessionPageProps) {
     }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
-      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt);
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, { title });
       return;
     }
     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
   }, [props.selectedSessionId, props.selectedWorkspaceId, props.sidebar, props.surface, protocolWorkflowLaunchers]);
-  const openVenueRailPane = useCallback((panel: VenueSidePanel, options?: { primePrompt?: boolean; prompt?: string; source?: string }) => {
+  const openVenueRailPane = useCallback((panel: VenueSidePanel, options?: { primePrompt?: boolean; prompt?: string; source?: string; title?: string }) => {
     if (options?.primePrompt && !(props.selectedSessionId && props.surface)) {
       pendingProtocolRailPanelRef.current = panel;
     }
@@ -1289,11 +1300,23 @@ export function SessionPage(props: SessionPageProps) {
           <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/88 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.10)] backdrop-blur-xl md:px-6 mac:titlebar-drag mac:backdrop-saturate-150 @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
-              <h1 className="truncate text-[15px] font-semibold text-dls-text">
+              <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
                 {showWorkspaceSetupEmptyState
                   ? t("session.create_or_connect_workspace")
                   : selectedSessionTitle || t("session.default_title")}
               </h1>
+              {props.selectedSessionId && props.onRenameSession && !showWorkspaceSetupEmptyState ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-7 shrink-0 text-dls-secondary hover:text-dls-text mac:titlebar-no-drag"
+                  onClick={() => openRenameModal(props.selectedSessionId!)}
+                  title={t("session.rename_title")}
+                  aria-label={t("session.rename_title")}
+                >
+                  <PencilLine className="size-3.5" />
+                </Button>
+              ) : null}
               {props.developerMode ? (
                 <span className="hidden text-[12px] text-dls-secondary lg:inline">
                   {props.headerStatus}
@@ -1475,8 +1498,8 @@ export function SessionPage(props: SessionPageProps) {
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
                         onBackHome={() => setCurrentSidePanel(null)}
-                        onUsePrompt={(prompt) => {
-                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt);
+                        onUsePrompt={(prompt, title) => {
+                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, { title });
                         }}
                       />
                     </div>
@@ -1510,7 +1533,7 @@ export function SessionPage(props: SessionPageProps) {
                             disabled={props.sidebar.newTaskDisabled}
                             onClick={() => {
                               if (blankWorkflowLauncher && props.sidebar.onCreateTaskWithPrompt) {
-                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
+                                props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
                                 return;
                               }
                               props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -1527,7 +1550,7 @@ export function SessionPage(props: SessionPageProps) {
                               return;
                             }
                             if (id === "wellness" && wellnessRailLauncher) {
-                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt);
+                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt, { title: wellnessRailLauncher.title });
                             }
                           }}
                         />
@@ -1539,7 +1562,7 @@ export function SessionPage(props: SessionPageProps) {
                               openVenueRailPane(launcher.panel);
                               return;
                             }
-                            props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt);
+                            props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt, { title: launcher.title });
                           }}
                         />
                         {props.developerMode ? (
@@ -1565,10 +1588,10 @@ export function SessionPage(props: SessionPageProps) {
                                       className="relative isolate flex min-h-[144px] w-full flex-col items-start overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.075)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
                                         if (demo.panel) {
-                                          openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo" });
+                                          openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo", title: demo.title });
                                           return;
                                         }
-                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt);
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, { title: demo.title });
                                       }}
                                     >
                                       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
@@ -1624,7 +1647,7 @@ export function SessionPage(props: SessionPageProps) {
                                       style={deskToneStyle(task.iconHint)}
                                       className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
-                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt);
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt, { title: task.title });
                                       }}
                                     >
                                       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
@@ -1678,7 +1701,7 @@ export function SessionPage(props: SessionPageProps) {
                               type="button"
                               className="flex min-h-[92px] w-full items-start gap-3 rounded-xl bg-dls-surface-muted/70 p-3.5 text-left transition-colors hover:bg-dls-hover"
                               onClick={() => {
-                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt);
+                                props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, blankWorkflowLauncher.prompt, { title: blankWorkflowLauncher.title });
                               }}
                             >
                               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
@@ -1792,18 +1815,18 @@ export function SessionPage(props: SessionPageProps) {
               </>
             ) : null}
           </ResizablePanelGroup>
-          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 border-l border-white/[0.06] bg-dls-sidebar/80 px-2 py-2 text-muted-foreground mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
+          <aside className="hidden w-[var(--nav-rail-width-compact)] shrink-0 flex-col items-center gap-1 border-l border-white/[0.06] bg-dls-sidebar/80 px-2 py-2 text-dls-text mac:titlebar-no-drag lg:flex 2xl:w-[var(--nav-rail-width)]">
             {sidePanelOpen ? (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground"
+                className={RAIL_BUTTON_CLASS}
                 onClick={closeRightPane}
                 title="Back to chat"
                 aria-label="Back to chat"
               >
                 <PanelRightClose size={17} />
-                <span className="text-[9px] leading-none">Chat</span>
+                <span className={RAIL_LABEL_CLASS}>Chat</span>
               </Button>
             ) : null}
             <div className="flex w-full flex-col items-center gap-1 border-b border-white/[0.06] pb-2">
@@ -1811,8 +1834,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                  profileRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                  RAIL_BUTTON_CLASS,
+                  profileRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={() => setCurrentSidePanel("profile")}
                 title={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
@@ -1820,14 +1843,14 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={profileRailActive}
               >
                 {shellConfig.cloudSignin ? <Cloud size={17} /> : <Settings2 size={17} />}
-                <span className="text-[9px] leading-none">Profile</span>
+                <span className={RAIL_LABEL_CLASS}>Profile</span>
               </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                  walletRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                  RAIL_BUTTON_CLASS,
+                  walletRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={() => setCurrentSidePanel("wallet")}
                 title="Wallet details"
@@ -1835,7 +1858,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={walletRailActive}
               >
                 <WalletIcon size={17} />
-                <span className="text-[9px] leading-none">Wallet</span>
+                <span className={RAIL_LABEL_CLASS}>Wallet</span>
               </Button>
             </div>
             {isElectronRuntime() ? (
@@ -1843,8 +1866,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                  browserRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                  RAIL_BUTTON_CLASS,
+                  browserRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={openBrowserRailPane}
                 title="Browser"
@@ -1852,7 +1875,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={browserRailActive}
               >
                 <Globe size={17} />
-                <span className="hidden text-[9px] leading-none 2xl:inline">Browser</span>
+                <span className={RAIL_OPTIONAL_LABEL_CLASS}>Browser</span>
               </Button>
             ) : null}
             {voiceExtensionEnabled ? (
@@ -1860,8 +1883,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                  voiceRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                  RAIL_BUTTON_CLASS,
+                  voiceRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={openVoiceRailPane}
                 title="Voice Mode"
@@ -1869,7 +1892,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-pressed={voiceRailActive}
               >
                 <Mic2 size={17} />
-                <span className="hidden text-[9px] leading-none 2xl:inline">Voice</span>
+                <span className={RAIL_OPTIONAL_LABEL_CLASS}>Voice</span>
               </Button>
             ) : null}
             {showArtifactRailItem ? (
@@ -1877,8 +1900,8 @@ export function SessionPage(props: SessionPageProps) {
                 variant="ghost"
                 size="icon-sm"
                 className={cn(
-                  "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                  artifactRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                  RAIL_BUTTON_CLASS,
+                  artifactRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={openArtifactRailPane}
                 title={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
@@ -1887,7 +1910,7 @@ export function SessionPage(props: SessionPageProps) {
                 disabled={!hasArtifactTargets}
               >
                 <FileText size={17} />
-                <span className="text-[9px] leading-none">Artifacts</span>
+                <span className={RAIL_LABEL_CLASS}>Artifacts</span>
                 {artifactTargetCount > 0 ? (
                   <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                     {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
@@ -1899,8 +1922,8 @@ export function SessionPage(props: SessionPageProps) {
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                extensionsRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                RAIL_BUTTON_CLASS,
+                extensionsRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={props.settingsSlot ? openExtensionsRailPane : props.onOpenSettings}
               title="MCPs & Connectors"
@@ -1908,14 +1931,14 @@ export function SessionPage(props: SessionPageProps) {
               aria-pressed={extensionsRailActive}
             >
               <Settings2 size={17} />
-              <span className="text-[9px] leading-none">MCPs</span>
+              <span className={RAIL_LABEL_CLASS}>MCPs</span>
             </Button>
             <Button
               variant="ghost"
               size="icon-sm"
               className={cn(
-                "relative h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-white/[0.06] hover:text-foreground",
-                memoryRailActive && "bg-primary/10 text-primary ring-1 ring-primary/35 hover:bg-primary/15 hover:text-primary",
+                `relative ${RAIL_BUTTON_CLASS}`,
+                memoryRailActive && RAIL_ACTIVE_CLASS,
               )}
               onClick={openMemoryRailPane}
               title={`${memoryInboxLabel}. Review remembered context, use selected memories in chat, forget records, and export evidence.`}
@@ -1923,14 +1946,14 @@ export function SessionPage(props: SessionPageProps) {
               aria-pressed={memoryRailActive}
             >
               {memorySuggestionUnreadCount > 0 ? <Bell size={17} /> : <Database size={17} />}
-              <span className="text-[9px] leading-none">Memory</span>
+              <span className={RAIL_LABEL_CLASS}>Memory</span>
               {memorySuggestionUnreadCount > 0 ? (
                 <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                   {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
                 </span>
               ) : null}
             </Button>
-            <div className="mt-1 w-full border-t border-white/[0.06] pt-2 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
+            <div className={RAIL_SECTION_LABEL_CLASS}>
               Desks
             </div>
             {VENUE_SIDE_PANELS.map((panel) => {
@@ -1953,7 +1976,7 @@ export function SessionPage(props: SessionPageProps) {
                   size="icon-sm"
                   style={deskToneStyle(item.panel)}
                   className={cn(
-                    "h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-foreground",
+                    RAIL_DESK_BUTTON_CLASS,
                     item.active && "bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)] ring-1 ring-[rgba(var(--matterhorn-desk-rgb),0.38)] hover:bg-[rgba(var(--matterhorn-desk-rgb),0.2)] hover:text-[var(--matterhorn-desk-color)]",
                   )}
                   onClick={() => openVenueRailPane(item.panel)}
@@ -1962,7 +1985,7 @@ export function SessionPage(props: SessionPageProps) {
                   aria-pressed={item.active}
                 >
                   <ProtocolLogo venue={item.panel} size={22} />
-                  <span className="text-[9px] leading-none 2xl:max-w-full 2xl:truncate">{item.label}</span>
+                  <span className={RAIL_LABEL_CLASS}>{item.label}</span>
                 </Button>
               );
             })}
@@ -1982,7 +2005,7 @@ export function SessionPage(props: SessionPageProps) {
                   variant="ghost"
                   size="icon-sm"
                   style={deskToneStyle("wellness")}
-                  className="h-auto w-full flex-col gap-1 rounded-md px-1 py-2 transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.1)] hover:text-[var(--matterhorn-desk-color)]"
+                  className={RAIL_DESK_BUTTON_CLASS}
                   onClick={() => {
                     if (item.launcher) {
                       dispatchMatterhornMemorySuggestions({
@@ -1996,7 +2019,7 @@ export function SessionPage(props: SessionPageProps) {
                       });
                     }
                     if (item.launcher && props.sidebar.onCreateTaskWithPrompt) {
-                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt);
+                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, { title: item.launcher.title });
                       return;
                     }
                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -2005,7 +2028,7 @@ export function SessionPage(props: SessionPageProps) {
                   aria-label={item.title}
                 >
                   <Icon size={17} />
-                  <span className="text-[9px] leading-none">{item.label}</span>
+                  <span className={RAIL_LABEL_CLASS}>{item.label}</span>
                 </Button>
               );
             })}

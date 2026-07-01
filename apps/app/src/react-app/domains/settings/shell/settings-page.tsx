@@ -152,15 +152,15 @@ export function getSettingsTabLabel(tab: SettingsTab) {
 export function getSettingsTabDescription(tab: SettingsTab) {
   switch (tab) {
     case "overview":
-      return "Profile, appearance, safety, protocols, and diagnostics";
+      return "Profile, safety, protocols, and diagnostics";
     case "ai":
-      return "Connect services that provide AI models";
+      return "Connect model providers";
     case "preferences":
-      return "Default model, reasoning, and compaction";
+      return "Model and reasoning controls";
     case "shell":
-      return "Branding, visibility, and shell controls";
+      return "Branding and shell controls";
     case "permissions":
-      return "Authorized folders and file access";
+      return "Folders the agent can use";
     case "cloud-account":
       return t("settings.tab_description_cloud_account");
     case "cloud-marketplaces":
@@ -186,11 +186,11 @@ export function getSettingsTabDescription(tab: SettingsTab) {
     case "debug":
       return t("settings.tab_description_debug");
     case "wallet":
-      return "Connect a wallet for external-signing workflows.";
+      return "Connect wallets for safe handoffs.";
     case "marketplace":
-      return "Preview future agent templates. Hiring and deployment are not live.";
+      return "Future agent templates. Not live.";
     case "general":
-      return "Overview of all settings";
+      return "Settings at a glance";
     default:
       return t("settings.tab_description_general");
   }

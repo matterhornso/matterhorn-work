@@ -77,6 +77,17 @@ function StatusIndicator(props: StatusIndicatorProps) {
   }
 
   if (props.clientConnected) {
+    const connectedDetails: string[] = [];
+    if (props.mcpConnectedCount > 0) {
+      connectedDetails.push(t("status.mcp_connected", undefined, { count: props.mcpConnectedCount }));
+    }
+    if (props.developerMode) {
+      connectedDetails.push(t("status.developer_mode"));
+    }
+    if (connectedDetails.length === 0) {
+      return null;
+    }
+
     return (
       <div className="flex min-w-0 items-center gap-2.5">
         <Tooltip>
@@ -85,16 +96,11 @@ function StatusIndicator(props: StatusIndicatorProps) {
           </TooltipTrigger>
           <TooltipContent>{t("status.connected")}</TooltipContent>
         </Tooltip>
-        <span className="truncate text-muted-foreground text-xs">
-          {props.mcpConnectedCount > 0
-            ? t("status.mcp_connected", undefined, { count: props.mcpConnectedCount })
-            : t("status.ready_for_tasks")}
-        </span>
-        {props.developerMode ? (
-          <span className="truncate text-muted-foreground text-xs">
-            {t("status.developer_mode")}
+        {connectedDetails.map((detail) => (
+          <span key={detail} className="truncate text-muted-foreground text-xs">
+            {detail}
           </span>
-        ) : null}
+        ))}
       </div>
     );
   }

@@ -5,6 +5,8 @@ import type { UIMessage } from "ai";
 import { useQuery } from "@tanstack/react-query";
 import type { SessionStatus } from "@opencode-ai/sdk/v2/client";
 import {
+  ArrowDown,
+  ArrowUp,
   BarChart3,
   BrainCircuit,
   Check,
@@ -1849,28 +1851,34 @@ export function SessionSurface(props: SessionSurfaceProps) {
           </div>
         </div>
         {renderedMessages.length > 0 && hasTranscriptJumpTarget && (!sessionScroll.isAtBottom || (!chatStreaming && sessionScroll.topClippedMessageId)) ? (
-          <div className="pointer-events-none absolute bottom-2 left-1/2 z-30 flex -translate-x-1/2 justify-center">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-md bg-dls-surface/95 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.18)] backdrop-blur-md">
+          <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 flex -translate-x-1/2 justify-center sm:bottom-5">
+            <div className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-dls-border bg-dls-surface px-1.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.28)]">
               {!chatStreaming && sessionScroll.topClippedMessageId ? (
                 <button
                   type="button"
-                  className="rounded-full px-3 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover"
+                  className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-dls-secondary transition-colors hover:bg-dls-hover hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.28)]"
                   onClick={() => {
                     sessionScroll.jumpToStartOfMessage("smooth");
                   }}
+                  title="Jump to the start of the latest message"
+                  aria-label="Jump to the start of the latest message"
                 >
+                  <ArrowUp size={14} />
                   Jump to start
                 </button>
               ) : null}
               {!sessionScroll.isAtBottom ? (
                 <button
                   type="button"
-                  className="rounded-full px-3 py-1.5 text-xs text-dls-text transition-colors hover:bg-dls-hover"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-dls-text bg-dls-text px-3.5 py-2 text-[12px] font-semibold text-dls-canvas transition-colors hover:bg-dls-text/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--dls-accent-rgb),0.36)]"
                   onClick={() => {
                     sessionScroll.jumpToLatest("smooth");
                   }}
+                  title="Jump to the latest message"
+                  aria-label="Jump to the latest message"
                 >
                   Jump to latest
+                  <ArrowDown size={14} />
                 </button>
               ) : null}
             </div>

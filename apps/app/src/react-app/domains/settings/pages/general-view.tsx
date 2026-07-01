@@ -38,20 +38,20 @@ type SettingsHubCard = {
 };
 
 const workspaceCards: SettingsHubCard[] = [
-  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Default model, reasoning, and compaction.", status: "Ready" },
-  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Authorized folders and file access.", status: "Ready" },
-  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers, protocol tools, connectors, and plugins.", status: "Ready" },
-  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime, engine, and developer options.", status: "Developer", developerOnly: true },
+  { tab: "preferences", icon: Cog, title: "Preferences", desc: "Model and reasoning controls.", status: "Ready" },
+  { tab: "permissions", icon: FolderLock, title: "Permissions", desc: "Folders the agent can use.", status: "Ready" },
+  { tab: "extensions", icon: Puzzle, title: "MCPs & Tools", desc: "MCP servers and connectors.", status: "Ready" },
+  { tab: "advanced", icon: Wrench, title: "Advanced", desc: "Runtime and developer options.", status: "Developer", developerOnly: true },
 ];
 
 const globalCards: SettingsHubCard[] = [
-  { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect services that provide AI models.", status: "Needs setup" },
-  { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account, sign-in, and organization.", status: "Needs setup" },
-  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme, font size, and display.", status: "Ready" },
-  { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "App version and update channel.", status: "Desktop only" },
-  { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud-only worker instances after Matterhorn Cloud sign-in.", status: "Cloud only", developerOnly: true },
-  { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables. Requires server token.", status: "Developer", developerOnly: true },
-  { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Disabled reset/repair diagnostics preview.", status: "Preview", developerOnly: true },
+  { tab: "ai", icon: Sparkles, title: "AI Providers", desc: "Connect model providers.", status: "Needs setup" },
+  { tab: "cloud-account", icon: Cloud, title: "Matterhorn Cloud", desc: "Account and organization.", status: "Needs setup" },
+  { tab: "appearance", icon: Paintbrush, title: "Appearance", desc: "Theme and text size.", status: "Ready" },
+  { tab: "updates", icon: RefreshCcw, title: "Updates", desc: "Version and update channel.", status: "Desktop only" },
+  { tab: "cloud-workers", icon: Cloud, title: "Cloud Workers Preview", desc: "Cloud worker instances.", status: "Cloud only", developerOnly: true },
+  { tab: "environment", icon: Terminal, title: "Environment", desc: "Local runtime variables.", status: "Developer", developerOnly: true },
+  { tab: "recovery", icon: ShieldCheck, title: "Recovery", desc: "Reset and repair diagnostics.", status: "Preview", developerOnly: true },
 ];
 
 function SettingsCard(props: {
@@ -88,7 +88,7 @@ function SettingsCard(props: {
             {props.status}
           </span>
         </div>
-        <div className="text-[11px] text-dls-secondary">{props.desc}</div>
+        <div className="mt-0.5 text-[12px] leading-5 text-dls-text">{props.desc}</div>
       </div>
       <ArrowRight size={14} className="shrink-0 text-dls-secondary" />
     </button>
@@ -141,10 +141,10 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
         <div className="space-y-3">
           <div>
             <div className="flex items-center gap-2">
-              <LifeBuoy size={14} className="text-dls-secondary" />
+              <LifeBuoy size={14} className="text-dls-text" />
               <div className="text-[13px] font-medium text-dls-text">{t("settings.feedback_title")}</div>
             </div>
-            <div className="mt-1 max-w-[58ch] text-[11px] leading-5 text-dls-secondary">{t("settings.feedback_desc")}</div>
+            <div className="mt-1 max-w-[58ch] text-[12px] leading-5 text-dls-text">{t("settings.feedback_desc")}</div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
