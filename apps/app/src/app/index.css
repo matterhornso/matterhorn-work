@@ -76,8 +76,8 @@
   --status-warning-rgb: 217 119 6;
   --status-blocked: #dc2626;
   --status-blocked-rgb: 220 38 38;
-  --nav-rail-width: 112px;
-  --nav-rail-width-compact: 72px;
+  --nav-rail-width: 120px;
+  --nav-rail-width-compact: 88px;
   --dls-surface: #ffffff;
   --dls-sidebar: #f5fbff;
   --dls-app-bg: #f6f9ff;
@@ -89,9 +89,9 @@
   --dls-accent-hover: #000000;
   --dls-accent-fg: var(--matterhorn-blue);
   --dls-accent-rgb: var(--matterhorn-ink-rgb);
-  --dls-secondary-rgb: 96 100 108;
+  --dls-secondary-rgb: 70 80 100;
   --dls-text-primary: var(--slate-12);
-  --dls-text-secondary: #555c6d;
+  --dls-text-secondary: #465064;
   --dls-hover: rgba(56, 189, 248, 0.12);
   --dls-active: rgba(56, 189, 248, 0.2);
   --dls-radius: 16px;
@@ -112,7 +112,7 @@
   --secondary: #eaf4ff;
   --secondary-foreground: var(--slate-12);
   --muted: #eaf4ff;
-  --muted-foreground: #555c6d;
+  --muted-foreground: #465064;
   --accent: #e0f7ff;
   --accent-foreground: var(--slate-12);
   --destructive: var(--red-9);
@@ -172,9 +172,9 @@
   --dls-accent-hover: #e7f8ff;
   --dls-accent-fg: var(--matterhorn-ink);
   --dls-accent-rgb: var(--matterhorn-blue-rgb);
-  --dls-secondary-rgb: 180 189 202;
+  --dls-secondary-rgb: 203 213 225;
   --dls-text-primary: #fafcff;
-  --dls-text-secondary: #b4bdca;
+  --dls-text-secondary: #cbd5e1;
   --dls-hover: rgba(56, 189, 248, 0.13);
   --dls-active: rgba(56, 189, 248, 0.22);
   --dls-shell-shadow: 0 22px 56px rgba(0, 0, 0, 0.46);
@@ -620,7 +620,7 @@ select:disabled {
   --secondary: #182033;
   --secondary-foreground: #fafcff;
   --muted: #182033;
-  --muted-foreground: #b4bdca;
+  --muted-foreground: #cbd5e1;
   --accent: #142237;
   --accent-foreground: #fafcff;
   --destructive: var(--red-9);

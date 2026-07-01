@@ -58,11 +58,19 @@ export type WalletSettingsViewProps = {
 function WalletBoundaryList({ safetyCopy }: {
   safetyCopy: WalletRuntimeCapability["safetyCopy"];
 }) {
+  const items = [
+    { label: "Public reads", body: safetyCopy.publicAddressLine },
+    { label: "External signer", body: safetyCopy.externalSignerLine },
+    { label: "Never paste", body: safetyCopy.forbiddenSecretsLine },
+  ];
+
   return (
     <div className="divide-y divide-dls-border/45 text-xs leading-5 text-dls-secondary">
-      <p className="py-2">{safetyCopy.publicAddressLine}</p>
-      <p className="py-2">{safetyCopy.externalSignerLine}</p>
-      <p className="py-2">{safetyCopy.forbiddenSecretsLine}</p>
+      {items.map((item) => (
+        <p key={item.label} className="py-2">
+          <span className="font-medium text-dls-text">{item.label}:</span> {item.body}
+        </p>
+      ))}
     </div>
   );
 }
@@ -148,7 +156,7 @@ function WalletProtocolSupportMap(props: {
       <div>
         <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-dls-secondary">Protocol support</h4>
         <p className="mt-1 text-xs leading-5 text-dls-secondary">
-          One wallet surface, different safety boundary per desk. Matterhorn never stores keys, API secrets, raw signatures, signed payloads, or wallet exports.
+          One wallet surface; each desk keeps its own safety boundary.
         </p>
       </div>
       <div className="divide-y divide-dls-border/35">
@@ -170,22 +178,22 @@ const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe;
   web: {
     label: "Web browser",
     icon: Globe,
-    detail: "Injected wallets such as MetaMask or Rabby can appear when their extension is installed and allowed on the Matterhorn page.",
+    detail: "Injected wallets appear when their extension is installed and allowed on Matterhorn.",
   },
   desktop: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Browser wallet extensions do not inject into Electron. Desktop users should use the external signer flow today; WalletConnect or deep-link bridge support is the planned native wallet path.",
+    detail: "Browser wallet extensions do not inject into Electron. Use external signing today.",
   },
   electron: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Electron builds do not support injected wallets. Use external-signer handoffs for any on-chain action.",
+    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
   },
   unknown: {
     label: "Unknown runtime",
     icon: MonitorSmartphone,
-    detail: "Wallet capabilities are unknown for this runtime. Use the web or desktop app for the full feature set.",
+    detail: "Wallet capabilities are unknown here. Use web or desktop for full support.",
   },
 };
 
@@ -193,10 +201,10 @@ function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; co
   const { label, icon: RuntimeIcon, detail } = RUNTIME_LABELS[props.capability.runtime];
   const strategyNote = (() => {
     switch (props.capability.desktopWalletStrategy) {
-      case "external_signer": return "External signer handoffs are available in this runtime.";
-      case "walletconnect_planned": return "WalletConnect integration is planned for this runtime.";
-      case "deep_link_planned": return "Deep-link bridge support is planned for this runtime.";
-      default: return "Native wallet strategy is not yet available in this runtime.";
+      case "external_signer": return "External signer handoffs are available here.";
+      case "walletconnect_planned": return "WalletConnect support is planned for this runtime.";
+      case "deep_link_planned": return "Deep-link support is planned for this runtime.";
+      default: return "Native wallet support is not available in this runtime.";
     }
   })();
 
@@ -210,7 +218,7 @@ function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; co
         <div className="min-w-0">
           <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-200">Wallet runtime behavior</h4>
           <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Matterhorn keeps wallet behavior explicit so web and desktop users know where signing actually happens.
+            Matterhorn shows where signing happens before any handoff.
           </p>
         </div>
       </div>
@@ -342,7 +350,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
             <div className="min-w-0">
               <h3 className="text-sm font-semibold text-dls-text">Matterhorn Wallet</h3>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                One wallet surface for EVM handoffs. Bittensor still uses public SS58 reads and external signing.
+                EVM handoffs live here. Bittensor uses public SS58 reads and external signing.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -419,7 +427,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
                   No EVM wallet connector detected
                 </div>
                 <p className="mt-2 text-xs leading-5">
-                  Install or enable MetaMask, Rabby, or another injected wallet in this runtime. You can still use public Bittensor reads and market previews without connecting one.
+                  Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.
                 </p>
               </div>
             )}
@@ -441,7 +449,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
           <SettingsSectionHeader>
             <SettingsSectionHeaderTitle>Matterhorn Wallet</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              Connect an EVM wallet for supported handoff flows. Bittensor coldkeys/hotkeys still use external Bittensor-compatible signing, and Matterhorn never asks for seed phrases or private keys.
+              Connect an EVM wallet for handoffs. Bittensor actions stay external-signer only.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
 
@@ -476,12 +484,15 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
 
             {connectors.length === 0 && (
               <div className="rounded-lg border border-dls-border p-6 text-center">
-                <Wallet className="size-8 mx-auto mb-2 text-gray-8" />
-                <p className="text-sm text-gray-8">
-                  No EVM wallet connectors detected. Install or enable an injected browser wallet such as MetaMask or Rabby in this runtime.
+                <Wallet className="size-8 mx-auto mb-2 text-dls-secondary" />
+                <p className="text-sm font-medium text-dls-text">
+                  No EVM wallet connector detected.
                 </p>
-                <p className="mt-2 text-xs text-gray-9">
-                  Public Bittensor reads, Hyperliquid previews, and Polymarket previews still work without connecting an EVM wallet.
+                <p className="mt-2 text-xs leading-5 text-dls-secondary">
+                  Install or enable MetaMask, Rabby, or another injected wallet.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-dls-secondary">
+                  Public Bittensor reads and market previews still work.
                 </p>
               </div>
             )}
@@ -491,7 +502,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
           <SettingsSectionHeader>
             <SettingsSectionHeaderTitle>Safety boundaries</SettingsSectionHeaderTitle>
             <SettingsSectionHeaderDescription>
-              What this wallet surface can and cannot do today.
+              Current read, preview, and signing limits.
             </SettingsSectionHeaderDescription>
           </SettingsSectionHeader>
           <WalletProtocolSupportMap capability={capability} connected={state.isConnected} />

@@ -52,7 +52,7 @@ type SettingsPanelDescriptionProps = {
 };
 
 export function SettingsPanelDescription(props: SettingsPanelDescriptionProps) {
-  return <p className="text-sm text-muted-foreground">{props.children}</p>;
+  return <p className="text-sm leading-5 text-dls-text">{props.children}</p>;
 }
 
 type SettingsPanelToolbarProps = {

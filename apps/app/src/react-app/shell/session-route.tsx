@@ -2883,28 +2883,38 @@ export function SessionRoute() {
         onCreateTaskInWorkspace: (workspaceId) => {
           void handleCreateTaskInWorkspace(workspaceId);
         },
-        onCreateTaskWithPrompt: (workspaceId, prompt) => {
+        onCreateTaskWithPrompt: (workspaceId, prompt, options) => {
           void (async () => {
             const workspace = workspaces.find((item) => item.id === workspaceId);
             if (!workspace) return;
             const endpoint = resolveWorkspaceEndpoint(workspace, { baseUrl, token });
             if (!endpoint?.token) return;
+            const workspacePath = workspace.path?.trim() || undefined;
+            const title = options?.title?.trim();
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
-              workspace.path?.trim() || undefined,
+              workspacePath,
               { token: endpoint.token, mode: "matterhorn" },
             );
             try {
               const session = unwrap(
-                await workspaceClient.session.create({ directory: workspace.path?.trim() || undefined }),
+                await workspaceClient.session.create({ directory: workspacePath }),
               );
+              const displaySession = title ? { ...(session as any), title } : session;
+              if (title) {
+                await workspaceClient.session.update({
+                  sessionID: session.id,
+                  title,
+                  directory: workspacePath,
+                }).catch(() => undefined);
+              }
               saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
               writeActiveWorkspaceId(workspaceId || null);
               writeLastSessionFor(workspaceId, session.id);
               rememberPendingCreatedSession(workspaceId, session.id);
               setSessionsByWorkspaceId((current) => ({
                 ...current,
-                [workspaceId]: [session as any, ...(current[workspaceId] ?? [])],
+                [workspaceId]: [displaySession as any, ...(current[workspaceId] ?? [])],
               }));
               navigateToWorkspaceSession(workspaceId, session.id);
               focusPromptSoon();
