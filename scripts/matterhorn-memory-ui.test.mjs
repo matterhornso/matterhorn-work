@@ -268,4 +268,67 @@ for (const forbidden of [
   assert.doesNotMatch(`${memoryPanel}\n${memoryStore}\n${extensions}\n${memoryProducer}\n${memorySuggestionTool}`, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `forbidden unsafe memory claim found: ${forbidden}`)
 }
 
+// ---------------------------------------------------------------------------
+// UI state matrix: each of the 6 lifecycle states renders correctly.
+// ---------------------------------------------------------------------------
+// State 1 — pending: actionable (confirm / edit / dismiss)
+for (const marker of [
+  'status === "pending"',
+  "Confirm",
+  "Edit before saving",
+  "Dismiss",
+  "Needs review",
+  "actorConfirmationRequired",
+]) {
+  assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `pending state missing: ${marker}`)
+}
+// pending: no "Saved" badge (it is NOT saved yet)
+assert.doesNotMatch(memoryPanel, /pending.*Saved|Saved.*pending/, "pending state must not display a Saved badge")
+
+// State 2 — edited: already saved, read-only actions
+for (const marker of [
+  'status === "edited"',
+  "edited cards are already saved",
+  "read-only lifecycle history",
+]) {
+  assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `edited state missing: ${marker}`)
+}
+
+// State 3 — confirmed: saved, read-only
+for (const marker of [
+  'status === "confirmed"',
+  "Remembered",
+  "read-only lifecycle history",
+]) {
+  assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `confirmed state missing: ${marker}`)
+}
+
+// State 4 — dismissed: no Confirm button (falls through to read-only)
+assert.match(memoryPanel, /status === "dismissed"/)
+assert.match(memoryPanel, /Dismiss from view only/)
+// dismissed never satisfies canActOnSuggestion (only pending does)
+assert.match(memoryPanel, /return "Available actions: none\. This card is read-only lifecycle history\."/)
+
+// State 5 — expired: dismiss-from-view only, stale notice
+for (const marker of [
+  'status === "expired"',
+  "stale",
+  "Dismiss from view",
+  "dismissalWindowDays",
+]) {
+  assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `expired state missing: ${marker}`)
+}
+
+// State 6 — blocked: policy-protected, content redacted
+for (const marker of [
+  'status === "blocked"',
+  "Policy protected",
+  "Content redacted",
+  "shouldHideSuggestionContent",
+]) {
+  assert.match(memoryPanel, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `blocked state missing: ${marker}`)
+}
+// blocked: suggestionDeskReason is rendered (but title/body are hidden)
+assert.match(memoryPanel, /suggestionDeskReason/)
+
 console.log("Matterhorn Memory production UI gate passed.")

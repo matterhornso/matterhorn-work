@@ -710,7 +710,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(var(--matterhorn-blue-rgb),0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_42%),var(--dls-background)] text-dls-text">
+    <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
       <header className="flex shrink-0 items-start justify-between gap-3 px-5 py-5">
         <div className="min-w-0">
           <div className="text-base font-semibold">Matterhorn Memory</div>
@@ -727,7 +727,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <section className="rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.20),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <section className="rounded-xl border border-dls-border bg-dls-surface p-3">
           <div className="flex flex-col gap-2">
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
@@ -779,7 +779,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </section>
         ) : null}
 
-        <section className="mt-4 rounded-[28px] bg-[linear-gradient(135deg,rgba(var(--matterhorn-blue-rgb),0.16),rgba(255,255,255,0.035))] p-4 shadow-[0_20px_70px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(255,255,255,0.08)]">
+        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-2">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
@@ -803,7 +803,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : null}
 
-          <div className="mt-4 divide-y divide-white/10 rounded-[22px] bg-background/45 px-3" aria-label="Memory inbox lifecycle summary">
+          <div className="mt-4 divide-y divide-dls-border rounded-xl border border-dls-border bg-dls-surface px-3" aria-label="Memory inbox lifecycle summary">
             <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
               <div>
                 <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
@@ -854,13 +854,13 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
 
           {suggestionsLoading && !suggestionEntries.length ? (
-            <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               Loading suggestion inbox. Matterhorn is checking for visible, reviewable memory candidates.
             </div>
           ) : null}
 
           {suggestionEntries.length > 0 && !filteredSuggestionEntries.length ? (
-            <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               No suggestions match this filter. <span className="font-semibold text-dls-text">{selectedSuggestionFilter.label}</span> currently has no visible entries.
             </div>
           ) : null}
@@ -881,7 +881,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
                 return (
                   <article key={entry.id} className={cn(
-                    "overflow-hidden rounded-[24px] bg-background/62 px-3 py-3 shadow-[0_18px_50px_rgba(0,0,0,0.18),inset_3px_0_0_rgba(var(--matterhorn-blue-rgb),0.58)]",
+                    "overflow-hidden rounded-xl border border-dls-border bg-dls-surface px-3 py-3",
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
@@ -981,7 +981,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     )}
 
                     {editing ? (
-                      <div className="mt-3 grid gap-2 rounded-[22px] bg-[rgba(var(--matterhorn-blue-rgb),0.12)] p-3">
+                      <div className="mt-3 grid gap-2 rounded-xl border border-dls-border bg-dls-surface p-3">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
                         <input
                           value={suggestionEditDraft.title}
@@ -1083,7 +1083,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : (
             !suggestionsLoading && !suggestionEntries.length ? (
-              <div className="mt-3 rounded-[22px] bg-background/45 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
                 No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
               </div>
             ) : null
@@ -1092,7 +1092,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
         <section className="mt-4 space-y-2">
           {records.length === 0 && !loading ? (
-            <div className="rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.06)] px-4 py-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <div className="rounded-xl border border-dls-border bg-dls-surface px-4 py-8 text-center">
               <div className="text-sm font-medium">No memories yet</div>
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
                 Save one manually below. Matterhorn will not remember anything unless you explicitly confirm it.
@@ -1103,7 +1103,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             const policyDecision = getMatterhornMemoryPolicyDecision(record);
             const selected = visibleSelectedRecords.some((item) => item.id === record.id);
             return (
-              <article key={record.id} className="rounded-[24px] bg-dls-card/70 p-3.5 shadow-[0_16px_50px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <article key={record.id} className="rounded-xl border border-dls-border bg-dls-surface p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1165,7 +1165,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           })}
         </section>
 
-        <section className="mt-4 rounded-[28px] bg-dls-card/70 p-4 shadow-[0_20px_70px_rgba(0,0,0,0.18),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
           <div className="flex items-start gap-2">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
               <ShieldAlert className="size-4" />
@@ -1178,7 +1178,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           </div>
           <div className="mt-3 grid gap-2">
-            <div className="rounded-2xl bg-background/45 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <div className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
               Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Wellness becomes restricted by default; market memories cannot be exported or shared with MCP/API.
             </div>
             <input
@@ -1248,7 +1248,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
         </section>
 
-        <section className="mt-4 rounded-[28px] bg-[rgba(var(--matterhorn-blue-rgb),0.07)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
           <div className="flex flex-col gap-3">
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
