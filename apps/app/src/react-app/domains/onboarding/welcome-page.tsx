@@ -41,7 +41,7 @@ const capabilities = [
   },
   {
     icon: Dumbbell,
-    title: "Wellness builder",
+    title: "Longevity builder",
     desc: "Create training, yoga, dietician, check-in, and customer-management workflows.",
   },
   {
@@ -159,10 +159,10 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
                 Pick a folder where Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.
               </OnboardingStep>
               <OnboardingStep number="2" title="Choose a product lane">
-                Open Bittensor, Hyperliquid, Polymarket, wellness workflows, or a blank chat.
+                Open Bittensor, Hyperliquid, Polymarket, longevity workflows, or a blank chat.
               </OnboardingStep>
               <OnboardingStep number="3" title="Review before action">
-                Inspect evidence, preview-only actions, and external-signer handoffs. Matterhorn never holds your keys.
+                Inspect evidence and external-signer handoffs before anything sensitive happens. Matterhorn never holds your keys.
               </OnboardingStep>
             </div>
 

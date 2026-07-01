@@ -1,6 +1,6 @@
-# Wellness Creator Pilot — Artifact Fixtures
+# Longevity Creator Pilot — Artifact Fixtures
 
-These are **reproducible reference outputs** for the Wellness Creator Pilot. Each file is the artifact the agent produces for one canonical demo prompt, generated for a single worked example: a **4-week beginner fat-loss program, 3 sessions/week, minimal equipment.**
+These are **reproducible reference outputs** for the Longevity Creator Pilot. Each file is the artifact the agent produces for one canonical demo prompt, generated for a single worked example: a **4-week beginner fat-loss program, 3 sessions/week, minimal equipment.**
 
 They exist so the demo is concrete and repeatable: an operator can compare a live run against these references, and the go-live gate (`pnpm test:wellness-creator-pilot`) validates that every artifact carries its mandatory non-medical disclaimer and contains no medical or guarantee claim.
 
@@ -15,4 +15,4 @@ They exist so the demo is concrete and repeatable: an operator can compare a liv
 
 See [`../wellness-creator-pilot.md`](../wellness-creator-pilot.md) for the full pilot spec and go-live runbook.
 
-> All content here is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.
+> All content here is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment.

@@ -44,4 +44,4 @@ Complete beginners and anyone returning to training who wants a clear, doable pl
 
 ## Disclaimer
 
-This packet is general fitness and wellness education, not medical care. It is not medical advice, diagnosis, or treatment. No specific outcome, weight change, or fitness result is guaranteed.
+This packet is general fitness and longevity education, not medical care. It is not medical advice, diagnosis, or treatment. No specific outcome, weight change, or fitness result is guaranteed.

@@ -2,7 +2,7 @@
 
 *A reproducible, customer-demo-safe walk-through of the complete client-delivery path for a dietician. General healthy-eating education only; artifact-first and offline: nothing is hosted, charged, emailed, or gated.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 > This guidance is general healthy-eating information, not a clinical or therapeutic diet. It is not a substitute for care from a registered dietitian or doctor.
 

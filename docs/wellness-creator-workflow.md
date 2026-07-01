@@ -1,4 +1,4 @@
-# Wellness Creator Workflow
+# Longevity Creator Workflow
 
 A **full Matterhorn Work workflow** — **not a pilot and not a custom vertical UI.** A personal trainer, gym instructor, yoga instructor, or dietician uses Matterhorn Work entirely through chat to design a program, generate client artifacts, package a sellable service, plan delivery, manage customers, and export the whole thing as a Matterhorn / MCP artifact.
 
@@ -8,11 +8,11 @@ This is a use case on the universal chat-first platform. It deliberately blurs t
 
 ## Why This Is a Full Workflow, Not a Pilot
 
-The earlier Wellness Creator *Pilot* proved a handful of canonical prompts end-to-end. This workflow is the productised version: a complete, seven-stage operating flow a creator runs from first idea to a packaged, exportable service. It is framed as a first-class Matterhorn Work workflow — the same shape the platform uses for any other use case — not a one-off demo and not a bespoke wellness app.
+The earlier Longevity Creator *Pilot* proved a handful of canonical prompts end-to-end. This workflow is the productised version: a complete, seven-stage operating flow a creator runs from first idea to a packaged, exportable service. It is framed as a first-class Matterhorn Work workflow — the same shape the platform uses for any other use case — not a one-off demo and not a bespoke longevity app.
 
 ## Reusable Matterhorn Workflow Pattern
 
-This is a **reusable workflow pattern**, not a custom vertical app. It conforms to the shared [Matterhorn Workflow Contract](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`), is registered in the workflow catalog as `wellness_creator_workflow` (category `wellness`), and **runs through the same Matterhorn chat/operator system as every other workflow** — Bittensor playbooks, market previews, decentralized-services planners, and future verticals. There is no bespoke wellness UI.
+This is a **reusable workflow pattern**, not a custom vertical app. It conforms to the shared [Matterhorn Workflow Contract](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`), is registered in the workflow catalog as `wellness_creator_workflow` (category `wellness`), and **runs through the same Matterhorn chat/operator system as every other workflow** — Bittensor playbooks, market previews, decentralized-services planners, and future verticals. There is no bespoke longevity UI.
 
 The same pattern serves a range of **client-facing service professionals**, not just one role:
 
@@ -37,7 +37,7 @@ Each stage has one canonical chat prompt and the client-safe artifacts it produc
 
 ### 1. Intake
 The creator describes their **audience, goal, constraints, session type, duration, equipment, and level.**
-- Prompt: `Start a new wellness program — here is my audience, goal, constraints, session type, duration, equipment, and level`
+- Prompt: `Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level`
 - Artifact: intake summary.
 
 ### 2. Program design
@@ -81,7 +81,7 @@ How the workflow runs through **Matterhorn Work, Claude Code, Codex, or a shared
 
 These are validated by the workflow gate; keep them stable. The seven stage prompts above are the canonical set:
 
-1. `Start a new wellness program — here is my audience, goal, constraints, session type, duration, equipment, and level`
+1. `Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level`
 2. `Design the program with safety disclaimers`
 3. `Generate the client artifacts: weekly plan, video script, checklist, FAQ, and progress tracker`
 4. `Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text`
@@ -97,19 +97,19 @@ Beyond the seven stage prompts, the same pattern handles ad-hoc, role-specific r
 |---|---|---|
 | `Create a 4-week beginner strength plan` | Structured 4-week beginner strength plan | General fitness education only. Not medical advice, diagnosis, or treatment. |
 | `Turn this into a client PDF packet` | Client-facing program packet ready to export | Standard Matterhorn artifact. Storage / hosting is planned, not live. |
-| `Draft a yoga class plan for lower-back mobility` | General mobility-focused yoga class plan | General wellness education only, not medical care. Refer pain or injury to a qualified professional. |
+| `Draft a yoga class plan for lower-back mobility` | General mobility-focused yoga class plan | General longevity education only, not medical care. Refer pain or injury to a qualified professional. |
 | `Create a dietician-safe meal planning template without medical claims` | General healthy-eating meal-planning template | General healthy-eating information, not a clinical or therapeutic diet. Not medical advice, diagnosis, or treatment. |
 | `Prepare a future paid program page, but do not process payment` | Draft paid program page with placeholder pricing only | Payments are planned, not live; no payment is processed and no funds move. |
 
 ## Exposed Through Generic Matterhorn Workflow Surfaces
 
-**This is not a custom wellness app.** It is a chat-first Matterhorn workflow that creates artifacts, plans, packets, check-ins, and client deliverables — and it is discovered and run through the **same generic Matterhorn workflow surfaces as every other workflow**, with no bespoke UI:
+**This is not a custom longevity app.** It is a chat-first Matterhorn workflow that creates artifacts, plans, packets, check-ins, and client deliverables — and it is discovered and run through the **same generic Matterhorn workflow surfaces as every other workflow**, with no bespoke UI:
 
 - **Workflow catalog:** registered as `wellness_creator_workflow` in [`scripts/matterhorn-workflow-catalog.mjs`](../scripts/matterhorn-workflow-catalog.mjs).
 - **Template registry:** registered as `wellness_creator_service_workflow` in [`packages/types/src/matterhorn-workflows.ts`](../packages/types/src/matterhorn-workflows.ts).
 - **Shared contract:** conforms to [`docs/matterhorn-workflow-contract.md`](./matterhorn-workflow-contract.md) (`matterhorn.workflow.manifest.v1`).
 
-The same surfaces serve Bittensor operator playbooks, market previews, and decentralized-service planners. Wellness is simply one reusable workflow among them — proof that Matterhorn Work can help **any professional service provider operate through chat.** The helper's `--json` output carries a `genericSurfaces` block with these identifiers.
+The same surfaces serve Bittensor operator playbooks, market previews, and decentralized-service planners. Longevity is simply one reusable workflow among them — proof that Matterhorn Work can help **any professional service provider operate through chat.** The helper's `--json` output carries a `genericSurfaces` block with these identifiers.
 
 ### CLI / Operator Examples
 
@@ -164,9 +164,9 @@ The workflow is a **service builder**: a creator describes what they want and it
 | `create a client check-in` | Weekly progress check-in |
 | `package a paid program` | Offer / landing packet |
 | `create a client video script` | Video lesson script |
-| *arbitrary wellness/business prompt* | routed to the closest contract |
+| *arbitrary longevity/business prompt* | routed to the closest contract |
 
-**Artifact contracts** (all educational/general wellness only, `live_local`):
+**Artifact contracts** (all educational/general longevity only, `live_local`):
 
 1. **Client plan** — a structured training, yoga, or nutrition-education program.
 2. **Intake questionnaire** — onboarding questions (goals, experience, schedule, non-clinical context, consent).
@@ -178,7 +178,7 @@ The workflow is a **service builder**: a creator describes what they want and it
 
 ## Sample Prompts (Hermes / Customer Demos)
 
-Realistic prompts and the artifact each produces. Every output is educational/general wellness only with the mandatory disclaimer:
+Realistic prompts and the artifact each produces. Every output is educational/general longevity only with the mandatory disclaimer:
 
 | Prompt | Artifact | Summary |
 |---|---|---|
@@ -197,7 +197,7 @@ Realistic prompts and the artifact each produces. Every output is educational/ge
 
 ## Customer Demo Pack (Test-Customer Ready)
 
-The **Wellness Creator Customer Demo Pack** is the showcase set: seven reusable, client-ready artifacts a personal trainer, yoga instructor, or dietician can generate and share through chat. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline — nothing is hosted, charged, emailed, or gated.
+The **Longevity Creator Customer Demo Pack** is the showcase set: seven reusable, client-ready artifacts a personal trainer, yoga instructor, or dietician can generate and share through chat. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline — nothing is hosted, charged, emailed, or gated.
 
 | # | Deliverable | Fixture | Example prompt → artifact |
 |---|---|---|---|
@@ -216,7 +216,7 @@ node scripts/wellness-creator-workflow.mjs --demo-pack --json
 node scripts/wellness-creator-workflow.mjs --demo-pack personal_trainer --json
 ```
 
-The workflow **accepts arbitrary creator prompts** and routes each into the right artifact type (see "Any Prompt, One Workflow"). Every deliverable is educational/general wellness only — no diagnosis, prescription, treatment, or guaranteed outcomes — and every service hook (storage/hosting, payments, email, identity/access) is `planned_not_live`. Secret-shaped input is refused and not echoed.
+The workflow **accepts arbitrary creator prompts** and routes each into the right artifact type (see "Any Prompt, One Workflow"). Every deliverable is educational/general longevity only — no diagnosis, prescription, treatment, or guaranteed outcomes — and every service hook (storage/hosting, payments, email, identity/access) is `planned_not_live`. Secret-shaped input is refused and not echoed.
 
 ## Demo Packet Export (Single Shareable File)
 
@@ -232,7 +232,7 @@ node scripts/wellness-creator-workflow.mjs --demo-pack-export personal_trainer -
 
 ## Client Lifecycle (Full Test-Customer Demo Path)
 
-The **Client Lifecycle** is the complete, ordered client-delivery path a wellness creator runs through chat — a test customer can walk the whole flow end to end. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline: nothing is hosted, charged, emailed, or gated.
+The **Client Lifecycle** is the complete, ordered client-delivery path a longevity creator runs through chat — a test customer can walk the whole flow end to end. It is a generic Matterhorn workflow (no custom app UI), artifact-first and offline: nothing is hosted, charged, emailed, or gated.
 
 The seven stages (each produces a client-safe artifact):
 
@@ -263,10 +263,10 @@ Reproducible full-lifecycle reference walk-throughs (customer-demo safe, with no
 
 ## Customer Offer Builder
 
-The **Wellness Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Work is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.
+The **Longevity Creator Customer Offer Builder** lets a personal trainer, yoga instructor, dietician, or hybrid coach **package and deliver a service** as client-safe artifacts — proof that Matterhorn Work is a general work platform beyond Web3. It is artifact-first and offline: nothing is hosted, charged, emailed, or gated.
 
 - **Personas:** `personal_trainer`, `yoga_instructor`, `dietician`, `hybrid_coach`.
-- **Offer types:** 4-week starter, 8-week transformation, group cohort, corporate wellness, habit reset.
+- **Offer types:** 4-week starter, 8-week transformation, group cohort, corporate longevity, habit reset.
 - **Deliverables:** offer page, client intake, weekly plan, video script, progress tracker, check-in note, renewal offer (each maps to a workflow artifact contract).
 - **Service hooks:** storage/hosting, payments, email, identity/access — all explicitly **`planned_not_live`**.
 - **Safety:** educational only; no medical diagnosis, no treatment plan, no payment processing, no email sending.
@@ -285,9 +285,9 @@ Reproducible reference offers (customer-demo safe, with non-medical disclaimers)
 - [`dietician-client-packet.md`](./wellness-creator-workflow/dietician-client-packet.md)
 - [`yoga-instructor-program.md`](./wellness-creator-workflow/yoga-instructor-program.md)
 
-## Wellness Memory Safety Lane
+## Longevity Memory Safety Lane
 
-Matterhorn Memory will eventually remember safe workflow context. For wellness it is held to an extra-careful standard: a trainer, yoga instructor, dietician, or coach can have **service preferences and client workflow metadata** remembered, but the system must **never** store diagnosis, treatment, prescriptions, guaranteed outcomes, or hidden health records.
+Matterhorn Memory will eventually remember safe workflow context. For longevity it is held to an extra-careful standard: a trainer, yoga instructor, dietician, or coach can have **service preferences and client workflow metadata** remembered, but the system must **never** store diagnosis, treatment, prescriptions, guaranteed outcomes, or hidden health records.
 
 **Nothing is written to memory yet** — this lane only surfaces *candidates*:
 
@@ -301,7 +301,7 @@ A black-box **QA evidence pack** proves the candidates are useful but safe (per-
 node scripts/wellness-creator-workflow.mjs --memory-qa --json
 ```
 
-A **contract adapter** converts safe candidates into `MatterhornMemorySuggestion`-shaped fixtures (the merged shape in `packages/types/src/memory.ts`) — **suggestions only, never writes**. It covers wellness preference types: **client preference, program preference, check-in cadence, equipment constraints, communication preference, dietary preference** (the last only when **non-clinical and user-confirmed**), plus product-behavior types **client communication style, preferred program length, preferred workout/yoga/nutrition format, offer-builder preference, and export format preference**. Every suggestion is **opt-in, educational, restricted by default, never clinical, and never auto-saved** (`sensitivity: restricted`; body carries `optIn`/`educationalOnly`/`restrictedByDefault: true`, `clinical`/`autoSaved: false`; adapter-level `safetyAttributes` all true). Each proposed record is `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`, with `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, and `requiresExplicitConsent: true`. Clinical and secret-shaped inputs are refused/redacted and never become records:
+A **contract adapter** converts safe candidates into `MatterhornMemorySuggestion`-shaped fixtures (the merged shape in `packages/types/src/memory.ts`) — **suggestions only, never writes**. It covers longevity preference types: **client preference, program preference, check-in cadence, equipment constraints, communication preference, dietary preference** (the last only when **non-clinical and user-confirmed**), plus product-behavior types **client communication style, preferred program length, preferred workout/yoga/nutrition format, offer-builder preference, and export format preference**. Every suggestion is **opt-in, educational, restricted by default, never clinical, and never auto-saved** (`sensitivity: restricted`; body carries `optIn`/`educationalOnly`/`restrictedByDefault: true`, `clinical`/`autoSaved: false`; adapter-level `safetyAttributes` all true). Each proposed record is `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `longevity` + `opt-in`, with `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, and `requiresExplicitConsent: true`. Clinical and secret-shaped inputs are refused/redacted and never become records:
 
 ```bash
 node scripts/wellness-creator-workflow.mjs --memory-suggestions --json
@@ -323,7 +323,7 @@ The helper pins `memory.writesMemory: false` and `memory.safety.{remembersDiagno
 
 ## How This Demonstrates Matterhorn Beyond Web3
 
-Wellness Creator is Matterhorn's **first Web2 / customer-business workflow**. A trainer, yoga instructor, dietician, or coach does real client work through the **same chat/workflow system** as the Web3 workspaces (Bittensor, Hyperliquid, Polymarket) — no crypto knowledge and no custom vertical app required.
+Longevity Creator is Matterhorn's **first Web2 / customer-business workflow**. A trainer, yoga instructor, dietician, or coach does real client work through the **same chat/workflow system** as the Web3 workspaces (Bittensor, Hyperliquid, Polymarket) — no crypto knowledge and no custom vertical app required.
 
 Future Matterhorn service hooks are **planned, not live**:
 
@@ -337,7 +337,7 @@ Nothing here hosts, charges, emails, or gates access today.
 ## Safety Disclaimers (Mandatory)
 
 - **General educational disclaimer** (on every program, nutrition, and client artifact):
-  > This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+  > This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 - **Nutrition-specific note** (on every nutrition artifact):
   > This guidance is general healthy-eating information, not a clinical or therapeutic diet. It is not a substitute for care from a registered dietitian or doctor.
 - **No-guarantee note** (on every service/packaging artifact):

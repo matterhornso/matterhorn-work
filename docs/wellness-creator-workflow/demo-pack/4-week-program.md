@@ -1,8 +1,8 @@
 # 4-Week Program
 
-*Customer Demo Pack artifact — a reusable 4-week program a personal trainer, yoga instructor, or dietician can adapt. Educational/general wellness only.*
+*Customer Demo Pack artifact — a reusable 4-week program a personal trainer, yoga instructor, or dietician can adapt. Educational/general longevity only.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## How to use
 
@@ -35,4 +35,4 @@
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome, weight change, or fitness result is guaranteed. This program is general fitness and wellness education, not medical care. For any pain, injury, or health concern, consult a qualified healthcare professional.
+Results vary between individuals. No specific outcome, weight change, or fitness result is guaranteed. This program is general fitness and longevity education, not medical care. For any pain, injury, or health concern, consult a qualified healthcare professional.

@@ -210,15 +210,15 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
   hyperliquid: [
     {
       title: "Show market context",
-      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
+      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
       title: "Show account exposure",
       prompt: "Use Hyperliquid chat mode. Summarize my public/read-only account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
-      title: "Prepare order preview",
-      prompt: "Use Hyperliquid chat mode. Prepare a preview-only order handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+      title: "Prepare trade handoff",
+      prompt: "Use Hyperliquid chat mode. Prepare an external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
   polymarket: [
@@ -228,11 +228,11 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     },
     {
       title: "Check compliance",
-      prompt: "Use Polymarket chat mode. Check whether this market can be previewed safely. If compliance blocks the preview, do not show executable price, size, share, or order fields.",
+      prompt: "Use Polymarket chat mode. Check whether this market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
-      title: "Prepare preview handoff",
-      prompt: "Use Polymarket chat mode. Prepare a preview-only external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+      title: "Prepare trade handoff",
+      prompt: "Use Polymarket chat mode. Prepare a compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
 };
@@ -275,7 +275,7 @@ function HomeCapabilityOverview({
         <div>
           <h3 className="text-sm font-semibold text-dls-text">Capability status</h3>
           <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary text-pretty">
-            Each desk keeps its own context, wallet needs, previews, and safety boundary. Markets stay preview-only;
+            Each desk keeps its own context, wallet needs, previews, and safety boundary. Markets use external handoffs;
             Bittensor uses public SS58 reads and external signing.
           </p>
         </div>
@@ -341,7 +341,9 @@ function ProtocolDeskEmptyState({
   const [draftedPromptTitle, setDraftedPromptTitle] = useState<string | null>(null);
   const safeBoundary = panel === "bittensor"
     ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
-    : "Read and preview only. Can submit: No. Live submission: Off. External signer/client required.";
+    : panel === "polymarket"
+      ? "Compliance-gated handoff only. Can submit: No. Live submission: Off. External wallet/client required."
+    : "External handoff only. Can submit: No. Live submission: Off. External signer/client required.";
 
   return (
     <section
@@ -448,9 +450,9 @@ function workflowLauncherCapabilityItems(launcher: CustomerWorkflowStarterCard):
     case "bittensor":
       return ["TAO wallet reads", "Subnet discovery", "Unsigned previews"];
     case "hyperliquid":
-      return ["Orderbook reads", "Exposure context", "External-client handoff"];
+      return ["Orderbook reads", "Exposure context", "External trade handoff"];
     case "polymarket":
-      return ["Market research", "Compliance checks", "External-client handoff"];
+      return ["Market research", "Compliance checks", "Trade handoff"];
     default:
       if (launcher.iconHint === "wellness") {
         return ["Client program packets", "Progress check-ins", "No medical claims"];
@@ -1635,7 +1637,7 @@ export function SessionPage(props: SessionPageProps) {
                                 </span>
                               </summary>
                               <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-                                Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
+                                Longevity is a standalone service workflow desk for trainers, yoga instructors, and dieticians. It is not Web3, not markets, and not medical care.
                               </p>
                               <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-2">
                                 {businessWorkflowLaunchers.map((task) => {
@@ -1657,7 +1659,7 @@ export function SessionPage(props: SessionPageProps) {
                                         </span>
                                         <span className="min-w-0">
                                           <span className="flex flex-wrap items-center gap-2">
-                                            <span className="text-[14px] font-semibold text-dls-text">Wellness workflow desk</span>
+                                            <span className="text-[14px] font-semibold text-dls-text">Longevity workflow desk</span>
                                             <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.16)] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--matterhorn-desk-color)]">
                                               {task.statusLabel}
                                             </span>
@@ -1686,7 +1688,7 @@ export function SessionPage(props: SessionPageProps) {
                                         {task.safetySummary} No diagnosis, prescription, guaranteed outcomes, or live payment/email/hosting/token gating.
                                       </span>
                                       <span className="mt-auto text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                                        Start wellness workflow -&gt;
+                                        Start longevity workflow -&gt;
                                       </span>
                                     </button>
                                   );
@@ -1992,8 +1994,8 @@ export function SessionPage(props: SessionPageProps) {
             {([
               {
                 id: "wellness_creator_workflow",
-                label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Wellness",
-                title: getCustomerProtocolDeskVisual("wellness")?.railTitle ?? "Wellness workflow desk",
+                label: getCustomerProtocolDeskVisual("wellness")?.displayName ?? "Longevity",
+                title: getCustomerProtocolDeskVisual("wellness")?.railTitle ?? "Longevity workflow desk",
                 icon: Dumbbell,
                 launcher: wellnessRailLauncher,
               },

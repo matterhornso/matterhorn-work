@@ -119,16 +119,16 @@ export const DEFAULT_MATTERHORN_WORKFLOW_SAFETY_POLICY: MatterhornWorkflowSafety
 export const WELLNESS_CREATOR_SERVICES_WORKFLOW: MatterhornWorkflowManifest = {
   version: "matterhorn.workflow.manifest.v1",
   workflowId: "wellness_creator_services",
-  name: "Wellness Creator Services",
+  name: "Longevity Creator Services",
   category: "wellness",
-  targetUserPersona: "wellness creator or coach",
+  targetUserPersona: "longevity creator or coach",
   description:
-    "Helps a wellness creator plan services, content, and customer touchpoints without executing live provider actions.",
+    "Helps a longevity creator plan services, content, and customer touchpoints without executing live provider actions.",
   status: "planned_not_live",
   inputPrompts: [
     {
       id: "service_name",
-      label: "What is the name of your wellness service?",
+      label: "What is the name of your longevity service?",
       required: true,
       type: "text",
     },
@@ -542,8 +542,8 @@ export const WELLNESS_CREATOR_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEviden
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "wellness_creator_services",
   domain: "wellness",
-  requestedOutcome: "Plan a safe wellness creator service package without collecting PII or secrets.",
-  inputPrompt: "Create a wellness program for my clients",
+  requestedOutcome: "Plan a safe longevity creator service package without collecting PII or secrets.",
+  inputPrompt: "Create a longevity program for my clients",
   generatedArtifactType: "service_plan",
   safetyStatus: "planned_not_live",
   liveExecutionEnabled: false,
@@ -649,8 +649,8 @@ export const HYPERLIQUID_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvi
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "market_read_preview",
   domain: "hyperliquid",
-  requestedOutcome: "Generate a read-only Hyperliquid market preview without submission or signing.",
-  inputPrompt: "Preview a Hyperliquid trade",
+  requestedOutcome: "Generate a Hyperliquid market preview and external handoff without submission or signing.",
+  inputPrompt: "Prepare a Hyperliquid trade handoff",
   generatedArtifactType: "market_preview",
   safetyStatus: "preview_only",
   liveExecutionEnabled: false,
@@ -701,8 +701,8 @@ export const POLYMARKET_PREVIEW_WORKFLOW_EVIDENCE_BUNDLE: MatterhornWorkflowEvid
   version: "matterhorn.workflow.evidence-bundle.v1",
   workflowId: "market_read_preview",
   domain: "polymarket",
-  requestedOutcome: "Generate a read-only Polymarket market preview without submission or signing.",
-  inputPrompt: "Preview a Polymarket trade",
+  requestedOutcome: "Generate a Polymarket market preview and compliance-gated handoff without submission or signing.",
+  inputPrompt: "Prepare a Polymarket trade handoff",
   generatedArtifactType: "market_preview",
   safetyStatus: "preview_only",
   liveExecutionEnabled: false,
@@ -856,11 +856,11 @@ export const DEFAULT_MATTERHORN_WORKFLOW_TEMPLATE_SAFETY_BOUNDARY: MatterhornWor
 export const WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
   version: "matterhorn.workflow.template.v1",
   templateId: "wellness_creator_service_workflow",
-  title: "Wellness Creator Service Workflow",
+  title: "Longevity Creator Service Workflow",
   category: "wellness",
   intendedUser: "personal trainer, gym instructor, yoga instructor, or dietician",
   promptStarters: [
-    "Create a wellness program for my clients",
+    "Create a longevity program for my clients",
     "Design a nutrition plan",
     "Build a yoga class schedule",
     "Package my training services",
@@ -999,11 +999,11 @@ export const BITTENSOR_BETA_OPERATOR_WORKFLOW_TEMPLATE: MatterhornWorkflowTempla
 export const HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
   version: "matterhorn.workflow.template.v1",
   templateId: "hyperliquid_preview_workflow",
-  title: "Hyperliquid Preview Workflow",
+  title: "Hyperliquid Handoff Workflow",
   category: "markets",
-  intendedUser: "trader who wants read-only Hyperliquid previews",
+  intendedUser: "trader who wants Hyperliquid market reads and external handoffs",
   promptStarters: [
-    "Preview a Hyperliquid trade",
+    "Prepare a Hyperliquid trade handoff",
     "Show my Hyperliquid positions",
     "Generate a Hyperliquid signing handoff",
   ],
@@ -1063,11 +1063,11 @@ export const HYPERLIQUID_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate =
 export const POLYMARKET_PREVIEW_WORKFLOW_TEMPLATE: MatterhornWorkflowTemplate = {
   version: "matterhorn.workflow.template.v1",
   templateId: "polymarket_preview_workflow",
-  title: "Polymarket Preview Workflow",
+  title: "Polymarket Handoff Workflow",
   category: "markets",
-  intendedUser: "trader who wants read-only Polymarket previews",
+  intendedUser: "trader who wants Polymarket research and compliance-gated handoffs",
   promptStarters: [
-    "Preview a Polymarket trade",
+    "Prepare a Polymarket trade handoff",
     "Show my Polymarket positions",
     "Generate a Polymarket signing handoff",
   ],
@@ -1439,12 +1439,12 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   id: "hyperliquid_trader",
   name: "Trade on Hyperliquid",
   summary:
-    "Preview Hyperliquid orders, check positions, and generate external-signer handoffs without live submission.",
+    "Read Hyperliquid markets, check exposure, and prepare external trade handoffs for the user's own client.",
   promise:
-    "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    "Trade handoff only. No live submission, no custody, and no signing by Matterhorn.",
   category: "markets",
   examplePrompts: [
-    "Preview a Hyperliquid BTC-PERP trade",
+    "Prepare a Hyperliquid BTC-PERP trade handoff",
     "Show my Hyperliquid exposure",
     "Generate a Hyperliquid signing handoff",
   ],
@@ -1523,8 +1523,8 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
   chatMode: "crypto chat",
   launch: {
     primaryCta: "Open Hyperliquid panel",
-    secondaryCta: "Preview a trade",
-    defaultPrompt: "Preview a Hyperliquid BTC-PERP trade",
+    secondaryCta: "Prepare trade handoff",
+    defaultPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
     handoffContextLabel: "Public wallet address",
     recommendedSurface: "protocol_desk",
   },
@@ -1532,7 +1532,7 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     iconHint: "hyperliquid",
     accent: "matterhorn_blue",
     shortDescription:
-      "Preview Hyperliquid trades and generate external-signer handoffs.",
+      "Prepare Hyperliquid trade handoffs for external execution.",
   },
   routing: {
     chatMode: "hyperliquid",
@@ -1540,7 +1540,7 @@ export const HYPERLIQUID_TRADER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTem
     startsSession: true,
   },
   recommendedCommands: {
-    cli: ['matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json'],
+    cli: ['matterhorn-work crypto chat --message "prepare Hyperliquid BTC-PERP handoff" --json'],
     mcp: ["matterhorn_hyperliquid_prepare_handoff"],
   },
 };
@@ -1550,13 +1550,13 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
   id: "polymarket_researcher",
   name: "Bet on Polymarket",
   summary:
-    "Research Polymarket markets, preview positions, and prepare compliance-aware signing handoffs without live submission.",
+    "Research Polymarket markets, check eligibility, and prepare compliance-aware trade handoffs.",
   promise:
-    "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+    "Compliance-gated handoff only. No live submission by Matterhorn.",
   category: "markets",
   examplePrompts: [
     "Summarize this Polymarket market",
-    "Preview a Polymarket trade",
+    "Prepare a Polymarket trade handoff",
     "Show my Polymarket positions",
   ],
   expectedArtifacts: [
@@ -1628,7 +1628,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
   chatMode: "crypto chat",
   launch: {
     primaryCta: "Open Polymarket panel",
-    secondaryCta: "Research markets",
+    secondaryCta: "Prepare handoff",
     defaultPrompt: "Summarize this Polymarket market",
     handoffContextLabel: "Public wallet address",
     recommendedSurface: "protocol_desk",
@@ -1637,7 +1637,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
     iconHint: "polymarket",
     accent: "matterhorn_blue",
     shortDescription:
-      "Research Polymarket markets and prepare signing handoffs.",
+      "Research Polymarket markets and prepare compliance-gated handoffs.",
   },
   routing: {
     chatMode: "polymarket",
@@ -1645,7 +1645,7 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
     startsSession: true,
   },
   recommendedCommands: {
-    cli: ['matterhorn-work crypto chat --message "preview Polymarket market" --json'],
+    cli: ['matterhorn-work crypto chat --message "prepare Polymarket handoff" --json'],
     mcp: ["matterhorn_polymarket_prepare_handoff"],
   },
 };
@@ -1653,14 +1653,14 @@ export const POLYMARKET_RESEARCHER_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflow
 export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWorkflowTemplate = {
   version: "matterhorn.customer.workflow.template.v1",
   id: "wellness_creator_workflow",
-  name: "Build a Wellness Creator business workflow",
+  name: "Build a Longevity Creator business workflow",
   summary:
-    "Design wellness programs, service packages, and client management workflows without giving medical advice.",
+    "Design longevity programs, service packages, and client management workflows without giving medical advice.",
   promise:
-    "Plan your wellness business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    "Plan your longevity business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
   category: "wellness",
   examplePrompts: [
-    "Create a wellness program for my clients",
+    "Create a longevity program for my clients",
     "Design a nutrition plan",
     "Build a yoga class schedule",
     "Package my training services",
@@ -1753,9 +1753,9 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
   ],
   chatMode: "workflow chat",
   launch: {
-    primaryCta: "Start wellness workflow",
+    primaryCta: "Start longevity workflow",
     secondaryCta: "Plan a service",
-    defaultPrompt: "Create a wellness program for my clients",
+    defaultPrompt: "Create a longevity program for my clients",
     handoffContextLabel: "Audience and goal",
     recommendedSurface: "workflow_chat",
   },
@@ -1763,7 +1763,7 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
     iconHint: "wellness",
     accent: "neutral",
     shortDescription:
-      "Design wellness programs and service packages without medical advice.",
+      "Design longevity programs and service packages without medical advice.",
   },
   routing: {
     chatMode: "wellness",
@@ -2082,7 +2082,7 @@ export const HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspac
   },
   primaryPanelRouteId: "/workspaces/hyperliquid",
   mcpCliHints: {
-    cli: 'matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP" --json',
+    cli: 'matterhorn-work crypto chat --message "prepare Hyperliquid BTC-PERP handoff" --json',
     mcp: "matterhorn_hyperliquid_prepare_handoff",
   },
   supportedCardKinds: [
@@ -2091,7 +2091,7 @@ export const HYPERLIQUID_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspac
     "handoff_card",
     "receipt_card",
   ],
-  demoPrompt: "Preview a Hyperliquid BTC-PERP trade",
+  demoPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
   launchBehavior: "opens_desk",
 };
 
@@ -2120,7 +2120,7 @@ export const POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspace
   },
   primaryPanelRouteId: "/workspaces/polymarket",
   mcpCliHints: {
-    cli: 'matterhorn-work crypto chat --message "preview Polymarket market" --json',
+    cli: 'matterhorn-work crypto chat --message "prepare Polymarket handoff" --json',
     mcp: "matterhorn_polymarket_prepare_handoff",
   },
   supportedCardKinds: [
@@ -2136,7 +2136,7 @@ export const POLYMARKET_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspace
 export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
   version: "matterhorn.protocol.workspace.manifest.v1",
   id: "wellness",
-  displayName: "Wellness Creator",
+  displayName: "Longevity Creator",
   category: "wellness",
   customerStatus: "planned_not_live",
   allowedIntents: [
@@ -2166,7 +2166,7 @@ export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceMa
     "package_card",
     "receipt_card",
   ],
-  demoPrompt: "Create a wellness program for my clients",
+  demoPrompt: "Create a longevity program for my clients",
   launchBehavior: "planned_not_live",
 };
 
@@ -2357,10 +2357,10 @@ export const BITTENSOR_TAO_STAKING_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenar
 export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario = {
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "hyperliquid_order_preview",
-  displayName: "Hyperliquid order preview",
+  displayName: "Hyperliquid trade handoff",
   targetCustomerPersona: "Crypto trader reviewing Hyperliquid markets during the Monday beta",
   assignedBetaCustomers: ["Arbor Trading", "PerpPrime Capital"],
-  entryPrompt: "Preview a Hyperliquid BTC-PERP long without signing or submitting anything",
+  entryPrompt: "Prepare a Hyperliquid BTC-PERP long handoff without signing or submitting anything",
   expectedArtifacts: [
     {
       id: "market_preview",
@@ -2378,7 +2378,7 @@ export const HYPERLIQUID_ORDER_PREVIEW_DEMO_SCENARIO: CustomerBetaDemoScenario =
     },
   ],
   readinessCommands: [
-    'matterhorn-work crypto chat --message "preview Hyperliquid BTC-PERP long" --json',
+    'matterhorn-work crypto chat --message "prepare Hyperliquid BTC-PERP long handoff" --json',
     "matterhorn-work hyperliquid handoff --market BTC-PERP --side long --size 0.1 --json",
   ],
   safetyBoundaries: {
@@ -2499,8 +2499,8 @@ export const POLYMARKET_MARKET_RESEARCH_DEMO_SCENARIO: CustomerBetaDemoScenario 
 export const WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO: CustomerBetaDemoScenario = {
   version: "matterhorn.customer.beta.demo.scenario.v1",
   id: "wellness_client_program_packet",
-  displayName: "Wellness client program packet",
-  targetCustomerPersona: "Wellness creator or coach running the Monday beta",
+  displayName: "Longevity client program packet",
+  targetCustomerPersona: "Longevity creator or coach running the Monday beta",
   assignedBetaCustomers: ["Summit Wellness Co", "FitPath Studio"],
   entryPrompt: "Create a 6-week strength program packet for busy professionals with a weekly check-in workflow",
   expectedArtifacts: [
@@ -2736,10 +2736,10 @@ export const HYPERLIQUID_DESK_MANIFEST: MatterhornDeskManifest = {
   deskId: "hyperliquid",
   deskDisplayName: "Hyperliquid",
   deskShortName: "HL",
-  deskDescription: "Read-only market previews and watchlists for Hyperliquid. No live submission or signing.",
+  deskDescription: "Market reads, watchlists, and external handoffs for Hyperliquid. No live submission or signing.",
   deskAccent: "green",
-  customerPrimaryAction: "Preview market or manage watchlist",
-  customerSafetyStrip: "Preview-only. No live submission, signing, custody, or secrets.",
+  customerPrimaryAction: "Prepare handoff or manage watchlist",
+  customerSafetyStrip: "External handoff only. No live submission, signing, custody, or secrets.",
   status: "preview_only",
   allowedSurfaces: ["protocol_desk", "workflow_chat"],
   liveSubmissionEnabled: false,
@@ -2758,10 +2758,10 @@ export const POLYMARKET_DESK_MANIFEST: MatterhornDeskManifest = {
   deskId: "polymarket",
   deskDisplayName: "Polymarket",
   deskShortName: "PM",
-  deskDescription: "Read-only market research and watchlists for Polymarket. No live submission or signing.",
+  deskDescription: "Market research, watchlists, and compliance-gated handoffs for Polymarket. No live submission or signing.",
   deskAccent: "orange",
-  customerPrimaryAction: "Research market or manage watchlist",
-  customerSafetyStrip: "Preview-only. No live submission, signing, custody, or secrets.",
+  customerPrimaryAction: "Research market or prepare handoff",
+  customerSafetyStrip: "Compliance-gated handoff only. No live submission, signing, custody, or secrets.",
   status: "preview_only",
   allowedSurfaces: ["protocol_desk", "workflow_chat"],
   liveSubmissionEnabled: false,
@@ -2778,11 +2778,11 @@ export const POLYMARKET_DESK_MANIFEST: MatterhornDeskManifest = {
 export const WELLNESS_DESK_MANIFEST: MatterhornDeskManifest = {
   version: "matterhorn.desk.manifest.v1",
   deskId: "wellness",
-  deskDisplayName: "Wellness",
-  deskShortName: "Wellness",
-  deskDescription: "Workflow-ready wellness program builder for creators and coaches. Educational and non-medical.",
+  deskDisplayName: "Longevity",
+  deskShortName: "Longevity",
+  deskDescription: "Workflow-ready longevity program builder for creators and coaches. Educational and non-medical.",
   deskAccent: "matterhorn_blue",
-  customerPrimaryAction: "Build a wellness program packet",
+  customerPrimaryAction: "Build a longevity program packet",
   customerSafetyStrip: "Workflow-ready. Educational content only. Not medical advice. No live payments, no live email, no live hosting, and no live data access.",
   status: "workflow_ready",
   allowedSurfaces: ["workflow_chat", "evidence_packet"],
@@ -3222,11 +3222,11 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "hyperliquid",
   displayName: "Hyperliquid",
-  shortDescription: "Read-only perp market previews and watchlists.",
+  shortDescription: "Perp reads, watches, and external trade handoffs.",
   launcherTitle: "Hyperliquid",
-  launcherDescription: "Preview perp markets and manage watchlists. Read-only.",
-  launcherPrompt: "Preview a Hyperliquid BTC-PERP trade",
-  rightRailSummary: "Preview-only desk. Enter a public EVM wallet address or market for read-only previews.",
+  launcherDescription: "Read perp markets, manage watchlists, and prepare external trade handoffs.",
+  launcherPrompt: "Prepare a Hyperliquid BTC-PERP trade handoff",
+  rightRailSummary: "External handoff desk. Enter a public EVM wallet address or market before preparing a handoff.",
   logoAssetId: "hyperliquid-logo",
   officialLogoAssetId: "hyperliquid-logo",
   logoAlt: "Hyperliquid logo",
@@ -3266,9 +3266,9 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   primaryActions: [
     {
       actionId: "preview-trade",
-      label: "Preview trade",
+      label: "Prepare handoff",
       iconHint: "preview",
-      intent: "preview trade",
+      intent: "prepare trade handoff",
       requiresConfirmation: false,
       surface: "desk_panel",
     },
@@ -3281,7 +3281,7 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
       surface: "desk_panel",
     },
   ],
-  primaryActionLabel: "Preview market",
+  primaryActionLabel: "Prepare handoff",
   secondaryActions: [
     {
       actionId: "show-exposure",
@@ -3312,21 +3312,21 @@ export const HYPERLIQUID_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   capabilityBullets: [
     "Read perp market data, orderbooks, and funding",
     "Show account exposure and open orders",
-    "Preview trades without order placement",
+    "Prepare external trade handoffs",
     "Manage market watches and receipts",
   ],
-  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
-  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Preview trades without order placement.",
-  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  safetySummary: "Matterhorn never holds your credentials or submits orders. Trade execution stays in your external client.",
+  customerCapabilitySummary: "Read perp market data, orderbooks, funding, account exposure, and open orders. Prepare external trade handoffs without Matterhorn submission.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials or submits orders. Trade execution stays in your external client.",
   suggestedPromptTitles: [
     "Show BTC-PERP on Hyperliquid",
-    "Preview a BTC long",
+    "Prepare a BTC long handoff",
     "Show my Hyperliquid exposure",
     "Watch BTC funding",
   ],
   emptyStateCopy: {
-    headline: "Preview Hyperliquid markets",
-    body: "Enter a public wallet address or market to generate a read-only preview.",
+    headline: "Prepare Hyperliquid handoffs",
+    body: "Enter a public wallet address or market to review terms before using your external client.",
     primaryActionId: "preview-trade",
   },
   degradedStateCopy: {
@@ -3340,11 +3340,11 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "polymarket",
   displayName: "Polymarket",
-  shortDescription: "Read-only prediction market research and previews.",
+  shortDescription: "Prediction market research and compliance-gated handoffs.",
   launcherTitle: "Polymarket",
-  launcherDescription: "Research prediction markets and preview positions. Read-only.",
+  launcherDescription: "Research prediction markets and prepare compliance-gated handoffs.",
   launcherPrompt: "Find Polymarket markets about AI",
-  rightRailSummary: "Preview-only desk. Search markets or enter a public EVM wallet address for read-only research.",
+  rightRailSummary: "Compliance-gated handoff desk. Search markets before preparing any external handoff.",
   logoAssetId: "polymarket-logo",
   officialLogoAssetId: "polymarket-logo",
   logoAlt: "Polymarket logo",
@@ -3392,9 +3392,9 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     },
     {
       actionId: "preview-position",
-      label: "Preview position",
+      label: "Prepare handoff",
       iconHint: "preview",
-      intent: "preview position",
+      intent: "prepare trade handoff",
       requiresConfirmation: false,
       surface: "desk_panel",
     },
@@ -3430,21 +3430,21 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   capabilityBullets: [
     "Search and filter prediction markets",
     "View outcome probabilities and orderbooks",
-    "Preview trades without order placement",
+    "Prepare compliance-gated trade handoffs",
     "Manage market watches and receipts",
   ],
-  safetySummary: "Matterhorn never holds your credentials. All market data is read-only.",
-  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Preview trades without order placement.",
-  noCustodySafetyLine: "Matterhorn never holds your credentials. All market data is read-only.",
+  safetySummary: "Matterhorn never holds your credentials or submits bets. Compliance-blocked users get no executable order fields.",
+  customerCapabilitySummary: "Research prediction markets, view outcome probabilities, orderbooks, and compliance status. Prepare trade handoffs only when allowed.",
+  noCustodySafetyLine: "Matterhorn never holds your credentials or submits bets. Compliance-blocked users get no executable order fields.",
   suggestedPromptTitles: [
     "Find markets about AI",
     "Show probabilities for this market",
-    "Preview a yes position",
+    "Prepare a yes handoff",
     "Watch this market",
   ],
   emptyStateCopy: {
     headline: "Research Polymarket",
-    body: "Search markets or enter a public wallet address for read-only research.",
+    body: "Search markets and check eligibility before preparing an external handoff.",
     primaryActionId: "research-market",
   },
   degradedStateCopy: {
@@ -3457,15 +3457,15 @@ export const POLYMARKET_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
 export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   version: "matterhorn.protocol.desk.manifest.v1",
   id: "wellness",
-  displayName: "Wellness",
-  shortDescription: "Workflow-ready wellness program builder for creators and coaches.",
-  launcherTitle: "Wellness Creator",
-  launcherDescription: "Build educational, non-medical wellness programs and service packages through chat.",
+  displayName: "Longevity",
+  shortDescription: "Workflow-ready longevity program builder for creators and coaches.",
+  launcherTitle: "Longevity Creator",
+  launcherDescription: "Build educational, non-medical longevity programs and service packages through chat.",
   launcherPrompt: "Create a 4-week beginner strength plan",
   rightRailSummary: "Workflow-ready desk. No account or keys required. Generates educational content only, not medical advice.",
   logoAssetId: "wellness-logo",
   officialLogoAssetId: "wellness-logo",
-  logoAlt: "Wellness Creator logo",
+  logoAlt: "Longevity Creator logo",
   category: "wellness",
   status: "workflow_ready",
   readinessTone: "workflow_ready",
@@ -3546,14 +3546,14 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   },
   customerVisible: true,
   capabilityBullets: [
-    "Build educational, non-medical wellness programs",
+    "Build educational, non-medical longevity programs",
     "Generate intake forms, schedules, and packets",
     "Package services without live execution",
     "Plan future live-service integrations",
   ],
   safetySummary: "Educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
-  customerCapabilitySummary: "Build educational, non-medical wellness programs, generate client artifacts, and package services through chat. No Web3 trading required.",
-  noCustodySafetyLine: "Wellness content is educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
+  customerCapabilitySummary: "Build educational, non-medical longevity programs, generate client artifacts, and package services through chat. No Web3 trading required.",
+  noCustodySafetyLine: "Longevity content is educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
   suggestedPromptTitles: [
     "Create a 4-week strength plan",
     "Draft a yoga class for lower backs",
@@ -3561,12 +3561,12 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
     "Package this as a service offer",
   ],
   emptyStateCopy: {
-    headline: "Build a wellness program",
+    headline: "Build a longevity program",
     body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
     primaryActionId: "build-program",
   },
   degradedStateCopy: {
-    headline: "Wellness builder unavailable",
+    headline: "Longevity builder unavailable",
     body: "The program builder is temporarily unavailable. Your saved program packets and memory are still accessible.",
     primaryActionId: "build-program",
   },
@@ -3840,7 +3840,7 @@ export function getDeskSafetySummary(id: string): string | undefined {
     return "External signer required. Matterhorn never holds your keys.";
   }
   if (manifest.walletRailMode === "evm_preview") {
-    return "Preview-only. No live submission or signing.";
+    return "External handoff only. No live submission or signing.";
   }
   if (manifest.id === "wellness") {
     return "Educational and non-medical. No wallet required.";
@@ -3862,7 +3862,7 @@ export function getDeskWalletRequirementSummary(id: string): string | undefined 
     case "external_signer":
       return "SS58 address + external signer";
     case "evm_preview":
-      return "EVM address for read-only previews";
+      return "EVM address for reads and handoffs";
     case "none":
       return "No wallet needed";
     default:
@@ -3918,7 +3918,7 @@ export const WELLNESS_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
   allowedUseNote: "Matterhorn-owned asset. Free to use across Matterhorn Work UI surfaces.",
   lightAssetPath: "/assets/desks/wellness/logo-light.svg",
   darkAssetPath: "/assets/desks/wellness/logo-dark.svg",
-  fallbackInitials: "WL",
+  fallbackInitials: "LO",
 };
 
 export const MEMORY_BRAND_ASSET_MANIFEST: ProtocolBrandAssetManifest = {
@@ -4046,6 +4046,7 @@ export const BITTENSOR_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
   status: "preview",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/bittensor.md",
   isBuiltIn: true,
 };
 
@@ -4082,6 +4083,7 @@ export const HYPERLIQUID_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
   status: "live",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/hyperliquid.md",
   isBuiltIn: true,
 };
 
@@ -4091,7 +4093,7 @@ export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   displayName: "Matterhorn Polymarket",
   deskId: "polymarket",
   description:
-    "Search Polymarket markets, read probabilities, and preview positions. Prepare external-signer handoffs and verify receipts. No live bet placement.",
+    "Search Polymarket markets, read probabilities, and prepare compliance-gated handoffs. Verify receipts without Matterhorn submission.",
   installCommand: "matterhorn-work mcp install matterhorn-polymarket",
   supportedTools: [
     { name: "polymarket_search_markets", description: "Search prediction markets.", isReadOnly: true },
@@ -4118,6 +4120,7 @@ export const POLYMARKET_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf", "generic_sse"],
   status: "live",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/polymarket.md",
   isBuiltIn: true,
 };
 
@@ -4152,6 +4155,7 @@ export const MEMORY_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
   status: "live",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/memory.md",
   isBuiltIn: true,
 };
 
@@ -4185,6 +4189,7 @@ export const WORKFLOW_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code", "claude_desktop", "cursor", "windsurf"],
   status: "preview",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/workflow.md",
   isBuiltIn: true,
 };
 
@@ -4218,6 +4223,7 @@ export const UI_CONTROL_MCP_CATALOG_ITEM: MatterhornMcpCatalogItem = {
   },
   compatibleClients: ["codex", "claude_code"],
   status: "planned",
+  documentationUrl: "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp/ui-control.md",
   isBuiltIn: true,
 };
 
@@ -4349,12 +4355,12 @@ export const SURFACE_READINESS_REGISTRY: Record<string, MatterhornSurfaceReadine
       custody: false,
       secretInputsAllowed: false,
     },
-    notes: "Market research, previews, and handoffs. No live bet placement.",
+    notes: "Market research, compliance checks, and external handoffs. No Matterhorn bet submission.",
   },
   wellness_desk: {
     version: "matterhorn.surface.readiness.v1",
     id: "wellness_desk",
-    displayName: "Wellness Creator Desk",
+    displayName: "Longevity Creator Desk",
     kind: "desk",
     status: "ready",
     routeOrPanelId: "/workspaces/wellness",

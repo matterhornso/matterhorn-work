@@ -8,13 +8,13 @@ Use this checklist for the first external beta sessions. The goal is to verify t
 - Start Matterhorn Work from a clean local project folder.
 - Keep test inputs public or redacted only.
 - Do not paste seed phrases, private keys, mnemonics, raw signatures, signed payloads, API secrets, wallet exports, or customer funds.
-- Capture screenshots for Home, Bittensor, Hyperliquid, Polymarket, Wellness, MCPs, Memory, Profile, Wallet, and Settings.
+- Capture screenshots for Home, Bittensor, Hyperliquid, Polymarket, Longevity, MCPs, Memory, Profile, Wallet, and Settings.
 
 ## 2. First-Run Home
 
 - Home must show `New Project`, `New chat`, and `Open Bittensor desk` as obvious actions.
 - Home desk launchers must fit without horizontal overflow, bottom overlap, or a broken blank-chat tile.
-- Customer-visible launchers should be Bittensor, Hyperliquid, Polymarket, Wellness, and Blank chat only.
+- Customer-visible launchers should be Bittensor, Hyperliquid, Polymarket, Longevity, and Blank chat only.
 - Developer-only names such as lighthouse, harness, OpenWork, OpenCode, Computer Use, and Services must not appear in the customer launcher.
 - The status bar must say `Engine connected` only when the local engine is reachable.
 
@@ -46,10 +46,10 @@ Use this checklist for the first external beta sessions. The goal is to verify t
 - Try market research, compliance, and preview handoff prompts.
 - Compliance-blocked previews must not expose executable price, size, share, or order fields.
 
-## 6. Wellness Desk
+## 6. Longevity Desk
 
-- Open the Wellness workflow.
-- Confirm Wellness is presented as a standalone service workflow, not Web3, not trading, and not medical care.
+- Open the Longevity workflow.
+- Confirm Longevity is presented as a standalone service workflow, not Web3, not trading, and not medical care.
 - Test service offer, onboarding questionnaire, weekly plan, progress check-in, renewal/follow-up, and client handoff prompts.
 - Clinical or treatment prompts must redirect to a qualified professional.
 - The UI must not claim live payments, live email, live hosting, or live token-gated access.

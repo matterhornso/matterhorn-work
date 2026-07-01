@@ -2,11 +2,11 @@
 
 *Customer Demo Pack artifact — reusable offer-page copy for a personal trainer, yoga instructor, or dietician. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Headline
 
-**[Program name] — a simple, structured way to reach your general wellness goals.**
+**[Program name] — a simple, structured way to reach your general longevity goals.**
 
 ## Who it's for
 
@@ -38,4 +38,4 @@ Beginners and returning clients who want a clear, doable plan with guidance and 
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This offer is general wellness education, not medical care. Future Matterhorn hooks — storage/hosting, payments, email, identity/access — are planned, not live.
+Results vary between individuals. No specific outcome or result is guaranteed. This offer is general longevity education, not medical care. Future Matterhorn hooks — storage/hosting, payments, email, identity/access — are planned, not live.

@@ -52,7 +52,7 @@ const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-check
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
-  "Ask Matterhorn about Bittensor, markets, wellness, files, or workflows...",
+  "Ask Matterhorn about Bittensor, markets, longevity, files, or workflows...",
   "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
   "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
@@ -63,7 +63,7 @@ for (const phrase of [
   "Bittensor workspace",
   "Hyperliquid desk",
   "Polymarket desk",
-  "Wellness builder",
+  "Longevity builder",
   "Stay non-custodial",
   "/matterhorn-logo-square.svg",
   'alt="Matterhorn Work"',
@@ -88,8 +88,8 @@ for (const phrase of [
   "Each desk keeps its own context",
   "Wallet stays external",
   "Public SS58 reads and unsigned previews only.",
-  "Can submit: No. Live submission: Off. External signer/client only.",
-  "Compliance blocks must not expose executable bet fields.",
+  "Can submit: No. Live submission: Off. External trade handoff only.",
+  "Blocked regions get no executable bet fields.",
   "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
   "Choose a desk",
   "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
@@ -111,15 +111,15 @@ for (const phrase of [
   "Unsigned previews",
   "Orderbook reads",
   "Exposure context",
-  "External-client handoff",
+  "External trade handoff",
   "Market research",
   "Compliance checks",
   "Insert editable prompt",
   "Business workflows",
-  "Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
+  "Longevity is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
   "It is not Web3, not markets, and not medical care.",
   "Planned services only",
-  "Wellness workflow desk",
+  "Longevity workflow desk",
   "Service offer packet",
   "Onboarding questionnaire",
   "Weekly program plan",
@@ -139,7 +139,7 @@ for (const phrase of [
   "Open Bittensor desk",
   "Open Hyperliquid desk",
   "Open Polymarket desk",
-  "Start wellness workflow",
+  "Start longevity workflow",
   "Start blank chat",
   "ProtocolLogo",
   "Use the Bittensor desk in this session",
@@ -152,25 +152,25 @@ for (const phrase of [
   "MatterhornDeskSessionStrip",
   "starterWorkflowCapabilityItems",
   "`${manifest.displayName} session`",
-  "Wellness workflow session",
+  "Longevity workflow session",
   "Public SS58/coldkey/hotkey context only. External signer required for actions.",
   "Matterhorn never stores API secrets or signs orders.",
-  "Compliance blocks must not expose executable bet fields.",
+  "Blocked regions get no executable bet fields.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "External-signer previews",
-  "No live market submit",
-  "No live bet placement",
+  "External trade handoff",
+  "Trade handoff",
   "Non-medical workflow",
   "Insert editable prompt",
   "Show my TAO",
   "Compare validators",
-  "Preview Hyperliquid BTC-PERP context",
+  "Prepare Hyperliquid BTC-PERP handoff",
   "Summarize this Polymarket market",
   "Check Polymarket compliance",
-  "Create a wellness program for my clients",
+  "Create a longevity program for my clients",
   "MCPs & Connectors",
   "Start with a Matterhorn workflow",
-  "Wellness: standalone service workflows, program packets, progress check-ins, and client handoffs",
+  "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
   "Plan trainer, yoga, or dietician service delivery without Web3, markets, medical advice, or live payment/email/hosting claims.",
   "Can submit: No",
   "Live submission: Off",
@@ -192,9 +192,9 @@ for (const phrase of [
   "Workflow-ready",
   "Planned, not live",
   "starterStatusLabel",
-  "Can submit: No. Live submission: Off. External signer/client only.",
+  "Can submit: No. Live submission: Off. External trade handoff only.",
   "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.",
-  "Use the standalone Wellness workflow, not a Web3 or market desk.",
+  "Use the standalone Longevity workflow, not a Web3 or market desk.",
   "CUSTOMER_VISIBLE_TEMPLATE_IDS",
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
@@ -306,9 +306,9 @@ for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
   "CustomerBetaDemoStarterCard",
   "Bittensor TAO staking preview",
-  "Hyperliquid order preview",
+  "Hyperliquid trade handoff",
   "Polymarket market research and preview",
-  "Wellness client program packet",
+  "Longevity client program packet",
   "node scripts/customer-demo-evidence-pack.mjs --scenario",
   "Demo-ready",
   "buildCustomerWorkflowPromptFromText",
@@ -340,7 +340,7 @@ for (const forbidden of [
   "Send crypto",
   "Trade on Hyperliquid",
   "Bet on Polymarket",
-  "Preview a Hyperliquid BTC-PERP trade",
+  "Prepare a Hyperliquid BTC-PERP trade handoff",
 ]) {
   assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
 }
@@ -365,8 +365,8 @@ assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'),
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
 assert.ok(protocolDeskUi.includes("Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, account exposure, funding, watches, and external-client previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");
@@ -447,7 +447,7 @@ for (const phrase of [
   "Bittensor Desk",
   "Hyperliquid Desk",
   "Polymarket Desk",
-  "Wellness Desk",
+  "Longevity Desk",
   "MCPs, Memory, Profile, Wallet, And Settings",
   "Security Negative Tests",
   "Stop Criteria",
@@ -509,7 +509,7 @@ for (const phrase of [
   "walletStatusLabel",
   "Wallet not connected",
   "Open Matterhorn Wallet",
-  "Bittensor uses public SS58 reads and external signing; market desks remain preview-only.",
+  "Bittensor uses public SS58 reads and external signing; market desks prepare external handoffs only.",
 ]) {
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
@@ -549,8 +549,10 @@ assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "com
 assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
 assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
 assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
-assert.ok(extensionsView.includes('props.compact ? "w-full" : "w-fit"'), "embedded extensions tabs should fill the narrow rail instead of crowding content");
-assert.ok(extensionsView.includes('className={props.compact ? "flex-1" : undefined}'), "embedded extensions tabs should stay tappable in the narrow rail");
+assert.ok(extensionsView.includes('props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit"'), "embedded extensions tabs should use equal compact columns instead of crowding content");
+assert.ok(extensionsView.includes("h-auto min-w-0 whitespace-normal"), "embedded extensions tabs should stay tappable without forcing long labels outside the rail");
+assert.ok(extensionsView.includes("h-auto min-w-0 flex-col items-center gap-0.5 whitespace-normal"), "embedded Marketplace tab should stack its status label in compact rail layout");
+assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
 assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
@@ -616,7 +618,7 @@ for (const phrase of [
   "Bittensor: explain subnets",
   "Hyperliquid: read markets/orderbooks/account exposure",
   "Polymarket: search/summarize markets",
-  "Wellness workflows",
+  "Longevity workflows",
   "Can submit: No. Live submission: Off.",
 ]) {
   assert.ok(cryptoPrompt.includes(phrase), `orientation prompt should keep starter answers Matterhorn-native: ${phrase}`);
@@ -631,7 +633,7 @@ for (const phrase of [
   'name: "Hyperliquid"',
   'id: "polymarket"',
   'name: "Polymarket"',
-  "read/preview-only",
+  "external handoffs",
   "external-signer",
   "Open Bittensor desk",
   "Open Hyperliquid desk",
@@ -708,6 +710,14 @@ for (const phrase of [
   "grid-cols-[44px_minmax(0,1fr)]",
   "border-l border-dls-border/30 pl-3",
   "Safety",
+  "Full docs",
+  "Open GitHub docs",
+  "MATTERHORN_MCP_DOCS_GITHUB_BASE",
+  "mcpDocs(",
+  "Use this MCP for",
+  "How it works",
+  "Safety boundary",
+  "Example prompts",
   "plus {hiddenToolCount} more.",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
@@ -724,8 +734,8 @@ for (const phrase of [
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
   "Public reads and unsigned previews only.",
-  "Preview only. No live submit.",
-  "Use an external signer/client.",
+  "External handoff only. No live submit.",
+  "Use your own signer/client.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
   "Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
   "No hidden saves.",

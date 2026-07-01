@@ -73,6 +73,11 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
   planned_not_live: "Planned, not live",
 };
 
+const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
+  hyperliquid: "External trade handoff",
+  polymarket: "Compliance-gated handoff",
+};
+
 const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> = {
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
@@ -80,8 +85,8 @@ const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> =
   wellness: "wellness",
 };
 
-export function protocolDeskStatusLabel(status: ProtocolDeskVisualStatus): string {
-  return STATUS_LABELS[status];
+export function protocolDeskStatusLabel(status: ProtocolDeskVisualStatus, id?: CustomerProtocolDeskId | string): string {
+  return MARKET_STATUS_LABELS[id as CustomerProtocolDeskId] ?? STATUS_LABELS[status];
 }
 
 export function protocolDeskIdForWorkspace(workspaceId: string | null | undefined): CustomerProtocolDeskId | null {
@@ -124,7 +129,7 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
     return "Public SS58 reads and unsigned previews only. External signer required; no seed phrases, private keys, or wallet exports.";
   }
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
-    return "Can submit: No. Live submission: Off. External signer/client only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
+    return "Can submit: No. Live submission: Off. External trade handoff only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.";
@@ -143,19 +148,19 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, account exposure, funding, watches, and external-client previews";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs";
   }
   if (manifest.id === "polymarket") {
-    return "Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews";
+    return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";
   }
   if (manifest.id === "wellness") {
-    return "Wellness: standalone service workflows, program packets, progress check-ins, and client handoffs";
+    return "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs";
   }
   return `${manifest.displayName}: ${manifest.shortDescription}`;
 }
 
 function sessionTitle(manifest: ProtocolDeskManifest): string {
-  if (manifest.id === "wellness") return "Wellness workflow session";
+  if (manifest.id === "wellness") return "Longevity workflow session";
   return `${manifest.displayName} session`;
 }
 
@@ -164,10 +169,10 @@ function sessionBoundary(manifest: ProtocolDeskManifest): string {
     return "Public SS58/coldkey/hotkey context only. External signer required for actions.";
   }
   if (manifest.id === "hyperliquid") {
-    return "Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.";
+    return "External trade handoff only. Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.";
   }
   if (manifest.id === "polymarket") {
-    return "Can submit: No. Live submission: Off. Compliance blocks must not expose executable bet fields.";
+    return "Compliance-gated handoff only. Can submit: No. Live submission: Off. Blocked regions get no executable bet fields.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.";
@@ -186,7 +191,7 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     shortDescription: manifest.shortDescription,
     category: manifest.category,
     status: manifest.status,
-    statusLabel: protocolDeskStatusLabel(manifest.status),
+    statusLabel: protocolDeskStatusLabel(manifest.status, manifest.id),
     routeOrPanelId: manifest.routeOrPanelId,
     logoAssetKey: manifest.logoAssetKey,
     fallbackInitials: brandAsset?.fallbackInitials ?? manifest.displayName.slice(0, 2).toUpperCase(),
@@ -217,4 +222,3 @@ export const CUSTOMER_PROTOCOL_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUST
 export const CUSTOMER_LAUNCHER_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUSTOMER_LAUNCHER_DESK_IDS
   .map((id) => getCustomerProtocolDeskVisual(id))
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));
-

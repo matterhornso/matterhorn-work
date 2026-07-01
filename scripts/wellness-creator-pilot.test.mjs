@@ -25,7 +25,7 @@ const FIXTURES = [
 
 // 1. Docs, helper, and fixtures exist.
 for (const path of [DOC_PATH, HANDOFF_PATH, HELPER_PATH]) {
-  assert.ok(existsSync(path), `Wellness Creator Pilot file should exist: ${path}`);
+  assert.ok(existsSync(path), `Longevity Creator Pilot file should exist: ${path}`);
 }
 for (const fixture of FIXTURES) {
   assert.ok(existsSync(`${FIXTURE_DIR}/${fixture}`), `Artifact fixture should exist: ${FIXTURE_DIR}/${fixture}`);
@@ -39,7 +39,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(
   pkg.scripts?.["test:wellness-creator-pilot"],
   "node scripts/wellness-creator-pilot.test.mjs",
-  "package.json should expose the Wellness Creator Pilot gate",
+  "package.json should expose the Longevity Creator Pilot gate",
 );
 
 // 3. Canonical demo prompts exist in both the doc and the handoff.
@@ -365,4 +365,4 @@ assert.ok(
 );
 assert.equal(demoPacket.noLiveServices, true, "Demo packet should flag noLiveServices: true");
 
-console.log("Wellness Creator Pilot go-live gate passed.");
+console.log("Longevity Creator Pilot go-live gate passed.");

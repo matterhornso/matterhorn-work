@@ -1,8 +1,8 @@
 # Client Progress Check-In
 
-A reusable weekly check-in artifact for the **customer-management** stage of the Wellness Creator Workflow. The creator shares it with a client each week, reviews the answers, and adjusts the plan. It is educational progress tracking only.
+A reusable weekly check-in artifact for the **customer-management** stage of the Longevity Creator Workflow. The creator shares it with a client each week, reviews the answers, and adjusts the plan. It is educational progress tracking only.
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Week of: ____________________
 

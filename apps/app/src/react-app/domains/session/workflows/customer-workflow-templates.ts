@@ -108,14 +108,14 @@ type CustomerWorkflowTemplateResponse = {
   customerTemplates?: unknown[];
 };
 
-const MARKET_PREVIEW_SUFFIX =
-  "Keep this read/preview only. Make clear: Can submit: No, Live submission: Off, and Matterhorn never signs or holds keys.";
+const MARKET_HANDOFF_SUFFIX =
+  "Prepare an external trade handoff when asked. Make clear: Can submit: No, Live submission: Off, the user executes in their own external client, and Matterhorn never signs or holds keys.";
 
 const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";
 
 const WELLNESS_SUFFIX =
-  "Use the standalone Wellness workflow, not a Web3 or market desk. Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating.";
+  "Use the standalone Longevity workflow, not a Web3 or market desk. Keep this educational and client-safe. Include a non-medical disclaimer and do not diagnose, prescribe, or claim live payments, hosting, email, or token gating.";
 
 const SERVICES_SUFFIX =
   "Treat service hooks as planned-not-live future contracts. Do not claim live hosting, storage, email, payment, identity, custody, or provider execution.";
@@ -192,8 +192,11 @@ function safetySummary(template: CustomerWorkflowTemplate): string {
       ? "External signer required. No seed phrases, private keys, or wallet exports."
       : "Public reads only. No secrets.";
   }
-  if (template.routing.chatMode === "hyperliquid" || template.routing.chatMode === "polymarket") {
-    return "Can submit: No. Live submission: Off. External signer/client only.";
+  if (template.routing.chatMode === "hyperliquid") {
+    return "Can submit: No. Live submission: Off. External trade handoff only.";
+  }
+  if (template.routing.chatMode === "polymarket") {
+    return "Can submit: No. Live submission: Off. Compliance-gated handoff only.";
   }
   if (template.routing.chatMode === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
@@ -212,11 +215,11 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
     case "bittensor":
       return `Use the Bittensor desk in this session. Keep all context Bittensor-specific: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, wallet reads, staking previews, watches, and receipts. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
     case "hyperliquid":
-      return `Use the Hyperliquid desk in this session. Keep all context Hyperliquid-specific: markets, orderbooks, account exposure, funding, open orders, preview-only handoffs, watches, and receipts. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+      return `Use the Hyperliquid desk in this session. Keep all context Hyperliquid-specific: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${prompt}. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
-      return `Use the Polymarket desk in this session. Keep all context Polymarket-specific: market discovery, outcomes, probabilities, liquidity, compliance checks, preview-only handoffs, watches, and receipts. ${prompt}. ${MARKET_PREVIEW_SUFFIX} ${intentContext}`.trim();
+      return `Use the Polymarket desk in this session. Keep all context Polymarket-specific: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${prompt}. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "wellness":
-      return `Use the Wellness workflow desk in this session. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
+      return `Use the Longevity workflow desk in this session. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${prompt}. ${WELLNESS_SUFFIX} ${intentContext}`.trim();
     case "services":
       return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
     default:
@@ -312,22 +315,22 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "hyperliquid_trader",
     name: "Use Hyperliquid",
-    summary: "Read Hyperliquid markets, check exposure, and prepare external-signer previews without live submission.",
-    promise: "Preview-only. No live submission, no custody, and no signing by Matterhorn.",
+    summary: "Read Hyperliquid markets, check exposure, and prepare external trade handoffs for your own client.",
+    promise: "Trade handoff only. No live submission, no custody, and no signing by Matterhorn.",
     category: "markets",
     status: "preview_only",
-    examplePrompts: ["Preview Hyperliquid BTC-PERP context", "Show my Hyperliquid exposure"],
+    examplePrompts: ["Prepare Hyperliquid BTC-PERP handoff", "Show my Hyperliquid exposure"],
     launch: {
       primaryCta: "Open Hyperliquid desk",
-      secondaryCta: "Preview market context",
-      defaultPrompt: "Preview Hyperliquid BTC-PERP context",
+      secondaryCta: "Prepare trade handoff",
+      defaultPrompt: "Prepare Hyperliquid BTC-PERP handoff",
       handoffContextLabel: "Public wallet address",
       recommendedSurface: "protocol_desk",
     },
     ui: {
       iconHint: "hyperliquid",
       accent: "matterhorn_blue",
-      shortDescription: "Read orderbooks, account exposure, funding, and external-signer previews. Submission stays off.",
+      shortDescription: "Read orderbooks, account exposure, funding, and prepare external trade handoffs. Submission stays off.",
     },
     routing: { chatMode: "hyperliquid", opensPanel: "hyperliquid", startsSession: true },
     safetyBoundaries: {
@@ -345,14 +348,14 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "polymarket_researcher",
     name: "Use Polymarket",
-    summary: "Research Polymarket outcomes, liquidity, and compliance before preparing external-signer previews.",
-    promise: "Preview-only. Compliance and external signer required. No live submission by Matterhorn.",
+    summary: "Research Polymarket outcomes, liquidity, and eligibility before preparing a trade handoff.",
+    promise: "Compliance-gated handoff only. No live submission by Matterhorn.",
     category: "markets",
     status: "preview_only",
     examplePrompts: ["Summarize this Polymarket market", "Check Polymarket compliance"],
     launch: {
       primaryCta: "Open Polymarket desk",
-      secondaryCta: "Research markets",
+      secondaryCta: "Prepare handoff",
       defaultPrompt: "Summarize this Polymarket market",
       handoffContextLabel: "Public wallet address",
       recommendedSurface: "protocol_desk",
@@ -360,7 +363,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "polymarket",
       accent: "matterhorn_blue",
-      shortDescription: "Research markets, outcomes, liquidity, compliance, and external-signer previews. Bet placement stays off.",
+      shortDescription: "Research markets, outcomes, liquidity, compliance, and prepare external trade handoffs. Bet placement stays off.",
     },
     routing: { chatMode: "polymarket", opensPanel: "polymarket", startsSession: true },
     safetyBoundaries: {
@@ -377,20 +380,20 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   },
   {
     id: "wellness_creator_workflow",
-    name: "Build a Wellness Creator service workflow",
+    name: "Build a Longevity Creator service workflow",
     summary: "Create trainer, yoga, or dietician service workflows with offer packets, onboarding, weekly plans, progress check-ins, renewal notes, and client handoffs.",
     promise: "Plan the whole client service loop as a normal business workflow. No medical advice, no Web3 trading, and payment/email/hosting hooks remain planned-not-live.",
     category: "wellness",
     status: "workflow_ready",
     examplePrompts: [
-      "Create a wellness program for my clients",
+      "Create a longevity program for my clients",
       "Build a yoga class schedule",
       "Create a client onboarding questionnaire and weekly check-in workflow",
     ],
     launch: {
-      primaryCta: "Start wellness workflow",
+      primaryCta: "Start longevity workflow",
       secondaryCta: "Plan a service",
-      defaultPrompt: "Create a wellness program for my clients",
+      defaultPrompt: "Create a longevity program for my clients",
       handoffContextLabel: "Audience and goal",
       recommendedSurface: "workflow_chat",
     },

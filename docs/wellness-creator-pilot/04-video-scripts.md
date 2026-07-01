@@ -2,7 +2,7 @@
 
 Short-form scripts (15–45 sec each) mapped to the 4-week beginner plan. Each has a hook, a demo, a coaching cue, and a call-to-action.
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ---
 

@@ -4,7 +4,7 @@
 
 Welcome! This is your simple, do-anywhere starting program: three short sessions a week, a general healthy-eating guide, and everything you need to follow along on your own.
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## What's inside
 
@@ -33,4 +33,4 @@ If anything hurts, feels off, or you have a health condition, stop and check in 
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome, weight change, or fitness result is guaranteed. This program is general fitness and wellness education, not medical care.
+Results vary between individuals. No specific outcome, weight change, or fitness result is guaranteed. This program is general fitness and longevity education, not medical care.
