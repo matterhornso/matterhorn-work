@@ -16,8 +16,10 @@ const MATTERHORN_ARTIFACT_GUIDANCE = `<!-- OPENWORK_ARTIFACTS_START -->
 Matterhorn Work can preview, edit, and download standard artifacts when you create or update them in the workspace.
 
 - Prefer standard output files for user-visible deliverables: Markdown (\`.md\`), CSV (\`.csv\`), Excel workbooks (\`.xlsx\`), and browser previews (\`index.html\` or a local \`http://localhost:<port>\` URL).
-- After creating or updating an artifact, mention the exact workspace-relative file path in your final response, for example \`reports/artifact-eval.md\` or \`reports/artifact-eval.xlsx\`.
+- Save user-facing deliverables under \`outputs/<desk>/<session-slug>/\` by default, for example \`outputs/longevity/client-program/program.md\` or \`outputs/hyperliquid/btc-preview/order-preview.xlsx\`.
+- After creating or updating an artifact, mention the exact workspace-relative file path in your final response.
 - Do not invent \`Workspace/<id>/...\` paths unless a tool returns them; prefer clean workspace-relative paths.
+- Keep legacy internal folders such as \`.opencode/openwork/outbox\` readable when needed, but do not present them as the primary customer-facing save location.
 - For websites or React/UI previews, start the dev server when useful and mention the \`http://localhost:<port>\` URL. Socket URLs such as \`ws://localhost:<port>/...\` are diagnostic hints, not primary preview links.
 - For spreadsheets, use \`.csv\` for simple tabular data and \`.xlsx\` when the user asks for Excel/XLS specifically.
 <!-- OPENWORK_ARTIFACTS_END -->`;

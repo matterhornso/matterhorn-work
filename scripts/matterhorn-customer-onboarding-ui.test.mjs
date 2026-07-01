@@ -41,6 +41,7 @@ const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/ove
 const cloudAccountSettings = read("apps/app/src/react-app/domains/settings/pages/cloud-account-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
+
 const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
 const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
@@ -90,7 +91,7 @@ for (const phrase of [
   "Public SS58 reads and unsigned previews only.",
   "Can submit: No. Live submission: Off. External trade handoff only.",
   "Blocked regions get no executable bet fields.",
-  "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
+  "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "Choose a desk",
   "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
   "focused desk",
@@ -167,11 +168,11 @@ for (const phrase of [
   "Prepare Hyperliquid BTC-PERP handoff",
   "Summarize this Polymarket market",
   "Check Polymarket compliance",
-  "Create a longevity program for my clients",
+  "Build the full 7-stage Longevity workflow for my clients",
   "MCPs & Connectors",
   "Start with a Matterhorn workflow",
   "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
-  "Plan trainer, yoga, or dietician service delivery without Web3, markets, medical advice, or live payment/email/hosting claims.",
+  "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
   "Can submit: No",
   "Live submission: Off",
   "Matterhorn never signs",

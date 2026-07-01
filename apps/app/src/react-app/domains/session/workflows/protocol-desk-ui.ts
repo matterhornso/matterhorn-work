@@ -119,7 +119,7 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
     : manifest.walletRequirements.includes("evm_read_only")
       ? "Public wallet context"
       : manifest.category === "wellness"
-        ? "Client-safe artifacts"
+        ? "Offline human-optimization"
         : "Safe context";
   return Array.from(new Set([...actions, walletBoundary])).slice(0, 3);
 }
@@ -132,7 +132,7 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
     return "Can submit: No. Live submission: Off. External trade handoff only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
   if (manifest.id === "wellness") {
-    return "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.";
+    return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
   }
   if (manifest.id === "memory") {
     return "User-controlled memory only. No hidden saves; secrets and clinical records are blocked.";

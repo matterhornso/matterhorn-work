@@ -24,7 +24,7 @@ describe("ensureWorkspaceFiles", () => {
       expect(agent).toContain("You are Matterhorn Work.");
       expect(agent).toContain("Matterhorn Work Artifacts");
       expect(agent).toContain("Do not lead with internal runtime files");
-      expect(agent).toContain("reports/artifact-eval.xlsx");
+      expect(agent).toContain("outputs/longevity/client-program/program.md");
       expect(config).toContain('"default_agent": "matterhorn"');
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
 

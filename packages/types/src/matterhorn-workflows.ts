@@ -123,7 +123,7 @@ export const WELLNESS_CREATOR_SERVICES_WORKFLOW: MatterhornWorkflowManifest = {
   category: "wellness",
   targetUserPersona: "longevity creator or coach",
   description:
-    "Helps a longevity creator plan services, content, and customer touchpoints without executing live provider actions.",
+    "Helps a longevity creator plan services, content, and customer touchpoints for a 7-stage offline workflow without executing live provider actions. Outputs should be saved under outputs/longevity/<session-slug>/.",
   status: "planned_not_live",
   inputPrompts: [
     {
@@ -860,10 +860,10 @@ export const WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE: MatterhornWorkflowTempl
   category: "wellness",
   intendedUser: "personal trainer, gym instructor, yoga instructor, or dietician",
   promptStarters: [
-    "Create a longevity program for my clients",
-    "Design a nutrition plan",
-    "Build a yoga class schedule",
-    "Package my training services",
+    "Build the full 7-stage Longevity workflow for my clients",
+    "Create intake, goals, training, nutrition education, schedule, handouts, and service package",
+    "Create a client onboarding questionnaire, weekly check-in workflow, and handout packet",
+    "Package my longevity service with offer copy, tiers, disclaimer, and renewal prompts",
   ],
   requiredPublicInputs: [
     {
@@ -895,14 +895,32 @@ export const WELLNESS_CREATOR_SERVICE_WORKFLOW_TEMPLATE: MatterhornWorkflowTempl
   ],
   generatedArtifacts: [
     {
+      id: "intake_summary",
+      name: "Intake Summary",
+      mimeType: "text/markdown",
+      public: false,
+    },
+    {
       id: "program_design_plan",
       name: "Program Design Plan",
       mimeType: "text/markdown",
       public: false,
     },
     {
+      id: "nutrition_education_plan",
+      name: "Nutrition Education Plan",
+      mimeType: "text/markdown",
+      public: false,
+    },
+    {
       id: "weekly_schedule",
       name: "Weekly Schedule",
+      mimeType: "text/markdown",
+      public: false,
+    },
+    {
+      id: "client_handout_packet",
+      name: "Client Handout Packet",
       mimeType: "text/markdown",
       public: false,
     },
@@ -1655,17 +1673,37 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
   id: "wellness_creator_workflow",
   name: "Build a Longevity Creator business workflow",
   summary:
-    "Design longevity programs, service packages, and client management workflows without giving medical advice.",
+    "Build a 7-stage offline Longevity workflow for human optimization: intake, goals, movement, nutrition education, schedule, client handouts, and service packaging.",
   promise:
-    "Plan your longevity business. No medical advice. Service hooks remain planned-not-live until you connect providers.",
+    "Plan your longevity business. No medical advice. Generated artifacts should be saved under outputs/longevity/<session-slug>/. Service hooks remain planned-not-live until you connect providers.",
   category: "wellness",
   examplePrompts: [
-    "Create a longevity program for my clients",
-    "Design a nutrition plan",
-    "Build a yoga class schedule",
-    "Package my training services",
+    "Build the full 7-stage Longevity workflow for my clients",
+    "Stage 1: run a client intake and redacted goals summary",
+    "Stage 2: define goals, constraints, and non-medical boundaries",
+    "Stage 3: draft a training, mobility, or yoga plan",
+    "Stage 4: build a nutrition education plan without prescribing",
+    "Stage 5: create a weekly schedule and check-in workflow",
+    "Stage 6: generate client handouts, FAQ, and a progress tracker",
+    "Stage 7: package the service with offer copy, tiers, and disclaimers",
+    "Create a client onboarding questionnaire, weekly check-in workflow, and handout packet",
+    "Package my longevity service with offer copy, tiers, disclaimer, and renewal prompts",
   ],
   expectedArtifacts: [
+    {
+      id: "intake_summary",
+      name: "Intake Summary",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Audience, context, constraints, and redacted goals.",
+    },
+    {
+      id: "goals_constraints",
+      name: "Goals and Constraints",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Non-medical goals, boundaries, schedule, equipment, and assumptions.",
+    },
     {
       id: "program_design_plan",
       name: "Program Design Plan",
@@ -1674,11 +1712,25 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
       description: "High-level program design with safety disclaimers.",
     },
     {
+      id: "nutrition_education_plan",
+      name: "Nutrition Education Plan",
+      mimeType: "text/markdown",
+      public: true,
+      description: "General nutrition education and habit structure without prescribing.",
+    },
+    {
       id: "weekly_schedule",
       name: "Weekly Schedule",
       mimeType: "text/markdown",
       public: true,
       description: "Weekly session and content schedule.",
+    },
+    {
+      id: "client_handout_packet",
+      name: "Client Handout Packet",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Client-safe handouts, FAQ, checklists, and progress review prompts.",
     },
     {
       id: "pricing_package_draft",
@@ -1753,9 +1805,9 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
   ],
   chatMode: "workflow chat",
   launch: {
-    primaryCta: "Start longevity workflow",
+    primaryCta: "Start Longevity workflow",
     secondaryCta: "Plan a service",
-    defaultPrompt: "Create a longevity program for my clients",
+    defaultPrompt: "Build the full 7-stage Longevity workflow for my clients",
     handoffContextLabel: "Audience and goal",
     recommendedSurface: "workflow_chat",
   },
@@ -1763,7 +1815,7 @@ export const WELLNESS_CREATOR_WORKFLOW_CUSTOMER_TEMPLATE: MatterhornCustomerWork
     iconHint: "wellness",
     accent: "neutral",
     shortDescription:
-      "Design longevity programs and service packages without medical advice.",
+      "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
   },
   routing: {
     chatMode: "wellness",
@@ -2138,11 +2190,15 @@ export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceMa
   id: "wellness",
   displayName: "Longevity Creator",
   category: "wellness",
-  customerStatus: "planned_not_live",
+  customerStatus: "workflow_ready",
   allowedIntents: [
+    "client intake",
+    "define goals and constraints",
+    "build training mobility yoga plan",
+    "build nutrition education plan",
+    "build weekly schedule and check-ins",
+    "create client artifacts and handouts",
     "plan program",
-    "design nutrition plan",
-    "build schedule",
     "package services",
   ],
   safetyBoundaries: {
@@ -2166,8 +2222,8 @@ export const WELLNESS_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceMa
     "package_card",
     "receipt_card",
   ],
-  demoPrompt: "Create a longevity program for my clients",
-  launchBehavior: "planned_not_live",
+  demoPrompt: "Build the full 7-stage Longevity workflow for my clients",
+  launchBehavior: "starts_chat",
 };
 
 export const DECENTRALIZED_SERVICES_PROTOCOL_WORKSPACE_MANIFEST: MatterhornProtocolWorkspaceManifest = {
@@ -2505,25 +2561,53 @@ export const WELLNESS_CLIENT_PROGRAM_PACKET_DEMO_SCENARIO: CustomerBetaDemoScena
   entryPrompt: "Create a 6-week strength program packet for busy professionals with a weekly check-in workflow",
   expectedArtifacts: [
     {
+      id: "intake_summary",
+      name: "Intake Summary",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Stage 1 — Audience, context, constraints, and redacted client goals.",
+    },
+    {
+      id: "goals_constraints",
+      name: "Goals and Constraints",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Stage 2 — Non-medical goals, boundaries, schedule, equipment, and assumptions.",
+    },
+    {
       id: "program_design_plan",
       name: "Program Design Plan",
       mimeType: "text/markdown",
       public: true,
-      description: "High-level program design with safety disclaimers.",
+      description: "Stage 3 — High-level movement program design with safety disclaimers.",
+    },
+    {
+      id: "nutrition_education_plan",
+      name: "Nutrition Education Plan",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Stage 4 — General nutrition education and habit structure without prescribing.",
     },
     {
       id: "weekly_schedule",
       name: "Weekly Schedule",
       mimeType: "text/markdown",
       public: true,
-      description: "Weekly session and content schedule.",
+      description: "Stage 5 — Weekly session and content schedule plus check-in cadence.",
+    },
+    {
+      id: "client_handout_packet",
+      name: "Client Handout Packet",
+      mimeType: "text/markdown",
+      public: true,
+      description: "Stage 6 — Client-safe handouts, FAQ, checklists, and progress review prompts.",
     },
     {
       id: "pricing_package_draft",
       name: "Pricing Package Draft",
       mimeType: "text/markdown",
       public: true,
-      description: "Draft pricing and packaging options.",
+      description: "Stage 7 — Draft pricing, packaging options, and service terms/disclaimer.",
     },
     {
       id: "service_plan",
@@ -3544,23 +3628,25 @@ export const WELLNESS_PROTOCOL_DESK_MANIFEST: ProtocolDeskManifest = {
   },
   customerVisible: true,
   capabilityBullets: [
-    "Build educational, non-medical longevity programs",
-    "Generate intake forms, schedules, and packets",
-    "Package services without live execution",
-    "Plan future live-service integrations",
+    "Run a 7-stage offline human-optimization workflow",
+    "Build educational, non-medical movement and nutrition plans",
+    "Generate intake forms, weekly schedules, handouts, and check-ins",
+    "Package services and draft offer copy without live execution",
+    "Keep every output separate from Web3 trading and market desks",
   ],
   safetySummary: "Educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
   customerCapabilitySummary: "Build educational, non-medical longevity programs, generate client artifacts, and package services through chat. No Web3 trading required.",
   noCustodySafetyLine: "Longevity content is educational and opt-in. Matterhorn does not process payments, send email, host sites, or access external accounts.",
   suggestedPromptTitles: [
+    "Build the 7-stage Longevity workflow",
     "Create a 4-week strength plan",
     "Draft a yoga class for lower backs",
     "Generate a meal-planning template",
     "Package this as a service offer",
   ],
   emptyStateCopy: {
-    headline: "Build a longevity program",
-    body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export.",
+    headline: "Build a Longevity program",
+    body: "Describe your audience, goal, and format. Matterhorn generates an educational, non-medical program packet you can refine and export. Artifacts should be saved under outputs/longevity/<session-slug>/.",
     primaryActionId: "build-program",
   },
   degradedStateCopy: {

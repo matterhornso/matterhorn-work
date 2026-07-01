@@ -4,7 +4,7 @@ A **full Matterhorn Work workflow** — **not a pilot and not a custom vertical 
 
 This is a use case on the universal chat-first platform. It deliberately blurs the Web2/Web3 boundary: the creator gets full value on day one with zero crypto setup, and the Web3-shaped capabilities (storage, payments, identity/access, email) attach later as planned hooks — never as a requirement, never described as live.
 
-> **Status note (read first):** The artifacts this workflow produces are live today as chat-generated Matterhorn artifacts. The delivery-stage service hooks — storage/hosting, email updates, payments, identity/access — are **planned, not live.** Nothing here takes a payment, sends an email, hosts on a live storage service, or enforces token-gated access. Fitness and nutrition content is **educational only** — never medical advice, diagnosis, treatment, prescription, or a guaranteed result.
+> **Status note (read first):** The artifacts this workflow produces are live today as chat-generated Matterhorn artifacts. Generated outputs should be saved under `outputs/longevity/<session-slug>/` per session, but Matterhorn does not implement the output storage system itself. The delivery-stage service hooks — storage/hosting, email updates, payments, identity/access — are **planned, not live.** Nothing here takes a payment, sends an email, hosts on a live storage service, or enforces token-gated access. Fitness and nutrition content is **educational only** — never medical advice, diagnosis, treatment, prescription, or a guaranteed result.
 
 ## Why This Is a Full Workflow, Not a Pilot
 
