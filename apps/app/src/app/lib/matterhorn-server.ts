@@ -37,6 +37,7 @@ export type MatterhornServerCapabilities = {
       outbox: boolean;
       inboxPath: string;
       outboxPath: string;
+      outputsPath: string;
       maxBytes: number;
     };
   };

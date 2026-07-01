@@ -128,6 +128,7 @@ export interface Capabilities {
       outbox: boolean;
       inboxPath: string;
       outboxPath: string;
+      outputsPath: string;
       maxBytes: number;
     };
   };

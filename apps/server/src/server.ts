@@ -1376,6 +1376,7 @@ function buildCapabilities(config: ServerConfig): Capabilities {
         outbox: outboxEnabled,
         inboxPath: ".opencode/openwork/inbox/",
         outboxPath: ".opencode/openwork/outbox/",
+        outputsPath: "outputs/",
         maxBytes,
       },
     },
