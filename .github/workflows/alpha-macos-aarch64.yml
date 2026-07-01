@@ -181,25 +181,15 @@ jobs:
           TARGET: aarch64-apple-darwin
         run: pnpm --filter @matterhorn-work/desktop build:electron
 
-      - name: Skip signed Electron alpha publish
-        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
-        shell: bash
-        run: |
-          {
-            echo "### Signed Electron alpha publish skipped"
-            echo
-            echo "The Electron app build completed, but signed packaging and release publishing were skipped because Apple signing secrets are not configured."
-            echo
-            echo "Missing secrets: \`${{ steps.alpha-signing.outputs.missing }}\`"
-            echo
-            echo "An unsigned tester artifact will be uploaded to this workflow run for internal QA. It is not notarized and is not published to the alpha updater release."
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Package Electron alpha tester artifact (macOS, unsigned)
         if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+          # Notarization must be disabled for the ad-hoc-signed internal tester
+          # artifact. The afterSign hook checks this flag before validating the
+          # automation helper's Developer ID signature.
+          MACOS_NOTARIZE: false
         run: |
           set -euo pipefail
           pnpm --dir apps/desktop exec electron-builder \
@@ -218,6 +208,20 @@ jobs:
             apps/desktop/dist-electron/*.blockmap
             apps/desktop/dist-electron/latest-mac.yml
           if-no-files-found: error
+
+      - name: Summarize unsigned alpha tester build
+        if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured != 'true'
+        shell: bash
+        run: |
+          {
+            echo "### Signed Electron alpha publish skipped"
+            echo
+            echo "The Electron app build completed, but signed packaging and release publishing were skipped because Apple signing secrets are not configured."
+            echo
+            echo "Missing secrets: \`${{ steps.alpha-signing.outputs.missing }}\`"
+            echo
+            echo "An unsigned, ad-hoc-signed tester artifact was uploaded to this workflow run as \`matterhorn-alpha-macos-arm64-unsigned\`. It is not notarized and is not published to the alpha updater release."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package Electron alpha (macOS, signed + notarized)
         if: env.MACOS_NOTARIZE == 'true' && steps.alpha-signing.outputs.configured == 'true'
