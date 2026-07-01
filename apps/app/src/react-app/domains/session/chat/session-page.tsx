@@ -81,6 +81,7 @@ import {
   getCustomerProtocolDeskVisual,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import { getChatDraftConfig } from "@matterhorn-work/types";
 
 const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
 const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
@@ -326,6 +327,7 @@ function ProtocolDeskEmptyState({
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
+  const draftConfig = getChatDraftConfig(panel);
   const [draftedPromptTitle, setDraftedPromptTitle] = useState<string | null>(null);
   const safeBoundary = panel === "bittensor"
     ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
@@ -396,7 +398,7 @@ function ProtocolDeskEmptyState({
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
             <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open chat draft" title="Open chat draft">
-              Create editable draft
+              {draftConfig?.confirmCtaLabel ?? "Create editable draft"}
             </span>
           </button>
         ))}
@@ -408,7 +410,7 @@ function ProtocolDeskEmptyState({
         >
           <div className="min-w-0">
             <span className="font-semibold uppercase tracking-[0.14em] text-[var(--matterhorn-desk-color)]">
-              Draft ready
+              {draftConfig?.draftStateLabel ?? "Draft ready"}
             </span>
             <p className="mt-1">
               <span className="font-medium text-dls-text">{draftedPromptTitle}</span> is in the composer. Nothing has
