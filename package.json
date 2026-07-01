@@ -119,6 +119,7 @@
     "test:monday-beta-launch-readiness": "node scripts/monday-beta-launch-readiness.test.mjs",
     "test:beta-auth": "node scripts/beta-auth.test.mjs",
     "test:matterhorn-memory-contract": "node scripts/matterhorn-memory-contract.test.mjs",
+    "test:matterhorn-memory-suggestion-lifecycle-contract": "node scripts/matterhorn-memory-suggestion-lifecycle-contract.test.mjs",
     "test:matterhorn-memory-api-cli": "cd apps/server && bun test src/memory-routes.e2e.test.ts && cd ../.. && node scripts/matterhorn-memory-api-cli.test.mjs",
     "test:matterhorn-memory-producers": "bun test apps/app/tests/memory-suggestion-producers.test.ts",
     "test:matterhorn-memory-ui": "node scripts/matterhorn-memory-ui.test.mjs",

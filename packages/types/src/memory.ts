@@ -629,6 +629,34 @@ export function sanitizeMemorySuggestionForDisplay(
   };
 }
 
+export function sanitizeMemorySuggestionLifecycleForDisplay(
+  entry: MatterhornMemorySuggestionLifecycle,
+): MatterhornMemorySuggestionLifecycle {
+  if (!isForbiddenMemorySecretBody(entry.proposedRecord.body)) {
+    return entry;
+  }
+
+  const redactedBody: Record<string, unknown> = {
+    __redacted: true,
+    reason: "Forbidden secret material was detected and removed before display.",
+    redactedFields: findForbiddenMemorySecretFields(entry.proposedRecord.body),
+  };
+
+  return {
+    ...entry,
+    proposedRecord: {
+      ...entry.proposedRecord,
+      body: redactedBody,
+      summary: "[Redacted] suggestion contains forbidden secret material.",
+    },
+    status: "blocked",
+    policyWarnings: [
+      ...(entry.policyWarnings ?? []),
+      "Display sanitizer removed forbidden secret-shaped material.",
+    ],
+  };
+}
+
 export function canMemorySuggestionBecomeSavedMemory(
   suggestion: MatterhornMemorySuggestion,
 ): boolean {
@@ -1105,9 +1133,17 @@ export const MATTERHORN_MEMORY_SUGGESTION_ACTIONS = [
   "confirm",
   "edit",
   "dismiss",
+  "restore",
+  "regenerate",
 ] as const;
 export type MatterhornMemorySuggestionAction =
   (typeof MATTERHORN_MEMORY_SUGGESTION_ACTIONS)[number];
+
+export interface MatterhornMemorySuggestionWhySuggested {
+  summary: string;
+  sourceLabel: string;
+  maxLength: number;
+}
 
 export interface MatterhornMemorySuggestionLifecycle {
   suggestionId: string;
@@ -1118,6 +1154,8 @@ export interface MatterhornMemorySuggestionLifecycle {
   sensitivity: MatterhornMemorySensitivity;
   confidence: number;
   reason: string;
+  whySuggested?: MatterhornMemorySuggestionWhySuggested;
+  visibleProvenance?: MatterhornMemoryProvenance;
   proposedRecord: MatterhornMemoryRecord;
   createdAt: string;
   expiresAt?: string;
@@ -1126,6 +1164,8 @@ export interface MatterhornMemorySuggestionLifecycle {
   actorConfirmationRequired: true;
   status: MatterhornMemorySuggestionStatus;
   policyWarnings?: string[];
+  localOnly?: boolean;
+  nonClinical?: boolean;
 }
 
 export interface MatterhornMemorySuggestionConfirmationResult {
@@ -1139,6 +1179,10 @@ export interface MatterhornMemorySuggestionConfirmationResult {
 }
 
 export const DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS = 30;
+
+export const DEFAULT_MEMORY_SUGGESTION_EXPIRATION_DAYS = 14;
+
+export const MAX_MEMORY_SUGGESTION_REASON_LENGTH = 240;
 
 export function validateMemorySuggestionLifecycle(
   entry: MatterhornMemorySuggestionLifecycle,
@@ -1175,6 +1219,22 @@ export function validateMemorySuggestionLifecycle(
 
   if (!entry.reason || typeof entry.reason !== "string") {
     errors.push("lifecycle reason is required and must be a string");
+  } else if (entry.reason.length > MAX_MEMORY_SUGGESTION_REASON_LENGTH) {
+    errors.push(`lifecycle reason must be at most ${MAX_MEMORY_SUGGESTION_REASON_LENGTH} characters`);
+  }
+
+  if (entry.whySuggested) {
+    if (typeof entry.whySuggested.summary !== "string") {
+      errors.push("lifecycle whySuggested.summary must be a string");
+    } else if (entry.whySuggested.summary.length > entry.whySuggested.maxLength) {
+      errors.push("lifecycle whySuggested.summary exceeds whySuggested.maxLength");
+    }
+    if (typeof entry.whySuggested.sourceLabel !== "string") {
+      errors.push("lifecycle whySuggested.sourceLabel must be a string");
+    }
+    if (entry.whySuggested.maxLength > MAX_MEMORY_SUGGESTION_REASON_LENGTH) {
+      errors.push(`lifecycle whySuggested.maxLength must not exceed ${MAX_MEMORY_SUGGESTION_REASON_LENGTH}`);
+    }
   }
 
   if (!entry.proposedRecord || typeof entry.proposedRecord !== "object") {
@@ -1183,6 +1243,18 @@ export function validateMemorySuggestionLifecycle(
     const recordResult = validateMemorySafety(entry.proposedRecord);
     if (!recordResult.ok) {
       errors.push(`lifecycle proposedRecord is unsafe: ${recordResult.errors.join("; ")}`);
+    }
+
+    const tags = entry.proposedRecord.tags.map((tag) => tag.toLowerCase());
+    const isWellnessSuggestion =
+      tags.includes("wellness") || tags.includes("health") || tags.includes("clinical");
+    if (isWellnessSuggestion) {
+      if (entry.localOnly !== true) {
+        errors.push("wellness suggestions must be localOnly: true");
+      }
+      if (entry.nonClinical !== true) {
+        errors.push("wellness suggestions must be nonClinical: true");
+      }
     }
   }
 
@@ -1226,9 +1298,19 @@ export function computeMemorySuggestionDismissedUntil(
   return date.toISOString();
 }
 
+export function computeMemorySuggestionExpiresAt(
+  createdAt: string,
+  expirationDays = DEFAULT_MEMORY_SUGGESTION_EXPIRATION_DAYS,
+): string {
+  const date = new Date(createdAt);
+  date.setUTCDate(date.getUTCDate() + expirationDays);
+  return date.toISOString();
+}
+
 export function isMemorySuggestionTransitionAllowed(
   entry: MatterhornMemorySuggestionLifecycle,
   action: MatterhornMemorySuggestionAction,
+  now = new Date().toISOString(),
 ): MatterhornMemoryValidationResult {
   const errors: string[] = [];
 
@@ -1249,7 +1331,21 @@ export function isMemorySuggestionTransitionAllowed(
     }
   }
 
-  if (entry.status === "expired") {
+  if (action === "restore") {
+    if (entry.status !== "dismissed") {
+      errors.push(`cannot restore a suggestion that is ${entry.status}`);
+    } else if (isMemorySuggestionDismissalActive(entry, now)) {
+      errors.push("cannot restore a suggestion while the dismissal window is still active");
+    }
+  }
+
+  if (action === "regenerate") {
+    if (entry.status !== "expired") {
+      errors.push(`cannot regenerate a suggestion that is ${entry.status}`);
+    }
+  }
+
+  if (entry.status === "expired" && action !== "regenerate") {
     errors.push("expired suggestions cannot create memory records");
   }
 
@@ -1282,7 +1378,7 @@ export function applyMemorySuggestionAction(
     status = "blocked";
   }
 
-  const transitionResult = isMemorySuggestionTransitionAllowed(entry, action);
+  const transitionResult = isMemorySuggestionTransitionAllowed(entry, action, now);
   if (!transitionResult.ok) {
     blockedReasons.push(...transitionResult.errors);
     status = "blocked";
@@ -1307,6 +1403,16 @@ export function applyMemorySuggestionAction(
   } else if (action === "dismiss") {
     status = "dismissed";
     memoryRecordId = undefined;
+  } else if (action === "restore") {
+    if (status !== "blocked") {
+      status = "pending";
+      memoryRecordId = undefined;
+    }
+  } else if (action === "regenerate") {
+    if (status !== "blocked") {
+      status = "pending";
+      memoryRecordId = undefined;
+    }
   }
 
   const provenance: MatterhornMemoryProvenance = {
@@ -1352,7 +1458,7 @@ export function createMemorySuggestionLifecycleFixture(
   const expiresAt =
     status === "expired"
       ? new Date(now.getTime() - 1).toISOString()
-      : new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      : computeMemorySuggestionExpiresAt(createdAt);
 
   const base: MatterhornMemorySuggestionLifecycle = {
     suggestionId: `sugg-fixture-${status}`,
@@ -1363,6 +1469,19 @@ export function createMemorySuggestionLifecycleFixture(
     sensitivity: "public",
     confidence: 0.9,
     reason: `Example ${status} suggestion fixture`,
+    whySuggested: {
+      summary: `Example ${status} suggestion fixture`,
+      sourceLabel: "Chat context",
+      maxLength: MAX_MEMORY_SUGGESTION_REASON_LENGTH,
+    },
+    visibleProvenance: {
+      source: "chat_capture",
+      sourceId: "fixture-message-1",
+      capturedAt: createdAt,
+      capturedBy: "agent",
+      confidence: 0.9,
+      reasonRemembered: `Fixture for ${status}`,
+    },
     proposedRecord: {
       id: `rec-fixture-${status}`,
       kind: "user_preference",
@@ -1389,9 +1508,11 @@ export function createMemorySuggestionLifecycleFixture(
     createdAt,
     expiresAt,
     dismissedUntil,
-    dismissalWindowDays: 30,
+    dismissalWindowDays: DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS,
     actorConfirmationRequired: true,
     status,
+    localOnly: false,
+    nonClinical: true,
     ...overrides,
   };
 
@@ -1408,6 +1529,8 @@ export function createWellnessMemorySuggestionLifecycleFixture(
     kind: "user_preference",
     sensitivity: "restricted",
     reason: "Example wellness suggestion fixture",
+    localOnly: true,
+    nonClinical: true,
     proposedRecord: {
       id: `rec-wellness-fixture-${status}`,
       kind: "user_preference",
