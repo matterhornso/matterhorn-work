@@ -7,7 +7,6 @@ import {
   BarChart3,
   Bell,
   BrainCircuit,
-  Cloud,
   Copy,
   Database,
   Dumbbell,
@@ -20,6 +19,7 @@ import {
   Plus,
   Settings2,
   ShieldCheck,
+  CircleUserRound,
   Wallet as WalletIcon,
   Zap,
 } from "lucide-react";
@@ -40,6 +40,11 @@ import type {
 } from "../../../../app/types";
 import type { ShareWorkspaceModalProps } from "../../workspace/types";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ConfirmModal } from "../../../design-system/modals/confirm-modal";
 import type { ProviderAuthModalProps } from "../../connections/provider-auth/provider-auth-modal";
 import { RenameSessionModal } from "../modals/rename-session-modal";
@@ -285,10 +290,30 @@ function HomeCapabilityOverview({
       style={{ contentVisibility: "auto", containIntrinsicSize: "360px" } as CSSProperties}
       aria-label="Desk capability overview"
     >
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-dls-text">Open a desk</h3>
-        </div>
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-dls-text">Open a desk</h3>
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Open a desk details"
+                className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-dls-border text-[11px] font-semibold leading-none text-dls-secondary transition-colors hover:border-dls-text/45 hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dls-text/30"
+              >
+                i
+              </button>
+            }
+          />
+          <PopoverContent
+            side="right"
+            align="start"
+            className="w-60 gap-1 rounded-lg border border-dls-border bg-dls-surface px-3 py-2 text-left text-[11px] leading-5 text-dls-text shadow-none"
+          >
+            <span>Dedicated desk agents</span>
+            <span>Review before action</span>
+            <span>Outputs stay with the project</span>
+          </PopoverContent>
+        </Popover>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {homeCapabilityStatusItems().map((item) => {
@@ -323,11 +348,6 @@ function HomeCapabilityOverview({
             </button>
           );
         })}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium leading-5 text-dls-secondary">
-        <span>Dedicated desk agents</span>
-        <span>Review before action</span>
-        <span>Outputs stay with the project</span>
       </div>
     </section>
   );
@@ -544,6 +564,7 @@ export type SessionPageProps = {
   respondQuestion?: (requestID: string, answers: string[][]) => void;
   statusBar?: Partial<StatusBarOverrides>;
   notFoundMessage?: string | null;
+  onRevealPath?: (path: string, label: string) => Promise<void> | void;
   onRenameSession?: (sessionId: string, title: string) => Promise<void> | void;
   onDeleteSession?: (sessionId: string) => Promise<void> | void;
   onAccessibleTargetsChange?: (targets: OpenTarget[]) => void;
@@ -1557,6 +1578,18 @@ export function SessionPage(props: SessionPageProps) {
                               <Copy className="size-3.5" />
                               {homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs"}
                             </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
+                              disabled={!homeProjectPath || !props.onRevealPath}
+                              onClick={() => {
+                                if (!props.onRevealPath) return;
+                                void props.onRevealPath(homeOutputsPath, "Outputs folder");
+                              }}
+                            >
+                              <FolderOpen className="size-3.5" />
+                              Open outputs
+                            </button>
                           </div>
                         </div>
                         <HomeCapabilityOverview
@@ -1857,7 +1890,7 @@ export function SessionPage(props: SessionPageProps) {
                 aria-label={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
                 aria-pressed={profileRailActive}
               >
-                {shellConfig.cloudSignin ? <Cloud size={17} /> : <Settings2 size={17} />}
+                <CircleUserRound size={17} />
                 <span className={RAIL_LABEL_CLASS}>Profile</span>
               </Button>
               <Button

@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import * as React from "react";
-import { ArrowUpRight, ExternalLink } from "lucide-react";
+import { ArrowUpRight, ExternalLink, ListChecks } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ import {
   type ProfileAuthState,
   type ProfileReadiness,
 } from "@matterhorn-work/types";
+import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
+import { useWorkflowTaskLog } from "./use-workflow-task-log";
 
 type CloudAccountSession = Pick<
   ReturnType<typeof useDenSession>,
@@ -63,6 +65,7 @@ export type CloudAccountViewProps = {
   developerMode: boolean;
   session: CloudAccountSession;
   compact?: boolean;
+  workspaceId?: string;
 };
 
 type DenSignedOutPanelProps = Pick<
@@ -217,7 +220,103 @@ function ProfileReadinessSupportSection({ readiness }: { readiness: ProfileReadi
   );
 }
 
-export function CloudAccountView({ compact = false, developerMode, session }: CloudAccountViewProps) {
+function formatTaskLogTime(updatedAt: number) {
+  if (!updatedAt) return "Just now";
+  return new Date(updatedAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function TaskLogSourceBadge({ source }: { source: "backend" | "local" }) {
+  if (source === "backend") {
+    return (
+      <span className="rounded bg-dls-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-dls-accent">
+        Workflow
+      </span>
+    );
+  }
+  return (
+    <span className="rounded bg-dls-surface/70 px-1.5 py-0.5 text-[10px] font-medium text-dls-secondary">
+      Local
+    </span>
+  );
+}
+
+function formatTaskLogDesk(deskId?: string) {
+  if (!deskId) return "Matterhorn";
+  if (deskId === "wellness") return "Longevity";
+  if (deskId === "mcps") return "MCPs";
+  return deskId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function taskLogTitle(log: { visibleUserIntent?: string; sessionId: string }) {
+  const intent = log.visibleUserIntent?.trim();
+  if (intent) return intent;
+  return `Task ${log.sessionId.slice(0, 8)}`;
+}
+
+function ProfileTaskLogSection({ workspaceId }: { workspaceId?: string }) {
+  const { logs, error } = useWorkflowTaskLog(workspaceId);
+
+  return (
+    <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-2">
+          <ListChecks className="mt-0.5 size-4 shrink-0 text-dls-text" />
+          <div className="min-w-0">
+            <h4 className="font-semibold text-dls-text">Task log</h4>
+            <p>Recent task state from this workspace session.</p>
+          </div>
+        </div>
+        <span className="shrink-0 font-semibold text-dls-text">{logs.length}</span>
+      </div>
+
+      {error ? (
+        <div className="rounded-lg border border-dls-border/45 px-3 py-3 text-center text-dls-secondary">
+          {error}
+        </div>
+      ) : logs.length ? (
+        <div className="divide-y divide-dls-border/35">
+          {logs.map((log) => (
+            <div key={log.id} className="grid gap-1 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate font-medium text-dls-text">
+                  {taskLogTitle(log)}
+                </span>
+                <span className="shrink-0 text-[11px] text-dls-secondary">{formatTaskLogTime(log.updatedAt)}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {log.deskId ? <span>{formatTaskLogDesk(log.deskId)}</span> : null}
+                <span>{getSessionActivityStatusLabel(log.status as SessionActivityStatus)}</span>
+                {log.waitingCount ? <span>{log.waitingCount} waiting</span> : null}
+                <TaskLogSourceBadge source={log.source} />
+                <span className="truncate text-dls-muted">Workspace {log.workspaceId.slice(-8)}</span>
+              </div>
+              {log.outputBasePath ? (
+                <div className="truncate rounded bg-dls-surface/45 px-2 py-1 font-mono text-[10px] leading-4 text-dls-secondary">
+                  {log.outputBasePath}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dls-border/45 px-3 py-3 text-center">
+          Task events appear here when Matterhorn starts, waits, finishes, or errors.
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function CloudAccountView({ compact = false, developerMode, session, workspaceId }: CloudAccountViewProps) {
   const { activeOrganization, isSignedIn, statusMessage } = useCloudSession();
   const navigate = useNavigate();
 
@@ -317,6 +416,8 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
           />
         ) : null}
 
+        <ProfileTaskLogSection workspaceId={workspaceId} />
+
         <ProfileReadinessSupportSection readiness={profileReadiness} />
       </SettingsStack>
     );
@@ -390,6 +491,8 @@ export function CloudAccountView({ compact = false, developerMode, session }: Cl
           sessionBusy={session.sessionBusy}
         />
       ) : null}
+
+      <ProfileTaskLogSection workspaceId={workspaceId} />
     </SettingsStack>
   );
 }

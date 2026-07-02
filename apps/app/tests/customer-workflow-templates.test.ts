@@ -32,7 +32,8 @@ describe("customer workflow template launch cards", () => {
     const hyperliquid = cards.find((card) => card.id === "hyperliquid_trader");
     const polymarket = cards.find((card) => card.id === "polymarket_researcher");
 
-    expect(bittensor?.prompt).toContain("Use the Bittensor desk in this session");
+    expect(bittensor?.prompt).toContain("Bittensor task");
+    expect(bittensor?.prompt).toContain("Scope: TAO");
     expect(bittensor?.prompt).toContain("Do not ask for seed phrases");
     expect(bittensor?.prompt).toContain("private keys");
 
@@ -48,9 +49,11 @@ describe("customer workflow template launch cards", () => {
     const wellness = cards.find((card) => card.id === "wellness_creator_workflow");
     const services = cards.find((card) => card.id === "decentralized_services_operator");
 
-    expect(wellness?.prompt).toContain("non-medical disclaimer");
-    expect(wellness?.prompt).toContain("do not diagnose");
-    expect(wellness?.prompt).toContain("claim live payments");
+    expect(wellness?.prompt).toContain("Start a Longevity program");
+    expect(wellness?.prompt).toContain("Ask me for missing audience");
+    expect(wellness?.prompt).not.toContain("Run this as a visible 7-stage workflow");
+    expect(wellness?.safetySummary).toContain("no medical advice");
+    expect(wellness?.safetySummary).toContain("no live payments");
 
     expect(services).toBeUndefined();
     expect(cards.map((card) => card.title).join(" ")).not.toContain("Services");

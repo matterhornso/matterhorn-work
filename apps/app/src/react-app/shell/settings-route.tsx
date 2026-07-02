@@ -2228,6 +2228,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             compact={props.embedded}
             developerMode={developerMode}
             session={denSession}
+            workspaceId={selectedWorkspaceId}
           />
         );
       case "cloud-marketplaces":

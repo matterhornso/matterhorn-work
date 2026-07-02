@@ -29,7 +29,7 @@ PR #2 (`feat: add Bittensor workspace MVP`) is still open against an old `dev` b
 | Protocol workspace manifest bittensor exists | ✅ | category=bittensor, customerStatus=beta_ready |
 | Protocol workspace manifest hyperliquid exists | ✅ | category=markets, customerStatus=preview_only |
 | Protocol workspace manifest polymarket exists | ✅ | category=markets, customerStatus=preview_only |
-| Protocol workspace manifest wellness exists | ✅ | category=wellness, customerStatus=planned_not_live |
+| Protocol workspace manifest wellness exists | ✅ | category=wellness, customerStatus=workflow_ready |
 | Protocol workspace manifest decentralized_services exists | ✅ | category=decentralized_services, customerStatus=planned_not_live |
 | Customer template bittensor_operator maps to protocol workspace bittensor | ✅ | mapping valid |
 | Customer template hyperliquid_trader maps to protocol workspace hyperliquid | ✅ | mapping valid |
@@ -57,7 +57,7 @@ PR #2 (`feat: add Bittensor workspace MVP`) is still open against an old `dev` b
 | Wellness scenario is planned_not_live | ✅ | planned_not_live |
 | Wellness scenario canExecute is false | ✅ | false |
 | Wellness workflow manifest status is planned_not_live | ✅ | planned_not_live |
-| Wellness protocol workspace customerStatus is planned_not_live | ✅ | planned_not_live |
+| Wellness protocol workspace customerStatus is workflow_ready | ✅ | workflow_ready |
 | Wellness scenario forbids medical advice claims | ✅ | Matterhorn gives medical advice; Matterhorn stores protected health information; Matterhorn diagnoses conditions; Matterhorn replaces a licensed medical professional |
 
 ### Services planned-not-live

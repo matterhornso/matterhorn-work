@@ -4,12 +4,19 @@ export type MatterhornDeskAgentDeskId =
   | "polymarket"
   | "wellness"
   | "memory"
-  | "mcps";
+  | "mcps"
+  | "blank";
 
 export interface MatterhornDeskAgentManifest {
   version: "matterhorn.desk.agent.v1";
   deskId: MatterhornDeskAgentDeskId;
   agentId: string;
+  workflowId: string;
+  workflowManifestRef?: string;
+  outputDeskId: string;
+  defaultStageId?: string;
+  defaultActionId?: string;
+  toolAllowlist: string[];
   displayName: string;
   description: string;
   instructions: string;
@@ -28,6 +35,17 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "bittensor",
     agentId: "matterhorn-bittensor",
+    workflowId: "bittensor_operator",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/bittensor_operator",
+    outputDeskId: "bittensor",
+    defaultStageId: "stage_1_ss58_context",
+    defaultActionId: "read_or_preview",
+    toolAllowlist: [
+      "matterhorn_bittensor_",
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
     displayName: "Bittensor Agent",
     description: "Bittensor-native TAO, subnet, validator, wallet-read, watch, receipt, and external-signer handoff agent.",
     instructions: [
@@ -45,6 +63,18 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "hyperliquid",
     agentId: "matterhorn-hyperliquid",
+    workflowId: "hyperliquid_preview",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/hyperliquid_preview",
+    outputDeskId: "hyperliquid",
+    defaultStageId: "stage_1_market_read",
+    defaultActionId: "read_or_handoff",
+    toolAllowlist: [
+      "matterhorn_hyperliquid_",
+      "matterhorn_market_",
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
     displayName: "Hyperliquid Agent",
     description: "Hyperliquid market-read, exposure, funding, watch, receipt, and external trade-handoff agent.",
     instructions: [
@@ -62,6 +92,18 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "polymarket",
     agentId: "matterhorn-polymarket",
+    workflowId: "polymarket_preview",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/polymarket_preview",
+    outputDeskId: "polymarket",
+    defaultStageId: "stage_1_market_summary",
+    defaultActionId: "research_or_handoff",
+    toolAllowlist: [
+      "matterhorn_polymarket_",
+      "matterhorn_market_",
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
     displayName: "Polymarket Agent",
     description: "Polymarket research, liquidity, compliance, watch, receipt, and compliance-gated handoff agent.",
     instructions: [
@@ -79,6 +121,17 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "wellness",
     agentId: "matterhorn-longevity",
+    workflowId: "wellness_creator_services",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/wellness_creator_services",
+    outputDeskId: "longevity",
+    defaultStageId: "stage_1_intake",
+    defaultActionId: "start_longevity_workflow",
+    toolAllowlist: [
+      "matterhorn_workflows_",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+      "matterhorn_file_",
+    ],
     displayName: "Longevity Agent",
     description: "Offline longevity optimization workflow agent for creators, coaches, client packets, and service packaging.",
     instructions: [
@@ -97,6 +150,16 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "memory",
     agentId: "matterhorn-memory",
+    workflowId: "matterhorn_memory_review",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/memory_review",
+    outputDeskId: "memory",
+    defaultStageId: "review_candidates",
+    defaultActionId: "review_memory",
+    toolAllowlist: [
+      "matterhorn_memory_",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
     displayName: "Memory Agent",
     description: "User-controlled memory review, suggestion, provenance, and forget/edit workflow agent.",
     instructions: [
@@ -113,6 +176,18 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
     version: "matterhorn.desk.agent.v1",
     deskId: "mcps",
     agentId: "matterhorn-mcps",
+    workflowId: "matterhorn_mcp_setup",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/mcp_setup",
+    outputDeskId: "mcp",
+    defaultStageId: "inspect_client",
+    defaultActionId: "configure_mcp",
+    toolAllowlist: [
+      "matterhorn_workflows_",
+      "matterhorn_services_",
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+    ],
     displayName: "MCP Agent",
     description: "MCP setup, docs, tool inventory, install command, and client configuration agent.",
     instructions: [
@@ -125,11 +200,56 @@ export const MATTERHORN_DESK_AGENT_MANIFESTS: Record<MatterhornDeskAgentDeskId, 
       "- Never ask users to paste secrets into chat; use local config or environment setup where required.",
     ].join("\n"),
   },
+  blank: {
+    version: "matterhorn.desk.agent.v1",
+    deskId: "blank",
+    agentId: "matterhorn",
+    workflowId: "matterhorn_blank_chat",
+    workflowManifestRef: "matterhorn.workflow.manifest.v1/blank_chat",
+    outputDeskId: "blank",
+    defaultStageId: "freeform",
+    defaultActionId: "ask_matterhorn",
+    toolAllowlist: [
+      "matterhorn_status",
+      "matterhorn_read_files",
+      "matterhorn_write_files",
+      "matterhorn_create_session",
+      "matterhorn_submit_session_prompt",
+    ],
+    displayName: "Matterhorn Agent",
+    description: "General Matterhorn Work project agent for free-form tasks that do not belong to a dedicated desk.",
+    instructions: [
+      AGENT_SHARED_BOUNDARY,
+      "",
+      "Desk scope:",
+      "- Use this only when no dedicated desk agent is a better fit.",
+      "- Keep project context visible, ask for missing file or output details, and save deliverables under outputs/blank/<session-slug>/ when creating files.",
+      "- If the user asks for Bittensor, Hyperliquid, Polymarket, Longevity, Memory, or MCP setup, hand off to that dedicated Matterhorn desk agent.",
+    ].join("\n"),
+  },
 };
 
+const MATTERHORN_DESK_AGENT_ALIASES: Record<string, MatterhornDeskAgentDeskId> = {
+  longevity: "wellness",
+  wellness: "wellness",
+  mcp: "mcps",
+  mcps: "mcps",
+  default: "blank",
+  matterhorn: "blank",
+};
+
+export function normalizeMatterhornDeskAgentDeskId(deskId: string | null | undefined): MatterhornDeskAgentDeskId | undefined {
+  const normalized = deskId?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return MATTERHORN_DESK_AGENT_ALIASES[normalized] ?? (
+    normalized in MATTERHORN_DESK_AGENT_MANIFESTS ? normalized as MatterhornDeskAgentDeskId : undefined
+  );
+}
+
 export function getMatterhornDeskAgent(deskId: string | null | undefined): MatterhornDeskAgentManifest | undefined {
-  if (!deskId) return undefined;
-  return MATTERHORN_DESK_AGENT_MANIFESTS[deskId as MatterhornDeskAgentDeskId];
+  const normalized = normalizeMatterhornDeskAgentDeskId(deskId);
+  if (!normalized) return undefined;
+  return MATTERHORN_DESK_AGENT_MANIFESTS[normalized];
 }
 
 export function matterhornDeskAgentIdForDesk(deskId: string | null | undefined): string | undefined {

@@ -15,7 +15,7 @@
  *   caller before they reach this module.
  */
 
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { appendFile, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 
@@ -94,15 +94,18 @@ export async function deriveTaskRuns(
 ): Promise<MatterhornTaskRun[]> {
   const events = await readTaskEvents(workspaceId, limit * 20);
 
-  // Group by taskId, keep newest first
-  const byTask = new Map<string, MatterhornTaskEvent>();
+  const byTask = new Map<string, MatterhornTaskEvent[]>();
   for (const ev of events) {
-    // Last occurrence of each taskId = most recent event
-    byTask.set(ev.taskId, ev);
+    const list = byTask.get(ev.taskId) ?? [];
+    list.push(ev);
+    byTask.set(ev.taskId, list);
   }
 
   const runs: MatterhornTaskRun[] = [];
-  for (const [, latest] of byTask) {
+  for (const [, taskEvents] of byTask) {
+    taskEvents.sort((a, b) => b.timestamp - a.timestamp);
+    const latest = taskEvents[0];
+    if (!latest) continue;
     const terminal = latest.type === "completed"
       ? "completed"
       : latest.type === "failed"
@@ -111,18 +114,19 @@ export async function deriveTaskRuns(
           ? "cancelled"
           : "running";
 
-    // Collect all artifact_saved paths for this task
-    const artifactPaths = events
-      .filter((e) => e.taskId === latest.taskId && e.type === "artifact_saved" && e.artifactPath)
+    const oldest = taskEvents[taskEvents.length - 1] ?? latest;
+    const artifactPaths = taskEvents
+      .filter((e) => e.type === "artifact_saved" && e.artifactPath)
       .map((e) => e.artifactPath!);
+    const [desk = "unknown", sessionSlug = latest.taskId] = (latest.detail ?? "").split(";");
 
     runs.push({
       taskId: latest.taskId,
       workspaceId: latest.workspaceId,
-      desk: latest.detail?.split(";")[0] ?? "unknown",   // first ';' segment is the desk hint
-      sessionSlug: latest.detail?.split(";")[1] ?? latest.taskId,
+      desk,
+      sessionSlug,
       status: terminal,
-      createdAt: latest.timestamp,
+      createdAt: oldest.timestamp,
       updatedAt: latest.timestamp,
       outcomeSummary: latest.summary,
       artifactPaths,

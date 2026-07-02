@@ -34,12 +34,20 @@ import type {
   MatterhornExtensionSourceFormat,
 } from "../extensions";
 
-const STORAGE_BASE_URL = "openwork.den.baseUrl";
-const STORAGE_API_BASE_URL = "openwork.den.apiBaseUrl";
-const STORAGE_AUTH_TOKEN = "openwork.den.authToken";
-const STORAGE_ACTIVE_ORG_ID = "openwork.den.activeOrgId";
-const STORAGE_ACTIVE_ORG_SLUG = "openwork.den.activeOrgSlug";
-const STORAGE_ACTIVE_ORG_NAME = "openwork.den.activeOrgName";
+const STORAGE_BASE_URL = "matterhorn.den.baseUrl";
+const STORAGE_API_BASE_URL = "matterhorn.den.apiBaseUrl";
+const STORAGE_AUTH_TOKEN = "matterhorn.den.authToken";
+const STORAGE_ACTIVE_ORG_ID = "matterhorn.den.activeOrgId";
+const STORAGE_ACTIVE_ORG_SLUG = "matterhorn.den.activeOrgSlug";
+const STORAGE_ACTIVE_ORG_NAME = "matterhorn.den.activeOrgName";
+const LEGACY_STORAGE_KEYS = [
+  "openwork.den.baseUrl",
+  "openwork.den.apiBaseUrl",
+  "openwork.den.authToken",
+  "openwork.den.activeOrgId",
+  "openwork.den.activeOrgSlug",
+  "openwork.den.activeOrgName",
+] as const;
 const ORG_PROXY_HEADER = "x-matterhorn-legacy-org-id";
 const DEFAULT_DEN_TIMEOUT_MS = 12_000;
 
@@ -556,6 +564,47 @@ function resolveRequestBaseUrl(baseUrls: DenBaseUrls, path: string): string {
   return path.startsWith("/api/") ? baseUrls.baseUrl : baseUrls.apiBaseUrl;
 }
 
+function migrateLegacyDenSettings(): void {
+  if (typeof window === "undefined") return;
+
+  // One-time migration from openwork.den.* to matterhorn.den.* storage keys.
+  // We only copy a legacy value if the new key has never been written.
+  const newKeys = [
+    STORAGE_BASE_URL,
+    STORAGE_API_BASE_URL,
+    STORAGE_AUTH_TOKEN,
+    STORAGE_ACTIVE_ORG_ID,
+    STORAGE_ACTIVE_ORG_SLUG,
+    STORAGE_ACTIVE_ORG_NAME,
+  ];
+  if (newKeys.some((key) => window.localStorage.getItem(key) !== null)) {
+    return;
+  }
+
+  const legacyToNew: Record<string, string> = {
+    "openwork.den.baseUrl": STORAGE_BASE_URL,
+    "openwork.den.apiBaseUrl": STORAGE_API_BASE_URL,
+    "openwork.den.authToken": STORAGE_AUTH_TOKEN,
+    "openwork.den.activeOrgId": STORAGE_ACTIVE_ORG_ID,
+    "openwork.den.activeOrgSlug": STORAGE_ACTIVE_ORG_SLUG,
+    "openwork.den.activeOrgName": STORAGE_ACTIVE_ORG_NAME,
+  };
+
+  for (const [legacyKey, newKey] of Object.entries(legacyToNew)) {
+    const value = window.localStorage.getItem(legacyKey);
+    if (value !== null) {
+      window.localStorage.setItem(newKey, value);
+    }
+  }
+}
+
+function clearLegacyDenSettings(): void {
+  if (typeof window === "undefined") return;
+  for (const key of LEGACY_STORAGE_KEYS) {
+    window.localStorage.removeItem(key);
+  }
+}
+
 export function readDenSettings(): DenSettings {
   if (typeof window === "undefined") {
     return {
@@ -566,6 +615,8 @@ export function readDenSettings(): DenSettings {
       activeOrgName: null,
     };
   }
+
+  migrateLegacyDenSettings();
 
   const baseUrls = resolveDenBaseUrls({
     baseUrl: window.localStorage.getItem(STORAGE_BASE_URL) ?? readDenBootstrapConfig().baseUrl,
@@ -652,6 +703,8 @@ export function writeDenSettings(next: DenSettings, options?: { persistBootstrap
     }
   }
 
+  clearLegacyDenSettings();
+
   dispatchDenSettingsChanged({
     settings: readDenSettings(),
   });
@@ -671,6 +724,7 @@ export function clearDenSession(options?: { includeBaseUrls?: boolean }) {
   window.localStorage.removeItem(STORAGE_ACTIVE_ORG_ID);
   window.localStorage.removeItem(STORAGE_ACTIVE_ORG_SLUG);
   window.localStorage.removeItem(STORAGE_ACTIVE_ORG_NAME);
+  clearLegacyDenSettings();
 
   dispatchDenSettingsChanged({
     settings: readDenSettings(),

@@ -180,6 +180,19 @@ import {
   findForbiddenMatterhornWorkflowQueryKey,
 } from "./tools/matterhorn-workflows.js";
 import {
+  WorkflowRunEngine,
+  type WorkflowRunFilters,
+} from "./workflow-runs.js";
+import {
+  isValidWorkflowRunStatus,
+  makeOutputBasePath,
+  normalizeSessionSlug,
+  type MatterhornWorkflowRun,
+  type MatterhornWorkflowRunEvent,
+  type MatterhornWorkflowRunEventType,
+  type MatterhornWorkflowRunStatus,
+} from "./workflow-run-types.js";
+import {
   hasForbiddenMatterhornMemorySuggestionInput,
   planMatterhornMemorySuggestions,
   type MatterhornMemorySuggestionPlanInput,
@@ -198,12 +211,13 @@ import {
   type MatterhornMemorySuggestion,
   type MatterhornMemorySuggestionUserAction,
 } from "@matterhorn-work/types/memory";
+import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
 import { homedir, hostname } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client";
-import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope } from "./types.js";
+import type { ApprovalRequest, Capabilities, ServerConfig, WorkspaceInfo, Actor, ReloadReason, ReloadTrigger, TokenScope, MatterhornTaskEventType } from "./types.js";
 import { ApprovalService } from "./approvals.js";
 import { addPlugin, listPlugins, normalizePluginSpec, removePlugin } from "./plugins.js";
 import { sanitizePortableOpencodeConfig } from "./portable-opencode.js";
@@ -214,7 +228,7 @@ import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./co
 import { ApiError, formatError } from "./errors.js";
 import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import { recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
-import { deriveTaskRuns, readTaskEvents } from "./task-events.js";
+import { deriveTaskRuns, readTaskEvents, recordTaskEvent } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
 import { computeReloadFingerprint } from "./reload-fingerprint.js";
 import { startReloadWatchers } from "./reload-watcher.js";
@@ -1927,6 +1941,72 @@ function serializeWorkspace(workspace: ServerConfig["workspaces"][number]) {
   };
 }
 
+const WORKFLOW_TASK_EVENT_TYPES: Record<MatterhornWorkflowRunEventType, MatterhornTaskEventType> = {
+  "workflow.staged": "workflow_staged",
+  "workflow.started": "workflow_started",
+  "workflow.stage_started": "stage_started",
+  "workflow.tool_called": "tool_called",
+  "workflow.artifact_saved": "artifact_saved",
+  "workflow.waiting_for_user": "waiting_for_user",
+  "workflow.completed": "completed",
+  "workflow.failed": "failed",
+  "workflow.cancelled": "cancelled",
+};
+
+function formatWorkflowDeskLabel(deskId: string): string {
+  if (deskId === "wellness") return "Longevity";
+  if (deskId === "mcps") return "MCPs";
+  return deskId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Matterhorn";
+}
+
+function workflowEventPayload(event: MatterhornWorkflowRunEvent): Record<string, unknown> | null {
+  if (!event.payload || typeof event.payload !== "object" || Array.isArray(event.payload)) {
+    return null;
+  }
+  return event.payload as Record<string, unknown>;
+}
+
+function workflowTaskEventSummary(run: MatterhornWorkflowRun, event: MatterhornWorkflowRunEvent): string {
+  const desk = formatWorkflowDeskLabel(run.deskId);
+  if (event.type === "workflow.staged") return `${desk} task staged`;
+  if (event.type === "workflow.started") return `${desk} task started`;
+  if (event.type === "workflow.stage_started") return `${desk} stage started`;
+  if (event.type === "workflow.tool_called") return `${desk} tool called`;
+  if (event.type === "workflow.artifact_saved") return `${desk} output saved`;
+  if (event.type === "workflow.waiting_for_user") return `${desk} waiting for user`;
+  if (event.type === "workflow.completed") return `${desk} task completed`;
+  if (event.type === "workflow.failed") return `${desk} task failed`;
+  if (event.type === "workflow.cancelled") return `${desk} task cancelled`;
+  return `${desk} task updated`;
+}
+
+async function recordWorkflowTaskEvent(
+  run: MatterhornWorkflowRun,
+  event: MatterhornWorkflowRunEvent,
+): Promise<void> {
+  const payload = workflowEventPayload(event);
+  const artifactPath = typeof payload?.path === "string" ? payload.path : undefined;
+  const toolName = typeof payload?.tool === "string" ? payload.tool : undefined;
+  const sessionSlug = normalizeSessionSlug(run.sessionId);
+
+  await recordTaskEvent({
+    id: `task_evt_${shortId()}`,
+    workspaceId: run.workspaceId,
+    taskId: run.workflowRunId,
+    type: WORKFLOW_TASK_EVENT_TYPES[event.type],
+    timestamp: event.timestamp,
+    summary: workflowTaskEventSummary(run, event),
+    detail: `${run.deskId};${sessionSlug};${run.workflowId};${run.outputBasePath}`,
+    artifactPath,
+    toolName,
+    stageName: event.stageId,
+  });
+}
+
 function createRoutes(
   config: ServerConfig,
   approvals: ApprovalService,
@@ -1938,6 +2018,10 @@ function createRoutes(
   const fileSessions = new FileSessionStore();
   const googleWorkspaceConnectFlows = createGoogleWorkspaceConnectFlowManager(config);
   const memoryVault = createMatterhornMemoryVault(resolveMatterhornMemoryRoot());
+  const workflowRuns = new WorkflowRunEngine({
+    persistenceRoot: config.workspaces[0]?.path ?? process.cwd(),
+    onEvent: recordWorkflowTaskEvent,
+  });
 
   const serializeFileSession = (session: {
     id: string;
@@ -4582,6 +4666,177 @@ function createRoutes(
         error instanceof Error ? error.message : "Could not build Matterhorn customer workflow template catalog",
       );
     }
+  });
+
+  const workflowRunMutation = async <T,>(operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith("workflow_run_not_found")) {
+        throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
+      }
+      if (message.startsWith("invalid_workflow_run_transition")) {
+        throw new ApiError(409, "invalid_workflow_run_transition", message);
+      }
+      if (message.startsWith("workflow_run_event_rejected")) {
+        throw new ApiError(400, "workflow_run_event_rejected", message);
+      }
+      throw error;
+    }
+  };
+
+  addRoute(routes, "GET", "/api/workflows/runs", "client", async (ctx) => {
+    const statusParam = ctx.url.searchParams.get("status");
+    if (statusParam && !isValidWorkflowRunStatus(statusParam)) {
+      throw new ApiError(400, "invalid_workflow_status", "status is invalid");
+    }
+    const filters: WorkflowRunFilters = {
+      workspaceId: ctx.url.searchParams.get("workspaceId") ?? undefined,
+      sessionId: ctx.url.searchParams.get("sessionId") ?? undefined,
+      deskId: ctx.url.searchParams.get("deskId") ?? undefined,
+      status: statusParam as MatterhornWorkflowRunStatus | undefined,
+      limit: parseOptionalNonNegativeInteger(ctx.url.searchParams.get("limit"), "limit"),
+    };
+    const items = workflowRuns.listRuns(filters);
+    return jsonResponse({ success: true, items });
+  });
+
+  addRoute(routes, "GET", "/api/workflows/runs/:id", "client", async (ctx) => {
+    const run = workflowRuns.getRun(ctx.params.id);
+    if (!run) {
+      throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
+    }
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "GET", "/api/workflows/runs/:id/events", "client", async (ctx) => {
+    const run = workflowRuns.getRun(ctx.params.id);
+    if (!run) {
+      throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
+    }
+    const events = workflowRuns.listEvents(ctx.params.id);
+    return jsonResponse({ success: true, events });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/stage", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+
+    const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    const deskId = typeof body.deskId === "string" ? body.deskId.trim() : "";
+    const visibleUserIntent = typeof body.visibleUserIntent === "string" ? body.visibleUserIntent.trim() : "";
+
+    if (!workspaceId) {
+      throw new ApiError(400, "invalid_workspace_id", "workspaceId is required");
+    }
+    if (!sessionId) {
+      throw new ApiError(400, "invalid_session_id", "sessionId is required");
+    }
+    if (!deskId) {
+      throw new ApiError(400, "invalid_desk_id", "deskId is required");
+    }
+    if (!visibleUserIntent) {
+      throw new ApiError(400, "invalid_user_intent", "visibleUserIntent is required");
+    }
+
+    const agentManifest = getMatterhornDeskAgent(deskId);
+    if (!agentManifest) {
+      throw new ApiError(400, "unknown_desk_agent", `No Matterhorn desk agent is registered for ${deskId}`);
+    }
+    const actionId = typeof body.actionId === "string" && body.actionId.trim()
+      ? body.actionId.trim()
+      : agentManifest.defaultActionId;
+    const stageId = typeof body.stageId === "string" && body.stageId.trim()
+      ? body.stageId.trim()
+      : agentManifest.defaultStageId;
+    const outputBasePath = makeOutputBasePath(
+      agentManifest.outputDeskId,
+      normalizeSessionSlug(sessionId),
+    );
+
+    const run = await workflowRuns.stageRun({
+      workspaceId,
+      sessionId,
+      deskId: agentManifest.deskId,
+      actionId,
+      stageId,
+      visibleUserIntent,
+      agentId: agentManifest.agentId,
+      workflowId: agentManifest.workflowId,
+      workflowManifestRef: agentManifest.workflowManifestRef,
+      hiddenAgentInstructions: agentManifest.instructions,
+      outputBasePath,
+    });
+
+    return jsonResponse({ success: true, run }, 201);
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/start", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const run = await workflowRunMutation(() => workflowRuns.startRun(ctx.params.id));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/stage", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+    const stageId = typeof body.stageId === "string" ? body.stageId.trim() : "";
+    if (!stageId) {
+      throw new ApiError(400, "invalid_stage_id", "stageId is required");
+    }
+    const actionId = typeof body.actionId === "string" && body.actionId.trim()
+      ? body.actionId.trim()
+      : undefined;
+    const run = await workflowRunMutation(() => workflowRuns.advanceStage(ctx.params.id, stageId, actionId));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/tool-call", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+    const run = await workflowRunMutation(() => workflowRuns.recordToolCall(ctx.params.id, body.payload ?? body));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/artifact", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+    const path = typeof body.path === "string" ? body.path.trim() : "";
+    if (!path) {
+      throw new ApiError(400, "invalid_artifact_path", "path is required");
+    }
+    const run = await workflowRunMutation(() => workflowRuns.recordArtifactSaved(ctx.params.id, path));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/waiting", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+    const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined;
+    const run = await workflowRunMutation(() => workflowRuns.recordWaitingForUser(ctx.params.id, reason));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/complete", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const run = await workflowRunMutation(() => workflowRuns.completeRun(ctx.params.id));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/fail", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const body = await readJsonBody(ctx.request);
+    const error = typeof body.error === "string" && body.error.trim() ? body.error.trim() : "Workflow failed";
+    const run = await workflowRunMutation(() => workflowRuns.failRun(ctx.params.id, error));
+    return jsonResponse({ success: true, run });
+  });
+
+  addRoute(routes, "POST", "/api/workflows/runs/:id/cancel", "client", async (ctx) => {
+    requireClientScope(ctx, "viewer");
+    const run = await workflowRunMutation(() => workflowRuns.cancelRun(ctx.params.id));
+    return jsonResponse({ success: true, run });
   });
 
   addRoute(routes, "GET", "/api/memory/search", "client", async (ctx) => {
