@@ -121,7 +121,7 @@ describe("workflow run routes", () => {
     expect(run?.status).toBe("staged");
     expect(run?.outputBasePath).toBe("outputs/longevity/sess_longevity_1/");
     expect(run?.workflowManifestRef).toBe("matterhorn.workflow.manifest.v1/wellness_creator_services");
-    expect(typeof run?.hiddenAgentInstructions).toBe("string");
+    expect(run?.hiddenAgentInstructions).toBeUndefined();
   });
 
   test("POST /api/workflows/runs/stage creates a dedicated Hyperliquid run", async () => {

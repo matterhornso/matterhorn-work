@@ -1432,7 +1432,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       }
 
       if (activeWorkflowDeskAgent) {
-        void stageWorkflowRun({
+        void stageWorkflowRun(props.client, {
           workspaceId: props.workspaceId,
           sessionId: props.sessionId,
           deskId: activeWorkflowDeskAgent.deskId,
@@ -1440,7 +1440,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
           stageId: activeWorkflowDeskAgent.defaultStageId,
           visibleUserIntent: text,
         })
-          .then((run) => startWorkflowRun(run.workflowRunId))
+          .then((run) => startWorkflowRun(props.client, run.workflowRunId))
           .catch((error) => {
             recordInspectorEvent("session.workflow_run.failed", {
               workspaceId: props.workspaceId,
