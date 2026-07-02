@@ -1,14 +1,5 @@
 /** @jsxImportSource react */
-import type { ComponentType, ReactNode } from "react";
-import {
-  BarChart3,
-  BrainCircuit,
-  ClipboardCheck,
-  Coins,
-  Dumbbell,
-  Eye,
-  ShieldCheck,
-} from "lucide-react";
+import type { ReactNode } from "react";
 
 import { t } from "../../../i18n";
 import {
@@ -19,46 +10,12 @@ import {
   PageTitle,
   PageTitlebarRegion,
 } from "@/components/page";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 
-const capabilities = [
-  {
-    icon: BrainCircuit,
-    title: "Bittensor workspace",
-    desc: "Explore subnets, inspect TAO wallets, compare validators, and prepare safe staking previews.",
-  },
-  {
-    icon: BarChart3,
-    title: "Hyperliquid desk",
-    desc: "Read account, orderbook, funding, and preview data with live submission clearly off.",
-  },
-  {
-    icon: Eye,
-    title: "Polymarket desk",
-    desc: "Summarize prediction markets, outcomes, liquidity, receipts, and compliance status.",
-  },
-  {
-    icon: Dumbbell,
-    title: "Longevity builder",
-    desc: "Create training, yoga, dietician, check-in, and customer-management workflows.",
-  },
-  {
-    icon: Coins,
-    title: "Create artifacts",
-    desc: "Generate plans, reports, packets, scripts, and reusable workflow bundles.",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "Collect evidence",
-    desc: "Export customer-safe receipts, QA packets, and readiness reports.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Stay non-custodial",
-    desc: "Matterhorn never asks for seed phrases, private keys, or raw signatures.",
-  },
+const principles = [
+  "Understand complex domains without becoming an expert first.",
+  "Keep risky work review-first, with safety boundaries visible before action.",
+  "Turn useful conversations into saved project context, files, and receipts.",
 ];
 
 function ShowcasePanel() {
@@ -66,14 +23,12 @@ function ShowcasePanel() {
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold tracking-[-0.01em] text-foreground">
-            Separate workspaces,
-            <br />
-            one Matterhorn chat.
+          <h2 className="text-xl font-semibold tracking-[-0.01em] text-foreground">
+            Matterhorn Work
           </h2>
-          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-            Pick Bittensor, Hyperliquid, Polymarket, or a workflow builder,
-            then ask in plain English.
+          <p className="mt-2 max-w-[46ch] text-sm leading-6 text-muted-foreground">
+            A workspace for AI-assisted work that needs judgment, context, and
+            review before anything serious happens.
           </p>
         </div>
         <img
@@ -83,24 +38,32 @@ function ShowcasePanel() {
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {capabilities.map((cap) => {
-          const Icon = cap.icon as ComponentType<{ className?: string }>;
-          return (
-          <div
-            key={cap.title}
-            className="flex min-h-[118px] flex-col gap-2.5 rounded-xl border border-border bg-background/70 p-3"
-          >
-            <Icon className="size-4 text-primary" />
-            <div className="text-sm font-medium leading-tight text-foreground">
-              {cap.title}
+      <div className="rounded-lg border border-border bg-background p-5">
+        <div className="text-[17px] font-semibold leading-7 text-foreground">
+          Matterhorn turns chat into an operating layer for projects, protocols,
+          workflows, and real-world decisions.
+        </div>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          The aim is not just faster answers. It is safer progress: clear
+          context, visible evidence, editable next steps, and outputs that stay
+          attached to the project.
+        </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background p-5">
+        <div className="text-sm font-semibold text-foreground">
+          How it helps people
+        </div>
+        <div className="mt-3 space-y-3">
+          {principles.map((principle) => (
+            <div
+              key={principle}
+              className="text-sm leading-6 text-muted-foreground"
+            >
+              {principle}
             </div>
-            <div className="text-xs leading-snug text-muted-foreground">
-              {cap.desc}
-            </div>
-          </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -166,21 +129,20 @@ export function WelcomePage({ onGetStarted }: WelcomePageProps) {
               </OnboardingStep>
             </div>
 
-            <Button
-              size="lg"
-              className="w-full"
+            <button
+              type="button"
+              className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-foreground px-4 text-sm font-semibold text-background transition-colors hover:bg-foreground/85 focus:outline-none focus:ring-2 focus:ring-ring/30"
               onClick={onGetStarted}
             >
               {t("welcome.get_started")}
-            </Button>
+            </button>
           </div>
         </div>
 
         {/* ---- Right: Matterhorn capability card ---- */}
         <div className="hidden lg:flex lg:w-[55%] lg:items-center lg:justify-center lg:p-6">
-          <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] p-3 shadow-[0_24px_80px_rgba(var(--matterhorn-blue-rgb),0.18)]">
-            <div className="absolute right-0 top-0 size-40 -translate-y-1/3 translate-x-1/3 rounded-full bg-background/50 blur-3xl" />
-            <div className="relative z-10 rounded-2xl border border-border bg-background p-7">
+          <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.35)] bg-[var(--matterhorn-blue)] p-2">
+            <div className="relative z-10 rounded-lg border border-border bg-background p-7">
               <ShowcasePanel />
             </div>
           </div>

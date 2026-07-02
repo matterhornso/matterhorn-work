@@ -19,8 +19,8 @@ export function LoadingOverlay() {
 
   return (
     <div
-      className={`pointer-events-auto fixed inset-0 z-[1000] flex items-center justify-center bg-dls-surface transition-opacity duration-[160ms] ${
-        fading ? "opacity-0" : "opacity-100"
+      className={`fixed inset-0 z-[1000] flex items-center justify-center bg-dls-surface transition-opacity duration-[160ms] ${
+        fading ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100"
       }`}
       aria-live="polite"
       aria-busy={!fading}

@@ -8,9 +8,11 @@ import {
   Bell,
   BrainCircuit,
   Cloud,
+  Copy,
   Database,
   Dumbbell,
   FileText,
+  FolderOpen,
   Globe,
   Mic2,
   PanelRightClose,
@@ -83,6 +85,7 @@ import {
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
 import { getChatDraftConfig } from "@matterhorn-work/types";
+import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 
 const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
 const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
@@ -128,6 +131,11 @@ const RAIL_SECTION_LABEL_CLASS =
 
 function isVenueSidePanel(panel: SidePanelItem | null): panel is VenueSidePanel {
   return panel === "bittensor" || panel === "hyperliquid" || panel === "polymarket";
+}
+
+function agentIdForDesk(panel: CustomerWorkflowIconHint | VenueSidePanel | string | null | undefined): string | undefined {
+  if (!panel) return undefined;
+  return matterhornDeskAgentIdForDesk(panel);
 }
 
 function LazyPanelFallback({ label = "Loading panel" }: { label?: string }) {
@@ -180,6 +188,12 @@ function deskToneStyle(iconHint: CustomerWorkflowIconHint | VenueSidePanel | "me
   } as CSSProperties;
 }
 
+function joinWorkspaceChildPath(root: string, child: string) {
+  const trimmed = root.trim().replace(/[\\/]+$/, "");
+  if (!trimmed) return child;
+  return trimmed.includes("\\") ? `${trimmed}\\${child}` : `${trimmed}/${child}`;
+}
+
 type HomeCapabilityStatusItem = {
   id: CustomerWorkflowIconHint;
   title: string;
@@ -192,47 +206,47 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
   bittensor: [
     {
       title: "Show my TAO balance",
-      prompt: "Use Bittensor chat mode. Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+      prompt: "Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
     },
     {
       title: "Find useful subnets",
-      prompt: "Use Bittensor chat mode. Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, and what data source/freshness you used.",
+      prompt: "Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, and what data source/freshness you used.",
     },
     {
       title: "Compare validators",
-      prompt: "Use Bittensor chat mode. Compare validators on subnet 14 with a balanced strategy. Show source, freshness, risks, and what extra public context is needed before staking.",
+      prompt: "Compare Bittensor validators on subnet 14 with a balanced strategy. Show source, freshness, risks, and what extra public context is needed before staking.",
     },
     {
       title: "Prepare staking preview",
-      prompt: "Use Bittensor chat mode. Prepare a staking preview for 1 TAO on subnet 14. Ask for the public validator hotkey and coldkey if missing. This must be unsigned and require an external Bittensor-compatible signer.",
+      prompt: "Prepare a Bittensor staking preview for 1 TAO on subnet 14. Ask for the public validator hotkey and coldkey if missing. This must be unsigned and require an external Bittensor-compatible signer.",
     },
   ],
   hyperliquid: [
     {
       title: "Show market context",
-      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
+      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
       title: "Show account exposure",
-      prompt: "Use Hyperliquid chat mode. Summarize my public/read-only account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+      prompt: "Summarize my public/read-only Hyperliquid account exposure if an address or public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
       title: "Prepare trade handoff",
-      prompt: "Use Hyperliquid chat mode. Prepare an external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+      prompt: "Prepare a Hyperliquid external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
   polymarket: [
     {
       title: "Research a market",
-      prompt: "Use Polymarket chat mode. Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
+      prompt: "Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
     },
     {
       title: "Check compliance",
-      prompt: "Use Polymarket chat mode. Check whether this market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
+      prompt: "Check whether this Polymarket market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
       title: "Prepare trade handoff",
-      prompt: "Use Polymarket chat mode. Prepare a compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+      prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
 };
@@ -273,19 +287,7 @@ function HomeCapabilityOverview({
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-dls-text">Capability status</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary text-pretty">
-            Each desk keeps its own context, wallet needs, previews, and safety boundary. Markets use external handoffs;
-            Bittensor uses public SS58 reads and external signing.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-dls-secondary">
-          <span className="text-primary">
-            Wallet stays external
-          </span>
-          <span>
-            No hidden auto-send
-          </span>
+          <h3 className="text-sm font-semibold text-dls-text">Open a desk</h3>
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -321,6 +323,11 @@ function HomeCapabilityOverview({
             </button>
           );
         })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium leading-5 text-dls-secondary">
+        <span>Dedicated desk agents</span>
+        <span>Review before action</span>
+        <span>Outputs stay with the project</span>
       </div>
     </section>
   );
@@ -362,7 +369,7 @@ function ProtocolDeskEmptyState({
           Back to Home
         </button>
         <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-3 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
-          Choose a prompt, then review it in chat
+          Choose a task, then review it with the agent
         </span>
       </div>
       <div className="matterhorn-focused-desk-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.085)] px-4 py-5 shadow-[inset_0_0_0_1px_rgba(var(--matterhorn-desk-rgb),0.09)] sm:px-5 sm:py-6">
@@ -376,15 +383,15 @@ function ProtocolDeskEmptyState({
                 {visual?.displayName ?? panel} desk
               </h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-dls-secondary text-pretty">
-                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a starter below to open a chat draft.
-                You can edit it before anything is sent.
+                {visual?.shortDescription ?? "Focused protocol workspace."} Pick a task below to open this desk's agent.
+                You can review the task before anything is sent.
               </p>
             </div>
           </div>
           <div className="matterhorn-focused-desk-boundary flex max-w-full flex-wrap gap-1.5 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] lg:max-w-56 lg:justify-end lg:text-right">
-            <span>Starts a chat draft</span>
+            <span>Dedicated agent</span>
             <span>External signer</span>
-            <span>Editable prompts</span>
+            <span>Editable tasks</span>
             <span>No auto-send</span>
           </div>
         </div>
@@ -394,7 +401,7 @@ function ProtocolDeskEmptyState({
         <span className="font-semibold text-[var(--matterhorn-desk-color)]">Boundary:</span> {safeBoundary}
       </p>
 
-      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" aria-label="Chat starters">
+      <div className="matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl bg-dls-surface/48 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" aria-label="Agent tasks">
         {prompts.map((item) => (
           <button
             key={item.title}
@@ -409,7 +416,7 @@ function ProtocolDeskEmptyState({
               <span className="block text-sm font-semibold text-dls-text">{item.title}</span>
               <span className="mt-1 block max-w-2xl text-xs leading-5 text-dls-secondary">{item.prompt}</span>
             </span>
-            <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open chat draft" title="Open chat draft">
+            <span className="text-xs font-semibold text-[var(--matterhorn-desk-color)]" aria-label="Open with desk agent" title="Open with desk agent">
               {draftConfig?.confirmCtaLabel ?? "Create editable draft"}
             </span>
           </button>
@@ -438,108 +445,6 @@ function ProtocolDeskEmptyState({
           </button>
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function workflowLauncherCapabilityItems(launcher: CustomerWorkflowStarterCard): string[] {
-  if (launcher.protocolDesk?.capabilityBullets.length) {
-    return launcher.protocolDesk.capabilityBullets;
-  }
-  switch (launcher.panel) {
-    case "bittensor":
-      return ["TAO wallet reads", "Subnet discovery", "Unsigned previews"];
-    case "hyperliquid":
-      return ["Orderbook reads", "Exposure context", "External trade handoff"];
-    case "polymarket":
-      return ["Market research", "Compliance checks", "Trade handoff"];
-    default:
-      if (launcher.iconHint === "wellness") {
-        return ["Client program packets", "Progress check-ins", "No medical claims"];
-      }
-      return ["Editable prompt", "Safe context", "No auto-send"];
-  }
-}
-
-function DeskLauncherButton({
-  launcher,
-  onOpen,
-}: {
-  launcher: CustomerWorkflowStarterCard;
-  onOpen: () => void;
-}) {
-  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[launcher.iconHint];
-  const capabilityItems = workflowLauncherCapabilityItems(launcher);
-  const capabilitySummary = capabilityItems.slice(0, 3).join(" · ");
-  const actionLabel = launcher.panel ? "Open desk" : "Draft prompt";
-  return (
-    <button
-      type="button"
-      style={deskToneStyle(launcher.iconHint)}
-      className="matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)] items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.075)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)] sm:grid-cols-[32px_minmax(0,1fr)_auto]"
-      onClick={onOpen}
-    >
-      <span className="flex size-8 shrink-0 items-center justify-center text-[var(--matterhorn-desk-color)]">
-        {launcher.panel ? <ProtocolLogo venue={launcher.panel} size={26} /> : <Icon className="size-4" />}
-      </span>
-      <span className="grid min-w-0 gap-0.5">
-        <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="truncate text-[13px] font-semibold leading-snug text-dls-text">
-            {launcher.workspaceDisplayName ?? launcher.title}
-          </span>
-          <span className="shrink-0 text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
-            {launcher.statusLabel}
-          </span>
-        </span>
-        <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">
-          {launcher.description}
-        </span>
-        <span className="truncate text-[11px] leading-4 text-dls-muted">{capabilitySummary}</span>
-      </span>
-      <span className="sr-only">{launcher.safetySummary}</span>
-      <span className="hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline">
-        {actionLabel}
-      </span>
-    </button>
-  );
-}
-
-function HomeDeskLaunchers({
-  protocolLaunchers,
-  businessLaunchers,
-  onOpenLauncher,
-}: {
-  protocolLaunchers: CustomerWorkflowStarterCard[];
-  businessLaunchers: CustomerWorkflowStarterCard[];
-  onOpenLauncher: (launcher: CustomerWorkflowStarterCard) => void;
-}) {
-  const launchers = [...protocolLaunchers, ...businessLaunchers];
-  return (
-    <section
-      className="matterhorn-desk-board space-y-2"
-      style={{ contentVisibility: "auto", containIntrinsicSize: "280px" } as CSSProperties}
-      aria-label="Matterhorn desk launchers"
-    >
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-dls-text">Choose a desk</h3>
-          <p className="mt-1 max-w-2xl text-xs leading-5 text-dls-secondary">
-            Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.
-          </p>
-        </div>
-        <span className="hidden shrink-0 text-[11px] font-semibold text-primary sm:inline">
-          No auto-send
-        </span>
-      </div>
-      <div className="matterhorn-desk-command-list grid gap-1">
-        {launchers.map((launcher) => (
-          <DeskLauncherButton
-            key={launcher.id}
-            launcher={launcher}
-            onOpen={() => onOpenLauncher(launcher)}
-          />
-        ))}
-      </div>
     </section>
   );
 }
@@ -574,7 +479,7 @@ export type SessionPageSidebarProps = {
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
-  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string }) => void;
+  onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void;
   onOpenRenameWorkspace: (workspaceId: string) => void;
   onShareWorkspace: (workspaceId: string) => void;
   onRevealWorkspace: (workspaceId: string) => void;
@@ -857,15 +762,82 @@ export function SessionPage(props: SessionPageProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
+  const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
   const pendingProtocolRailPanelRef = useRef<VenueSidePanel | null>(null);
+  const focusedDeskHistoryRef = useRef<VenueSidePanel | null>(null);
+  const homeProjectPath = props.selectedWorkspaceRoot.trim();
+  const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, "outputs") : "outputs/";
+  const homeProjectName = props.selectedWorkspaceDisplay.displayName || props.selectedWorkspaceDisplay.name || "Current project";
+
+  const copyHomePath = useCallback(async (value: string, label: string) => {
+    if (!value.trim()) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(value);
+      setHomePathCopyLabel(label);
+      window.setTimeout(() => setHomePathCopyLabel((current) => current === label ? null : current), 1600);
+    } catch {
+      setHomePathCopyLabel("Copy failed");
+      window.setTimeout(() => setHomePathCopyLabel((current) => current === "Copy failed" ? null : current), 2200);
+    }
+  }, []);
 
   const setCurrentSidePanel = useCallback((panel: SidePanelItem | null) => {
     setSidePanelState(GLOBAL_VOICE_SIDE_PANEL_KEY, panel === "voice" ? "voice" : null);
     if (panel === "voice") return;
     setSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
   }, [props.selectedSessionId, setSidePanelState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!focusedProtocolPanel) {
+      focusedDeskHistoryRef.current = null;
+      return;
+    }
+    if (focusedDeskHistoryRef.current === focusedProtocolPanel) return;
+
+    const currentState = window.history.state && typeof window.history.state === "object"
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (currentState.matterhornFocusedDesk !== focusedProtocolPanel) {
+      window.history.pushState(
+        { ...currentState, matterhornFocusedDesk: focusedProtocolPanel },
+        "",
+        window.location.href,
+      );
+    }
+    focusedDeskHistoryRef.current = focusedProtocolPanel;
+  }, [focusedProtocolPanel]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPopState = (event: PopStateEvent) => {
+      const state = event.state && typeof event.state === "object" ? event.state as Record<string, unknown> : {};
+      if (!state.matterhornFocusedDesk && focusedDeskHistoryRef.current) {
+        focusedDeskHistoryRef.current = null;
+        setCurrentSidePanel(null);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [setCurrentSidePanel]);
+
+  const returnToProjectHome = useCallback(() => {
+    if (typeof window !== "undefined" && focusedDeskHistoryRef.current) {
+      const state = window.history.state && typeof window.history.state === "object"
+        ? window.history.state as Record<string, unknown>
+        : {};
+      if (state.matterhornFocusedDesk) {
+        focusedDeskHistoryRef.current = null;
+        setCurrentSidePanel(null);
+        window.history.back();
+        return;
+      }
+    }
+    setCurrentSidePanel(null);
+  }, [setCurrentSidePanel]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
     if (panel === "voice") {
@@ -1049,7 +1021,7 @@ export function SessionPage(props: SessionPageProps) {
     }
     pendingProtocolRailPanelRef.current = panel;
     if (props.sidebar.onCreateTaskWithPrompt) {
-      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, { title });
+      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, prompt, { title, agent: agentIdForDesk(panel) });
       return;
     }
     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);
@@ -1499,9 +1471,12 @@ export function SessionPage(props: SessionPageProps) {
                     >
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
-                        onBackHome={() => setCurrentSidePanel(null)}
+                        onBackHome={returnToProjectHome}
                         onUsePrompt={(prompt, title) => {
-                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, { title });
+                          props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, {
+                            title,
+                            agent: agentIdForDesk(focusedProtocolPanel),
+                          });
                         }}
                       />
                     </div>
@@ -1545,6 +1520,45 @@ export function SessionPage(props: SessionPageProps) {
                             New chat
                           </button>
                         </div>
+                        <div className="mx-auto grid w-full max-w-3xl gap-2 rounded-lg border border-dls-border/70 bg-dls-surface-muted/20 px-3 py-2 text-left text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span className="shrink-0 font-semibold text-dls-text">{homeProjectName}</span>
+                              <span className="shrink-0 text-dls-secondary">outputs/</span>
+                            </div>
+                            <div className="truncate font-mono text-[11px] leading-4 text-dls-secondary" title={homeProjectPath || "No local project folder selected"}>
+                              {homeProjectPath || "No local project folder selected"}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
+                              disabled={!homeProjectPath}
+                              onClick={() => void copyHomePath(homeProjectPath, "Project path")}
+                            >
+                              <Copy className="size-3.5" />
+                              {homePathCopyLabel === "Project path" ? "Copied" : "Copy path"}
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover disabled:cursor-not-allowed disabled:text-dls-secondary"
+                              disabled={!homeProjectPath}
+                              onClick={() => props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)}
+                            >
+                              <FolderOpen className="size-3.5" />
+                              Open folder
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                              onClick={() => void copyHomePath(homeOutputsPath, "Outputs path")}
+                            >
+                              <Copy className="size-3.5" />
+                              {homePathCopyLabel === "Outputs path" ? "Copied" : "Copy outputs"}
+                            </button>
+                          </div>
+                        </div>
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
                             if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
@@ -1552,19 +1566,11 @@ export function SessionPage(props: SessionPageProps) {
                               return;
                             }
                             if (id === "wellness" && wellnessRailLauncher) {
-                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt, { title: wellnessRailLauncher.title });
+                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt, {
+                                title: wellnessRailLauncher.title,
+                                agent: wellnessRailLauncher.agentId ?? agentIdForDesk("wellness"),
+                              });
                             }
-                          }}
-                        />
-                        <HomeDeskLaunchers
-                          protocolLaunchers={protocolWorkflowLaunchers}
-                          businessLaunchers={businessWorkflowLaunchers}
-                          onOpenLauncher={(launcher) => {
-                            if (launcher.panel) {
-                              openVenueRailPane(launcher.panel);
-                              return;
-                            }
-                            props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, launcher.prompt, { title: launcher.title });
                           }}
                         />
                         {props.developerMode ? (
@@ -1593,7 +1599,10 @@ export function SessionPage(props: SessionPageProps) {
                                           openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo", title: demo.title });
                                           return;
                                         }
-                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, { title: demo.title });
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, {
+                                          title: demo.title,
+                                          agent: demo.agentId ?? agentIdForDesk(demo.iconHint),
+                                        });
                                       }}
                                     >
                                       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
@@ -1649,7 +1658,10 @@ export function SessionPage(props: SessionPageProps) {
                                       style={deskToneStyle(task.iconHint)}
                                       className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
-                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt, { title: task.title });
+                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt, {
+                                          title: task.title,
+                                          agent: task.agentId ?? agentIdForDesk(task.iconHint),
+                                        });
                                       }}
                                     >
                                       <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),transparent_44%)] opacity-0 transition-opacity hover:opacity-100" aria-hidden="true" />
@@ -2022,7 +2034,10 @@ export function SessionPage(props: SessionPageProps) {
                       });
                     }
                     if (item.launcher && props.sidebar.onCreateTaskWithPrompt) {
-                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, { title: item.launcher.title });
+                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, {
+                        title: item.launcher.title,
+                        agent: item.launcher.agentId ?? agentIdForDesk("wellness"),
+                      });
                       return;
                     }
                     props.sidebar.onCreateTaskInWorkspace(props.selectedWorkspaceId);

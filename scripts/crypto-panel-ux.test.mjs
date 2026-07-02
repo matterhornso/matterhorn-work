@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Static gate for the beta-tester protocol workspace panel UX.
-// Verifies the venue desks, "Ask in Chat ->" prompts, safety strip/card, and "Evidence / QA"
+// Verifies the venue desks, "Ask Agent ->" tasks, safety strip/card, and "Evidence / QA"
 // card exist; that prompt buttons insert (not auto-send) via the handoff event;
 // and that no copy claims live market submission or asks for secrets.
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ for (const phrase of [
   "Allowed intents",
   "primaryPanelRouteId",
   "Start with your TAO, then choose what to do next.",
-  "Preview Hyperliquid trades through chat, with execution off.",
+  "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
   "Analyze prediction markets and preview safely.",
   "Actions",
   "Matterhorn prepares Bittensor action previews for review.",
@@ -51,7 +51,7 @@ for (const phrase of [
   "Public fields only",
   "ProtocolBrandLogo",
   "formatBittensorProviderError",
-  "Insert editable prompt",
+  "editable Bittensor Agent task",
   'outcome: "Wallet snapshot"',
   'outcome: "Stake position summary"',
   'outcome: "Unsigned stake preview"',
@@ -67,11 +67,11 @@ for (const phrase of [
 assert.equal(panel.includes("Crypto workspace"), false, "Panel should not render a generic Crypto workspace title");
 
 // 3. The beta-tester sections exist.
-for (const section of ["Ask in Chat ->", "Monday beta scenarios", "Monday beta launch checklist", "Safety status", "Evidence / QA"]) {
+for (const section of ["Ask Agent ->", "Monday beta scenarios", "Monday beta launch checklist", "Safety status", "Evidence / QA"]) {
   assert.ok(panel.includes(`title="${section}"`), `Panel should render a "${section}" section`);
 }
 
-// 4. The six ask-in-chat prompt button labels exist.
+// 4. The six Ask Agent task button labels exist.
 for (const label of [
   "show my TAO",
   "find Bittensor subnets for image generation",
@@ -80,29 +80,29 @@ for (const label of [
   "show Hyperliquid BTC orderbook",
   "summarize a Polymarket market",
 ]) {
-  assert.ok(panel.includes(label), `Panel should include Try-in-chat prompt: ${label}`);
+  assert.ok(panel.includes(label), `Panel should include Ask Agent task: ${label}`);
 }
 
 // 5. Buttons insert into the composer (do not auto-send): they use the handoff
 //    helper, and the copy makes the no-auto-send behavior explicit.
-assert.ok(panel.includes("askAgentBetaTryPrompt"), "Try-in-chat buttons should call the beta prompt handler");
+assert.ok(panel.includes("askAgentBetaTryPrompt"), "Ask Agent buttons should call the beta task handler");
 assert.ok(panel.includes('source: "crypto-beta-try"'), "Beta prompts should route through the crypto handoff source");
 assert.ok(panel.includes("matterhorn:crypto-chat-handoff") || panel.includes('mode: item.mode'), "Beta prompts should use the insert handoff event");
 assert.ok(panel.includes("Nothing sends automatically"), "Panel should tell testers prompts are not auto-sent");
 assert.ok(panel.includes("Right-rail command groups stay single-column"), "Protocol rail command groups should avoid cramped multi-column controls");
-assert.ok(panel.includes("askAgentForStandardBittensorAction"), "Standard Bittensor action cards should insert editable chat prompts");
+assert.ok(panel.includes("askAgentForStandardBittensorAction"), "Standard Bittensor action cards should stage editable Bittensor Agent tasks");
 assert.ok(panel.includes('source: "bittensor-standard-action"'), "Standard Bittensor actions should use a dedicated handoff source");
 assert.ok(panel.includes("they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets."), "Standard Bittensor action copy should state no auto-send and no signing");
 assert.ok(panel.includes('source: `${venue}-standard-action`'), "Standard market actions should use a dedicated handoff source");
 assert.ok(panel.includes("They do not auto-send, sign, submit, place orders, bet, or ask for private keys"), "Standard market action copy should state no auto-send, no submission, and no secrets");
-assert.ok(panel.includes("One-click prompts stay short; the full instruction is inserted into chat."), "Market action cards should show short summaries instead of full prompt walls");
+assert.ok(panel.includes("One-click tasks stay short; the full instruction stays editable before you send."), "Market action cards should show short summaries instead of full task walls");
 assert.ok(panel.includes("Read-only market context"), "Market desks should show a read-only context primer");
 assert.ok(panel.includes("Preview boundary: show the user what can be read"), "Market desks should explain the preview-only boundary");
 assert.ok(panel.includes("Prepare a no-submit testnet preview with hash expectations."), "Hyperliquid cards should use concise preview summaries");
 assert.ok(panel.includes("Prepare a preview-only YES/NO plan with no executable submit path."), "Polymarket cards should use concise preview summaries");
 
 // 5b. Monday beta customer scenarios are sourced from the shared registry and
-//     support prompt insertion plus evidence command copy.
+//     support task staging plus evidence command copy.
 for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
   "MONDAY_BETA_DEMO_SCENARIOS",
@@ -111,7 +111,7 @@ for (const phrase of [
   'source: "monday-beta-panel"',
   "copyMondayBetaScenarioCommand",
   "node scripts/customer-demo-evidence-pack.mjs --scenario",
-  "Insert demo prompt",
+  "Stage demo task",
   "Copy evidence command",
   "assignedBetaCustomers",
   "expectedArtifacts",
@@ -129,8 +129,8 @@ for (const phrase of [
   "Crypto safety smoke is green",
   "Production app typecheck passes",
   "Mac tester build and doctor pass",
-  "Wellness workflow remains safe",
-  "Bittensor, Hyperliquid, Polymarket, and Wellness are visible as separate customer paths",
+  "Longevity workflow remains safe",
+  "Bittensor, Hyperliquid, Polymarket, and Longevity are visible as separate customer paths",
   "desktop automation is not a default beta task.",
   "pnpm test:matterhorn-customer-onboarding-ui && pnpm test:crypto-panel-ux && pnpm test:customer-readiness-ui",
   "pnpm smoke:customer-ready-crypto && pnpm test:market-execution-safety-gate",
@@ -141,8 +141,8 @@ for (const phrase of [
   "Copy launch check",
   "Monday beta promise",
   "Bittensor is the most mature beta path.",
-  "Wellness is a standalone workflow surface, not Web3 and not medical care.",
-  "Wellness workflow: Standalone",
+  "Longevity is a standalone workflow surface, not Web3 and not medical care.",
+  "Longevity workflow: Standalone",
   "Not Web3, not medical advice, and no live payments or email.",
 ]) {
   assert.ok(panel.includes(phrase), `Panel should expose Monday beta launch checklist copy: ${phrase}`);

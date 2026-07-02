@@ -165,7 +165,7 @@ assert.equal(promptPack.safety.liveExecutionEnabled, false);
 assert.deepEqual(promptPack.workflows.map((workflow) => workflow.workflowId), ["wellness_creator_workflow"]);
 assert.equal(promptPack.workflows[0].prompts.length, 7);
 assert.equal(promptPack.workflows[0].prompts[0].step, 1);
-assert.match(promptPack.workflows[0].prompts[0].prompt, /Start a new wellness program/);
+assert.match(promptPack.workflows[0].prompts[0].prompt, /Start a new longevity program/);
 assert.equal(promptPack.workflows[0].safety.acceptsSecrets, false);
 assert.equal(promptPack.workflows[0].safety.noProviderExecution, true);
 

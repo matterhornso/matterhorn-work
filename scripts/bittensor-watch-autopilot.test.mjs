@@ -72,7 +72,7 @@ try {
   assert.match(markdown, /READ_ONLY_ALERT_REPORT/);
   assert.match(markdown, /Notification Summary/);
   assert.match(markdown, /Validator drift/);
-  assert.match(markdown, /Analyze validator/);
+  assert.match(markdown, /Bittensor Agent task: Analyze validator/);
 
   const summary = JSON.parse(await readFile(jsonOutput, "utf8"));
   assert.equal(summary.ok, true);
@@ -81,12 +81,12 @@ try {
   assert.equal(summary.notificationSummary.totalNotifications, 2);
   assert.equal(summary.notificationSummary.intents.review_validator, 1);
   assert.equal(summary.notificationSummary.intents.review_wallet, 1);
-  assert.equal(summary.notificationSummary.promptSamples[0].prompt.includes("Analyze validator"), true);
-  assert.equal(summary.notificationSummary.safety, "read_only_chat_prompts");
+  assert.equal(summary.notificationSummary.promptSamples[0].prompt.includes("Bittensor Agent task: Analyze validator"), true);
+  assert.equal(summary.notificationSummary.safety, "read_only_agent_tasks");
   assert.equal(summary.safety.signsOrBroadcasts, false);
   assert.equal(summary.safety.submitsTransactions, false);
   assert.equal(summary.safety.invokesSubnetServices, false);
-  assert.equal(summary.alerts[1].prompt.includes("Review public Bittensor wallet"), true);
+  assert.equal(summary.alerts[1].prompt.includes("review public Bittensor wallet"), true);
 
   const badFixture = path.join(tmp, "bad.json");
   const badJsonOutput = path.join(tmp, "bad.json.out");

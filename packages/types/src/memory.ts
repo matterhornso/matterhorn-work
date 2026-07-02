@@ -321,7 +321,11 @@ export function validateWellnessMemoryIsEducationalAndOptIn(
 ): MatterhornMemoryValidationResult {
   const errors: string[] = [];
   const tags = record.tags.map((t) => t.toLowerCase());
-  const isWellness = tags.includes("wellness") || tags.includes("health") || tags.includes("clinical");
+  const isWellness =
+    tags.includes("wellness") ||
+    tags.includes("longevity") ||
+    tags.includes("health") ||
+    tags.includes("clinical");
   if (!isWellness) {
     return { ok: true, errors };
   }
@@ -1009,7 +1013,7 @@ export function detectMemoryDeskFromRecord(record: MatterhornMemoryRecord): Matt
   if (tags.includes("bittensor")) return "bittensor";
   if (tags.includes("hyperliquid")) return "hyperliquid";
   if (tags.includes("polymarket")) return "polymarket";
-  if (tags.includes("wellness") || tags.includes("health") || tags.includes("clinical")) {
+  if (tags.includes("wellness") || tags.includes("longevity") || tags.includes("health") || tags.includes("clinical")) {
     return "wellness";
   }
   if (tags.includes("decentralized_services") || tags.includes("decentralized service")) {
@@ -1094,7 +1098,7 @@ export function validateMemoryRecordAgainstDeskPolicy(
   }
 
   if (desk === "generic_workspace") {
-    const forbiddenTags = ["bittensor", "hyperliquid", "polymarket", "wellness", "clinical", "wallet"];
+    const forbiddenTags = ["bittensor", "hyperliquid", "polymarket", "wellness", "longevity", "clinical", "wallet"];
     if (record.tags.some((tag) => forbiddenTags.includes(tag.toLowerCase()))) {
       errors.push(
         "generic_workspace memory must not silently include protocol, wallet, or medical data",

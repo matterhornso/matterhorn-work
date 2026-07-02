@@ -24,19 +24,19 @@ for (const phrase of [
   "App opens with first-class desks",
   "Crypto safety smoke is green",
   "Mac tester build and doctor pass",
-  "Wellness workflow remains safe",
+  "Longevity workflow remains safe",
   "Copy launch check",
   "Monday beta promise",
   "VENUE_DESKS",
   "Start with your TAO, then choose what to do next.",
-  "Preview Hyperliquid trades through chat, with execution off.",
+  "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
   "Analyze prediction markets and preview safely.",
   "BTC orderbook",
   "Find markets",
   "Exchange preview controls",
   "Market preview controls",
   "Readiness",
-  "Ask in Chat ->",
+  "Ask Agent ->",
   "Evidence",
   "Safety",
   "/api/crypto/readiness",
@@ -51,8 +51,8 @@ for (const phrase of [
   "All-protocol smoke",
   "Blocker:",
   "Next:",
-  "Protocol Chat",
-  "Market Chat",
+  "Protocol Agent",
+  "Market Agent",
   "crypto-readiness-panel",
   "market-execution-readiness-panel",
   "Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.",
@@ -164,7 +164,8 @@ for (const phrase of [
   "External signer required",
   "Read/preview-only",
   "No market submit",
-  "Use Matterhorn protocol chat.",
+  "Protocol Agent",
+  "Market Agent",
   "no seed phrases, private keys, API secrets, raw signatures, signed payloads, wallet exports, custody, or live Hyperliquid/Polymarket submission",
 ]) {
   assert.ok(panel.includes(phrase), `Bittensor panel should include customer demo checklist text: ${phrase}`);
@@ -181,9 +182,9 @@ for (const forbidden of [
   assert.equal(panel.includes(forbidden), false, `customer UI must not include forbidden execution/secret surface ${forbidden}`);
 }
 
-assert.ok(panel.includes("matterhorn:crypto-chat-handoff"), "demo prompts should use the generic crypto chat handoff event");
+assert.ok(panel.includes("matterhorn:crypto-chat-handoff"), "demo tasks should use the generic crypto handoff event");
 assert.ok(surface.includes("matterhorn:crypto-chat-handoff"), "session surface should listen for the generic crypto handoff event");
-assert.ok(surface.includes("Protocol prompt ready"), "session notice should distinguish protocol prompts from Bittensor-only prompts");
+assert.ok(surface.includes("task ready"), "session notice should distinguish protocol agent tasks from Bittensor-only tasks");
 assert.ok(surface.includes("crypto.chat_handoff.applied"), "generic crypto handoffs should have their own inspector event");
 assert.ok(sharedCardRenderer.includes("matterhorn.crypto.shared-card.v1"), "transcript should render versioned shared crypto cards");
 

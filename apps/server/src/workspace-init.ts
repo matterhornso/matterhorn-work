@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
+import { MATTERHORN_DESK_AGENT_MANIFESTS } from "@matterhorn-work/types/desk-agents";
 
 import { ensureDir, exists } from "./utils.js";
 import { ApiError } from "./errors.js";
@@ -145,6 +146,24 @@ function resolveAgentTemplate(): string {
   return MATTERHORN_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
 }
 
+function renderDeskAgentTemplate(agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS]): string {
+  return `---
+description: ${agent.description}
+mode: primary
+temperature: 0.2
+matterhorn_desk_agent: v1
+matterhorn_desk_id: ${agent.deskId}
+agent_id: ${agent.agentId}
+---
+
+# ${agent.displayName}
+
+${agent.instructions}
+
+${MATTERHORN_ARTIFACT_GUIDANCE}
+`;
+}
+
 async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
   const agentsDir = join(workspaceRoot, ".opencode", "agents");
   const agentPath = join(agentsDir, "matterhorn.md");
@@ -192,6 +211,20 @@ async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+async function ensureMatterhornDeskAgents(workspaceRoot: string): Promise<boolean> {
+  const agentsDir = join(workspaceRoot, ".opencode", "agents");
+  await ensureDir(agentsDir);
+  let changed = false;
+  for (const agent of Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)) {
+    const agentPath = join(agentsDir, `${agent.agentId}.md`);
+    if (await exists(agentPath)) continue;
+    const content = renderDeskAgentTemplate(agent);
+    await writeFile(agentPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+    changed = true;
+  }
+  return changed;
 }
 
 async function ensureBrowserPlugin(workspaceRoot: string): Promise<boolean> {
@@ -242,10 +275,12 @@ export async function ensureWorkspaceFiles(workspaceRoot: string, presetInput: s
     throw new ApiError(400, "invalid_workspace_path", "workspace path is required");
   }
   await ensureDir(workspaceRoot);
+  await ensureDir(join(workspaceRoot, "outputs"));
   const reloadReasons = new Set<ReloadReason>();
   if (await ensureOpencodeConfig(workspaceRoot)) reloadReasons.add("config");
   if (await ensureBrowserPlugin(workspaceRoot)) reloadReasons.add("config");
   if (await ensureMatterhornAgent(workspaceRoot)) reloadReasons.add("agents");
+  if (await ensureMatterhornDeskAgents(workspaceRoot)) reloadReasons.add("agents");
   const openworkConfigChanged = await ensureWorkspaceOpenworkConfig(workspaceRoot, preset);
   return {
     changed: openworkConfigChanged || reloadReasons.size > 0,

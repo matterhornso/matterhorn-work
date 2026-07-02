@@ -3416,8 +3416,8 @@ function matterhornBittensorCheckReceipt(args = {}) {
 
   const accepted = findings.every((finding) => finding.status !== "fail");
   const followUpPrompt = netuid !== null
-    ? "Use Bittensor chat mode. Compare my public wallet state after this " + (action || "Bittensor") + " receipt on subnet " + netuid + ". Explain what changed, source freshness, and any safe next steps without asking for seed phrases or private keys."
-    : "Use Bittensor chat mode. Review this Bittensor receipt and compare my public wallet state after finality. Explain what changed and any safe next steps without asking for seed phrases or private keys.";
+    ? "Bittensor Agent task: compare my public wallet state after this " + (action || "Bittensor") + " receipt on subnet " + netuid + ". Explain what changed, source freshness, and any safe next steps without asking for seed phrases or private keys."
+    : "Bittensor Agent task: review this Bittensor receipt and compare my public wallet state after finality. Explain what changed and any safe next steps without asking for seed phrases or private keys.";
   const result = {
     ok: true,
     accepted,

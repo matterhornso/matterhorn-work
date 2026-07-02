@@ -743,7 +743,7 @@ function folderForRecord(record: MatterhornMemoryRecord): string {
   if (tags.includes("bittensor")) return "Protocols/Bittensor"
   if (tags.includes("hyperliquid")) return "Protocols/Hyperliquid"
   if (tags.includes("polymarket")) return "Protocols/Polymarket"
-  if (tags.includes("wellness") || record.kind === "client_profile") return "Wellness"
+  if (tags.includes("wellness") || tags.includes("longevity") || record.kind === "client_profile") return "Longevity"
 
   switch (record.kind) {
     case "watchlist":

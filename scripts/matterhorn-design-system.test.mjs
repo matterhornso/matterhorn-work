@@ -18,7 +18,7 @@ const all = `${design}\n${uiDesign}\n${css}`;
 
 for (const phrase of [
   "desk-first",
-  "Home, Bittensor, Hyperliquid, Polymarket, Wellness, Memory, MCPs, and Settings",
+  "Home, Bittensor, Hyperliquid, Polymarket, Longevity, Memory, MCPs, and Settings",
   "#0C0C0C",
   "#D1F2FF",
   "Matterhorn logo",
@@ -39,7 +39,7 @@ for (const phrase of [
   "Prepare unstake preview",
   "Prepare transfer preview",
   "Compliance-blocked previews must not expose executable price, size, or share fields",
-  "Wellness is not Web3 and not medical care",
+  "safe offline optimization workflows",
   "No hidden saves",
   "No hidden memory saves",
   "No horizontal overflow",

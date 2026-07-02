@@ -4,7 +4,7 @@
 **Audience:** Codex, Kimi, Minimax, Claude Code, Stitch, and implementation reviewers  
 **Source:** Matterhorn Work production app, Minimax desk specs, memory specs, and customer beta screenshots
 
-Matterhorn Work is not a generic chat app and it is not a raw crypto dashboard. It is a desk-first workspace where a customer can use Bittensor, Hyperliquid, Polymarket, Wellness workflows, Memory, and Matterhorn MCPs through plain chat with visible safety boundaries.
+Matterhorn Work is not a generic chat app and it is not a raw crypto dashboard. It is a desk-first workspace where a customer can use Bittensor, Hyperliquid, Polymarket, Longevity workflows, Memory, and Matterhorn MCPs through plain chat with visible safety boundaries.
 
 ## 1. Navigation Model
 
@@ -14,7 +14,7 @@ The primary customer model is **desks**:
 2. **Bittensor:** TAO wallet, subnets, validators, unsigned previews, watches, receipts.
 3. **Hyperliquid:** account/orderbook reads, funding, open orders, preview handoffs, watches, receipts.
 4. **Polymarket:** market discovery, outcomes, liquidity, compliance, preview handoffs, watches, receipts.
-5. **Wellness:** trainer, yoga, dietician, and service-creator workflows. Standalone and non-medical.
+5. **Longevity:** trainer, yoga, dietician, and service-creator workflows. Standalone and non-medical.
 6. **Memory:** suggestion inbox, memories, provenance, privacy, watchlists, receipts.
 7. **MCPs:** Matterhorn MCP setup and tools for Codex, Claude Code, Claude Desktop, Cursor, and compatible clients.
 8. **Settings:** account, profile, appearance, privacy, connectors, developer/advanced surfaces.
@@ -44,7 +44,7 @@ Customer-facing navigation must not expose **Services** as a primary destination
 | Bittensor | electric cyan / violet | TAO, subnets, validators, external-signer previews |
 | Hyperliquid | blue / green | market data, account exposure, preview-only trade planning |
 | Polymarket | purple / amber | market outcomes, compliance, preview-only prediction planning |
-| Wellness | coral / mint | human service workflows, educational client artifacts |
+| Longevity | coral / mint | human service workflows, educational client artifacts |
 | Memory | gold / slate | remembered context, provenance, confidence, privacy |
 
 ## 3. Layout System

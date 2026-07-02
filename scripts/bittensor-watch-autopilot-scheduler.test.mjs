@@ -38,7 +38,7 @@ try {
   assert.equal(first.notificationSummary.intents.review_wallet, 1);
   assert.equal(first.safety.signsOrBroadcasts, false);
   assert.equal(first.safety.invokesSubnetServices, false);
-  assert.match(first.alerts[0].prompt, /Review public Bittensor wallet/);
+  assert.match(first.alerts[0].prompt, /review public Bittensor wallet/);
   const summary = JSON.parse(await readFile(summaryOut, "utf8"));
   assert.equal(summary.ok, true);
   assert.equal(summary.iterations, 2);
@@ -46,7 +46,7 @@ try {
   assert.equal(summary.notificationSummary.totalNotifications, 2);
   assert.equal(summary.notificationSummary.intents.review_wallet, 2);
   assert.equal(summary.notificationSummary.promptSamples.length, 2);
-  assert.equal(summary.notificationSummary.safety, "read_only_chat_prompts");
+  assert.equal(summary.notificationSummary.safety, "read_only_agent_tasks");
   assert.equal(summary.safety.submitsTransactions, false);
   const bad = path.join(tmp, "bad.json");
   await writeFile(bad, JSON.stringify({ success: true, evaluations: [{ status: "alert", seedPhrase: "never" }] }));

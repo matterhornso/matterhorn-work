@@ -40,6 +40,17 @@ function RouteFallback() {
   );
 }
 
+function isExplicitCloudSignin(search: string): boolean {
+  const params = new URLSearchParams(search);
+  if (params.get("intent") === "cloud-auth") return true;
+  if (typeof window === "undefined") return false;
+  try {
+    return new URL(window.location.href).searchParams.get("intent") === "cloud-auth";
+  } catch {
+    return false;
+  }
+}
+
 const readRequireSigninSnapshot = () => readDenBootstrapConfig().requireSignin;
 
 const subscribeToRequireSignin = (onStoreChange: () => void) => {
@@ -55,8 +66,9 @@ const subscribeToRequireSignin = (onStoreChange: () => void) => {
  *
  * When the desktop bootstrap config has `requireSignin: true` (persisted by
  * the Tauri shell via `desktop-bootstrap.json`), the UI is held at `/signin`
- * until the user authenticates with Den. When sign-in is NOT required, we
- * never let users land on `/signin` — redirect them to `/session` instead.
+ * until the user authenticates with Den. When sign-in is NOT required, plain
+ * `/signin` redirects to `/session`; explicit Cloud account CTAs use
+ * `/signin?intent=cloud-auth` so first-run users can still sign in.
  *
  * While we're still checking the Den session AND sign-in is required, we
  * render nothing so the transcript/settings never flash behind the gate.
@@ -79,8 +91,11 @@ function DenSigninGate({ children }: DenSigninGateProps) {
 
     const path = location.pathname.toLowerCase();
     const onSignin = path === "/signin" || path.startsWith("/signin/");
+    const explicitCloudSignin = onSignin && isExplicitCloudSignin(location.search);
 
     const onOnboarding = path === "/onboarding" || path.startsWith("/onboarding/");
+
+    if (explicitCloudSignin) return;
 
     if (requireSignin) {
       if (!denAuth.isSignedIn && !onSignin) {

@@ -7,6 +7,7 @@ import {
   Download,
   Edit3,
   Eye,
+  Inbox,
   Info,
   RefreshCw,
   Search,
@@ -575,12 +576,17 @@ export function MemoryPanel(props: MemoryPanelProps) {
     if (!props.client) return;
     setCaptureError(null);
     try {
+      const reason = action === "dismiss"
+        ? "User dismissed this visible Memory suggestion from the Matterhorn Memory panel."
+        : action === "restore"
+          ? "User restored this visible Memory suggestion from the Matterhorn Memory panel."
+          : action === "regenerate"
+            ? "User regenerated this visible Memory suggestion from the Matterhorn Memory panel."
+            : "User confirmed this visible Memory suggestion from the Matterhorn Memory panel.";
       if (entry.status === "pending") {
         const response = await props.client.resolveStoredMemorySuggestion(entry.id, {
           action,
-          reason: action === "dismiss"
-            ? "User dismissed this visible Memory suggestion from the Matterhorn Memory panel."
-            : "User confirmed this visible Memory suggestion from the Matterhorn Memory panel.",
+          reason,
         });
         if (response.record) {
           setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
@@ -592,12 +598,19 @@ export function MemoryPanel(props: MemoryPanelProps) {
         return;
       }
 
+      if (action === "restore" || action === "regenerate") {
+        const response = await props.client.resolveStoredMemorySuggestion(entry.id, { action, reason });
+        upsertSuggestionEntries([response.entry]);
+        window.dispatchEvent(new CustomEvent("matterhorn:memory-suggestions-changed", {
+          detail: { id: entry.id, action, status: response.entry.status },
+        }));
+        return;
+      }
+
       const response = await props.client.resolveMemorySuggestion({
         suggestion: entry.suggestion,
         action,
-        reason: action === "dismiss"
-          ? "User dismissed this visible Memory suggestion from the Matterhorn Memory panel."
-          : "User confirmed this visible Memory suggestion from the Matterhorn Memory panel.",
+        reason,
       });
       if (response.record) {
         setRecords((current) => [response.record!, ...current.filter((item) => item.id !== response.record!.id)]);
@@ -711,14 +724,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-dls-background text-dls-text">
-      <header className="flex shrink-0 items-start justify-between gap-3 px-5 py-5">
+      <header className="flex shrink-0 items-start justify-between gap-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <div className="text-base font-semibold">Matterhorn Memory</div>
-          <p className="mt-1 text-xs leading-5 text-dls-secondary">
-            Explicit, user-controlled memory. No hidden memory, no auto-capture, no seeds or private keys.
+          <div className="text-lg font-semibold tracking-[-0.01em]">Matterhorn Memory</div>
+          <p className="mt-1 max-w-[34rem] text-sm leading-6 text-dls-secondary">
+            Save only what you review; nothing is saved unless you confirm.
           </p>
-          <div className="mt-3 inline-flex rounded-full bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
-            Visible review only
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-semibold text-primary">
+            <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-1">No hidden memory</span>
+            <span className="rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] px-2 py-1">No hidden save</span>
           </div>
         </div>
         <Button variant="ghost" size="icon-sm" onClick={props.onClose} aria-label="Close Memory panel">
@@ -726,37 +740,37 @@ export function MemoryPanel(props: MemoryPanelProps) {
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <section className="rounded-xl border border-dls-border bg-dls-surface p-3">
-          <div className="flex flex-col gap-2">
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 pb-6 pt-2 sm:px-5">
+        <section className="space-y-2">
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="relative min-w-0 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dls-secondary" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="h-11 w-full rounded-2xl border border-transparent bg-background/70 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-dls-secondary focus:border-primary focus:bg-background"
-                placeholder="Search memories, receipts, addresses, workflow notes..."
+                className="h-10 w-full rounded-md border border-dls-border/50 bg-dls-surface-muted/20 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-dls-secondary focus:border-primary focus:bg-dls-background"
+                placeholder="Search memories, receipts, addresses..."
               />
             </label>
-            <Button className="w-full justify-center rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+            <Button className="justify-center rounded-md border-dls-border/60 bg-dls-surface-muted/20 hover:bg-dls-hover/65 sm:w-auto" variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
               <RefreshCw className={cn("mr-2 size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
           </div>
           {error ? (
-            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               {error}
             </div>
           ) : null}
         </section>
 
         {visibleSelectedRecords.length ? (
-          <section className="mt-4 rounded-2xl border border-[rgba(var(--matterhorn-blue-rgb),0.28)] bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5">
+          <section className="rounded-lg bg-[rgba(var(--matterhorn-blue-rgb),0.08)] p-3.5 ring-1 ring-[rgba(var(--matterhorn-blue-rgb),0.20)]">
             <div className="flex flex-col gap-3">
               <div>
                 <div className="text-sm font-semibold">Using memories in chat</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  These records will appear as visible composer chips. Remove any record before sending if it is not relevant.
+                  Selected records appear as visible composer chips.
                 </p>
               </div>
               <Button className="w-full justify-center" size="sm" onClick={() => dispatchMemoryContext(visibleSelectedRecords)}>
@@ -768,7 +782,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 <button
                   key={record.id}
                   type="button"
-                  className="rounded-full border border-dls-border bg-dls-surface px-3 py-1 text-xs text-dls-text transition-colors hover:border-red-500/40 hover:text-red-200"
+                  className="rounded-full bg-dls-hover/45 px-3 py-1 text-xs text-dls-text transition-colors hover:bg-red-500/10 hover:text-red-200"
                   onClick={() => toggleSelectedRecord(record)}
                   title="Remove memory from chat context"
                 >
@@ -779,56 +793,56 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </section>
         ) : null}
 
-        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
+        <section className="space-y-3">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-2">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-                <ShieldAlert className="size-4" />
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-[rgba(var(--matterhorn-blue-rgb),0.12)] text-primary">
+                <Inbox className="size-4" />
               </span>
               <div>
                 <div className="text-sm font-semibold">Suggestion inbox</div>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                  Visible memory candidates only: nothing is saved unless you confirm or edit to save; dismiss keeps it out of memory.
+                  Review suggestions before anything is saved.
                 </p>
               </div>
             </div>
-            <Button className="shrink-0 rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
+            <Button className="shrink-0 rounded-md border-transparent bg-dls-hover/35 hover:bg-dls-hover/65" variant="outline" size="sm" onClick={() => void refreshSuggestions()} disabled={suggestionsLoading || !props.client}>
               <RefreshCw className={cn("mr-2 size-3.5", suggestionsLoading && "animate-spin")} />
               Refresh
             </Button>
           </div>
           {suggestionsError ? (
-            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
               {suggestionsError}
             </div>
           ) : null}
 
-          <div className="mt-4 divide-y divide-dls-border rounded-xl border border-dls-border bg-dls-surface px-3" aria-label="Memory inbox lifecycle summary">
-            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+          <div className="grid gap-2 sm:grid-cols-3" aria-label="Memory inbox lifecycle summary">
+            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Needs review</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">New suggestions that can be confirmed, edited, or dismissed.</p>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Needs review</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirm, edit, or dismiss.</p>
               </div>
               <div className="text-lg font-semibold">{suggestionStatusCounts.pending}</div>
             </div>
-            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-200">Saved history</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited memories that were saved after review.</p>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Saved history</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Confirmed or edited.</p>
               </div>
-              <div className="text-lg font-semibold text-emerald-100">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
+              <div className="text-lg font-semibold">{suggestionStatusCounts.confirmed + suggestionStatusCounts.edited}</div>
             </div>
-            <div className="grid grid-cols-[1fr_auto] gap-3 py-3">
+            <div className="grid min-w-0 grid-cols-[1fr_auto] gap-3 rounded-md bg-dls-surface-muted/22 px-3 py-2">
               <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">Not saved</div>
-                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked candidates kept out of Memory.</p>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-dls-secondary">Not saved</div>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">Dismissed, expired, or blocked.</p>
               </div>
               <div className="text-lg font-semibold">{suggestionStatusCounts.dismissed + suggestionStatusCounts.expired + suggestionStatusCounts.blocked}</div>
             </div>
           </div>
 
-          <div className="mt-3 pb-1" aria-label="Memory inbox filters">
-            <div className="flex flex-wrap gap-2">
+          <div aria-label="Memory inbox filters">
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-dls-surface-muted/35 p-1 sm:grid-cols-4">
               {SUGGESTION_INBOX_FILTERS.map((filter) => {
                 const selected = suggestionStatusFilter === filter.id;
                 return (
@@ -838,10 +852,10 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     aria-pressed={selected}
                     onClick={() => setSuggestionStatusFilter(filter.id)}
                     className={cn(
-                      "min-w-0 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
+                      "min-w-0 rounded-md px-2 py-1.5 text-center text-[11px] font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]",
                       selected
-                        ? "border-primary bg-[rgba(var(--matterhorn-blue-rgb),0.20)] text-primary shadow-[0_8px_28px_rgba(0,0,0,0.16)]"
-                        : "border-transparent bg-background/45 text-dls-secondary hover:bg-background/70 hover:text-dls-text",
+                        ? "bg-[rgba(var(--dls-accent-rgb),0.18)] text-dls-text shadow-sm ring-1 ring-[rgba(var(--dls-accent-rgb),0.35)]"
+                        : "text-dls-secondary hover:bg-dls-hover/65 hover:text-dls-text",
                     )}
                   >
                     <span className="font-semibold">{filter.label}</span>
@@ -854,19 +868,19 @@ export function MemoryPanel(props: MemoryPanelProps) {
           </div>
 
           {suggestionsLoading && !suggestionEntries.length ? (
-            <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
-              Loading suggestion inbox. Matterhorn is checking for visible, reviewable memory candidates.
+            <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              Loading suggestion inbox...
             </div>
           ) : null}
 
           {suggestionEntries.length > 0 && !filteredSuggestionEntries.length ? (
-            <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+            <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
               No suggestions match this filter. <span className="font-semibold text-dls-text">{selectedSuggestionFilter.label}</span> currently has no visible entries.
             </div>
           ) : null}
 
           {filteredSuggestionEntries.length ? (
-            <div className="mt-3 space-y-2">
+            <div className="space-y-2">
               {filteredSuggestionEntries.map((entry) => {
                 const suggestion = entry.suggestion;
                 const statusMeta = suggestionStatusMeta(entry.status);
@@ -881,7 +895,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                 const activeConfidenceSegments = confidenceSegments(suggestion.confidence);
                 return (
                   <article key={entry.id} className={cn(
-                    "overflow-hidden rounded-xl border border-dls-border bg-dls-surface px-3 py-3",
+                    "overflow-hidden rounded-lg bg-dls-surface-muted/20 p-3",
                     statusMeta.cardClassName,
                     resolved && "shadow-none",
                   )}>
@@ -918,12 +932,12 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         </p>
                       </div>
                       {hidesSensitiveContent ? (
-                        <div className="min-w-0 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
+                        <div className="min-w-0 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
                           <div className="text-[10px] font-semibold uppercase tracking-[0.08em]">Content redacted</div>
                           <p className="mt-1">No title, body, source, confidence detail, or trigger text is rendered for blocked suggestions.</p>
                         </div>
                       ) : (
-                        <div className="min-w-0 rounded-2xl bg-black/18 px-3 py-2">
+                        <div className="min-w-0 rounded-lg bg-dls-hover/25 px-3 py-2">
                           <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-dls-secondary">
                             <span>Confidence</span>
                             <span>{confidence}%</span>
@@ -944,7 +958,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       )}
                     </div>
 
-                    <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                    <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-dls-text">Lifecycle state:</span>
                         <span>{statusMeta.title}</span>
@@ -953,7 +967,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     </div>
 
                     {hidesSensitiveContent ? (
-                      <div className="mt-3 rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
+                      <div className="mt-3 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-100">
                         <div className="flex items-center gap-2 font-semibold">
                           <Ban className="size-3.5" />
                           Why hidden
@@ -963,7 +977,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
                         </p>
                       </div>
                     ) : (
-                      <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                      <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
                         <div className="flex items-center gap-2 font-semibold text-dls-text">
                           <Info className="size-3.5 text-primary" />
                           Why suggested
@@ -981,24 +995,24 @@ export function MemoryPanel(props: MemoryPanelProps) {
                     )}
 
                     {editing ? (
-                      <div className="mt-3 grid gap-2 rounded-xl border border-dls-border bg-dls-surface p-3">
+                      <div className="mt-3 grid gap-2 rounded-lg bg-dls-background/45 p-3 ring-1 ring-dls-border/60">
                         <div className="text-xs font-semibold text-dls-text">Edit before saving</div>
                         <input
                           value={suggestionEditDraft.title}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, title: event.target.value } : current)}
-                          className="h-10 min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          className="h-10 min-w-0 rounded-md border border-transparent bg-dls-surface px-3 text-sm outline-none focus:border-primary"
                           placeholder="Memory title"
                         />
                         <input
                           value={suggestionEditDraft.summary}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, summary: event.target.value } : current)}
-                          className="h-10 min-w-0 rounded-xl border border-dls-border bg-dls-surface px-3 text-sm outline-none focus:border-primary"
+                          className="h-10 min-w-0 rounded-md border border-transparent bg-dls-surface px-3 text-sm outline-none focus:border-primary"
                           placeholder="Short summary"
                         />
                         <textarea
                           value={suggestionEditDraft.note}
                           onChange={(event) => setSuggestionEditDraft((current) => current ? { ...current, note: event.target.value } : current)}
-                          className="min-h-24 min-w-0 resize-y rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
+                          className="min-h-24 min-w-0 resize-y rounded-md border border-transparent bg-dls-surface px-3 py-2 text-sm leading-6 outline-none focus:border-primary"
                           placeholder="Memory note"
                         />
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1019,11 +1033,11 @@ export function MemoryPanel(props: MemoryPanelProps) {
                       </p>
                     ) : null}
                     {entry.policyWarnings?.length && !hidesSensitiveContent ? (
-                      <div className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
+                      <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-100">
                         {entry.policyWarnings.slice(0, 3).join(" ")}
                       </div>
                     ) : null}
-                    <div className="mt-3 rounded-2xl bg-black/18 px-3 py-2 text-xs leading-5 text-dls-secondary">
+                    <div className="mt-3 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
                       <span className="font-semibold text-dls-text">{statusMeta.title}:</span> {suggestionActionMessage(entry)}
                     </div>
                     {showActiveSuggestionActions ? (
@@ -1083,19 +1097,19 @@ export function MemoryPanel(props: MemoryPanelProps) {
             </div>
           ) : (
             !suggestionsLoading && !suggestionEntries.length ? (
-              <div className="mt-3 rounded-xl border border-dls-border bg-dls-surface px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
+              <div className="rounded-lg bg-dls-surface-muted/22 px-3 py-5 text-center text-xs leading-5 text-dls-secondary">
                 No suggestions yet. Matterhorn will show visible candidates here before anything is remembered.
               </div>
             ) : null
           )}
         </section>
 
-        <section className="mt-4 space-y-2">
+        <section className="space-y-2">
           {records.length === 0 && !loading ? (
-              <div className="rounded-xl border border-dls-border bg-dls-surface px-4 py-8 text-center">
+              <div className="rounded-lg bg-dls-surface-muted/22 px-4 py-8 text-center">
               <div className="text-sm font-medium">No memories yet</div>
               <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                Save one manually below. Matterhorn will not remember anything unless you explicitly confirm it.
+                Save one manually below. Nothing is stored without confirmation.
               </p>
             </div>
           ) : null}
@@ -1103,7 +1117,7 @@ export function MemoryPanel(props: MemoryPanelProps) {
             const policyDecision = getMatterhornMemoryPolicyDecision(record);
             const selected = visibleSelectedRecords.some((item) => item.id === record.id);
             return (
-              <article key={record.id} className="rounded-xl border border-dls-border bg-dls-surface p-3.5">
+              <article key={record.id} className="rounded-lg bg-dls-surface-muted/20 p-3.5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -1119,15 +1133,15 @@ export function MemoryPanel(props: MemoryPanelProps) {
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.08em] text-dls-secondary">
-                  <span className="rounded-full bg-white/5 px-2 py-1">{formatKind(record.kind)}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">{record.scope}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">{record.provenance.source}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
-                  <span className="rounded-full bg-white/5 px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{formatKind(record.kind)}</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{record.scope}</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{record.provenance.source}</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">{Math.round(record.provenance.confidence * 100)}% confidence</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">MCP/API {policyDecision.canSendToMcpApi ? "allowed" : "blocked"}</span>
+                  <span className="rounded-full bg-dls-hover/45 px-2 py-1">Export {policyDecision.canExport ? "allowed" : "blocked"}</span>
                 </div>
                 {policyDecision.blockedReasons.length || policyDecision.warnings.length ? (
-                  <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
+                  <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
                     <div className="font-semibold">Desk policy</div>
                     {[...policyDecision.blockedReasons, ...policyDecision.warnings].slice(0, 4).join(" ")}
                   </div>
@@ -1165,70 +1179,73 @@ export function MemoryPanel(props: MemoryPanelProps) {
           })}
         </section>
 
-        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
-          <div className="flex items-start gap-2">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+        <section className="space-y-3 rounded-lg bg-dls-surface-muted/20 p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-dls-hover/55 text-primary">
               <ShieldAlert className="size-4" />
             </span>
             <div>
               <div className="text-sm font-semibold">Remember this</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Manual capture only. Never paste seed phrases, private keys, mnemonics, API secrets, raw signatures, signed payloads, wallet exports, or hidden clinical records.
+                Manual capture only. Do not paste secrets or hidden clinical records.
               </p>
             </div>
           </div>
-          <div className="mt-3 grid gap-2">
-            <div className="rounded-xl border border-dls-border bg-dls-surface px-3 py-2 text-xs leading-5 text-dls-secondary">
-              Desk defaults are applied from tags. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">wellness</span>. Longevity becomes restricted by default; market memories cannot be exported or shared with MCP/API.
+          <div className="grid gap-2">
+            <div className="rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+              Tags set desk defaults. Use <span className="font-semibold text-dls-text">bittensor</span>, <span className="font-semibold text-dls-text">hyperliquid</span>, <span className="font-semibold text-dls-text">polymarket</span>, or <span className="font-semibold text-dls-text">longevity</span>.
+            </div>
+            <div className="rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
+              Longevity becomes restricted by default; market memories cannot be exported or shared with MCP/API.
             </div>
             <input
               value={draft.title}
               onChange={(event) => updateDraft("title", event.target.value)}
-              className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+              className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
               placeholder="Memory title"
             />
             <input
               value={draft.summary}
               onChange={(event) => updateDraft("summary", event.target.value)}
-              className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+              className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
               placeholder="Short summary"
             />
             <textarea
               value={draft.body}
               onChange={(event) => updateDraft("body", event.target.value)}
-              className="min-h-24 resize-y rounded-2xl border border-transparent bg-background/55 px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:bg-background"
+              className="min-h-24 resize-y rounded-md border border-transparent bg-dls-background/60 px-3 py-2 text-sm leading-6 outline-none focus:border-primary focus:bg-dls-background"
               placeholder="What should Matterhorn remember?"
             />
             <div className="grid gap-2 sm:grid-cols-2">
               <select
                 value={draft.kind}
                 onChange={(event) => updateDraft("kind", event.target.value as MatterhornMemoryKind)}
-                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
               >
                 {MATTERHORN_MEMORY_KINDS.map((kind) => <option key={kind} value={kind}>{formatKind(kind)}</option>)}
               </select>
               <select
                 value={draft.scope}
                 onChange={(event) => updateDraft("scope", event.target.value as MatterhornMemoryScope)}
-                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
               >
                 {MATTERHORN_MEMORY_SCOPES.map((scope) => <option key={scope} value={scope}>{scope}</option>)}
               </select>
               <select
                 value={draft.sensitivity}
                 onChange={(event) => updateDraft("sensitivity", event.target.value as CaptureDraft["sensitivity"])}
-                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
               >
                 {SELECTABLE_SENSITIVITIES.map((sensitivity) => <option key={sensitivity} value={sensitivity}>{sensitivity}</option>)}
               </select>
               <input
                 value={draft.tags}
                 onChange={(event) => updateDraft("tags", event.target.value)}
-                className="h-11 rounded-2xl border border-transparent bg-background/55 px-3 text-sm outline-none focus:border-primary focus:bg-background"
+                className="h-10 rounded-md border border-transparent bg-dls-background/60 px-3 text-sm outline-none focus:border-primary focus:bg-dls-background"
                 placeholder="tags, comma separated"
               />
             </div>
-            <label className="flex items-start gap-2 rounded-2xl bg-background/45 px-3 py-2 text-xs leading-5 text-dls-secondary">
+            <label className="flex items-start gap-2 rounded-lg bg-dls-hover/25 px-3 py-2 text-xs leading-5 text-dls-secondary">
               <input
                 type="checkbox"
                 checked={draft.confirmed}
@@ -1240,23 +1257,23 @@ export function MemoryPanel(props: MemoryPanelProps) {
               </span>
             </label>
             {captureError ? (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-100">{captureError}</div>
             ) : null}
-            <Button className="rounded-2xl" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
+            <Button className="rounded-md" onClick={() => void handleCapture()} disabled={captureBusy || !props.client}>
               {captureBusy ? "Remembering..." : "Remember this"}
             </Button>
           </div>
         </section>
 
-        <section className="mt-4 rounded-xl border border-dls-border bg-dls-surface p-4">
+        <section className="rounded-lg bg-dls-surface-muted/20 p-4">
           <div className="flex flex-col gap-3">
             <div>
               <div className="text-sm font-semibold">Export evidence</div>
               <p className="mt-1 text-xs leading-5 text-dls-secondary">
-                Export only policy-approved public-safe memory bundle metadata. Restricted, market, longevity, and forbidden-secret records stay out.
+                Exports include only policy-approved public-safe memory metadata.
               </p>
             </div>
-            <Button className="w-full justify-center rounded-2xl border-transparent bg-background/55 hover:bg-background/80" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
+            <Button className="w-full justify-center rounded-md border-transparent bg-dls-hover/35 hover:bg-dls-hover/65" variant="outline" size="sm" onClick={() => void handleExport()} disabled={!props.client}>
               <Download className="mr-2 size-3.5" />
               Export
             </Button>

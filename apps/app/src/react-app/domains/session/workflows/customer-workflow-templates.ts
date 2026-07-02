@@ -6,6 +6,7 @@ import {
   type MatterhornProtocolWorkspaceId,
   type MatterhornProtocolWorkspaceLaunchBehavior,
 } from "@matterhorn-work/types/matterhorn-workflows";
+import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import {
   getCustomerProtocolDeskVisual,
   protocolDeskIdForChatMode,
@@ -76,6 +77,7 @@ export type CustomerWorkflowStarterCard = {
   title: string;
   description: string;
   prompt: string;
+  agentId?: string;
   iconHint: CustomerWorkflowIconHint;
   panel?: "bittensor" | "hyperliquid" | "polymarket";
   recommendedSurface: CustomerWorkflowTemplate["launch"]["recommendedSurface"];
@@ -92,6 +94,7 @@ export type CustomerBetaDemoStarterCard = {
   persona: string;
   customers: string;
   prompt: string;
+  agentId?: string;
   iconHint: CustomerWorkflowIconHint;
   panel?: "bittensor" | "hyperliquid" | "polymarket";
   statusLabel: string;
@@ -216,13 +219,13 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
     : "";
   switch (template.routing.chatMode) {
     case "bittensor":
-      return `Use the Bittensor desk in this session. Keep all context Bittensor-specific: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, wallet reads, staking previews, watches, and receipts. ${prompt}. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
+      return `Bittensor task: ${prompt}. Scope: TAO, SS58 public addresses, coldkeys, hotkeys, subnets, validators, wallet reads, staking previews, watches, and receipts. ${BITTENSOR_SUFFIX} ${intentContext}`.trim();
     case "hyperliquid":
-      return `Use the Hyperliquid desk in this session. Keep all context Hyperliquid-specific: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${prompt}. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
+      return `Hyperliquid task: ${prompt}. Scope: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
-      return `Use the Polymarket desk in this session. Keep all context Polymarket-specific: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${prompt}. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
+      return `Polymarket task: ${prompt}. Scope: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "wellness":
-      return `Use the Longevity workflow desk in this session. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${prompt}. ${LONGEVITY_WORKFLOW_STAGES} ${WELLNESS_SUFFIX} ${intentContext}`.trim();
+      return `Longevity task: ${prompt}. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${LONGEVITY_WORKFLOW_STAGES} ${WELLNESS_SUFFIX} ${intentContext}`.trim();
     case "services":
       return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
     default:
@@ -460,7 +463,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
   {
     id: "blank_chat_workflow",
     name: "Blank chat",
-    summary: "Start a free-form chat session with the Matterhorn Work engine.",
+    summary: "Start a free-form session with the default Matterhorn Agent.",
     promise: "Open-ended assistance. You choose the goal.",
     category: "future",
     status: "blank",
@@ -475,7 +478,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     ui: {
       iconHint: "blank",
       accent: "neutral",
-      shortDescription: "Start a free-form chat with the Matterhorn Work engine.",
+      shortDescription: "Start a free-form chat with the default Matterhorn Agent.",
     },
     routing: { chatMode: "general", startsSession: true },
     safetyBoundaries: {
@@ -541,6 +544,7 @@ export function buildCustomerWorkflowStarterCards(
       title: template.launch.primaryCta || template.name,
       description: protocolDesk?.shortDescription ?? template.ui.shortDescription ?? template.summary,
       prompt: buildCustomerWorkflowPrompt(template),
+      agentId: matterhornDeskAgentIdForDesk(protocolDesk?.id ?? protocolDeskIdForChatMode(template.routing.chatMode)),
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
       recommendedSurface: template.launch.recommendedSurface,
@@ -576,6 +580,7 @@ export function buildCustomerBetaDemoStarterCards(
       persona: scenario.targetCustomerPersona,
       customers: scenario.assignedBetaCustomers.join(", "),
       prompt: buildCustomerWorkflowPromptFromText(template, scenario.entryPrompt),
+      agentId: matterhornDeskAgentIdForDesk(template.protocolDesk?.id ?? protocolDeskIdForChatMode(template.routing.chatMode)),
       iconHint: template.ui.iconHint,
       panel: template.routing.opensPanel,
       statusLabel: template.protocolDesk?.statusLabel ?? demoStatusLabel(scenario.status),

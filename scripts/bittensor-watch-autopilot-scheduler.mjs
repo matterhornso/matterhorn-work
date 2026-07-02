@@ -62,12 +62,18 @@ function watchLabel(watch = {}) {
 }
 function fallbackPrompt(evaluation = {}) {
   const watch = evaluation.watch || {};
-  if (watch.validatorHotkey) return `Use Bittensor chat mode. Analyze validator ${watch.validatorHotkey}${watch.netuid !== undefined ? ` on subnet ${watch.netuid}` : ""}. Explain what changed, risks, and safe next steps without taking action.`;
-  if (watch.ss58Address) return `Use Bittensor chat mode. Review public Bittensor wallet ${watch.ss58Address}. Explain stake exposure, alerts, and safe next steps without asking for private wallet material.`;
-  if (watch.netuid !== undefined) return `Use Bittensor chat mode. Review subnet ${watch.netuid}. Explain this watch alert, likely causes, source freshness, and safe next steps.`;
-  return "Use Bittensor chat mode. Review this Bittensor watch alert and explain safe next steps without taking financial action.";
+  if (watch.validatorHotkey) return `Bittensor Agent task: analyze validator ${watch.validatorHotkey}${watch.netuid !== undefined ? ` on subnet ${watch.netuid}` : ""}. Explain what changed, risks, and safe next steps without taking action.`;
+  if (watch.ss58Address) return `Bittensor Agent task: review public Bittensor wallet ${watch.ss58Address}. Explain stake exposure, alerts, and safe next steps without asking for private wallet material.`;
+  if (watch.netuid !== undefined) return `Bittensor Agent task: review subnet ${watch.netuid}. Explain this watch alert, likely causes, source freshness, and safe next steps.`;
+  return "Bittensor Agent task: review this Bittensor watch alert and explain safe next steps without taking financial action.";
 }
-function alertPrompt(evaluation = {}) { const action = asArray(evaluation.copilotActions)[0]; return action?.prompt || fallbackPrompt(evaluation); }
+function normalizeAgentTaskPrompt(prompt = "") {
+  const value = String(prompt || "").trim();
+  if (!value) return "";
+  if (/^Bittensor Agent task:/i.test(value)) return value;
+  return `Bittensor Agent task: ${value}`;
+}
+function alertPrompt(evaluation = {}) { const action = asArray(evaluation.copilotActions)[0]; return normalizeAgentTaskPrompt(action?.prompt) || fallbackPrompt(evaluation); }
 function buildNotificationSummary(alerts = []) {
   const intents = {};
   const promptSamples = [];
@@ -78,7 +84,7 @@ function buildNotificationSummary(alerts = []) {
       promptSamples.push({ intent, label: alert.label, prompt: alert.prompt });
     }
   }
-  return { totalNotifications: alerts.length, intents, promptSamples, safety: "read_only_chat_prompts" };
+  return { totalNotifications: alerts.length, intents, promptSamples, safety: "read_only_agent_tasks" };
 }
 function aggregateNotificationSummaries(runs = []) {
   const intents = {};
@@ -92,7 +98,7 @@ function aggregateNotificationSummaries(runs = []) {
       if (promptSamples.length < config.maxAlerts) promptSamples.push(sample);
     }
   }
-  return { totalNotifications, intents, promptSamples, safety: "read_only_chat_prompts" };
+  return { totalNotifications, intents, promptSamples, safety: "read_only_agent_tasks" };
 }
 
 async function requestCheck() {

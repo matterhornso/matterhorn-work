@@ -5,6 +5,7 @@ import {
   type ProtocolDeskManifest,
   type ProtocolDeskVisualStatus,
 } from "@matterhorn-work/types/matterhorn-workflows";
+import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 
 export type CustomerProtocolDeskId =
   | "bittensor"
@@ -63,6 +64,9 @@ export type CustomerProtocolDeskVisual = {
   railTitle: string;
   sessionTitle: string;
   sessionBoundary: string;
+  agentId?: string;
+  agentName: string;
+  agentDescription: string;
   brandAsset: ProtocolBrandAssetManifest | null;
 };
 
@@ -185,6 +189,7 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
   const manifest = PROTOCOL_DESK_MANIFEST_REGISTRY[id];
   if (!manifest || !CUSTOMER_PROTOCOL_DESK_IDS.includes(manifest.id as CustomerProtocolDeskId)) return null;
   const brandAsset = PROTOCOL_BRAND_ASSET_REGISTRY[manifest.logoAssetKey] ?? null;
+  const agent = getMatterhornDeskAgent(manifest.id);
   return {
     id: manifest.id as CustomerProtocolDeskId,
     displayName: manifest.displayName,
@@ -211,6 +216,9 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     railTitle: railTitle(manifest),
     sessionTitle: sessionTitle(manifest),
     sessionBoundary: sessionBoundary(manifest),
+    agentId: agent?.agentId,
+    agentName: agent?.displayName ?? `${manifest.displayName} Agent`,
+    agentDescription: agent?.description ?? manifest.shortDescription,
     brandAsset,
   };
 }

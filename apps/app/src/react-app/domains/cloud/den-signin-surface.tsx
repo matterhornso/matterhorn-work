@@ -4,10 +4,7 @@ import {
   Cloud,
   ChevronDown,
   ChevronUp,
-  Users,
-  Share2,
 } from "lucide-react";
-import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 
 import { t } from "../../../i18n";
 import { DEFAULT_DEN_BASE_URL } from "../../../app/lib/den";
@@ -34,112 +31,94 @@ export type DenSignInSurfaceProps = {
   onApplyBaseUrl: () => void;
   onOpenControlPlane: () => void;
   onOpenBrowserAuth: (mode: "sign-in" | "sign-up") => void;
+  onContinueWithoutCloud?: () => void;
   onToggleManualAuth: () => void;
   onManualAuthInput: (value: string) => void;
   onSubmitManualAuth: () => void;
 };
 
-const settingsPanelClass = "ow-soft-card rounded-[28px] p-5 md:p-6";
-const settingsPanelSoftClass = "ow-soft-card-quiet rounded-2xl p-4";
+const settingsPanelClass = "ow-soft-card rounded-xl p-5 md:p-6";
+const settingsPanelSoftClass = "ow-soft-card-quiet rounded-xl p-4";
 const headerBadgeClass =
-  "inline-flex min-h-8 items-center gap-2 rounded-xl border border-dls-border bg-dls-hover px-3 text-[13px] font-medium text-dls-text shadow-sm";
+  "inline-flex min-h-8 items-center gap-2 rounded-lg border border-dls-border bg-dls-hover px-3 text-[13px] font-medium text-dls-text";
 const softNoticeClass =
-  "rounded-xl border border-dls-border bg-dls-hover px-3 py-2 text-xs text-dls-secondary";
+  "rounded-lg border border-dls-border bg-dls-hover px-3 py-2 text-xs leading-5 text-dls-text";
 const errorBannerClass =
-  "rounded-xl border border-red-7/30 bg-red-1/40 px-3 py-2 text-xs text-red-11";
+  "rounded-lg border border-red-7/30 bg-red-1/40 px-3 py-2 text-xs leading-5 text-red-11";
+const primaryActionClass =
+  "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-dls-accent px-4 text-sm font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60";
+const secondaryActionClass =
+  "inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-dls-border bg-dls-surface/70 px-4 text-sm font-medium text-dls-text transition-colors hover:bg-dls-surface disabled:cursor-not-allowed disabled:opacity-60";
+const tertiaryActionClass =
+  "inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-dls-border bg-transparent px-4 text-sm font-medium text-dls-text transition-colors hover:bg-dls-surface disabled:cursor-not-allowed disabled:opacity-60";
 
-/* ------------------------------------------------------------------ */
-/*  Brand icon via Simple Icons CDN                                    */
-/* ------------------------------------------------------------------ */
-
-function BrandIcon({ slug, size = 18 }: { slug: string; size?: number }) {
-  return (
-    <img
-      src={`https://cdn.simpleicons.org/${slug}`}
-      alt=""
-      width={size}
-      height={size}
-      loading="lazy"
-      style={{ display: "block" }}
-    />
-  );
+function isUnavailableDefaultCloudUrl(value: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  try {
+    const url = new URL(value);
+    return url.hostname.toLowerCase() === "app.matterhorn.work";
+  } catch {
+    return false;
+  }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Right-side showcase: capabilities + team features                  */
-/* ------------------------------------------------------------------ */
-
-const capabilities = [
-  { slug: "googlesheets", title: "Edit spreadsheets", desc: "Create, clean, and transform CSV and Excel files." },
-  { slug: "semanticweb", title: "Control your browser", desc: "Automate the built-in browser for repetitive web tasks." },
-  { slug: "apple", title: "Organize files", desc: "Read, write, and manage files and folders." },
-  { slug: "zapier", title: "Automate tasks", desc: "Build reusable workflows with skills and commands." },
-  { slug: "medium", title: "Generate content", desc: "Draft documents, emails, and reports." },
-  { slug: "stripe", title: "Connect to APIs", desc: "Plug into external services and tools via MCP." },
+const matterhornPrinciples = [
+  "AI should be an operator you can understand, not a black box you must trust blindly.",
+  "People should keep control of memory, approvals, wallets, files, and final decisions.",
+  "Useful work should become durable project context, not disappear into chat history.",
 ];
 
 function ShowcasePanel() {
   return (
     <div className="flex flex-col gap-5">
-      {/* Hero */}
-      <div>
-        <h2 className="text-[20px] font-semibold tracking-[-0.01em] text-dls-text">
-          Your computer,
-          <br />
-          but it works for you.
-        </h2>
-      </div>
-
-      {/* Capabilities */}
-      <div className="grid grid-cols-3 gap-2">
-        {capabilities.map((cap) => (
-          <div
-            key={cap.title}
-            className="flex flex-col gap-1.5 rounded-xl border border-dls-border bg-dls-surface p-3"
-          >
-            <BrandIcon slug={cap.slug} size={18} />
-            <div className="text-[12px] font-medium leading-tight text-dls-text">
-              {cap.title}
-            </div>
-            <div className="text-[11px] leading-snug text-dls-secondary">
-              {cap.desc}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Team features */}
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3">
-          <Share2 size={16} className="mt-0.5 shrink-0 text-dls-secondary" strokeWidth={1.5} />
-          <div>
-            <div className="text-[12px] font-medium text-dls-text">
-              Team skill hubs
-            </div>
-            <div className="mt-0.5 text-[11px] leading-snug text-dls-secondary">
-              Save approved skills for your organization.
-            </div>
-          </div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-[22px] font-semibold tracking-[-0.01em] text-dls-text">
+            Matterhorn Work
+          </h2>
         </div>
-        <div className="flex items-start gap-2.5 rounded-xl border border-dls-border bg-dls-surface p-3">
-          <Users size={16} className="mt-0.5 shrink-0 text-dls-secondary" strokeWidth={1.5} />
-          <div>
-            <div className="text-[12px] font-medium text-dls-text">
-              Provision your team
+        <img
+          className="size-12 shrink-0 rounded-xl border border-dls-border bg-[var(--matterhorn-blue)] p-1"
+          src="/matterhorn-logo-square.svg"
+          alt="Matterhorn Work"
+        />
+      </div>
+
+      <div className="rounded-xl border border-dls-border bg-dls-background p-5">
+        <div className="text-[18px] font-semibold leading-7 text-dls-text">
+          Matterhorn is building the workspace where people can trust AI to help
+          with serious work.
+        </div>
+        <p className="mt-4 text-[13px] leading-6 text-dls-secondary">
+          The vision is simple: AI should not only answer questions. It should
+          help people understand complex systems, prepare safe next steps, keep
+          evidence visible, and carry work all the way into saved outputs.
+        </p>
+        <p className="mt-3 text-[13px] leading-6 text-dls-secondary">
+          Matterhorn turns chat into an operating layer for projects, protocols,
+          workflows, and real-world decisions while keeping the human clearly in
+          control.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-dls-border bg-dls-background p-5">
+        <div className="text-[13px] font-semibold text-dls-text">
+          What that means for people
+        </div>
+        <div className="mt-3 space-y-3">
+          {matterhornPrinciples.map((principle) => (
+            <div
+              key={principle}
+              className="text-[13px] leading-6 text-dls-secondary"
+            >
+              {principle}
             </div>
-            <div className="mt-0.5 text-[11px] leading-snug text-dls-secondary">
-              Manage workspaces, models, and permissions.
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/*  Main surface                                                      */
-/* ------------------------------------------------------------------ */
 
 /**
  * React port of the Solid `DenSignInSurface`
@@ -152,8 +131,12 @@ function ShowcasePanel() {
  */
 export function DenSignInSurface(props: DenSignInSurfaceProps) {
   const variant: DenSignInSurfaceVariant = props.variant ?? "panel";
+  const cloudUrlMayNeedSetup = isUnavailableDefaultCloudUrl(props.baseUrl);
+  const browserAuthDisabled =
+    props.authBusy || props.sessionBusy || cloudUrlMayNeedSetup;
+  const cloudControlPlaneHint =
+    "Use this for local testing or a self-hosted Matterhorn Cloud control plane.";
 
-  /* -- Panel content (reused by both variants) -- */
   const panelContent = (
     <div className={`${settingsPanelClass} space-y-4`}>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -179,10 +162,10 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
               props.onBaseUrlDraftInput(event.currentTarget.value)
             }
             placeholder={DEFAULT_DEN_BASE_URL}
-            hint={t("den.cloud_control_plane_url_hint")}
+            hint={cloudControlPlaneHint}
             disabled={props.authBusy || props.baseUrlBusy || props.sessionBusy}
-          />
-          <div className="flex flex-wrap items-center gap-2">
+        />
+        <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -225,14 +208,37 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button onClick={() => props.onOpenBrowserAuth("sign-in")}>
+        <Button
+          onClick={() => props.onOpenBrowserAuth("sign-in")}
+          disabled={browserAuthDisabled}
+          title={
+            cloudUrlMayNeedSetup
+              ? "Enter a live Matterhorn Cloud URL before signing in."
+              : undefined
+          }
+        >
           {t("den.signin_button")}
           <ArrowUpRight size={13} />
         </Button>
+        {props.onContinueWithoutCloud ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={props.onContinueWithoutCloud}
+          >
+            Continue without Cloud
+          </Button>
+        ) : null}
         <Button
           variant="outline"
           size="sm"
           onClick={() => props.onOpenBrowserAuth("sign-up")}
+          disabled={browserAuthDisabled}
+          title={
+            cloudUrlMayNeedSetup
+              ? "Enter a live Matterhorn Cloud URL before creating an account."
+              : undefined
+          }
         >
           {t("den.create_account")}
           <ArrowUpRight size={13} />
@@ -286,45 +292,77 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
     </div>
   );
 
-  /* ---------------------------------------------------------------- */
-  /*  Fullscreen: two-column split layout                             */
-  /* ---------------------------------------------------------------- */
-
   if (variant === "fullscreen") {
     return (
-      <div className="relative min-h-screen bg-dls-background text-dls-text">
-        {/* Subtle background texture */}
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-          <div className="absolute -left-[20%] -top-[30%] h-[70%] w-[60%] rounded-full bg-[radial-gradient(ellipse,rgba(14,51,217,0.06),transparent_70%)] blur-3xl" />
-          <div className="absolute -bottom-[20%] -right-[10%] h-[50%] w-[50%] rounded-full bg-[radial-gradient(ellipse,rgba(255,126,46,0.05),transparent_70%)] blur-3xl" />
-          <div className="absolute left-[30%] top-[60%] h-[40%] w-[40%] rounded-full bg-[radial-gradient(ellipse,rgba(255,227,64,0.04),transparent_70%)] blur-3xl" />
-        </div>
-
-        {/* Titlebar drag region */}
+      <div className="relative min-h-screen overflow-y-auto bg-dls-background text-dls-text">
         <div className="absolute inset-x-0 top-0 z-20 h-10 mac:titlebar-drag" />
 
-        <div className="relative z-10 flex min-h-screen">
-          {/* ---- Left: sign-in (transparent on page bg) ---- */}
-          <div className="flex w-full flex-col items-center justify-center px-8 py-16 lg:w-[45%] lg:px-12">
-            <div className="w-full max-w-md space-y-8">
+        <div className="relative z-10 grid min-h-screen gap-10 px-6 py-16 lg:grid-cols-[minmax(360px,480px)_minmax(0,640px)] lg:items-center lg:justify-center lg:px-12">
+          <div className="w-full">
+            <div className="w-full max-w-md space-y-7">
               <div className="space-y-2">
                 <h1 className="text-2xl font-semibold tracking-tight text-dls-text">
                   Welcome to Matterhorn Work
                 </h1>
                 <p className="text-sm text-dls-secondary">
-                  Sign in to get started with your workspace.
+                  Sign in with Matterhorn Cloud, or continue locally for desktop
+                  testing.
                 </p>
               </div>
 
-              <button
-                type="button"
-                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-dls-accent text-sm font-semibold text-[var(--dls-accent-fg)] transition-all hover:bg-[var(--dls-accent-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={() => props.onOpenBrowserAuth("sign-in")}
-                disabled={props.authBusy || props.sessionBusy}
-              >
-                Sign in with Matterhorn Cloud
-                <ArrowUpRight size={15} />
-              </button>
+              {cloudUrlMayNeedSetup ? (
+                <div className={softNoticeClass}>
+                  Matterhorn Cloud is not live in this local build yet.
+                  Continue locally, or enter a Matterhorn Cloud control-plane URL
+                  if you have one.
+                </div>
+              ) : null}
+
+              <div className="grid gap-2">
+                {cloudUrlMayNeedSetup ? (
+                  <>
+                    {props.onContinueWithoutCloud ? (
+                      <button
+                        type="button"
+                        className={primaryActionClass}
+                        onClick={props.onContinueWithoutCloud}
+                      >
+                        Continue locally without Cloud
+                      </button>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={primaryActionClass}
+                      onClick={() => props.onOpenBrowserAuth("sign-in")}
+                      disabled={browserAuthDisabled}
+                    >
+                      Sign in with Matterhorn Cloud
+                      <ArrowUpRight size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className={secondaryActionClass}
+                      onClick={() => props.onOpenBrowserAuth("sign-up")}
+                      disabled={browserAuthDisabled}
+                    >
+                      Create account
+                      <ArrowUpRight size={14} />
+                    </button>
+                    {props.onContinueWithoutCloud ? (
+                      <button
+                        type="button"
+                        className={tertiaryActionClass}
+                        onClick={props.onContinueWithoutCloud}
+                      >
+                        Continue locally without Cloud
+                      </button>
+                    ) : null}
+                  </>
+                )}
+              </div>
 
               {props.statusMessage && !props.authError ? (
                 <div className={softNoticeClass}>{props.statusMessage}</div>
@@ -334,11 +372,10 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                 <div className={errorBannerClass}>{props.authError}</div>
               ) : null}
 
-              {/* Paste code disclosure */}
               <div className="space-y-3">
                 <button
                   type="button"
-                   className="flex w-full items-center gap-2 rounded-xl border border-dls-border bg-dls-surface/60 px-4 py-2.5 text-left text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-surface"
+                  className="flex w-full items-center gap-2 rounded-lg border border-dls-border bg-dls-surface/60 px-4 py-2.5 text-left text-xs font-medium text-dls-secondary transition-colors hover:bg-dls-surface"
                   onClick={props.onToggleManualAuth}
                   disabled={props.authBusy || props.sessionBusy}
                 >
@@ -353,7 +390,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                 </button>
 
                 {props.manualAuthOpen ? (
-                  <div className="space-y-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+                  <div className="space-y-3 rounded-lg border border-dls-border bg-dls-surface p-4">
                     <TextInput
                       label={t("den.signin_link_label")}
                       value={props.manualAuthInput}
@@ -366,7 +403,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                     />
                     <button
                       type="button"
-                      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-full bg-dls-accent px-4 text-xs font-semibold text-[var(--dls-accent-fg)] transition-all hover:bg-[var(--dls-accent-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-dls-accent px-4 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={props.onSubmitManualAuth}
                       disabled={
                         props.authBusy ||
@@ -382,9 +419,8 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                 ) : null}
               </div>
 
-              {/* Developer mode */}
               {props.developerMode ? (
-                <div className="space-y-3 rounded-xl border border-dls-border bg-dls-surface p-4">
+                <div className="space-y-3 rounded-lg border border-dls-border bg-dls-surface p-4">
                   <TextInput
                     label={t("den.cloud_control_plane_url_label")}
                     value={props.baseUrlDraft}
@@ -392,7 +428,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                       props.onBaseUrlDraftInput(event.currentTarget.value)
                     }
                     placeholder={DEFAULT_DEN_BASE_URL}
-                    hint={t("den.cloud_control_plane_url_hint")}
+                    hint={cloudControlPlaneHint}
                     disabled={
                       props.authBusy || props.baseUrlBusy || props.sessionBusy
                     }
@@ -403,7 +439,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-3.5 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover hover:border-dls-border disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-dls-border bg-dls-surface px-3.5 text-xs font-medium text-dls-text transition-colors hover:border-dls-border hover:bg-dls-hover disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={props.onResetBaseUrl}
                       disabled={
                         props.authBusy || props.baseUrlBusy || props.sessionBusy
@@ -413,7 +449,7 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
                     </button>
                     <button
                       type="button"
-                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-dls-accent px-3.5 text-xs font-semibold text-[var(--dls-accent-fg)] transition-all hover:bg-[var(--dls-accent-hover)] disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-dls-accent px-3.5 text-xs font-semibold text-[var(--dls-accent-fg)] transition-colors hover:bg-[var(--dls-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={props.onApplyBaseUrl}
                       disabled={
                         props.authBusy || props.baseUrlBusy || props.sessionBusy
@@ -427,31 +463,22 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
             </div>
           </div>
 
-          {/* ---- Right: shader outer card > white inner card ---- */}
-          <div className="hidden lg:flex lg:w-[55%] lg:items-center lg:justify-center lg:p-6">
-            {/* Outer: shader card */}
-            <div className="relative w-full max-w-xl overflow-hidden rounded-3xl">
-              {/* Shader background */}
-              <div className="absolute inset-0 z-0">
-                <PaperGrainGradient
-                  speed={0}
-                  scale={1}
-                  rotation={0}
-                  offsetX={0}
-                  offsetY={0}
-                  softness={0.5}
-                  intensity={0.5}
-                  noise={0.25}
-                  shape="corners"
-                  frame={37706.748}
-                  colors={["#0E33D9", "#FF7E2E", "#FFE340", "#000000"]}
-                  colorBack="#00000000"
-                  style={{ backgroundColor: "#FFFFFF", width: "100%", height: "100%" }}
+          <div className="hidden lg:flex lg:items-center lg:justify-center">
+            <div className="relative w-full max-w-xl overflow-hidden rounded-xl border border-[rgba(var(--matterhorn-blue-rgb),0.45)] bg-[var(--matterhorn-blue)] p-2">
+              <div className="pointer-events-none absolute inset-0 opacity-[0.08]">
+                <img
+                  src="/matterhorn-mark.svg"
+                  alt=""
+                  className="absolute -right-8 -top-10 size-56 rotate-12"
+                />
+                <img
+                  src="/matterhorn-mark.svg"
+                  alt=""
+                  className="absolute -bottom-16 left-6 size-64 -rotate-12"
                 />
               </div>
 
-              {/* Inner: card with capabilities */}
-              <div className="relative z-10 m-3 rounded-2xl bg-dls-surface p-7">
+              <div className="relative z-10 rounded-lg border border-dls-border bg-dls-surface p-6">
                 <ShowcasePanel />
               </div>
             </div>
@@ -460,10 +487,6 @@ export function DenSignInSurface(props: DenSignInSurfaceProps) {
       </div>
     );
   }
-
-  /* ---------------------------------------------------------------- */
-  /*  Panel variant (settings embed): unchanged                       */
-  /* ---------------------------------------------------------------- */
 
   return panelContent;
 }

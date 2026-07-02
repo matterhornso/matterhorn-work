@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { t } from "../../../i18n";
 import {
@@ -67,6 +68,16 @@ function parseManualAuthInput(value: string) {
   return trimmed.length >= 12 ? { grant: trimmed } : null;
 }
 
+function isUnavailableDefaultCloudUrl(value: string): boolean {
+  if (!import.meta.env.DEV) return false;
+  try {
+    const url = new URL(resolveDenBaseUrls(value).baseUrl);
+    return url.hostname.toLowerCase() === "app.matterhorn.work";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * React port of the Solid `ForcedSigninPage`
  * (`apps/app/src/app/cloud/forced-signin-page.tsx` on dev).
@@ -78,6 +89,7 @@ function parseManualAuthInput(value: string) {
  */
 export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
   const platform = usePlatform();
+  const navigate = useNavigate();
   const denAuth = useDenAuth();
   const desktopConfig = useDesktopConfig();
   const { markRouteReady } = useBootState();
@@ -96,11 +108,25 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const openControlPlane = useCallback(() => {
+    if (isUnavailableDefaultCloudUrl(baseUrl)) {
+      setAuthError(
+        "Matterhorn Cloud is not live in this local build yet. Enter a live Matterhorn Cloud URL below, then save it before opening Cloud.",
+      );
+      setStatusMessage(null);
+      return;
+    }
     platform.openLink(resolveDenBaseUrls(baseUrl).baseUrl);
   }, [baseUrl, platform]);
 
   const openBrowserAuth = useCallback(
     (mode: "sign-in" | "sign-up") => {
+      if (isUnavailableDefaultCloudUrl(baseUrl)) {
+        setAuthError(
+          "app.matterhorn.work is not live in this local build. Enter a live Matterhorn Cloud URL below, then save it before signing in.",
+        );
+        setStatusMessage(null);
+        return;
+      }
       platform.openLink(buildDenAuthUrl(baseUrl, mode));
       setStatusMessage(
         mode === "sign-up"
@@ -170,8 +196,8 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
     }
   }, [authBusy, baseUrl, developerMode, manualAuthInput]);
 
-  const applyBaseUrl = useCallback(async () => {
-    const normalized = normalizeDenBaseUrl(baseUrlDraft);
+  const applyBaseUrlValue = useCallback(async (value: string) => {
+    const normalized = normalizeDenBaseUrl(value);
     if (!normalized) {
       setBaseUrlError(t("den.error_base_url"));
       return;
@@ -214,7 +240,11 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
     } finally {
       setBaseUrlBusy(false);
     }
-  }, [baseUrlDraft, denAuth, desktopConfig, developerMode]);
+  }, [denAuth, desktopConfig, developerMode]);
+
+  const applyBaseUrl = useCallback(async () => {
+    await applyBaseUrlValue(baseUrlDraft);
+  }, [applyBaseUrlValue, baseUrlDraft]);
 
   // Listen for Den session events broadcast from the Tauri deep-link handler,
   // a successful browser auth, or an org switch, and reflect the result in
@@ -281,6 +311,11 @@ export function ForcedSigninPage({ developerMode }: ForcedSigninPageProps) {
       }}
       onOpenControlPlane={openControlPlane}
       onOpenBrowserAuth={openBrowserAuth}
+      onContinueWithoutCloud={
+        readDenBootstrapConfig().requireSignin
+          ? undefined
+          : () => navigate("/session", { replace: true })
+      }
       onToggleManualAuth={() => {
         setManualAuthOpen((value) => !value);
         setAuthError(null);

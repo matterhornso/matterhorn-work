@@ -6,6 +6,7 @@ import { t } from "../../i18n";
 import {
   pickDirectory,
   resolveWorkspaceListSelectedId,
+  workspaceBootstrap,
   workspaceCreate,
   workspaceCreateRemote,
   workspaceSetRuntimeActive,
@@ -20,7 +21,7 @@ import { WelcomePage } from "../domains/onboarding/welcome-page";
 import { CreateWorkspaceModal } from "../domains/workspace/create-workspace-modal";
 import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { buildMatterhornWorkspaceBaseUrl, createMatterhornServerClient } from "../../app/lib/matterhorn-server";
-import { writeActiveWorkspaceId, writeLastSessionFor } from "./session-memory";
+import { readActiveWorkspaceId, writeActiveWorkspaceId, writeLastSessionFor } from "./session-memory";
 import { workspaceSessionRoute } from "./workspace-routes";
 
 function folderNameFromPath(path: string) {
@@ -95,12 +96,57 @@ export function WelcomeRoute() {
   const local = useLocal();
   const [state, dispatch] = useReducer(welcomeReducer, initialWelcomeState);
 
-  // If user already completed onboarding, redirect away immediately.
+  const redirectToWorkspaceHome = useCallback((workspaceId: string) => {
+    const id = workspaceId.trim();
+    if (!id) return;
+    writeActiveWorkspaceId(id);
+    navigate(workspaceSessionRoute(id), {
+      replace: true,
+      state: { matterhornHomeIntent: true },
+    });
+  }, [navigate]);
+
+  // /welcome is first-run only. Browser Back can revisit it after a project
+  // exists, so immediately send the user to the active project Home instead.
   useEffect(() => {
     if (local.prefs.hasCompletedOnboarding) {
-      navigate("/session", { replace: true });
+      const activeWorkspaceId = readActiveWorkspaceId();
+      if (activeWorkspaceId) {
+        redirectToWorkspaceHome(activeWorkspaceId);
+        return;
+      }
+      navigate("/session", {
+        replace: true,
+        state: { matterhornHomeIntent: true },
+      });
+      return;
     }
-  }, [local.prefs.hasCompletedOnboarding, navigate]);
+
+    let cancelled = false;
+    void (async () => {
+      const activeWorkspaceId = readActiveWorkspaceId();
+      if (activeWorkspaceId) {
+        local.setPrefs((prev) => ({ ...prev, hasCompletedOnboarding: true }));
+        redirectToWorkspaceHome(activeWorkspaceId);
+        return;
+      }
+
+      try {
+        const list = await workspaceBootstrap() as WorkspaceList;
+        if (cancelled) return;
+        const workspaceId = resolveWorkspaceListSelectedId(list) || list.workspaces[0]?.id || "";
+        if (!workspaceId) return;
+        local.setPrefs((prev) => ({ ...prev, hasCompletedOnboarding: true }));
+        redirectToWorkspaceHome(workspaceId);
+      } catch {
+        // Stay on welcome when no existing workspace can be found.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [local, local.prefs.hasCompletedOnboarding, navigate, redirectToWorkspaceHome]);
 
   const markOnboardingComplete = useCallback(() => {
     local.setPrefs((prev) => ({ ...prev, hasCompletedOnboarding: true }));

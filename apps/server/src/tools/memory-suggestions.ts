@@ -93,7 +93,7 @@ function inferDesk(input: MatterhornMemorySuggestionPlanInput): MemoryProducerDe
   if (raw.includes("polymarket") || raw.includes("prediction market") || raw.includes("outcome") || raw.includes("odds")) {
     return "polymarket";
   }
-  if (raw.includes("wellness") || raw.includes("trainer") || raw.includes("dietician") || raw.includes("yoga")) {
+  if (raw.includes("wellness") || raw.includes("longevity") || raw.includes("trainer") || raw.includes("dietician") || raw.includes("yoga")) {
     return "wellness";
   }
   return null;

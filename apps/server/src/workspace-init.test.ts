@@ -20,13 +20,30 @@ describe("ensureWorkspaceFiles", () => {
     await withWorkspace(async (root) => {
       const result = await ensureWorkspaceFiles(root, "starter");
       const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
+      const bittensorAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-bittensor.md"), "utf8");
+      const hyperliquidAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-hyperliquid.md"), "utf8");
+      const polymarketAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-polymarket.md"), "utf8");
+      const longevityAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-longevity.md"), "utf8");
       const config = await readFile(join(root, "opencode.jsonc"), "utf8");
+      const outputsDir = await stat(join(root, "outputs"));
       expect(agent).toContain("You are Matterhorn Work.");
       expect(agent).toContain("Matterhorn Work Artifacts");
       expect(agent).toContain("Do not lead with internal runtime files");
       expect(agent).toContain("outputs/<desk>/<session-slug>");
       expect(agent).toContain("outputs/longevity/client-program/program.md");
       expect(agent).toContain("outputs/");
+      expect(bittensorAgent).toContain("Bittensor Agent");
+      expect(bittensorAgent).toContain("matterhorn_desk_agent: v1");
+      expect(bittensorAgent).toContain("matterhorn_desk_id: bittensor");
+      expect(bittensorAgent).toContain("agent_id: matterhorn-bittensor");
+      expect(bittensorAgent).toContain("public SS58/coldkey/hotkey context only");
+      expect(hyperliquidAgent).toContain("Hyperliquid Agent");
+      expect(hyperliquidAgent).toContain("Can submit: No");
+      expect(polymarketAgent).toContain("Polymarket Agent");
+      expect(polymarketAgent).toContain("compliance-gated handoff");
+      expect(longevityAgent).toContain("Longevity Agent");
+      expect(longevityAgent).toContain("7-stage workflow");
+      expect(outputsDir.isDirectory()).toBe(true);
       expect(config).toContain('"default_agent": "matterhorn"');
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
 
@@ -55,8 +72,10 @@ describe("ensureWorkspaceFiles", () => {
       await writeFile(join(root, ".opencode", "agents", "matterhorn.md"), "---\ndescription: Old\n---\n\nOld instructions\n", "utf8");
       const result = await ensureWorkspaceFiles(root, "starter");
       const agent = await readFile(join(root, ".opencode", "agents", "matterhorn.md"), "utf8");
+      const deskAgent = await readFile(join(root, ".opencode", "agents", "matterhorn-bittensor.md"), "utf8");
       expect(agent).toContain("Old instructions");
       expect(agent).toContain("Matterhorn Work Artifacts");
+      expect(deskAgent).toContain("Bittensor Agent");
       expect(result.reloadReasons.sort()).toEqual(["agents", "config"]);
     });
   });

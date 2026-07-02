@@ -183,7 +183,7 @@ for (const required of [
 const plan = readFileSync("docs/customer-ready-crypto-build-plan.md", "utf8");
 for (const phase of [
   "Phase 1: Customer Readiness Smoke Pass",
-  "Phase 2: Unified Market Chat Router",
+  "Phase 2: Unified Market Agent Router",
   "Phase 3: Shared Cross-Venue Cards",
   "matterhorn.crypto.shared-card.v1",
   "Phase 4: Bittensor Customer Polish",
