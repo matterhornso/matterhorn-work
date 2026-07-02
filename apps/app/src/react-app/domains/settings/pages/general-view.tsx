@@ -6,6 +6,7 @@ import {
   Cog,
   FolderLock,
   LifeBuoy,
+  ListChecks,
   MessageCircle,
   Paintbrush,
   Puzzle,
@@ -18,11 +19,16 @@ import {
 
 import { t } from "../../../../i18n";
 import type { SettingsTab } from "../../../../app/types";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { Button } from "@/components/ui/button";
+import { getSessionActivityStatusLabel, type SessionActivityStatus } from "../../session/status/session-activity-store";
+import { useWorkflowTaskLog, type TaskLogSource } from "./use-workflow-task-log";
 
 export type GeneralSettingsViewProps = {
   onNavigateTab: (tab: SettingsTab) => void;
   developerMode: boolean;
+  runtimeWorkspaceId?: string;
+  matterhornServerClient?: MatterhornServerClient | null;
   onSendFeedback: () => void;
   onJoinDiscord: () => void;
   onReportIssue: () => void;
@@ -95,6 +101,98 @@ function SettingsCard(props: {
   );
 }
 
+function formatTaskDesk(deskId?: string) {
+  if (!deskId) return "Matterhorn";
+  if (deskId === "wellness") return "Longevity";
+  if (deskId === "mcps") return "MCPs";
+  return deskId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatTaskTime(updatedAt: number) {
+  if (!updatedAt) return "Just now";
+  const seconds = Math.max(0, Math.round((Date.now() - updatedAt) / 1000));
+  if (seconds < 60) return "Just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatTaskSource(source: TaskLogSource) {
+  return source === "backend" ? "Workflow" : "Session";
+}
+
+function taskTitle(log: { visibleUserIntent?: string; sessionId: string }) {
+  const intent = log.visibleUserIntent?.trim();
+  if (intent) return intent;
+  return `Task ${log.sessionId.slice(0, 8)}`;
+}
+
+function TaskLogsSection(props: {
+  workspaceId?: string;
+  matterhornServerClient?: MatterhornServerClient | null;
+}) {
+  const { logs, isLoading, error } = useWorkflowTaskLog(
+    props.workspaceId,
+    props.matterhornServerClient ?? undefined,
+  );
+
+  return (
+    <section className="rounded-xl bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[rgba(var(--dls-accent-rgb),0.12)] text-dls-text">
+            <ListChecks size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-dls-text">Task Logs</div>
+            <p className="mt-0.5 text-[12px] leading-5 text-dls-text">Recent desk runs, outputs, and wait states.</p>
+          </div>
+        </div>
+        <span className="shrink-0 rounded-md border border-dls-border/55 px-2 py-0.5 text-[11px] font-medium text-dls-secondary">
+          {logs.length}
+        </span>
+      </div>
+
+      <div className="mt-3 divide-y divide-dls-border/45">
+        {isLoading ? (
+          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Loading task logs...</div>
+        ) : error ? (
+          <div className="py-3 text-[12px] leading-5 text-dls-secondary">{error}</div>
+        ) : logs.length ? (
+          logs.slice(0, 5).map((log) => (
+            <div key={log.id} className="grid gap-1 py-3 first:pt-0 last:pb-0">
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="truncate text-[13px] font-medium text-dls-text">{taskTitle(log)}</span>
+                <span className="shrink-0 text-[11px] text-dls-secondary">{formatTaskTime(log.updatedAt)}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-4 text-dls-secondary">
+                <span>{formatTaskDesk(log.deskId)}</span>
+                <span>{getSessionActivityStatusLabel(log.status as SessionActivityStatus)}</span>
+                {log.waitingCount ? <span>{log.waitingCount} waiting</span> : null}
+                <span>{formatTaskSource(log.source)}</span>
+              </div>
+              {log.outputBasePath ? (
+                <div className="truncate rounded-md bg-dls-surface px-2 py-1 font-mono text-[10px] leading-4 text-dls-secondary">
+                  {log.outputBasePath}
+                </div>
+              ) : null}
+            </div>
+          ))
+        ) : (
+          <div className="py-3 text-[12px] leading-5 text-dls-secondary">Desk tasks will appear here when they start, wait, finish, or save outputs.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function GeneralSettingsView(props: GeneralSettingsViewProps) {
   return (
     <div className="w-full max-w-4xl space-y-6">
@@ -135,6 +233,11 @@ export function GeneralSettingsView(props: GeneralSettingsViewProps) {
             ))}
         </div>
       </section>
+
+      <TaskLogsSection
+        workspaceId={props.runtimeWorkspaceId}
+        matterhornServerClient={props.matterhornServerClient}
+      />
 
       {/* Feedback */}
       <section className="rounded-xl bg-dls-surface/70 p-4 shadow-[0_8px_28px_-24px_rgba(0,0,0,0.55)] ring-1 ring-dls-border/35">

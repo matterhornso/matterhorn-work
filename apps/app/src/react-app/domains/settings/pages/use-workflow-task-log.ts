@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MatterhornWorkflowRunListItem } from "@matterhorn-work/types/workflow-runs";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { useSessionActivityStore, type SessionActivityStatus } from "../../session/status/session-activity-store";
 
 export type TaskLogSource = "backend" | "local";
@@ -35,7 +36,10 @@ function backendStatusToLabel(status: string): SessionActivityStatus | string {
   }
 }
 
-export function useWorkflowTaskLog(workspaceId?: string): {
+export function useWorkflowTaskLog(
+  workspaceId?: string,
+  matterhornServerClient?: Pick<MatterhornServerClient, "listWorkflowRuns">,
+): {
   logs: TaskLogEntry[];
   isLoading: boolean;
   error: string | null;
@@ -47,17 +51,21 @@ export function useWorkflowTaskLog(workspaceId?: string): {
 
   useEffect(() => {
     let cancelled = false;
-    setIsLoading(true);
     setError(null);
 
-    const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}&limit=20` : "?limit=20";
-    fetch(`/api/workflows/runs${query}`)
-      .then(async (response) => {
+    if (!matterhornServerClient) {
+      setBackendRuns([]);
+      setIsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsLoading(true);
+    matterhornServerClient
+      .listWorkflowRuns({ workspaceId, limit: 20 })
+      .then((json) => {
         if (cancelled) return;
-        if (!response.ok) {
-          throw new Error(`Could not load task logs (${response.status})`);
-        }
-        const json = (await response.json()) as { items?: MatterhornWorkflowRunListItem[] };
         setBackendRuns(json.items ?? []);
       })
       .catch((nextError) => {
@@ -71,7 +79,7 @@ export function useWorkflowTaskLog(workspaceId?: string): {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [matterhornServerClient, workspaceId]);
 
   const localLogs = useMemo(() => {
     return Object.entries(recordsByWorkspaceId)

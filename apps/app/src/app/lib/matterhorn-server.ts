@@ -9,6 +9,7 @@ import type {
 } from "@matterhorn-work/types";
 import type {
   MatterhornWorkflowRun,
+  MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
 } from "@matterhorn-work/types/workflow-runs";
 import { desktopFetch } from "./desktop";
@@ -1408,6 +1409,26 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${workspaceId}/task-runs?limit=${limit}`,
         { token, hostToken },
       ),
+    listWorkflowRuns: (options?: {
+      workspaceId?: string;
+      sessionId?: string;
+      deskId?: string;
+      status?: string;
+      limit?: number;
+    }) => {
+      const query = new URLSearchParams();
+      if (options?.workspaceId) query.set("workspaceId", options.workspaceId);
+      if (options?.sessionId) query.set("sessionId", options.sessionId);
+      if (options?.deskId) query.set("deskId", options.deskId);
+      if (options?.status) query.set("status", options.status);
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<{ success: boolean; items: MatterhornWorkflowRunListItem[] }>(
+        baseUrl,
+        `/api/workflows/runs${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
     stageWorkflowRun: (payload: MatterhornWorkflowRunStageInput) =>
       requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(baseUrl, "/api/workflows/runs/stage", {
         token,

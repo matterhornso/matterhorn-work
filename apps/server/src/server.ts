@@ -4686,9 +4686,13 @@ function createRoutes(
     }
   };
 
-  const publicWorkflowRun = (run: MatterhornWorkflowRun): MatterhornWorkflowRun => {
-    const { hiddenAgentInstructions: _hiddenAgentInstructions, ...publicRun } = run;
-    return publicRun;
+  const publicWorkflowRun = <T extends object>(
+    run: T,
+  ): Omit<T, "hiddenAgentInstructions"> => {
+    const { hiddenAgentInstructions: _hiddenAgentInstructions, ...publicRun } = run as T & {
+      hiddenAgentInstructions?: string;
+    };
+    return publicRun as Omit<T, "hiddenAgentInstructions">;
   };
 
   addRoute(routes, "GET", "/api/workflows/runs", "client", async (ctx) => {

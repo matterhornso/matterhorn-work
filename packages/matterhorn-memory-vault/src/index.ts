@@ -143,6 +143,8 @@ function buildSuggestionLifecycle(
   createdAt: string,
   existing?: MatterhornMemorySuggestionInboxEntry,
 ): MatterhornMemorySuggestionLifecycle {
+  const isWellnessSuggestion = suggestion.desk === "wellness";
+
   return {
     suggestionId: suggestion.id,
     dedupeKey: existing?.dedupeKey ?? suggestionDedupeKey(suggestion),
@@ -160,7 +162,9 @@ function buildSuggestionLifecycle(
     actorConfirmationRequired: true,
     status,
     policyWarnings: existing?.policyWarnings,
-  }
+    localOnly: existing?.localOnly ?? (isWellnessSuggestion ? true : undefined),
+    nonClinical: existing?.nonClinical ?? (isWellnessSuggestion ? true : undefined),
+  };
 }
 
 type MemoryLogAction =
