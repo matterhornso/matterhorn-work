@@ -93,15 +93,22 @@ function watchLabel(watch = {}) {
 
 function fallbackPrompt(evaluation = {}) {
   const watch = evaluation.watch || {};
-  if (watch.validatorHotkey) return `Use Bittensor chat mode. Analyze validator ${watch.validatorHotkey}${watch.netuid !== undefined ? ` on subnet ${watch.netuid}` : ""}. Explain what changed, risks, and safe next steps without taking action.`;
-  if (watch.ss58Address) return `Use Bittensor chat mode. Review public Bittensor wallet ${watch.ss58Address}. Explain stake exposure, alerts, and safe next steps without asking for private wallet material.`;
-  if (watch.netuid !== undefined) return `Use Bittensor chat mode. Review subnet ${watch.netuid}. Explain this watch alert, likely causes, source freshness, and safe next steps.`;
-  return "Use Bittensor chat mode. Review this Bittensor watch alert and explain safe next steps without taking financial action.";
+  if (watch.validatorHotkey) return `Bittensor Agent task: analyze validator ${watch.validatorHotkey}${watch.netuid !== undefined ? ` on subnet ${watch.netuid}` : ""}. Explain what changed, risks, and safe next steps without taking action.`;
+  if (watch.ss58Address) return `Bittensor Agent task: review public Bittensor wallet ${watch.ss58Address}. Explain stake exposure, alerts, and safe next steps without asking for private wallet material.`;
+  if (watch.netuid !== undefined) return `Bittensor Agent task: review subnet ${watch.netuid}. Explain this watch alert, likely causes, source freshness, and safe next steps.`;
+  return "Bittensor Agent task: review this Bittensor watch alert and explain safe next steps without taking financial action.";
+}
+
+function normalizeAgentTaskPrompt(prompt = "") {
+  const value = String(prompt || "").trim();
+  if (!value) return "";
+  if (/^Bittensor Agent task:/i.test(value)) return value;
+  return `Bittensor Agent task: ${value}`;
 }
 
 function alertPrompt(evaluation = {}) {
   const action = asArray(evaluation.copilotActions)[0];
-  return action?.prompt || fallbackPrompt(evaluation);
+  return normalizeAgentTaskPrompt(action?.prompt) || fallbackPrompt(evaluation);
 }
 
 function statusOf(evaluation = {}) {
@@ -126,7 +133,7 @@ function buildNotificationSummary(alerts = []) {
     totalNotifications: alerts.length,
     intents,
     promptSamples: prompts,
-    safety: "read_only_chat_prompts",
+    safety: "read_only_agent_tasks",
   };
 }
 
@@ -184,7 +191,7 @@ function renderMarkdown(summary) {
     "",
     "- Result: READ_ONLY_ALERT_REPORT",
     `- Generated at: ${summary.generatedAt}`,
-    "- Safety posture: this report creates chat prompts only. It never signs, submits, broadcasts, moves stake, transfers TAO, or invokes subnet services.",
+    "- Safety posture: this report creates Bittensor Agent tasks only. It never signs, submits, broadcasts, moves stake, transfers TAO, or invokes subnet services.",
     "",
     "## Summary",
     "",
@@ -195,15 +202,15 @@ function renderMarkdown(summary) {
     "## Notification Summary",
     "",
     "- Notification intents are local/operator review hints only. They do not sign, submit, broadcast, or trigger wallet actions.",
-    `- Prompt samples: ${summary.notificationSummary?.promptSamples?.length ?? 0}`,
+    `- Task samples: ${summary.notificationSummary?.promptSamples?.length ?? 0}`,
     "",
     "| Intent | Count |",
     "| --- | ---: |",
     notificationRows,
     "",
-    "## Alert Prompts",
+    "## Alert Tasks",
     "",
-    "| Status | Watch | Intent | Prompt |",
+    "| Status | Watch | Intent | Task |",
     "| --- | --- | --- | --- |",
     alertRows,
     "",

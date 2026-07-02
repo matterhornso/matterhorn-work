@@ -274,6 +274,16 @@ type MatterhornMcpProductCard = {
   toolSummary?: string;
   boundary: string;
   worksWith: string[];
+  docs: {
+    repoPath: string;
+    githubUrl: string;
+    summary: string;
+    sections: Array<{
+      title: string;
+      items: string[];
+    }>;
+    examples: string[];
+  };
   protocolDeskId?: CustomerProtocolDeskId;
   statusLabel?: string;
   setupNote?: string;
@@ -294,6 +304,18 @@ type MatterhornMcpClientInstallGuide = {
 };
 
 const DEFAULT_MATTERHORN_MCP_CLIENT_ID: MatterhornMcpClientId = "codex";
+const MATTERHORN_MCP_DOCS_GITHUB_BASE =
+  "https://github.com/matterhornso/matterhorn-work/blob/dev/docs/mcp";
+
+function mcpDocs(slug: string, summary: string, sections: MatterhornMcpProductCard["docs"]["sections"], examples: string[]): MatterhornMcpProductCard["docs"] {
+  return {
+    repoPath: `docs/mcp/${slug}.md`,
+    githubUrl: `${MATTERHORN_MCP_DOCS_GITHUB_BASE}/${slug}.md`,
+    summary,
+    sections,
+    examples,
+  };
+}
 
 const MATTERHORN_MCP_CLIENT_INSTALL_GUIDES: MatterhornMcpClientInstallGuide[] = [
   {
@@ -399,6 +421,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Public reads and unsigned previews only. Use an external signer. Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "bittensor",
+      "Use Bittensor public wallet and subnet context from an agent without turning Matterhorn into a custodian.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "TAO balance, stake, hotkey, coldkey, subnet, validator, and watch context.",
+            "Unsigned staking, transfer, subnet invocation, and receipt previews.",
+            "Customer evidence bundles and readiness checks before an external signing step.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Reads use public SS58, coldkey, hotkey, subnet, validator, and receipt data.",
+            "Preview tools return unsigned payloads or handoff packets for review.",
+            "External signing remains outside Matterhorn; signed receipts can be imported for evidence.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "Matterhorn never asks for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+            "Action previews require user review and an external signer.",
+            "Any live sidecar submission remains explicitly separated from the default MCP flow.",
+          ],
+        },
+      ],
+      [
+        "Show my TAO balance and active stakes for this public SS58 address.",
+        "Compare validators for subnet 1 and prepare an unsigned delegation preview.",
+        "Create a watch for validator stake changes and summarize today's alerts.",
+      ],
+    ),
     backendBacked: true,
   },
   {
@@ -426,10 +483,45 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
       "matterhorn_hyperliquid_validate_external_artifact",
       "matterhorn_hyperliquid_verify_receipt",
     ],
-    toolSummary: "16 tools for markets, accounts, watches, previews, handoffs, and receipts.",
+    toolSummary: "16 tools for markets, accounts, watches, handoffs, validation, and receipts.",
     boundary:
-      "Preview only. No live submit. Use an external signer/client. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
+      "External handoff only. No live submit. Use your own signer/client. Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "hyperliquid",
+      "Use Hyperliquid market, account, and watch context from an agent while keeping trade execution outside Matterhorn.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Market list, funding, open interest, L2 orderbook, account, position, and open-order reads.",
+            "Read-only funding, orderbook, and account watches with alert digests.",
+            "Non-submittable order previews, external trade handoffs, artifact validation, and receipt checks.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Read tools fetch public or user-supplied account context without storing exchange secrets.",
+            "Preview tools produce a handoff summary, not an executable order inside Matterhorn.",
+            "Receipt tools verify artifacts after the user acts in their own Hyperliquid client.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "No live order submission, custody, hidden signing, or API secret collection.",
+            "Matterhorn does not store exchange API keys, private keys, raw signatures, or signed payloads.",
+            "Users execute trades only in their own external client after reviewing the handoff.",
+          ],
+        },
+      ],
+      [
+        "Show BTC-PERP funding, open interest, and the current orderbook.",
+        "Summarize exposure for this public account and flag liquidation-sensitive positions.",
+        "Prepare a BTC-PERP long handoff for review without submitting anything.",
+      ],
+    ),
     backendBacked: true,
   },
   {
@@ -437,7 +529,7 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     name: "Polymarket MCP",
     protocolDeskId: "polymarket",
     description:
-      "Market search, outcomes, compliance, liquidity, watches, previews, and receipts.",
+      "Market search, outcomes, compliance, liquidity, watches, handoffs, and receipts.",
     command: "matterhorn-work mcp config --target claude-desktop --profile full",
     tools: [
       "matterhorn_polymarket_chat",
@@ -458,8 +550,43 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     ],
     toolSummary: "15 tools for research, orderbooks, compliance, watches, handoffs, and receipts.",
     boundary:
-      "Preview only. No live submit. Compliance-blocked previews hide executable price, size, and share fields.",
+      "Compliance-gated handoff only. No live submit. Blocked flows hide executable price, size, and share fields.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "polymarket",
+      "Use Polymarket research, liquidity, compliance, and receipt context from an agent without enabling in-app bet placement.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Market and event search, market detail reads, orderbook checks, and outcome context.",
+            "Compliance checks before any handoff is prepared.",
+            "Read-only watches, compliance-gated handoffs, external artifact validation, and receipt verification.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Research tools collect market, outcome, liquidity, and orderbook context.",
+            "Compliance tools determine whether a handoff can be shown.",
+            "Blocked regions or blocked markets do not expose executable price, size, or share fields.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "No live bet placement, no hidden wallet connection, and no signed payload storage.",
+            "Handoffs stay external and compliance-gated.",
+            "Receipt checks are evidence tools, not a Matterhorn submission path.",
+          ],
+        },
+      ],
+      [
+        "Search Polymarket for Bitcoin ETF markets and summarize liquidity.",
+        "Check compliance for this market before preparing any handoff.",
+        "Create a watch for probability changes and explain today's movement.",
+      ],
+    ),
     backendBacked: true,
   },
   {
@@ -481,6 +608,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "No hidden saves. Capture is explicit and user-confirmed; restricted records stay protected by policy.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "memory",
+      "Use explicit Matterhorn Memory from agents while keeping saves reviewable, scoped, and reversible.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Searching, listing, reading, capturing, updating, forgetting, and exporting memory records.",
+            "Keeping agent work consistent across Matterhorn desks without hidden capture.",
+            "Exporting user-safe evidence bundles for review.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "The server only writes explicit, user-confirmed records.",
+            "Capture and update routes run safety validators before storing content.",
+            "Forget and export operations leave auditable intent in the server response.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "No hidden saves or background capture.",
+            "Credentials, secrets, signatures, payloads, and unsafe records are rejected.",
+            "Restricted records remain protected by policy and scope.",
+          ],
+        },
+      ],
+      [
+        "Search memory for the current Bittensor wallet context.",
+        "Capture this project preference as a user-confirmed memory.",
+        "Export safe memory records for this workspace.",
+      ],
+    ),
     statusLabel: "Memory MCP",
     backendBacked: true,
   },
@@ -516,6 +678,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Agent control only. File writes and approvals stay explicit. No custody, signing, or hidden market submit.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "core-agent",
+      "Use Matterhorn workspace, session, file-session, approval, and event controls from an external agent.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Server readiness, status, workspace discovery, and session lifecycle control.",
+            "Reading and submitting chat prompts through Matterhorn's server route.",
+            "File-session catalog, read, write, close, approval, and event-watch operations.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Tools call the running Matterhorn Work server through the configured client token.",
+            "Writable operations use Matterhorn's session and approval model.",
+            "Event-watch tools return bounded progress batches for agents that cannot hold an SSE stream.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "Approvals require the host token where needed.",
+            "File writes remain explicit and scoped to the active file session.",
+            "No custody, signing, market submit, or hidden wallet action is exposed here.",
+          ],
+        },
+      ],
+      [
+        "Run doctor checks for the local Matterhorn server and workspace.",
+        "Create a session in this workspace and submit a reviewed prompt.",
+        "Watch session events until the current run finishes.",
+      ],
+    ),
     statusLabel: "Core MCP",
     backendBacked: true,
   },
@@ -541,6 +738,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Public or redacted evidence only. No keys, exchange secrets, signatures, payload imports, or live submit.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "evidence",
+      "Use customer-safe readiness, QA, reconciliation, packet, and receipt evidence tools from agents.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Crypto readiness, market execution readiness, live public QA, SDK validation, and reconciliation.",
+            "Bittensor and market customer evidence verification.",
+            "Customer packets that summarize public or redacted proof without secrets.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Evidence tools assemble deterministic reports from public, redacted, or server-held safe context.",
+            "Readiness tools state missing dependencies before a customer demo or handoff.",
+            "Verification tools reconcile artifacts against expected Matterhorn safety boundaries.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "Evidence packets must not include keys, exchange secrets, signatures, signed payloads, or wallet exports.",
+            "Market evidence does not submit trades or bets.",
+            "Receipts are validation artifacts, not custody or execution authority.",
+          ],
+        },
+      ],
+      [
+        "Run market execution readiness and list blockers for the customer demo.",
+        "Build a customer packet for this public Bittensor wallet context.",
+        "Reconcile this market artifact and explain whether it is safe to show.",
+      ],
+    ),
     statusLabel: "Evidence MCP",
     backendBacked: true,
   },
@@ -561,6 +793,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Discovery and planning only. No provider execution, payments, email sending, publishing, or token gates.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "workflow",
+      "Use Matterhorn workflow catalogs, prompt packs, service capability planning, and customer templates from agents.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Reading workflow catalogs and customer-visible template metadata.",
+            "Generating staged prompt packs for Matterhorn desks and workflows.",
+            "Planning decentralized service capabilities without executing providers.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "Catalog tools return supported workflows, prompts, and customer templates.",
+            "Service planning tools explain possible hosting, storage, email, payments, and access paths.",
+            "Outputs are reviewed artifacts and prompts, not live provider actions.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "No live payments, email sending, hosting publish, token gates, or provider execution.",
+            "Health-related customer workflows remain standalone, reviewed, and non-medical.",
+            "Users review generated plans before any external work happens.",
+          ],
+        },
+      ],
+      [
+        "List workflow templates available for a first customer demo.",
+        "Generate a prompt pack for the Bittensor desk.",
+        "Plan hosting and email capabilities without executing a provider.",
+      ],
+    ),
     statusLabel: "Workflow MCP",
     backendBacked: true,
   },
@@ -574,6 +841,41 @@ const MATTERHORN_MCP_PRODUCT_CARDS: MatterhornMcpProductCard[] = [
     boundary:
       "Desktop bridge preview only. No custody, signing, market submit, or secret collection.",
     worksWith: ["Codex", "Claude Code", "Claude Desktop", "Cursor"],
+    docs: mcpDocs(
+      "ui-control",
+      "Preview the local desktop UI bridge for focusing desks, setting prompts, and reading panel state.",
+      [
+        {
+          title: "Use this MCP for",
+          items: [
+            "Opening or focusing a Matterhorn desk from an agent.",
+            "Setting a reviewed prompt in the composer without auto-sending.",
+            "Reading visible panel state for guided UI workflows.",
+          ],
+        },
+        {
+          title: "How it works",
+          items: [
+            "The bridge is planned for the local desktop runtime rather than the backend MCP server.",
+            "Actions are UI navigation and prompt-prep operations, not backend execution.",
+            "Availability depends on the desktop UI bridge publishing Matterhorn UI actions.",
+          ],
+        },
+        {
+          title: "Safety boundary",
+          items: [
+            "No backend execution, custody, signing, market submit, or secret collection.",
+            "Prompt changes remain user-visible and editable.",
+            "The bridge stays unavailable until the desktop integration is registered.",
+          ],
+        },
+      ],
+      [
+        "Open the Bittensor desk and place this prompt in the composer.",
+        "Show the Wallet panel so I can review signing boundaries.",
+        "Read which Matterhorn side panel is currently open.",
+      ],
+    ),
     statusLabel: "Desktop bridge preview",
     setupNote:
       "This is not registered by the backend MCP server yet. It becomes available when the local desktop UI bridge publishes matterhorn UI actions.",
@@ -1209,6 +1511,81 @@ function MatterhornMcpReadinessFacts(props: { card: MatterhornMcpProductCard; co
   );
 }
 
+function MatterhornMcpFullDocs(props: { card: MatterhornMcpProductCard; compact?: boolean }) {
+  return (
+    <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 font-medium text-dls-text">
+        <BookOpen size={props.compact ? 12 : 14} />
+        Full docs
+      </summary>
+      <div className={props.compact ? "mt-3 space-y-3 border-l border-dls-border/30 pl-3" : "mt-3 space-y-4 border-l border-dls-border/30 pl-4"}>
+        <p>{props.card.docs.summary}</p>
+
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Tools</p>
+          {props.card.tools.length > 0 ? (
+            <div className="mt-2 flex min-w-0 flex-wrap gap-1.5">
+              {props.card.tools.map((tool) => (
+                <code
+                  key={tool}
+                  className={props.compact
+                    ? "max-w-full break-words rounded-md bg-dls-hover/45 px-1.5 py-0.5 font-mono text-[10px] text-dls-text"
+                    : "max-w-full break-words rounded-md bg-dls-hover/45 px-2 py-1 font-mono text-[10px] text-dls-text"
+                  }
+                >
+                  {tool}
+                </code>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1.5">Tool names publish after the desktop bridge registers this MCP.</p>
+          )}
+        </div>
+
+        {props.card.docs.sections.map((section) => (
+          <div key={section.title}>
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">{section.title}</p>
+            <ul className="mt-1.5 space-y-1.5">
+              {section.items.map((item) => (
+                <li key={item} className="grid grid-cols-[0.75rem_minmax(0,1fr)] gap-1.5">
+                  <span aria-hidden="true" className="pt-[0.45em]">
+                    <span className="block size-1 rounded-full bg-dls-secondary/55" />
+                  </span>
+                  <span className="min-w-0">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-dls-secondary">Example prompts</p>
+          <ul className="mt-1.5 space-y-1.5">
+            {props.card.docs.examples.map((example) => (
+              <li key={example} className="min-w-0 rounded-md bg-dls-surface/35 px-2 py-1 text-dls-text">
+                {example}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 break-words font-mono text-[10px] text-dls-secondary">{props.card.docs.repoPath}</span>
+          <a
+            href={props.card.docs.githubUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-fit items-center gap-1 text-[11px] font-medium text-dls-text transition-colors hover:text-[rgb(var(--dls-accent-rgb))] focus:outline-none focus:ring-2 focus:ring-[rgba(var(--dls-accent-rgb),0.28)]"
+          >
+            Open GitHub docs
+            <ExternalLink size={12} />
+          </a>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 function MatterhornMcpProductSection(props: {
   cards: MatterhornMcpProductCard[];
   onCopyCommand: (command: string) => void;
@@ -1417,6 +1794,8 @@ function MatterhornMcpProductSection(props: {
                 {card.setupNote ? (
                   <p className="mt-2 text-[11px] leading-4 text-dls-secondary">{card.setupNote}</p>
                 ) : null}
+
+                <MatterhornMcpFullDocs card={card} compact={props.compact} />
 
                 <details className={props.compact ? "mt-3 text-[11px] leading-4 text-dls-secondary" : "mt-4 text-xs leading-5 text-dls-secondary"}>
                   <summary className="cursor-pointer list-none font-medium text-dls-text">

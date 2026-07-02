@@ -2,7 +2,7 @@
 
 *An example of safe offer-preference metadata Matterhorn Memory may remember. Candidates only — nothing is written automatically.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment.
 
 ## Safe to remember (offer preferences)
 

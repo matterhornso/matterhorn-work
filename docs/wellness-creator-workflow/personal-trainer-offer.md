@@ -2,7 +2,7 @@
 
 *A reproducible reference offer a personal trainer can package and share through Matterhorn Work. Customer-demo safe; artifact-first; nothing is hosted, charged, emailed, or gated.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Offer: "4-Week Beginner Strength Starter"
 

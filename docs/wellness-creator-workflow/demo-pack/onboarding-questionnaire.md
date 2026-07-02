@@ -2,7 +2,7 @@
 
 *Customer Demo Pack artifact — a reusable onboarding questionnaire for a personal trainer, yoga instructor, or dietician. Collects general, non-clinical context only.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## About you
 
@@ -19,7 +19,7 @@
 
 ## Consent
 
-8. I understand this program is **general fitness and wellness education, not medical advice, diagnosis, or treatment**, and that I should consult a qualified healthcare professional about any medical concern.  ☐
+8. I understand this program is **general fitness and longevity education, not medical advice, diagnosis, or treatment**, and that I should consult a qualified healthcare professional about any medical concern.  ☐
 
 ## Note for the creator
 

@@ -237,7 +237,7 @@ for (const expected of [
   "No hidden memory",
   "Desk policy",
   "MCP/API",
-  "Wellness becomes restricted by default",
+  "Longevity becomes restricted by default",
   "market memories cannot be exported or shared with MCP/API",
   "seed phrases",
   "private keys",

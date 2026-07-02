@@ -1,5 +1,6 @@
 import { basename, join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
+import { MATTERHORN_DESK_AGENT_MANIFESTS } from "@matterhorn-work/types/desk-agents";
 
 import { ensureDir, exists } from "./utils.js";
 import { ApiError } from "./errors.js";
@@ -18,6 +19,7 @@ Matterhorn Work can preview, edit, and download standard artifacts when you crea
 **Default save location:** \`outputs/<desk>/<session-slug>/\`
 
 - Prefer the \`outputs/<desk>/<session-slug>/\` path for user-visible deliverables. For example: \`outputs/bittensor/my-session/report.md\` or \`outputs/hyperliquid/session-abc/positions.csv\`.
+- For Longevity deliverables, use the same convention, for example \`outputs/longevity/client-program/program.md\`.
 - After creating or updating an artifact, mention the exact workspace-relative file path in your final response, for example \`outputs/memory/session-xyz/notes.md\`.
 - Use standard output formats: Markdown (\`.md\`), CSV (\`.csv\`), Excel workbooks (\`.xlsx\`), and browser previews (\`index.html\` or a local \`http://localhost:<port>\` URL).
 - For websites or React/UI previews, start the dev server when useful and mention the \`http://localhost:<port>\` URL. Socket URLs such as \`ws://localhost:<port>/...\` are diagnostic hints, not primary preview links.
@@ -41,7 +43,7 @@ Your job:
 - Automate repeatable work.
 - Keep behavior portable and reproducible.
 - Help users use Web3 protocols and real-world workflows through plain English without exposing unnecessary technical runtime details.
-- For Bittensor, Hyperliquid, Polymarket, Wellness, or Matterhorn Services requests, prefer the dedicated Matterhorn Work protocol/workflow tools and safety cards instead of generic setup advice.
+- For Bittensor, Hyperliquid, Polymarket, Longevity, or Matterhorn Services requests, prefer the dedicated Matterhorn Work protocol/workflow tools and safety cards instead of generic setup advice.
 - Do not lead with internal runtime files such as \`opencode.json\` or \`.opencode/**\` unless the user specifically asks for technical file inventory. Describe them as Matterhorn Work workspace metadata/config when a summary is enough.
 
 <!-- OPENWORK_BROWSER_START -->
@@ -144,6 +146,24 @@ function resolveAgentTemplate(): string {
   return MATTERHORN_AGENT.replace("{{BROWSER_CDP_PORT}}", cdpPort);
 }
 
+function renderDeskAgentTemplate(agent: (typeof MATTERHORN_DESK_AGENT_MANIFESTS)[keyof typeof MATTERHORN_DESK_AGENT_MANIFESTS]): string {
+  return `---
+description: ${agent.description}
+mode: primary
+temperature: 0.2
+matterhorn_desk_agent: v1
+matterhorn_desk_id: ${agent.deskId}
+agent_id: ${agent.agentId}
+---
+
+# ${agent.displayName}
+
+${agent.instructions}
+
+${MATTERHORN_ARTIFACT_GUIDANCE}
+`;
+}
+
 async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
   const agentsDir = join(workspaceRoot, ".opencode", "agents");
   const agentPath = join(agentsDir, "matterhorn.md");
@@ -191,6 +211,20 @@ async function ensureMatterhornAgent(workspaceRoot: string): Promise<boolean> {
     return true;
   }
   return false;
+}
+
+async function ensureMatterhornDeskAgents(workspaceRoot: string): Promise<boolean> {
+  const agentsDir = join(workspaceRoot, ".opencode", "agents");
+  await ensureDir(agentsDir);
+  let changed = false;
+  for (const agent of Object.values(MATTERHORN_DESK_AGENT_MANIFESTS)) {
+    const agentPath = join(agentsDir, `${agent.agentId}.md`);
+    if (await exists(agentPath)) continue;
+    const content = renderDeskAgentTemplate(agent);
+    await writeFile(agentPath, content.endsWith("\n") ? content : `${content}\n`, "utf8");
+    changed = true;
+  }
+  return changed;
 }
 
 async function ensureBrowserPlugin(workspaceRoot: string): Promise<boolean> {
@@ -241,10 +275,12 @@ export async function ensureWorkspaceFiles(workspaceRoot: string, presetInput: s
     throw new ApiError(400, "invalid_workspace_path", "workspace path is required");
   }
   await ensureDir(workspaceRoot);
+  await ensureDir(join(workspaceRoot, "outputs"));
   const reloadReasons = new Set<ReloadReason>();
   if (await ensureOpencodeConfig(workspaceRoot)) reloadReasons.add("config");
   if (await ensureBrowserPlugin(workspaceRoot)) reloadReasons.add("config");
   if (await ensureMatterhornAgent(workspaceRoot)) reloadReasons.add("agents");
+  if (await ensureMatterhornDeskAgents(workspaceRoot)) reloadReasons.add("agents");
   const openworkConfigChanged = await ensureWorkspaceOpenworkConfig(workspaceRoot, preset);
   return {
     changed: openworkConfigChanged || reloadReasons.size > 0,

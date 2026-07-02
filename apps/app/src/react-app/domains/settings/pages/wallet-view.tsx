@@ -126,13 +126,14 @@ function WalletProtocolSupportMap(props: {
   connected: boolean;
 }) {
   const evm = evmConnectorStatusLabel(props.capability.evmConnectorState, props.connected);
+  const evmDetail = props.capability.supportsInjectedEvm
+    ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
+    : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs; WalletConnect or deep-link bridge is planned.";
   const rows: { label: string; status: string; detail: string; tone: string }[] = [
     {
       label: "EVM wallet",
       status: evm.label,
-      detail: props.capability.supportsInjectedEvm
-        ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
-        : "Injected wallets are not available in this runtime. Use the external signer flow.",
+      detail: evmDetail,
       tone: evm.tone,
     },
     ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][]).map(
@@ -183,12 +184,12 @@ const RUNTIME_LABELS: Record<WalletRuntime, { label: string; icon: typeof Globe;
   desktop: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Browser wallet extensions do not inject into Electron. Use external signing today.",
+    detail: "Browser wallet extensions do not inject into Electron. Use external signing today; WalletConnect or deep-link bridge is planned.",
   },
   electron: {
     label: "Desktop app",
     icon: MonitorSmartphone,
-    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions.",
+    detail: "Electron builds do not support injected wallets. Use external signing for on-chain actions; WalletConnect or deep-link bridge is planned.",
   },
   unknown: {
     label: "Unknown runtime",
@@ -231,9 +232,27 @@ function WalletRuntimeExplainer(props: { capability: WalletRuntimeCapability; co
           </div>
         </div>
         <div className="py-2 text-xs leading-5 text-dls-secondary">{strategyNote}</div>
+        {!props.capability.supportsInjectedEvm ? (
+          <div className="py-2 text-xs leading-5 text-dls-secondary">
+            <span className="font-medium text-dls-text">Remote worker:</span> use public addresses in Matterhorn and complete signing in your own wallet or protocol client.
+          </div>
+        ) : null}
       </div>
     </section>
   );
+}
+
+function noEvmConnectorCopy(capability: WalletRuntimeCapability): { title: string; body: string } {
+  if (capability.supportsInjectedEvm) {
+    return {
+      title: "No EVM wallet connector detected",
+      body: "Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.",
+    };
+  }
+  return {
+    title: "Desktop uses external handoffs",
+    body: "Browser extensions do not connect inside the desktop app. Use a public address here, then sign in your own wallet or protocol client. WalletConnect or deep-link bridge is planned.",
+  };
 }
 
 function WalletRailMetric(props: { label: string; value: string }) {
@@ -334,6 +353,7 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
       ? "desktop"
       : "web";
   const capability = useMemo(() => getWalletRuntimeCapability(runtime), [runtime]);
+  const noConnectorCopy = useMemo(() => noEvmConnectorCopy(capability), [capability]);
 
   const runtimeBadgeLabel: Record<WalletRuntime, string> = {
     web: "Web",
@@ -424,10 +444,10 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               <div className="rounded-lg bg-dls-surface-muted/55 px-3 py-3 text-sm leading-6 text-dls-secondary">
                 <div className="flex items-center gap-2 font-medium text-dls-text">
                   <Wallet className="size-4" />
-                  No EVM wallet connector detected
+                  {noConnectorCopy.title}
                 </div>
                 <p className="mt-2 text-xs leading-5">
-                  Install or enable MetaMask, Rabby, or another injected wallet. Public reads and market previews still work.
+                  {noConnectorCopy.body}
                 </p>
               </div>
             )}
@@ -486,10 +506,10 @@ export function WalletSettingsView({ compact = false, store, onTxApprove, onTxRe
               <div className="rounded-lg border border-dls-border p-6 text-center">
                 <Wallet className="size-8 mx-auto mb-2 text-dls-secondary" />
                 <p className="text-sm font-medium text-dls-text">
-                  No EVM wallet connector detected.
+                  {noConnectorCopy.title}.
                 </p>
                 <p className="mt-2 text-xs leading-5 text-dls-secondary">
-                  Install or enable MetaMask, Rabby, or another injected wallet.
+                  {noConnectorCopy.body}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-dls-secondary">
                   Public Bittensor reads and market previews still work.

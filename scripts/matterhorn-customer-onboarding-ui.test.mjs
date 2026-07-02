@@ -24,10 +24,13 @@ const workflowTemplates = read("apps/app/src/react-app/domains/session/workflows
 const protocolDeskUi = read("apps/app/src/react-app/domains/session/workflows/protocol-desk-ui.ts");
 const appSidebar = read("apps/app/src/react-app/domains/session/sidebar/app-sidebar.tsx");
 const sidebarUtils = read("apps/app/src/react-app/domains/session/sidebar/utils.ts");
+const appRoot = read("apps/app/src/react-app/shell/app-root.tsx");
 const uiStateStore = read("apps/app/src/react-app/shell/ui-state-store.ts");
+const loadingOverlay = read("apps/app/src/react-app/shell/loading-overlay.tsx");
 const workflowTypes = read("packages/types/src/matterhorn-workflows.ts");
 const cryptoPrompt = read("apps/app/src/react-app/domains/wallet/prompts/crypto-system-prompt.ts");
 const sessionRoute = read("apps/app/src/react-app/shell/session-route.tsx");
+const commandPalette = read("apps/app/src/react-app/shell/command-palette.tsx");
 const walletPanel = read("apps/app/src/react-app/domains/wallet/WalletPanel.tsx");
 const extensions = read("apps/app/src/app/extensions.ts");
 const constants = read("apps/app/src/app/constants.ts");
@@ -41,6 +44,9 @@ const settingsOverview = read("apps/app/src/react-app/domains/settings/pages/ove
 const cloudAccountSettings = read("apps/app/src/react-app/domains/settings/pages/cloud-account-view.tsx");
 const feedback = read("apps/app/src/app/lib/feedback.ts");
 const den = read("apps/app/src/app/lib/den.ts");
+const denSigninSurface = read("apps/app/src/react-app/domains/cloud/den-signin-surface.tsx");
+const forcedSigninPage = read("apps/app/src/react-app/domains/cloud/forced-signin-page.tsx");
+
 const denHelpLink = read("apps/app/src/react-app/domains/workspace/matterhorn-den-help-link.tsx");
 const remoteWorkspaceDiagnostics = read("apps/app/src/react-app/domains/workspace/remote-workspace-diagnostics.ts");
 const advancedSettings = read("apps/app/src/react-app/domains/settings/pages/advanced-view-sections.tsx");
@@ -52,19 +58,19 @@ const betaGoLiveChecklist = read("docs/handoffs/beta-go-live-first-10-user-check
 
 for (const phrase of [
   "Use Bittensor, Hyperliquid, Polymarket, and real-world workflows through one safe chat workspace.",
-  "Ask Matterhorn about Bittensor, markets, wellness, files, or workflows...",
+  "Ask Matterhorn about Bittensor, markets, longevity, files, or workflows...",
   "Matterhorn saves chats, artifacts, receipts, QA evidence, and workflow files.",
   "Matterhorn never holds your keys.",
   '"composer.assistant_identity": "Matterhorn"',
   '"composer.run_task": "Ask"',
   '"composer.stop": "Stop generating"',
-  "Separate workspaces",
-  "one Matterhorn chat.",
-  "Bittensor workspace",
-  "Hyperliquid desk",
-  "Polymarket desk",
-  "Wellness builder",
-  "Stay non-custodial",
+  "A workspace for AI-assisted work that needs judgment, context, and",
+  "Matterhorn turns chat into an operating layer for projects, protocols,",
+  "The aim is not just faster answers. It is safer progress:",
+  "How it helps people",
+  "Understand complex domains without becoming an expert first.",
+  "Keep risky work review-first, with safety boundaries visible before action.",
+  "Turn useful conversations into saved project context, files, and receipts.",
   "/matterhorn-logo-square.svg",
   'alt="Matterhorn Work"',
   "var(--matterhorn-blue)",
@@ -76,50 +82,79 @@ assert.equal(
   false,
   "customer UI should not show a generic hard-coded engine-connected label",
 );
+assert.ok(
+  loadingOverlay.includes("pointer-events-none opacity-0") &&
+    loadingOverlay.includes("pointer-events-auto opacity-100"),
+  "boot overlay should not block clicks while fading out",
+);
+for (const phrase of [
+  "Matterhorn Cloud is not live in this local build yet.",
+  "Continue locally, or enter a Matterhorn Cloud control-plane URL",
+  "Continue locally without Cloud",
+]) {
+  assert.ok(
+    `${denSigninSurface}\n${forcedSigninPage}`.includes(phrase),
+    `local Cloud auth should explain the unavailable Cloud state: ${phrase}`,
+  );
+}
+for (const phrase of [
+  "Use beta Cloud and sign in",
+  "Create account on beta Cloud",
+  "Use beta Cloud URL",
+  "onUseBetaCloud",
+  "onUseBetaCloudAndOpenAuth",
+  "BETA_CLOUD_BASE_URL",
+  "https://app.openworklabs.com",
+]) {
+  assert.equal(
+    `${denSigninSurface}\n${forcedSigninPage}`.includes(phrase),
+    false,
+    `local Cloud auth should not point users to stale beta/OpenWork Cloud paths: ${phrase}`,
+  );
+}
+assert.ok(
+  appRoot.includes("isExplicitCloudSignin") &&
+    appRoot.includes("get(\"intent\") === \"cloud-auth\"") &&
+    appRoot.includes("if (explicitCloudSignin) return"),
+  "explicit Cloud account routes should not be redirected into first-run workspace routing",
+);
+assert.equal(
+  denSigninSurface.includes("Cloud URL required"),
+  false,
+  "local beta auth should not lead with a disabled dead-domain button",
+);
+assert.equal(
+  denSigninSurface.includes("Your computer,"),
+  false,
+  "sign-in image should explain Matterhorn Work instead of generic computer automation",
+);
 
 for (const phrase of [
   "Start a Matterhorn project.",
   "New Project",
   "New chat",
   "Open Bittensor desk",
-  "Bittensor uses public SS58 reads and external signing.",
+  "Open a desk",
+  "Dedicated desk agents",
+  "Review before action",
+  "Outputs stay with the project",
   "Wallet details",
-  "Capability status",
-  "Each desk keeps its own context",
-  "Wallet stays external",
   "Public SS58 reads and unsigned previews only.",
-  "Can submit: No. Live submission: Off. External signer/client only.",
-  "Compliance blocks must not expose executable bet fields.",
-  "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.",
-  "Choose a desk",
-  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
+  "Can submit: No. Live submission: Off. External trade handoff only.",
+  "Blocked regions get no executable bet fields.",
+  "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "focused desk",
   "No auto-send",
   "matterhorn-capability-overview",
   "matterhorn-capability-card",
   "grid gap-2 sm:grid-cols-2",
-  "matterhorn-desk-board",
-  "matterhorn-desk-command-list",
-  "matterhorn-desk-launcher",
   "Open desk",
-  "Draft prompt",
-  "grid-cols-[32px_minmax(0,1fr)]",
-  "matterhorn-desk-command-list grid gap-1",
-  "workflowLauncherCapabilityItems",
-  "TAO wallet reads",
-  "Subnet discovery",
-  "Unsigned previews",
-  "Orderbook reads",
-  "Exposure context",
-  "External-client handoff",
-  "Market research",
-  "Compliance checks",
-  "Insert editable prompt",
+  "Stage agent task",
   "Business workflows",
-  "Wellness is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
+  "Longevity is a standalone service workflow desk for trainers, yoga instructors, and dieticians.",
   "It is not Web3, not markets, and not medical care.",
   "Planned services only",
-  "Wellness workflow desk",
+  "Longevity workflow desk",
   "Service offer packet",
   "Onboarding questionnaire",
   "Weekly program plan",
@@ -139,39 +174,40 @@ for (const phrase of [
   "Open Bittensor desk",
   "Open Hyperliquid desk",
   "Open Polymarket desk",
-  "Start wellness workflow",
+  "Start longevity workflow",
   "Start blank chat",
   "ProtocolLogo",
-  "Use the Bittensor desk in this session",
-  "Use the Hyperliquid desk in this session",
-  "Use the Polymarket desk in this session",
-  "Keep all context Bittensor-specific",
-  "Keep all context Hyperliquid-specific",
-  "Keep all context Polymarket-specific",
+  "Bittensor task:",
+  "Hyperliquid task:",
+  "Polymarket task:",
+  "Dedicated agent",
+  "hand the task to",
+  "agentId:",
+  "agentName:",
   "deriveMatterhornDeskMode",
   "MatterhornDeskSessionStrip",
   "starterWorkflowCapabilityItems",
   "`${manifest.displayName} session`",
-  "Wellness workflow session",
+  "Longevity workflow session",
   "Public SS58/coldkey/hotkey context only. External signer required for actions.",
   "Matterhorn never stores API secrets or signs orders.",
-  "Compliance blocks must not expose executable bet fields.",
+  "Blocked regions get no executable bet fields.",
   "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.",
   "External-signer previews",
-  "No live market submit",
-  "No live bet placement",
+  "External trade handoff",
+  "Trade handoff",
   "Non-medical workflow",
-  "Insert editable prompt",
+  "Stage agent task",
   "Show my TAO",
   "Compare validators",
-  "Preview Hyperliquid BTC-PERP context",
+  "Prepare Hyperliquid BTC-PERP handoff",
   "Summarize this Polymarket market",
   "Check Polymarket compliance",
-  "Create a wellness program for my clients",
+  "Build the full 7-stage Longevity workflow for my clients",
   "MCPs & Connectors",
   "Start with a Matterhorn workflow",
-  "Wellness: standalone service workflows, program packets, progress check-ins, and client handoffs",
-  "Plan trainer, yoga, or dietician service delivery without Web3, markets, medical advice, or live payment/email/hosting claims.",
+  "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs",
+  "Intake, goals, training, nutrition education, schedule, handouts, and service packaging.",
   "Can submit: No",
   "Live submission: Off",
   "Matterhorn never signs",
@@ -184,17 +220,16 @@ for (const phrase of [
   "CustomerProtocolDeskVisual",
   "enrichCustomerWorkflowTemplate",
   "buildCustomerBetaDemoStarterCards",
-  "Choose a desk or start a blank chat. Every prompt stays editable before sending.",
-  "Open a focused workspace or draft a workflow prompt. Nothing is sent until you ask.",
+  "Choose a task, then review it with the agent",
   "Allowed workspace intents",
   "Beta-ready",
   "Preview only",
   "Workflow-ready",
   "Planned, not live",
   "starterStatusLabel",
-  "Can submit: No. Live submission: Off. External signer/client only.",
+  "Can submit: No. Live submission: Off. External trade handoff only.",
   "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.",
-  "Use the standalone Wellness workflow, not a Web3 or market desk.",
+  "Use the standalone Longevity workflow, not a Web3 or market desk.",
   "CUSTOMER_VISIBLE_TEMPLATE_IDS",
   "CUSTOMER_VISIBLE_DEMO_TEMPLATE_IDS",
 ]) {
@@ -233,12 +268,39 @@ assert.ok(
   "active chat title should expose a header rename action, not hide naming in the sidebar only",
 );
 assert.ok(
-  sessionPage.includes("onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string }) => void") &&
-    sessionPage.includes("props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, prompt, { title })") &&
+  sessionPage.includes("onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void") &&
+    sessionPage.includes('agent: agentIdForDesk(panel)') &&
+    sessionPage.includes('agent: wellnessRailLauncher.agentId ?? agentIdForDesk("wellness"),') &&
     sessionRoute.includes("const title = options?.title?.trim()") &&
+    sessionRoute.includes("const agent = options?.agent?.trim()") &&
+    sessionRoute.includes("setSelectedAgent(agent || null)") &&
     sessionRoute.includes("workspaceClient.session.update({") &&
     sessionRoute.includes("[displaySession as any, ...(current[workspaceId] ?? [])]"),
-  "launcher-created chats should start with human launcher titles instead of internal protocol prompt titles",
+  "launcher-created chats should start with human launcher titles and the matching desk agent",
+);
+assert.ok(
+  commandPalette.includes('title: "Go home"') &&
+    commandPalette.includes('title: "New project"') &&
+    commandPalette.includes('title: "New chat"') &&
+    commandPalette.includes('title: "Open project folder"') &&
+    commandPalette.includes('title: "Open outputs"') &&
+    commandPalette.includes('title: "Copy project path"') &&
+    commandPalette.includes('title: "Copy outputs path"') &&
+    sessionRoute.includes("const selectedWorkspaceOutputsPath = selectedWorkspaceRoot ? joinWorkspacePath(selectedWorkspaceRoot, \"outputs\") : \"\"") &&
+    sessionRoute.includes("onGoHome={() => {") &&
+    sessionRoute.includes("onCreateNewProject={() => {") &&
+    sessionRoute.includes("onOpenProjectFolder={() => void revealWorkspacePath(selectedWorkspaceRoot, \"Project folder\")") &&
+    sessionRoute.includes("onOpenOutputs={() => void revealWorkspacePath(selectedWorkspaceOutputsPath, \"Outputs folder\")"),
+  "command palette should expose home, project, chat, folder, and outputs actions from any project surface",
+);
+assert.ok(
+  sessionPage.includes("const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, \"outputs\") : \"outputs/\"") &&
+    sessionPage.includes("{homeProjectName}") &&
+    sessionPage.includes("Copy path") &&
+    sessionPage.includes("Open folder") &&
+    sessionPage.includes("Copy outputs") &&
+    sessionPage.includes("props.sidebar.onRevealWorkspace(props.selectedWorkspaceId)"),
+  "project Home should show the active project folder and outputs location with copy/open actions",
 );
 
 for (const phrase of [
@@ -306,9 +368,9 @@ for (const phrase of [
   "MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS",
   "CustomerBetaDemoStarterCard",
   "Bittensor TAO staking preview",
-  "Hyperliquid order preview",
+  "Hyperliquid trade handoff",
   "Polymarket market research and preview",
-  "Wellness client program packet",
+  "Longevity client program packet",
   "node scripts/customer-demo-evidence-pack.mjs --scenario",
   "Demo-ready",
   "buildCustomerWorkflowPromptFromText",
@@ -340,7 +402,7 @@ for (const forbidden of [
   "Send crypto",
   "Trade on Hyperliquid",
   "Bet on Polymarket",
-  "Preview a Hyperliquid BTC-PERP trade",
+  "Prepare a Hyperliquid BTC-PERP trade handoff",
 ]) {
   assert.equal(`${welcome}\n${english}\n${sessionPage}\n${sessionSurface}\n${workflowTemplates}`.includes(forbidden), false, `old generic onboarding copy should be removed: ${forbidden}`);
 }
@@ -349,12 +411,12 @@ assert.ok(walletPanel.includes('lazy(() => import("./pages/BittensorPanel"))'), 
 assert.ok(walletPanel.includes("<BittensorPanel initialVenue={initialVenue} />"), "Protocol panel should render the selected workspace");
 assert.equal(walletPanel.includes("EVM wallet not connected"), false, "no-wallet protocol panel should not block content with a bottom overlay");
 assert.ok(sessionPage.includes("GLOBAL_HOME_SIDE_PANEL_KEY"), "home should keep right-rail panels usable before a session exists");
-assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before prompting chat");
+assert.ok(sessionPage.includes("ProtocolDeskEmptyState"), "protocol launchers should open a focused desk start state before staging an agent task");
 assert.ok(sessionPage.includes("PROTOCOL_DESK_SUGGESTED_PROMPTS"), "focused desk start states should offer protocol-specific suggested prompts");
-assert.ok(sessionPage.includes("openVenueRailPane(launcher.panel);"), "protocol launchers should open a dedicated desk without auto-priming a mixed chat draft");
+assert.ok(sessionPage.includes("openVenueRailPane(id);"), "protocol launchers should open a dedicated desk without auto-priming a mixed generic task");
 assert.equal(sessionPage.includes("bittensorLauncher"), false, "home hero should not keep a duplicate Bittensor-only shortcut above the desk launcher");
-assert.ok(sessionPage.includes("{launcher.statusLabel}"), "protocol launchers should show manifest-backed status labels");
-assert.ok(sessionPage.includes("{launcher.safetySummary}"), "protocol launchers should show manifest-backed safety summaries");
+assert.ok(sessionPage.includes("{item.statusLabel}"), "protocol launchers should show manifest-backed status labels");
+assert.ok(sessionPage.includes("{item.proof}"), "protocol launchers should show manifest-backed safety summaries");
 assert.ok(sessionPage.includes("{task.statusLabel}"), "starter task cards should show manifest-backed status labels");
 assert.ok(sessionPage.includes("{task.safetySummary}"), "starter task cards should show manifest-backed safety summaries");
 assert.ok(workflowTemplates.includes('opensPanel: "bittensor"'), "right rail should expose a dedicated Bittensor workspace");
@@ -365,8 +427,8 @@ assert.ok(workflowTemplates.includes('launchBehavior: manifest.launchBehavior'),
 assert.ok(workflowTemplates.includes('canSubmit: false'), "app launcher metadata should keep market submit disabled");
 assert.ok(workflowTemplates.includes('liveExecutionEnabled: false'), "app launcher metadata should keep live execution disabled");
 assert.ok(protocolDeskUi.includes("Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews"), "Bittensor rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, account exposure, funding, watches, and external-client previews"), "Hyperliquid rail tooltip should explain protocol-specific work");
-assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews"), "Polymarket rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs"), "Hyperliquid rail tooltip should explain protocol-specific work");
+assert.ok(protocolDeskUi.includes("Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs"), "Polymarket rail tooltip should explain protocol-specific work");
 assert.ok(sessionPage.includes('w-[var(--nav-rail-width-compact)]'), "right rail should use a compact responsive width before wide desktop");
 assert.ok(sessionPage.includes('2xl:w-[var(--nav-rail-width)]'), "right rail should expand to readable customer desk labels on wide desktop");
 assert.ok(appCss.includes("--nav-rail-width-compact: 88px;"), "compact right rail should be wide enough for readable desk labels");
@@ -378,7 +440,7 @@ for (const token of [
   "deskToneStyle",
   "--matterhorn-desk-color",
   "--matterhorn-desk-rgb",
-  "style={deskToneStyle(launcher.iconHint)}",
+  "style={deskToneStyle(item.id)}",
   "style={deskToneStyle(demo.iconHint)}",
   "style={deskToneStyle(item.panel)}",
   'style={deskToneStyle("wellness")}',
@@ -398,7 +460,12 @@ assert.ok(sessionPage.includes("onClick={() => openVenueRailPane(item.panel)}"),
 assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "right rail should expose the Wellness workflow launcher");
 assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
-assert.ok(sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, { title: item.launcher.title })"), "workflow rail launchers should create editable prompt drafts with human chat titles");
+assert.ok(
+  sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, {") &&
+    sessionPage.includes("title: item.launcher.title,") &&
+    sessionPage.includes('agent: item.launcher.agentId ?? agentIdForDesk("wellness"),'),
+  "workflow rail launchers should create editable prompt drafts with human chat titles and the Longevity Agent",
+);
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session launcher should scroll instead of clipping beneath the composer");
 assert.ok(sessionPage.includes("absolute inset-0 flex items-start justify-center overflow-y-auto"), "home starter launcher should be viewport-constrained and scroll inside the main pane");
@@ -409,7 +476,10 @@ assert.ok(sessionSurface.includes("Show TAO balance"), "Bittensor focused empty 
 assert.ok(sessionPage.includes("matterhorn-focused-desk-hero overflow-hidden rounded-xl"), "focused desk start should render a compact protocol-logo hero instead of a plain block");
 assert.ok(sessionPage.includes("matterhorn-focused-desk-boundary flex max-w-full flex-wrap"), "focused desk safety copy should use compact metadata labels without overflowing");
 assert.ok(sessionPage.includes("matterhorn-focused-desk-prompt-list overflow-hidden rounded-xl"), "focused desk prompts should render as a compact command list");
-assert.ok(sessionPage.includes("Open chat draft"), "focused desk prompt rows should clarify that prompts are drafted, not auto-sent");
+assert.ok(
+  sessionSurface.includes("Open with agent") && sessionSurface.includes("Nothing sends until you press Ask"),
+  "focused desk prompt rows should clarify that agent tasks are staged, not auto-sent",
+);
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.09)] px-4 py-3 text-sm leading-6 text-dls-text"), false, "focused desk safety boundary should not use the old boxed callout");
 assert.ok(sessionSurface.includes("matterhorn-desk-session-hero overflow-hidden rounded-xl"), "desk-specific empty sessions should use the same compact logo-led hero treatment");
 assert.ok(sessionSurface.includes("matterhorn-desk-session-prompts overflow-hidden rounded-xl"), "desk-specific empty sessions should use soft prompt lists instead of boxed cards");
@@ -430,13 +500,10 @@ assert.equal(sessionSurface.includes("size-28"), false, "starter workflow cards 
 assert.equal(sessionSurface.includes("rounded-[28px]"), false, "starter workflow grid should not render a large framed outer box");
 assert.equal(sessionSurface.includes("grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]"), false, "starter workflow grid should not use the old crowded auto-fit card wall");
 assert.equal(sessionSurface.includes("rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.07)]"), false, "starter workflow rows should not use the old boxed card treatment");
-assert.ok(sessionPage.includes("matterhorn-desk-command-list grid gap-1"), "home desk launchers should render as a lightweight command list, not a card grid");
-assert.ok(sessionPage.includes("matterhorn-desk-launcher group grid w-full min-w-0 grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact command-row spacing");
-assert.ok(sessionPage.includes("grid-cols-[32px_minmax(0,1fr)]"), "home desk launcher rows should use compact logo-led rows");
-assert.ok(sessionPage.includes("hidden shrink-0 text-xs font-medium text-[var(--matterhorn-desk-color)] sm:inline"), "home desk launchers should keep the row action out of cramped mobile layouts");
 assert.ok(sessionPage.includes("matterhorn-capability-card group grid min-w-0 gap-3"), "home capability status should render clickable destination cards");
 assert.ok(sessionPage.includes("onOpenCapability?.(item.id)"), "home capability status cards should open their matching desk or workflow");
 assert.ok(sessionPage.includes("item.id === \"wellness\" ? \"Start workflow\" : \"Open desk\""), "home capability cards should label protocol desks separately from wellness workflows");
+assert.equal(sessionPage.includes("matterhorn-desk-command-list"), false, "home should not render a second duplicate desk launcher list");
 assert.equal(sessionPage.includes("rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.13)]"), false, "home capability status should not use icon tiles");
 assert.equal(sessionPage.includes("rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.13)] px-1.5 py-0.5"), false, "home capability status should not use status pills");
 assert.equal(sessionPage.includes("matterhorn-desk-launcher group flex min-h-[96px] w-full overflow-hidden rounded-lg bg-[rgba(var(--matterhorn-desk-rgb),0.08)]"), false, "home desk launchers should not use the old boxed tile treatment");
@@ -447,7 +514,7 @@ for (const phrase of [
   "Bittensor Desk",
   "Hyperliquid Desk",
   "Polymarket Desk",
-  "Wellness Desk",
+  "Longevity Desk",
   "MCPs, Memory, Profile, Wallet, And Settings",
   "Security Negative Tests",
   "Stop Criteria",
@@ -509,7 +576,7 @@ for (const phrase of [
   "walletStatusLabel",
   "Wallet not connected",
   "Open Matterhorn Wallet",
-  "Bittensor uses public SS58 reads and external signing; market desks remain preview-only.",
+  "Bittensor uses public SS58 reads and external signing; market desks prepare external handoffs only.",
 ]) {
   assert.ok(statusBar.includes(phrase), `status bar should expose customer navigation: ${phrase}`);
 }
@@ -549,8 +616,10 @@ assert.ok(settingsShell.includes('props.compact ? "sr-only" : "truncate"'), "com
 assert.equal(settingsShell.includes('className="min-w-0 max-w-46 justify-start gap-2"'), false, "compact settings rail should not use the old large dropdown trigger as the primary header");
 assert.ok(extensionsView.includes("compact?: boolean"), "extensions settings should support embedded compact right-rail rendering");
 assert.ok(extensionsView.includes('props.compact ? "space-y-4 max-w-none" : "space-y-6 max-w-3xl"'), "embedded extensions settings should remove full-page max-width spacing");
-assert.ok(extensionsView.includes('props.compact ? "w-full" : "w-fit"'), "embedded extensions tabs should fill the narrow rail instead of crowding content");
-assert.ok(extensionsView.includes('className={props.compact ? "flex-1" : undefined}'), "embedded extensions tabs should stay tappable in the narrow rail");
+assert.ok(extensionsView.includes('props.compact ? "grid w-full min-w-0 grid-cols-2 gap-1" : "inline-flex w-fit"'), "embedded extensions tabs should use equal compact columns instead of crowding content");
+assert.ok(extensionsView.includes("h-auto min-w-0 whitespace-normal"), "embedded extensions tabs should stay tappable without forcing long labels outside the rail");
+assert.ok(extensionsView.includes("h-auto min-w-0 flex-col items-center gap-0.5 whitespace-normal"), "embedded Marketplace tab should stack its status label in compact rail layout");
+assert.ok(extensionsView.includes('<span className="min-w-0 max-w-full truncate">Marketplace</span>'), "embedded Marketplace label should be constrained inside its compact tab");
 assert.ok(settingsSurfaceRoute.includes("compact={props.embedded}"), "embedded settings should tell extensions and MCP views to use compact right-rail layout");
 assert.ok(settingsSurfaceRoute.includes("<CloudAccountView\n            compact={props.embedded}"), "embedded Profile rail should render the compact account surface");
 assert.ok(settingsSurfaceRoute.includes("<WalletSettingsView\n            compact={props.embedded}"), "embedded Wallet rail should render the compact wallet surface");
@@ -616,7 +685,7 @@ for (const phrase of [
   "Bittensor: explain subnets",
   "Hyperliquid: read markets/orderbooks/account exposure",
   "Polymarket: search/summarize markets",
-  "Wellness workflows",
+  "Longevity workflows",
   "Can submit: No. Live submission: Off.",
 ]) {
   assert.ok(cryptoPrompt.includes(phrase), `orientation prompt should keep starter answers Matterhorn-native: ${phrase}`);
@@ -631,7 +700,7 @@ for (const phrase of [
   'name: "Hyperliquid"',
   'id: "polymarket"',
   'name: "Polymarket"',
-  "read/preview-only",
+  "external handoffs",
   "external-signer",
   "Open Bittensor desk",
   "Open Hyperliquid desk",
@@ -708,6 +777,14 @@ for (const phrase of [
   "grid-cols-[44px_minmax(0,1fr)]",
   "border-l border-dls-border/30 pl-3",
   "Safety",
+  "Full docs",
+  "Open GitHub docs",
+  "MATTERHORN_MCP_DOCS_GITHUB_BASE",
+  "mcpDocs(",
+  "Use this MCP for",
+  "How it works",
+  "Safety boundary",
+  "Example prompts",
   "plus {hiddenToolCount} more.",
   "Bittensor MCP",
   'protocolDeskId: "bittensor"',
@@ -724,8 +801,8 @@ for (const phrase of [
   "matterhorn-work mcp config --target claude-desktop --profile full",
   "matterhorn-work mcp config --target cursor --profile full",
   "Public reads and unsigned previews only.",
-  "Preview only. No live submit.",
-  "Use an external signer/client.",
+  "External handoff only. No live submit.",
+  "Use your own signer/client.",
   "Never paste seeds, keys, mnemonics, signatures, signed payloads, or wallet exports.",
   "Never paste API secrets, keys, signatures, signed payloads, or custody credentials.",
   "No hidden saves.",

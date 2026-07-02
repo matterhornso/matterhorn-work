@@ -2,7 +2,7 @@
 
 *Customer Demo Pack artifact — a reusable progress summary a personal trainer, yoga instructor, or dietician can share with a client. Based on self-reported check-ins; educational only.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Summary for: [Client name] — [date range]
 
@@ -29,4 +29,4 @@ This is a general progress recap from self-reported information, **not a medical
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This summary is general wellness education, not medical care.
+Results vary between individuals. No specific outcome or result is guaranteed. This summary is general longevity education, not medical care.

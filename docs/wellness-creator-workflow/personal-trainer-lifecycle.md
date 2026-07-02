@@ -2,7 +2,7 @@
 
 *A reproducible, customer-demo-safe walk-through of the complete client-delivery path for a personal trainer. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## 1. Lead intake
 A short form to capture a prospective client's goals (e.g. general fitness, fat loss), schedule, available equipment, and general non-clinical context. No health diagnosis is collected.

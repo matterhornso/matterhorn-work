@@ -241,13 +241,13 @@ for (const id of ["hyperliquid_trader", "polymarket_researcher"]) {
   );
 }
 
-// 7. Wellness template includes non-medical / educational safety.
+// 7. Longevity template includes non-medical / educational safety.
 const wellness = catalog.customerTemplates.find((t) => t.id === "wellness_creator_workflow");
 assert.ok(wellness, "wellness_creator_workflow must exist");
 const wellnessSafetyText = `${wellness.promise} ${wellness.summary} ${wellness.ui.shortDescription}`.toLowerCase();
 assert.ok(
   /medical advice|not medical|educational|without giving medical/.test(wellnessSafetyText),
-  "wellness template must include non-medical/educational safety wording",
+  "longevity template must include non-medical/educational safety wording",
 );
 
 // 8. Crypto/market templates stay preview-only or handoff-only.
@@ -270,7 +270,7 @@ for (const id of ["hyperliquid_trader", "polymarket_researcher"]) {
   assert.equal(template.safetyBoundaries.requiresExternalSigner, false, `${id} must not require external signer`);
 }
 
-// 9. Wellness and decentralized services templates are planned-not-live.
+// 9. Longevity and decentralized services templates are planned-not-live.
 for (const id of ["wellness_creator_workflow", "decentralized_services_operator"]) {
   const template = catalog.customerTemplates.find((t) => t.id === id);
   assert.ok(template, `${id} template must exist`);
@@ -358,19 +358,19 @@ assert.ok(bittensorDeskBlock.includes('status: "beta_ready"'), "Bittensor desk m
 assert.ok(bittensorDeskBlock.includes("requiresExternalSigner: true"), "Bittensor desk must require external signer");
 assert.ok(bittensorDeskBlock.includes("isPrimaryCustomerDesk: true"), "Bittensor desk must be a primary customer desk");
 
-// 16. Wellness desk is workflow-ready, non-medical, no live payments/email/hosting/access.
+// 16. Longevity desk is workflow-ready, non-medical, no live payments/email/hosting/access.
 const wellnessDeskBlock = deskManifestBlocks.wellness;
-assert.ok(wellnessDeskBlock.includes('status: "workflow_ready"'), "Wellness desk must be workflow_ready");
+assert.ok(wellnessDeskBlock.includes('status: "workflow_ready"'), "Longevity desk must be workflow_ready");
 const wellnessDeskLower = wellnessDeskBlock.toLowerCase();
 for (const phrase of ["not medical", "educational", "no live payments", "no live email", "no live hosting"]) {
   assert.ok(
     wellnessDeskLower.includes(phrase),
-    `Wellness desk safety strip must include "${phrase}"`,
+    `Longevity desk safety strip must include "${phrase}"`,
   );
 }
 
-assert.ok(wellnessDeskBlock.includes("requiresExternalSigner: false"), "Wellness desk must not require external signer");
-assert.ok(wellnessDeskBlock.includes("isPrimaryCustomerDesk: true"), "Wellness desk must be a primary customer desk");
+assert.ok(wellnessDeskBlock.includes("requiresExternalSigner: false"), "Longevity desk must not require external signer");
+assert.ok(wellnessDeskBlock.includes("isPrimaryCustomerDesk: true"), "Longevity desk must be a primary customer desk");
 
 // 17. Services/decentralized services desk is planned-not-live and not a primary customer desk.
 const servicesDeskBlock = deskManifestBlocks.services;

@@ -2,7 +2,7 @@
 
 *A reproducible, customer-demo-safe walk-through of the complete client-delivery path for a yoga instructor. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## 1. Lead intake
 Capture a prospective student's goals (e.g. mobility, relaxation), schedule, experience level, and general non-clinical context.
@@ -27,4 +27,4 @@ A wrap-up packet: program summary, a self-reported recap, and gentle next steps 
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This lifecycle is general wellness education, not medical care. Future Matterhorn hooks — storage/hosting, payments, email, identity/access — are planned, not live.
+Results vary between individuals. No specific outcome or result is guaranteed. This lifecycle is general longevity education, not medical care. Future Matterhorn hooks — storage/hosting, payments, email, identity/access — are planned, not live.

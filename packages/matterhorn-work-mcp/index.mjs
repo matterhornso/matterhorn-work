@@ -512,7 +512,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_catalog",
-    description: "Read the catalog-only Matterhorn Work workflow registry for wellness creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read the catalog-only Matterhorn Work workflow registry for longevity creators, Bittensor, markets, decentralized services, and future vertical workflows. Discovery only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -562,7 +562,7 @@ const tools = [
   },
   {
     name: "matterhorn_workflows_customer_templates",
-    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, wellness creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
+    description: "Read customer-facing Matterhorn Work workflow templates for Bittensor, Hyperliquid, Polymarket, longevity creators, decentralized services, and blank chat. Template catalog only: no provider execution, custody, signing, submission, payments, email sending, hosting, or storage publish.",
     inputSchema: {
       type: "object",
       properties: {
@@ -3416,8 +3416,8 @@ function matterhornBittensorCheckReceipt(args = {}) {
 
   const accepted = findings.every((finding) => finding.status !== "fail");
   const followUpPrompt = netuid !== null
-    ? "Use Bittensor chat mode. Compare my public wallet state after this " + (action || "Bittensor") + " receipt on subnet " + netuid + ". Explain what changed, source freshness, and any safe next steps without asking for seed phrases or private keys."
-    : "Use Bittensor chat mode. Review this Bittensor receipt and compare my public wallet state after finality. Explain what changed and any safe next steps without asking for seed phrases or private keys.";
+    ? "Bittensor Agent task: compare my public wallet state after this " + (action || "Bittensor") + " receipt on subnet " + netuid + ". Explain what changed, source freshness, and any safe next steps without asking for seed phrases or private keys."
+    : "Bittensor Agent task: review this Bittensor receipt and compare my public wallet state after finality. Explain what changed and any safe next steps without asking for seed phrases or private keys.";
   const result = {
     ok: true,
     accepted,

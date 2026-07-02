@@ -19,9 +19,9 @@ Done when:
 - The smoke runner includes Bittensor gates, market execution safety, venue readiness, read-preview QA, receipt QA, and market live read-only smoke.
 - The runner never references submit/sign/exchange routes and never asks for secrets.
 
-## Phase 2: Unified Market Chat Router
+## Phase 2: Unified Market Agent Router
 
-Goal: users should not need to know which backend workflow to call. Matterhorn should route ordinary prompts across Bittensor, Hyperliquid, and Polymarket.
+Goal: users should not need to know which backend workflow to call. Matterhorn should route ordinary agent tasks across Bittensor, Hyperliquid, and Polymarket.
 
 Build:
 

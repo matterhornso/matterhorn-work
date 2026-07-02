@@ -1,7 +1,8 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@opencode-ai/sdk/v2/client";
-import { ArrowUp, ChevronRight, FileText, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, ChevronRight, FileText, Paperclip, Plug, Settings, Square, Terminal, X, Zap } from "lucide-react";
+import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 import fuzzysort from "fuzzysort";
 import { OPENWORK_EXTENSION_CATALOG, type McpDirectoryInfo } from "../../../../../app/constants";
 import type { CloudImportedPlugin, CloudImportedPluginFile } from "../../../../../app/cloud/import-state";
@@ -43,6 +44,16 @@ function isComposerExtensionAvailable(entry: McpDirectoryInfo) {
   ) === true;
   if (hasSessionSurface) return isMatterhornExtensionEnabled(entry);
   return !entry.defaultEnabled || isMatterhornExtensionEnabled(entry);
+}
+
+function formatComposerAgentName(agentName: string) {
+  const deskAgent = getMatterhornDeskAgentById(agentName);
+  if (deskAgent) return deskAgent.displayName;
+  return agentName
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 type ComposerProps = {
@@ -1441,7 +1452,6 @@ export function ReactSessionComposer(props: ComposerProps) {
         {/* Below-panel control strip: agent + model + behavior variant */}
         <div className="mt-2 flex items-center justify-between px-2">
           <div className="flex flex-wrap items-center gap-1.5 text-gray-10 sm:gap-2.5">
-            {/* TODO: Decide what to do with agent selection before showing this control again.
             <div ref={agentMenuRef} className="relative">
               <button
                 type="button"
@@ -1455,13 +1465,13 @@ export function ReactSessionComposer(props: ComposerProps) {
                 <ChevronDown size={13} />
               </button>
               {agentMenuOpen ? (
-                <div className="absolute left-0 bottom-full z-40 mb-2 w-64 overflow-hidden rounded-[18px] border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
-                  <div className="border-b border-dls-border px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-10">
+                <div className="absolute bottom-full left-0 z-40 mb-2 w-64 overflow-hidden rounded-xl border border-dls-border bg-dls-surface shadow-[var(--dls-shell-shadow)]">
+                  <div className="border-b border-dls-border px-3 py-2 text-[12px] font-semibold text-gray-11">
                     {t("composer.agent_label")}
                   </div>
                   <div
                     role="presentation"
-                    className="space-y-1 p-2 max-h-64 overflow-y-auto"
+                    className="max-h-64 space-y-1 overflow-y-auto p-2"
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     <button
@@ -1482,6 +1492,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                     </button>
                     {agents.map((agent, index) => {
                       const active = props.selectedAgent === agent.name;
+                      const label = formatComposerAgentName(agent.name);
                       return (
                         <button
                           key={agent.name}
@@ -1497,7 +1508,7 @@ export function ReactSessionComposer(props: ComposerProps) {
                             setAgentMenuOpen(false);
                           }}
                         >
-                          <span className="truncate">{agent.name.charAt(0).toUpperCase() + agent.name.slice(1)}</span>
+                          <span className="truncate">{label}</span>
                           {active ? <Check size={14} className="text-gray-10" /> : null}
                         </button>
                       );
@@ -1506,7 +1517,6 @@ export function ReactSessionComposer(props: ComposerProps) {
                 </div>
               ) : null}
             </div>
-            */}
 
             <ModelSelect
               open={props.modelPickerOpen}

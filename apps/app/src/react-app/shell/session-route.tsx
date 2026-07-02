@@ -135,6 +135,7 @@ import {
   shouldInjectMatterhornOrientationPrompt,
   shouldInjectCryptoPrompt,
 } from "../domains/wallet/prompts/crypto-system-prompt";
+import { getMatterhornDeskAgentById } from "@matterhorn-work/types/desk-agents";
 
 import { readDenSettings } from "../../app/lib/den";
 import { denSessionUpdatedEvent } from "../../app/lib/den-session-events";
@@ -163,6 +164,17 @@ import {
 const EmbeddedSettingsSurface = lazy(() => import("./settings-route").then((module) => ({
   default: module.SettingsSurface,
 })));
+
+function formatAgentDisplayName(agentId: string | null) {
+  if (!agentId) return t("session.default_agent");
+  const deskAgent = getMatterhornDeskAgentById(agentId);
+  if (deskAgent) return deskAgent.displayName;
+  return agentId
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 type RouteWorkspace = MatterhornWorkspaceInfo & {
   displayNameResolved: string;
@@ -229,6 +241,12 @@ function folderNameFromPath(path: string) {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
   const parts = normalized.split("/").filter(Boolean);
   return parts[parts.length - 1] ?? "workspace";
+}
+
+function joinWorkspacePath(root: string, child: string) {
+  const trimmed = root.trim().replace(/[\\/]+$/, "");
+  if (!trimmed) return child;
+  return trimmed.includes("\\") ? `${trimmed}\\${child}` : `${trimmed}/${child}`;
 }
 
 function isTransientStartupError(message: string | null | undefined) {
@@ -524,7 +542,7 @@ export function SessionRoute() {
   const params = useParams<{ workspaceId?: string; sessionId?: string }>();
   const routeWorkspaceId = params.workspaceId?.trim() || "";
   const selectedSessionId = params.sessionId?.trim() || null;
-  const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean }) => {
+  const navigateToWorkspaceSession = useCallback((workspaceId: string, sessionId?: string | null, options?: { replace?: boolean; state?: unknown }) => {
     const id = workspaceId.trim();
     if (!id) {
       navigate(legacySessionRoute(sessionId), options);
@@ -1362,13 +1380,8 @@ export function SessionRoute() {
       navigateToWorkspaceSession(selectedWorkspaceId, selectedSessionId, { replace: true });
       return;
     }
-    if (selectedSessionId) return;
-    if (!selectedWorkspaceId) return;
-    const remembered = readLastSessionFor(selectedWorkspaceId);
-    if (!remembered) return;
-    const sessions = sessionsByWorkspaceId[selectedWorkspaceId] ?? [];
-    if (!sessions.some((session: any) => session?.id === remembered)) return;
-    navigateToWorkspaceSession(selectedWorkspaceId, remembered, { replace: true });
+    // `/workspace/:workspaceId/session` is project Home. Do not auto-open the
+    // last chat here; explicit workspace/session controls handle that.
   }, [
     loading,
     legacySelectedWorkspaceId,
@@ -1376,7 +1389,6 @@ export function SessionRoute() {
     routeWorkspaceId,
     selectedSessionId,
     selectedWorkspaceId,
-    sessionsByWorkspaceId,
     workspaces,
   ]);
 
@@ -1480,6 +1492,35 @@ export function SessionRoute() {
   }, [client, loading, selectedWorkspace, workspaces]);
 
   const selectedWorkspaceRoot = selectedWorkspace?.path?.trim() || "";
+  const selectedWorkspaceName = selectedWorkspace ? workspaceLabel(selectedWorkspace) : "";
+  const selectedWorkspaceOutputsPath = selectedWorkspaceRoot ? joinWorkspacePath(selectedWorkspaceRoot, "outputs") : "";
+  const copyTextToClipboard = useCallback(async (text: string, label: string) => {
+    if (!text.trim()) return;
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("Clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(text);
+      showToast({ title: `${label} copied`, tone: "success", durationMs: 1800 });
+    } catch {
+      showToast({ title: `Could not copy ${label.toLowerCase()}`, tone: "error", durationMs: 2400 });
+    }
+  }, [showToast]);
+
+  const revealWorkspacePath = useCallback(async (path: string, label: string) => {
+    if (!path.trim()) return;
+    if (!isDesktopRuntime()) {
+      showToast({ title: `${label} is available in the desktop app`, description: path, tone: "warning", durationMs: 3200 });
+      return;
+    }
+    try {
+      await revealDesktopItemInDir(path);
+      showToast({ title: `${label} opened`, tone: "success", durationMs: 1800 });
+    } catch {
+      showToast({ title: `Could not open ${label.toLowerCase()}`, description: path, tone: "error", durationMs: 3200 });
+    }
+  }, [showToast]);
+
   // Single source of truth for the selected workspace's server URL/token/id.
   // For remote workspaces this is the worker that owns the workspace; for
   // local workspaces it's the user's local Matterhorn Work server.
@@ -2137,7 +2178,7 @@ export function SessionRoute() {
       onModelVariantChange: (value: string | null) => {
         local.setPrefs((previous) => ({ ...previous, modelVariant: value }));
       },
-      agentLabel: selectedAgent ? selectedAgent.charAt(0).toUpperCase() + selectedAgent.slice(1) : t("session.default_agent"),
+      agentLabel: formatAgentDisplayName(selectedAgent),
       selectedAgent,
       listAgents: async () => {
         const list = unwrap(await opencodeClient.app.agents());
@@ -2524,7 +2565,7 @@ export function SessionRoute() {
   }, [navigateToWorkspaceSession, selectedWorkspaceId, sessionsByWorkspaceId]);
 
   const navigateToSessionRootForControl = useCallback(() => {
-    navigateToWorkspaceSession(selectedWorkspaceId);
+    navigateToWorkspaceSession(selectedWorkspaceId, null, { replace: true });
   }, [navigateToWorkspaceSession, selectedWorkspaceId]);
 
   const openModelPickerForControl = useCallback(() => {
@@ -2874,6 +2915,7 @@ export function SessionRoute() {
           return true;
         },
         onOpenSession: (workspaceId, sessionId) => {
+          setSelectedAgent(null);
           setLegacySelectedWorkspaceId(workspaceId);
           writeActiveWorkspaceId(workspaceId || null);
           writeLastSessionFor(workspaceId, sessionId);
@@ -2881,6 +2923,7 @@ export function SessionRoute() {
         },
         onPrefetchSession: () => {},
         onCreateTaskInWorkspace: (workspaceId) => {
+          setSelectedAgent(null);
           void handleCreateTaskInWorkspace(workspaceId);
         },
         onCreateTaskWithPrompt: (workspaceId, prompt, options) => {
@@ -2891,6 +2934,7 @@ export function SessionRoute() {
             if (!endpoint?.token) return;
             const workspacePath = workspace.path?.trim() || undefined;
             const title = options?.title?.trim();
+            const agent = options?.agent?.trim();
             const workspaceClient = createClient(
               endpoint.opencodeBaseUrl,
               workspacePath,
@@ -2909,6 +2953,7 @@ export function SessionRoute() {
                 }).catch(() => undefined);
               }
               saveSessionDraft(workspaceId, session.id, { text: prompt, mode: "prompt" });
+              setSelectedAgent(agent || null);
               writeActiveWorkspaceId(workspaceId || null);
               writeLastSessionFor(workspaceId, session.id);
               rememberPendingCreatedSession(workspaceId, session.id);
@@ -3054,6 +3099,16 @@ export function SessionRoute() {
     <CommandPalette
       open={commandPaletteOpen}
       onClose={() => setCommandPaletteOpen(false)}
+      onGoHome={() => {
+        if (selectedWorkspaceId) {
+          navigateToWorkspaceSession(selectedWorkspaceId);
+        }
+      }}
+      onCreateNewProject={() => {
+        setCreateWorkspaceError(null);
+        setCreateWorkspaceRemoteError(null);
+        setCreateWorkspaceOpen(true);
+      }}
       onCreateNewSession={() => {
         if (selectedWorkspaceId) {
           void handleCreateTaskInWorkspace(selectedWorkspaceId);
@@ -3076,6 +3131,13 @@ export function SessionRoute() {
           // ignore event dispatch failures
         }
       }}
+      currentProjectName={selectedWorkspaceName}
+      projectFolderPath={selectedWorkspaceRoot}
+      outputsPath={selectedWorkspaceOutputsPath}
+      onOpenProjectFolder={() => void revealWorkspacePath(selectedWorkspaceRoot, "Project folder")}
+      onOpenOutputs={() => void revealWorkspacePath(selectedWorkspaceOutputsPath, "Outputs folder")}
+      onCopyProjectPath={() => void copyTextToClipboard(selectedWorkspaceRoot, "Project path")}
+      onCopyOutputsPath={() => void copyTextToClipboard(selectedWorkspaceOutputsPath, "Outputs path")}
       sessions={paletteSessionOptions}
     />
     <ModelPickerModal

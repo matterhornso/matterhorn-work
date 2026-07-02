@@ -69,9 +69,9 @@ await writeFile(schedulerPath, JSON.stringify({
     promptSamples: [{
       intent: "review_wallet",
       label: "Wallet exposure",
-      prompt: "Use Bittensor chat mode. Review public Bittensor wallet 5Ek9...",
+      prompt: "Bittensor Agent task: review public Bittensor wallet 5Ek9...",
     }],
-    safety: "read_only_chat_prompts",
+    safety: "read_only_agent_tasks",
   },
   safety: {
     custody: "none",
@@ -99,7 +99,7 @@ assert.ok(markdown.includes("Matterhorn Work Tests passed."));
 assert.ok(markdown.includes("Covered validator comparison."));
 assert.ok(markdown.includes("Scheduled watch autopilot reported ready."));
 assert.ok(markdown.includes("Completed 6 scheduled watch checks."));
-assert.ok(markdown.includes("Prepared 1 read-only notification prompt"));
+assert.ok(markdown.includes("Prepared 1 read-only Bittensor Agent task"));
 assert.equal(/seed phrase|private key|wallet export/i.test(markdown), false);
 
 const missingWalletPath = join(dir, "bittensor-missing-wallet.json");

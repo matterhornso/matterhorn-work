@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Wellness Creator Pilot — offline planner + go-live gate.
+ * Longevity Creator Pilot — offline planner + go-live gate.
  *
  * This helper is intentionally offline. It does three things and never needs a
  * network, wallet, key, or payment account:
@@ -101,7 +101,7 @@ const PROMPTS = [
 
 const DISCLAIMERS = {
   general:
-    "This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.",
+    "This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.",
   nutrition:
     "This guidance is general healthy-eating information, not a clinical or therapeutic diet. It is not a substitute for care from a registered dietitian or doctor.",
   noGuarantee:
@@ -160,7 +160,7 @@ const SUCCESS_METRICS = [
   "Zero medical-claim or false-Web3-live escapes in QA.",
 ];
 
-// Customer demo packet — the first-party Matterhorn services each wellness
+// Customer demo packet — the first-party Matterhorn services each longevity
 // workflow maps onto, every one planned-not-live in the pilot.
 const SERVICE_HOOKS = [
   {
@@ -226,7 +226,7 @@ function assertNoForbiddenArgs() {
   for (const item of args) {
     const key = item.split("=")[0] || item;
     if (FORBIDDEN_ARG_RE.test(key)) {
-      throw new Error(`Forbidden credential-shaped flag ${key} is not accepted by the Wellness Creator Pilot helper.`);
+      throw new Error(`Forbidden credential-shaped flag ${key} is not accepted by the Longevity Creator Pilot helper.`);
     }
   }
 }
@@ -235,8 +235,8 @@ function assertNoForbiddenArgs() {
 // demo without understanding the repo. Everything here is offline and read-only.
 function buildDemoPacket() {
   return {
-    title: "Wellness Creator Customer Demo Packet",
-    pilot: "Wellness Creator Pilot",
+    title: "Longevity Creator Customer Demo Packet",
+    pilot: "Longevity Creator Pilot",
     nonTrading: true,
     personas: PERSONAS,
     canonicalPrompts: PROMPTS.map((p) => p.prompt),
@@ -256,7 +256,7 @@ function buildContract({ dryRun }) {
     version: VERSION,
     ok: true,
     dryRun,
-    pilot: "Wellness Creator Pilot",
+    pilot: "Longevity Creator Pilot",
     nonTrading: true,
     personas: PERSONAS,
     prompts: PROMPTS,
@@ -353,8 +353,8 @@ function main() {
       for (const failure of result.failures) process.stderr.write(`FAIL ${failure}\n`);
       process.stdout.write(
         result.ok
-          ? "Wellness Creator Pilot go-live check passed.\n"
-          : `Wellness Creator Pilot go-live check found ${result.failures.length} issue(s).\n`,
+          ? "Longevity Creator Pilot go-live check passed.\n"
+          : `Longevity Creator Pilot go-live check found ${result.failures.length} issue(s).\n`,
       );
     }
     process.exitCode = result.ok ? 0 : 1;

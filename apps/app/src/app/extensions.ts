@@ -189,7 +189,7 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     icon: { src: "/matterhorn-wallet.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. " },
     setup: {
-      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Market routes are read/preview-only; signing stays external.",
+      instructions: "Protocol workflows are available as separate Bittensor, Hyperliquid, and Polymarket desks in the session rail. Market routes prepare external handoffs only; signing and submission stay external.",
       primaryCta: "Open protocol desks",
     },
     resources: [
@@ -261,12 +261,12 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "hyperliquid",
     name: "Hyperliquid",
-    description: "Read markets, orderbooks, account exposure, watches, and preview external-signer order flows with live submission off.",
+    description: "Read markets, orderbooks, account exposure, watches, and prepare external trade handoffs with live submission off.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/assets/desks/hyperliquid/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Hyperliquid, " },
     setup: {
-      instructions: "Hyperliquid is preview-only in this build. Matterhorn does not accept API secrets, raw signatures, signed payloads, or live order submission.",
+      instructions: "Hyperliquid is external-handoff-only in this build. Matterhorn does not accept API secrets, raw signatures, signed payloads, or live order submission.",
       primaryCta: "Open Hyperliquid desk",
     },
     resources: [
@@ -285,12 +285,12 @@ export const BUILT_IN_OPENWORK_EXTENSION_MANIFESTS: MatterhornExtensionManifest[
     schemaVersion: 1,
     id: "polymarket",
     name: "Polymarket",
-    description: "Discover prediction markets, inspect compliance, read orderbooks, create watches, and prepare non-custodial preview-only flows.",
+    description: "Discover prediction markets, inspect compliance, read orderbooks, create watches, and prepare non-custodial handoffs.",
     source: { format: "matterhorn-builtin", origin: "builtin", trusted: true },
     icon: { src: "/assets/desks/polymarket/logo-dark.svg" },
     composer: { prompt: "Use Matterhorn protocol chat. For Polymarket, " },
     setup: {
-      instructions: "Polymarket support is read/preview-only. Compliance-blocked markets must not expose executable price, size, or share terms.",
+      instructions: "Polymarket support is compliance-gated handoff only. Blocked markets must not expose executable price, size, or share terms.",
       primaryCta: "Open Polymarket desk",
     },
     resources: [

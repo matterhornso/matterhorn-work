@@ -98,7 +98,7 @@ const STAGES = [
     description:
       "The creator describes their audience, goal, constraints, session type, duration, equipment, and level.",
     prompt:
-      "Start a new wellness program — here is my audience, goal, constraints, session type, duration, equipment, and level",
+      "Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level",
     artifacts: ["Intake summary"],
   },
   {
@@ -169,7 +169,7 @@ const EXPECTED_ARTIFACT_TYPES = [...new Set(STAGES.flatMap((stage) => stage.arti
 
 const DISCLAIMERS = {
   general:
-    "This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.",
+    "This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.",
   nutrition:
     "This guidance is general healthy-eating information, not a clinical or therapeutic diet. It is not a substitute for care from a registered dietitian or doctor.",
   noGuarantee:
@@ -231,7 +231,7 @@ const OFFER_TYPES = [
   { id: "starter_4_week", name: "4-week starter" },
   { id: "transformation_8_week", name: "8-week transformation" },
   { id: "group_cohort", name: "Group cohort" },
-  { id: "corporate_wellness", name: "Corporate wellness" },
+  { id: "corporate_wellness", name: "Corporate longevity" },
   { id: "habit_reset", name: "Habit reset" },
 ];
 const OFFER_DELIVERABLES = [
@@ -268,7 +268,7 @@ const OFFER_FIXTURES = {
 function buildOfferBuilder(persona = null) {
   const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
   return {
-    title: "Wellness Creator Customer Offer Builder",
+    title: "Longevity Creator Customer Offer Builder",
     notCustomApp: true,
     educationalOnly: true,
     personas: OFFER_PERSONAS,
@@ -282,7 +282,7 @@ function buildOfferBuilder(persona = null) {
     fixtures: OFFER_FIXTURES,
     fixture: resolved ? OFFER_FIXTURES[resolved] ?? null : null,
     disclaimer: DISCLAIMERS.general,
-    note: "Package and deliver a wellness service as client-safe artifacts. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
+    note: "Package and deliver a longevity service as client-safe artifacts. Every service hook is planned, not live; no payment, email, hosting, or access action happens.",
   };
 }
 
@@ -309,7 +309,7 @@ const LIFECYCLE_FIXTURES = {
 function buildClientLifecycle(persona = null) {
   const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
   return {
-    title: "Wellness Creator Client Lifecycle",
+    title: "Longevity Creator Client Lifecycle",
     notCustomApp: true,
     educationalOnly: true,
     personas: OFFER_PERSONAS,
@@ -356,7 +356,7 @@ const DEMO_PACK_DELIVERABLES = [
 function buildCustomerDemoPack(persona = null) {
   const resolved = persona && OFFER_PERSONAS.includes(persona) ? persona : null;
   return {
-    title: "Wellness Creator Customer Demo Pack",
+    title: "Longevity Creator Customer Demo Pack",
     notCustomApp: true,
     educationalOnly: true,
     personas: OFFER_PERSONAS,
@@ -372,7 +372,7 @@ function buildCustomerDemoPack(persona = null) {
   };
 }
 
-// ---- Wellness Creator Demo Packet Export ----
+// ---- Longevity Creator Demo Packet Export ----
 // Stitch the seven demo-pack artifacts into one shareable, customer-facing
 // markdown packet. Personas include a generic "wellness_creator" default.
 const EXPORT_PERSONAS = ["personal_trainer", "yoga_instructor", "dietician", "wellness_creator"];
@@ -380,14 +380,14 @@ const EXPORT_PERSONA_LABELS = {
   personal_trainer: "Personal trainer",
   yoga_instructor: "Yoga instructor",
   dietician: "Dietician",
-  wellness_creator: "Wellness creator",
+  wellness_creator: "Longevity creator",
 };
 
 // The safety footer appended to every exported packet.
 const PACKET_SAFETY_FOOTER = [
   "## Safety & Boundaries",
   "",
-  "- This packet is for **general fitness and wellness education only**. It is **not medical advice, diagnosis, or treatment**.",
+  "- This packet is for **general fitness and longevity education only**. It is **not medical advice, diagnosis, or treatment**.",
   "- It contains **no diagnosis, no prescription, no treatment plan, and no guaranteed outcomes**. Results vary between individuals.",
   "- For any medical condition, injury, pregnancy, eating concern, or medication question, consult a **qualified healthcare professional**.",
   "- Payments, email, hosting/storage, and identity/access are **planned, not live** Matterhorn service hooks. Nothing here is charged, emailed, hosted, or gated automatically.",
@@ -410,9 +410,9 @@ function buildDemoPacketExport(persona = "wellness_creator") {
     sections.push(`---\n\n# ${deliverable.name}\n\n${body}`);
   }
   const header = [
-    `# Wellness Creator Demo Packet — ${label}`,
+    `# Longevity Creator Demo Packet — ${label}`,
     "",
-    `*A single, shareable customer-facing packet stitched from the Wellness Creator Customer Demo Pack. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*`,
+    `*A single, shareable customer-facing packet stitched from the Longevity Creator Customer Demo Pack. Artifact-first and offline: nothing is hosted, charged, emailed, or gated.*`,
     "",
     "This packet bundles seven client-ready artifacts: service offer page, onboarding questionnaire, 4-week program, weekly check-in, progress summary, renewal/follow-up message, and client handoff packet.",
   ].join("\n");
@@ -524,7 +524,7 @@ const EXAMPLE_PROMPTS = [
     id: "yoga-mobility",
     prompt: "Draft a yoga class plan for lower-back mobility",
     expectedArtifact: "General mobility-focused yoga class plan.",
-    safetyCaveat: "General wellness education only, not medical care. Refer pain or injury to a qualified professional.",
+    safetyCaveat: "General longevity education only, not medical care. Refer pain or injury to a qualified professional.",
     processesPayment: false,
     sendsEmail: false,
   },
@@ -727,7 +727,7 @@ const SAMPLE_PROMPTS = [
 // How this demonstrates Matterhorn beyond Web3.
 const MATTERHORN_BEYOND_WEB3 = {
   summary:
-    "Wellness Creator is Matterhorn's first Web2 / customer-business workflow: a non-crypto service professional does real client work through the same chat/workflow system as Bittensor, Hyperliquid, and Polymarket.",
+    "Longevity Creator is Matterhorn's first Web2 / customer-business workflow: a non-crypto service professional does real client work through the same chat/workflow system as Bittensor, Hyperliquid, and Polymarket.",
   firstWeb2Workflow: true,
   sharesGenericSurface: true,
   plannedNotLiveServiceHooks: ["storage/hosting", "payments", "email", "identity/access"],
@@ -778,7 +778,7 @@ function routeFreeformPrompt(prompt) {
     };
   }
   const text = raw.toLowerCase();
-  let artifactType = "Custom wellness program artifact";
+  let artifactType = "Custom longevity program artifact";
   if (/check.?in|progress|review/.test(text)) artifactType = "Client progress check-in";
   else if (/diet|meal|nutrition|eating|macro/.test(text)) artifactType = "Nutrition education artifact";
   else if (/yoga|mobility|stretch|flexib/.test(text)) artifactType = "Yoga / mobility class plan";
@@ -890,7 +890,7 @@ function buildMemoryCandidates() {
 
 function buildMemoryLane() {
   return {
-    title: "Wellness Memory Safety Lane",
+    title: "Longevity Memory Safety Lane",
     status: "candidates_only",
     writesMemory: false,
     educationalOnly: true,
@@ -977,9 +977,9 @@ function buildMemoryQa() {
   const secretRefused = refusedSecret.filter((item) => item.allowed === false).length;
 
   return {
-    title: "Wellness Memory QA Evidence Pack",
+    title: "Longevity Memory QA Evidence Pack",
     educationalOnly: true,
-    notMedicalAdvice: "This is general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.",
+    notMedicalAdvice: "This is general fitness and longevity education only. It is not medical advice, diagnosis, or treatment.",
     writesMemory: false,
     optInRequirements: MEMORY_QA_OPT_IN_REQUIREMENTS,
     safeCandidatesByPersona: safeByPersona,
@@ -1062,7 +1062,7 @@ function memorySuggestionFor(persona, candidate, index, categoryOverride) {
   const suggestion = {
     version: MEMORY_SUGGESTION_VERSION,
     proposedRecord: record,
-    reason: "Proposed wellness service/workflow preference. Requires explicit user confirmation before anything is stored.",
+    reason: "Proposed longevity service/workflow preference. Requires explicit user confirmation before anything is stored.",
     captureMode: "user_confirmed_only",
     canAutoCapture: false,
     requiresExplicitConsent: true,
@@ -1139,7 +1139,7 @@ function buildMemorySuggestions() {
   }
   const categoriesCovered = [...new Set(suggestions.map((s) => s.proposedRecord.body.category))];
   return {
-    title: "Wellness Memory Contract Adapter",
+    title: "Longevity Memory Contract Adapter",
     suggestionVersion: MEMORY_SUGGESTION_VERSION,
     captureMode: "user_confirmed_only",
     writesMemory: false,
@@ -1166,7 +1166,7 @@ function buildMemorySuggestions() {
       writesMemory: false,
       noLiveServiceClaims: true,
     },
-    note: "Non-writing adapter: safe wellness candidates become MatterhornMemorySuggestion fixtures (user_confirmed, opt-in tagged). Clinical and secret-shaped inputs are refused/redacted and never become records. Nothing is written to memory.",
+    note: "Non-writing adapter: safe longevity candidates become MatterhornMemorySuggestion fixtures (user_confirmed, opt-in tagged). Clinical and secret-shaped inputs are refused/redacted and never become records. Nothing is written to memory.",
   };
 }
 
@@ -1187,7 +1187,7 @@ function buildContract() {
   return {
     version: VERSION,
     ok: true,
-    workflow: "Wellness Creator Workflow",
+    workflow: "Longevity Creator Workflow",
     framing: "A full Matterhorn Work workflow, not a pilot and not a custom vertical UI.",
     fullWorkflow: true,
     isPilot: false,
@@ -1223,7 +1223,7 @@ function buildContract() {
         routed: routeFreeformPrompt(intent.intent).serviceArtifactContract,
       })),
       routesArbitraryPrompts: true,
-      note: "Named intents and arbitrary wellness/business prompts both route into one of the artifact contracts. Clinical prompts redirect to a qualified professional; secret-shaped text is refused and not echoed.",
+      note: "Named intents and arbitrary longevity/business prompts both route into one of the artifact contracts. Clinical prompts redirect to a qualified professional; secret-shaped text is refused and not echoed.",
     },
     artifactContracts: ARTIFACT_CONTRACTS,
     samplePrompts: SAMPLE_PROMPTS.map((sample) => {
@@ -1788,7 +1788,7 @@ function runCheck() {
       failures.push(`Demo packet export for ${persona} should stitch all ${DEMO_PACK_DELIVERABLES.length} deliverables.`);
     }
     for (const marker of [
-      "Wellness Creator Demo Packet",
+      "Longevity Creator Demo Packet",
       "Safety & Boundaries",
       "not medical advice, diagnosis, or treatment",
       "planned, not live",
@@ -1985,7 +1985,7 @@ function main() {
         bytes: Buffer.byteLength(packet.markdown, "utf8"),
       }, null, 2)}\n`);
     } else if (written) {
-      process.stdout.write(`Wrote Wellness demo packet for ${packet.personaLabel} to ${written}\n`);
+      process.stdout.write(`Wrote Longevity demo packet for ${packet.personaLabel} to ${written}\n`);
     } else {
       process.stdout.write(`${packet.markdown}\n`);
     }
@@ -2028,8 +2028,8 @@ function main() {
       for (const failure of result.failures) process.stderr.write(`FAIL ${failure}\n`);
       process.stdout.write(
         result.ok
-          ? "Wellness Creator Workflow check passed.\n"
-          : `Wellness Creator Workflow check found ${result.failures.length} issue(s).\n`,
+          ? "Longevity Creator Workflow check passed.\n"
+          : `Longevity Creator Workflow check found ${result.failures.length} issue(s).\n`,
       );
     }
     process.exitCode = result.ok ? 0 : 1;

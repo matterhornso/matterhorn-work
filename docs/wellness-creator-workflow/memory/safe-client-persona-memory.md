@@ -1,8 +1,8 @@
 # Safe Memory — Client Persona
 
-*An example of safe workflow metadata Matterhorn Memory may remember for a wellness creator. Candidates only — nothing is written automatically.*
+*An example of safe workflow metadata Matterhorn Memory may remember for a longevity creator. Candidates only — nothing is written automatically.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment.
 
 ## Safe to remember (workflow metadata)
 

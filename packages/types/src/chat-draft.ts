@@ -21,31 +21,31 @@ export const BITTENSOR_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "bittensor",
   promptAction: "draft_only",
-  draftStateLabel: "Draft ready — Bittensor preview or handoff",
-  confirmCtaLabel: "Open in chat",
+  draftStateLabel: "Bittensor Agent ready",
+  confirmCtaLabel: "Open with agent",
 };
 
 export const HYPERLIQUID_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "hyperliquid",
   promptAction: "draft_only",
-  draftStateLabel: "Draft ready — Hyperliquid preview only",
-  confirmCtaLabel: "Open in chat",
+  draftStateLabel: "Hyperliquid Agent ready",
+  confirmCtaLabel: "Open with agent",
 };
 
 export const POLYMARKET_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "polymarket",
   promptAction: "draft_only",
-  draftStateLabel: "Draft ready — Polymarket preview only",
-  confirmCtaLabel: "Open in chat",
+  draftStateLabel: "Polymarket Agent ready",
+  confirmCtaLabel: "Open with agent",
 };
 
 export const WELLNESS_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "wellness",
   promptAction: "send_after_confirm",
-  draftStateLabel: "Draft ready — Wellness program builder",
+  draftStateLabel: "Longevity Agent ready",
   confirmCtaLabel: "Build program",
 };
 
@@ -53,7 +53,7 @@ export const MEMORY_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "memory",
   promptAction: "send_after_confirm",
-  draftStateLabel: "Draft ready — Memory review",
+  draftStateLabel: "Memory Agent ready",
   confirmCtaLabel: "Review memory",
 };
 
@@ -61,8 +61,8 @@ export const MCPS_CHAT_DRAFT: ChatDraftConfig = {
   version: "matterhorn.chat.draft.v1",
   deskId: "mcps",
   promptAction: "draft_only",
-  draftStateLabel: "Draft ready — Browse MCP tools",
-  confirmCtaLabel: "Open in chat",
+  draftStateLabel: "MCP Agent ready",
+  confirmCtaLabel: "Open with agent",
 };
 
 export const CHAT_DRAFT_REGISTRY: Record<string, ChatDraftConfig> = {

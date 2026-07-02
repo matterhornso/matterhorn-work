@@ -145,7 +145,7 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
     title: "App opens with first-class desks",
     owner: "Operator",
     commandKey: "mondayBetaUiGate",
-    proof: "Bittensor, Hyperliquid, Polymarket, and Wellness are visible as separate customer paths; desktop automation is not a default beta task.",
+    proof: "Bittensor, Hyperliquid, Polymarket, and Longevity are visible as separate customer paths; desktop automation is not a default beta task.",
   },
   {
     id: "beta-safety-smoke",
@@ -170,10 +170,10 @@ const MONDAY_BETA_LAUNCH_CHECKLIST = [
   },
   {
     id: "beta-wellness-proof",
-    title: "Wellness workflow remains safe",
+    title: "Longevity workflow remains safe",
     owner: "Operator",
     commandKey: "mondayBetaWellnessProof",
-    proof: "Wellness artifacts stay educational, non-medical, and do not claim live payments, email, hosting, storage, or token-gated access.",
+    proof: "Longevity artifacts stay educational, non-medical, and do not claim live payments, email, hosting, storage, or token-gated access.",
   },
 ] as const satisfies ReadonlyArray<{
   id: string;
@@ -187,65 +187,65 @@ const CUSTOMER_DEMO_PROMPTS = [
     id: "bittensor-image-subnets",
     label: "Bittensor discovery",
     betaVisible: true,
-    prompt: "Use Bittensor chat mode. Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
+    prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Return customer-safe cards and explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
     id: "bittensor-tao-wallet",
     label: "TAO wallet",
     betaVisible: true,
-    prompt: "Use Bittensor chat mode. Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
+    prompt: "Bittensor Agent task: Show my TAO for the public SS58 address in context. If no public SS58 address is available, ask one concise question for a public coldkey only. Do not ask for seed phrases or private keys.",
   },
   {
     id: "hyperliquid-orderbook",
     label: "Hyperliquid read",
     betaVisible: false,
-    prompt: "Use Hyperliquid chat mode. Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+    prompt: "Hyperliquid Agent task: Show BTC Hyperliquid orderbook context and explain why Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "polymarket-compliance",
     label: "Polymarket compliance",
     betaVisible: false,
-    prompt: "Use Polymarket chat mode. Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
+    prompt: "Polymarket Agent task: Find Polymarket markets about AI and show any compliance blocks without executable order terms.",
   },
   {
     id: "external-signer-preview",
     label: "Signer preview",
     betaVisible: true,
-    prompt: "Use Matterhorn protocol chat. Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
+    prompt: "Matterhorn protocol task: Explain the external-signer preview flow across Bittensor, Hyperliquid, and Polymarket. Make clear that Matterhorn prepares safe previews; my wallet/client decides whether anything is signed externally, and Matterhorn cannot sign, submit, custody, or broadcast.",
   },
   {
     id: "market-execution-readiness",
     label: "Execution readiness",
     betaVisible: false,
-    prompt: "Use Matterhorn protocol chat. Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
+    prompt: "Matterhorn protocol task: Can Matterhorn submit Hyperliquid and Polymarket orders yet? Show the execution readiness contract, Can submit: No, Live submission: Off, and the missing security-review steps before any future route could change.",
   },
   {
     id: "market-execution-chain",
     label: "Safe execution chain",
     betaVisible: false,
-    prompt: "Use Matterhorn protocol chat. Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
+    prompt: "Matterhorn protocol task: Explain the Hyperliquid and Polymarket preview -> external sign request -> redacted artifact validation -> public receipt import chain. Confirm that Matterhorn rejects raw signatures, signed payloads, API secrets, private keys, hash mismatches, and any live submission request.",
   },
   {
     id: "market-sdk-validation",
     label: "SDK validation",
     betaVisible: false,
-    prompt: "Use Matterhorn protocol chat. Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
+    prompt: "Matterhorn protocol task: Explain official SDK validation for Hyperliquid and Polymarket. Show fixture mode, operator-owned testnet mode, Hyperliquid testnet, Polygon Amoy, public/redacted evidence only, Can submit: No, Live submission: Off, and why Matterhorn never receives keys, API secrets, raw signatures, signed payloads, or wallet exports.",
   },
   {
     id: "hyperliquid-watch",
     label: "Hyperliquid watch",
     betaVisible: false,
-    prompt: "Use Hyperliquid chat mode. Create a read-only Hyperliquid watch plan for BTC funding and orderbook movement. Show the watch kind, asset, threshold, source/freshness, watch_alert card behavior, and confirm no orders are signed, submitted, or auto-executed.",
+    prompt: "Hyperliquid Agent task: Create a read-only Hyperliquid watch plan for BTC funding and orderbook movement. Show the watch kind, asset, threshold, source/freshness, watch_alert card behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
   {
     id: "polymarket-watch",
     label: "Polymarket watch",
     betaVisible: false,
-    prompt: "Use Polymarket chat mode. Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
+    prompt: "Polymarket Agent task: Create a read-only Polymarket watch plan for a public market id. Show market status, odds/liquidity movement, compliance state, watch_alert behavior, and confirm no orders are signed, submitted, or auto-executed.",
   },
 ] as const;
-// Beta-tester "Try in chat" quick prompts. Each inserts a ready-to-review
-// prompt into the composer (it does not auto-send). Copy is preview/read-only
+// Beta-tester quick tasks. Each inserts a ready-to-review task into the
+// composer (it does not auto-send). Copy is preview/read-only
 // and never asks for secrets.
 const BETA_TRY_PROMPTS = [
   {
@@ -253,42 +253,42 @@ const BETA_TRY_PROMPTS = [
     label: "show my TAO",
     mode: "bittensor",
     prompt:
-      "Use Bittensor chat mode. Show my TAO for the public SS58 address in context. If none is set, ask once for a public coldkey address only. Never ask for seed phrases, private keys, or wallet exports.",
+      "Bittensor Agent task: Show my TAO for the public SS58 address in context. If none is set, ask once for a public coldkey address only. Never ask for seed phrases, private keys, or wallet exports.",
   },
   {
     id: "beta-image-subnets",
     label: "find Bittensor subnets for image generation",
     mode: "crypto",
     prompt:
-      "Use Bittensor chat mode. Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
+      "Bittensor Agent task: Find Bittensor subnets useful for image generation and return customer-safe cards. Explain which actions are read-only, which are preview-only, and which require external signing.",
   },
   {
     id: "beta-validators-14",
     label: "compare validators on subnet 14",
     mode: "bittensor",
     prompt:
-      "Use Bittensor chat mode. Compare validators on subnet 14 using public metagraph context. Explain stake, trust, and emissions in beginner language. Any staking action requires an external Bittensor-compatible signer; Matterhorn cannot sign or broadcast.",
+      "Bittensor Agent task: Compare validators on subnet 14 using public metagraph context. Explain stake, trust, and emissions in beginner language. Any staking action requires an external Bittensor-compatible signer; Matterhorn cannot sign or broadcast.",
   },
   {
     id: "beta-stake-1-tao",
     label: "prepare staking 1 TAO",
     mode: "bittensor",
     prompt:
-      "Use Bittensor chat mode. Prepare a preview for staking 1 TAO: show netuid, validator hotkey, expected alpha, fee, slippage, and warnings. Make clear this is a preview only and must be signed in an external Bittensor-compatible signer. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare a preview for staking 1 TAO: show netuid, validator hotkey, expected alpha, fee, slippage, and warnings. Make clear this is a preview only and must be signed in an external Bittensor-compatible signer. Never ask for seed phrases or private keys.",
   },
   {
     id: "beta-hl-orderbook",
     label: "show Hyperliquid BTC orderbook",
     mode: "crypto",
     prompt:
-      "Use Hyperliquid chat mode. Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
+      "Hyperliquid Agent task: Show the BTC Hyperliquid orderbook context and explain that Matterhorn is preview-only for orders: Can submit: No, Live submission: Off, External signer required.",
   },
   {
     id: "beta-pm-summary",
     label: "summarize a Polymarket market",
     mode: "crypto",
     prompt:
-      "Use Polymarket chat mode. Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
+      "Polymarket Agent task: Summarize a public Polymarket market: status, odds/liquidity, and any compliance block. Keep it preview-only with no executable order terms; compliance checks are required.",
   },
 ] as const;
 const MONDAY_BETA_DEMO_SCENARIOS = Object.values(MONDAY_BETA_CUSTOMER_DEMO_SCENARIOS);
@@ -302,6 +302,16 @@ const BITTENSOR_BETA_MODE = (() => {
 type Tab = "overview" | "demo" | "subnets" | "wallet" | "actions";
 type CryptoVenue = "bittensor" | "hyperliquid" | "polymarket";
 type ActionType = BittensorActionQuote["action"];
+
+function venueForPromptId(id: string): CryptoVenue | undefined {
+  if (id.includes("bittensor") || id.includes("tao") || id.includes("subnet") || id.includes("stake") || id.includes("validator")) {
+    return "bittensor";
+  }
+  if (id.includes("hyperliquid") || id.includes("-hl-")) return "hyperliquid";
+  if (id.includes("polymarket") || id.includes("-pm-")) return "polymarket";
+  return undefined;
+}
+
 const BITTENSOR_STANDARD_ACTIONS = [
   {
     id: "wallet-balance",
@@ -312,7 +322,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Public address only",
     outcome: "Wallet snapshot",
     prompt:
-      "Use Bittensor chat mode. Show my TAO balance from the public SS58 coldkey in context. If no address is set, ask once for a public coldkey only. Explain free TAO, staked TAO, validator exposure, provider source, freshness, and safe next steps.",
+      "Bittensor Agent task: Show my TAO balance from the public SS58 coldkey in context. If no address is set, ask once for a public coldkey only. Explain free TAO, staked TAO, validator exposure, provider source, freshness, and safe next steps.",
   },
   {
     id: "stake-positions",
@@ -323,7 +333,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Public address only",
     outcome: "Stake position summary",
     prompt:
-      "Use Bittensor chat mode. Show where this public SS58 coldkey is staked. If no address is set, ask once for a public coldkey only. Explain subnet exposure, validator hotkeys, estimated TAO value, source/freshness, and safe next steps without asking for wallet secrets.",
+      "Bittensor Agent task: Show where this public SS58 coldkey is staked. If no address is set, ask once for a public coldkey only. Explain subnet exposure, validator hotkeys, estimated TAO value, source/freshness, and safe next steps without asking for wallet secrets.",
   },
   {
     id: "subnet-discovery",
@@ -334,7 +344,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Read-only discovery",
     outcome: "Subnet shortlist",
     prompt:
-      "Use Bittensor chat mode. Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
+      "Bittensor Agent task: Help me find Bittensor subnets for my goal. Explain each subnet in beginner language with utility, risks, source/freshness, adapter support, and which actions require external signing.",
   },
   {
     id: "validator-compare",
@@ -346,7 +356,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     outcome: "Validator ranking",
     formAction: "compare",
     prompt:
-      "Use Bittensor chat mode. Compare validators for the netuid in context. Explain stake, trust, rank, emissions, risks, and what I should verify before preparing any staking preview. Do not sign or broadcast anything.",
+      "Bittensor Agent task: Compare validators for the netuid in context. Explain stake, trust, rank, emissions, risks, and what I should verify before preparing any staking preview. Do not sign or broadcast anything.",
   },
   {
     id: "stake-preview",
@@ -358,7 +368,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     outcome: "Unsigned stake preview",
     formAction: "stake",
     prompt:
-      "Use Bittensor chat mode. Prepare a stake preview using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, warnings, and the exact external-signing handoff. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare a stake preview using the netuid, amount, and validator hotkey in context. Show consequence, fee, slippage, expected alpha, warnings, and the exact external-signing handoff. Never ask for seed phrases or private keys.",
   },
   {
     id: "unstake-preview",
@@ -370,7 +380,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     outcome: "Unsigned unstake preview",
     formAction: "unstake",
     prompt:
-      "Use Bittensor chat mode. Prepare an unstake preview using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, warnings, and the external-signing step. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare an unstake preview using the netuid, amount, and validator hotkey in context. Explain expected TAO/alpha effects, slippage, fee, warnings, and the external-signing step. Never ask for seed phrases or private keys.",
   },
   {
     id: "transfer-preview",
@@ -382,7 +392,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     outcome: "Unsigned transfer preview",
     formAction: "transfer",
     prompt:
-      "Use Bittensor chat mode. Prepare a TAO transfer preview using the amount and recipient coldkey in context. Confirm destination meaning, fee, consequence, warnings, and external-signing requirements. Never ask for seed phrases or private keys.",
+      "Bittensor Agent task: Prepare a TAO transfer preview using the amount and recipient coldkey in context. Confirm destination meaning, fee, consequence, warnings, and external-signing requirements. Never ask for seed phrases or private keys.",
   },
   {
     id: "watch-alert",
@@ -393,7 +403,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Read-only monitoring",
     outcome: "Watch plan",
     prompt:
-      "Use Bittensor chat mode. Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
+      "Bittensor Agent task: Create a read-only watch plan for the public wallet, subnet, validator, emissions, or provider freshness in context. Explain what will be checked, alert thresholds, source/freshness, and how the watch produces evidence without signing or moving funds.",
   },
   {
     id: "receipt-import",
@@ -404,7 +414,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "Public receipt only",
     outcome: "Receipt status",
     prompt:
-      "Use Bittensor chat mode. Import and explain a public Bittensor receipt. Verify the public transaction evidence, summarize what changed, link it to the active watch or wallet context if possible, and do not ask for raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.",
+      "Bittensor Agent task: Import and explain a public Bittensor receipt. Verify the public transaction evidence, summarize what changed, link it to the active watch or wallet context if possible, and do not ask for raw signatures, signed payloads, seed phrases, private keys, mnemonics, or wallet exports.",
   },
   {
     id: "keys-explainer",
@@ -415,7 +425,7 @@ const BITTENSOR_STANDARD_ACTIONS = [
     safety: "No secrets requested",
     outcome: "Plain-English explainer",
     prompt:
-      "Use Bittensor chat mode. Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and external signer boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
+      "Bittensor Agent task: Explain coldkeys, hotkeys, SS58 public addresses, validator hotkeys, staking exposure, and external signer boundaries in beginner language. Make clear that Matterhorn never needs seed phrases, private keys, mnemonics, wallet exports, raw signatures, or signed payloads.",
   },
 ] satisfies Array<{
   id: string;
@@ -554,22 +564,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
       {
         label: "Find image subnets",
         summary: "Discover useful image-generation subnets and adapter support.",
-        prompt: "Use Bittensor chat mode. Find Bittensor subnets useful for image generation. Explain each subnet in beginner language, adapter availability, live data freshness, risks, and safe next steps.",
+        prompt: "Bittensor Agent task: Find Bittensor subnets useful for image generation. Explain each subnet in beginner language, adapter availability, live data freshness, risks, and safe next steps.",
       },
       {
         label: "Show my TAO",
         summary: "Read a public SS58 wallet and explain balance/stake exposure.",
-        prompt: "Use Bittensor chat mode. Show my TAO and where I am staked for this public SS58 coldkey: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
+        prompt: "Bittensor Agent task: Show my TAO and where I am staked for this public SS58 coldkey: <paste public coldkey SS58 address>. Do not ask for seed phrases, private keys, mnemonics, or wallet exports.",
       },
       {
         label: "Compare validators",
         summary: "Compare subnet 14 validators with source and freshness context.",
-        prompt: "Use Bittensor chat mode. Compare validators on subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, hotkey meaning, and what is missing before a staking preview.",
+        prompt: "Bittensor Agent task: Compare validators on subnet 14 with a balanced strategy. Explain data freshness, fallback warnings, hotkey meaning, and what is missing before a staking preview.",
       },
       {
         label: "Prepare staking",
         summary: "Build an unsigned stake preview and external signer handoff.",
-        prompt: "Use Bittensor chat mode. Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
+        prompt: "Bittensor Agent task: Prepare staking 1 TAO safely. Ask for netuid and validator hotkey if missing. Return an unsigned preview only and explain that external signing is required.",
       },
     ],
   },
@@ -578,7 +588,7 @@ const VENUE_DESKS: Record<CryptoVenue, {
     shortLabel: "HL",
     workspaceTitle: "Hyperliquid desk",
     eyebrow: "Orderbook · account · previews",
-    headline: "Preview Hyperliquid trades through chat, with execution off.",
+    headline: "Preview Hyperliquid trades with the Hyperliquid Agent, with execution off.",
     description: "Inspect orderbooks, account exposure, funding, open-order context, watch plans, and external-signer handoffs. Matterhorn does not submit live Hyperliquid orders in this build.",
     statusLabel: "Preview-only",
     canSubmit: "No",
@@ -589,22 +599,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
       {
         label: "BTC orderbook",
         summary: "Read spread, depth, source, and stale-data context.",
-        prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
+        prompt: "Hyperliquid Agent task: Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain that this is read/preview-only with Can submit: No and Live submission: Off.",
       },
       {
         label: "Account exposure",
         summary: "Summarize public account value, margin, positions, and funding.",
-        prompt: "Use Hyperliquid chat mode. Show my Hyperliquid exposure for this public address: <paste public address>. Summarize account value, margin, positions, open orders, funding exposure, and risk notes where data exists.",
+        prompt: "Hyperliquid Agent task: Show my Hyperliquid exposure for this public address: <paste public address>. Summarize account value, margin, positions, open orders, funding exposure, and risk notes where data exists.",
       },
       {
         label: "Preview order",
         summary: "Prepare a no-submit testnet preview with hash expectations.",
-        prompt: "Use Hyperliquid chat mode. Prepare a preview for buying 0.001 BTC with a testnet external-signer flow. Do not submit, sign, or ask for API secrets. Show Can submit: No, Live submission: Off, missing context, and preview hash expectations.",
+        prompt: "Hyperliquid Agent task: Prepare a preview for buying 0.001 BTC with a testnet external-signer flow. Do not submit, sign, or ask for API secrets. Show Can submit: No, Live submission: Off, missing context, and preview hash expectations.",
       },
       {
         label: "Create watch",
         summary: "Create read-only funding and orderbook movement watches.",
-        prompt: "Use Hyperliquid chat mode. Create a read-only watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert card behavior, and confirm no auto-execution.",
+        prompt: "Hyperliquid Agent task: Create a read-only watch plan for BTC funding rate and orderbook movement. Explain threshold, source/freshness, alert card behavior, and confirm no auto-execution.",
       },
     ],
   },
@@ -624,22 +634,22 @@ const VENUE_DESKS: Record<CryptoVenue, {
       {
         label: "Find markets",
         summary: "Find public markets and explain outcomes as probabilities.",
-        prompt: "Use Polymarket chat mode. Find and summarize Polymarket markets about this topic: <topic>. Explain outcomes, implied probabilities, liquidity/orderbook context where available, and compliance status.",
+        prompt: "Polymarket Agent task: Find and summarize Polymarket markets about this topic: <topic>. Explain outcomes, implied probabilities, liquidity/orderbook context where available, and compliance status.",
       },
       {
         label: "Compliance read",
         summary: "Check if a market can be previewed and what gets blocked.",
-        prompt: "Use Polymarket chat mode. Review whether this market can be previewed: <market id or URL>. If compliance-blocked, return no executable price, size, or share fields.",
+        prompt: "Polymarket Agent task: Review whether this market can be previewed: <market id or URL>. If compliance-blocked, return no executable price, size, or share fields.",
       },
       {
         label: "Preview prediction",
         summary: "Prepare a preview-only YES/NO plan with no executable submit path.",
-        prompt: "Use Polymarket chat mode. Prepare a preview-only YES/NO prediction for this testnet/operator-owned market: <market id>. Do not sign, submit, or ask for API secrets. Show Can submit: No, Live submission: Off, and external signer requirements.",
+        prompt: "Polymarket Agent task: Prepare a preview-only YES/NO prediction for this testnet/operator-owned market: <market id>. Do not sign, submit, or ask for API secrets. Show Can submit: No, Live submission: Off, and external signer requirements.",
       },
       {
         label: "Create watch",
         summary: "Watch odds, liquidity, compliance, and public receipt changes.",
-        prompt: "Use Polymarket chat mode. Create a read-only watch plan for odds/liquidity movement and compliance status on this public market: <market id>. Confirm no order signing, submission, or auto-execution.",
+        prompt: "Polymarket Agent task: Create a read-only watch plan for odds/liquidity movement and compliance status on this public market: <market id>. Confirm no order signing, submission, or auto-execution.",
       },
     ],
   },
@@ -1122,13 +1132,20 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
     void loadMarketSdkValidation();
   };
 
-  const sendToChat = async (prompt: string, context: Record<string, unknown>, options: { mode?: "bittensor" | "crypto"; source?: string } = {}) => {
+  const sendToChat = async (
+    prompt: string,
+    context: Record<string, unknown>,
+    options: { mode?: "bittensor" | "crypto"; source?: string; venue?: CryptoVenue } = {},
+  ) => {
     const mode = options.mode ?? "bittensor";
-    const expandedPrompt = mode === "bittensor" ? buildBittensorChatPrompt(prompt, context) : prompt;
-    window.dispatchEvent(new CustomEvent(mode === "crypto" ? "matterhorn:crypto-chat-handoff" : "matterhorn:bittensor-chat-handoff", {
+    const promptVenue = options.venue ?? (mode === "bittensor" ? "bittensor" : undefined);
+    const isBittensorHandoff = promptVenue === "bittensor";
+    const expandedPrompt = isBittensorHandoff ? buildBittensorChatPrompt(prompt, context) : prompt;
+    window.dispatchEvent(new CustomEvent(isBittensorHandoff ? "matterhorn:bittensor-chat-handoff" : "matterhorn:crypto-chat-handoff", {
       detail: {
         prompt: expandedPrompt,
         context,
+        venue: promptVenue,
         source: options.source ?? "bittensor-panel",
       },
     }));
@@ -1150,30 +1167,30 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
   };
 
   const askAgentAboutSubnet = async (subnet: BittensorSubnetSummary) => {
-    const prompt = `Use Bittensor chat mode. Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
+    const prompt = `Bittensor Agent task: Explain subnet ${subnet.netuid} (${subnet.name}) in beginner language, then tell me how it could help my Matterhorn Work tasks. Include utility, risks, metagraph context, whether Matterhorn can directly invoke this subnet, and which actions require external Bittensor signing.`;
     await sendToChat(prompt, { netuid: subnet.netuid, subnet });
   };
 
   const askAgentAboutWallet = async () => {
     const address = watchAddress.trim();
     const prompt = wallet
-      ? `Use Bittensor chat mode. Review this watch-only Bittensor wallet snapshot for ${address}. Explain TAO balance, subnet stake exposure, validator hotkeys, slippage risk, provider freshness, and safe next steps. Do not ask for seed phrases or private keys.`
-      : `Use Bittensor chat mode. Help me inspect this Bittensor SS58 coldkey public address: ${address || "[paste address]"}. Show wallet positions, subnet exposure, validator hotkeys, and risks.`;
+      ? `Bittensor Agent task: Review this watch-only Bittensor wallet snapshot for ${address}. Explain TAO balance, subnet stake exposure, validator hotkeys, slippage risk, provider freshness, and safe next steps. Do not ask for seed phrases or private keys.`
+      : `Bittensor Agent task: Help me inspect this Bittensor SS58 coldkey public address: ${address || "[paste address]"}. Show wallet positions, subnet exposure, validator hotkeys, and risks.`;
     await sendToChat(prompt, { ss58Address: address, wallet });
   };
 
   const askAgentAboutReadiness = async () => {
-    const prompt = "Use Bittensor chat mode. Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, what is safe to demo, and the next command or fix to run before a test customer session.";
+    const prompt = "Bittensor Agent task: Review the current Matterhorn Bittensor customer readiness status. Explain any failing or warning checks, what is safe to demo, and the next command or fix to run before a test customer session.";
     await sendToChat(prompt, { readiness });
   };
 
   const askAgentAboutCryptoReadiness = async () => {
-    const prompt = "Use Matterhorn protocol chat. Review the current Matterhorn readiness status across Bittensor, Hyperliquid, and Polymarket. Explain blockers, warnings, safe demo paths, and the next command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Matterhorn readiness status across Bittensor, Hyperliquid, and Polymarket. Explain blockers, warnings, safe demo paths, and the next command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { cryptoReadiness }, { mode: "crypto", source: "crypto-readiness-panel" });
   };
 
   const askAgentAboutMarketExecutionReadiness = async () => {
-    const prompt = "Use Matterhorn protocol chat. Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
+    const prompt = "Matterhorn protocol task: Review the current Hyperliquid and Polymarket market execution readiness contract. Explain why live submission is disabled, which controls are passing, what is still missing before any future submit/sign route, and the next safe operator command to run. Do not ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.";
     await sendToChat(prompt, { marketExecutionReadiness }, { mode: "crypto", source: "market-execution-readiness-panel" });
   };
 
@@ -1187,16 +1204,16 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       marketExecutionChain,
       marketSdkValidation,
       sourcePrompt: item.id,
-    }, { mode: "crypto", source: "crypto-customer-demo-checklist" });
+    }, { mode: "crypto", source: "crypto-customer-demo-checklist", venue: venueForPromptId(item.id) });
   };
 
-  // Insert a beta "Try in chat" prompt into the composer (never auto-sends).
+  // Insert a beta agent task into the composer (never auto-sends).
   const askAgentBetaTryPrompt = async (item: (typeof BETA_TRY_PROMPTS)[number]) => {
     await sendToChat(item.prompt, {
       ss58Address: watchAddress.trim() || undefined,
       wallet,
       sourcePrompt: item.id,
-    }, { mode: item.mode, source: "crypto-beta-try" });
+    }, { mode: item.mode, source: "crypto-beta-try", venue: venueForPromptId(item.id) });
   };
 
   const askAgentForMondayBetaScenario = async (scenario: CustomerBetaDemoScenario) => {
@@ -1229,6 +1246,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       marketSdkValidation,
     }, {
       mode: venue === "bittensor" ? "bittensor" : "crypto",
+      venue,
       source: options.source ?? `${venue}-workspace-panel`,
     });
   };
@@ -1247,12 +1265,12 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
       recipient: recipient.trim() || undefined,
       destination: recipient.trim() || undefined,
       wallet,
-    }, { source: "bittensor-standard-action" });
+    }, { source: "bittensor-standard-action", venue: "bittensor" });
   };
 
   const askAgentAboutQuote = async () => {
     if (!quote) return;
-    const prompt = `Use Bittensor chat mode. Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
+    const prompt = `Bittensor Agent task: Review this Bittensor ${quote.action} quote. Explain the consequence, netuid, amount, expected alpha, fee, slippage, warnings, and exactly what I must do in an external Bittensor-compatible signer before anything can be broadcast.`;
     await sendToChat(prompt, {
       action: quote.action,
       netuid: quote.netuid,
@@ -1458,14 +1476,14 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   <Metric label="Signer" value={activeVenue.signer} compact />
                 </div>
                 <p className="text-xs leading-5 text-dls-secondary">
-                  Source: {activeVenue.source}. Matterhorn keeps this desk chat-first: ask in plain English, review cards, then use an external wallet/client only when a future approved handoff requires it.
+                  Source: {activeVenue.source}. Ask the {activeVenue.label} Agent in plain English, review cards, then use an external wallet/client only when an approved handoff requires it.
                 </p>
               </div>
             </Section>
 
             <Section title={venue === "hyperliquid" ? "Standard Hyperliquid actions" : "Standard Polymarket actions"} icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-xs leading-5 text-dls-secondary">
-                These insert editable {activeVenue.label} prompts into chat. One-click prompts stay short; the full instruction is inserted into chat. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
+                These stage editable {activeVenue.label} Agent tasks in the composer. One-click tasks stay short; the full instruction stays editable before you send. They do not auto-send, sign, submit, place orders, bet, or ask for private keys, API secrets, raw signatures, signed payloads, or wallet exports.
               </p>
               <div className="grid gap-2">
                 {activeVenue.prompts.map((item) => (
@@ -1478,7 +1496,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <span className="block text-xs font-semibold text-dls-text">{item.label}</span>
                     <span className="mt-1 block text-[11px] leading-5 text-dls-secondary">{item.summary}</span>
                     <span className="mt-2 inline-flex rounded-md bg-[var(--protocol-desk-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--protocol-desk-accent)]">
-                      Ask in Chat -&gt;
+                      Ask Agent -&gt;
                     </span>
                   </button>
                 ))}
@@ -1543,7 +1561,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             </Section>
             <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
               <p className="mb-3 text-sm leading-6 text-dls-secondary">
-                These are the core Bittensor workflows Matterhorn should make easy. Each one inserts an editable chat prompt with public context; nothing auto-sends, signs, broadcasts, stakes, unstakes, transfers, or asks for wallet secrets.
+                These are the core Bittensor workflows Matterhorn should make easy. Each one stages an editable Bittensor Agent task with public context; nothing auto-sends, signs, broadcasts, stakes, unstakes, transfers, or asks for wallet secrets.
               </p>
               <BittensorStandardActionList onAction={(item) => void askAgentForStandardBittensorAction(item)} />
             </Section>
@@ -1621,9 +1639,9 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
         {venue === "bittensor" && tab === "demo" && (
           <div className="space-y-4">
-            <Section title="Ask in Chat ->" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Ask Agent ->" icon={<BrainCircuit className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Tap a prompt to drop it into the chat composer. Nothing sends automatically — review it, then press send. Public reads work without connecting an EVM wallet.
+                Pick a task to stage it in the composer. Nothing sends automatically; review it, then press send. Public reads work without connecting an EVM wallet.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {BETA_TRY_PROMPTS.map((item) => (
@@ -1642,7 +1660,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
 
             <Section title="Monday beta scenarios" icon={<Star className="size-4" />}>
               <p className="text-[11px] leading-5 text-dls-secondary">
-                Use these five guided scripts for the first 10 customer demos. Each prompt is editable and each evidence command is fixture/offline unless you supply public inputs.
+                Use these five guided scripts for the first 10 customer demos. Each task is editable and each evidence command is fixture/offline unless you supply public inputs.
               </p>
               <div className="mt-2 grid grid-cols-1 gap-2">
                 {MONDAY_BETA_DEMO_SCENARIOS.map((scenario) => {
@@ -1666,7 +1684,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                       </p>
                       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Button variant="outline" size="sm" className="text-xs" onClick={() => void askAgentForMondayBetaScenario(scenario)}>
-                          Insert demo prompt
+                          Stage demo task
                         </Button>
                         <Button variant="ghost" size="sm" className="text-xs text-dls-secondary" onClick={() => void copyMondayBetaScenarioCommand(scenario.id)}>
                           {copied ? "Copied" : "Copy evidence command"}
@@ -1709,7 +1727,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 })}
               </div>
               <Notice tone="info" icon={<Shield className="size-4" />} title="Monday beta promise">
-                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Wellness is a standalone workflow surface, not Web3 and not medical care.
+                Bittensor is the most mature beta path. Hyperliquid and Polymarket are separate preview desks with external-signer language. Longevity is a standalone workflow surface, not Web3 and not medical care.
               </Notice>
             </Section>
 
@@ -1796,11 +1814,11 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutReadiness} disabled={!readiness}>
                     <BrainCircuit className="size-3.5" />
-                    Bittensor Chat
+                    Bittensor Agent
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutCryptoReadiness} disabled={!cryptoReadiness}>
                     <BrainCircuit className="size-3.5" />
-                    Protocol Chat
+                    Protocol Agent
                   </Button>
                 </div>
               </div>
@@ -1821,7 +1839,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Can submit: No. Live submission: Off. No market submit.</p>
                   </div>
                   <div className="rounded-xl bg-dls-surface-muted/40 px-3 py-2">
-                    <p className="text-xs font-semibold text-dls-text">Wellness workflow: Standalone</p>
+                    <p className="text-xs font-semibold text-dls-text">Longevity workflow: Standalone</p>
                     <p className="mt-1 text-[11px] leading-5 text-dls-secondary">Client-safe plans and packets. Not Web3, not medical advice, and no live payments or email.</p>
                   </div>
                 </div>
@@ -1865,7 +1883,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={askAgentAboutMarketExecutionReadiness} disabled={!marketExecutionReadiness}>
                     <BrainCircuit className="size-3.5" />
-                    Market Chat
+                    Market Agent
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => void copyCustomerDemoCommand("executionReadiness")}>
                     {copiedCustomerCommand === "executionReadiness" ? "Copied" : "Execution CLI"}
@@ -1957,7 +1975,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
               </div>
             </Section>
 
-            <Section title="Ask in Chat ->" icon={<BrainCircuit className="size-4" />}>
+            <Section title="Ask Agent ->" icon={<BrainCircuit className="size-4" />}>
               <div className="grid gap-2">
                 {customerDemoPrompts.map((item) => (
                   <button
@@ -2174,7 +2192,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 </Button>
                 <Button variant="outline" className="w-full gap-1.5" onClick={askAgentAboutWallet} disabled={!watchAddress.trim()}>
                   <BrainCircuit className="size-4" />
-                  {agentPromptReady ? "Sent to Chat" : "Ask in Chat"}
+                  {agentPromptReady ? "Task ready" : "Ask Agent"}
                 </Button>
                 {walletError && <p className="text-xs text-red-300">{walletError}</p>}
               </div>
@@ -2231,7 +2249,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
             <Section title="Standard Bittensor actions" icon={<BrainCircuit className="size-4" />}>
               <div className="space-y-3">
                 <p className="text-sm leading-6 text-dls-secondary">
-                  Start from the common Bittensor workflows below. These insert an editable chat prompt with public context;
+                  Start from the common Bittensor workflows below. These stage an editable Bittensor Agent task with public context;
                   they do not auto-send, sign, broadcast, stake, unstake, transfer, or ask for wallet secrets.
                 </p>
                 <BittensorStandardActionList onAction={(item) => void askAgentForStandardBittensorAction(item)} />
@@ -2252,7 +2270,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                     <ul className="mt-1.5 space-y-1">
                       <li>Use netuid, amount, validator hotkey, recipient coldkey, or SS58 public address.</li>
                       <li>Never paste seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.</li>
-                      <li>Ask Chat to review the preview before signing externally.</li>
+                      <li>Ask the Bittensor Agent to review the preview before signing externally.</li>
                     </ul>
                   </div>
                 </div>
@@ -2289,7 +2307,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                 </div>
                 <div className="grid gap-3 rounded-lg bg-dls-surface-muted/35 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
                   <div className="text-xs leading-5 text-dls-secondary">
-                    Missing context is safe. Chat can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted. This button creates an unsigned preview only.
+                    Missing context is safe. The Bittensor Agent can ask for the exact public netuid, hotkey, recipient, or address before a preview is trusted. This button creates an unsigned preview only.
                   </div>
                   <Button className="gap-1.5 rounded-md bg-[var(--protocol-desk-accent)] text-[var(--matterhorn-ink)] hover:opacity-90" onClick={requestQuote} disabled={quoteLoading}>
                     {quoteLoading ? <Loader2 className="size-4 animate-spin" /> : <ArrowUpDown className="size-4" />}
@@ -2318,7 +2336,7 @@ export default function BittensorPanel({ initialVenue = "bittensor" }: { initial
                   </div>
                   <Button variant="outline" className="w-full gap-1.5" onClick={askAgentAboutQuote}>
                     <BrainCircuit className="size-4" />
-                    {agentPromptReady ? "Sent to Chat" : "Review in Chat"}
+                    {agentPromptReady ? "Task ready" : "Review with agent"}
                   </Button>
                 </div>
               </Section>
@@ -2378,7 +2396,7 @@ function BittensorStandardActionList({
           </div>
           <div className="flex items-center justify-between gap-2 sm:min-w-[9rem] sm:justify-end">
             <span className="text-xs font-medium text-[var(--protocol-desk-accent)] group-hover:text-dls-text">
-              Create chat draft
+              Open with agent
             </span>
           </div>
         </button>
@@ -2537,7 +2555,7 @@ function SubnetDetailCard({
         </div>
         <Button size="sm" className="shrink-0 gap-1.5 bg-sky-500 text-white hover:bg-sky-600" onClick={() => onAskAgent(detail)}>
           <BrainCircuit className="size-3.5" />
-          {agentPromptReady ? "Sent to Chat" : "Ask in Chat"}
+          {agentPromptReady ? "Task ready" : "Ask Agent"}
         </Button>
       </div>
 

@@ -1,8 +1,8 @@
 # Yoga Instructor — Program Packet
 
-*A reproducible reference program a yoga instructor can package and share through Matterhorn Work. Customer-demo safe; general wellness education only; artifact-first.*
+*A reproducible reference program a yoga instructor can package and share through Matterhorn Work. Customer-demo safe; general longevity education only; artifact-first.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Offer: "4-Week Mobility & Calm Program"
 
@@ -29,4 +29,4 @@ The program is a standard Matterhorn artifact shared as a link or file. Future M
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This program is general wellness education, not medical care. If a student reports pain or injury, refer them to a qualified healthcare professional.
+Results vary between individuals. No specific outcome or result is guaranteed. This program is general longevity education, not medical care. If a student reports pain or injury, refer them to a qualified healthcare professional.

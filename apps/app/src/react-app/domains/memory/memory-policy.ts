@@ -23,7 +23,7 @@ const DESK_LABELS: Record<MatterhornMemoryDesk, string> = {
   bittensor: "Bittensor",
   hyperliquid: "Hyperliquid",
   polymarket: "Polymarket",
-  wellness: "Wellness",
+  wellness: "Longevity",
   decentralized_services: "Future services",
   generic_workspace: "Workspace",
 };

@@ -23,7 +23,7 @@ describe("customer workflow template launch cards", () => {
     expect(titles).toContain("Bittensor");
     expect(titles).toContain("Hyperliquid");
     expect(titles).toContain("Polymarket");
-    expect(titles.toLowerCase()).toContain("wellness");
+    expect(titles).toContain("Longevity");
   });
 
   test("protocol prompts carry non-custodial safety language", () => {
@@ -32,7 +32,7 @@ describe("customer workflow template launch cards", () => {
     const hyperliquid = cards.find((card) => card.id === "hyperliquid_trader");
     const polymarket = cards.find((card) => card.id === "polymarket_researcher");
 
-    expect(bittensor?.prompt).toContain("Use Bittensor chat");
+    expect(bittensor?.prompt).toContain("Use the Bittensor desk in this session");
     expect(bittensor?.prompt).toContain("Do not ask for seed phrases");
     expect(bittensor?.prompt).toContain("private keys");
 

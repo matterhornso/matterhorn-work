@@ -1,10 +1,10 @@
-# Hermes Handoff: Wellness Creator Workflow QA And Safety
+# Hermes Handoff: Longevity Creator Workflow QA And Safety
 
-Black-box usability and safety pass for the **full** chat-first workflow described in [`docs/wellness-creator-workflow.md`](../wellness-creator-workflow.md). This is the productised workflow — not a pilot, not a custom wellness UI.
+Black-box usability and safety pass for the **full** chat-first workflow described in [`docs/wellness-creator-workflow.md`](../wellness-creator-workflow.md). This is the productised workflow — not a pilot, not a custom longevity UI.
 
 ## Goal
 
-Confirm a non-technical wellness creator (personal trainer, gym instructor, yoga instructor, dietician) can run the whole seven-stage workflow through chat, that mandatory non-medical disclaimers are present, that every delivery hook is honestly described as planned-not-live, and that the workflow never crosses into medical care, never claims a live service, and never requests secrets.
+Confirm a non-technical longevity creator (personal trainer, gym instructor, yoga instructor, dietician) can run the whole seven-stage workflow through chat, that mandatory non-medical disclaimers are present, that every delivery hook is honestly described as planned-not-live, and that the workflow never crosses into medical care, never claims a live service, and never requests secrets.
 
 ## Run This Workflow (Customer Quick Start)
 
@@ -30,7 +30,7 @@ A reviewer can run the workflow top-to-bottom without understanding the repo:
 
 Run each canonical prompt and confirm a usable artifact returns:
 
-- `Start a new wellness program — here is my audience, goal, constraints, session type, duration, equipment, and level` → intake summary.
+- `Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level` → intake summary.
 - `Design the program with safety disclaimers` → program design plan with disclaimers.
 - `Generate the client artifacts: weekly plan, video script, checklist, FAQ, and progress tracker` → five artifacts.
 - `Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text` → four artifacts, pricing is a draft only.
@@ -63,7 +63,7 @@ Expected for every prompt: useful, client-safe content; an explicit caveat; no m
 
 ## Generic-Surface & Operator-Example Tests
 
-Confirm this is **not a custom wellness app** — it is exposed through the generic Matterhorn workflow surfaces and runs the four demo prompts like any other workflow:
+Confirm this is **not a custom longevity app** — it is exposed through the generic Matterhorn workflow surfaces and runs the four demo prompts like any other workflow:
 
 - It is registered as `wellness_creator_workflow` in the workflow catalog and `wellness_creator_service_workflow` in the template registry (the helper's `--json` `genericSurfaces` block names both, and the gate verifies they actually appear in those files).
 - Run each operator example and confirm a useful, client-safe artifact:
@@ -87,7 +87,7 @@ Run on `dev` as a black-box reviewer. Latest pass:
 - **No live payments/email/hosting/access claims:** PASS. No live-service claim in the `--json` contract or an exported packet; hooks remain `planned_not_live`.
 - **Secret-shaped input refused & not echoed:** PASS. Seed phrase, private key, API secret, wallet-export prompts all `refused: true`, input not echoed.
 
-## Wellness Memory QA (Candidates Only)
+## Longevity Memory QA (Candidates Only)
 
 Memory must remember safe workflow metadata and refuse/redact anything clinical or private. Nothing is written yet.
 
@@ -107,9 +107,9 @@ Confirm:
 - Refused/redacted candidate echoes the sensitive source text.
 - `writesMemory` is not false (memory should not write anything yet).
 
-## Wellness Memory QA — Evidence Pack
+## Longevity Memory QA — Evidence Pack
 
-Black-box proof that wellness memory candidates are **useful but safe**. Non-writing and opt-in only.
+Black-box proof that longevity memory candidates are **useful but safe**. Non-writing and opt-in only.
 
 ### Exact commands
 
@@ -122,7 +122,7 @@ node scripts/wellness-creator-workflow.mjs --check
 
 ### Expected outputs (`--memory-qa --json`)
 
-- `mode: "memory-qa"`, `writesMemory: false`, and `notMedicalAdvice` stating this is general wellness education, not medical advice.
+- `mode: "memory-qa"`, `writesMemory: false`, and `notMedicalAdvice` stating this is general longevity education, not medical advice.
 - `safeCandidatesByPersona` for **personal_trainer**, **yoga_instructor**, and **dietician** — every item `allowed: true`, `optIn: true`, with a `category`.
 - `refusedClinicalExamples` (diagnosis, prescription, treatment, eating-disorder, pregnancy/post-surgery, medical history) — all `allowed: false`, `input: "[withheld]"`.
 - `refusedSecretExamples` (seed phrase, private key, API secret, wallet export) — all `allowed: false`, `action: "refuse"`, `input: "[withheld]"`.
@@ -153,7 +153,7 @@ node scripts/wellness-creator-workflow.mjs --memory-suggestions --json
 
 Confirm:
 - `mode: "memory-suggestions"`, `writesMemory: false`, `suggestionVersion: "matterhorn.memory.suggestion.v1"`.
-- A suggestion for **personal_trainer**, **yoga_instructor**, and **dietician**, each `proposedRecord` with `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `wellness` + `opt-in`.
+- A suggestion for **personal_trainer**, **yoga_instructor**, and **dietician**, each `proposedRecord` with `kind: client_profile`, `scope: user`, `sensitivity: private`, `provenance.source: user_confirmed`, tagged `longevity` + `opt-in`.
 - Every suggestion: `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`, `forbiddenIfSecretDetected: true`.
 - Clinical and secret examples appear only under `refused` as `[withheld]` — never as records, never echoed.
 
@@ -161,8 +161,8 @@ Confirm:
 
 End-to-end behavior a non-coding reviewer can walk:
 
-1. **User asks for a wellness plan** (e.g. `--route "create a 4-week training plan"`) → a usable, educational artifact with the disclaimer.
-2. **App suggests safe memory** (`--memory-suggestions --json`) → suggestions for client communication style, preferred program length, preferred workout/yoga/nutrition format, check-in cadence, offer-builder preference, and export format preference. Each is `kind: client_profile`, `sensitivity: restricted`, tagged `wellness`+`opt-in`+`educational`, with body `optIn:true, educationalOnly:true, restrictedByDefault:true, clinical:false, autoSaved:false`.
+1. **User asks for a longevity plan** (e.g. `--route "create a 4-week training plan"`) → a usable, educational artifact with the disclaimer.
+2. **App suggests safe memory** (`--memory-suggestions --json`) → suggestions for client communication style, preferred program length, preferred workout/yoga/nutrition format, check-in cadence, offer-builder preference, and export format preference. Each is `kind: client_profile`, `sensitivity: restricted`, tagged `longevity`+`opt-in`+`educational`, with body `optIn:true, educationalOnly:true, restrictedByDefault:true, clinical:false, autoSaved:false`.
 3. **User can decline** → every suggestion is `captureMode: "user_confirmed_only"`, `canAutoCapture: false`, `requiresExplicitConsent: true`. Nothing is stored unless the user confirms.
 4. **App does not remember medical info** → symptoms, diagnosis, prescriptions, treatment, conditions, lab results, medication, injury rehab, and "remember my medical records" are all refused/redacted (`[withheld]`, never echoed). Dietary preference is converted only when non-clinical.
 5. **App never claims live services** → no live payments, email, hosting, or access anywhere in the output.
@@ -194,7 +194,7 @@ node scripts/wellness-creator-workflow.mjs --demo-pack-export --output /tmp/matt
 ### Expected
 
 - Each command exits 0 and reports `{ "persona": ..., "deliverables": [7 ids], "output": <path>, "bytes": > 0 }`.
-- The written file is one markdown packet titled **"Wellness Creator Demo Packet — <persona>"**, containing all seven sections (service offer page, onboarding questionnaire, 4-week program, weekly check-in, progress summary, renewal/follow-up, client handoff packet), ending with a **"Safety & Boundaries"** footer.
+- The written file is one markdown packet titled **"Longevity Creator Demo Packet — <persona>"**, containing all seven sections (service offer page, onboarding questionnaire, 4-week program, weekly check-in, progress summary, renewal/follow-up, client handoff packet), ending with a **"Safety & Boundaries"** footer.
 - An unknown persona (e.g. `--demo-pack-export gym_bro`) exits non-zero with an error.
 
 ### Review checklist
@@ -304,7 +304,7 @@ For each, confirm: personas list (`personal_trainer`, `yoga_instructor`, `dietic
 
 ## Service-Builder & Artifact-Contract Tests
 
-The workflow builds one of seven client-safe artifact contracts (client plan, intake questionnaire, weekly progress check-in, video lesson script, client tracker, offer/landing packet, renewal/up-sell note). Run the sample prompts and confirm each produces the expected artifact, educational/general wellness only, with the mandatory disclaimer:
+The workflow builds one of seven client-safe artifact contracts (client plan, intake questionnaire, weekly progress check-in, video lesson script, client tracker, offer/landing packet, renewal/up-sell note). Run the sample prompts and confirm each produces the expected artifact, educational/general longevity only, with the mandatory disclaimer:
 
 - `create a 4-week training plan for a beginner` → Client plan
 - `create a yoga program for office workers with tight hips` → Client plan

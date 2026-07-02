@@ -2,7 +2,7 @@
 
 *Customer Demo Pack artifact — a reusable weekly check-in a personal trainer, yoga instructor, or dietician shares with a client. Educational progress tracking only.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program, especially if you have an existing health condition, are pregnant, or take medication.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program, especially if you have an existing health condition, are pregnant, or take medication.
 
 ## Week of: ____________________
 
@@ -28,4 +28,4 @@ This check-in is **not a medical assessment**. If the client reports pain, injur
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This form is general wellness education, not medical care.
+Results vary between individuals. No specific outcome or result is guaranteed. This form is general longevity education, not medical care.

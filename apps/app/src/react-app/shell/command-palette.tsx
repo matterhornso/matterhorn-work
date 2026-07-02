@@ -23,7 +23,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import { ChevronLeftIcon, FileText, Globe } from "lucide-react";
+import { ChevronLeftIcon, Copy, FileText, FolderOpen, Home, MessageSquarePlus, Plus, Globe } from "lucide-react";
 
 export type PaletteItem = {
   id: string;
@@ -77,6 +77,10 @@ function targetIcon(target: AccessibleTargetOption) {
 export type CommandPaletteProps = {
   open: boolean;
   onClose: () => void;
+  /** Called when "Go home" is chosen. */
+  onGoHome?: () => void;
+  /** Called when "New project" is chosen. */
+  onCreateNewProject?: () => void;
   /** Called when a session row is chosen. */
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   /** Called when "New session" is chosen. */
@@ -89,6 +93,13 @@ export type CommandPaletteProps = {
   accessibleTargets?: AccessibleTargetOption[];
   onOpenAccessibleTarget?: (target: AccessibleTargetOption) => void;
   onHideAccessibleTarget?: (target: AccessibleTargetOption) => void;
+  currentProjectName?: string;
+  projectFolderPath?: string;
+  outputsPath?: string;
+  onOpenProjectFolder?: () => void;
+  onOpenOutputs?: () => void;
+  onCopyProjectPath?: () => void;
+  onCopyOutputsPath?: () => void;
   /** Optional: sessions for the second mode. */
   sessions: SessionOption[];
 };
@@ -118,112 +129,202 @@ export function CommandPalette(props: CommandPaletteProps) {
 
   const accessibleTargetCount = props.accessibleTargets?.length ?? 0;
 
-  const rootItems = useMemo<PaletteItem[]>(() => [
-    {
-      id: "new-session",
-      title: t("session.cmd_new_session_title"),
-      detail: t("session.cmd_new_session_detail"),
-      meta: t("session.cmd_new_session_meta"),
-      action: () => {
-        props.onClose();
-        props.onCreateNewSession();
+  const rootItems = useMemo<PaletteItem[]>(() => {
+    const items: PaletteItem[] = [];
+    if (props.onGoHome) {
+      items.push({
+        id: "go-home",
+        title: "Go home",
+        detail: props.currentProjectName ? `Open ${props.currentProjectName} home` : "Open the active project home",
+        meta: "Project",
+        icon: <Home className="size-4 text-primary" />,
+        searchText: "home project launcher back",
+        action: () => {
+          props.onClose();
+          props.onGoHome?.();
+        },
+      });
+    }
+    if (props.onCreateNewProject) {
+      items.push({
+        id: "new-project",
+        title: "New project",
+        detail: "Create or connect a Matterhorn project",
+        meta: "Project",
+        icon: <Plus className="size-4 text-primary" />,
+        searchText: "new project create workspace",
+        action: () => {
+          props.onClose();
+          props.onCreateNewProject?.();
+        },
+      });
+    }
+    items.push(
+      {
+        id: "new-session",
+        title: "New chat",
+        detail: t("session.cmd_new_session_detail"),
+        meta: t("session.cmd_new_session_meta"),
+        icon: <MessageSquarePlus className="size-4 text-primary" />,
+        searchText: "new chat new session task",
+        action: () => {
+          props.onClose();
+          props.onCreateNewSession();
+        },
       },
-    },
-    {
-      id: "sessions",
-      title: t("session.cmd_sessions_title"),
-      detail: t("session.cmd_sessions_detail", undefined, {
-        count: props.sessions.length.toLocaleString(),
-      }),
-      meta: t("session.cmd_sessions_meta"),
-      action: () => {
-        setMode("sessions");
+      {
+        id: "sessions",
+        title: t("session.cmd_sessions_title"),
+        detail: t("session.cmd_sessions_detail", undefined, {
+          count: props.sessions.length.toLocaleString(),
+        }),
+        meta: t("session.cmd_sessions_meta"),
+        action: () => {
+          setMode("sessions");
+        },
       },
-    },
-    {
-      id: "accessible-items",
-      title: "Accessible items",
-      detail: accessibleTargetCount > 0
-        ? `Open ${accessibleTargetCount.toLocaleString()} servers and artifacts detected in this session`
-        : "No servers or artifacts detected in this session yet",
-      meta: "Session",
-      action: () => {
-        setMode("accessible-items");
+    );
+    if (props.projectFolderPath && props.onOpenProjectFolder) {
+      items.push({
+        id: "open-project-folder",
+        title: "Open project folder",
+        detail: props.projectFolderPath,
+        meta: "Project",
+        icon: <FolderOpen className="size-4 text-primary" />,
+        searchText: `open reveal project folder finder ${props.projectFolderPath}`,
+        action: () => {
+          props.onClose();
+          props.onOpenProjectFolder?.();
+        },
+      });
+    }
+    if (props.projectFolderPath && props.onCopyProjectPath) {
+      items.push({
+        id: "copy-project-path",
+        title: "Copy project path",
+        detail: props.projectFolderPath,
+        meta: "Copy",
+        icon: <Copy className="size-4 text-primary" />,
+        searchText: `copy project folder path ${props.projectFolderPath}`,
+        action: () => {
+          props.onClose();
+          props.onCopyProjectPath?.();
+        },
+      });
+    }
+    if (props.outputsPath && props.onOpenOutputs) {
+      items.push({
+        id: "open-outputs",
+        title: "Open outputs",
+        detail: props.outputsPath,
+        meta: "Project",
+        icon: <FolderOpen className="size-4 text-primary" />,
+        searchText: `open outputs artifacts files ${props.outputsPath}`,
+        action: () => {
+          props.onClose();
+          props.onOpenOutputs?.();
+        },
+      });
+    }
+    if (props.outputsPath && props.onCopyOutputsPath) {
+      items.push({
+        id: "copy-outputs-path",
+        title: "Copy outputs path",
+        detail: props.outputsPath,
+        meta: "Copy",
+        icon: <Copy className="size-4 text-primary" />,
+        searchText: `copy outputs artifacts path ${props.outputsPath}`,
+        action: () => {
+          props.onClose();
+          props.onCopyOutputsPath?.();
+        },
+      });
+    }
+    items.push(
+      {
+        id: "accessible-items",
+        title: "Accessible items",
+        detail: accessibleTargetCount > 0
+          ? `Open ${accessibleTargetCount.toLocaleString()} servers and artifacts detected in this session`
+          : "No servers or artifacts detected in this session yet",
+        meta: "Session",
+        action: () => {
+          setMode("accessible-items");
+        },
       },
-    },
-    {
-      id: "open-settings",
-      title: t("settings.tab_general"),
-      detail: t("settings.tab_description_general"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings();
+      {
+        id: "open-settings",
+        title: t("settings.tab_general"),
+        detail: t("settings.tab_description_general"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          props.onOpenSettings();
+        },
       },
-    },
-    // Top-bar shortcuts — these used to be selectable via Cmd+K and were
-    // missing after the React port. Each one mirrors one of the icons at
-    // the bottom-right of the session surface (documentation / feedback)
-    // plus every settings tab the user is likely to reach for.
-    {
-      id: "open-docs",
-      title: t("session.support_docs"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        openUrl("https://matterhorn.work/docs");
+      // Top-bar shortcuts mirror documentation / feedback plus every settings
+      // tab the user is likely to reach for from Cmd/Ctrl+K.
+      {
+        id: "open-docs",
+        title: t("session.support_docs"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          openUrl("https://matterhorn.work/docs");
+        },
       },
-    },
-    {
-      id: "open-feedback",
-      title: t("session.support_feedback"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        openUrl("https://matterhorn.work/feedback");
+      {
+        id: "open-feedback",
+        title: t("session.support_feedback"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          openUrl("https://matterhorn.work/feedback");
+        },
       },
-    },
-    {
-      id: "settings-skills",
-      title: t("settings.tab_skills"),
-      detail: t("settings.tab_description_skills"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/skills");
+      {
+        id: "settings-skills",
+        title: t("settings.tab_skills"),
+        detail: t("settings.tab_description_skills"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          props.onOpenSettings("/settings/skills");
+        },
       },
-    },
-    {
-      id: "settings-extensions",
-      title: t("settings.tab_extensions"),
-      detail: t("settings.tab_description_extensions"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/extensions");
+      {
+        id: "settings-extensions",
+        title: t("settings.tab_extensions"),
+        detail: t("settings.tab_description_extensions"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          props.onOpenSettings("/settings/extensions");
+        },
       },
-    },
-    {
-      id: "settings-appearance",
-      title: t("settings.tab_appearance"),
-      detail: t("settings.tab_description_appearance"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/appearance");
+      {
+        id: "settings-appearance",
+        title: t("settings.tab_appearance"),
+        detail: t("settings.tab_description_appearance"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          props.onOpenSettings("/settings/appearance");
+        },
       },
-    },
-    {
-      id: "settings-updates",
-      title: t("settings.tab_updates"),
-      detail: t("settings.tab_description_updates"),
-      meta: t("session.cmd_settings_meta"),
-      action: () => {
-        props.onClose();
-        props.onOpenSettings("/settings/updates");
+      {
+        id: "settings-updates",
+        title: t("settings.tab_updates"),
+        detail: t("settings.tab_description_updates"),
+        meta: t("session.cmd_settings_meta"),
+        action: () => {
+          props.onClose();
+          props.onOpenSettings("/settings/updates");
+        },
       },
-    },
-  ], [accessibleTargetCount, props]);
+    );
+    return items;
+  }, [accessibleTargetCount, props]);
 
   const sessionItems = useMemo<PaletteItem[]>(
     () =>

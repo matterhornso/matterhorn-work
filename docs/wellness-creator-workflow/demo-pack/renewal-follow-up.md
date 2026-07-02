@@ -2,7 +2,7 @@
 
 *Customer Demo Pack artifact — a reusable renewal/follow-up draft a personal trainer, yoga instructor, or dietician can send to a client. Pricing is a draft only; no payment is processed.*
 
-> This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program.
+> This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting or changing any program.
 
 ## Message draft
 
@@ -28,4 +28,4 @@
 
 ## Disclaimer
 
-Results vary between individuals. No specific outcome or result is guaranteed. This message is general wellness education, not medical care.
+Results vary between individuals. No specific outcome or result is guaranteed. This message is general longevity education, not medical care.

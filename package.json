@@ -111,6 +111,7 @@
     "test:protocol-desk-visual-contract": "node scripts/protocol-desk-visual-contract.test.mjs",
     "test:matterhorn-work-contract": "node scripts/protocol-desk-visual-contract.test.mjs",
     "test:desk-action-manifest": "node scripts/desk-action-manifest.test.mjs",
+    "test:matterhorn-desk-agent-contract": "node scripts/matterhorn-desk-agent-contract.test.mjs",
     "test:mcp-catalog-contract": "node scripts/mcp-catalog-contract.test.mjs",
     "test:surface-readiness-contract": "node scripts/surface-readiness-contract.test.mjs",
     "test:wallet-profile-mcp-readiness-contract": "node scripts/wallet-profile-mcp-readiness-contract.test.mjs",

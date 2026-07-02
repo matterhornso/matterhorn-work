@@ -5,6 +5,7 @@ import {
   type ProtocolDeskManifest,
   type ProtocolDeskVisualStatus,
 } from "@matterhorn-work/types/matterhorn-workflows";
+import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 
 export type CustomerProtocolDeskId =
   | "bittensor"
@@ -63,6 +64,9 @@ export type CustomerProtocolDeskVisual = {
   railTitle: string;
   sessionTitle: string;
   sessionBoundary: string;
+  agentId?: string;
+  agentName: string;
+  agentDescription: string;
   brandAsset: ProtocolBrandAssetManifest | null;
 };
 
@@ -73,6 +77,11 @@ const STATUS_LABELS: Record<ProtocolDeskVisualStatus, string> = {
   planned_not_live: "Planned, not live",
 };
 
+const MARKET_STATUS_LABELS: Partial<Record<CustomerProtocolDeskId, string>> = {
+  hyperliquid: "External trade handoff",
+  polymarket: "Compliance-gated handoff",
+};
+
 const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> = {
   bittensor: "bittensor",
   hyperliquid: "hyperliquid",
@@ -80,8 +89,8 @@ const WORKSPACE_TO_DESK_ID: Record<string, CustomerProtocolDeskId | undefined> =
   wellness: "wellness",
 };
 
-export function protocolDeskStatusLabel(status: ProtocolDeskVisualStatus): string {
-  return STATUS_LABELS[status];
+export function protocolDeskStatusLabel(status: ProtocolDeskVisualStatus, id?: CustomerProtocolDeskId | string): string {
+  return MARKET_STATUS_LABELS[id as CustomerProtocolDeskId] ?? STATUS_LABELS[status];
 }
 
 export function protocolDeskIdForWorkspace(workspaceId: string | null | undefined): CustomerProtocolDeskId | null {
@@ -114,7 +123,7 @@ function capabilityBullets(manifest: ProtocolDeskManifest): string[] {
     : manifest.walletRequirements.includes("evm_read_only")
       ? "Public wallet context"
       : manifest.category === "wellness"
-        ? "Client-safe artifacts"
+        ? "Offline human-optimization"
         : "Safe context";
   return Array.from(new Set([...actions, walletBoundary])).slice(0, 3);
 }
@@ -124,10 +133,10 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
     return "Public SS58 reads and unsigned previews only. External signer required; no seed phrases, private keys, or wallet exports.";
   }
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
-    return "Can submit: No. Live submission: Off. External signer/client only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
+    return "Can submit: No. Live submission: Off. External trade handoff only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
   if (manifest.id === "wellness") {
-    return "Standalone workflow. No Web3 trading, medical advice, diagnosis, prescriptions, or live payment/email/hosting claims.";
+    return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
   }
   if (manifest.id === "memory") {
     return "User-controlled memory only. No hidden saves; secrets and clinical records are blocked.";
@@ -143,19 +152,19 @@ function railTitle(manifest: ProtocolDeskManifest): string {
     return "Bittensor: TAO wallet reads, subnets, validators, watches, receipts, and unsigned staking previews";
   }
   if (manifest.id === "hyperliquid") {
-    return "Hyperliquid: orderbooks, account exposure, funding, watches, and external-client previews";
+    return "Hyperliquid: orderbooks, exposure, funding, watches, and external trade handoffs";
   }
   if (manifest.id === "polymarket") {
-    return "Polymarket: markets, outcomes, liquidity, compliance, watches, and external-client previews";
+    return "Polymarket: markets, outcomes, liquidity, compliance, watches, and trade handoffs";
   }
   if (manifest.id === "wellness") {
-    return "Wellness: standalone service workflows, program packets, progress check-ins, and client handoffs";
+    return "Longevity: standalone service workflows, program packets, progress check-ins, and client handoffs";
   }
   return `${manifest.displayName}: ${manifest.shortDescription}`;
 }
 
 function sessionTitle(manifest: ProtocolDeskManifest): string {
-  if (manifest.id === "wellness") return "Wellness workflow session";
+  if (manifest.id === "wellness") return "Longevity workflow session";
   return `${manifest.displayName} session`;
 }
 
@@ -164,10 +173,10 @@ function sessionBoundary(manifest: ProtocolDeskManifest): string {
     return "Public SS58/coldkey/hotkey context only. External signer required for actions.";
   }
   if (manifest.id === "hyperliquid") {
-    return "Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.";
+    return "External trade handoff only. Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.";
   }
   if (manifest.id === "polymarket") {
-    return "Can submit: No. Live submission: Off. Compliance blocks must not expose executable bet fields.";
+    return "Compliance-gated handoff only. Can submit: No. Live submission: Off. Blocked regions get no executable bet fields.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.";
@@ -180,13 +189,14 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
   const manifest = PROTOCOL_DESK_MANIFEST_REGISTRY[id];
   if (!manifest || !CUSTOMER_PROTOCOL_DESK_IDS.includes(manifest.id as CustomerProtocolDeskId)) return null;
   const brandAsset = PROTOCOL_BRAND_ASSET_REGISTRY[manifest.logoAssetKey] ?? null;
+  const agent = getMatterhornDeskAgent(manifest.id);
   return {
     id: manifest.id as CustomerProtocolDeskId,
     displayName: manifest.displayName,
     shortDescription: manifest.shortDescription,
     category: manifest.category,
     status: manifest.status,
-    statusLabel: protocolDeskStatusLabel(manifest.status),
+    statusLabel: protocolDeskStatusLabel(manifest.status, manifest.id),
     routeOrPanelId: manifest.routeOrPanelId,
     logoAssetKey: manifest.logoAssetKey,
     fallbackInitials: brandAsset?.fallbackInitials ?? manifest.displayName.slice(0, 2).toUpperCase(),
@@ -206,6 +216,9 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     railTitle: railTitle(manifest),
     sessionTitle: sessionTitle(manifest),
     sessionBoundary: sessionBoundary(manifest),
+    agentId: agent?.agentId,
+    agentName: agent?.displayName ?? `${manifest.displayName} Agent`,
+    agentDescription: agent?.description ?? manifest.shortDescription,
     brandAsset,
   };
 }
@@ -217,4 +230,3 @@ export const CUSTOMER_PROTOCOL_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUST
 export const CUSTOMER_LAUNCHER_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUSTOMER_LAUNCHER_DESK_IDS
   .map((id) => getCustomerProtocolDeskVisual(id))
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));
-

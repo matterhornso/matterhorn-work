@@ -38,6 +38,11 @@
       "development": "./src/matterhorn-workflows.ts",
       "default": "./src/matterhorn-workflows.ts"
     },
+    "./desk-agents": {
+      "types": "./src/desk-agents.ts",
+      "development": "./src/desk-agents.ts",
+      "default": "./src/desk-agents.ts"
+    },
     "./memory": {
       "types": "./src/memory.ts",
       "development": "./src/memory.ts",

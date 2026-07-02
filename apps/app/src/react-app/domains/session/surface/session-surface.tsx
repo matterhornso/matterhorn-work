@@ -45,7 +45,6 @@ import { useControlAction, type MatterhornControlAction } from "../../../shell/c
 import { ReactSessionComposer } from "./composer/composer";
 import { decodeComposerMentionValue, encodeComposerMentionValue } from "./composer/mention-encoding";
 import { DevProfiler } from "../../../shell/dev-profiler";
-import { PaperGrainGradient } from "@matterhorn-work/ui/react";
 import { OwDotTicker } from "../../../shell/dot-ticker";
 import { useShellConfig } from "../../../shell/shell-config";
 import { useReactRenderWatchdog } from "../../../shell/react-render-watchdog";
@@ -102,6 +101,10 @@ import {
 } from "../workflows/customer-workflow-templates";
 import { getCustomerProtocolDeskVisual } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import {
+  getMatterhornDeskAgent,
+  matterhornDeskAgentIdForDesk,
+} from "@matterhorn-work/types/desk-agents";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
@@ -135,73 +138,93 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
     {
       title: "Show TAO balance",
       detail: "Read a public SS58 coldkey balance and explain what the user can safely share.",
-      prompt: "Use Bittensor chat mode. Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
+      prompt: "Show my TAO balance for this SS58 public address: <paste public SS58 address>. Use public wallet context only and never ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.",
     },
     {
       title: "Browse useful subnets",
       detail: "Explain useful subnets in plain language, including image-generation options.",
-      prompt: "Use Bittensor chat mode. Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, source/freshness, and what public context would help narrow the choice.",
+      prompt: "Find useful Bittensor subnets for image generation. Explain what each subnet does, why it is useful, source/freshness, and what public context would help narrow the choice.",
     },
     {
       title: "Compare validators",
       detail: "Compare validators on a subnet before staking, with risk notes and missing public context.",
-      prompt: "Use Bittensor chat mode. Compare validators on subnet 14. Show source, freshness, risks, and what public validator/coldkey context is needed before staking.",
+      prompt: "Compare Bittensor validators on subnet 14. Show source, freshness, risks, and what public validator/coldkey context is needed before staking.",
     },
     {
       title: "Prepare unsigned staking preview",
       detail: "Build a non-custodial preview that must be reviewed and signed elsewhere.",
-      prompt: "Use Bittensor chat mode. Prepare a staking preview for 1 TAO on subnet 14. Ask for public coldkey and validator hotkey if missing. This must stay unsigned and require an external Bittensor-compatible signer.",
+      prompt: "Prepare a Bittensor staking preview for 1 TAO on subnet 14. Ask for public coldkey and validator hotkey if missing. This must stay unsigned and require an external Bittensor-compatible signer.",
     },
   ],
   hyperliquid: [
     {
       title: "Read orderbook context",
       detail: "Summarize spread, depth, and stale-data warnings without submission.",
-      prompt: "Use Hyperliquid chat mode. Show BTC orderbook context, spread, depth summary, stale-data warnings, and explain this is read/preview-only with Can submit: No and Live submission: Off.",
+      prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
       title: "Summarize exposure",
       detail: "Use public/read-only account context only; never ask for exchange secrets.",
-      prompt: "Use Hyperliquid chat mode. Summarize my read-only account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
+      prompt: "Summarize my read-only Hyperliquid account exposure if public account context is available. Do not ask for API secrets, private keys, raw signatures, signed payloads, or exchange custody.",
     },
     {
-      title: "Prepare preview handoff",
-      detail: "Create an external-client preview with submission disabled.",
-      prompt: "Use Hyperliquid chat mode. Prepare a preview-only order handoff for BTC. Keep Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
+      title: "Prepare trade handoff",
+      detail: "Create an external-client handoff with submission disabled.",
+      prompt: "Prepare a Hyperliquid external trade handoff for BTC. Keep Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
   polymarket: [
     {
       title: "Research a market",
       detail: "Explain outcomes, liquidity, orderbook context, and compliance state.",
-      prompt: "Use Polymarket chat mode. Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
+      prompt: "Summarize this Polymarket market: <paste market URL or slug>. Include outcomes, liquidity/orderbook context, compliance state, source, freshness, and no bet placement.",
     },
     {
       title: "Check compliance",
       detail: "If blocked, do not expose executable price, size, share, or order fields.",
-      prompt: "Use Polymarket chat mode. Check whether this market can be previewed safely. If compliance blocks the preview, do not show executable price, size, share, or order fields.",
+      prompt: "Check whether this Polymarket market is eligible for a handoff. If compliance blocks the flow, do not show executable price, size, share, or order fields.",
     },
     {
-      title: "Prepare preview handoff",
+      title: "Prepare trade handoff",
       detail: "Build a non-custodial wallet handoff while live submission stays off.",
-      prompt: "Use Polymarket chat mode. Prepare a preview-only external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
+      prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
   wellness: [
     {
-      title: "Create service offer",
-      detail: "Package a trainer, yoga, or dietician offer without medical or live-service claims.",
-      prompt: "Use the Wellness workflow desk. Create a client-safe service offer packet for a personal trainer, yoga instructor, or dietician. Keep it educational, non-medical, and do not claim live payments, email, hosting, or token-gated access.",
+      title: "1. Intake",
+      detail: "Describe your audience, goal, constraints, session type, duration, equipment, and level.",
+      prompt: "Start a new longevity program — here is my audience, goal, constraints, session type, duration, equipment, and level",
     },
     {
-      title: "Build weekly plan",
-      detail: "Draft a safe weekly program artifact with boundaries and client check-in prompts.",
-      prompt: "Use the Wellness workflow desk. Draft a weekly client program plan and progress check-in packet. Include a non-medical disclaimer and avoid diagnosis, prescription, treatment claims, or guaranteed outcomes.",
+      title: "2. Program design",
+      detail: "Design the program with mandatory non-medical safety disclaimers attached.",
+      prompt: "Design the program with safety disclaimers",
     },
     {
-      title: "Prepare handoff packet",
-      detail: "Create a client handoff packet ready for review and export.",
-      prompt: "Use the Wellness workflow desk. Prepare a client handoff packet with onboarding notes, weekly plan, progress check-in, and follow-up message. Keep payments, email, storage, hosting, and access control planned-not-live.",
+      title: "3. Client artifacts",
+      detail: "Generate the weekly plan, video script, checklist, FAQ, and progress tracker.",
+      prompt: "Generate the client artifacts: weekly plan, video script, checklist, FAQ, and progress tracker",
+    },
+    {
+      title: "4. Service packaging",
+      detail: "Package the program as a sellable service with draft pricing and onboarding.",
+      prompt: "Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text",
+    },
+    {
+      title: "5. Delivery plan",
+      detail: "Draft how the program would be delivered through planned Matterhorn services.",
+      prompt: "Draft the delivery plan: storage/hosting, email updates, payments, and client access",
+    },
+    {
+      title: "6. Customer management",
+      detail: "Set up follow-up cadence, feedback form, and renewal/up-sell prompts.",
+      prompt: "Set up customer management: follow-up cadence, feedback form, and renewal/up-sell prompts",
+    },
+    {
+      title: "7. Export",
+      detail: "Export the whole workflow as a re-runnable Matterhorn / MCP artifact.",
+      prompt: "Export this as a Matterhorn workflow / MCP artifact",
     },
   ],
 };
@@ -209,10 +232,10 @@ const MATTERHORN_DESK_EMPTY_PROMPTS: Record<MatterhornDeskMode, MatterhornDeskPr
 function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
   const text = chunks.join("\n").toLowerCase();
   const candidates: Array<[MatterhornDeskMode, RegExp[]]> = [
-    ["wellness", [/use the wellness workflow desk/, /start wellness workflow/, /\bwellness workflow\b/]],
-    ["bittensor", [/use the bittensor desk/, /bittensor chat mode/, /\bshow my tao\b/, /\bsubnet\b/, /\bss58\b/]],
-    ["hyperliquid", [/use the hyperliquid desk/, /hyperliquid chat mode/, /\bbtc-perp\b/, /\borderbook\b/]],
-    ["polymarket", [/use the polymarket desk/, /polymarket chat mode/, /\bpolymarket market\b/, /\bcompliance\b/]],
+    ["wellness", [/use the longevity desk/i, /start longevity workflow/i, /\blongevity workflow\b/i, /\blongevity desk\b/i, /offline optimization/i, /use the wellness workflow desk/, /start wellness workflow/, /\bwellness workflow\b/]],
+    ["bittensor", [/bittensor task/i, /bittensor agent/i, /use the bittensor desk/i, /\bshow my tao\b/i, /\bsubnet\b/i, /\bss58\b/i]],
+    ["hyperliquid", [/hyperliquid task/i, /hyperliquid agent/i, /use the hyperliquid desk/i, /\bbtc-perp\b/i, /\borderbook\b/i]],
+    ["polymarket", [/polymarket task/i, /polymarket agent/i, /use the polymarket desk/i, /\bpolymarket market\b/i, /\bcompliance\b/i]],
   ];
   return candidates.find(([, patterns]) => patterns.some((pattern) => pattern.test(text)))?.[0] ?? null;
 }
@@ -244,6 +267,7 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
   if (!copy) return null;
   const iconHint = copy.id as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint];
+  const agent = getMatterhornDeskAgent(mode);
   return (
     <div style={deskToneStyle(iconHint)} className="mb-2 border-y border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.045)] px-3 py-2.5">
       <div className="flex items-start gap-3">
@@ -258,7 +282,7 @@ function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="text-[12px] font-semibold text-dls-text">{copy.sessionTitle}</span>
             <span className="rounded-md border border-[rgba(var(--matterhorn-desk-rgb),0.32)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--matterhorn-desk-color)]">
-              {copy.statusLabel}
+              {agent?.displayName ?? copy.agentName}
             </span>
           </div>
           <p className="mt-1 text-[11px] leading-5 text-dls-secondary">{copy.shortDescription}</p>
@@ -277,14 +301,17 @@ function MatterhornDeskFocusedEmptyState({
   onUsePrompt: (prompt: string) => void | Promise<void>;
 }) {
   const visual = getCustomerProtocolDeskVisual(mode);
+  const agent = getMatterhornDeskAgent(mode);
   const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
   const prompts = MATTERHORN_DESK_EMPTY_PROMPTS[mode];
   const boundary = mode === "bittensor"
     ? "Public SS58/coldkey/hotkey context only. External signing is required for every action."
     : mode === "wellness"
-      ? "Standalone wellness workflow. Educational only, non-medical, and no live payments/email/hosting."
-      : "Read and preview only. Can submit: No. Live submission: Off. External client required.";
+      ? "Standalone longevity workflow. Educational only, non-medical, and no live payments/email/hosting."
+      : mode === "polymarket"
+        ? "Compliance-gated handoff only. Can submit: No. Live submission: Off. Your external client executes."
+        : "External trade handoff only. Can submit: No. Live submission: Off. Your external client executes.";
 
   return (
     <div
@@ -308,14 +335,14 @@ function MatterhornDeskFocusedEmptyState({
                   </span>
                 </div>
                 <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-dls-secondary">
-                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to open the chat composer
-                  with an editable draft. Nothing sends until you press Ask.
+                  {visual?.shortDescription ?? "Focused Matterhorn desk."} Choose a starter below to hand the task to
+                  {` ${agent?.displayName ?? visual?.agentName ?? "this desk agent"}`}. Nothing sends until you press Ask.
                 </p>
                 <p className="mt-1 text-[11px] leading-4 text-dls-secondary">{boundary}</p>
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
-              {["Opens in chat", "Editable", "No auto-send"].map((label) => (
+              {[agent?.displayName ?? "Desk agent", "Editable", "No auto-send"].map((label) => (
                 <span
                   key={label}
                   className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
@@ -340,7 +367,7 @@ function MatterhornDeskFocusedEmptyState({
                 <span className="mt-0.5 block text-[11px] leading-4 text-dls-secondary">{item.detail}</span>
               </span>
               <span className="text-[12px] font-semibold text-[var(--matterhorn-desk-color)]">
-                Open chat draft
+                Open with agent
               </span>
             </button>
           ))}
@@ -350,8 +377,163 @@ function MatterhornDeskFocusedEmptyState({
   );
 }
 
+function LongevityDeskEmptyState({
+  onUsePrompt,
+}: {
+  onUsePrompt: (prompt: string) => void | Promise<void>;
+}) {
+  const visual = getCustomerProtocolDeskVisual("wellness");
+  const agent = getMatterhornDeskAgent("wellness");
+  const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS.wellness;
+  const stagePrompts = MATTERHORN_DESK_EMPTY_PROMPTS.wellness;
+
+  const pathChoices = [
+    {
+      label: "For myself",
+      prompt:
+        "Start a new longevity program for myself — here is my audience, goal, constraints, session type, duration, equipment, and level",
+    },
+    {
+      label: "For clients",
+      prompt:
+        "Start a new longevity program for my clients — here is the audience, goal, constraints, session type, duration, equipment, and level",
+    },
+    {
+      label: "For a coaching offer",
+      prompt:
+        "Package this as a service: offer page copy, pricing-package draft, onboarding questionnaire, and terms/disclaimer text",
+    },
+    { label: "For a reusable workflow", prompt: "Export this as a Matterhorn workflow / MCP artifact" },
+  ];
+
+  const gallery = [
+    { title: "Service offer page", detail: "Offer page + pricing draft", prompt: "create an offer page for my coaching" },
+    {
+      title: "Onboarding questionnaire",
+      detail: "New-client intake",
+      prompt: "create an onboarding questionnaire for a new client",
+    },
+    { title: "4-week program", detail: "Beginner training plan", prompt: "create a 4-week training plan for a beginner" },
+    { title: "Weekly check-in form", detail: "Client progress check-in", prompt: "create a weekly client check-in form" },
+    { title: "Progress summary", detail: "Review client progress", prompt: "summarize my client's progress so far" },
+    { title: "Renewal / follow-up", detail: "Renewal note draft", prompt: "write a renewal follow-up message for my client" },
+    { title: "Client handoff packet", detail: "Exportable packet", prompt: "create a client handoff packet" },
+  ];
+
+  return (
+    <div className="min-w-0 w-full px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle("wellness")}>
+      <section className="w-full space-y-3">
+        <div className="matterhorn-desk-session-hero overflow-hidden rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5 sm:px-4 sm:py-4">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+                {visual ? <ProtocolLogo iconHint="wellness" size={34} /> : <Icon className="size-5" />}
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-dls-text sm:text-lg">
+                    Longevity Creator
+                  </h2>
+                  <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                    {visual?.statusLabel ?? "Workflow-ready"}
+                  </span>
+                </div>
+                <p className="mt-1.5 max-w-2xl text-[12px] leading-5 text-dls-secondary">
+                  Build a personal longevity routine, training plan, yoga/mobility plan, nutrition-education template,
+                  weekly check-in, habit/recovery tracker, client packet, or offer page. The Longevity Agent keeps the
+                  workflow separate from markets and wallets.
+                </p>
+                <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+                  Standalone workflow. Educational only, non-medical, and no live payments/email/hosting.
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-1.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)] sm:max-w-48 sm:justify-end">
+              {[agent?.displayName ?? "Longevity Agent", "Editable", "No auto-send"].map((label) => (
+                <span
+                  key={label}
+                  className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-1"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-[12px] font-semibold text-dls-text">I want to build…</p>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            {pathChoices.map((choice) => (
+              <button
+                key={choice.label}
+                type="button"
+                onClick={() => void onUsePrompt(choice.prompt)}
+                className="rounded-md bg-dls-surface-muted/42 px-2.5 py-2 text-left text-[12px] font-medium text-dls-text transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              >
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div
+          className="matterhorn-desk-session-prompts overflow-hidden rounded-xl bg-dls-surface/44"
+          aria-label="Longevity workflow stages"
+        >
+          {stagePrompts.map((item) => (
+            <div
+              key={item.title}
+              className="group grid w-full grid-cols-1 items-center gap-2 px-3.5 py-2.5 text-left sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_auto]"
+            >
+              <span className="text-[13px] font-semibold text-dls-text">{item.title}</span>
+              <span className="text-[11px] leading-4 text-dls-secondary">{item.detail}</span>
+              <button
+                type="button"
+                onClick={() => void onUsePrompt(item.prompt)}
+                className="rounded-md px-2 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              >
+                Stage task
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-[12px] font-semibold text-dls-text">Quick artifact gallery</p>
+          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {gallery.map((card) => (
+              <button
+                key={card.title}
+                type="button"
+                onClick={() => void onUsePrompt(card.prompt)}
+                className="group flex items-center justify-between rounded-md bg-dls-surface-muted/42 px-3 py-2 text-left transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.09)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+              >
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-semibold text-dls-text">{card.title}</span>
+                  <span className="text-[11px] leading-4 text-dls-secondary">{card.detail}</span>
+                </span>
+                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">Insert</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[rgba(var(--matterhorn-desk-rgb),0.24)] bg-[rgba(var(--matterhorn-desk-rgb),0.06)] px-3 py-2.5">
+          <p className="text-[11px] leading-4 text-dls-secondary">
+            <span className="font-semibold text-dls-text">Safety boundary:</span> Educational only, not medical advice.
+            No diagnosis, prescription, treatment, or guaranteed outcomes. Storage/hosting, payments, email, and
+            identity/access hooks are planned, not live.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
   const visual = getCustomerProtocolDeskVisual(mode);
+  const agent = getMatterhornDeskAgent(mode);
   const iconHint = (visual?.id ?? mode) as CustomerWorkflowIconHint;
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
 
@@ -367,14 +549,14 @@ function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-dls-text">
-              {visual?.displayName ?? "Matterhorn"} draft ready
+              {agent?.displayName ?? visual?.agentName ?? "Matterhorn Agent"} ready
             </span>
             <span className="rounded-full bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--matterhorn-desk-color)]">
               Review before sending
             </span>
           </div>
           <p className="mt-1 text-[12px] leading-5 text-dls-secondary">
-            The chat draft is in the composer below. Edit it, add any public context, then press Ask when you are ready.
+            The task is staged for this desk agent. Edit it, add public context, then press Ask when you are ready.
           </p>
         </div>
       </div>
@@ -390,10 +572,10 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
     return ["TAO wallet reads", "Subnet discovery", "External-signer previews"];
   }
   if (item.panel === "hyperliquid") {
-    return ["Orderbook reads", "Account exposure", "No live market submit"];
+    return ["Orderbook reads", "Exposure context", "External trade handoff"];
   }
   if (item.panel === "polymarket") {
-    return ["Market research", "Compliance checks", "No live bet placement"];
+    return ["Market research", "Compliance checks", "Trade handoff"];
   }
   if (item.iconHint === "wellness") {
     return ["Service packets", "Client check-ins", "Non-medical workflow"];
@@ -570,18 +752,17 @@ function AssistantWaitingCard({ label = t("session.assistant_thinking"), collaps
       aria-label={`${t("composer.assistant_identity")} ${label}`}
     >
       <div className="inline-flex items-center gap-1.5 px-1 py-1 text-[12px] text-dls-secondary">
-        <div style={{ width: 20, height: 20, borderRadius: "50%", overflow: "hidden" }}>
-          <PaperGrainGradient
-            speed={12}
-            softness={0.1}
-            intensity={1}
-            noise={0.05}
-            shape="sphere"
-            colors={["#818cf8", "#fb7185", "#fbbf24", "#34d399"]}
-            colorBack="#ffffff00"
-            style={{ backgroundColor: "#818cf8", width: "100%", height: "100%", borderRadius: "50%" }}
+        <span
+          className="inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-dls-surface ring-1 ring-dls-border/60"
+          aria-hidden="true"
+        >
+          <img
+            src="/matterhorn-mark.svg"
+            alt=""
+            draggable={false}
+            className="size-4 select-none object-contain animate-spin motion-reduce:animate-none"
           />
-        </div>
+        </span>
         <span className="font-medium text-dls-text">{t("composer.assistant_identity")}</span>
         <span>{label}</span>
       </div>
@@ -993,6 +1174,12 @@ export function SessionSurface(props: SessionSurfaceProps) {
     () => deriveMatterhornDeskMode([draft, ...renderedMessages.map(messageToReadableText)]),
     [draft, renderedMessages],
   );
+  useEffect(() => {
+    const deskAgentId = matterhornDeskAgentIdForDesk(activeDeskMode);
+    if (deskAgentId && props.selectedAgent !== deskAgentId) {
+      props.onSelectAgent(deskAgentId);
+    }
+  }, [activeDeskMode, props.onSelectAgent, props.selectedAgent]);
   const openTargets = useMemo(() => deriveOpenTargets(renderedMessages), [renderedMessages]);
   const openTargetsFingerprint = useMemo(
     () => openTargets.map((target) => `${target.kind}:${target.value}:${target.confidence}`).join("|"),
@@ -1408,8 +1595,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
       setNotice({
-        title: "Memory prompt ready",
-        description: "Review or send it from the chat composer.",
+        title: "Memory task ready",
+        description: "Review it, then send it to the Memory Agent.",
         tone: "info",
       });
       recordInspectorEvent("memory.chat_handoff.applied", {
@@ -1461,9 +1648,20 @@ export function SessionSurface(props: SessionSurfaceProps) {
       const resolvedText = isGenericCryptoHandoff ? text : addBittensorContextToResolvedText(text, mergedContext);
       void typeComposerText(text);
       props.onDraftChange(buildDraft(text, attachments, { resolvedText }));
+      const venue = isGenericCryptoHandoff
+        ? (typeof (detail as { venue?: unknown; panel?: unknown }).venue === "string"
+            ? (detail as { venue: string }).venue
+            : typeof (detail as { panel?: unknown }).panel === "string"
+              ? (detail as { panel: string }).panel
+              : null)
+        : "bittensor";
+      const agent = getMatterhornDeskAgent(venue);
+      if (agent && props.selectedAgent !== agent.agentId) {
+        props.onSelectAgent(agent.agentId);
+      }
       setNotice({
-        title: isGenericCryptoHandoff ? "Protocol prompt ready" : "Bittensor prompt ready",
-        description: "Review or send it from the chat composer.",
+        title: agent ? `${agent.displayName} task ready` : "Desk task ready",
+        description: "Review it, then send it to the desk agent.",
         tone: "info",
       });
       recordInspectorEvent(isGenericCryptoHandoff ? "crypto.chat_handoff.applied" : "bittensor.chat_handoff.applied", {
@@ -1481,7 +1679,18 @@ export function SessionSurface(props: SessionSurfaceProps) {
       window.removeEventListener("matterhorn:bittensor-chat-handoff", handleCryptoChatHandoff);
       window.removeEventListener("matterhorn:bittensor-agent-prompt", handleCryptoChatHandoff);
     };
-  }, [attachments, bittensorContext, buildDraft, props.onDraftChange, props.sessionId, props.workspaceId, setBittensorContext, typeComposerText]);
+  }, [
+    attachments,
+    bittensorContext,
+    buildDraft,
+    props.onDraftChange,
+    props.onSelectAgent,
+    props.selectedAgent,
+    props.sessionId,
+    props.workspaceId,
+    setBittensorContext,
+    typeComposerText,
+  ]);
 
   useEffect(() => {
     const handleVoiceTranscript = (event: Event) => {
@@ -1769,6 +1978,8 @@ export function SessionSurface(props: SessionSurfaceProps) {
               ) : activeDeskMode ? (
                 draft.trim() ? (
                   <MatterhornDeskDraftReadyState mode={activeDeskMode} />
+                ) : activeDeskMode === "wellness" ? (
+                  <LongevityDeskEmptyState onUsePrompt={typeComposerText} />
                 ) : (
                   <MatterhornDeskFocusedEmptyState
                     mode={activeDeskMode}
@@ -1811,7 +2022,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
                               <span className="line-clamp-1 text-[12px] leading-5 text-dls-secondary">{item.description}</span>
                               <span className="hidden truncate text-[11px] leading-4 text-dls-muted sm:block">{capabilitySummary}</span>
                               <span className="text-[11px] font-semibold leading-4 text-[var(--matterhorn-desk-color)]">
-                                Insert editable prompt
+                                Stage agent task
                               </span>
                             </span>
                             <span className="sr-only">{item.safetySummary}</span>

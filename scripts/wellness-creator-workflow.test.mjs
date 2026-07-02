@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Gate for the full Wellness Creator Workflow.
+// Gate for the full Longevity Creator Workflow.
 // Proves: it is framed as a full workflow (not a pilot); every service hook is
 // planned-not-live; no medical-advice expansion; no live payments/storage/
 // email/identity claims; no secret-taking examples; and every canonical prompt
@@ -17,7 +17,7 @@ const HELPER_PATH = "scripts/wellness-creator-workflow.mjs";
 
 // 1. Files exist.
 for (const path of [DOC_PATH, HANDOFF_PATH, HELPER_PATH]) {
-  assert.ok(existsSync(path), `Wellness Creator Workflow file should exist: ${path}`);
+  assert.ok(existsSync(path), `Longevity Creator Workflow file should exist: ${path}`);
 }
 
 const doc = readFileSync(DOC_PATH, "utf8");
@@ -28,7 +28,7 @@ const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 assert.equal(
   pkg.scripts?.["test:wellness-creator-workflow"],
   "node scripts/wellness-creator-workflow.test.mjs",
-  "package.json should expose the Wellness Creator Workflow gate",
+  "package.json should expose the Longevity Creator Workflow gate",
 );
 
 // 3. Helper emits the versioned contract.
@@ -478,10 +478,10 @@ for (const phrase of [
 
 // 22d. Doc + handoff carry the generic-surface sections.
 assert.ok(doc.includes("Exposed Through Generic Matterhorn Workflow Surfaces"), "Doc should explain generic-surface exposure");
-assert.ok(doc.includes("not a custom wellness app"), "Doc should state this is not a custom wellness app");
+assert.ok(doc.includes("not a custom longevity app"), "Doc should state this is not a custom longevity app");
 assert.ok(handoff.includes("Generic-Surface & Operator-Example Tests"), "Handoff should include generic-surface QA");
 
-// 23. Wellness Creator Service Workflow layer: artifact contracts, service
+// 23. Longevity Creator Service Workflow layer: artifact contracts, service
 //     builder intents, sample prompts, sensitive redirects, beyond-Web3.
 const ARTIFACT_IDS = [
   "client_plan",
@@ -826,7 +826,7 @@ for (const persona of ["personal_trainer", "yoga_instructor", "dietician", "well
   // The written packet exists and is well-formed.
   assert.ok(existsSync(outPath), `Exported packet should exist: ${outPath}`);
   const packet = readFileSync(outPath, "utf8");
-  assert.ok(packet.includes("# Wellness Creator Demo Packet"), "Packet should have the demo-packet header");
+  assert.ok(packet.includes("# Longevity Creator Demo Packet"), "Packet should have the demo-packet header");
   assert.ok(packet.includes("## Safety & Boundaries"), "Packet should carry the safety footer");
   assert.ok(packet.includes("not medical advice, diagnosis, or treatment"), "Packet safety footer should state non-medical boundary");
   assert.ok(packet.includes("planned, not live"), "Packet should state planned-not-live hooks");
@@ -855,7 +855,7 @@ for (const phrase of ["--demo-pack-export", "Demo Packet Export"]) {
 }
 assert.ok(handoff.includes("Demo Packet Export QA"), "Handoff should include export QA");
 
-// 28. Wellness Memory safety lane.
+// 28. Longevity Memory safety lane.
 const memory = contract.memory;
 assert.ok(memory, "Contract should include the memory lane");
 assert.equal(memory.writesMemory, false, "memory.writesMemory must be false (candidates only)");
@@ -931,11 +931,11 @@ for (const fixturePath of MEMORY_FIXTURE_PATHS) {
 }
 
 // Doc + handoff carry the memory lane.
-assert.ok(doc.includes("Wellness Memory Safety Lane"), "Doc should include the memory safety lane");
+assert.ok(doc.includes("Longevity Memory Safety Lane"), "Doc should include the memory safety lane");
 assert.ok(doc.includes("--memory-candidates"), "Doc should show the memory-candidates command");
-assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include memory QA");
+assert.ok(handoff.includes("Longevity Memory QA"), "Handoff should include memory QA");
 
-// 29. Wellness Memory QA evidence pack.
+// 29. Longevity Memory QA evidence pack.
 const memCli2 = spawnSync(process.execPath, [HELPER_PATH, "--memory-qa", "--json"], {
   encoding: "utf8",
   maxBuffer: 5 * 1024 * 1024,
@@ -998,9 +998,9 @@ for (const leak of [
 assert.ok(contract.memoryQa, "Contract should include the memoryQa block");
 assert.equal(contract.memoryQa.writesMemory, false, "contract memoryQa must not write memory");
 assert.ok(doc.includes("--memory-qa"), "Doc should reference --memory-qa");
-assert.ok(handoff.includes("Wellness Memory QA"), "Handoff should include the Wellness Memory QA section");
+assert.ok(handoff.includes("Longevity Memory QA"), "Handoff should include the Longevity Memory QA section");
 
-// 30. Wellness Memory contract adapter (suggestions only).
+// 30. Longevity Memory contract adapter (suggestions only).
 const sugCli = spawnSync(process.execPath, [HELPER_PATH, "--memory-suggestions", "--json"], {
   encoding: "utf8",
   maxBuffer: 5 * 1024 * 1024,
@@ -1103,4 +1103,4 @@ assert.equal(contract.memorySuggestions.writesMemory, false, "contract memorySug
 assert.ok(doc.includes("--memory-suggestions"), "Doc should reference --memory-suggestions");
 assert.ok(handoff.includes("--memory-suggestions"), "Handoff should reference --memory-suggestions");
 
-console.log("Wellness Creator Workflow gate passed.");
+console.log("Longevity Creator Workflow gate passed.");

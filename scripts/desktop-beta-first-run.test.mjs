@@ -70,7 +70,7 @@ for (const phrase of [
   "Desktop beta",
   "Bittensor: Beta-ready",
   "Hyperliquid/Polymarket: Preview only",
-  "Wellness workflow: Standalone",
+  "Longevity workflow: Standalone",
   "Open install guide",
   "Copy doctor",
   "Copy tester build",

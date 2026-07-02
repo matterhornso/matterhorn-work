@@ -227,7 +227,7 @@ function evaluateWatchAutopilotScheduler(report, findings) {
   }
 
   if (totalAlerts > 0 && totalNotifications >= totalAlerts && notificationIntents.length > 0) {
-    addFinding(findings, "pass", "Scheduled watch autopilot", `Prepared ${totalNotifications} read-only notification prompt(s) across ${notificationIntents.length} intent(s).`);
+    addFinding(findings, "pass", "Scheduled watch autopilot", `Prepared ${totalNotifications} read-only Bittensor Agent task(s) across ${notificationIntents.length} intent(s).`);
   } else if (totalAlerts > 0) {
     addFinding(findings, "warn", "Scheduled watch autopilot", "Scheduled watch alerts did not include notification intent summary evidence.", "P3");
   }

@@ -1,4 +1,4 @@
-# Wellness Creator Pilot
+# Longevity Creator Pilot
 
 A chat-first use case that shows Matterhorn Work doing real creator work — not trading. A personal trainer, gym instructor, dietician, or yoga instructor opens Matterhorn Work, describes the program they want, and the agent produces shareable, sellable client artifacts. Web3 capabilities (decentralized storage, payments, client access, creator subscriptions) attach later as optional rails, never as a requirement to get value on day one.
 
@@ -67,7 +67,7 @@ All outputs below are generated in chat as Matterhorn artifacts. No Web3 rail is
 These disclaimers are **mandatory** and must appear on the relevant artifacts. They are enforced by `scripts/wellness-creator-pilot.test.mjs`.
 
 - **General educational disclaimer (every plan, nutrition guide, and client artifact):**
-  > This content is for general fitness and wellness education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
+  > This content is for general fitness and longevity education only. It is not medical advice, diagnosis, or treatment. Consult a qualified healthcare professional before starting any exercise or nutrition program, especially if you have an existing health condition, are pregnant, or take medication.
 - **Nutrition-specific note (every nutrition guide):**
   > This guidance is general healthy-eating information, not a clinical or therapeutic diet. It is not a substitute for care from a registered dietitian or doctor.
 - **No-guarantee note (every paid program landing packet):**
@@ -98,9 +98,9 @@ The pilot is deliberately useful with **zero** Web3 setup. Web3 is the upgrade p
 
 ## Matterhorn Services Bridge (Planned — Not Live)
 
-The pilot delivers value today with zero infrastructure — every output is a chat-generated Matterhorn artifact. As Matterhorn Work's first-party platform services come online, each wellness workflow has a natural upgrade path onto a Matterhorn service. **Every mapping below is planned, not live.** None of these services is enabled in the pilot, and the app must never claim any of them is active.
+The pilot delivers value today with zero infrastructure — every output is a chat-generated Matterhorn artifact. As Matterhorn Work's first-party platform services come online, each longevity workflow has a natural upgrade path onto a Matterhorn service. **Every mapping below is planned, not live.** None of these services is enabled in the pilot, and the app must never claim any of them is active.
 
-| Wellness workflow (live today) | Future Matterhorn service | Status |
+| Longevity workflow (live today) | Future Matterhorn service | Status |
 |---|---|---|
 | Client artifact (shareable doc) | **Storage / hosting** — durable, creator-owned hosting of the artifact | Planned — not live |
 | Paid program landing packet | **Payments** — real checkout so a client can pay the creator | Planned — not live |
