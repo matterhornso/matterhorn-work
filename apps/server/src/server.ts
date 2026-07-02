@@ -214,6 +214,7 @@ import { deleteCommand, listCommands, repairCommands, upsertCommand } from "./co
 import { ApiError, formatError } from "./errors.js";
 import { readJsoncFile, updateJsoncPath, updateJsoncTopLevel, writeJsoncFile } from "./jsonc.js";
 import { recordAudit, readAuditEntries, readLastAudit } from "./audit.js";
+import { deriveTaskRuns, readTaskEvents } from "./task-events.js";
 import { ReloadEventStore } from "./events.js";
 import { computeReloadFingerprint } from "./reload-fingerprint.js";
 import { startReloadWatchers } from "./reload-watcher.js";
@@ -2535,6 +2536,25 @@ function createRoutes(
     const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 200) : 50;
     const items = await readAuditEntries(workspace.path, workspace.id, limit);
     return jsonResponse({ items });
+  });
+
+  // Task / workflow run events
+  addRoute(routes, "GET", "/workspace/:id/task-events", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const limitParam = ctx.url.searchParams.get("limit");
+    const parsed = limitParam ? Number(limitParam) : NaN;
+    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 200) : 50;
+    const items = await readTaskEvents(workspace.id, limit);
+    return jsonResponse({ items });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/task-runs", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const limitParam = ctx.url.searchParams.get("limit");
+    const parsed = limitParam ? Number(limitParam) : NaN;
+    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50) : 20;
+    const runs = await deriveTaskRuns(workspace.id, limit);
+    return jsonResponse({ runs });
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions", "client", async (ctx) => {

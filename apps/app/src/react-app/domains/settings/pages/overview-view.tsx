@@ -1,20 +1,33 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
+  AlertCircle,
+  Ban,
   Boxes,
+  CheckCircle2,
+  Circle,
   CircleUser,
+  Clock3,
   Copy,
   ExternalLink,
   FolderCog,
+  FolderOpen,
   Info,
+  ListTodo,
   Lock,
   Network,
   Palette,
+  Play,
   ShieldCheck,
   Stethoscope,
+  XCircle,
 } from "lucide-react";
 
+import type { MatterhornServerClient, MatterhornTaskRun } from "../../../../app/lib/matterhorn-server";
+import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -127,7 +140,97 @@ function CopyButton(props: { text: string; label: string }) {
   );
 }
 
-export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) => void }) {
+// ---------------------------------------------------------------------------
+// Task History helpers
+// ---------------------------------------------------------------------------
+
+function taskStatusMeta(status: MatterhornTaskRun["status"]) {
+  if (status === "completed") {
+    return { icon: CheckCircle2, label: "Completed", tone: "emerald", bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-300" };
+  }
+  if (status === "failed") {
+    return { icon: AlertCircle, label: "Failed", tone: "red", bg: "bg-red-500/10", border: "border-red-500/30", text: "text-red-300" };
+  }
+  if (status === "cancelled") {
+    return { icon: Ban, label: "Cancelled", tone: "slate", bg: "bg-dls-surface", border: "border-dls-border", text: "text-muted-foreground" };
+  }
+  return { icon: Play, label: "Running", tone: "blue", bg: "bg-sky-500/10", border: "border-sky-500/30", text: "text-sky-300" };
+}
+
+function TaskHistorySection(props: {
+  matterhornServerClient: MatterhornServerClient;
+  runtimeWorkspaceId: string;
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["task-runs", props.runtimeWorkspaceId] as const,
+    queryFn: () => props.matterhornServerClient.listTaskRuns(props.runtimeWorkspaceId, 10),
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    staleTime: 30_000,
+    refetchInterval: 15_000,
+  });
+
+  const runs = data?.runs ?? [];
+
+  return (
+    <div className="space-y-2">
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Clock3 className="size-3.5 animate-pulse" />
+          Loading task history…
+        </div>
+      ) : runs.length === 0 ? (
+        <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+          <ListTodo className="size-3.5 shrink-0" />
+          Tasks you run from desks will appear here.
+        </div>
+      ) : (
+        <div className="divide-y divide-dls-border/45">
+          {runs.map((run) => {
+            const meta = taskStatusMeta(run.status);
+            const StatusIcon = meta.icon;
+            return (
+              <div key={run.taskId} className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+                <div className={cn("mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border text-[10px]", meta.bg, meta.border, meta.text)}>
+                  <StatusIcon className="size-3" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-medium capitalize text-dls-text">{run.desk}</span>
+                    <span className="rounded-full border border-dls-border bg-dls-surface px-1.5 py-0.5 text-[10px] text-muted-foreground">{run.sessionSlug}</span>
+                    <span className={cn("ml-auto shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium", meta.bg, meta.border, meta.text)}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[11px] leading-5 text-muted-foreground">{run.outcomeSummary}</p>
+                  {run.artifactPaths.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {run.artifactPaths.slice(0, 3).map((path) => (
+                        <span
+                          key={path}
+                          className="max-w-[200px] truncate rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] text-muted-foreground"
+                          title={path}
+                        >
+                          {path}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{formatRelativeTime(run.updatedAt / 1000)}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SettingsOverviewView(props: {
+  onSelectTab: (tab: SettingsTab) => void;
+  matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
+}) {
   const { onSelectTab } = props;
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
@@ -179,6 +282,33 @@ export function SettingsOverviewView(props: { onSelectTab: (tab: SettingsTab) =>
             </Button>
           </div>
         </SettingsCard>
+
+        {/* 1b. Task History */}
+        {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+          <SettingsCard
+            icon={<ListTodo size={18} />}
+            title="Task History"
+            description="Latest desk tasks and their outputs."
+          >
+            <div className="pl-0">
+              <TaskHistorySection
+                matterhornServerClient={props.matterhornServerClient}
+                runtimeWorkspaceId={props.runtimeWorkspaceId}
+              />
+            </div>
+          </SettingsCard>
+        ) : (
+          <SettingsCard
+            icon={<ListTodo size={18} />}
+            title="Task History"
+            description="Latest desk tasks and their outputs."
+          >
+            <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+              <ListTodo className="size-3.5 shrink-0" />
+              Open a workspace to see your task history.
+            </div>
+          </SettingsCard>
+        )}
 
         {/* 2. Appearance */}
         <SettingsCard

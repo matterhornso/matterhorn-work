@@ -218,6 +218,52 @@ export type MatterhornMemoryForgetResponse = {
   id: string;
 };
 
+// ---------------------------------------------------------------------------
+// Task / Workflow run events
+// ---------------------------------------------------------------------------
+
+export type MatterhornTaskEventType =
+  | "workflow_staged"
+  | "workflow_started"
+  | "stage_started"
+  | "tool_called"
+  | "artifact_saved"
+  | "waiting_for_user"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+/**
+ * A single task/workflow run event.
+ * detail and outcomeSummary are pre-scrubbed by the server — never contain
+ * raw wallet keys, API tokens, signatures, or other secret material.
+ */
+export type MatterhornTaskEvent = {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  type: MatterhornTaskEventType;
+  timestamp: number;
+  summary: string;
+  detail?: string;
+  artifactPath?: string;
+  toolName?: string;
+  stageName?: string;
+};
+
+/** Collapsed view of a single task run, suitable for the task history list */
+export type MatterhornTaskRun = {
+  taskId: string;
+  workspaceId: string;
+  desk: string;
+  sessionSlug: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  createdAt: number;
+  updatedAt: number;
+  outcomeSummary: string;
+  artifactPaths: string[];
+};
+
 export type MatterhornMemoryExportResponse = {
   success: boolean;
   export: MatterhornMemoryExportManifest & {
@@ -1343,6 +1389,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<{ items: MatterhornAuditEntry[] }>(
         baseUrl,
         `/workspace/${workspaceId}/audit?limit=${limit}`,
+        { token, hostToken },
+      ),
+    listTaskEvents: (workspaceId: string, limit = 50) =>
+      requestJson<{ items: MatterhornTaskEvent[] }>(
+        baseUrl,
+        `/workspace/${workspaceId}/task-events?limit=${limit}`,
+        { token, hostToken },
+      ),
+    listTaskRuns: (workspaceId: string, limit = 20) =>
+      requestJson<{ runs: MatterhornTaskRun[] }>(
+        baseUrl,
+        `/workspace/${workspaceId}/task-runs?limit=${limit}`,
         { token, hostToken },
       ),
     upsertCommand: (

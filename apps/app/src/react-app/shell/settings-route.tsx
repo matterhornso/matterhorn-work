@@ -1996,7 +1996,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const settingsView = (() => {
     switch (route.tab) {
       case "overview":
-        return <SettingsOverviewView onSelectTab={(tab) => navigateSettingsPath(tab)} />;
+        return <SettingsOverviewView onSelectTab={(tab) => navigateSettingsPath(tab)} matterhornServerClient={matterhornClient} runtimeWorkspaceId={runtimeWorkspaceId ?? undefined} />;
       case "general":
         return (
           <GeneralSettingsView

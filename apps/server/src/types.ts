@@ -228,3 +228,50 @@ export interface AuditEntry {
   summary: string;
   timestamp: number;
 }
+
+// ---------------------------------------------------------------------------
+// Task / Workflow run events
+// ---------------------------------------------------------------------------
+
+export type MatterhornTaskEventType =
+  | "workflow_staged"   // workflow staged, not yet running
+  | "workflow_started"  // execution has begun
+  | "stage_started"    // a named stage within the workflow began
+  | "tool_called"      // a tool was invoked during a stage
+  | "artifact_saved"   // an artifact file was written to disk
+  | "waiting_for_user" // workflow paused, awaiting user input/approval
+  | "completed"        // workflow finished successfully
+  | "failed"           // workflow terminated with an error
+  | "cancelled";       // workflow was cancelled by the user or system
+
+export interface MatterhornTaskEvent {
+  id: string;
+  workspaceId: string;
+  taskId: string;
+  type: MatterhornTaskEventType;
+  timestamp: number;
+  /** Human-readable summary, safe to display — never contains secrets */
+  summary: string;
+  /** Optional per-event detail — never contains wallet keys, API tokens, signatures, or raw payloads */
+  detail?: string;
+  /** Workspace-relative path to an artifact written during this event */
+  artifactPath?: string;
+  /** Name of the tool that was called (only for tool_called events) */
+  toolName?: string;
+  /** Stage name (only for stage_started / waiting_for_user events) */
+  stageName?: string;
+}
+
+export interface MatterhornTaskRun {
+  taskId: string;
+  workspaceId: string;
+  desk: string;
+  sessionSlug: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  createdAt: number;
+  updatedAt: number;
+  /** Summary of the final outcome. Failed runs include a safe error reason — never raw stack traces or secret payloads */
+  outcomeSummary: string;
+  /** Artifact paths produced by this run. May be empty if the run produced no files */
+  artifactPaths: string[];
+}
