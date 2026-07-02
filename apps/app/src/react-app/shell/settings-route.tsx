@@ -2002,6 +2002,8 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
           <GeneralSettingsView
             onNavigateTab={(tab) => navigateSettingsPath(tab)}
             developerMode={developerMode}
+            runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
+            matterhornServerClient={matterhornClient}
             onSendFeedback={() => platform.openLink(buildFeedbackUrl({ entrypoint: "settings" }))}
             onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
             onReportIssue={() => platform.openLink("https://github.com/matterhornso/matterhorn-work/issues/new?template=bug.yml")}
@@ -2229,6 +2231,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             session={denSession}
             workspaceId={selectedWorkspaceId}
+            matterhornServerClient={matterhornClient}
           />
         );
       case "cloud-marketplaces":

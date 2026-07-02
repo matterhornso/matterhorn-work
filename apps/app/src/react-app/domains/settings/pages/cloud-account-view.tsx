@@ -13,6 +13,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { t } from "@/i18n";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 import { CloudAccountSection } from "../cloud/cloud-account-section";
 import { useCloudSession } from "../cloud/cloud-session-provider";
 import { CloudDevMode } from "../cloud/dev-mode";
@@ -66,6 +67,7 @@ export type CloudAccountViewProps = {
   session: CloudAccountSession;
   compact?: boolean;
   workspaceId?: string;
+  matterhornServerClient?: MatterhornServerClient | null;
 };
 
 type DenSignedOutPanelProps = Pick<
@@ -262,8 +264,14 @@ function taskLogTitle(log: { visibleUserIntent?: string; sessionId: string }) {
   return `Task ${log.sessionId.slice(0, 8)}`;
 }
 
-function ProfileTaskLogSection({ workspaceId }: { workspaceId?: string }) {
-  const { logs, error } = useWorkflowTaskLog(workspaceId);
+function ProfileTaskLogSection({
+  workspaceId,
+  matterhornServerClient,
+}: {
+  workspaceId?: string;
+  matterhornServerClient?: MatterhornServerClient | null;
+}) {
+  const { logs, error } = useWorkflowTaskLog(workspaceId, matterhornServerClient ?? undefined);
 
   return (
     <section className="flex flex-col gap-3 rounded-xl bg-dls-surface-muted/20 px-3 py-3 text-xs leading-5 text-dls-secondary">
@@ -316,7 +324,13 @@ function ProfileTaskLogSection({ workspaceId }: { workspaceId?: string }) {
   );
 }
 
-export function CloudAccountView({ compact = false, developerMode, session, workspaceId }: CloudAccountViewProps) {
+export function CloudAccountView({
+  compact = false,
+  developerMode,
+  session,
+  workspaceId,
+  matterhornServerClient,
+}: CloudAccountViewProps) {
   const { activeOrganization, isSignedIn, statusMessage } = useCloudSession();
   const navigate = useNavigate();
 
@@ -416,7 +430,10 @@ export function CloudAccountView({ compact = false, developerMode, session, work
           />
         ) : null}
 
-        <ProfileTaskLogSection workspaceId={workspaceId} />
+        <ProfileTaskLogSection
+          workspaceId={workspaceId}
+          matterhornServerClient={matterhornServerClient}
+        />
 
         <ProfileReadinessSupportSection readiness={profileReadiness} />
       </SettingsStack>
@@ -492,7 +509,10 @@ export function CloudAccountView({ compact = false, developerMode, session, work
         />
       ) : null}
 
-      <ProfileTaskLogSection workspaceId={workspaceId} />
+      <ProfileTaskLogSection
+        workspaceId={workspaceId}
+        matterhornServerClient={matterhornServerClient}
+      />
     </SettingsStack>
   );
 }
