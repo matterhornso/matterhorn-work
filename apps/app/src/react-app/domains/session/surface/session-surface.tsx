@@ -99,12 +99,22 @@ import {
   type CustomerWorkflowIconHint,
   type CustomerWorkflowStarterCard,
 } from "../workflows/customer-workflow-templates";
-import { getCustomerProtocolDeskVisual } from "../workflows/protocol-desk-ui";
+import {
+  stageWorkflowRun,
+  startWorkflowRun,
+} from "../workflows/workflow-run-client";
+import {
+  deskToneStyle,
+  getCustomerProtocolDeskVisual,
+} from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
 import {
   getMatterhornDeskAgent,
+  getMatterhornDeskAgentById,
   matterhornDeskAgentIdForDesk,
 } from "@matterhorn-work/types/desk-agents";
+import { WELLNESS_CREATOR_SERVICES_WORKFLOW } from "@matterhorn-work/types/matterhorn-workflows";
 
 const EMPTY_TRANSCRIPT: UIMessage[] = [];
 const IDLE_STATUS: SessionStatus = { type: "idle" };
@@ -238,28 +248,6 @@ function deriveMatterhornDeskMode(chunks: string[]): MatterhornDeskMode | null {
     ["polymarket", [/polymarket task/i, /polymarket agent/i, /use the polymarket desk/i, /\bpolymarket market\b/i, /\bcompliance\b/i]],
   ];
   return candidates.find(([, patterns]) => patterns.some((pattern) => pattern.test(text)))?.[0] ?? null;
-}
-
-function deskToneStyle(iconHint: CustomerWorkflowIconHint): CSSProperties {
-  const tone = (() => {
-    switch (iconHint) {
-      case "bittensor":
-        return ["--desk-bittensor", "--desk-bittensor-rgb", "--desk-bittensor-secondary"];
-      case "hyperliquid":
-        return ["--desk-hyperliquid", "--desk-hyperliquid-rgb", "--desk-hyperliquid-secondary"];
-      case "polymarket":
-        return ["--desk-polymarket", "--desk-polymarket-rgb", "--desk-polymarket-secondary"];
-      case "wellness":
-        return ["--desk-wellness", "--desk-wellness-rgb", "--desk-wellness-secondary"];
-      default:
-        return ["--matterhorn-blue", "--matterhorn-blue-rgb", "--matterhorn-sky"];
-    }
-  })();
-  return {
-    "--matterhorn-desk-color": `var(${tone[0]})`,
-    "--matterhorn-desk-rgb": `var(${tone[1]})`,
-    "--matterhorn-desk-secondary": `var(${tone[2]})`,
-  } as CSSProperties;
 }
 
 function MatterhornDeskSessionStrip({ mode }: { mode: MatterhornDeskMode }) {
@@ -538,10 +526,7 @@ function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
   const Icon = CUSTOMER_WORKFLOW_ICON_COMPONENTS[iconHint] ?? FileText;
 
   return (
-    <div
-      className="w-full px-2 py-3 sm:px-3 sm:py-4"
-      style={deskToneStyle(iconHint)}
-    >
+    <div className="w-full space-y-3 px-2 py-3 sm:px-3 sm:py-4" style={deskToneStyle(iconHint)}>
       <div className="flex min-w-0 items-start gap-3 rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-3.5 py-3.5">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
           {visual ? <ProtocolLogo iconHint={iconHint} size={30} /> : <Icon className="size-5" />}
@@ -560,7 +545,39 @@ function MatterhornDeskDraftReadyState({ mode }: { mode: MatterhornDeskMode }) {
           </p>
         </div>
       </div>
+      {mode === "wellness" ? <LongevityWorkflowStagePreview /> : null}
     </div>
+  );
+}
+
+function LongevityWorkflowStagePreview() {
+  const stages = WELLNESS_CREATOR_SERVICES_WORKFLOW.steps;
+  return (
+    <section
+      className="matterhorn-longevity-workflow-preview overflow-hidden rounded-xl bg-dls-surface/44 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
+      aria-label="Standardized Longevity workflow"
+    >
+      <div className="flex flex-col gap-1 border-b border-dls-border/35 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[13px] font-semibold text-dls-text">Standardized Longevity workflow</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-dls-secondary">
+            The agent runs the workflow stages; the composer only carries your public context.
+          </p>
+        </div>
+        <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">7 stages</span>
+      </div>
+      <div className="divide-y divide-dls-border/30">
+        {stages.map((stage, index) => (
+          <div key={stage.id} className="grid gap-1 px-3.5 py-2.5 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-3">
+            <span className="text-[12px] font-semibold text-dls-text">{index + 1}. {stage.name}</span>
+            <span className="text-[11px] leading-4 text-dls-secondary">{stage.description}</span>
+          </div>
+        ))}
+      </div>
+      <div className="border-t border-dls-border/35 px-3.5 py-2.5 text-[11px] leading-4 text-dls-secondary">
+        Outputs save in this project under <span className="font-medium text-dls-text">outputs/longevity/&lt;session-slug&gt;/</span>.
+      </div>
+    </section>
   );
 }
 
@@ -1174,6 +1191,10 @@ export function SessionSurface(props: SessionSurfaceProps) {
     () => deriveMatterhornDeskMode([draft, ...renderedMessages.map(messageToReadableText)]),
     [draft, renderedMessages],
   );
+  const activeWorkflowDeskAgent = useMemo(() => {
+    if (activeDeskMode) return getMatterhornDeskAgent(activeDeskMode);
+    return getMatterhornDeskAgentById(props.selectedAgent);
+  }, [activeDeskMode, props.selectedAgent]);
   useEffect(() => {
     const deskAgentId = matterhornDeskAgentIdForDesk(activeDeskMode);
     if (deskAgentId && props.selectedAgent !== deskAgentId) {
@@ -1409,6 +1430,28 @@ export function SessionSurface(props: SessionSurfaceProps) {
           memoryRecordCount: memoryContext?.records.length ?? 0,
         });
       }
+
+      if (activeWorkflowDeskAgent) {
+        void stageWorkflowRun({
+          workspaceId: props.workspaceId,
+          sessionId: props.sessionId,
+          deskId: activeWorkflowDeskAgent.deskId,
+          actionId: activeWorkflowDeskAgent.defaultActionId,
+          stageId: activeWorkflowDeskAgent.defaultStageId,
+          visibleUserIntent: text,
+        })
+          .then((run) => startWorkflowRun(run.workflowRunId))
+          .catch((error) => {
+            recordInspectorEvent("session.workflow_run.failed", {
+              workspaceId: props.workspaceId,
+              sessionId: props.sessionId,
+              deskId: activeWorkflowDeskAgent.deskId,
+              agentId: activeWorkflowDeskAgent.agentId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
+
       await props.onSendDraft(nextDraft);
       attachments.forEach(revokeAttachmentPreview);
       clearComposerSession(props.sessionId);
@@ -1423,7 +1466,7 @@ export function SessionSurface(props: SessionSurfaceProps) {
       setNoVisibleAssistantOutputBaseline(null);
       setSending(false);
     }
-  }, [attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
+  }, [activeWorkflowDeskAgent, attachments, bittensorContext, buildDraft, clearComposerSession, draft, memoryContext, props.onDraftChange, props.onSendDraft, props.sessionId, props.workspaceId, renderedMessages.length, setComposerDraft]);
 
   const handleAbort = useCallback(async () => {
     if (!chatStreaming) return;
@@ -1976,16 +2019,11 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   onOpenModelPicker={props.onModelClick}
                 />
               ) : activeDeskMode ? (
-                draft.trim() ? (
-                  <MatterhornDeskDraftReadyState mode={activeDeskMode} />
-                ) : activeDeskMode === "wellness" ? (
-                  <LongevityDeskEmptyState onUsePrompt={typeComposerText} />
-                ) : (
-                  <MatterhornDeskFocusedEmptyState
-                    mode={activeDeskMode}
-                    onUsePrompt={typeComposerText}
-                  />
-                )
+                <DeskWorkflowStagePanel
+                  deskId={activeDeskMode}
+                  taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
+                  onStartStage={(_, prompt) => void typeComposerText(prompt)}
+                />
               ) : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="w-full max-w-[880px]">

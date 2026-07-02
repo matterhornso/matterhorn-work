@@ -8,6 +8,7 @@ import {
   type MatterhornMemorySuggestionAction,
   type MatterhornMemorySuggestionLifecycle,
   type MatterhornMemorySuggestionStatus,
+  type MatterhornMemorySuggestionUserAction,
   type MatterhornMemoryKind,
   type MatterhornMemoryRecord,
   applyMemorySuggestionAction,
@@ -623,7 +624,7 @@ function applySuggestionResolution(
   suggestion: MatterhornMemorySuggestion,
   options: MatterhornMemorySuggestionResolveOptions,
 ): MatterhornMemorySuggestion {
-  const userAction = options.action ?? suggestion.userAction
+  const userAction = coerceSuggestionUserAction(options.action, suggestion.userAction)
   const patch = options.patch
   if (!patch) {
     return { ...suggestion, userAction }
@@ -650,6 +651,16 @@ function applySuggestionResolution(
       provenance: safePatch.provenance ?? suggestion.proposedRecord.provenance,
     },
   }
+}
+
+function coerceSuggestionUserAction(
+  action: MatterhornMemorySuggestionAction | undefined,
+  fallback: MatterhornMemorySuggestionUserAction,
+): MatterhornMemorySuggestionUserAction {
+  if (action === "confirm" || action === "edit" || action === "dismiss") {
+    return action
+  }
+  return fallback
 }
 
 function assertMemoryDeskPolicy(record: MatterhornMemoryRecord): void {

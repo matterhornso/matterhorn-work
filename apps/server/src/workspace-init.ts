@@ -154,6 +154,9 @@ temperature: 0.2
 matterhorn_desk_agent: v1
 matterhorn_desk_id: ${agent.deskId}
 agent_id: ${agent.agentId}
+workflow_id: ${agent.workflowId}
+workflow_manifest_ref: ${agent.workflowManifestRef ?? "none"}
+output_desk_id: ${agent.outputDeskId}
 ---
 
 # ${agent.displayName}

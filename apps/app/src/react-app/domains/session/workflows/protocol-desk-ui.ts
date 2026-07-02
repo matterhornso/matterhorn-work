@@ -1,6 +1,9 @@
+import type { CSSProperties } from "react";
 import {
+  MATTERHORN_WORKFLOW_FIXTURES,
   PROTOCOL_BRAND_ASSET_REGISTRY,
   PROTOCOL_DESK_MANIFEST_REGISTRY,
+  type MatterhornWorkflowManifest,
   type ProtocolBrandAssetManifest,
   type ProtocolDeskManifest,
   type ProtocolDeskVisualStatus,
@@ -67,6 +70,7 @@ export type CustomerProtocolDeskVisual = {
   agentId?: string;
   agentName: string;
   agentDescription: string;
+  outputDeskId: string;
   brandAsset: ProtocolBrandAssetManifest | null;
 };
 
@@ -219,6 +223,7 @@ export function getCustomerProtocolDeskVisual(id: CustomerProtocolDeskId | strin
     agentId: agent?.agentId,
     agentName: agent?.displayName ?? `${manifest.displayName} Agent`,
     agentDescription: agent?.description ?? manifest.shortDescription,
+    outputDeskId: agent?.outputDeskId ?? manifest.id,
     brandAsset,
   };
 }
@@ -230,3 +235,40 @@ export const CUSTOMER_PROTOCOL_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUST
 export const CUSTOMER_LAUNCHER_DESK_VISUALS: CustomerProtocolDeskVisual[] = CUSTOMER_LAUNCHER_DESK_IDS
   .map((id) => getCustomerProtocolDeskVisual(id))
   .filter((visual): visual is CustomerProtocolDeskVisual => Boolean(visual));
+
+const DESK_WORKFLOW_ID: Record<CustomerProtocolDeskId, string | undefined> = {
+  bittensor: "bittensor_operator",
+  hyperliquid: "hyperliquid_preview",
+  polymarket: "polymarket_preview",
+  wellness: "wellness_creator_services",
+  memory: undefined,
+  mcps: undefined,
+};
+
+export function getDeskWorkflowManifest(id: CustomerProtocolDeskId | string): MatterhornWorkflowManifest | null {
+  const workflowId = DESK_WORKFLOW_ID[id as CustomerProtocolDeskId];
+  if (!workflowId) return null;
+  return MATTERHORN_WORKFLOW_FIXTURES[workflowId] ?? null;
+}
+
+export function deskToneStyle(id: CustomerProtocolDeskId | string): CSSProperties {
+  const tone = (() => {
+    switch (id) {
+      case "bittensor":
+        return ["--desk-bittensor", "--desk-bittensor-rgb", "--desk-bittensor-secondary"];
+      case "hyperliquid":
+        return ["--desk-hyperliquid", "--desk-hyperliquid-rgb", "--desk-hyperliquid-secondary"];
+      case "polymarket":
+        return ["--desk-polymarket", "--desk-polymarket-rgb", "--desk-polymarket-secondary"];
+      case "wellness":
+        return ["--desk-wellness", "--desk-wellness-rgb", "--desk-wellness-secondary"];
+      default:
+        return ["--matterhorn-blue", "--matterhorn-blue-rgb", "--matterhorn-sky"];
+    }
+  })();
+  return {
+    "--matterhorn-desk-color": `var(${tone[0]})`,
+    "--matterhorn-desk-rgb": `var(${tone[1]})`,
+    "--matterhorn-desk-secondary": `var(${tone[2]})`,
+  } as CSSProperties;
+}

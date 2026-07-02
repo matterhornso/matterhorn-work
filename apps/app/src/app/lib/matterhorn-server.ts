@@ -809,6 +809,7 @@ export function hydrateMatterhornServerSettingsFromEnv() {
   const envPort = readViteEnv("VITE_MATTERHORN_WORK_PORT", "VITE_OPENWORK_PORT");
   const envToken = readViteEnv("VITE_MATTERHORN_WORK_TOKEN", "VITE_OPENWORK_TOKEN");
   const envHostToken = readViteEnv("VITE_MATTERHORN_WORK_HOST_TOKEN", "VITE_OPENWORK_HOST_TOKEN");
+  const forceEnvSettings = readViteEnv("VITE_MATTERHORN_WORK_FORCE_SETTINGS", "VITE_OPENWORK_FORCE_SETTINGS") === "1";
 
   if (!envUrl && !envPort && !envToken && !envHostToken) return;
 
@@ -817,12 +818,12 @@ export function hydrateMatterhornServerSettingsFromEnv() {
     const next: MatterhornServerSettings = { ...current };
     let changed = false;
 
-    if (!current.urlOverride && envUrl) {
+    if ((forceEnvSettings || !current.urlOverride) && envUrl) {
       next.urlOverride = normalizeMatterhornServerUrl(envUrl) ?? undefined;
       changed = true;
     }
 
-    if (!current.portOverride && envPort) {
+    if ((forceEnvSettings || !current.portOverride) && envPort) {
       const parsed = Number(envPort);
       if (Number.isFinite(parsed) && parsed > 0) {
         next.portOverride = parsed;
@@ -830,12 +831,12 @@ export function hydrateMatterhornServerSettingsFromEnv() {
       }
     }
 
-    if (!current.token && envToken) {
+    if ((forceEnvSettings || !current.token) && envToken) {
       next.token = envToken;
       changed = true;
     }
 
-    if (!current.hostToken && envHostToken) {
+    if ((forceEnvSettings || !current.hostToken) && envHostToken) {
       next.hostToken = envHostToken;
       changed = true;
     }

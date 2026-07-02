@@ -204,8 +204,8 @@ record(
 );
 record(
   "Wellness safety",
-  "Wellness protocol workspace customerStatus is planned_not_live",
-  wellnessProtocol?.customerStatus === "planned_not_live",
+  "Wellness protocol workspace customerStatus is workflow_ready",
+  wellnessProtocol?.customerStatus === "workflow_ready",
   wellnessProtocol?.customerStatus,
 );
 record(

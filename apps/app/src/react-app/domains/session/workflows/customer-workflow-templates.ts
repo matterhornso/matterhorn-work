@@ -224,8 +224,12 @@ function buildCustomerWorkflowPromptFromText(template: CustomerWorkflowTemplate,
       return `Hyperliquid task: ${prompt}. Scope: markets, orderbooks, account exposure, funding, open orders, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
     case "polymarket":
       return `Polymarket task: ${prompt}. Scope: market discovery, outcomes, probabilities, liquidity, compliance checks, external trade handoffs, watches, and receipts. ${MARKET_HANDOFF_SUFFIX} ${intentContext}`.trim();
-    case "wellness":
-      return `Longevity task: ${prompt}. Keep this separate from Bittensor, Hyperliquid, Polymarket, and Web3 trading flows. ${LONGEVITY_WORKFLOW_STAGES} ${WELLNESS_SUFFIX} ${intentContext}`.trim();
+    case "wellness": {
+      const task = /build the full 7-stage longevity workflow/i.test(prompt)
+        ? "Start the Longevity workflow for my clients"
+        : prompt.replace(/\.+$/, "");
+      return `${task}. Ask me for missing audience, goal, constraints, schedule, and output details before creating the workflow.`;
+    }
     case "services":
       return `${prompt}. ${SERVICES_SUFFIX} ${intentContext}`.trim();
     default:
@@ -405,7 +409,7 @@ const RAW_FALLBACK_CUSTOMER_WORKFLOW_TEMPLATES: CustomerWorkflowTemplate[] = [
     launch: {
       primaryCta: "Start Longevity workflow",
       secondaryCta: "Plan a service",
-      defaultPrompt: "Build the full 7-stage Longevity workflow for my clients",
+      defaultPrompt: "Start a Longevity workflow for my clients",
       handoffContextLabel: "Audience and goal",
       recommendedSurface: "workflow_chat",
     },

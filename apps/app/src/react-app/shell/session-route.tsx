@@ -1398,9 +1398,10 @@ export function SessionRoute() {
   useEffect(() => {
     if (loading) return;
     if (workspaces.length > 0) return;
+    if (routeWorkspaceId) return;
     if (local.prefs.hasCompletedOnboarding) return;
     navigate("/welcome", { replace: true });
-  }, [loading, local.prefs.hasCompletedOnboarding, navigate, workspaces.length]);
+  }, [loading, local.prefs.hasCompletedOnboarding, navigate, routeWorkspaceId, workspaces.length]);
 
   // NOTE: Blueprint seeding was removed from the route.
   // It was firing `materializeBlueprintSessions` + a session re-fetch on every
@@ -1538,6 +1539,12 @@ export function SessionRoute() {
   );
   const routeNotFoundMessage = (() => {
     if (loading) return null;
+    if (routeError && !client && routeWorkspaceId) {
+      return `Matterhorn Work engine is not connected. Start the local app with pnpm dev:matterhorn-local, then open the printed project URL. Details: ${routeError}`;
+    }
+    if (!client && routeWorkspaceId && workspaces.length === 0) {
+      return "Matterhorn Work engine is not connected. Start the local app with pnpm dev:matterhorn-local, then open the printed project URL.";
+    }
     if (routeWorkspaceId && !selectedWorkspace) {
       return "Workspace was not found. Select a new workspace from the sidebar.";
     }
@@ -3056,6 +3063,7 @@ export function SessionRoute() {
       }
       statusBar={{ loading: showPreparingStatus }}
       notFoundMessage={routeNotFoundMessage}
+      onRevealPath={revealWorkspacePath}
       onAccessibleTargetsChange={setPaletteAccessibleTargets}
     />
     <CreateWorkspaceModal
