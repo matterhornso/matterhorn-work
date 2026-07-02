@@ -4686,6 +4686,11 @@ function createRoutes(
     }
   };
 
+  const publicWorkflowRun = (run: MatterhornWorkflowRun): MatterhornWorkflowRun => {
+    const { hiddenAgentInstructions: _hiddenAgentInstructions, ...publicRun } = run;
+    return publicRun;
+  };
+
   addRoute(routes, "GET", "/api/workflows/runs", "client", async (ctx) => {
     const statusParam = ctx.url.searchParams.get("status");
     if (statusParam && !isValidWorkflowRunStatus(statusParam)) {
@@ -4698,7 +4703,7 @@ function createRoutes(
       status: statusParam as MatterhornWorkflowRunStatus | undefined,
       limit: parseOptionalNonNegativeInteger(ctx.url.searchParams.get("limit"), "limit"),
     };
-    const items = workflowRuns.listRuns(filters);
+    const items = workflowRuns.listRuns(filters).map(publicWorkflowRun);
     return jsonResponse({ success: true, items });
   });
 
@@ -4707,7 +4712,7 @@ function createRoutes(
     if (!run) {
       throw new ApiError(404, "workflow_run_not_found", "Workflow run not found");
     }
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "GET", "/api/workflows/runs/:id/events", "client", async (ctx) => {
@@ -4770,13 +4775,13 @@ function createRoutes(
       outputBasePath,
     });
 
-    return jsonResponse({ success: true, run }, 201);
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) }, 201);
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/start", "client", async (ctx) => {
     requireClientScope(ctx, "viewer");
     const run = await workflowRunMutation(() => workflowRuns.startRun(ctx.params.id));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/stage", "client", async (ctx) => {
@@ -4790,14 +4795,14 @@ function createRoutes(
       ? body.actionId.trim()
       : undefined;
     const run = await workflowRunMutation(() => workflowRuns.advanceStage(ctx.params.id, stageId, actionId));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/tool-call", "client", async (ctx) => {
     requireClientScope(ctx, "viewer");
     const body = await readJsonBody(ctx.request);
     const run = await workflowRunMutation(() => workflowRuns.recordToolCall(ctx.params.id, body.payload ?? body));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/artifact", "client", async (ctx) => {
@@ -4808,7 +4813,7 @@ function createRoutes(
       throw new ApiError(400, "invalid_artifact_path", "path is required");
     }
     const run = await workflowRunMutation(() => workflowRuns.recordArtifactSaved(ctx.params.id, path));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/waiting", "client", async (ctx) => {
@@ -4816,13 +4821,13 @@ function createRoutes(
     const body = await readJsonBody(ctx.request);
     const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined;
     const run = await workflowRunMutation(() => workflowRuns.recordWaitingForUser(ctx.params.id, reason));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/complete", "client", async (ctx) => {
     requireClientScope(ctx, "viewer");
     const run = await workflowRunMutation(() => workflowRuns.completeRun(ctx.params.id));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/fail", "client", async (ctx) => {
@@ -4830,13 +4835,13 @@ function createRoutes(
     const body = await readJsonBody(ctx.request);
     const error = typeof body.error === "string" && body.error.trim() ? body.error.trim() : "Workflow failed";
     const run = await workflowRunMutation(() => workflowRuns.failRun(ctx.params.id, error));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "POST", "/api/workflows/runs/:id/cancel", "client", async (ctx) => {
     requireClientScope(ctx, "viewer");
     const run = await workflowRunMutation(() => workflowRuns.cancelRun(ctx.params.id));
-    return jsonResponse({ success: true, run });
+    return jsonResponse({ success: true, run: publicWorkflowRun(run) });
   });
 
   addRoute(routes, "GET", "/api/memory/search", "client", async (ctx) => {

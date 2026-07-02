@@ -87,10 +87,17 @@ import {
 import {
   CUSTOMER_LAUNCHER_DESK_VISUALS,
   getCustomerProtocolDeskVisual,
+  type CustomerProtocolDeskId,
 } from "../workflows/protocol-desk-ui";
 import { ProtocolBrandLogo } from "../workflows/protocol-brand-logo";
+import { DeskWorkflowStagePanel } from "../workflows/desk-workflow-stage-panel";
+import {
+  stageWorkflowRun,
+  startWorkflowRun,
+} from "../workflows/workflow-run-client";
 import { getChatDraftConfig } from "@matterhorn-work/types";
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
+import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
 
 const ProviderAuthModal = lazy(() => import("../../connections/provider-auth/provider-auth-modal"));
 const ShareWorkspaceModal = lazy(() => import("../../workspace/share-workspace-modal").then((module) => ({
@@ -353,6 +360,85 @@ function HomeCapabilityOverview({
   );
 }
 
+function WorkflowDeskHomeSurface({
+  deskId,
+  launchState,
+  onBackHome,
+  onStartStage,
+}: {
+  deskId: WorkflowDeskId;
+  launchState: WorkflowDeskLaunchState | null;
+  onBackHome: () => void;
+  onStartStage: (stageId: string, prompt: string) => void;
+}) {
+  const visual = getCustomerProtocolDeskVisual(deskId);
+  const taskStatus = launchState?.run?.status ?? (
+    launchState?.status === "staging"
+      ? "staged"
+      : launchState?.status === "failed"
+        ? "failed"
+        : "idle"
+  );
+
+  return (
+    <div
+      className="absolute inset-0 flex min-w-0 w-full justify-center overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 pb-24 pt-5 sm:px-6 sm:pb-28 sm:pt-7"
+      style={{ ...deskToneStyle(deskId), scrollbarGutter: "stable" } as CSSProperties}
+    >
+      <div className="w-full max-w-5xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            className="inline-flex w-fit items-center gap-2 rounded-lg bg-dls-surface/70 px-3 py-2 text-xs font-semibold text-dls-secondary transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.12)] hover:text-dls-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            onClick={onBackHome}
+            aria-label="Back to Home"
+          >
+            <span aria-hidden="true">←</span>
+            Back to Home
+          </button>
+          <span className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.12)] px-3 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+            Engine-free workflow
+          </span>
+        </div>
+
+        <section className="rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.08)] px-4 py-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[rgba(var(--matterhorn-desk-rgb),0.14)] text-[var(--matterhorn-desk-color)]">
+              <ProtocolBrandLogo id={deskId} visual={visual ?? undefined} size={34} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold text-dls-text">{visual?.agentName ?? "Longevity Agent"}</h2>
+                <span className="text-[11px] font-semibold text-[var(--matterhorn-desk-color)]">
+                  {taskStatus === "failed" ? "Needs attention" : taskStatus === "idle" ? "Ready" : "Started"}
+                </span>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
+                {visual?.agentDescription ?? "Run a standardized workflow with visible stages, outputs, and safety boundaries."}
+              </p>
+              {launchState?.message ? (
+                <p className={cn(
+                  "mt-1 text-xs leading-5",
+                  launchState.status === "failed" ? "text-red-300" : "text-dls-secondary",
+                )}>
+                  {launchState.message}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+
+        <DeskWorkflowStagePanel
+          deskId={deskId}
+          currentStageId={launchState?.run?.stageId}
+          taskStatus={taskStatus}
+          onStartStage={onStartStage}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ProtocolDeskEmptyState({
   panel,
   onUsePrompt,
@@ -476,6 +562,16 @@ type StatusBarOverrides = Pick<
   | "settingsOpen"
 >;
 
+type WorkflowDeskLaunchState = {
+  deskId: WorkflowDeskId;
+  status: "idle" | "staging" | "running" | "failed";
+  run: MatterhornWorkflowRun | null;
+  message: string | null;
+  intent: string | null;
+};
+
+type WorkflowDeskId = Extract<CustomerProtocolDeskId, CustomerWorkflowIconHint>;
+
 export type SessionPageHistoryControls = {
   canUndo: boolean;
   canRedo: boolean;
@@ -496,6 +592,7 @@ export type SessionPageSidebarProps = {
   sidebarHydratedFromCache: boolean;
   startupPhase: BootPhase;
   onSelectWorkspace: (workspaceId: string) => Promise<boolean> | boolean | void;
+  onOpenWorkspaceHome?: (workspaceId: string) => void;
   onOpenSession: (workspaceId: string, sessionId: string) => void;
   onPrefetchSession?: (workspaceId: string, sessionId: string) => void;
   onCreateTaskInWorkspace: (workspaceId: string) => void;
@@ -784,6 +881,8 @@ export function SessionPage(props: SessionPageProps) {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [sessionActionId, setSessionActionId] = useState<string | null>(null);
   const [homePathCopyLabel, setHomePathCopyLabel] = useState<string | null>(null);
+  const [activeWorkflowDeskId, setActiveWorkflowDeskId] = useState<WorkflowDeskId | null>(null);
+  const [workflowLaunchState, setWorkflowLaunchState] = useState<WorkflowDeskLaunchState | null>(null);
   const browserPanelRef = usePanelRef();
   const preserveSidePanelOnPanelOpenRef = useRef(false);
   const pendingProtocolRailPanelRef = useRef<VenueSidePanel | null>(null);
@@ -810,6 +909,11 @@ export function SessionPage(props: SessionPageProps) {
     if (panel === "voice") return;
     setSidePanelState(props.selectedSessionId ?? GLOBAL_HOME_SIDE_PANEL_KEY, panel);
   }, [props.selectedSessionId, setSidePanelState]);
+
+  useEffect(() => {
+    setActiveWorkflowDeskId(null);
+    setWorkflowLaunchState(null);
+  }, [props.selectedWorkspaceId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -859,6 +963,85 @@ export function SessionPage(props: SessionPageProps) {
     }
     setCurrentSidePanel(null);
   }, [setCurrentSidePanel]);
+
+  const closeWorkflowDesk = useCallback(() => {
+    setActiveWorkflowDeskId(null);
+    setWorkflowLaunchState(null);
+    returnToProjectHome();
+  }, [returnToProjectHome]);
+
+  const openWorkflowDesk = useCallback((
+    deskId: WorkflowDeskId,
+    prompt: string,
+    options?: { title?: string; stageId?: string; actionId?: string; sourceId?: string },
+  ) => {
+    const visibleUserIntent = prompt.trim();
+    if (!visibleUserIntent) return;
+
+    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+    setCurrentSidePanel(null);
+    setActiveWorkflowDeskId(deskId);
+
+    const baseState: WorkflowDeskLaunchState = {
+      deskId,
+      status: props.matterhornServerClient ? "staging" : "failed",
+      run: null,
+      message: props.matterhornServerClient
+        ? `Starting ${options?.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "workflow"}...`
+        : "Matterhorn Work server is not connected. Start the local app with pnpm dev:matterhorn-local, then try again.",
+      intent: visibleUserIntent,
+    };
+    setWorkflowLaunchState(baseState);
+
+    if (!props.matterhornServerClient) return;
+
+    const sessionId = `workflow_${deskId}_${Date.now().toString(36)}`;
+    if (deskId === "wellness") {
+      dispatchMatterhornMemorySuggestions({
+        desk: "wellness",
+        prompt: visibleUserIntent,
+        source: "workflow_output",
+        sourceId: options?.sourceId ?? "wellness-workflow-launcher",
+        workspaceId: props.selectedWorkspaceId,
+        sessionId,
+        templateId: "wellness_creator_workflow",
+      });
+    }
+
+    void stageWorkflowRun(props.matterhornServerClient, {
+      workspaceId: props.selectedWorkspaceId,
+      sessionId,
+      deskId,
+      actionId: options?.actionId,
+      stageId: options?.stageId,
+      visibleUserIntent,
+    })
+      .then((run) => startWorkflowRun(props.matterhornServerClient!, run.workflowRunId))
+      .then((run) => {
+        setWorkflowLaunchState({
+          deskId,
+          status: "running",
+          run,
+          message: `Started. Outputs will save under ${run.outputBasePath}`,
+          intent: visibleUserIntent,
+        });
+        window.dispatchEvent(new Event("matterhorn:task-log-updated"));
+      })
+      .catch((error) => {
+        setWorkflowLaunchState({
+          deskId,
+          status: "failed",
+          run: null,
+          message: error instanceof Error ? error.message : String(error),
+          intent: visibleUserIntent,
+        });
+      });
+  }, [
+    props.matterhornServerClient,
+    props.selectedWorkspaceId,
+    props.sidebar,
+    setCurrentSidePanel,
+  ]);
 
   const toggleCurrentSidePanel = useCallback((panel: SidePanelItem) => {
     if (panel === "voice") {
@@ -1481,6 +1664,19 @@ export function SessionPage(props: SessionPageProps) {
                         </div>
                       </div>
                     </div>
+                  ) : activeWorkflowDeskId ? (
+                    <WorkflowDeskHomeSurface
+                      deskId={activeWorkflowDeskId}
+                      launchState={workflowLaunchState}
+                      onBackHome={closeWorkflowDesk}
+                      onStartStage={(stageId, prompt) => {
+                        openWorkflowDesk(activeWorkflowDeskId, prompt, {
+                          stageId,
+                          title: getCustomerProtocolDeskVisual(activeWorkflowDeskId)?.agentName,
+                          sourceId: `${activeWorkflowDeskId}-${stageId}`,
+                        });
+                      }}
+                    />
                   ) : props.selectedSessionId ? (
                     <div className="px-6 py-16 text-center text-sm text-dls-secondary">
                       {t("session.loading_detail")}
@@ -1599,9 +1795,9 @@ export function SessionPage(props: SessionPageProps) {
                               return;
                             }
                             if (id === "wellness" && wellnessRailLauncher) {
-                              props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, wellnessRailLauncher.prompt, {
+                              openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {
                                 title: wellnessRailLauncher.title,
-                                agent: wellnessRailLauncher.agentId ?? agentIdForDesk("wellness"),
+                                sourceId: "home-capability",
                               });
                             }
                           }}
@@ -1630,6 +1826,13 @@ export function SessionPage(props: SessionPageProps) {
                                       onClick={() => {
                                         if (demo.panel) {
                                           openVenueRailPane(demo.panel, { primePrompt: true, prompt: demo.prompt, source: "monday-beta-demo", title: demo.title });
+                                          return;
+                                        }
+                                        if (demo.iconHint === "wellness") {
+                                          openWorkflowDesk("wellness", demo.prompt, {
+                                            title: demo.title,
+                                            sourceId: `monday-beta-demo-${demo.id}`,
+                                          });
                                           return;
                                         }
                                         props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, demo.prompt, {
@@ -1691,9 +1894,9 @@ export function SessionPage(props: SessionPageProps) {
                                       style={deskToneStyle(task.iconHint)}
                                       className="relative isolate flex min-h-[162px] w-full flex-col gap-3 overflow-hidden rounded-lg border-0 bg-[rgba(var(--matterhorn-desk-rgb),0.08)] p-3 text-left transition-colors duration-150 hover:bg-[rgba(var(--matterhorn-desk-rgb),0.13)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
                                       onClick={() => {
-                                        props.sidebar.onCreateTaskWithPrompt?.(props.selectedWorkspaceId, task.prompt, {
+                                        openWorkflowDesk("wellness", task.prompt, {
                                           title: task.title,
-                                          agent: task.agentId ?? agentIdForDesk(task.iconHint),
+                                          sourceId: `business-workflow-${task.id}`,
                                         });
                                       }}
                                     >
@@ -2066,10 +2269,10 @@ export function SessionPage(props: SessionPageProps) {
                         templateId: item.id,
                       });
                     }
-                    if (item.launcher && props.sidebar.onCreateTaskWithPrompt) {
-                      props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, {
+                    if (item.launcher) {
+                      openWorkflowDesk("wellness", item.launcher.prompt, {
                         title: item.launcher.title,
-                        agent: item.launcher.agentId ?? agentIdForDesk("wellness"),
+                        sourceId: "wellness-rail-launcher",
                       });
                       return;
                     }

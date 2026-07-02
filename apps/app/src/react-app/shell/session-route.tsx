@@ -2921,6 +2921,11 @@ export function SessionRoute() {
           }
           return true;
         },
+        onOpenWorkspaceHome: (workspaceId) => {
+          setSelectedAgent(null);
+          writeActiveWorkspaceId(workspaceId || null);
+          navigateToWorkspaceSession(workspaceId, null);
+        },
         onOpenSession: (workspaceId, sessionId) => {
           setSelectedAgent(null);
           setLegacySelectedWorkspaceId(workspaceId);

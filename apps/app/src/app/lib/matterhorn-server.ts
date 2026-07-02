@@ -7,6 +7,10 @@ import type {
   MatterhornMemorySuggestionLifecycle,
   MatterhornMemorySuggestionStatus,
 } from "@matterhorn-work/types";
+import type {
+  MatterhornWorkflowRun,
+  MatterhornWorkflowRunStageInput,
+} from "@matterhorn-work/types/workflow-runs";
 import { desktopFetch } from "./desktop";
 import { isDesktopRuntime } from "../utils";
 import type { ExecResult, OpencodeConfigFile, WorkspaceInfo, WorkspaceList } from "./desktop";
@@ -1403,6 +1407,23 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${workspaceId}/task-runs?limit=${limit}`,
         { token, hostToken },
+      ),
+    stageWorkflowRun: (payload: MatterhornWorkflowRunStageInput) =>
+      requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(baseUrl, "/api/workflows/runs/stage", {
+        token,
+        hostToken,
+        method: "POST",
+        body: payload,
+      }),
+    startWorkflowRun: (workflowRunId: string) =>
+      requestJson<{ success: boolean; run: MatterhornWorkflowRun }>(
+        baseUrl,
+        `/api/workflows/runs/${encodeURIComponent(workflowRunId)}/start`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+        },
       ),
     upsertCommand: (
       workspaceId: string,

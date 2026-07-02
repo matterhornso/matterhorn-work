@@ -270,13 +270,20 @@ assert.ok(
 assert.ok(
   sessionPage.includes("onCreateTaskWithPrompt?: (workspaceId: string, prompt: string, options?: { title?: string; agent?: string }) => void") &&
     sessionPage.includes('agent: agentIdForDesk(panel)') &&
-    sessionPage.includes('agent: wellnessRailLauncher.agentId ?? agentIdForDesk("wellness"),') &&
+    sessionPage.includes('agent: demo.agentId ?? agentIdForDesk(demo.iconHint),') &&
     sessionRoute.includes("const title = options?.title?.trim()") &&
     sessionRoute.includes("const agent = options?.agent?.trim()") &&
     sessionRoute.includes("setSelectedAgent(agent || null)") &&
     sessionRoute.includes("workspaceClient.session.update({") &&
     sessionRoute.includes("[displaySession as any, ...(current[workspaceId] ?? [])]"),
   "launcher-created chats should start with human launcher titles and the matching desk agent",
+);
+assert.ok(
+  sessionPage.includes('openWorkflowDesk("wellness", wellnessRailLauncher.prompt, {') &&
+    sessionPage.includes("stageWorkflowRun(props.matterhornServerClient, {") &&
+    sessionPage.includes("startWorkflowRun(props.matterhornServerClient!, run.workflowRunId)") &&
+    sessionPage.includes("window.dispatchEvent(new Event(\"matterhorn:task-log-updated\"));"),
+  "Longevity launchers should create backend workflow runs instead of prompted generic chats",
 );
 assert.ok(
   commandPalette.includes('title: "Go home"') &&
@@ -461,10 +468,10 @@ assert.ok(sessionPage.includes('card.id === "wellness_creator_workflow"'), "righ
 assert.equal(sessionPage.includes('card.id === "decentralized_services_operator"'), false, "right rail should not expose future Services as a customer-facing launcher");
 assert.equal(sessionPage.includes('label: "Services"'), false, "customer right rail should not render a Services button");
 assert.ok(
-  sessionPage.includes("props.sidebar.onCreateTaskWithPrompt(props.selectedWorkspaceId, item.launcher.prompt, {") &&
+  sessionPage.includes('openWorkflowDesk("wellness", item.launcher.prompt, {') &&
     sessionPage.includes("title: item.launcher.title,") &&
-    sessionPage.includes('agent: item.launcher.agentId ?? agentIdForDesk("wellness"),'),
-  "workflow rail launchers should create editable prompt drafts with human chat titles and the Longevity Agent",
+    sessionPage.includes('sourceId: "wellness-rail-launcher",'),
+  "workflow rail launchers should create backend Longevity workflow runs with human task titles",
 );
 assert.ok(sessionPage.includes('title="Back to chat"'), "right rail should expose a clear way back to chat");
 assert.ok(sessionSurface.includes("overflow-y-auto px-4 py-5"), "empty session launcher should scroll instead of clipping beneath the composer");

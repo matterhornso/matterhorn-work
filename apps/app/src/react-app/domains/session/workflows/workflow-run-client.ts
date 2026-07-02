@@ -1,6 +1,7 @@
 import type {
   MatterhornWorkflowRun,
 } from "@matterhorn-work/types/workflow-runs";
+import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-server";
 
 export type StageWorkflowRunInput = {
   workspaceId: string;
@@ -11,33 +12,14 @@ export type StageWorkflowRunInput = {
   visibleUserIntent: string;
 };
 
-export async function stageWorkflowRun(input: StageWorkflowRunInput): Promise<MatterhornWorkflowRun> {
-  const response = await fetch("/api/workflows/runs/stage", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
+export type WorkflowRunClient = Pick<MatterhornServerClient, "stageWorkflowRun" | "startWorkflowRun">;
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ message: `Could not stage workflow run (${response.status})` }));
-    throw new Error(typeof body?.message === "string" ? body.message : String(body));
-  }
-
-  const json = (await response.json()) as { run: MatterhornWorkflowRun };
+export async function stageWorkflowRun(client: WorkflowRunClient, input: StageWorkflowRunInput): Promise<MatterhornWorkflowRun> {
+  const json = await client.stageWorkflowRun(input);
   return json.run;
 }
 
-export async function startWorkflowRun(workflowRunId: string): Promise<MatterhornWorkflowRun> {
-  const response = await fetch(`/api/workflows/runs/${encodeURIComponent(workflowRunId)}/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ message: `Could not start workflow run (${response.status})` }));
-    throw new Error(typeof body?.message === "string" ? body.message : String(body));
-  }
-
-  const json = (await response.json()) as { run: MatterhornWorkflowRun };
+export async function startWorkflowRun(client: WorkflowRunClient, workflowRunId: string): Promise<MatterhornWorkflowRun> {
+  const json = await client.startWorkflowRun(workflowRunId);
   return json.run;
 }
