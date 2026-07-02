@@ -63,6 +63,9 @@ for (const token of [
   "MATTERHORN_MEMORY_SUGGESTION_STATUSES",
   "MATTERHORN_MEMORY_SUGGESTION_ACTIONS",
   "DEFAULT_MEMORY_SUGGESTION_DISMISSAL_WINDOW_DAYS",
+  "DEFAULT_MEMORY_SUGGESTION_EXPIRATION_DAYS",
+  "MAX_MEMORY_SUGGESTION_REASON_LENGTH",
+  "MatterhornMemorySuggestionWhySuggested",
 ]) {
   assert.ok(memorySource.includes(token), `memory.ts must define ${token}`);
 }
@@ -122,7 +125,7 @@ for (const status of ["pending", "confirmed", "edited", "dismissed", "expired", 
   assert.ok(memorySource.includes(`"${status}"`), `status ${status} must be defined`);
 }
 
-for (const action of ["confirm", "edit", "dismiss"]) {
+for (const action of ["confirm", "edit", "dismiss", "restore", "regenerate"]) {
   assert.ok(memorySource.includes(`"${action}"`), `lifecycle action ${action} must be defined`);
 }
 
@@ -277,6 +280,8 @@ for (const field of [
   "sensitivity",
   "confidence",
   "reason",
+  "whySuggested",
+  "visibleProvenance",
   "proposedRecord",
   "createdAt",
   "expiresAt",
@@ -284,6 +289,8 @@ for (const field of [
   "dismissalWindowDays",
   "actorConfirmationRequired",
   "status",
+  "localOnly",
+  "nonClinical",
 ]) {
   assert.ok(
     memorySource.includes(`${field}:`) || memorySource.includes(`${field}?:`),
@@ -1172,6 +1179,8 @@ function makeLifecycleEntry(overrides = {}) {
     dismissalWindowDays: 30,
     actorConfirmationRequired: true,
     status: "pending",
+    localOnly: true,
+    nonClinical: true,
     ...overrides,
   };
 }
