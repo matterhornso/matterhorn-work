@@ -1,4 +1,5 @@
-import { FileOutput, FileText, Shield } from "lucide-react";
+import { FileOutput, FileText, PencilLine, Shield } from "lucide-react";
+import { t } from "@/i18n";
 import type { MatterhornWorkflowManifest, MatterhornWorkflowStep } from "@matterhorn-work/types/matterhorn-workflows";
 import { deskToneStyle, getCustomerProtocolDeskVisual, getDeskWorkflowManifest, type CustomerProtocolDeskId } from "./protocol-desk-ui";
 import { ProtocolBrandLogo } from "./protocol-brand-logo";
@@ -8,6 +9,7 @@ export type DeskWorkflowStagePanelProps = {
   currentStageId?: string;
   taskStatus?: "idle" | "staged" | "running" | "waiting" | "completed" | "failed" | "cancelled";
   onStartStage?: (stageId: string, prompt: string) => void;
+  onJotNote?: () => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,6 +53,7 @@ export function DeskWorkflowStagePanel({
   currentStageId,
   taskStatus = "idle",
   onStartStage,
+  onJotNote,
 }: DeskWorkflowStagePanelProps) {
   const visual = getCustomerProtocolDeskVisual(deskId);
   const manifest = getDeskWorkflowManifest(deskId);
@@ -201,18 +204,30 @@ export function DeskWorkflowStagePanel({
               ? "Review the stage output, then confirm or edit before continuing."
               : "Add your public context in the composer and send to run the current stage."}
         </span>
-        {onStartStage && currentStageId ? (
-          <button
-            type="button"
-            onClick={() => {
-              const stage = manifest.steps.find((s) => s.id === currentStageId);
-              if (stage) onStartStage(stage.id, buildStagePrompt(deskId, stage, manifest));
-            }}
-            className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2.5 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
-          >
-            Next action
-          </button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {onJotNote ? (
+            <button
+              type="button"
+              onClick={onJotNote}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-dls-secondary transition-colors hover:bg-dls-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            >
+              <PencilLine className="size-3" />
+              {t("notes.quick_jot_button_title")}
+            </button>
+          ) : null}
+          {onStartStage && currentStageId ? (
+            <button
+              type="button"
+              onClick={() => {
+                const stage = manifest.steps.find((s) => s.id === currentStageId);
+                if (stage) onStartStage(stage.id, buildStagePrompt(deskId, stage, manifest));
+              }}
+              className="rounded-md bg-[rgba(var(--matterhorn-desk-rgb),0.14)] px-2.5 py-1 text-[11px] font-semibold text-[var(--matterhorn-desk-color)] transition-colors hover:bg-[rgba(var(--matterhorn-desk-rgb),0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]"
+            >
+              Next action
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

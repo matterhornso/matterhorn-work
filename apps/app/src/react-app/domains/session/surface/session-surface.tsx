@@ -89,6 +89,7 @@ import {
   type MatterhornSessionMemoryContext,
 } from "./memory-context-store";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { useQuickJot } from "../../notes";
 
 const SessionTranscript = lazy(() => import("./message-list").then((module) => ({
   default: module.SessionTranscript,
@@ -1016,6 +1017,7 @@ function revokeAttachmentPreview(attachment: { previewUrl?: string | undefined }
 
 export function SessionSurface(props: SessionSurfaceProps) {
   const local = useLocal();
+  const { openQuickJot } = useQuickJot();
   const { config: shellConfig } = useShellConfig();
   const showThinking = local.prefs.showThinking;
   const sessionActivityStatus = useSessionActivityStore(
@@ -2023,6 +2025,14 @@ export function SessionSurface(props: SessionSurfaceProps) {
                   deskId={activeDeskMode}
                   taskStatus={effectiveActivityStatus === "idle" ? "idle" : effectiveActivityStatus === "waiting" ? "waiting" : "running"}
                   onStartStage={(_, prompt) => void typeComposerText(prompt)}
+                  onJotNote={() => {
+                    const visual = getCustomerProtocolDeskVisual(activeDeskMode);
+                    openQuickJot({
+                      type: "desk",
+                      id: activeDeskMode,
+                      label: visual?.displayName ?? activeDeskMode,
+                    });
+                  }}
                 />
               ) : shellConfig.starterCards ? (
                 <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-5 sm:px-6">

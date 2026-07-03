@@ -1,5 +1,6 @@
 /** @jsxImportSource react */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -17,6 +18,7 @@ import {
   ListTodo,
   Lock,
   Network,
+  NotebookPen,
   Palette,
   Play,
   ShieldCheck,
@@ -25,9 +27,11 @@ import {
 } from "lucide-react";
 
 import type { MatterhornServerClient, MatterhornTaskRun } from "../../../../app/lib/matterhorn-server";
+import { t } from "../../../../i18n";
 import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useQuickJot } from "../../notes";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -232,6 +236,8 @@ export function SettingsOverviewView(props: {
   runtimeWorkspaceId?: string | null;
 }) {
   const { onSelectTab } = props;
+  const navigate = useNavigate();
+  const { openQuickJot } = useQuickJot();
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
 
@@ -309,6 +315,23 @@ export function SettingsOverviewView(props: {
             </div>
           </SettingsCard>
         )}
+
+        {/* Notes */}
+        <SettingsCard
+          icon={<NotebookPen size={18} />}
+          title={t("notes.settings_title")}
+          description={t("notes.settings_description")}
+        >
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => navigate("/notes")}>
+              <NotebookPen size={14} />
+              {t("notes.open_notes")}
+            </Button>
+            <Button variant="secondary" size="sm" className="gap-1.5 text-xs" onClick={() => openQuickJot()}>
+              {t("notes.quick_jot_title")}
+            </Button>
+          </div>
+        </SettingsCard>
 
         {/* 2. Appearance */}
         <SettingsCard

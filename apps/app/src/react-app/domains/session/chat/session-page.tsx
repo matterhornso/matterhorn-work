@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 import type { CSSProperties } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
@@ -75,7 +76,9 @@ import { useWallet } from "../../wallet/WalletProvider";
 import { useJobCron } from "../../wallet/hooks/useJobCron";
 import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
+import { workspaceNotesRoute } from "../../../shell/workspace-routes";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
+import { useQuickJot } from "../../notes";
 import { cn } from "@/lib/utils";
 import {
   buildCustomerBetaDemoStarterCards,
@@ -729,6 +732,7 @@ function writeHiddenAccessibleTargetIds(workspaceId: string | null | undefined, 
 }
 
 export function SessionPage(props: SessionPageProps) {
+  const navigate = useNavigate();
   const { config: shellConfig } = useShellConfig();
   const wallet = useWallet();
   const sessionWallet = useSessionWallet(wallet.store);
@@ -746,6 +750,8 @@ export function SessionPage(props: SessionPageProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const { openQuickJot } = useQuickJot();
 
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
@@ -852,6 +858,7 @@ export function SessionPage(props: SessionPageProps) {
   const memoryInboxLabel = memorySuggestionUnreadCount > 0
     ? `Memory inbox: ${memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount} pending suggestions`
     : "Memory inbox: no pending suggestions";
+
   const businessWorkflowLaunchers = useMemo(
     () => customerWorkflowStarterCards.filter((card) => card.id === "wellness_creator_workflow"),
     [customerWorkflowStarterCards],
@@ -1508,6 +1515,22 @@ export function SessionPage(props: SessionPageProps) {
             </div>
 
             <div className="flex items-center gap-1.5 text-gray-10 mac:titlebar-no-drag">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7 text-dls-secondary hover:text-dls-text"
+                onClick={() =>
+                  openQuickJot(
+                    props.selectedSessionId
+                      ? { type: "session", id: props.selectedSessionId, label: selectedSessionTitle }
+                      : undefined,
+                  )
+                }
+                title={t("notes.quick_jot_button_title")}
+                aria-label={t("notes.quick_jot_button_title")}
+              >
+                <PencilLine className="size-3.5" />
+              </Button>
               {/* Revert/redo moved to per-message actions */}
               {props.developerMode ? (
                 <Button
@@ -1736,6 +1759,14 @@ export function SessionPage(props: SessionPageProps) {
                             <FileText className="size-4" />
                             New chat
                           </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-md border border-dls-border/70 bg-dls-surface/50 px-4 py-2 text-sm font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                            onClick={() => openQuickJot()}
+                          >
+                            <PencilLine className="size-4" />
+                            {t("notes.quick_jot_button_title")}
+                          </button>
                         </div>
                         <div className="mx-auto grid w-full max-w-3xl gap-2 rounded-lg border border-dls-border/70 bg-dls-surface-muted/20 px-3 py-2 text-left text-xs sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                           <div className="min-w-0 space-y-1">
@@ -1785,6 +1816,20 @@ export function SessionPage(props: SessionPageProps) {
                             >
                               <FolderOpen className="size-3.5" />
                               Open outputs
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-dls-text transition-colors hover:bg-dls-hover"
+                              onClick={() =>
+                                openQuickJot({
+                                  type: "output",
+                                  id: homeOutputsPath,
+                                  label: "Outputs",
+                                })
+                              }
+                            >
+                              <PencilLine className="size-3.5" />
+                              {t("notes.jot_action")}
                             </button>
                           </div>
                         </div>
@@ -2044,6 +2089,13 @@ export function SessionPage(props: SessionPageProps) {
                         target={visibleArtifactTarget}
                         targets={artifactFileTargets}
                         onSelectTarget={openTarget}
+                        onAddNote={(artifactPath) =>
+                          openQuickJot({
+                            type: "output",
+                            id: artifactPath,
+                            label: artifactPath.split(/[\\/]/).filter(Boolean).pop() ?? artifactPath,
+                          })
+                        }
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (
@@ -2203,6 +2255,17 @@ export function SessionPage(props: SessionPageProps) {
                   {memorySuggestionUnreadCount > 99 ? "99+" : memorySuggestionUnreadCount}
                 </span>
               ) : null}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(`relative ${RAIL_BUTTON_CLASS}`)}
+              onClick={() => navigate(workspaceNotesRoute(props.selectedWorkspaceId))}
+              title={t("notes.rail_title")}
+              aria-label={t("notes.rail_title")}
+            >
+              <PencilLine size={17} />
+              <span className={RAIL_LABEL_CLASS}>{t("notes.rail_label")}</span>
             </Button>
             <div className={RAIL_SECTION_LABEL_CLASS}>
               Desks

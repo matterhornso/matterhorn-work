@@ -7,6 +7,7 @@
 const ACTIVE_WORKSPACE_KEY = "openwork.react.activeWorkspace";
 const SESSION_BY_WORKSPACE_KEY = "openwork.react.sessionByWorkspace";
 const WORKSPACE_ORDER_KEY = "openwork.react.workspaceOrder";
+export const ACTIVE_WORKSPACE_CHANGED_EVENT = "matterhorn:active-workspace-changed";
 
 function safeGet(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -37,6 +38,9 @@ export function readActiveWorkspaceId(): string | null {
 
 export function writeActiveWorkspaceId(id: string | null): void {
   safeSet(ACTIVE_WORKSPACE_KEY, id?.trim() || null);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(ACTIVE_WORKSPACE_CHANGED_EVENT));
+  }
 }
 
 export function readWorkspaceOrderIds(): string[] {
