@@ -13,6 +13,10 @@ import type {
   MatterhornNoteUpdateRequest,
 } from "@matterhorn-work/types";
 import type {
+  MatterhornProjectEvidenceListOptions,
+  MatterhornProjectEvidenceResponse,
+} from "@matterhorn-work/types/project-evidence";
+import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
   MatterhornWorkflowRunStageInput,
@@ -1439,6 +1443,20 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         `/workspace/${workspaceId}/task-runs?limit=${limit}`,
         { token, hostToken },
       ),
+    listProjectEvidence: (workspaceId: string, options?: MatterhornProjectEvidenceListOptions) => {
+      const query = new URLSearchParams();
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      if (options?.desk?.trim()) query.set("desk", options.desk.trim());
+      if (options?.sessionId?.trim()) query.set("sessionId", options.sessionId.trim());
+      if (options?.taskId?.trim()) query.set("taskId", options.taskId.trim());
+      if (options?.source) query.set("source", options.source);
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornProjectEvidenceResponse>(
+        baseUrl,
+        `/workspace/${workspaceId}/evidence${suffix}`,
+        { token, hostToken },
+      );
+    },
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());
