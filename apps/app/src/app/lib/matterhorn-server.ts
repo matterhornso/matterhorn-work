@@ -6,6 +6,11 @@ import type {
   MatterhornMemorySuggestionAction,
   MatterhornMemorySuggestionLifecycle,
   MatterhornMemorySuggestionStatus,
+  MatterhornNote,
+  MatterhornNoteCreateRequest,
+  MatterhornNoteListOptions,
+  MatterhornNoteMemorySuggestionRequest,
+  MatterhornNoteUpdateRequest,
 } from "@matterhorn-work/types";
 import type {
   MatterhornWorkflowRun,
@@ -221,6 +226,31 @@ export type MatterhornMemoryForgetResponse = {
   success: boolean;
   forgotten: boolean;
   id: string;
+};
+
+export type MatterhornNoteListResponse = {
+  success: true;
+  items: MatterhornNote[];
+  count: number;
+};
+
+export type MatterhornNoteResponse = {
+  success: true;
+  note: MatterhornNote;
+};
+
+export type MatterhornNoteDeleteResponse = {
+  success: true;
+  deleted: true;
+  note: MatterhornNote;
+};
+
+export type MatterhornNoteMemorySuggestionResponse = {
+  success: true;
+  note: MatterhornNote;
+  suggestionId: string;
+  suggestionStatus: MatterhornNote["memorySuggestionStatus"];
+  inbox: unknown;
 };
 
 // ---------------------------------------------------------------------------
@@ -1408,6 +1438,80 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${workspaceId}/task-runs?limit=${limit}`,
         { token, hostToken },
+      ),
+    listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
+      const query = new URLSearchParams();
+      if (options?.query?.trim()) query.set("query", options.query.trim());
+      if (options?.tags?.length) query.set("tags", options.tags.join(","));
+      if (options?.desk) query.set("desk", String(options.desk));
+      if (options?.sessionId) query.set("sessionId", options.sessionId);
+      if (options?.taskId) query.set("taskId", options.taskId);
+      if (options?.outputPath) query.set("outputPath", options.outputPath);
+      if (options?.includeDeleted) query.set("includeDeleted", "true");
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornNoteListResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+    getNote: (workspaceId: string, noteId: string) =>
+      requestJson<MatterhornNoteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes/${encodeURIComponent(noteId)}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      ),
+    createNote: (workspaceId: string, payload: MatterhornNoteCreateRequest) =>
+      requestJson<MatterhornNoteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload,
+          timeoutMs: timeouts.config,
+        },
+      ),
+    updateNote: (workspaceId: string, noteId: string, patch: MatterhornNoteUpdateRequest) =>
+      requestJson<MatterhornNoteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes/${encodeURIComponent(noteId)}`,
+        {
+          token,
+          hostToken,
+          method: "PATCH",
+          body: patch,
+          timeoutMs: timeouts.config,
+        },
+      ),
+    deleteNote: (workspaceId: string, noteId: string) =>
+      requestJson<MatterhornNoteDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes/${encodeURIComponent(noteId)}`,
+        {
+          token,
+          hostToken,
+          method: "DELETE",
+          timeoutMs: timeouts.config,
+        },
+      ),
+    suggestMemoryFromNote: (
+      workspaceId: string,
+      noteId: string,
+      payload?: MatterhornNoteMemorySuggestionRequest,
+    ) =>
+      requestJson<MatterhornNoteMemorySuggestionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/notes/${encodeURIComponent(noteId)}/memory-suggestion`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: payload ?? {},
+          timeoutMs: timeouts.config,
+        },
       ),
     listWorkflowRuns: (options?: {
       workspaceId?: string;

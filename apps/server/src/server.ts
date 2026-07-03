@@ -204,13 +204,22 @@ import {
 } from "./tools/market-execution-readiness.js";
 import { createMatterhornMemoryVault } from "@matterhorn-work/memory-vault";
 import {
+  MATTERHORN_MEMORY_SUGGESTION_VERSION,
   MATTERHORN_MEMORY_DESK_POLICY_MATRIX,
   detectMemoryDeskFromRecord,
   validateMemoryRecordAgainstDeskPolicy,
+  type MatterhornMemoryDesk,
+  type MatterhornMemoryKind,
   type MatterhornMemoryRecord,
   type MatterhornMemorySuggestion,
   type MatterhornMemorySuggestionUserAction,
 } from "@matterhorn-work/types/memory";
+import type {
+  MatterhornNote,
+  MatterhornNoteCreateRequest,
+  MatterhornNoteMemorySuggestionRequest,
+  MatterhornNoteUpdateRequest,
+} from "@matterhorn-work/types/notes";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -239,6 +248,7 @@ import { ensureWorkspaceFiles, readRawOpencodeConfig } from "./workspace-init.js
 import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
+import { MatterhornNotesStore } from "./notes.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -1040,6 +1050,214 @@ function normalizeMemoryLimit(value: string | null): number | undefined {
     throw new ApiError(400, "invalid_memory_limit", "limit must be a positive number");
   }
   return Math.min(Math.floor(limit), 200);
+}
+
+function normalizeNoteLimit(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const limit = Number(value);
+  if (!Number.isFinite(limit) || limit <= 0) {
+    throw new ApiError(400, "invalid_note_limit", "limit must be a positive number");
+  }
+  return Math.min(Math.floor(limit), 500);
+}
+
+function normalizeNoteTags(value: string | null): string[] | undefined {
+  if (!value) return undefined;
+  const tags = value
+    .split(/[,;]/)
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  return tags.length ? tags : undefined;
+}
+
+function noteApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  if (/not found/i.test(message)) {
+    return new ApiError(404, "note_not_found", message);
+  }
+  if (/forbidden secret|safety validation|desk policy|forbidden_secret|private key|seed phrase|signed payload|raw signature|wallet export|api secret/i.test(message)) {
+    return new ApiError(400, "note_memory_safety_rejected", message);
+  }
+  return new ApiError(400, "note_request_failed", message);
+}
+
+function notesListOptionsFromUrl(url: URL) {
+  const outputPath = url.searchParams.get("outputPath") ?? url.searchParams.get("output_path");
+  return {
+    query: url.searchParams.get("q") ?? url.searchParams.get("query") ?? undefined,
+    tags: normalizeNoteTags(url.searchParams.get("tags")),
+    desk: url.searchParams.get("desk") ?? undefined,
+    sessionId: url.searchParams.get("sessionId") ?? url.searchParams.get("session_id") ?? undefined,
+    taskId: url.searchParams.get("taskId") ?? url.searchParams.get("task_id") ?? undefined,
+    outputPath: outputPath ? normalizeWorkspaceRelativePath(outputPath, { allowSubdirs: true }) : undefined,
+    includeDeleted: url.searchParams.get("includeDeleted") === "true" || url.searchParams.get("include_deleted") === "true",
+    limit: normalizeNoteLimit(url.searchParams.get("limit")),
+  };
+}
+
+function coerceNoteCreateRequest(value: unknown): MatterhornNoteCreateRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_note", "note body must be an object");
+  }
+  const input = value as MatterhornNoteCreateRequest;
+  return {
+    ...input,
+    outputPath: input.outputPath ? normalizeWorkspaceRelativePath(String(input.outputPath), { allowSubdirs: true }) : input.outputPath,
+  };
+}
+
+function coerceNoteUpdateRequest(value: unknown): MatterhornNoteUpdateRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_note", "note patch must be an object");
+  }
+  const input = value as MatterhornNoteUpdateRequest;
+  return {
+    ...input,
+    outputPath: input.outputPath ? normalizeWorkspaceRelativePath(String(input.outputPath), { allowSubdirs: true }) : input.outputPath,
+  };
+}
+
+function coerceNoteMemorySuggestionRequest(value: unknown): MatterhornNoteMemorySuggestionRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as MatterhornNoteMemorySuggestionRequest;
+}
+
+function noteMemoryDesk(note: MatterhornNote): MatterhornMemoryDesk {
+  const haystack = [note.desk ?? "", note.tags.join(" "), note.title, note.body].join(" ").toLowerCase();
+  if (haystack.includes("bittensor") || haystack.includes("tao") || haystack.includes("ss58")) return "bittensor";
+  if (haystack.includes("hyperliquid")) return "hyperliquid";
+  if (haystack.includes("polymarket")) return "polymarket";
+  if (haystack.includes("wellness") || haystack.includes("longevity") || haystack.includes("trainer") || haystack.includes("dietician") || haystack.includes("yoga")) return "wellness";
+  if (haystack.includes("mcp") || haystack.includes("connector")) return "decentralized_services";
+  return "generic_workspace";
+}
+
+function noteMemoryKind(
+  desk: MatterhornMemoryDesk,
+  requested: MatterhornNoteMemorySuggestionRequest["kind"],
+  note: MatterhornNote,
+): MatterhornMemoryKind {
+  const policy = MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk];
+  if (requested && policy.allowedKinds.includes(requested)) return requested;
+  const text = `${note.title} ${note.body}`.toLowerCase();
+  if (text.includes("decision") && policy.allowedKinds.includes("decision")) return "decision";
+  if (note.outputPath && policy.allowedKinds.includes("workflow_artifact")) return "workflow_artifact";
+  if (desk === "generic_workspace" && policy.allowedKinds.includes("project_fact")) return "project_fact";
+  return policy.allowedKinds.includes("user_preference") ? "user_preference" : policy.allowedKinds[0];
+}
+
+function noteMemorySensitivity(desk: MatterhornMemoryDesk): MatterhornMemoryRecord["sensitivity"] {
+  if (desk === "wellness") return "restricted";
+  return "private";
+}
+
+function compactNoteText(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit - 3).trimEnd()}...`;
+}
+
+function noteMemoryTags(note: MatterhornNote, desk: MatterhornMemoryDesk, extra: string[] | undefined): string[] {
+  const deskTag = desk === "wellness" ? "longevity" : desk;
+  const tags = new Set([
+    "user-note",
+    "memory-suggestion",
+    deskTag,
+    ...note.tags,
+    ...(extra ?? []),
+  ].map((tag) => tag.trim().toLowerCase().replace(/\s+/g, "-")).filter(Boolean));
+  if (desk === "wellness") tags.add("opt-in");
+  return Array.from(tags).slice(0, 24);
+}
+
+function buildNoteMemorySuggestion(
+  note: MatterhornNote,
+  input: MatterhornNoteMemorySuggestionRequest = {},
+): MatterhornMemorySuggestion {
+  const desk = noteMemoryDesk(note);
+  const policy = MATTERHORN_MEMORY_DESK_POLICY_MATRIX[desk];
+  const kind = noteMemoryKind(desk, input.kind, note);
+  const now = new Date().toISOString();
+  const summary = compactNoteText(
+    input.summary?.trim() ||
+      note.body ||
+      note.title,
+    240,
+  );
+  const title = compactNoteText(input.title?.trim() || note.title || "Project note", 120);
+  const tags = noteMemoryTags(note, desk, input.tags);
+  const record: MatterhornMemoryRecord = {
+    id: `mem_${note.id}`,
+    kind,
+    scope: "project",
+    title,
+    summary,
+    body: {
+      source: "user_note",
+      noteId: note.id,
+      noteTitle: note.title,
+      noteExcerpt: compactNoteText(note.body, 1200),
+      notePath: note.filePath,
+      tags: note.tags,
+      desk: note.desk ?? null,
+      sessionId: note.sessionId ?? null,
+      taskId: note.taskId ?? null,
+      outputPath: note.outputPath ?? null,
+      links: note.links,
+    },
+    tags,
+    links: [
+      {
+        rel: "source_note",
+        href: note.filePath,
+        title: note.title,
+      },
+      ...(note.outputPath
+        ? [{
+            rel: "source_output",
+            href: note.outputPath,
+            title: "Linked output",
+          }]
+        : []),
+    ],
+    provenance: {
+      source: "user_note",
+      sourceId: note.id,
+      capturedAt: now,
+      capturedBy: "user",
+      confidence: 0.72,
+      reasonRemembered: "The user explicitly sent this project note to Memory review. Nothing is saved to Memory until the user confirms it.",
+    },
+    sensitivity: noteMemorySensitivity(desk),
+    createdAt: now,
+    updatedAt: now,
+    canUseInChat: policy.canUseInChat,
+    canExport: false,
+    canDelete: true,
+  };
+
+  return {
+    version: MATTERHORN_MEMORY_SUGGESTION_VERSION,
+    id: `suggestion_${note.id}`,
+    proposedRecord: record,
+    reason: input.reason?.trim() || "The user asked Matterhorn to review this note as a possible Memory item.",
+    source: "user_note",
+    confidence: 0.72,
+    desk,
+    useCase: "project_note",
+    userAction: "dismiss",
+    captureMode: "user_confirmed_only",
+    canAutoCapture: false,
+    requiresExplicitConsent: true,
+    forbiddenIfSecretDetected: true,
+    policyDecision: "review",
+    policyWarnings: [
+      "This came from a project note. It remains a suggestion until the user confirms it in Memory.",
+    ],
+  };
 }
 
 function memoryApiError(error: unknown): ApiError {
@@ -2639,6 +2857,144 @@ function createRoutes(
     const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50) : 20;
     const runs = await deriveTaskRuns(workspace.id, limit);
     return jsonResponse({ runs });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/notes", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const items = await store.listNotes(notesListOptionsFromUrl(ctx.url));
+      return jsonResponse({ success: true, items, count: items.length });
+    } catch (error) {
+      throw noteApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/notes/:noteId", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const note = await store.getNote(ctx.params.noteId);
+      if (!note || note.deletedAt) {
+        throw new ApiError(404, "note_not_found", "Note not found");
+      }
+      return jsonResponse({ success: true, note });
+    } catch (error) {
+      throw noteApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/notes", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = coerceNoteCreateRequest(body.note ?? body);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const note = await store.createNote(input);
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.note.create",
+        target: resolveSafeChildPath(workspace.path, note.filePath),
+        summary: `Created note ${note.title}`,
+        timestamp: Date.now(),
+      });
+      return jsonResponse({ success: true, note }, 201);
+    } catch (error) {
+      throw noteApiError(error);
+    }
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/notes/:noteId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const patch = coerceNoteUpdateRequest(body.patch ?? body.note ?? body);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const note = await store.updateNote(ctx.params.noteId, patch);
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.note.update",
+        target: resolveSafeChildPath(workspace.path, note.filePath),
+        summary: `Updated note ${note.title}`,
+        timestamp: Date.now(),
+      });
+      return jsonResponse({ success: true, note });
+    } catch (error) {
+      throw noteApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/notes/:noteId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const note = await store.deleteNote(ctx.params.noteId);
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.note.delete",
+        target: resolveSafeChildPath(workspace.path, note.filePath),
+        summary: `Deleted note ${note.title}`,
+        timestamp: Date.now(),
+      });
+      return jsonResponse({ success: true, deleted: true, note });
+    } catch (error) {
+      throw noteApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/notes/:noteId/memory-suggestion", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const input = coerceNoteMemorySuggestionRequest(body.input ?? body);
+      const store = new MatterhornNotesStore({ workspaceRoot: workspace.path, workspaceId: workspace.id });
+      const note = await store.getNote(ctx.params.noteId);
+      if (!note || note.deletedAt) {
+        throw new ApiError(404, "note_not_found", "Note not found");
+      }
+      const suggestion = buildNoteMemorySuggestion(note, input);
+      const inbox = await memoryVault.storeSuggestions([suggestion]);
+      const entry = inbox.entries[0];
+      if (!entry) {
+        throw new ApiError(500, "memory_suggestion_not_created", "Memory suggestion was not created");
+      }
+      const updatedNote = await store.markMemorySuggestion(note.id, {
+        id: entry.id,
+        status: entry.status,
+      });
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.note.memory_suggestion",
+        target: resolveSafeChildPath(workspace.path, updatedNote.filePath),
+        summary: `Sent note ${updatedNote.title} to Memory review`,
+        timestamp: Date.now(),
+      });
+      return jsonResponse({
+        success: true,
+        note: updatedNote,
+        suggestionId: entry.id,
+        suggestionStatus: entry.status,
+        inbox,
+      });
+    } catch (error) {
+      throw noteApiError(error);
+    }
   });
 
   addRoute(routes, "POST", "/workspace/:id/sessions", "client", async (ctx) => {
