@@ -28,6 +28,7 @@ export const MATTERHORN_MEMORY_SOURCES = [
   "watch_event",
   "connector_metadata",
   "manual_entry",
+  "user_note",
 ] as const;
 export type MatterhornMemorySource = (typeof MATTERHORN_MEMORY_SOURCES)[number];
 
@@ -406,6 +407,7 @@ export const MATTERHORN_MEMORY_SUGGESTION_USE_CASES = [
   "wellness_offer_builder_preference",
   "mcp_tool_preference",
   "workflow_artifact_preference",
+  "project_note",
 ] as const;
 export type MatterhornMemorySuggestionUseCase =
   (typeof MATTERHORN_MEMORY_SUGGESTION_USE_CASES)[number];

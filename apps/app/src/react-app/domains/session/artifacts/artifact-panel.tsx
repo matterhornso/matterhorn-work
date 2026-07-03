@@ -1,7 +1,7 @@
 /** @jsxImportSource react */
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, ExternalLink, FolderOpen, X } from "lucide-react";
+import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, X } from "lucide-react";
 
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { openDesktopPath } from "@/app/lib/desktop";
@@ -29,6 +29,7 @@ type ArtifactPanelProps = {
   target: OpenTarget;
   targets?: OpenTarget[];
   onSelectTarget?: (target: OpenTarget) => void;
+  onAddNote?: (artifactPath: string, desk?: string, sessionSlug?: string) => void;
   onClose: () => void;
 };
 
@@ -49,7 +50,7 @@ function isTextContent(target: OpenTarget): boolean {
   return ["markdown", "text", "sheet", "html"].includes(target.preview) && !/\.(xlsx|xls|ods)$/i.test(target.value);
 }
 
-export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceName, isRemoteWorkspace = false, target, targets = [], onSelectTarget, onClose }: ArtifactPanelProps) {
+export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceName, isRemoteWorkspace = false, target, targets = [], onSelectTarget, onAddNote, onClose }: ArtifactPanelProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -309,6 +310,18 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                   <TooltipContent>{copiedPath ? "Copied!" : "Copy path"}</TooltipContent>
                 </Tooltip>
               ) : null}
+              {target.kind === "file" && onAddNote ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <Button variant="ghost" size="icon-sm" onClick={() => onAddNote(target.value)} aria-label="Add note about this output">
+                        <NotebookPen />
+                      </Button>
+                    )}
+                  />
+                  <TooltipContent>Add note about this output</TooltipContent>
+                </Tooltip>
+              ) : null}
               {target.kind === "file" ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -419,4 +432,3 @@ function SheetEditor({ className, ...props }: SheetEditorProps) {
     </Suspense>
   );
 }
-

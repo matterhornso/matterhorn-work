@@ -52,6 +52,11 @@
       "types": "./src/memory.ts",
       "development": "./src/memory.ts",
       "default": "./src/memory.ts"
+    },
+    "./notes": {
+      "types": "./src/notes.ts",
+      "development": "./src/notes.ts",
+      "default": "./src/notes.ts"
     }
   },
   "files": [

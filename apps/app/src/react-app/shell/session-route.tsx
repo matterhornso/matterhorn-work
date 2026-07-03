@@ -82,6 +82,7 @@ import { t } from "../../i18n";
 import { useLocal } from "../kernel/local-provider";
 import { usePlatform } from "../kernel/platform";
 import { SessionPage } from "../domains/session/chat/session-page";
+import { useQuickJot } from "../domains/notes";
 import { isDesktopProviderBlocked } from "../../app/cloud/desktop-app-restrictions";
 import { useCheckDesktopRestriction } from "../domains/cloud/desktop-config-provider";
 import { useRestrictionNotice } from "../domains/cloud/restriction-notice-provider";
@@ -149,7 +150,7 @@ import { useReloadCoordinator } from "./reload-coordinator";
 import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
-import { legacySessionRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
+import { legacySessionRoute, workspaceNotesRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
 import type { SettingsSurfaceProps } from "./settings-route";
@@ -532,6 +533,7 @@ async function draftToParts(draft: ComposerDraft, workspaceRoot: string) {
 
 export function SessionRoute() {
   const navigate = useNavigate();
+  const { openQuickJot } = useQuickJot();
   const platform = usePlatform();
   const local = useLocal();
   const reloadCoordinator = useReloadCoordinator();
@@ -3129,6 +3131,10 @@ export function SessionRoute() {
       }}
       onOpenSession={(workspaceId, sessionId) => navigateToWorkspaceSession(workspaceId, sessionId)}
       onOpenSettings={(route) => handleOpenSettings(route ?? "/settings/general")}
+      onOpenNotes={() => {
+        navigate(selectedWorkspaceId ? workspaceNotesRoute(selectedWorkspaceId) : "/notes");
+      }}
+      onQuickJot={() => openQuickJot()}
       accessibleTargets={paletteAccessibleTargets}
       onOpenAccessibleTarget={(target) => {
         try {

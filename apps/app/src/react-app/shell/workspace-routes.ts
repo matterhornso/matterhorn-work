@@ -15,6 +15,10 @@ export function workspaceSettingsRoute(
   return `/workspace/${encodeURIComponent(workspaceId.trim())}/settings/${tab}`;
 }
 
+export function workspaceNotesRoute(workspaceId: string) {
+  return `/workspace/${encodeURIComponent(workspaceId.trim())}/notes`;
+}
+
 export function globalSettingsRoute(tab: SettingsTab) {
   return `/settings/${tab}`;
 }

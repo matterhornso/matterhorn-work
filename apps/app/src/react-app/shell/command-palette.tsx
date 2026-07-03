@@ -23,7 +23,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import { ChevronLeftIcon, Copy, FileText, FolderOpen, Home, MessageSquarePlus, Plus, Globe } from "lucide-react";
+import { ChevronLeftIcon, Copy, FileText, FolderOpen, Home, MessageSquarePlus, NotebookPen, PencilLine, Plus, Globe } from "lucide-react";
 
 export type PaletteItem = {
   id: string;
@@ -87,6 +87,8 @@ export type CommandPaletteProps = {
   onCreateNewSession: () => void;
   /** Called when "Open settings" is chosen. Accepts an optional route to jump straight to a tab. */
   onOpenSettings: (route?: string) => void;
+  onOpenNotes?: () => void;
+  onQuickJot?: () => void;
   /** Optional — open a URL in the user's browser. Falls back to window.open. */
   onOpenUrl?: (url: string) => void;
   /** Optional: current session servers/artifacts exposed through Cmd/Ctrl+K. */
@@ -260,6 +262,30 @@ export function CommandPalette(props: CommandPaletteProps) {
         action: () => {
           props.onClose();
           props.onOpenSettings();
+        },
+      },
+      {
+        id: "open-notes",
+        title: t("notes.cmd_notes_title"),
+        detail: t("notes.cmd_notes_detail"),
+        meta: t("notes.cmd_notes_meta"),
+        icon: <NotebookPen className="size-4 text-primary" />,
+        searchText: "notes project scratchpad jot",
+        action: () => {
+          props.onClose();
+          props.onOpenNotes?.();
+        },
+      },
+      {
+        id: "quick-jot",
+        title: t("notes.cmd_quick_jot_title"),
+        detail: t("notes.cmd_quick_jot_detail"),
+        meta: t("notes.cmd_quick_jot_meta"),
+        icon: <PencilLine className="size-4 text-primary" />,
+        searchText: "quick jot note scratchpad",
+        action: () => {
+          props.onClose();
+          props.onQuickJot?.();
         },
       },
       // Top-bar shortcuts mirror documentation / feedback plus every settings

@@ -16,6 +16,7 @@ import { ReactRenderWatchdogOverlay } from "./react-render-watchdog-overlay";
 import { AppMenuProvider } from "./app-menu";
 import { MatterhornControlProvider, MatterhornRouteControlActions } from "./control/control-provider";
 import { ShellConfigProvider } from "./shell-config";
+import { QuickJotProvider, QuickJotGlobal } from "../domains/notes";
 
 const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboarding-page").then((module) => ({
   default: module.OrgOnboardingPage,
@@ -23,6 +24,9 @@ const OrgOnboardingPageRoute = lazy(() => import("../domains/cloud/org-onboardin
 const SessionRoute = lazy(() => import("./session-route").then((module) => ({ default: module.SessionRoute })));
 const SettingsRoute = lazy(() => import("./settings-route").then((module) => ({ default: module.SettingsRoute })));
 const WelcomeRoute = lazy(() => import("./welcome-route").then((module) => ({ default: module.WelcomeRoute })));
+const NotesPageRoute = lazy(() => import("../domains/notes/notes-page").then((module) => ({
+  default: module.NotesPage,
+})));
 
 type DenSigninGateProps = {
   children: ReactNode;
@@ -163,6 +167,7 @@ export function AppRoot() {
         <MatterhornControlProvider>
           <MatterhornRouteControlActions />
           <DenSigninGate>
+            <QuickJotProvider>
             <Routes>
               <Route
                 path="/signin"
@@ -252,11 +257,33 @@ export function AppRoot() {
                   </DevProfiler>
                 }
               />
+              <Route
+                path="/notes"
+                element={
+                  <DevProfiler id="NotesPage">
+                    <Suspense fallback={<RouteFallback />}>
+                      <NotesPageRoute />
+                    </Suspense>
+                  </DevProfiler>
+                }
+              />
+              <Route
+                path="/workspace/:workspaceId/notes"
+                element={
+                  <DevProfiler id="NotesPage">
+                    <Suspense fallback={<RouteFallback />}>
+                      <NotesPageRoute />
+                    </Suspense>
+                  </DevProfiler>
+                }
+              />
               {/* Default + fallback: land on the session view. Users open
                   settings deliberately via the sidebar or command palette. */}
               <Route path="/" element={<Navigate to="/session" replace />} />
               <Route path="*" element={<Navigate to="/session" replace />} />
             </Routes>
+            <QuickJotGlobal />
+            </QuickJotProvider>
           </DenSigninGate>
         </MatterhornControlProvider>
         </AppMenuProvider>
