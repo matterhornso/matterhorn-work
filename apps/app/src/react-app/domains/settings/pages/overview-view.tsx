@@ -6,6 +6,7 @@ import {
   AlertCircle,
   Ban,
   Boxes,
+  BrainCircuit,
   CheckCircle2,
   Circle,
   CircleUser,
@@ -33,6 +34,7 @@ import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
+import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { workspaceNotesRoute } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
@@ -337,6 +339,34 @@ export function SettingsOverviewView(props: {
             <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
               <ListTodo className="size-3.5 shrink-0" />
               Open a workspace to see your task history.
+            </div>
+          </SettingsCard>
+        )}
+
+        {/* 1c. Recent Activity */}
+        {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+          <SettingsCard
+            icon={<BrainCircuit size={18} />}
+            title="Recent Activity"
+            description="Notes, tasks, outputs, and memory across this workspace."
+          >
+            <div className="pl-0">
+              <RecentActivitySection
+                matterhornServerClient={props.matterhornServerClient}
+                runtimeWorkspaceId={props.runtimeWorkspaceId}
+                limit={10}
+              />
+            </div>
+          </SettingsCard>
+        ) : (
+          <SettingsCard
+            icon={<BrainCircuit size={18} />}
+            title="Recent Activity"
+            description="Notes, tasks, outputs, and memory across this workspace."
+          >
+            <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
+              <ListTodo className="size-3.5 shrink-0" />
+              Open a workspace to see your recent activity.
             </div>
           </SettingsCard>
         )}

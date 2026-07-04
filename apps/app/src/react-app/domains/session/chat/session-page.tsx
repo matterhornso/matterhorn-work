@@ -71,6 +71,7 @@ import { type SidePanelItem, useUiStateStore } from "../../../shell/ui-state-sto
 import { isElectronRuntime } from "../../../../app/utils";
 import { isCollectibleArtifactTarget, isLocalhostBrowserTarget, type OpenTarget } from "../artifacts/open-target";
 import { dispatchMatterhornMemorySuggestions } from "../../memory/memory-suggestion-producers";
+import { RecentActivitySection } from "../../recent-activity/recent-activity-section";
 import { TransactionApproval } from "../../wallet/TransactionApproval";
 import { useSessionWallet } from "../../wallet/useSessionWallet";
 import { useWallet } from "../../wallet/WalletProvider";
@@ -1896,6 +1897,13 @@ export function SessionPage(props: SessionPageProps) {
                             </button>
                           </div>
                         </div>
+                        {props.matterhornServerClient && props.runtimeWorkspaceId ? (
+                          <RecentActivitySection
+                            matterhornServerClient={props.matterhornServerClient}
+                            runtimeWorkspaceId={props.runtimeWorkspaceId}
+                            limit={8}
+                          />
+                        ) : null}
                         <HomeCapabilityOverview
                           onOpenCapability={(id) => {
                             if (id === "bittensor" || id === "hyperliquid" || id === "polymarket") {
