@@ -57,6 +57,11 @@
       "types": "./src/notes.ts",
       "development": "./src/notes.ts",
       "default": "./src/notes.ts"
+    },
+    "./project-evidence": {
+      "types": "./src/project-evidence.ts",
+      "development": "./src/project-evidence.ts",
+      "default": "./src/project-evidence.ts"
     }
   },
   "files": [

@@ -220,6 +220,7 @@ import type {
   MatterhornNoteMemorySuggestionRequest,
   MatterhornNoteUpdateRequest,
 } from "@matterhorn-work/types/notes";
+import type { MatterhornProjectEvidenceSource } from "@matterhorn-work/types/project-evidence";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -249,6 +250,7 @@ import { sanitizeCommandName, validateMcpName } from "./validators.js";
 import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { MatterhornNotesStore } from "./notes.js";
+import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -1094,6 +1096,14 @@ function notesListOptionsFromUrl(url: URL) {
     includeDeleted: url.searchParams.get("includeDeleted") === "true" || url.searchParams.get("include_deleted") === "true",
     limit: normalizeNoteLimit(url.searchParams.get("limit")),
   };
+}
+
+function parseProjectEvidenceSource(value: string | null): MatterhornProjectEvidenceSource | undefined {
+  if (!value) return undefined;
+  if (value === "notes" || value === "memory" || value === "task_events" || value === "task_runs") {
+    return value;
+  }
+  throw new ApiError(400, "invalid_project_evidence_source", "source must be notes, memory, task_events, or task_runs");
 }
 
 function coerceNoteCreateRequest(value: unknown): MatterhornNoteCreateRequest {
@@ -2857,6 +2867,23 @@ function createRoutes(
     const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 50) : 20;
     const runs = await deriveTaskRuns(workspace.id, limit);
     return jsonResponse({ runs });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/evidence", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const limitParam = ctx.url.searchParams.get("limit");
+    const parsed = limitParam ? Number(limitParam) : NaN;
+    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
+    const { items, summary } = await buildProjectEvidenceTimeline({
+      workspaceId: workspace.id,
+      workspaceRoot: workspace.path,
+      limit,
+      desk: ctx.url.searchParams.get("desk")?.trim() || undefined,
+      sessionId: ctx.url.searchParams.get("sessionId")?.trim() || undefined,
+      taskId: ctx.url.searchParams.get("taskId")?.trim() || undefined,
+      source: parseProjectEvidenceSource(ctx.url.searchParams.get("source")?.trim() || null),
+    });
+    return jsonResponse({ success: true, items, count: items.length, summary });
   });
 
   addRoute(routes, "GET", "/workspace/:id/notes", "client", async (ctx) => {

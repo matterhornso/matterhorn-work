@@ -78,7 +78,7 @@ import { useWorkspaceShellLayout } from "../../../shell/workspace-shell-layout";
 import { useControlAction, type MatterhornControlAction } from "../../../shell/control/control-provider";
 import { workspaceNotesRoute } from "../../../shell/workspace-routes";
 import { getExtensionId, isMatterhornExtensionEnabled, MATTERHORN_EXTENSION_STATE_CHANGED } from "../../settings/extension-state";
-import { useQuickJot } from "../../notes";
+import { dispatchNotesUpdated, useQuickJot } from "../../notes";
 import { cn } from "@/lib/utils";
 import {
   buildCustomerBetaDemoStarterCards,
@@ -98,6 +98,7 @@ import {
   stageWorkflowRun,
   startWorkflowRun,
 } from "../workflows/workflow-run-client";
+import { getArtifactNoteContext } from "../artifacts/artifact-note-context";
 import { getChatDraftConfig } from "@matterhorn-work/types";
 import { matterhornDeskAgentIdForDesk } from "@matterhorn-work/types/desk-agents";
 import type { MatterhornWorkflowRun } from "@matterhorn-work/types/workflow-runs";
@@ -752,6 +753,43 @@ export function SessionPage(props: SessionPageProps) {
   }, []);
 
   const { openQuickJot } = useQuickJot();
+  const addArtifactNote = useCallback(
+    async (artifactPath: string, desk?: string, sessionSlug?: string) => {
+      const noteContext = getArtifactNoteContext(artifactPath);
+      const workspaceId = (props.runtimeWorkspaceId ?? props.selectedWorkspaceId).trim();
+      const client = props.matterhornServerClient;
+
+      if (!workspaceId || !client) {
+        openQuickJot({
+          type: "output",
+          id: noteContext.path,
+          label: noteContext.fileName,
+        });
+        return;
+      }
+
+      try {
+        await client.createNote(workspaceId, {
+          title: `Note about ${noteContext.fileName}`.slice(0, 150),
+          body: `Linked output: ${noteContext.path}`,
+          tags: ["output", desk ?? noteContext.desk ?? ""].filter(Boolean),
+          desk: desk ?? noteContext.desk ?? null,
+          sessionId: sessionSlug ?? noteContext.sessionSlug ?? null,
+          outputPath: noteContext.path,
+          source: "output",
+        });
+        dispatchNotesUpdated(workspaceId);
+        navigate(workspaceNotesRoute(workspaceId));
+      } catch {
+        openQuickJot({
+          type: "output",
+          id: noteContext.path,
+          label: noteContext.fileName,
+        });
+      }
+    },
+    [navigate, openQuickJot, props.matterhornServerClient, props.runtimeWorkspaceId, props.selectedWorkspaceId],
+  );
 
   const sidebarOpen = useUiStateStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStateStore((state) => state.setSidebarOpen);
@@ -2089,13 +2127,7 @@ export function SessionPage(props: SessionPageProps) {
                         target={visibleArtifactTarget}
                         targets={artifactFileTargets}
                         onSelectTarget={openTarget}
-                        onAddNote={(artifactPath) =>
-                          openQuickJot({
-                            type: "output",
-                            id: artifactPath,
-                            label: artifactPath.split(/[\\/]/).filter(Boolean).pop() ?? artifactPath,
-                          })
-                        }
+                        onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (
