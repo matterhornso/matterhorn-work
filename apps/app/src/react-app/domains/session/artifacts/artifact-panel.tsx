@@ -9,6 +9,7 @@ import { PanelTab, PanelTabItem, PanelTabList } from "@/components/panel-tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatFileSize } from "@/lib/utils";
+import { getArtifactNoteContext } from "./artifact-note-context";
 import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
 import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable } from "./preview";
@@ -314,7 +315,15 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                 <Tooltip>
                   <TooltipTrigger
                     render={(
-                      <Button variant="ghost" size="icon-sm" onClick={() => onAddNote(target.value)} aria-label="Add note about this output">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          const noteContext = getArtifactNoteContext(target.value);
+                          onAddNote(noteContext.path, noteContext.desk, noteContext.sessionSlug);
+                        }}
+                        aria-label="Add note about this output"
+                      >
                         <NotebookPen />
                       </Button>
                     )}
