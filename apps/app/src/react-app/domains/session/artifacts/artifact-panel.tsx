@@ -5,13 +5,14 @@ import { Copy, Download, ExternalLink, FolderOpen, NotebookPen, X } from "lucide
 
 import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { openDesktopPath } from "@/app/lib/desktop";
-import { PanelTab, PanelTabItem, PanelTabList } from "@/components/panel-tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatFileSize } from "@/lib/utils";
 import { getArtifactNoteContext } from "./artifact-note-context";
 import { ArtifactIcon } from "./artifact-icon";
 import type { BinaryData, Data, OpenTarget, TextData } from "./open-target";
+import { outputDescriptorFromOpenTarget, type OutputDescriptor } from "./output-descriptor";
+import { OutputList } from "./output-list";
 import { HTMLPreview, ImagePreview, MarkdownPreview, PlainText, PreviewError, PreviewLoading, PreviewUnavailable } from "./preview";
 
 const ArtifactTextEditor = lazy(() =>
@@ -31,6 +32,7 @@ type ArtifactPanelProps = {
   targets?: OpenTarget[];
   onSelectTarget?: (target: OpenTarget) => void;
   onAddNote?: (artifactPath: string, desk?: string, sessionSlug?: string) => void;
+  onRevealPath?: (path: string, label: string) => Promise<void> | void;
   onClose: () => void;
 };
 
@@ -43,7 +45,7 @@ type SaveArtifactInput = Data & { baseUpdatedAt: number | null };
 function absoluteWorkspacePath(root: string, path: string) {
   const cleanRoot = root.trim().replace(/[/\\]+$/, "");
   const cleanPath = path.trim().replace(/^\.\//, "");
-  
+
   return cleanRoot ? `${cleanRoot}/${cleanPath}` : cleanPath;
 }
 
@@ -51,13 +53,34 @@ function isTextContent(target: OpenTarget): boolean {
   return ["markdown", "text", "sheet", "html"].includes(target.preview) && !/\.(xlsx|xls|ods)$/i.test(target.value);
 }
 
-export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceName, isRemoteWorkspace = false, target, targets = [], onSelectTarget, onAddNote, onClose }: ArtifactPanelProps) {
+export function ArtifactPanel({
+  client,
+  workspaceId,
+  workspaceRoot,
+  workspaceName,
+  isRemoteWorkspace = false,
+  target,
+  targets = [],
+  onSelectTarget,
+  onAddNote,
+  onRevealPath,
+  onClose,
+}: ArtifactPanelProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [copiedPath, setCopiedPath] = useState(false);
   const isDirectTextEdit = isTextContent(target) && target.preview === "markdown";
-  const externalPath = useMemo(() => target.kind === "file" ? absoluteWorkspacePath(workspaceRoot, target.value) : target.value, [target.kind, target.value, workspaceRoot]);
+  const externalPath = useMemo(
+    () => (target.kind === "file" ? absoluteWorkspacePath(workspaceRoot, target.value) : target.value),
+    [target.kind, target.value, workspaceRoot],
+  );
+  const noteContext = useMemo(() => getArtifactNoteContext(target.value), [target.value]);
+  const outputs = useMemo(() => (targets ?? []).map(outputDescriptorFromOpenTarget), [targets]);
+  const selectedOutput = useMemo(
+    () => outputs.find((output) => output.id === target.id) ?? outputs[0] ?? null,
+    [outputs, target.id],
+  );
 
   const { data, error, isError, isLoading } = useQuery<ArtifactQueryState>({
     queryKey: ["artifact-panel", workspaceId, target.id] as const,
@@ -71,7 +94,7 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
 
       if (isTextContent(target)) {
         const result = await client.readWorkspaceFile(workspaceId, target.value);
-        
+
         return { kind: "text", data: result.content, updatedAt: result.updatedAt ?? null };
       }
 
@@ -114,7 +137,7 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
   const { mutate, mutateAsync, isPending: isSaving } = useMutation({
     mutationFn: async (input: SaveArtifactInput) => {
       if (target.kind !== "file") {
-        throw new Error("Cannot save non-file artifact.");
+        throw new Error("Cannot save non-file output.");
       }
 
       if (input.kind === "text") {
@@ -141,7 +164,7 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
     if (target.kind === "url") {
       return;
     }
-    
+
     const result = await client.downloadWorkspaceFile(workspaceId, target.value);
     const url = URL.createObjectURL(new Blob([result.data], { type: result.contentType ?? "application/octet-stream" }));
     const anchor = document.createElement("a");
@@ -166,6 +189,17 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
     }
 
     await download();
+  };
+
+  const reveal = async () => {
+    if (target.kind !== "file" || !externalPath) return;
+    if (onRevealPath) {
+      await onRevealPath(externalPath, "Output file");
+      return;
+    }
+    if (!isRemoteWorkspace) {
+      void openDesktopPath(externalPath);
+    }
   };
 
   const save = () => {
@@ -201,6 +235,21 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
     setTimeout(() => setCopiedPath(false), 1800);
   };
 
+  const handleAddNote = () => {
+    if (!onAddNote) return;
+    onAddNote(noteContext.path, noteContext.desk, noteContext.sessionSlug);
+  };
+
+  const handleSelectOutput = (output: OutputDescriptor) => {
+    const match = targets.find((item) => item.id === output.id);
+    if (match) onSelectTarget?.(match);
+  };
+
+  const handleOpenOutput = (output: OutputDescriptor) => {
+    const match = targets.find((item) => item.id === output.id);
+    if (match) openExternal();
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {targets.length === 0 ? (
@@ -213,6 +262,9 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
             <p className="text-xs leading-5 text-muted-foreground">
               Outputs appear here after Matterhorn creates files in this project.
             </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              Saved files live under <span className="font-medium text-foreground">outputs/&lt;desk&gt;/&lt;session-slug&gt;/</span>.
+            </p>
           </div>
           {workspaceName && (
             <div className="mt-1 flex items-center gap-1.5 rounded-full border border-dls-border bg-dls-surface px-3 py-1 text-[11px] text-muted-foreground">
@@ -224,29 +276,6 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
       ) : (
         <>
           <div className="shrink-0 border-b border-border bg-background mac:bg-background/80 mac:backdrop-blur-2xl mac:backdrop-saturate-150">
-            {targets.length > 1 ? (
-              <div className="flex h-10 items-center gap-1 border-b border-border/60 px-2">
-                <div className="no-scrollbar min-w-0 flex-1 overflow-x-auto">
-                  <PanelTabList values={targets.map((item) => item.id)} onReorder={() => {}}>
-                    {targets.map((item) => (
-                      <PanelTabItem
-                        key={item.id}
-                        value={item.id}
-                      >
-                        <PanelTab
-                          active={item.id === target.id}
-                          title={`${item.value}${item.exists === false ? " (missing)" : ""}`}
-                          onClick={() => onSelectTarget?.(item)}
-                        >
-                          <ArtifactIcon type={item.preview} />
-                          <span className="truncate">{item.name}{item.exists === false ? " · missing" : ""}</span>
-                        </PanelTab>
-                      </PanelTabItem>
-                    ))}
-                  </PanelTabList>
-                </div>
-              </div>
-            ) : null}
             <div className="flex h-10 items-center gap-2 pe-2 ps-4">
               <div className="min-w-0 flex-1 flex items-center gap-1.5">
                 <h3 className="text-sm font-medium text-foreground">
@@ -295,7 +324,7 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                         <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>Edit</Button>
                       )}
                     />
-                    <TooltipContent>Edit artifact</TooltipContent>
+                    <TooltipContent>Edit output</TooltipContent>
                   </Tooltip>
                 )
               ) : null}
@@ -318,10 +347,7 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        onClick={() => {
-                          const noteContext = getArtifactNoteContext(target.value);
-                          onAddNote(noteContext.path, noteContext.desk, noteContext.sessionSlug);
-                        }}
+                        onClick={() => void handleAddNote()}
                         aria-label="Add note about this output"
                       >
                         <NotebookPen />
@@ -335,33 +361,45 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                 <Tooltip>
                   <TooltipTrigger
                     render={(
-                      <Button variant="ghost" size="icon-sm" onClick={() => void download()} aria-label="Download artifact">
+                      <Button variant="ghost" size="icon-sm" onClick={() => void download()} aria-label="Download output">
                         <Download />
                       </Button>
                     )}
                   />
-                  <TooltipContent>Download artifact</TooltipContent>
+                  <TooltipContent>Download output</TooltipContent>
+                </Tooltip>
+              ) : null}
+              {target.kind === "file" && !isRemoteWorkspace ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={(
+                      <Button variant="ghost" size="icon-sm" onClick={() => void reveal()} aria-label="Reveal in folder">
+                        <FolderOpen />
+                      </Button>
+                    )}
+                  />
+                  <TooltipContent>Reveal in folder</TooltipContent>
                 </Tooltip>
               ) : null}
               <Tooltip>
                 <TooltipTrigger
                   render={(
-                    <Button variant="ghost" size="icon-sm" onClick={() => void openExternal()} aria-label={isRemoteWorkspace ? "Download artifact" : "Open externally"}>
+                    <Button variant="ghost" size="icon-sm" onClick={() => void openExternal()} aria-label={isRemoteWorkspace ? "Download output" : "Open externally"}>
                       <ExternalLink />
                     </Button>
                   )}
                 />
-                <TooltipContent>{isRemoteWorkspace ? "Download artifact" : "Open externally"}</TooltipContent>
+                <TooltipContent>{isRemoteWorkspace ? "Download output" : "Open externally"}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger
                   render={(
-                    <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close artifact">
+                    <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close output">
                       <X />
                     </Button>
                   )}
                 />
-                <TooltipContent>Close artifact</TooltipContent>
+                <TooltipContent>Close output</TooltipContent>
               </Tooltip>
             </div>
             {target.kind === "file" && (
@@ -372,18 +410,47 @@ export function ArtifactPanel({ client, workspaceId, workspaceRoot, workspaceNam
                     {workspaceName}
                   </span>
                 )}
+                {noteContext.desk && (
+                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {noteContext.desk}
+                  </span>
+                )}
+                {noteContext.sessionSlug && (
+                  <span className="rounded-full border border-dls-border bg-dls-surface px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {noteContext.sessionSlug}
+                  </span>
+                )}
                 <span className="truncate text-[11px] text-muted-foreground" title={target.value}>{target.value}</span>
-                <span className="ml-auto shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                  Saved in this project
-                </span>
+                {noteContext.isLegacy ? (
+                  <span className="ml-auto shrink-0 rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                    Legacy location
+                  </span>
+                ) : (
+                  <span className="ml-auto shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                    Saved in this project
+                  </span>
+                )}
               </div>
             )}
+            {outputs.length > 1 ? (
+              <OutputList
+                outputs={outputs}
+                selectedId={selectedOutput?.id}
+                onSelect={handleSelectOutput}
+                onOpen={handleOpenOutput}
+                onCopyPath={(output) => {
+                  void navigator.clipboard.writeText(output.path);
+                }}
+                onAddNote={onAddNote ? (output) => onAddNote(output.path, output.desk, output.sessionSlug) : undefined}
+                onReveal={!isRemoteWorkspace ? () => void reveal() : undefined}
+              />
+            ) : null}
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">
             {isLoading || (data?.kind === "binary" && !binaryObjectUrl) ? (
               <PreviewLoading />
             ) : isError ? (
-              <PreviewError message={error instanceof Error ? error.message : "Failed to load artifact" } />
+              <PreviewError message={error instanceof Error ? error.message : "Failed to load output" } />
             ) : data?.kind === "text" && (editing || isDirectTextEdit) ? (
               <TextEditor value={draft} language={target.preview === "markdown" ? "markdown" : "text"} onChange={setDraft} />
             ) : target.preview === "markdown" && data?.kind === "text" ? (
@@ -428,7 +495,7 @@ function TextEditor({ value, language, onChange, ...props }: TextEditorProps) {
 }
 
 interface SheetEditorProps extends React.ComponentProps<typeof ArtifactSpreadsheetEditor> {
-  
+
 }
 
 function SheetEditor({ className, ...props }: SheetEditorProps) {

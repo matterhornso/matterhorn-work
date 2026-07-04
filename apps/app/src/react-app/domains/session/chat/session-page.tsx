@@ -2153,6 +2153,7 @@ export function SessionPage(props: SessionPageProps) {
                         targets={artifactFileTargets}
                         onSelectTarget={openTarget}
                         onAddNote={(artifactPath, desk, sessionSlug) => void addArtifactNote(artifactPath, desk, sessionSlug)}
+                        onRevealPath={props.onRevealPath}
                         onClose={closeRightPane}
                       />
                     ) : isVenueSidePanel(visibleSidePanel) ? (
@@ -2264,13 +2265,13 @@ export function SessionPage(props: SessionPageProps) {
                   artifactRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={openArtifactRailPane}
-                title={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
-                aria-label={hasArtifactTargets ? `Artifacts and files (${artifactTargetCount})` : "Artifacts and files"}
+                title={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
+                aria-label={hasArtifactTargets ? `Outputs (${artifactTargetCount})` : "Outputs"}
                 aria-pressed={artifactRailActive}
                 disabled={!hasArtifactTargets}
               >
                 <FileText size={17} />
-                <span className={RAIL_LABEL_CLASS}>Artifacts</span>
+                <span className={RAIL_LABEL_CLASS}>Outputs</span>
                 {artifactTargetCount > 0 ? (
                   <span className="absolute right-0 top-0 flex min-w-3.5 translate-x-1 -translate-y-1 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-3 text-primary-foreground">
                     {artifactTargetCount > 9 ? "9+" : artifactTargetCount}
