@@ -21,6 +21,7 @@ import {
   NotebookPen,
   Palette,
   Play,
+  RefreshCw,
   ShieldCheck,
   Stethoscope,
   XCircle,
@@ -32,6 +33,7 @@ import { formatRelativeTime } from "../../../../app/utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useQuickJot } from "../../notes";
+import { workspaceNotesRoute } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -165,7 +167,7 @@ function TaskHistorySection(props: {
   matterhornServerClient: MatterhornServerClient;
   runtimeWorkspaceId: string;
 }) {
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["task-runs", props.runtimeWorkspaceId] as const,
     queryFn: () => props.matterhornServerClient.listTaskRuns(props.runtimeWorkspaceId, 10),
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
@@ -181,6 +183,28 @@ function TaskHistorySection(props: {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Clock3 className="size-3.5 animate-pulse" />
           Loading task history…
+        </div>
+      ) : isError ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3 text-xs text-red-200">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-medium">Task history could not load.</p>
+              <p className="mt-0.5 break-words text-red-200/80">
+                {error instanceof Error ? error.message : "Check the workspace connection and try again."}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit gap-1.5 border-red-300/35 text-red-100 hover:bg-red-500/15"
+            onClick={() => void refetch()}
+          >
+            <RefreshCw className="size-3.5" />
+            Retry
+          </Button>
         </div>
       ) : runs.length === 0 ? (
         <div className="flex items-center gap-2 rounded-xl border border-dls-border bg-dls-surface px-3 py-3 text-xs text-muted-foreground">
@@ -240,6 +264,7 @@ export function SettingsOverviewView(props: {
   const { openQuickJot } = useQuickJot();
   const [theme, setTheme] = useState<ThemeMode>(getInitialThemeMode());
   const [density, setDensity] = useState<Density>(readDensity());
+  const notesWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
 
   useEffect(() => subscribeToTheme(() => setTheme(getInitialThemeMode())), []);
 
@@ -323,7 +348,12 @@ export function SettingsOverviewView(props: {
           description={t("notes.settings_description")}
         >
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => navigate("/notes")}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => navigate(notesWorkspaceId ? workspaceNotesRoute(notesWorkspaceId) : "/notes")}
+            >
               <NotebookPen size={14} />
               {t("notes.open_notes")}
             </Button>
