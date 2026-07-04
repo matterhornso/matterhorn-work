@@ -14,6 +14,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  Home,
   Mic2,
   PanelRightClose,
   PencilLine,
@@ -672,7 +673,7 @@ export type SessionPageProps = {
   /** Settings content rendered inside the right pane when the settings rail icon is active. */
   settingsSlot?: React.ReactNode;
   /** Settings content rendered inside the right pane for a specific compact settings route. */
-  settingsSlotForPath?: (initialPath: "cloud-account" | "wallet" | "extensions") => React.ReactNode;
+  settingsSlotForPath?: (initialPath: "general" | "cloud-account" | "wallet" | "extensions") => React.ReactNode;
 };
 
 function getSidebarInitialLoading(props: SessionPageSidebarProps) {
@@ -828,7 +829,7 @@ export function SessionPage(props: SessionPageProps) {
   const visibleSidePanel = focusedProtocolPanel ? null : activeSidePanel;
   const sidePanelOpen = visibleSidePanel !== null;
   const protocolSidePanelOpen = isVenueSidePanel(visibleSidePanel);
-  const renderCompactSettingsRail = (initialPath: "cloud-account" | "wallet" | "extensions") => {
+  const renderCompactSettingsRail = (initialPath: "general" | "cloud-account" | "wallet" | "extensions") => {
     const slot = props.settingsSlotForPath?.(initialPath)
       ?? (initialPath === "extensions" ? props.settingsSlot : null);
     return slot ? (
@@ -935,6 +936,9 @@ export function SessionPage(props: SessionPageProps) {
   const homeProjectPath = props.selectedWorkspaceRoot.trim();
   const homeOutputsPath = homeProjectPath ? joinWorkspaceChildPath(homeProjectPath, "outputs") : "outputs/";
   const homeProjectName = props.selectedWorkspaceDisplay.displayName || props.selectedWorkspaceDisplay.name || "Current project";
+  const goHome = useCallback(() => {
+    props.sidebar.onOpenWorkspaceHome?.(props.selectedWorkspaceId);
+  }, [props.selectedWorkspaceId, props.sidebar]);
 
   const copyHomePath = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
@@ -1033,7 +1037,7 @@ export function SessionPage(props: SessionPageProps) {
       run: null,
       message: props.matterhornServerClient
         ? `Starting ${options?.title ?? getCustomerProtocolDeskVisual(deskId)?.agentName ?? "workflow"}...`
-        : "Matterhorn Work server is not connected. Start the local app with pnpm dev:matterhorn-local, then try again.",
+        : "Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline.",
       intent: visibleUserIntent,
     };
     setWorkflowLaunchState(baseState);
@@ -1523,6 +1527,27 @@ export function SessionPage(props: SessionPageProps) {
           <header className="z-10 flex h-10 shrink-0 items-center justify-between bg-dls-surface/88 px-4 shadow-[0_1px_0_rgba(var(--matterhorn-blue-rgb),0.10)] backdrop-blur-xl md:px-6 mac:titlebar-drag mac:backdrop-saturate-150 @container/titlebar">
             <div className="flex min-w-0 items-center gap-3">
               {shellConfig.sidebar ? <SidebarTrigger className="mac:hidden" /> : null}
+              {!showWorkspaceSetupEmptyState ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 gap-1.5 rounded-md px-2 text-xs font-semibold text-dls-secondary hover:bg-dls-hover hover:text-dls-text mac:titlebar-no-drag"
+                  onClick={goHome}
+                  title="Go to project Home"
+                  aria-label="Go to project Home"
+                >
+                  <Home className="size-3.5" />
+                  <span>Home</span>
+                </Button>
+              ) : null}
+              {!showWorkspaceSetupEmptyState ? (
+                <span
+                  className="hidden max-w-[18rem] truncate text-[12px] font-medium text-dls-secondary lg:inline"
+                  title={homeProjectName}
+                >
+                  {homeProjectName}
+                </span>
+              ) : null}
               <h1 className="min-w-0 truncate text-[15px] font-semibold text-dls-text">
                 {showWorkspaceSetupEmptyState
                   ? t("session.create_or_connect_workspace")
@@ -2107,7 +2132,7 @@ export function SessionPage(props: SessionPageProps) {
                         onClose={closeRightPane}
                       />
                     ) : visibleSidePanel === "profile" && props.settingsSlotForPath ? (
-                      renderCompactSettingsRail("cloud-account")
+                      renderCompactSettingsRail("general")
                     ) : visibleSidePanel === "wallet" && props.settingsSlotForPath ? (
                       renderCompactSettingsRail("wallet")
                     ) : visibleSidePanel === "memory" ? (
@@ -2173,8 +2198,8 @@ export function SessionPage(props: SessionPageProps) {
                   profileRailActive && RAIL_ACTIVE_CLASS,
                 )}
                 onClick={() => setCurrentSidePanel("profile")}
-                title={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
-                aria-label={shellConfig.cloudSignin ? "Profile and account" : "Profile and settings"}
+                title="Profile, settings, and task logs"
+                aria-label="Profile, settings, and task logs"
                 aria-pressed={profileRailActive}
               >
                 <CircleUserRound size={17} />

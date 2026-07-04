@@ -1542,10 +1542,10 @@ export function SessionRoute() {
   const routeNotFoundMessage = (() => {
     if (loading) return null;
     if (routeError && !client && routeWorkspaceId) {
-      return `Matterhorn Work engine is not connected. Start the local app with pnpm dev:matterhorn-local, then open the printed project URL. Details: ${routeError}`;
+      return `Matterhorn Work engine is unavailable for this project. Retry the connection or restart Matterhorn Work if it stays offline. Details: ${routeError}`;
     }
     if (!client && routeWorkspaceId && workspaces.length === 0) {
-      return "Matterhorn Work engine is not connected. Start the local app with pnpm dev:matterhorn-local, then open the printed project URL.";
+      return "Matterhorn Work engine is unavailable for this project. Retry the connection or create/connect a project from this device.";
     }
     if (routeWorkspaceId && !selectedWorkspace) {
       return "Workspace was not found. Select a new workspace from the sidebar.";
@@ -2774,7 +2774,7 @@ export function SessionRoute() {
     }
   }, [local, refreshRouteState]);
 
-  const renderEmbeddedSettingsSurface = useCallback((initialPath: "cloud-account" | "wallet" | "extensions") => (
+  const renderEmbeddedSettingsSurface = useCallback((initialPath: "general" | "cloud-account" | "wallet" | "extensions") => (
     <LazyEmbeddedSettingsSurface
       key={initialPath}
       embedded

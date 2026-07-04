@@ -1,6 +1,7 @@
 /** @jsxImportSource react */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { NotebookPen, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 
 import { t } from "@/i18n";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useStatusToasts } from "../shell-feedback/status-toasts";
-import { readActiveWorkspaceId } from "../../shell/session-memory";
+import { ACTIVE_WORKSPACE_CHANGED_EVENT, readActiveWorkspaceId } from "../../shell/session-memory";
 import type { MatterhornServerClient } from "../../../app/lib/matterhorn-server";
 import { useNotesServerClient } from "./notes-server-client";
 import { filterNotes, useNotesStore } from "./notes-store";
@@ -53,19 +54,29 @@ function NoteListAttachment({ note }: { note: MatterhornNote }) {
 export function NotesPage({ client }: NotesPageProps) {
   const { showToast } = useStatusToasts();
   const notesClient = useNotesServerClient(client);
-  const [workspaceId, setWorkspaceId] = useState(() => readActiveWorkspaceId() ?? "");
+  const params = useParams<{ workspaceId?: string }>();
+  const routeWorkspaceId = params.workspaceId?.trim() ?? "";
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(() => readActiveWorkspaceId() ?? "");
+  const workspaceId = routeWorkspaceId || activeWorkspaceId;
   const { notes, loading, error, create, update, remove, suggestMemory } = useNotesStore(workspaceId, notesClient);
   const [query, setQuery] = useState("");
   const [filterId, setFilterId] = useState<NoteFilterId>("all");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = readActiveWorkspaceId() ?? "";
-    if (id !== workspaceId) {
-      setWorkspaceId(id);
-      setSelectedNoteId(null);
-    }
+    setSelectedNoteId(null);
   }, [workspaceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const refreshActiveWorkspace = () => setActiveWorkspaceId(readActiveWorkspaceId() ?? "");
+    window.addEventListener("storage", refreshActiveWorkspace);
+    window.addEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, refreshActiveWorkspace);
+    return () => {
+      window.removeEventListener("storage", refreshActiveWorkspace);
+      window.removeEventListener(ACTIVE_WORKSPACE_CHANGED_EVENT, refreshActiveWorkspace);
+    };
+  }, []);
 
   const filteredNotes = useMemo(
     () => filterNotes(notes, { query, filterId }),
