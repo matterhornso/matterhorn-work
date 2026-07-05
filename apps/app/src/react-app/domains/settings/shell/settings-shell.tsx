@@ -89,7 +89,7 @@ export function SettingsShell(props: SettingsShellProps) {
 
             {props.error ? (
               <div className="mx-auto w-full max-w-3xl px-4 pb-6">
-                <div className="flex flex-col gap-y-3 rounded-2xl border border-red-7/20 bg-red-1/40 px-5 py-4 text-sm text-red-12">
+                <div className="flex flex-col gap-y-3 rounded-lg border border-red-7/20 bg-red-1/40 px-5 py-4 text-sm text-red-12">
                   <div>{props.error}</div>
                   {props.errorSlot}
                 </div>
@@ -160,7 +160,7 @@ export function SettingsShell(props: SettingsShellProps) {
 
               {props.error ? (
                 <div className="mx-auto max-w-5xl px-6 pb-24 md:px-10 md:pb-10">
-                  <div className="flex flex-col gap-y-3 rounded-2xl border border-red-7/20 bg-red-1/40 px-5 py-4 text-sm text-red-12">
+                  <div className="flex flex-col gap-y-3 rounded-lg border border-red-7/20 bg-red-1/40 px-5 py-4 text-sm text-red-12">
                     <div>{props.error}</div>
                     {props.errorSlot}
                   </div>

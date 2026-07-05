@@ -299,7 +299,7 @@ export function CreateWorkspaceLocalPanel(
         ) : null}
 
         {props.localError ? (
-          <div className="mb-3 whitespace-pre-line rounded-[20px] border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
+          <div className="mb-3 whitespace-pre-line rounded-lg border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
             {props.localError}
           </div>
         ) : null}

@@ -450,7 +450,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
     >
       <DialogContent
         showCloseButton={showClose}
-        className={`flex max-h-[90vh] min-h-0 w-full flex-col overflow-hidden border-transparent bg-[radial-gradient(circle_at_top_left,rgba(var(--matterhorn-blue-rgb),0.14),transparent_36%),var(--dls-background)] shadow-[0_28px_110px_rgba(0,0,0,0.34)] ${modalWidthClass}`}
+        className={`flex max-h-[90vh] min-h-0 w-full flex-col overflow-hidden border-dls-border bg-dls-surface shadow-lg ${modalWidthClass}`}
       >
         <DialogHeader className="flex-row">
           {screen !== "chooser" ? (
@@ -585,7 +585,7 @@ export function CreateWorkspaceModal(props: CreateWorkspaceModalProps) {
             </div>
             <DialogFooter className="flex-col gap-3">
               {remoteError ? (
-                <div className="rounded-[20px] border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
+                <div className="rounded-lg border border-red-7/20 bg-red-1/40 px-4 py-3 text-[13px] text-red-11">
                   {remoteError}
                 </div>
               ) : null}

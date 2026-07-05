@@ -64,4 +64,16 @@ describe("Outputs panel contract", () => {
     expect(contextSource).toContain('"openwork"');
     expect(contextSource).toContain('"outbox"');
   });
+
+  test("command palette uses Outputs terminology for accessible targets", () => {
+    const paletteSource = readAppSource("shell/command-palette.tsx");
+
+    expect(paletteSource).toContain('title: "Outputs & servers"');
+    expect(paletteSource).toContain("outputs and servers detected in this session");
+    expect(paletteSource).toContain('"Search outputs and servers..."');
+    expect(paletteSource).toContain('meta: target.kind === "url" ? "Server" : "Output"');
+    expect(paletteSource).not.toContain('"servers and artifacts"');
+    expect(paletteSource).not.toContain('"Search servers and artifacts..."');
+    expect(paletteSource).not.toContain('"Accessible items"');
+  });
 });
