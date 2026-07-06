@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 
 import { startServer } from "./server.js";
 import { recordAudit } from "./audit.js";
@@ -114,6 +115,75 @@ async function hostFetch(base: string, path: string, init: RequestInit = {}) {
   return { response, payload };
 }
 
+function seedOpencodeRuntimeSession(root: string) {
+  const db = new Database(join(root, "opencode.db"));
+  db.exec(`
+    create table session (
+      id text primary key,
+      title text,
+      slug text,
+      directory text,
+      time_created integer,
+      time_updated integer,
+      data text
+    );
+    create table message (
+      id text primary key,
+      session_id text not null,
+      role text,
+      time_created integer,
+      time_updated integer,
+      data text
+    );
+    create table part (
+      id text primary key,
+      message_id text not null,
+      session_id text not null,
+      data text
+    );
+  `);
+  const insertSession = db.query("insert into session (id, title, slug, directory, time_created, time_updated, data) values (?1, ?2, ?3, ?4, ?5, ?6, ?7)");
+  const insertMessage = db.query("insert into message (id, session_id, role, time_created, time_updated, data) values (?1, ?2, ?3, ?4, ?5, ?6)");
+  const insertPart = db.query("insert into part (id, message_id, session_id, data) values (?1, ?2, ?3, ?4)");
+  insertSession.run(
+    "ses_opencode_runtime",
+    "Bittensor balance chat",
+    "bittensor-balance-chat",
+    root,
+    1_783_299_600_000,
+    1_783_299_660_000,
+    JSON.stringify({
+      title: "Bittensor balance chat",
+      slug: "bittensor-balance-chat",
+      directory: root,
+      time: { created: 1_783_299_600_000, updated: 1_783_299_660_000 },
+    }),
+  );
+  insertMessage.run(
+    "msg_runtime_user",
+    "ses_opencode_runtime",
+    "user",
+    1_783_299_610_000,
+    1_783_299_610_000,
+    JSON.stringify({ role: "user", time: { created: 1_783_299_610_000 } }),
+  );
+  insertMessage.run(
+    "msg_runtime_assistant",
+    "ses_opencode_runtime",
+    "assistant",
+    1_783_299_660_000,
+    1_783_299_660_000,
+    JSON.stringify({ role: "assistant", time: { created: 1_783_299_660_000, completed: 1_783_299_660_000 } }),
+  );
+  insertPart.run(
+    "prt_runtime_secret",
+    "msg_runtime_user",
+    "ses_opencode_runtime",
+    JSON.stringify({ type: "text", text: `Do not leak private key ${SECRET_HEX} from chat bodies.` }),
+  );
+  db.close();
+}
+
 afterEach(async () => {
   while (stops.length) {
     await stops.pop()?.();
@@ -131,6 +201,7 @@ afterEach(async () => {
 describe("project data ledger routes", () => {
   test("GET /workspace/:id/data-ledger unifies project evidence, audit, and feedback with redaction", async () => {
     const { base, dir } = await boot();
+    seedOpencodeRuntimeSession(dir);
 
     const createdNote = await jsonFetch(base, "/workspace/ws_ledger/notes", {
       method: "POST",
@@ -189,7 +260,7 @@ describe("project data ledger routes", () => {
     expect(ledger.payload.summary.notes).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.audits).toBeGreaterThanOrEqual(1);
     expect(ledger.payload.summary.feedback).toBe(1);
-    expect(ledger.payload.summary.chats).toBe(2);
+    expect(ledger.payload.summary.chats).toBeGreaterThanOrEqual(3);
     expect(ledger.payload.summary.redacted).toBeGreaterThanOrEqual(1);
 
     const kinds = ledger.payload.items.map((item: { kind: string }) => item.kind);
@@ -197,6 +268,24 @@ describe("project data ledger routes", () => {
     expect(kinds).toContain("audit");
     expect(kinds).toContain("feedback");
     expect(kinds).toContain("chat");
+    const opencodeEntry = ledger.payload.items.find((item: { source: string }) => item.source === "opencode_runtime");
+    expect(opencodeEntry).toMatchObject({
+      kind: "chat",
+      title: "Bittensor balance chat",
+      sessionId: "ses_opencode_runtime",
+      sessionSlug: "bittensor-balance-chat",
+      containsUserContent: false,
+      containsSecrets: "never",
+      retention: "runtime_controlled",
+      exportable: false,
+      deletable: false,
+      eventType: "opencode.session",
+      metadata: {
+        messageCount: 2,
+        userMessageCount: 1,
+        assistantMessageCount: 1,
+      },
+    });
     const feedbackEntry = ledger.payload.items.find((item: { kind: string }) => item.kind === "feedback");
     expect(feedbackEntry).toBeTruthy();
     expect(feedbackEntry.metadata.feedbackId).toBe(feedback.payload.feedback.id);
@@ -216,13 +305,20 @@ describe("project data ledger routes", () => {
     expect(serialized).toContain("[redacted]");
     expect(serialized).not.toContain("supersecret123");
     expect(serialized).not.toContain(SECRET_HEX);
+    expect(serialized).not.toContain("Do not leak private key");
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
 
     const chatLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=chat&limit=20");
     expect(chatLedger.response.status).toBe(200);
-    expect(chatLedger.payload.summary.chats).toBe(2);
+    expect(chatLedger.payload.summary.chats).toBeGreaterThanOrEqual(3);
     expect(chatLedger.payload.items.every((item: { kind: string }) => item.kind === "chat")).toBe(true);
+
+    const runtimeLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?source=opencode_runtime&limit=20");
+    expect(runtimeLedger.response.status).toBe(200);
+    expect(runtimeLedger.payload.summary.chats).toBe(1);
+    expect(runtimeLedger.payload.items).toHaveLength(1);
+    expect(runtimeLedger.payload.items[0].summary).toBe("2 messages (1 user, 1 assistant)");
 
     const dataMap = await jsonFetch(base, "/workspace/ws_ledger/backend/data-map");
     expect(dataMap.response.status).toBe(200);

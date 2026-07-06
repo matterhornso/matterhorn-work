@@ -8,6 +8,7 @@ export const MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION = "matterhorn.project
 export const MATTERHORN_PROJECT_DATA_LEDGER_SOURCES = [
   "project_evidence",
   "audit",
+  "opencode_runtime",
   "feedback",
 ] as const;
 
@@ -163,7 +164,7 @@ export interface MatterhornProjectDataLedgerExportResponse {
       version?: MatterhornProjectDataLedgerExportControlPlaneSnapshot["version"];
       generatedAt?: string;
     };
-    includes: Array<"project_evidence" | "audit" | "feedback">;
+    includes: Array<"project_evidence" | "audit" | "opencode_runtime" | "feedback">;
     trainingUse: "none_by_default";
     feedbackUse: MatterhornWorkspaceFeedbackUse;
     limitations: string[];
