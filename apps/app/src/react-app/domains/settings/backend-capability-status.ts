@@ -3,6 +3,8 @@ import type {
   MatterhornCapability,
   MatterhornCapabilityStatus,
   MatterhornDataStoreDescriptor,
+  MatterhornWalletFamilyCapability,
+  MatterhornWalletRuntimeSupport,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 
@@ -70,24 +72,60 @@ export function walletFamilySummary(capabilities: MatterhornBackendCapabilitiesR
   family: "EVM" | "Sui" | "Bittensor";
   label: string;
   status: MatterhornCapabilityStatus;
+  directConnect: boolean;
+  signing: MatterhornWalletFamilyCapability["signing"];
+  runtimeSupport?: MatterhornWalletFamilyCapability["runtimeSupport"];
 }> {
   return [
     {
       family: "EVM",
       label: capabilities.wallets.families.evm.label,
       status: capabilities.wallets.families.evm.status,
+      directConnect: capabilities.wallets.families.evm.directConnect,
+      signing: capabilities.wallets.families.evm.signing,
+      runtimeSupport: capabilities.wallets.families.evm.runtimeSupport,
     },
     {
       family: "Sui",
       label: capabilities.wallets.families.sui.label,
       status: capabilities.wallets.families.sui.status,
+      directConnect: capabilities.wallets.families.sui.directConnect,
+      signing: capabilities.wallets.families.sui.signing,
+      runtimeSupport: capabilities.wallets.families.sui.runtimeSupport,
     },
     {
       family: "Bittensor",
       label: capabilities.wallets.families.bittensor.label,
       status: capabilities.wallets.families.bittensor.status,
+      directConnect: capabilities.wallets.families.bittensor.directConnect,
+      signing: capabilities.wallets.families.bittensor.signing,
+      runtimeSupport: capabilities.wallets.families.bittensor.runtimeSupport,
     },
   ];
+}
+
+export function walletRuntimeSupportSummary(
+  support: MatterhornWalletRuntimeSupport | undefined,
+): { label: string; detail: string; status: MatterhornCapabilityStatus | null } {
+  if (!support) {
+    return {
+      label: "Runtime status unavailable",
+      detail: "The backend did not report wallet support for this runtime.",
+      status: null,
+    };
+  }
+  const connection = support.directConnect ? "Direct connect" : "External handoff";
+  const signing =
+    support.signing === "client_wallet"
+      ? "signing stays in the user's wallet"
+      : support.signing === "external_signer"
+        ? "external signer required"
+        : "signing not supported";
+  return {
+    label: `${connection} · ${backendCapabilityLabel(support.status)}`,
+    detail: support.description || `${connection}; ${signing}.`,
+    status: support.status,
+  };
 }
 
 export function storageLocationLabel(store: MatterhornDataStoreDescriptor): string {
