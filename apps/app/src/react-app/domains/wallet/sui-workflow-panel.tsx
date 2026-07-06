@@ -8,6 +8,7 @@ import {
   useWallets,
   type UiWallet,
 } from "@mysten/dapp-kit-react";
+import { Transaction } from "@mysten/sui/transactions";
 import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -107,7 +108,7 @@ export function SuiWorkflowPanel(props: {
   const [explorerUrl, setExplorerUrl] = useState("");
   const [previewResponse, setPreviewResponse] = useState<MatterhornSuiTransactionPreviewResponse | null>(null);
   const [receiptResponse, setReceiptResponse] = useState<MatterhornSuiTransactionReceiptResponse | null>(null);
-  const [busyAction, setBusyAction] = useState<"connect" | "disconnect" | "preview" | "receipt" | null>(null);
+  const [busyAction, setBusyAction] = useState<"connect" | "disconnect" | "preview" | "sign" | "receipt" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copyLabel, setCopyLabel] = useState<string | null>(null);
 
@@ -257,9 +258,85 @@ export function SuiWorkflowPanel(props: {
     workspaceId,
   ]);
 
+  const signPreviewInWallet = useCallback(async () => {
+    if (!client) {
+      setError("Matterhorn Work engine is offline.");
+      return;
+    }
+    if (!workspaceId) {
+      setError("Open a workspace before saving Sui evidence.");
+      return;
+    }
+    if (!previewResponse?.preview) {
+      setError("Prepare a Sui preview before signing.");
+      return;
+    }
+    if (!account?.address) {
+      setError("Connect the Sui wallet that owns the sender address before signing.");
+      return;
+    }
+    const preview = previewResponse.preview;
+    if (account.address.toLowerCase() !== preview.sender.toLowerCase()) {
+      setError("The connected Sui wallet does not match the preview sender.");
+      return;
+    }
+
+    setError(null);
+    setBusyAction("sign");
+    try {
+      const transaction = new Transaction();
+      transaction.setSender(preview.sender);
+      const [coin] = transaction.splitCoins(transaction.gas, [BigInt(preview.amountMist)]);
+      transaction.transferObjects([coin], preview.recipient);
+      const result = await suiDAppKit.signAndExecuteTransaction({
+        transaction,
+        account,
+        network: network as SuiMatterhornNetwork,
+      });
+      const executed = "Transaction" in result ? result.Transaction : result.FailedTransaction;
+      if (!executed?.digest) {
+        throw new Error("The Sui wallet did not return a transaction digest.");
+      }
+      const nextStatus = "Transaction" in result ? "success" : "failure";
+      const nextDigest = executed.digest;
+      const response = await client.workspaceSuiTransactionReceipt(
+        workspaceId,
+        {
+          network: network as MatterhornSuiNetwork,
+          previewSha256: preview.previewSha256,
+          transactionDigest: nextDigest,
+          status: nextStatus,
+          sender: preview.sender,
+          recipient: preview.recipient,
+          amountMist: preview.amountMist,
+        },
+        { sessionId: props.sessionId ?? null },
+      );
+      setDigest(nextDigest);
+      setReceiptStatus(nextStatus);
+      setReceiptResponse(response);
+      emitEvidenceSaved(response.evidence?.outputPath);
+      if (nextStatus === "failure") {
+        const message = executed.status?.error?.message ?? "The Sui wallet returned a failed transaction.";
+        setError(message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not sign and submit the Sui transaction.");
+    } finally {
+      setBusyAction(null);
+    }
+  }, [account, client, emitEvidenceSaved, network, previewResponse, props.sessionId, workspaceId]);
+
   const preview = previewResponse?.preview ?? null;
   const receipt = receiptResponse?.receipt ?? null;
   const canPreview = Boolean(client && workspaceId && effectiveSender && recipient.trim() && amountSui.trim());
+  const canSignPreview = Boolean(
+    client &&
+    workspaceId &&
+    preview &&
+    account?.address &&
+    account.address.toLowerCase() === preview.sender.toLowerCase(),
+  );
   const canImportReceipt = Boolean(client && workspaceId && digest.trim());
   const accountBalance = accountQuery.data?.account.balance.balanceMist;
   const connectedWalletLabel = account?.address
@@ -428,10 +505,20 @@ export function SuiWorkflowPanel(props: {
           </div>
           <div className="grid gap-1 text-xs leading-5 text-dls-secondary">
             <p><span className="font-medium text-dls-text">Preview hash:</span> <span className="font-mono">{preview.previewSha256.slice(0, 18)}...</span></p>
-            <p><span className="font-medium text-dls-text">Can submit:</span> No. Sign and submit in your Sui wallet.</p>
+            <p><span className="font-medium text-dls-text">Can submit:</span> Yes, only through your connected Sui wallet.</p>
           </div>
           <EvidencePath path={previewResponse?.evidence?.outputPath} />
           <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canSignPreview || busyAction === "sign"}
+              onClick={signPreviewInWallet}
+              title={canSignPreview ? "Sign and submit with the connected Sui wallet" : "Connect the sender wallet to sign"}
+            >
+              {busyAction === "sign" ? <RefreshCw className="size-3 animate-spin" /> : <Send className="size-3" />}
+              Sign in wallet
+            </Button>
             <Button variant="outline" size="sm" onClick={() => copyText("handoff", handoffText)}>
               <Copy className="size-3" />
               {copyLabel === "handoff" ? "Copied" : "Copy handoff"}

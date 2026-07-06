@@ -240,10 +240,13 @@ describe("backend capability UI contract", () => {
 
     expect(source).toContain("workspaceSuiTransactionPreview");
     expect(source).toContain("workspaceSuiTransactionReceipt");
+    expect(source).toContain("signAndExecuteTransaction");
+    expect(source).toContain("new Transaction()");
+    expect(source).toContain("Sign in wallet");
     expect(source).toContain("matterhorn:task-log-updated");
     expect(source).toContain("matterhorn:project-evidence-updated");
     expect(source).toContain("No custody");
-    expect(source).toContain("Sign and submit in your Sui wallet");
+    expect(source).toContain("only through your connected Sui wallet");
     expect(source).toContain("Do not paste signatures or signed payloads");
     expect(sessionSource).toContain("Sui workflow");
     expect(sessionSource).toContain('setCurrentSidePanel("wallet")');
