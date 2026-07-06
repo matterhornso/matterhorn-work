@@ -1,5 +1,6 @@
 import type { MatterhornCapability } from "./backend-capabilities.js";
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
+import type { MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_VERSION = "matterhorn.project-data-ledger.v1" as const;
 export const MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION = "matterhorn.project-data-ledger-export.v1" as const;
@@ -94,7 +95,7 @@ export interface MatterhornProjectDataLedgerSummary {
 
 export interface MatterhornProjectDataLedgerPolicy {
   trainingUse: "none_by_default";
-  feedbackUse: "eval_routing_product_quality_only";
+  feedbackUse: MatterhornWorkspaceFeedbackUse;
   redaction: MatterhornCapability;
   retention: MatterhornCapability;
   export: MatterhornCapability;
@@ -163,7 +164,7 @@ export interface MatterhornProjectDataLedgerExportResponse {
     };
     includes: Array<"project_evidence" | "audit" | "feedback">;
     trainingUse: "none_by_default";
-    feedbackUse: "eval_routing_product_quality_only";
+    feedbackUse: MatterhornWorkspaceFeedbackUse;
     limitations: string[];
   };
   backend?: {

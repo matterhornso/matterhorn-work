@@ -492,6 +492,7 @@ describe("backend control plane routes", () => {
       readiness: "matterhorn.backend.readiness.v1",
       dataMap: "matterhorn.backend.data-map.v1",
       dataControls: "matterhorn.backend.data-controls.v1",
+      dataPolicy: "matterhorn.backend.data-policy.v1",
     });
     expect(result.payload.summary).toMatchObject({
       status: "needs_setup",
@@ -511,12 +512,18 @@ describe("backend control plane routes", () => {
     expect(result.payload.models.catalog.errorCode).toBe("opencode_unconfigured");
     expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
     expect(result.payload.dataMap.stores.notes.scope).toBe("workspace");
+    expect(result.payload.dataPolicy.policy).toMatchObject({
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+      secretsReturned: false,
+    });
     expect(result.payload.dataMap.stores.walletEvidence.details.ledgerRoute).toBe("/workspace/ws_backend/data-ledger?kind=wallet");
     expect(result.payload.dataMap.stores.walletEvidence.containsSecrets).toBe("redacted");
     expect(result.payload.dataControls.stores.feedback.privacy.trainingUse).toBe("eval_routing_product_quality_only");
     expect(result.payload.privacy).toEqual({
       trainingUse: "none_by_default",
       feedbackUse: "eval_routing_product_quality_only",
+      feedbackCollectionEnabled: true,
       secretsReturned: false,
     });
 
@@ -587,6 +594,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.privacy).toEqual({
       trainingUse: "none_by_default",
       feedbackUse: "eval_routing_product_quality_only",
+      feedbackCollectionEnabled: true,
       secretsReturned: false,
     });
     expect(result.payload.warnings.join(" ")).toContain("do not include raw chat transcripts");
@@ -963,6 +971,10 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.modelPreferences.scope).toBe("workspace");
     expect(result.payload.stores.modelPreferences.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
     expect(result.payload.stores.modelPreferences.containsSecrets).toBe("never");
+    expect(result.payload.stores.dataPolicy.scope).toBe("workspace");
+    expect(result.payload.stores.dataPolicy.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
+    expect(result.payload.stores.dataPolicy.containsSecrets).toBe("never");
+    expect(result.payload.stores.dataPolicy.details.feedbackUse).toBe("eval_routing_product_quality_only");
     expect(result.payload.stores.outputs.path).toBe(join(dir, "outputs"));
     expect(result.payload.stores.feedback.scope).toBe("machine_global");
     expect(result.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_backend.jsonl"));
@@ -970,6 +982,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.feedback.retention).toBe("user_controlled");
     expect(result.payload.stores.feedback.deletable).toBe(true);
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
+    expect(result.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
@@ -1035,6 +1048,16 @@ describe("backend control plane routes", () => {
       method: "DELETE",
       destructive: true,
     });
+    expect(result.payload.stores.dataPolicy.export.actions[0]).toMatchObject({
+      id: "data-policy.read",
+      method: "GET",
+      href: "/workspace/ws_backend/backend/data-policy",
+    });
+    expect(result.payload.stores.dataPolicy.deletion.actions[0]).toMatchObject({
+      id: "data-policy.reset-feedback",
+      method: "PATCH",
+      href: "/workspace/ws_backend/backend/data-policy",
+    });
     expect(result.payload.stores.feedback.retention.mode).toBe("user_controlled");
     expect(result.payload.stores.feedback.deletion.status).toBe("working");
     expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({
@@ -1051,12 +1074,90 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(result.payload.stores.audit.retention.mode).toBe("append_only");
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
+    expect(result.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
     expect(result.payload.policy.limitations.join(" ")).toContain("Bulk deletion is currently limited to feedback");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export|bearer token/i);
+  });
+
+  test("workspace data policy persists feedback preference, blocks feedback writes, and audits updates", async () => {
+    const { base, dir } = await boot();
+
+    const initial = await jsonFetch(base, "/workspace/ws_backend/backend/data-policy");
+    expect(initial.response.status).toBe(200);
+    expect(initial.payload.policy).toMatchObject({
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+      secretsReturned: false,
+    });
+    expect(initial.payload.controls.modelTraining).toMatchObject({
+      status: "unsupported",
+      configurable: false,
+      rlTraining: false,
+    });
+    expect(initial.payload.controls.feedback.enabled).toBe(true);
+    expect(initial.payload.storage.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
+
+    const viewer = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Policy viewer" }),
+    });
+    const deniedViewer = await jsonFetch(base, "/workspace/ws_backend/backend/data-policy", {
+      method: "PATCH",
+      body: JSON.stringify({ feedbackUse: "disabled" }),
+    }, viewer.payload.token);
+    expect(deniedViewer.response.status).toBe(403);
+
+    const invalid = await jsonFetch(base, "/workspace/ws_backend/backend/data-policy", {
+      method: "PATCH",
+      body: JSON.stringify({ feedbackUse: "model_training" }),
+    });
+    expect(invalid.response.status).toBe(400);
+
+    const disabled = await jsonFetch(base, "/workspace/ws_backend/backend/data-policy", {
+      method: "PATCH",
+      body: JSON.stringify({ feedbackUse: "disabled" }),
+    });
+    expect(disabled.response.status).toBe(200);
+    expect(disabled.payload.policy.feedbackUse).toBe("disabled");
+    expect(disabled.payload.controls.feedback.enabled).toBe(false);
+    expect(disabled.payload.storage.exists).toBe(true);
+    expect(existsSync(join(dir, ".matterhorn-work", "privacy", "data-policy.json"))).toBe(true);
+
+    const blockedFeedback = await jsonFetch(base, "/workspace/ws_backend/feedback", {
+      method: "POST",
+      body: JSON.stringify({ kind: "comment", comment: "Should not be saved while disabled." }),
+    });
+    expect(blockedFeedback.response.status).toBe(403);
+    expect(blockedFeedback.payload.code).toBe("feedback_disabled");
+
+    const dataMap = await jsonFetch(base, "/workspace/ws_backend/backend/data-map");
+    expect(dataMap.payload.policy.feedbackUse).toBe("disabled");
+    expect(dataMap.payload.stores.dataPolicy.details.feedbackUse).toBe("disabled");
+    const controls = await jsonFetch(base, "/workspace/ws_backend/backend/data-controls");
+    expect(controls.payload.policy.feedbackUse).toBe("disabled");
+    expect(controls.payload.stores.feedback.privacy.trainingUse).toBe("disabled");
+    const controlPlane = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
+    expect(controlPlane.payload.privacy.feedbackUse).toBe("disabled");
+    expect(controlPlane.payload.privacy.feedbackCollectionEnabled).toBe(false);
+    const ledger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?source=feedback");
+    expect(ledger.payload.policy.feedbackUse).toBe("disabled");
+
+    const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=10");
+    expect(audit.payload.items).toContainEqual(expect.objectContaining({
+      action: "workspace.data_policy.update",
+      target: join(dir, ".matterhorn-work", "privacy", "data-policy.json"),
+    }));
+
+    const readOnly = await boot({ readOnly: true });
+    const deniedReadOnly = await jsonFetch(readOnly.base, "/workspace/ws_backend/backend/data-policy", {
+      method: "PATCH",
+      body: JSON.stringify({ feedbackUse: "disabled" }),
+    });
+    expect(deniedReadOnly.response.status).toBe(403);
   });
 
   test("workspace output delete removes one safe output file and audits the action", async () => {

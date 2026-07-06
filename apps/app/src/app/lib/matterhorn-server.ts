@@ -42,6 +42,10 @@ import type {
   MatterhornTeamAccessTokenRevokeResponse,
 } from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
+import type {
+  MatterhornWorkspaceDataPolicyResponse,
+  MatterhornWorkspaceDataPolicyUpdateRequest,
+} from "@matterhorn-work/types/backend-data-policy";
 import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import type { MatterhornBackendSupportReportResponse } from "@matterhorn-work/types/backend-support-report";
@@ -1770,6 +1774,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/data-controls`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceDataPolicy: (workspaceId: string) =>
+      requestJson<MatterhornWorkspaceDataPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-policy`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    updateWorkspaceDataPolicy: (workspaceId: string, policy: MatterhornWorkspaceDataPolicyUpdateRequest) =>
+      requestJson<MatterhornWorkspaceDataPolicyResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/data-policy`,
+        { token, hostToken, method: "PATCH", body: policy, timeoutMs: timeouts.config },
       ),
     workspaceTeamAccess: (workspaceId: string) =>
       requestJson<MatterhornBackendTeamAccessResponse>(

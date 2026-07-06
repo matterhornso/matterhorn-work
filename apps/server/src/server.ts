@@ -258,6 +258,7 @@ import type {
   MatterhornDataControlStoreId,
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
+import type { MatterhornWorkspaceDataPolicyUpdateRequest } from "@matterhorn-work/types/backend-data-policy";
 import type {
   MatterhornBackendModelCatalogErrorCode,
   MatterhornBackendModelCatalogSnapshot,
@@ -316,6 +317,12 @@ import {
   workspaceModelSelectionPath,
   writeWorkspaceModelSelection,
 } from "./backend-models.js";
+import {
+  buildWorkspaceDataPolicyResponse,
+  readWorkspaceDataPolicySync,
+  workspaceDataPolicyPath,
+  writeWorkspaceDataPolicy,
+} from "./backend-data-policy.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
 import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
@@ -1588,6 +1595,20 @@ function coerceProjectFeedbackRequest(value: unknown): MatterhornProjectFeedback
   return request;
 }
 
+function coerceWorkspaceDataPolicyUpdate(value: unknown): MatterhornWorkspaceDataPolicyUpdateRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_data_policy", "data policy body must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const feedbackUse = input.feedbackUse;
+  if (feedbackUse !== undefined && feedbackUse !== "eval_routing_product_quality_only" && feedbackUse !== "disabled") {
+    throw new ApiError(400, "invalid_data_policy_feedback_use", "feedbackUse must be eval_routing_product_quality_only or disabled");
+  }
+  return {
+    ...(feedbackUse ? { feedbackUse } : {}),
+  };
+}
+
 function coerceNoteCreateRequest(value: unknown): MatterhornNoteCreateRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ApiError(400, "invalid_note", "note body must be an object");
@@ -2392,6 +2413,8 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const outputsPath = join(workspace.path, "outputs");
   const walletEvidencePath = join(outputsPath, "sui");
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
+  const dataPolicyPath = workspaceDataPolicyPath(workspace);
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
@@ -2404,6 +2427,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     workflowRunsPath,
     walletEvidencePath,
     modelPreferencePath,
+    dataPolicyPath,
     outputsPath,
     feedbackPath,
   ];
@@ -2444,6 +2468,27 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         ),
         scope: "workspace",
         path: modelPreferencePath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
+      }),
+      dataPolicy: dataStore({
+        id: "dataPolicy",
+        ...capability(
+          existsSync(dataPolicyPath) ? "working" : "preview",
+          "Data policy",
+          "Workspace privacy choices are stored locally and never include secrets.",
+          {
+            route: `/workspace/${workspace.id}/backend/data-policy`,
+            feedbackUse: dataPolicy.feedbackUse,
+            modelTraining: "disabled",
+          },
+        ),
+        scope: "workspace",
+        path: dataPolicyPath,
         format: "json",
         containsUserContent: false,
         containsSecrets: "never",
@@ -2584,6 +2629,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     },
     policy: {
       trainingUse: "none_by_default",
+      feedbackUse: dataPolicy.feedbackUse,
       redaction: capability("working", "Redaction", "Memory, workflow, and market paths reject or redact known secret-shaped wallet/API/signature inputs."),
       export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; the project data ledger can be read as a unified JSON contract."),
       deletion: capability("preview", "Deletion", "Notes and memory records are user-deletable; append-only audit/task logs are retained for accountability."),
@@ -2637,7 +2683,9 @@ function buildDataControlStore(
   store: MatterhornDataStoreDescriptor,
 ): MatterhornDataControlStore {
   const storeId = store.id as MatterhornDataControlStoreId;
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
   const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
+  const dataPolicyRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/data-policy`;
   const modelSelectionRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/model-selection`;
   const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
   const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
@@ -2659,7 +2707,41 @@ function buildDataControlStore(
     actions: [],
   });
 
-  if (storeId === "modelPreferences") {
+  if (storeId === "dataPolicy") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Data policy API",
+      summary: "The workspace data policy reports training and feedback collection status without returning secrets.",
+      actions: [
+        dataControlAction({
+          id: "data-policy.read",
+          label: "Read data policy",
+          description: "Returns the workspace privacy and feedback policy.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: dataPolicyRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Reset data policy",
+      summary: "Collaborators can reset the workspace feedback policy to the safe default.",
+      actions: [
+        dataControlAction({
+          id: "data-policy.reset-feedback",
+          label: "Reset feedback policy",
+          description: "Restores feedback collection to the local product-quality default and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "PATCH",
+          href: dataPolicyRoute,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "modelPreferences") {
     exportCapability = dataControlCapability({
       status: "working",
       label: "Model selection API",
@@ -2944,7 +3026,7 @@ function buildDataControlStore(
     privacy: {
       containsUserContent: store.containsUserContent,
       containsSecrets: store.containsSecrets,
-      trainingUse: storeId === "feedback" ? "eval_routing_product_quality_only" : "none",
+      trainingUse: storeId === "feedback" ? dataPolicy.feedbackUse : "none",
     },
   };
 }
@@ -2978,6 +3060,7 @@ function buildWorkspaceDataControls(
     summary: summarizeDataControls(storeList),
     policy: {
       trainingUse: dataMap.policy.trainingUse,
+      feedbackUse: dataMap.policy.feedbackUse,
       redaction: dataMap.policy.redaction,
       export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
       deletion: capability("preview", "Deletion controls", "Notes and memory support individual deletes; append-only logs remain retained for accountability."),
@@ -3145,6 +3228,7 @@ async function buildWorkspaceBackendControlPlane(
   const readiness = buildWorkspaceReadiness(config, workspace, memoryVault);
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
   const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
+  const dataPolicy = buildWorkspaceDataPolicyResponse(workspace);
   const capabilitiesStatus = mergeCapabilityStatuses([
     capabilities.memory.status,
     capabilities.notes.status,
@@ -3190,15 +3274,18 @@ async function buildWorkspaceBackendControlPlane(
       readiness: readiness.version,
       dataMap: dataMap.version,
       dataControls: dataControls.version,
+      dataPolicy: dataPolicy.version,
     },
     capabilities,
     models,
     readiness,
     dataMap,
     dataControls,
+    dataPolicy,
     privacy: {
       trainingUse: "none_by_default",
-      feedbackUse: "eval_routing_product_quality_only",
+      feedbackUse: dataPolicy.policy.feedbackUse,
+      feedbackCollectionEnabled: dataPolicy.controls.feedback.enabled,
       secretsReturned: false,
     },
   };
@@ -4798,11 +4885,39 @@ function createRoutes(
     }));
   });
 
+  addRoute(routes, "GET", "/workspace/:id/backend/data-policy", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(buildWorkspaceDataPolicyResponse(workspace));
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/backend/data-policy", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const update = coerceWorkspaceDataPolicyUpdate(await readJsonBody(ctx.request));
+    const actorLabel = ctx.actor ? `${ctx.actor.type}:${"scope" in ctx.actor ? ctx.actor.scope : "unknown"}` : "remote";
+    const response = await writeWorkspaceDataPolicy(workspace, update, actorLabel);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.data_policy.update",
+      target: workspaceDataPolicyPath(workspace),
+      summary: `Updated workspace data policy feedback use to ${response.policy.feedbackUse}`,
+      timestamp: Date.now(),
+    });
+    return jsonResponse(response);
+  });
+
   addRoute(routes, "POST", "/workspace/:id/feedback", "client", async (ctx) => {
     ensureWritable(config);
     requireClientScope(ctx, "collaborator");
 
     const workspace = await resolveWorkspace(config, ctx.params.id);
+    const dataPolicy = readWorkspaceDataPolicySync(workspace);
+    if (dataPolicy.feedbackUse === "disabled") {
+      throw new ApiError(403, "feedback_disabled", "Feedback collection is disabled for this workspace.");
+    }
     const body = await readJsonBody(ctx.request);
     const requestBody = body.feedback && typeof body.feedback === "object" && !Array.isArray(body.feedback)
       ? body.feedback

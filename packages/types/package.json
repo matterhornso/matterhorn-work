@@ -88,6 +88,11 @@
       "development": "./src/backend-data-controls.ts",
       "default": "./src/backend-data-controls.ts"
     },
+    "./backend-data-policy": {
+      "types": "./src/backend-data-policy.ts",
+      "development": "./src/backend-data-policy.ts",
+      "default": "./src/backend-data-policy.ts"
+    },
     "./backend-readiness": {
       "types": "./src/backend-readiness.ts",
       "development": "./src/backend-readiness.ts",

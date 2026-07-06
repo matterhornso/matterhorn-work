@@ -12,6 +12,7 @@ import type { AuditEntry, WorkspaceInfo } from "./types.js";
 import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { readAuditEntries } from "./audit.js";
+import { readWorkspaceDataPolicySync } from "./backend-data-policy.js";
 import { readProjectFeedbackEntries } from "./project-feedback.js";
 
 type BuildProjectDataLedgerOptions = MatterhornProjectDataLedgerListOptions & {
@@ -268,10 +269,11 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
   };
 }
 
-function ledgerPolicy(): MatterhornProjectDataLedgerPolicy {
+function ledgerPolicy(workspace: WorkspaceInfo): MatterhornProjectDataLedgerPolicy {
+  const dataPolicy = readWorkspaceDataPolicySync(workspace);
   return {
     trainingUse: "none_by_default",
-    feedbackUse: "eval_routing_product_quality_only",
+    feedbackUse: dataPolicy.feedbackUse,
     redaction: capability("working", "Redaction", "Known secret-shaped tokens, wallet material, raw signatures, and private-key phrases are redacted from ledger text fields."),
     retention: capability("preview", "Retention", "Notes, outputs, memory records, and feedback are user-controlled; chat metadata, audit, and task events remain retained for accountability."),
     export: capability("preview", "Export", "The ledger response is exportable as JSON. Full project export packaging remains planned."),
@@ -319,7 +321,7 @@ export async function buildProjectDataLedger(options: BuildProjectDataLedgerOpti
     items,
     count: items.length,
     summary: summarize(allItems),
-    policy: ledgerPolicy(),
+    policy: ledgerPolicy(options.workspace),
   };
 }
 

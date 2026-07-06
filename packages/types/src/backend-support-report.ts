@@ -67,6 +67,7 @@ export interface MatterhornBackendSupportReportResponse {
   privacy: {
     trainingUse: MatterhornBackendControlPlaneResponse["privacy"]["trainingUse"];
     feedbackUse: MatterhornBackendControlPlaneResponse["privacy"]["feedbackUse"];
+    feedbackCollectionEnabled: MatterhornBackendControlPlaneResponse["privacy"]["feedbackCollectionEnabled"];
     secretsReturned: false;
   };
   warnings: string[];

@@ -90,6 +90,7 @@ export async function buildBackendSupportReport(options: {
     privacy: {
       trainingUse: controlPlaneSnapshot.privacy.trainingUse,
       feedbackUse: controlPlaneSnapshot.privacy.feedbackUse,
+      feedbackCollectionEnabled: controlPlaneSnapshot.privacy.feedbackCollectionEnabled,
       secretsReturned: false,
     },
     warnings: [

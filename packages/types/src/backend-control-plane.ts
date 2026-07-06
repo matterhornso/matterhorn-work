@@ -4,6 +4,7 @@ import type {
   MatterhornWorkspaceDataMapResponse,
 } from "./backend-capabilities.js";
 import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
+import type { MatterhornWorkspaceDataPolicyResponse } from "./backend-data-policy.js";
 import type { MatterhornBackendModelsResponse } from "./backend-models.js";
 import type {
   MatterhornBackendReadinessCheckId,
@@ -38,15 +39,18 @@ export interface MatterhornBackendControlPlaneResponse {
     readiness: MatterhornBackendReadinessResponse["version"];
     dataMap: MatterhornWorkspaceDataMapResponse["version"];
     dataControls: MatterhornWorkspaceDataControlsResponse["version"];
+    dataPolicy: MatterhornWorkspaceDataPolicyResponse["version"];
   };
   capabilities: MatterhornBackendCapabilitiesResponse;
   models: MatterhornBackendModelsResponse;
   readiness: MatterhornBackendReadinessResponse;
   dataMap: MatterhornWorkspaceDataMapResponse;
   dataControls: MatterhornWorkspaceDataControlsResponse;
+  dataPolicy: MatterhornWorkspaceDataPolicyResponse;
   privacy: {
     trainingUse: "none_by_default";
-    feedbackUse: "eval_routing_product_quality_only";
+    feedbackUse: MatterhornWorkspaceDataPolicyResponse["policy"]["feedbackUse"];
+    feedbackCollectionEnabled: boolean;
     secretsReturned: false;
   };
 }

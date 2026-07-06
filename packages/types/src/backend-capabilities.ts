@@ -173,6 +173,7 @@ export interface MatterhornWorkspaceDataMapResponse {
   };
   stores: Record<
     | "chat"
+    | "dataPolicy"
     | "notes"
     | "modelPreferences"
     | "memory"
@@ -187,6 +188,7 @@ export interface MatterhornWorkspaceDataMapResponse {
   >;
   policy: {
     trainingUse: "none_by_default" | "opt_in_only" | "unknown";
+    feedbackUse: "eval_routing_product_quality_only" | "disabled";
     redaction: MatterhornCapability;
     export: MatterhornCapability;
     deletion: MatterhornCapability;
