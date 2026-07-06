@@ -35,6 +35,14 @@ export interface MatterhornModelCapability extends MatterhornCapability {
   };
   providerListSource: "opencode" | "matterhorn_cloud" | "local_static" | "unknown";
   selectedModelSource: "local_preferences" | "server_default" | "unknown";
+  routing?: {
+    answerPath: "opencode_session_prompt_async" | "unknown";
+    modelListTool: "opencode_provider_list" | "matterhorn_backend_registry" | "unknown";
+    userSelectable: boolean;
+    selectionSurface: "model_picker" | "settings" | "none" | "unknown";
+    preferenceStore: "local_preferences" | "server" | "unknown";
+    cloudProviderImport: boolean;
+  };
 }
 
 export interface MatterhornProviderCapability extends MatterhornCapability {

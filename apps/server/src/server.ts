@@ -222,6 +222,12 @@ import type {
 } from "@matterhorn-work/types/notes";
 import type { MatterhornProjectEvidenceSource } from "@matterhorn-work/types/project-evidence";
 import type {
+  MatterhornProjectDataLedgerKind,
+  MatterhornProjectDataLedgerSource,
+  MatterhornProjectFeedbackKind,
+  MatterhornProjectFeedbackRequest,
+} from "@matterhorn-work/types/project-data-ledger";
+import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapability,
   MatterhornCapabilityStatus,
@@ -260,6 +266,8 @@ import { TokenService } from "./tokens.js";
 import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from "./env-file.js";
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
+import { buildProjectDataLedger, scrubProjectLedgerText } from "./project-data-ledger.js";
+import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
 import {
@@ -1115,6 +1123,102 @@ function parseProjectEvidenceSource(value: string | null): MatterhornProjectEvid
   throw new ApiError(400, "invalid_project_evidence_source", "source must be notes, memory, task_events, or task_runs");
 }
 
+function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDataLedgerSource | undefined {
+  if (!value) return undefined;
+  if (value === "project_evidence" || value === "audit" || value === "feedback") {
+    return value;
+  }
+  throw new ApiError(400, "invalid_project_data_ledger_source", "source must be project_evidence, audit, or feedback");
+}
+
+function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {
+  if (!value) return undefined;
+  if (value === "note" || value === "memory_suggestion" || value === "task" || value === "output" || value === "audit" || value === "feedback") {
+    return value;
+  }
+  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, task, output, audit, or feedback");
+}
+
+function parseProjectFeedbackKind(value: unknown): MatterhornProjectFeedbackKind {
+  if (
+    value === "thumbs_up" ||
+    value === "thumbs_down" ||
+    value === "rating" ||
+    value === "comment" ||
+    value === "bug" ||
+    value === "feature_request"
+  ) {
+    return value;
+  }
+  throw new ApiError(400, "invalid_project_feedback_kind", "feedback kind must be thumbs_up, thumbs_down, rating, comment, bug, or feature_request");
+}
+
+function optionalTrimmedString(value: unknown, field: string, limit: number): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new ApiError(400, "invalid_project_feedback", `${field} must be a string`);
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > limit) {
+    throw new ApiError(400, "invalid_project_feedback", `${field} must be ${limit} characters or fewer`);
+  }
+  return scrubProjectLedgerText(trimmed).value;
+}
+
+function optionalFeedbackRating(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const rating = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    throw new ApiError(400, "invalid_project_feedback_rating", "feedback rating must be between 1 and 5");
+  }
+  return rating;
+}
+
+function parseProjectFeedbackSourceType(
+  value: string | undefined,
+): NonNullable<MatterhornProjectFeedbackRequest["target"]>["sourceType"] | undefined {
+  if (value === undefined) return undefined;
+  if (value === "chat" || value === "task" || value === "output" || value === "memory" || value === "note" || value === "settings" || value === "wallet" || value === "other") {
+    return value;
+  }
+  throw new ApiError(400, "invalid_project_feedback_target", "target.sourceType must be chat, task, output, memory, note, settings, wallet, or other");
+}
+
+function coerceProjectFeedbackTarget(value: unknown): MatterhornProjectFeedbackRequest["target"] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_project_feedback_target", "feedback target must be an object");
+  }
+  const target = value as Record<string, unknown>;
+  const rawSourceType = optionalTrimmedString(target.sourceType, "target.sourceType", 80);
+  const sourceType = parseProjectFeedbackSourceType(rawSourceType);
+  const sourceId = optionalTrimmedString(target.sourceId, "target.sourceId", 160);
+  const href = optionalTrimmedString(target.href, "target.href", 500);
+  if (!sourceType && !sourceId && !href) return undefined;
+  return { sourceType, sourceId, href };
+}
+
+function coerceProjectFeedbackRequest(value: unknown): MatterhornProjectFeedbackRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_project_feedback", "feedback body must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const request: MatterhornProjectFeedbackRequest = {
+    kind: parseProjectFeedbackKind(input.kind),
+    target: coerceProjectFeedbackTarget(input.target),
+    rating: optionalFeedbackRating(input.rating),
+    comment: optionalTrimmedString(input.comment, "comment", 5000),
+  };
+  if (request.kind === "rating" && request.rating === undefined) {
+    throw new ApiError(400, "invalid_project_feedback_rating", "rating feedback requires a rating");
+  }
+  if ((request.kind === "comment" || request.kind === "bug" || request.kind === "feature_request") && !request.comment) {
+    throw new ApiError(400, "invalid_project_feedback_comment", `${request.kind} feedback requires a comment`);
+  }
+  return request;
+}
+
 function coerceNoteCreateRequest(value: unknown): MatterhornNoteCreateRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ApiError(400, "invalid_note", "note body must be an object");
@@ -1690,7 +1794,7 @@ function backendSettingsSections(input: {
     base("outputs", capability("working", "Outputs", "Workspace outputs live under the workspace outputs folder.")),
     base("teams", capability("preview", "Teams", "Local token sharing exists; full cloud teammates require Matterhorn Cloud setup.")),
     base("security", capability(input.securityStatus, "Security", "Security posture is reported from server auth, CORS, roots, logging, and approval settings.")),
-    base("feedback", capability("preview", "Feedback", "Feedback is currently a user-facing link, not a training or RL loop.")),
+    base("feedback", capability("working", "Feedback", "Structured feedback is stored locally for evaluation, routing, and product quality only; it is not used for training by default.")),
     base("mcp", capability(input.readOnly ? "preview" : "working", "MCPs", input.readOnly ? "MCPs can be inspected in read-only mode." : "MCP configuration can be inspected and updated.")),
   ];
 }
@@ -1773,7 +1877,18 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
   });
   const sui = walletFamily({
     family: "sui",
-    ...capability("unsupported", "Sui", "Sui wallet support is planned but not implemented in this build."),
+    ...capability(
+      "unsupported",
+      "Sui not implemented yet",
+      "Sui wallet support should use the current Mysten dApp Kit React packages with explicit user signing; no custody or pasted keys.",
+      {
+        recommendedPackages: ["@mysten/dapp-kit-react", "@mysten/dapp-kit-core", "@mysten/sui"],
+        plannedNetworks: ["sui-testnet", "sui-mainnet"],
+        signingBoundary: "client_wallet",
+        docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
+      },
+      [{ id: "sui.dapp-kit-docs", label: "Sui dApp Kit docs", kind: "external_link", href: "https://sdk.mystenlabs.com/dapp-kit/getting-started/react" }],
+    ),
     custody: false,
     directConnect: false,
     publicRead: false,
@@ -1813,6 +1928,14 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       defaultModel: { providerId: "opencode", modelId: "big-pickle" },
       providerListSource: "opencode",
       selectedModelSource: "local_preferences",
+      routing: {
+        answerPath: "opencode_session_prompt_async",
+        modelListTool: "opencode_provider_list",
+        userSelectable: true,
+        selectionSurface: "model_picker",
+        preferenceStore: "local_preferences",
+        cloudProviderImport: true,
+      },
     },
     providers: {
       ...capability("working", "Provider discovery", "The app reads available models from OpenCode provider.list; Matterhorn Cloud providers can be imported separately."),
@@ -1882,12 +2005,14 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
+  const feedbackPath = projectFeedbackLogPath(workspace.id);
   const evidencePaths = [
     notesIndexPath,
     join(memoryRoot, "memory-suggestions.json"),
     taskEventsPath(workspace.id),
     workflowRunsPath,
     outputsPath,
+    feedbackPath,
   ];
 
   return {
@@ -2000,20 +2125,21 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       }),
       feedback: dataStore({
         id: "feedback",
-        ...capability("preview", "Feedback", "Feedback currently opens a user-facing feedback surface; structured product/eval feedback is not yet persisted here."),
-        scope: "unknown",
-        format: "external",
+        ...capability("working", "Feedback", "Structured user feedback is stored locally for evaluation, routing, and product quality only."),
+        scope: "machine_global",
+        path: feedbackPath,
+        format: "jsonl",
         containsUserContent: true,
-        containsSecrets: "unknown",
-        retention: "unknown",
-        exportable: false,
+        containsSecrets: "redacted",
+        retention: "append_only",
+        exportable: true,
         deletable: false,
       }),
     },
     policy: {
       trainingUse: "none_by_default",
       redaction: capability("working", "Redaction", "Memory, workflow, and market paths reject or redact known secret-shaped wallet/API/signature inputs."),
-      export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; a unified project export policy is still planned."),
+      export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; the project data ledger can be read as a unified JSON contract."),
       deletion: capability("preview", "Deletion", "Notes and memory records are user-deletable; append-only audit/task logs are retained for accountability."),
     },
   };
@@ -3333,6 +3459,54 @@ function createRoutes(
       source: parseProjectEvidenceSource(ctx.url.searchParams.get("source")?.trim() || null),
     });
     return jsonResponse({ success: true, items, count: items.length, summary });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/data-ledger", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const limitParam = ctx.url.searchParams.get("limit");
+    const parsed = limitParam ? Number(limitParam) : NaN;
+    const limit = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 300) : 100;
+    return jsonResponse(await buildProjectDataLedger({
+      workspace,
+      limit,
+      source: parseProjectDataLedgerSource(ctx.url.searchParams.get("source")?.trim() || null),
+      kind: parseProjectDataLedgerKind(ctx.url.searchParams.get("kind")?.trim() || null),
+    }));
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/feedback", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const requestBody = body.feedback && typeof body.feedback === "object" && !Array.isArray(body.feedback)
+      ? body.feedback
+      : body;
+    const feedback = coerceProjectFeedbackRequest(requestBody);
+    const serializedFeedback = JSON.stringify(feedback);
+    const entry = {
+      ...feedback,
+      id: shortId(),
+      workspaceId: workspace.id,
+      createdAt: new Date().toISOString(),
+      actor: ctx.actor ? { type: ctx.actor.type, scope: ctx.actor.scope } : { type: "remote" },
+      trainingUse: "eval_routing_product_quality_only" as const,
+      redactionApplied: serializedFeedback.includes("[redacted]"),
+    };
+
+    await recordProjectFeedback(entry);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.feedback.create",
+      target: projectFeedbackLogPath(workspace.id),
+      summary: `Recorded ${entry.kind} feedback for project data ledger`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({ success: true, feedback: entry }, 201);
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/data-map", "client", async (ctx) => {

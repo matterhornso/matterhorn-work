@@ -17,6 +17,12 @@ import type {
   MatterhornProjectEvidenceResponse,
 } from "@matterhorn-work/types/project-evidence";
 import type {
+  MatterhornProjectDataLedgerListOptions,
+  MatterhornProjectDataLedgerResponse,
+  MatterhornProjectFeedbackRequest,
+  MatterhornProjectFeedbackResponse,
+} from "@matterhorn-work/types/project-data-ledger";
+import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
@@ -1467,6 +1473,30 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         { token, hostToken },
       );
     },
+    listProjectDataLedger: (workspaceId: string, options?: MatterhornProjectDataLedgerListOptions) => {
+      const query = new URLSearchParams();
+      if (typeof options?.limit === "number") query.set("limit", String(options.limit));
+      if (options?.source) query.set("source", options.source);
+      if (options?.kind) query.set("kind", options.kind);
+      const suffix = query.size ? `?${query.toString()}` : "";
+      return requestJson<MatterhornProjectDataLedgerResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`,
+        { token, hostToken, timeoutMs: timeouts.status },
+      );
+    },
+    submitProjectFeedback: (workspaceId: string, feedback: MatterhornProjectFeedbackRequest) =>
+      requestJson<MatterhornProjectFeedbackResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/feedback`,
+        {
+          token,
+          hostToken,
+          method: "POST",
+          body: feedback,
+          timeoutMs: timeouts.config,
+        },
+      ),
     workspaceDataMap: (workspaceId: string) =>
       requestJson<MatterhornWorkspaceDataMapResponse>(
         baseUrl,

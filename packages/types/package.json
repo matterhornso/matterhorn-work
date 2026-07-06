@@ -63,6 +63,11 @@
       "development": "./src/project-evidence.ts",
       "default": "./src/project-evidence.ts"
     },
+    "./project-data-ledger": {
+      "types": "./src/project-data-ledger.ts",
+      "development": "./src/project-data-ledger.ts",
+      "default": "./src/project-data-ledger.ts"
+    },
     "./backend-capabilities": {
       "types": "./src/backend-capabilities.ts",
       "development": "./src/backend-capabilities.ts",

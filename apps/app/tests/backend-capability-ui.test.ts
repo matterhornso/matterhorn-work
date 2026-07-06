@@ -65,7 +65,7 @@ describe("Backend capability fixtures", () => {
     expect(f.wallets.families.bittensor.signing).toBe("external_signer");
     expect(f.wallets.families.bittensor.custody).toBe(false);
     const feedback = f.settings.find((s) => s.section === "feedback");
-    expect(feedback?.status).toBe("unsupported");
+    expect(feedback?.status).toBe("working");
   });
 
   test("needs_setup fixture marks profile and wallet", () => {
