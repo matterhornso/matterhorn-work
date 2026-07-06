@@ -112,7 +112,7 @@ type CustomerWorkflowTemplateResponse = {
 };
 
 const MARKET_HANDOFF_SUFFIX =
-  "Prepare an external trade handoff when asked. Make clear: Can submit: No, Live submission: Off, the user executes in their own external client, and Matterhorn never signs or holds keys.";
+  "Prepare an external trade handoff when asked. Make clear: Can submit: No. Live submission: Off. External trade handoff only. The user executes in their own external client, and Matterhorn never signs or holds keys.";
 
 const BITTENSOR_SUFFIX =
   "Use public wallet context only. Do not ask for seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports.";

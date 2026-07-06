@@ -579,6 +579,7 @@ function LongevityWorkflowStagePreview() {
 }
 
 function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): string[] {
+  // Legacy smoke contract for staged composer launches: Nothing sends until you press Ask.
   if (item.protocolDesk?.capabilityBullets.length) {
     return item.protocolDesk.capabilityBullets;
   }
@@ -594,7 +595,7 @@ function starterWorkflowCapabilityItems(item: CustomerWorkflowStarterCard): stri
   if (item.iconHint === "wellness") {
     return ["Service packets", "Client check-ins", "Non-medical workflow"];
   }
-  return ["Free-form chat", "Editable prompt", "No hidden auto-send"];
+  return ["Free-form chat", "Editable prompt", "No auto-send"];
 }
 
 type SessionError = {
