@@ -65,7 +65,7 @@ export const PROFILE_READINESS_SIGNED_IN: ProfileReadiness = {
   externalLinkLabels: [],
   stateCopy: {
     headline: "Account active",
-    body: "Preferences and memory are synced to your Matterhorn account.",
+    body: "Your cloud account is active. Local project memory stays on this device unless a workspace policy says otherwise.",
   },
 };
 
@@ -83,7 +83,7 @@ export const PROFILE_READINESS_CLOUD_UNCONFIGURED: ProfileReadiness = {
   externalLinkLabels: [],
   stateCopy: {
     headline: "Cloud sync paused",
-    body: "Sign in or configure cloud settings to sync preferences and memory.",
+    body: "Sign in or configure cloud settings to sync shared workspaces. Local project memory stays on this device.",
   },
 };
 
