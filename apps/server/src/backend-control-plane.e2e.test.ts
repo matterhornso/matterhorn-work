@@ -603,6 +603,26 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
     expect(result.payload.teams.localTokenSharing.status).toBe("working");
     expect(result.payload.teams.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.teamAccess.sharingMode).toMatchObject({
+      current: "local_tokens",
+      label: "Local token sharing",
+      sameInterface: true,
+      durableCloudTeams: false,
+      requiresReachableLocalServer: true,
+      cloudTeamsStatus: "needs_setup",
+    });
+    expect(result.payload.teamAccess.scopeCapabilities.viewer).toMatchObject({
+      scope: "viewer",
+      canReadWorkspace: true,
+      canWriteWorkspace: false,
+      canManageLocalTokens: false,
+    });
+    expect(result.payload.teamAccess.scopeCapabilities.collaborator).toMatchObject({
+      scope: "collaborator",
+      canReadWorkspace: true,
+      canWriteWorkspace: true,
+      canManageLocalTokens: false,
+    });
     expect(result.payload.teamAccess.policy).toMatchObject({
       secretsReturned: false,
       hostProtected: false,
@@ -732,6 +752,16 @@ describe("backend control plane routes", () => {
     expect(summary.response.status).toBe(200);
     expect(summary.payload.version).toBe("matterhorn.backend.team-access.v1");
     expect(summary.payload.localAccess.byScope.viewer).toBe(1);
+    expect(summary.payload.sharingMode).toMatchObject({
+      current: "local_tokens",
+      label: "Local token sharing",
+      sameInterface: true,
+      durableCloudTeams: false,
+      requiresReachableLocalServer: true,
+      cloudTeamsStatus: "needs_setup",
+    });
+    expect(summary.payload.scopeCapabilities.viewer.canWriteWorkspace).toBe(false);
+    expect(summary.payload.scopeCapabilities.collaborator.canWriteWorkspace).toBe(true);
     expect(summary.payload.policy).toMatchObject({
       secretsReturned: false,
       hostProtected: false,
@@ -754,6 +784,8 @@ describe("backend control plane routes", () => {
       ]),
     );
     expect(result.payload.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.sharingMode.limitations.join(" ")).toContain("not durable cloud org membership");
+    expect(result.payload.scopeCapabilities.owner.canManageLocalTokens).toBe(true);
     expect(result.payload.policy.secretsReturned).toBe(false);
     expect(result.payload.policy.hostProtected).toBe(true);
 

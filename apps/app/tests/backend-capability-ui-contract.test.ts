@@ -256,6 +256,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.workspaceTeamAccess(workspaceId)");
     expect(source).toContain("TeamAccessControls");
     expect(source).toContain("Token details stay host-protected.");
+    expect(source).toContain("teamAccessSummaryQuery.data.sharingMode.label");
+    expect(source).toContain("props.summary?.sharingMode.description");
+    expect(source).toContain("props.summary?.scopeCapabilities");
+    expect(source).toContain("capability.canWriteWorkspace");
     expect(source).toContain("createWorkspaceTeamAccessToken");
     expect(source).toContain("revokeWorkspaceTeamAccessToken");
     expect(source).toContain("Local access token created. Copy it now; it will not be shown again.");
