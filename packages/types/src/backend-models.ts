@@ -1,6 +1,7 @@
 import type { MatterhornCapability } from "./backend-capabilities.js";
 
 export const MATTERHORN_BACKEND_MODELS_VERSION = "matterhorn.backend.models.v1" as const;
+export const MATTERHORN_BACKEND_MODEL_SELECTION_VERSION = "matterhorn.backend.model-selection.v1" as const;
 
 export type MatterhornBackendModelListSource =
   | "opencode_provider_list"
@@ -10,6 +11,50 @@ export type MatterhornBackendModelListSource =
 export interface MatterhornBackendModelRef {
   providerId: string;
   modelId: string;
+}
+
+export type MatterhornBackendModelSelectionSource =
+  | "server_workspace_preference"
+  | "server_default"
+  | "local_preferences"
+  | "unknown";
+
+export interface MatterhornBackendModelSelectionRecord extends MatterhornBackendModelRef {
+  source: "server_workspace_preference";
+  savedAt: string;
+  savedBy?: {
+    type: string;
+    scope?: string;
+  };
+}
+
+export interface MatterhornBackendModelSelectionRequest extends MatterhornBackendModelRef {}
+
+export interface MatterhornBackendModelSelectionResponse {
+  success: true;
+  version: typeof MATTERHORN_BACKEND_MODEL_SELECTION_VERSION;
+  generatedAt: string;
+  workspace: {
+    id: string;
+    name: string;
+    type: "local" | "remote";
+  };
+  selection: MatterhornBackendModelSelectionRecord | null;
+  effectiveModel: MatterhornBackendModelRef & {
+    source: Extract<MatterhornBackendModelSelectionSource, "server_workspace_preference" | "server_default">;
+  };
+  storage: MatterhornCapability & {
+    scope: "workspace";
+    path: string;
+    containsSecrets: false;
+    auditLogged: boolean;
+  };
+  policy: {
+    storesCredentials: false;
+    userSelectable: true;
+    writeRequires: Array<"collaborator" | "writable_server">;
+    feedbackTrainingUse: "none_by_default";
+  };
 }
 
 export type MatterhornBackendModelCatalogErrorCode =
@@ -62,8 +107,9 @@ export interface MatterhornBackendModelsResponse {
   version: typeof MATTERHORN_BACKEND_MODELS_VERSION;
   generatedAt: string;
   defaultModel: MatterhornBackendModelRef & {
-    source: "server_default" | "local_preferences" | "unknown";
+    source: MatterhornBackendModelSelectionSource;
   };
+  workspaceSelection?: MatterhornBackendModelSelectionRecord | null;
   catalog: MatterhornBackendModelCatalogSnapshot;
   routing: MatterhornBackendModelRouting;
   privacy: {

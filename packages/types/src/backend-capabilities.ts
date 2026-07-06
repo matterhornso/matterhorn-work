@@ -174,6 +174,7 @@ export interface MatterhornWorkspaceDataMapResponse {
   stores: Record<
     | "chat"
     | "notes"
+    | "modelPreferences"
     | "memory"
     | "outputs"
     | "audit"

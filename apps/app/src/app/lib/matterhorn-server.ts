@@ -29,7 +29,11 @@ import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
-import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
+import type {
+  MatterhornBackendModelSelectionRequest,
+  MatterhornBackendModelSelectionResponse,
+  MatterhornBackendModelsResponse,
+} from "@matterhorn-work/types/backend-models";
 import type {
   MatterhornBackendTeamAccessResponse,
   MatterhornBackendTeamAccessSummaryResponse,
@@ -1324,6 +1328,24 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/models`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceModelSelection: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    saveWorkspaceModelSelection: (workspaceId: string, body: MatterhornBackendModelSelectionRequest) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, method: "PATCH", body, timeoutMs: timeouts.capabilities },
+      ),
+    clearWorkspaceModelSelection: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelSelectionResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/model-selection`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.capabilities },
       ),
     workspaceReadiness: (workspaceId: string) =>
       requestJson<MatterhornBackendReadinessResponse>(

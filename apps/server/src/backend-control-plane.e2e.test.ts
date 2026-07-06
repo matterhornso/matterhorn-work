@@ -342,6 +342,108 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Basic ");
   });
 
+  test("workspace model selection persists, clears, audits, and enforces write guards", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [{
+        id: "openai",
+        name: "OpenAI",
+        source: "api",
+        models: {
+          "gpt-4.1": { name: "GPT 4.1" },
+          "gpt-4.1-mini": { name: "GPT 4.1 Mini" },
+        },
+      }],
+      default: { openai: "gpt-4.1-mini" },
+      connected: ["openai"],
+    });
+    const { base, dir } = await boot({ opencodeBaseUrl });
+
+    const initial = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection");
+    expect(initial.response.status).toBe(200);
+    expect(initial.payload.version).toBe("matterhorn.backend.model-selection.v1");
+    expect(initial.payload.selection).toBe(null);
+    expect(initial.payload.effectiveModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1-mini",
+      source: "server_default",
+    });
+    expect(initial.payload.storage.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
+    expect(initial.payload.storage.containsSecrets).toBe(false);
+
+    const viewer = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Model viewer" }),
+    });
+    const deniedViewer = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+    }, viewer.payload.token);
+    expect(deniedViewer.response.status).toBe(403);
+
+    const invalid = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "seed phrase should not be here" }),
+    });
+    expect(invalid.response.status).toBe(400);
+
+    const saved = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+    });
+    expect(saved.response.status).toBe(200);
+    expect(saved.payload.selection).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1",
+      source: "server_workspace_preference",
+    });
+    expect(saved.payload.effectiveModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1",
+      source: "server_workspace_preference",
+    });
+    expect(saved.payload.policy).toMatchObject({
+      storesCredentials: false,
+      userSelectable: true,
+      feedbackTrainingUse: "none_by_default",
+    });
+
+    const models = await jsonFetch(base, "/workspace/ws_backend/backend/models");
+    expect(models.payload.defaultModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1",
+      source: "server_workspace_preference",
+    });
+    expect(models.payload.routing.selection.preferenceStore).toBe("server");
+    expect(models.payload.routing.selection.serverPersisted).toBe(true);
+
+    const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=10");
+    expect(audit.payload.items).toContainEqual(expect.objectContaining({
+      action: "workspace.model_selection.update",
+      target: "openai/gpt-4.1",
+    }));
+
+    const reset = await jsonFetch(base, "/workspace/ws_backend/backend/model-selection", { method: "DELETE" });
+    expect(reset.response.status).toBe(200);
+    expect(reset.payload.selection).toBe(null);
+    expect(reset.payload.effectiveModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1-mini",
+      source: "server_default",
+    });
+
+    const readOnly = await boot({ readOnly: true, opencodeBaseUrl });
+    const deniedReadOnly = await jsonFetch(readOnly.base, "/workspace/ws_backend/backend/model-selection", {
+      method: "PATCH",
+      body: JSON.stringify({ providerId: "openai", modelId: "gpt-4.1" }),
+    });
+    expect(deniedReadOnly.response.status).toBe(403);
+
+    const serialized = JSON.stringify({ initial: initial.payload, saved: saved.payload, reset: reset.payload });
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export|bearer token/i);
+  });
+
   test("GET /workspace/:id/backend/readiness reports workspace action blockers", async () => {
     const { base } = await boot();
 
@@ -858,6 +960,9 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.memory.details.workspaceRoutes).toContain("/workspace/ws_backend/memory/capture");
     expect(result.payload.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
     expect(result.payload.stores.chat.scope).toBe("opencode_runtime");
+    expect(result.payload.stores.modelPreferences.scope).toBe("workspace");
+    expect(result.payload.stores.modelPreferences.path).toBe(join(dir, ".matterhorn-work", "models", "selection.json"));
+    expect(result.payload.stores.modelPreferences.containsSecrets).toBe("never");
     expect(result.payload.stores.outputs.path).toBe(join(dir, "outputs"));
     expect(result.payload.stores.feedback.scope).toBe("machine_global");
     expect(result.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_backend.jsonl"));
@@ -913,6 +1018,16 @@ describe("backend control plane routes", () => {
       href: "/workspace/ws_backend/memory/entities/:memoryId",
       destructive: true,
     }));
+    expect(result.payload.stores.modelPreferences.export.actions[0]).toMatchObject({
+      id: "model-preference.read",
+      method: "GET",
+      href: "/workspace/ws_backend/backend/model-selection",
+    });
+    expect(result.payload.stores.modelPreferences.deletion.actions[0]).toMatchObject({
+      id: "model-preference.clear",
+      method: "DELETE",
+      destructive: true,
+    });
     expect(result.payload.stores.feedback.retention.mode).toBe("user_controlled");
     expect(result.payload.stores.feedback.deletion.status).toBe("working");
     expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({

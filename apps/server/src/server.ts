@@ -262,6 +262,7 @@ import type {
   MatterhornBackendModelCatalogErrorCode,
   MatterhornBackendModelCatalogSnapshot,
   MatterhornBackendModelProviderSummary,
+  MatterhornBackendModelSelectionRequest,
 } from "@matterhorn-work/types/backend-models";
 import type {
   MatterhornBackendReadinessCheck,
@@ -307,7 +308,14 @@ import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
-import { buildBackendModels } from "./backend-models.js";
+import {
+  buildBackendModels,
+  buildWorkspaceModelSelectionResponse,
+  clearWorkspaceModelSelection,
+  readWorkspaceModelSelection,
+  workspaceModelSelectionPath,
+  writeWorkspaceModelSelection,
+} from "./backend-models.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
 import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
 import { deleteAllProjectFeedbackEntries, deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
@@ -1054,6 +1062,7 @@ function unavailableBackendModelCatalog(
 }
 
 async function buildWorkspaceBackendModels(config: ServerConfig, workspace: WorkspaceInfo) {
+  const selection = await readWorkspaceModelSelection(workspace).catch(() => null);
   try {
     const opencode = createWorkspaceOpencodeClient(config, workspace);
     const directory = resolveOpencodeDirectory(workspace) ?? undefined;
@@ -1063,7 +1072,7 @@ async function buildWorkspaceBackendModels(config: ServerConfig, workspace: Work
       }),
       "/provider",
     );
-    return buildBackendModels({ catalog: providerListToBackendModelCatalog(providerList) });
+    return buildBackendModels({ catalog: providerListToBackendModelCatalog(providerList), selection });
   } catch (error) {
     const errorCode: MatterhornBackendModelCatalogErrorCode =
       error instanceof ApiError && error.code === "opencode_unconfigured"
@@ -1071,7 +1080,7 @@ async function buildWorkspaceBackendModels(config: ServerConfig, workspace: Work
         : error instanceof ApiError && error.code === "opencode_request_failed"
           ? "opencode_request_failed"
           : "unknown";
-    return buildBackendModels({ catalog: unavailableBackendModelCatalog(errorCode) });
+    return buildBackendModels({ catalog: unavailableBackendModelCatalog(errorCode), selection });
   }
 }
 
@@ -2374,6 +2383,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const workflowRunsPath = join(workspace.path, ".matterhorn-work", "task-logs", workspace.id);
   const outputsPath = join(workspace.path, "outputs");
   const walletEvidencePath = join(outputsPath, "sui");
+  const modelPreferencePath = workspaceModelSelectionPath(workspace);
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
@@ -2385,6 +2395,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     taskEventsPath(workspace.id),
     workflowRunsPath,
     walletEvidencePath,
+    modelPreferencePath,
     outputsPath,
     feedbackPath,
   ];
@@ -2412,6 +2423,25 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         retention: "runtime_controlled",
         exportable: false,
         deletable: false,
+      }),
+      modelPreferences: dataStore({
+        id: "modelPreferences",
+        ...capability(
+          existsSync(modelPreferencePath) ? "working" : "preview",
+          "Model preference",
+          "The workspace default model stores only provider/model identifiers. Provider credentials stay in the provider connection layer.",
+          {
+            route: `/workspace/${workspace.id}/backend/model-selection`,
+          },
+        ),
+        scope: "workspace",
+        path: modelPreferencePath,
+        format: "json",
+        containsUserContent: false,
+        containsSecrets: "never",
+        retention: "user_controlled",
+        exportable: true,
+        deletable: true,
       }),
       notes: dataStore({
         id: "notes",
@@ -2600,6 +2630,7 @@ function buildDataControlStore(
 ): MatterhornDataControlStore {
   const storeId = store.id as MatterhornDataControlStoreId;
   const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
+  const modelSelectionRoute = `/workspace/${encodeURIComponent(workspace.id)}/backend/model-selection`;
   const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
   const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
 
@@ -2620,7 +2651,42 @@ function buildDataControlStore(
     actions: [],
   });
 
-  if (storeId === "notes") {
+  if (storeId === "modelPreferences") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Model selection API",
+      summary: "The workspace default model can be read without returning provider credentials.",
+      actions: [
+        dataControlAction({
+          id: "model-preference.read",
+          label: "Read model preference",
+          description: "Returns the saved provider/model identifiers and the effective fallback model.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: modelSelectionRoute,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "working",
+      label: "Reset workspace default",
+      summary: "Collaborators can clear the workspace default model and fall back to the server default.",
+      actions: [
+        dataControlAction({
+          id: "model-preference.clear",
+          label: "Reset model preference",
+          description: "Clears the saved workspace model preference and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: modelSelectionRoute,
+          destructive: true,
+          requirements: ["collaborator", "writable_server"],
+        }),
+      ],
+    });
+  } else if (storeId === "notes") {
     exportCapability = dataControlCapability({
       status: "working",
       label: "Notes API",
@@ -4086,6 +4152,80 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/models", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(await buildWorkspaceBackendModels(config, workspace));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection: models.workspaceSelection ?? null,
+    }));
+  });
+
+  addRoute(routes, "PATCH", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request) as Partial<MatterhornBackendModelSelectionRequest>;
+    let selection;
+    try {
+      selection = await writeWorkspaceModelSelection(workspace, {
+        providerId: body.providerId,
+        modelId: body.modelId,
+      } as MatterhornBackendModelSelectionRequest, ctx.actor ?? { type: "remote" });
+    } catch (error) {
+      throw new ApiError(400, "invalid_model_selection", error instanceof Error ? error.message : "Invalid model selection");
+    }
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.model_selection.update",
+      target: `${selection.providerId}/${selection.modelId}`,
+      summary: "Updated workspace default model",
+      timestamp: Date.now(),
+    });
+
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection,
+      auditLogged: true,
+    }));
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/backend/model-selection", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const existing = await readWorkspaceModelSelection(workspace);
+    const cleared = await clearWorkspaceModelSelection(workspace);
+    if (cleared) {
+      await recordAudit(workspace.path, {
+        id: shortId(),
+        workspaceId: workspace.id,
+        actor: ctx.actor ?? { type: "remote" },
+        action: "workspace.model_selection.clear",
+        target: existing ? `${existing.providerId}/${existing.modelId}` : "workspace_default_model",
+        summary: "Cleared workspace default model",
+        timestamp: Date.now(),
+      });
+    }
+
+    const models = await buildWorkspaceBackendModels(config, workspace);
+    const fallbackModels = buildBackendModels({ catalog: models.catalog });
+    return jsonResponse(buildWorkspaceModelSelectionResponse({
+      workspace,
+      fallbackModel: fallbackModels.defaultModel,
+      selection: null,
+      auditLogged: cleared,
+    }));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/readiness", "client", async (ctx) => {

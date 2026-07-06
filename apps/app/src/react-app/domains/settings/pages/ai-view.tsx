@@ -1,6 +1,6 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { t } from "@/i18n";
@@ -35,6 +35,8 @@ export type AiSettingsViewProps = {
   runtimeWorkspaceId?: string | null;
   defaultModelLabel: string;
   defaultModelRef: string;
+  defaultModelProviderId?: string | null;
+  defaultModelId?: string | null;
   connectedModelCount: number;
   providerStatusLabel: string;
   providerStatusStyle: string;
@@ -89,6 +91,7 @@ function catalogStatusLabel(status: string | undefined) {
 
 export function AiSettingsView(props: AiSettingsViewProps) {
   const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const queryClient = useQueryClient();
   const workspaceBackendModelsQuery = useQuery({
     queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
     enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
@@ -109,15 +112,63 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       return client.backendModels();
     },
   });
+  const workspaceModelSelectionQuery = useQuery({
+    queryKey: ["settings-workspace-model-selection", runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.workspaceModelSelection(runtimeWorkspaceId);
+    },
+  });
+  const saveWorkspaceDefaultMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      const providerId = props.defaultModelProviderId?.trim();
+      const modelId = props.defaultModelId?.trim();
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      if (!providerId || !modelId) throw new Error("Choose a model before saving a workspace default.");
+      return client.saveWorkspaceModelSelection(runtimeWorkspaceId, { providerId, modelId });
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+    },
+  });
+  const clearWorkspaceDefaultMutation = useMutation({
+    mutationFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.clearWorkspaceModelSelection(runtimeWorkspaceId);
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings-workspace-model-selection", runtimeWorkspaceId], data);
+      void queryClient.invalidateQueries({ queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId] });
+    },
+  });
   const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
   const modelRouting = backendModels?.routing;
   const catalog = backendModels?.catalog;
+  const workspaceSelection = workspaceModelSelectionQuery.data?.selection ?? backendModels?.workspaceSelection ?? null;
+  const effectiveWorkspaceModel = workspaceModelSelectionQuery.data?.effectiveModel ?? backendModels?.defaultModel ?? null;
   const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
   const catalogTone = catalogQueryFailed ? "warning" : catalogStatusTone(catalog?.status);
   const catalogLabel = catalogQueryFailed ? "Needs engine" : catalogStatusLabel(catalog?.status);
   const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
   const connectedModelCount = catalog?.serverFetched ? catalog.modelCount : props.connectedModelCount;
   const catalogSourceLabel = catalog?.serverFetched ? "Server snapshot" : "Delegated";
+  const canSaveWorkspaceDefault = Boolean(props.defaultModelProviderId && props.defaultModelId && props.matterhornServerClient && runtimeWorkspaceId);
+  const modelSelectionStatus =
+    saveWorkspaceDefaultMutation.error instanceof Error
+      ? saveWorkspaceDefaultMutation.error.message
+      : clearWorkspaceDefaultMutation.error instanceof Error
+        ? clearWorkspaceDefaultMutation.error.message
+        : saveWorkspaceDefaultMutation.isSuccess
+          ? "Workspace default saved."
+          : clearWorkspaceDefaultMutation.isSuccess
+            ? "Workspace default reset."
+            : null;
 
   return (
     <LayoutStack>
@@ -143,12 +194,38 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               <Button variant="outline" onClick={() => void props.onOpenModelPicker()} disabled={props.busy}>
                 Change model
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => saveWorkspaceDefaultMutation.mutate()}
+                disabled={props.busy || !canSaveWorkspaceDefault || saveWorkspaceDefaultMutation.isPending}
+              >
+                Save workspace default
+              </Button>
+              {workspaceSelection ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => clearWorkspaceDefaultMutation.mutate()}
+                  disabled={props.busy || clearWorkspaceDefaultMutation.isPending}
+                >
+                  Reset
+                </Button>
+              ) : null}
             </LayoutSectionItemHeaderActions>
           </LayoutSectionItemHeader>
           <div className="mt-3 grid gap-2 text-sm text-dls-secondary sm:grid-cols-2">
             <div>
               <span className="text-dls-text">Model</span>
               <span className="ml-2 font-mono text-xs">{props.defaultModelRef}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Workspace default</span>
+              <span className="ml-2 font-mono text-xs">
+                {workspaceSelection
+                  ? `${workspaceSelection.providerId}/${workspaceSelection.modelId}`
+                  : effectiveWorkspaceModel
+                    ? `${effectiveWorkspaceModel.providerId}/${effectiveWorkspaceModel.modelId}`
+                    : "Not saved"}
+              </span>
             </div>
             <div>
               <span className="text-dls-text">Connected</span>
@@ -174,6 +251,10 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               <span className="text-dls-text">Catalog</span>
               <span className="ml-2">{catalogSourceLabel}</span>
             </div>
+            <div>
+              <span className="text-dls-text">Preference store</span>
+              <span className="ml-2">{modelRouting?.selection.preferenceStore === "server" ? "Workspace" : "Local app"}</span>
+            </div>
             {catalog?.connectedProviderIds.length ? (
               <div>
                 <span className="text-dls-text">Providers</span>
@@ -186,6 +267,9 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               ? "No model training by default. Feedback is stored for eval, routing, and product quality only."
               : "Training policy is unavailable."}
           </p>
+          {modelSelectionStatus ? (
+            <p className="mt-2 text-xs leading-5 text-dls-secondary">{modelSelectionStatus}</p>
+          ) : null}
         </LayoutSectionItem>
       </LayoutSection>
 

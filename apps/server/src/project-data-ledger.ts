@@ -127,18 +127,26 @@ function chatAuditTitle(action: string): string | null {
   return null;
 }
 
+function modelSelectionAuditTitle(action: string): string | null {
+  if (action === "workspace.model_selection.update") return "Workspace model updated";
+  if (action === "workspace.model_selection.clear") return "Workspace model reset";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
   const memoryTitle = memoryAuditTitle(entry.action);
   const teamAccessTitle = teamAccessAuditTitle(entry.action);
   const walletTitle = walletAuditTitle(entry.action);
   const chatTitle = chatAuditTitle(entry.action);
-  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? chatTitle ?? entry.action);
+  const modelSelectionTitle = modelSelectionAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? chatTitle ?? modelSelectionTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);
   const isMemoryAudit = Boolean(memoryTitle);
   const isTeamAccessAudit = Boolean(teamAccessTitle);
   const isWalletAudit = Boolean(walletTitle);
   const isChatAudit = Boolean(chatTitle);
+  const isModelSelectionAudit = Boolean(modelSelectionTitle);
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
@@ -167,15 +175,15 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
     sessionId: isChatAudit ? target.value : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit,
-    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit ? "redacted" : "never",
+    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit,
+    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
     redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
-    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit
+    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit
       ? {
         auditAction: entry.action,
         target: target.value ?? null,
