@@ -26,17 +26,41 @@ function fallbackCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): Matte
   };
 }
 
+function defaultModelForCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): MatterhornBackendModelsResponse["defaultModel"] {
+  const fallback = {
+    providerId: "opencode",
+    modelId: "big-pickle",
+    source: "server_default" as const,
+  };
+  if (!catalog?.serverFetched) return fallback;
+
+  const providerIds = [
+    ...catalog.connectedProviderIds,
+    ...Object.keys(catalog.defaultModels).sort((a, b) => a.localeCompare(b)),
+  ];
+  for (const providerId of providerIds) {
+    const modelId = catalog.defaultModels[providerId]?.trim();
+    if (!modelId) continue;
+    const provider = catalog.providers.find((candidate) => candidate.id === providerId);
+    if (!provider || provider.modelCount === 0) continue;
+    return {
+      providerId,
+      modelId,
+      source: "server_default",
+    };
+  }
+
+  return fallback;
+}
+
 export function buildBackendModels(input: { catalog?: MatterhornBackendModelCatalogSnapshot } = {}): MatterhornBackendModelsResponse {
+  const catalog = fallbackCatalog(input.catalog);
   return {
     success: true,
     version: "matterhorn.backend.models.v1",
     generatedAt: new Date().toISOString(),
-    defaultModel: {
-      providerId: "opencode",
-      modelId: "big-pickle",
-      source: "server_default",
-    },
-    catalog: fallbackCatalog(input.catalog),
+    defaultModel: defaultModelForCatalog(catalog),
+    catalog,
     routing: {
       answerPath: {
         ...capability(

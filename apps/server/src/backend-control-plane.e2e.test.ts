@@ -330,6 +330,11 @@ describe("backend control plane routes", () => {
       modelCount: 3,
       sampleModels: ["claude-3-haiku", "claude-3-opus", "claude-3-sonnet"],
     });
+    expect(result.payload.defaultModel).toMatchObject({
+      providerId: "anthropic",
+      modelId: "claude-3-sonnet",
+      source: "server_default",
+    });
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
@@ -524,6 +529,11 @@ describe("backend control plane routes", () => {
       connected: true,
       modelCount: 2,
       sampleModels: ["gpt-4.1", "gpt-4.1-mini"],
+    });
+    expect(result.payload.models.defaultModel).toMatchObject({
+      providerId: "openai",
+      modelId: "gpt-4.1-mini",
+      source: "server_default",
     });
 
     const serialized = JSON.stringify(result.payload);
