@@ -1,4 +1,5 @@
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
+import type { MatterhornBackendModelsResponse } from "./backend-models.js";
 import type {
   MatterhornProjectDataLedgerExportControlPlaneSnapshot,
   MatterhornProjectDataLedgerExportResponse,
@@ -14,6 +15,23 @@ export interface MatterhornBackendSupportReportResponse {
   filename: string;
   workspace: MatterhornProjectDataLedgerExportControlPlaneSnapshot["workspace"];
   controlPlane: MatterhornProjectDataLedgerExportControlPlaneSnapshot;
+  models: {
+    defaultModel: MatterhornBackendModelsResponse["defaultModel"];
+    routing: MatterhornBackendModelsResponse["routing"];
+    catalog: Pick<
+      MatterhornBackendModelsResponse["catalog"],
+      | "status"
+      | "label"
+      | "description"
+      | "source"
+      | "serverFetched"
+      | "providerCount"
+      | "connectedProviderCount"
+      | "modelCount"
+      | "connectedProviderIds"
+      | "errorCode"
+    >;
+  };
   dataLedger: {
     version: MatterhornProjectDataLedgerResponse["version"];
     generatedAt: string;

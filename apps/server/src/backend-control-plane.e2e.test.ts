@@ -443,6 +443,15 @@ describe("backend control plane routes", () => {
     expect(result.payload.controlPlane.capabilities).toBeUndefined();
     expect(result.payload.controlPlane.models).toBeUndefined();
     expect(result.payload.controlPlane.dataMap).toBeUndefined();
+    expect(result.payload.models.defaultModel).toMatchObject({
+      providerId: "opencode",
+      modelId: "big-pickle",
+    });
+    expect(result.payload.models.routing.answerPath.transport).toBe("opencode_session_prompt_async");
+    expect(result.payload.models.routing.selection.preferenceStore).toBe("local_preferences");
+    expect(result.payload.models.catalog.source).toBe("opencode_provider_list");
+    expect(result.payload.models.catalog.providerCount).toBe(0);
+    expect(result.payload.models.catalog.providers).toBeUndefined();
     expect(result.payload.dataLedger.version).toBe("matterhorn.project-data-ledger.v1");
     expect(result.payload.dataLedger.summary.feedback).toBeGreaterThanOrEqual(1);
     expect(result.payload.dataLedger.export.href).toBe("/workspace/ws_backend/data-ledger/export");

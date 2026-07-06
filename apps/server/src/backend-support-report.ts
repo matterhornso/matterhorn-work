@@ -40,6 +40,22 @@ export async function buildBackendSupportReport(options: {
     filename: `matterhorn-backend-support-${safeExportFilePart(options.workspace.id)}-${generatedAt.slice(0, 10)}.json`,
     workspace: controlPlaneSnapshot.workspace,
     controlPlane: controlPlaneSnapshot,
+    models: {
+      defaultModel: options.controlPlane.models.defaultModel,
+      routing: options.controlPlane.models.routing,
+      catalog: {
+        status: options.controlPlane.models.catalog.status,
+        label: options.controlPlane.models.catalog.label,
+        description: options.controlPlane.models.catalog.description,
+        source: options.controlPlane.models.catalog.source,
+        serverFetched: options.controlPlane.models.catalog.serverFetched,
+        providerCount: options.controlPlane.models.catalog.providerCount,
+        connectedProviderCount: options.controlPlane.models.catalog.connectedProviderCount,
+        modelCount: options.controlPlane.models.catalog.modelCount,
+        connectedProviderIds: options.controlPlane.models.catalog.connectedProviderIds,
+        errorCode: options.controlPlane.models.catalog.errorCode,
+      },
+    },
     dataLedger: {
       version: ledgerExport.ledger.version,
       generatedAt: ledgerExport.ledger.generatedAt,
