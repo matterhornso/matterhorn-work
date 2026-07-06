@@ -425,6 +425,7 @@ function DataPolicySection(props: {
     .map((store) => props.controls?.stores[store.id as keyof MatterhornWorkspaceDataControlsResponse["stores"]])
     .filter((control): control is MatterhornDataControlStore => Boolean(control))
     .slice(0, 4);
+  const retentionPolicy = props.controls?.policy.retention ?? props.dataMap.policy.retention;
 
   return (
     <div className="px-1 py-3">
@@ -432,7 +433,7 @@ function DataPolicySection(props: {
         <p className="text-sm font-medium text-dls-text">Storage and retention</p>
         <StatusBadge tone="ready">{workspaceDataPolicySummary(props.dataMap)}</StatusBadge>
       </div>
-      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+      <div className="mb-4 grid gap-2 lg:grid-cols-3">
         <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-dls-text">Model training</p>
@@ -463,6 +464,15 @@ function DataPolicySection(props: {
           ) : props.feedbackPolicySaving ? (
             <p className="mt-2 text-[11px] leading-4 text-dls-secondary">Saving...</p>
           ) : null}
+        </div>
+        <div className="rounded-lg bg-dls-surface-muted/20 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-dls-text">Append-only history</p>
+            <StatusBadge>{retentionPolicy.label}</StatusBadge>
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-dls-secondary">
+            {retentionPolicy.windowLabel} Export through the project ledger.
+          </p>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -515,7 +525,7 @@ function DataPolicySection(props: {
         </div>
       ) : null}
       <p className="mt-3 text-xs leading-5 text-dls-secondary">
-        User-controlled stores can be managed from their own surfaces. Append-only rows are retained for accountability and are included in ledger export where available.
+        User-controlled stores can be managed from their own surfaces. {retentionPolicy.summary}
       </p>
     </div>
   );

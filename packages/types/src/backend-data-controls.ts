@@ -4,7 +4,7 @@ import type {
   MatterhornDataStoreDescriptor,
   MatterhornWorkspaceDataMapResponse,
 } from "./backend-capabilities.js";
-import type { MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
+import type { MatterhornWorkspaceAppendOnlyRetentionPolicy, MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
 
 export const MATTERHORN_BACKEND_DATA_CONTROLS_VERSION = "matterhorn.backend.data-controls.v1" as const;
 
@@ -82,6 +82,7 @@ export interface MatterhornWorkspaceDataControlsResponse {
     trainingUse: "none_by_default" | "opt_in_only" | "unknown";
     feedbackUse: MatterhornWorkspaceFeedbackUse;
     redaction: MatterhornCapability;
+    retention: MatterhornCapability & MatterhornWorkspaceAppendOnlyRetentionPolicy;
     export: MatterhornCapability;
     deletion: MatterhornCapability;
     limitations: string[];

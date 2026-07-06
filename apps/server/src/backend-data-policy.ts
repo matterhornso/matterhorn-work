@@ -3,6 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type {
+  MatterhornWorkspaceAppendOnlyRetentionMode,
+  MatterhornWorkspaceAppendOnlyRetentionPolicy,
   MatterhornWorkspaceDataPolicyRecord,
   MatterhornWorkspaceDataPolicyResponse,
   MatterhornWorkspaceDataPolicyUpdateRequest,
@@ -15,10 +17,30 @@ export function workspaceDataPolicyPath(workspace: WorkspaceInfo): string {
   return join(workspace.path, ".matterhorn-work", "privacy", "data-policy.json");
 }
 
+function normalizeAppendOnlyRetention(value: unknown): MatterhornWorkspaceAppendOnlyRetentionMode {
+  if (value === "accountability_default") return value;
+  return "accountability_default";
+}
+
+export function buildAppendOnlyRetentionPolicy(workspaceId: string): MatterhornWorkspaceAppendOnlyRetentionPolicy {
+  return {
+    mode: "accountability_default",
+    label: "Accountability default",
+    summary: "Audit, task event, and workflow run rows are append-only local records retained for accountability and exported through the project ledger.",
+    stores: ["audit", "taskEvents", "workflowRuns"],
+    exportRoute: `/workspace/${encodeURIComponent(workspaceId)}/data-ledger/export`,
+    windowDays: null,
+    windowLabel: "No automatic purge window in this local build.",
+    purgeSupported: false,
+    configurable: false,
+  };
+}
+
 function defaultDataPolicyRecord(): MatterhornWorkspaceDataPolicyRecord {
   return {
     version: "matterhorn.backend.data-policy.v1",
     feedbackUse: "eval_routing_product_quality_only",
+    appendOnlyRetention: "accountability_default",
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -41,6 +63,7 @@ function normalizeDataPolicyRecord(value: unknown): MatterhornWorkspaceDataPolic
   return {
     version: "matterhorn.backend.data-policy.v1",
     feedbackUse: normalizeFeedbackUse(record.feedbackUse),
+    appendOnlyRetention: normalizeAppendOnlyRetention(record.appendOnlyRetention),
     updatedAt,
     ...(updatedBy ? { updatedBy } : {}),
   };
@@ -70,6 +93,7 @@ export function buildWorkspaceDataPolicyResponse(workspace: WorkspaceInfo): Matt
   const path = workspaceDataPolicyPath(workspace);
   const record = readWorkspaceDataPolicySync(workspace);
   const feedbackEnabled = record.feedbackUse !== "disabled";
+  const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
 
   return {
     success: true,
@@ -88,6 +112,7 @@ export function buildWorkspaceDataPolicyResponse(workspace: WorkspaceInfo): Matt
     policy: {
       trainingUse: "none_by_default",
       feedbackUse: record.feedbackUse,
+      appendOnlyRetention,
       secretsReturned: false,
     },
     controls: {
@@ -108,6 +133,11 @@ export function buildWorkspaceDataPolicyResponse(workspace: WorkspaceInfo): Matt
         enabled: feedbackEnabled,
         route: `/workspace/${encodeURIComponent(workspace.id)}/feedback`,
       },
+      retention: {
+        status: "working",
+        description: appendOnlyRetention.summary,
+        ...appendOnlyRetention,
+      },
     },
     updatedAt: record.updatedAt,
     updatedBy: record.updatedBy,
@@ -123,6 +153,7 @@ export async function writeWorkspaceDataPolicy(
   const next: MatterhornWorkspaceDataPolicyRecord = {
     version: "matterhorn.backend.data-policy.v1",
     feedbackUse: request.feedbackUse ? normalizeFeedbackUse(request.feedbackUse) : current.feedbackUse,
+    appendOnlyRetention: current.appendOnlyRetention,
     updatedAt: new Date().toISOString(),
     ...(updatedBy ? { updatedBy: updatedBy.slice(0, 80) } : {}),
   };

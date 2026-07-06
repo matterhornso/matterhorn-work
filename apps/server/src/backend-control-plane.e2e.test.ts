@@ -1073,9 +1073,13 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(result.payload.stores.audit.retention.mode).toBe("append_only");
+    expect(result.payload.policy.retention.mode).toBe("accountability_default");
+    expect(result.payload.policy.retention.stores).toEqual(["audit", "taskEvents", "workflowRuns"]);
+    expect(result.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/data-ledger/export");
+    expect(result.payload.policy.retention.purgeSupported).toBe(false);
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
     expect(result.payload.policy.feedbackUse).toBe("eval_routing_product_quality_only");
-    expect(result.payload.policy.limitations.join(" ")).toContain("Bulk deletion is currently limited to feedback");
+    expect(result.payload.policy.limitations.join(" ")).toContain("Append-only audit, task event, and workflow run rows do not have a purge endpoint");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
@@ -1093,12 +1097,23 @@ describe("backend control plane routes", () => {
       feedbackUse: "eval_routing_product_quality_only",
       secretsReturned: false,
     });
+    expect(initial.payload.policy.appendOnlyRetention).toMatchObject({
+      mode: "accountability_default",
+      exportRoute: "/workspace/ws_backend/data-ledger/export",
+      purgeSupported: false,
+      configurable: false,
+    });
     expect(initial.payload.controls.modelTraining).toMatchObject({
       status: "unsupported",
       configurable: false,
       rlTraining: false,
     });
     expect(initial.payload.controls.feedback.enabled).toBe(true);
+    expect(initial.payload.controls.retention).toMatchObject({
+      status: "working",
+      mode: "accountability_default",
+      purgeSupported: false,
+    });
     expect(initial.payload.storage.path).toBe(join(dir, ".matterhorn-work", "privacy", "data-policy.json"));
 
     const viewer = await hostFetch(base, "/tokens", {
@@ -1136,9 +1151,11 @@ describe("backend control plane routes", () => {
 
     const dataMap = await jsonFetch(base, "/workspace/ws_backend/backend/data-map");
     expect(dataMap.payload.policy.feedbackUse).toBe("disabled");
+    expect(dataMap.payload.policy.retention.mode).toBe("accountability_default");
     expect(dataMap.payload.stores.dataPolicy.details.feedbackUse).toBe("disabled");
     const controls = await jsonFetch(base, "/workspace/ws_backend/backend/data-controls");
     expect(controls.payload.policy.feedbackUse).toBe("disabled");
+    expect(controls.payload.policy.retention.exportRoute).toBe("/workspace/ws_backend/data-ledger/export");
     expect(controls.payload.stores.feedback.privacy.trainingUse).toBe("disabled");
     const controlPlane = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
     expect(controlPlane.payload.privacy.feedbackUse).toBe("disabled");
