@@ -31,6 +31,7 @@ import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/bac
 import type { MatterhornBackendTeamAccessResponse } from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
 import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
+import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -1319,6 +1320,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornBackendReadinessResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/readiness`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceBackendControlPlane: (workspaceId: string) =>
+      requestJson<MatterhornBackendControlPlaneResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/control-plane`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),

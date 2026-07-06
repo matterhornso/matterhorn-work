@@ -366,6 +366,114 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Basic ");
   });
 
+  test("GET /workspace/:id/backend/control-plane composes sanitized backend contracts", async () => {
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.control-plane.v1");
+    expect(result.payload.workspace).toMatchObject({
+      id: "ws_backend",
+      name: "Backend control plane test workspace",
+      type: "local",
+      preset: "default",
+    });
+    expect(result.payload.versions).toEqual({
+      capabilities: "matterhorn.backend.capabilities.v1",
+      models: "matterhorn.backend.models.v1",
+      readiness: "matterhorn.backend.readiness.v1",
+      dataMap: "matterhorn.backend.data-map.v1",
+      dataControls: "matterhorn.backend.data-controls.v1",
+    });
+    expect(result.payload.summary).toMatchObject({
+      status: "needs_setup",
+      capabilitiesStatus: "needs_setup",
+      modelCatalogStatus: "needs_setup",
+      readinessStatus: "needs_setup",
+      readyFeatures: 4,
+      totalFeatures: 6,
+      connectedProviders: 0,
+      totalProviders: 0,
+      totalModels: 0,
+    });
+    expect(result.payload.summary.blockingChecks).toContain("opencode_connection");
+    expect(result.payload.summary.exportableStores).toBeGreaterThan(0);
+    expect(result.payload.summary.deletableStores).toBeGreaterThan(0);
+    expect(result.payload.capabilities.security.memoryWriteGuards.status).toBe("working");
+    expect(result.payload.models.catalog.errorCode).toBe("opencode_unconfigured");
+    expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
+    expect(result.payload.dataMap.stores.notes.scope).toBe("workspace");
+    expect(result.payload.dataControls.stores.feedback.privacy.trainingUse).toBe("eval_routing_product_quality_only");
+    expect(result.payload.privacy).toEqual({
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+      secretsReturned: false,
+    });
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
+    expect(serialized).not.toContain("Authorization");
+  });
+
+  test("GET /workspace/:id/backend/control-plane includes live model catalog counts", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          source: "config",
+          models: {
+            "big-pickle": { name: "Big Pickle" },
+          },
+        },
+        {
+          id: "openai",
+          name: "OpenAI",
+          source: "api",
+          models: {
+            "gpt-4.1": { name: "GPT-4.1" },
+            "gpt-4.1-mini": { name: "GPT-4.1 mini" },
+          },
+        },
+      ],
+      default: {
+        openai: "gpt-4.1-mini",
+        opencode: "big-pickle",
+      },
+      connected: ["openai"],
+    });
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/control-plane");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.summary).toMatchObject({
+      modelCatalogStatus: "working",
+      readinessStatus: "working",
+      connectedProviders: 1,
+      totalProviders: 2,
+      totalModels: 3,
+      readyFeatures: 6,
+      totalFeatures: 6,
+    });
+    expect(result.payload.summary.blockingChecks).toEqual([]);
+    expect(result.payload.models.catalog.providers).toContainEqual({
+      id: "openai",
+      name: "OpenAI",
+      source: "api",
+      connected: true,
+      modelCount: 2,
+      sampleModels: ["gpt-4.1", "gpt-4.1-mini"],
+    });
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
+  });
+
   test("GET /workspace/:id/backend/team-access reports sanitized local access status", async () => {
     const { base } = await boot();
 

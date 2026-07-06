@@ -266,6 +266,7 @@ import type {
   MatterhornBackendReadinessFeatureId,
   MatterhornBackendReadinessResponse,
 } from "@matterhorn-work/types/backend-readiness";
+import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -2750,6 +2751,85 @@ function buildWorkspaceReadiness(
   };
 }
 
+function mergeCapabilityStatuses(statuses: MatterhornCapabilityStatus[]): MatterhornCapabilityStatus {
+  if (statuses.includes("error")) return "error";
+  if (statuses.includes("needs_setup")) return "needs_setup";
+  if (statuses.includes("preview")) return "preview";
+  if (statuses.includes("unsupported")) return "unsupported";
+  return "working";
+}
+
+async function buildWorkspaceBackendControlPlane(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  memoryVault: MatterhornMemoryVault,
+): Promise<MatterhornBackendControlPlaneResponse> {
+  const [capabilities, models] = await Promise.all([
+    buildBackendCapabilities(config, memoryVault),
+    buildWorkspaceBackendModels(config, workspace),
+  ]);
+  const readiness = buildWorkspaceReadiness(config, workspace, memoryVault);
+  const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const dataControls = buildWorkspaceDataControls(workspace, memoryVault);
+  const capabilitiesStatus = mergeCapabilityStatuses([
+    capabilities.memory.status,
+    capabilities.notes.status,
+    capabilities.evidence.status,
+    capabilities.wallets.status,
+    capabilities.teams.status,
+    capabilities.security.status,
+  ]);
+  const dataControlsStatus = mergeCapabilityStatuses([
+    dataControls.policy.redaction.status,
+    dataControls.policy.export.status,
+    dataControls.policy.deletion.status,
+  ]);
+
+  return {
+    success: true,
+    version: "matterhorn.backend.control-plane.v1",
+    generatedAt: new Date().toISOString(),
+    workspace: dataMap.workspace,
+    summary: {
+      status: mergeCapabilityStatuses([
+        capabilitiesStatus,
+        models.catalog.status,
+        readiness.summary.status,
+        dataControlsStatus,
+      ]),
+      capabilitiesStatus,
+      modelCatalogStatus: models.catalog.status,
+      readinessStatus: readiness.summary.status,
+      dataControlsStatus,
+      readyFeatures: readiness.summary.readyFeatures,
+      totalFeatures: readiness.summary.totalFeatures,
+      blockingChecks: readiness.summary.blockingChecks,
+      connectedProviders: models.catalog.connectedProviderCount,
+      totalProviders: models.catalog.providerCount,
+      totalModels: models.catalog.modelCount,
+      exportableStores: dataControls.summary.exportableStores,
+      deletableStores: dataControls.summary.deletableStores,
+    },
+    versions: {
+      capabilities: capabilities.version,
+      models: models.version,
+      readiness: readiness.version,
+      dataMap: dataMap.version,
+      dataControls: dataControls.version,
+    },
+    capabilities,
+    models,
+    readiness,
+    dataMap,
+    dataControls,
+    privacy: {
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+      secretsReturned: false,
+    },
+  };
+}
+
 function objectField(value: unknown, key: string): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const child = (value as Record<string, unknown>)[key];
@@ -3712,6 +3792,11 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/readiness", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(buildWorkspaceReadiness(config, workspace, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/control-plane", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildWorkspaceBackendControlPlane(config, workspace, memoryVault));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
