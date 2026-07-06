@@ -250,6 +250,12 @@ describe("project data ledger routes", () => {
     expect(dataControls.payload.stores.walletEvidence.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?kind=wallet");
     expect(dataControls.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
+    expect(dataControls.payload.policy.retention).toMatchObject({
+      mode: "accountability_default",
+      stores: ["audit", "taskEvents", "workflowRuns"],
+      exportRoute: "/workspace/ws_ledger/data-ledger/export",
+      purgeSupported: false,
+    });
   });
 
   test("GET /workspace/:id/data-ledger/export returns a redacted export manifest", async () => {
@@ -278,6 +284,11 @@ describe("project data ledger routes", () => {
     expect(result.payload.manifest.backendContext.version).toBe("matterhorn.backend.control-plane.v1");
     expect(result.payload.manifest.trainingUse).toBe("none_by_default");
     expect(result.payload.manifest.feedbackUse).toBe("eval_routing_product_quality_only");
+    expect(result.payload.ledger.policy.retentionPolicy).toMatchObject({
+      mode: "accountability_default",
+      exportRoute: "/workspace/ws_ledger/data-ledger/export",
+      purgeSupported: false,
+    });
     expect(result.payload.backend.controlPlane.version).toBe("matterhorn.backend.control-plane.v1");
     expect(result.payload.backend.controlPlane.summary.totalFeatures).toBeGreaterThan(0);
     expect(result.payload.backend.controlPlane.privacy.secretsReturned).toBe(false);

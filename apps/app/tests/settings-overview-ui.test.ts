@@ -52,6 +52,8 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Workspace data is not used for RL or model training.");
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");
+    expect(source).toContain("Append-only history");
+    expect(source).toContain("retentionPolicy.summary");
     expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });
 

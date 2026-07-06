@@ -4,10 +4,25 @@ export const MATTERHORN_BACKEND_DATA_POLICY_VERSION = "matterhorn.backend.data-p
 
 export type MatterhornWorkspaceModelTrainingUse = "none_by_default";
 export type MatterhornWorkspaceFeedbackUse = "eval_routing_product_quality_only" | "disabled";
+export type MatterhornWorkspaceAppendOnlyRetentionMode = "accountability_default";
+export type MatterhornWorkspaceAppendOnlyStoreId = "audit" | "taskEvents" | "workflowRuns";
+
+export interface MatterhornWorkspaceAppendOnlyRetentionPolicy {
+  mode: MatterhornWorkspaceAppendOnlyRetentionMode;
+  label: string;
+  summary: string;
+  stores: MatterhornWorkspaceAppendOnlyStoreId[];
+  exportRoute: string;
+  windowDays: null;
+  windowLabel: string;
+  purgeSupported: false;
+  configurable: false;
+}
 
 export interface MatterhornWorkspaceDataPolicyRecord {
   version: typeof MATTERHORN_BACKEND_DATA_POLICY_VERSION;
   feedbackUse: MatterhornWorkspaceFeedbackUse;
+  appendOnlyRetention: MatterhornWorkspaceAppendOnlyRetentionMode;
   updatedAt: string;
   updatedBy?: string;
 }
@@ -33,6 +48,7 @@ export interface MatterhornWorkspaceDataPolicyResponse {
   policy: {
     trainingUse: MatterhornWorkspaceModelTrainingUse;
     feedbackUse: MatterhornWorkspaceFeedbackUse;
+    appendOnlyRetention: MatterhornWorkspaceAppendOnlyRetentionPolicy;
     secretsReturned: false;
   };
   controls: {
@@ -45,6 +61,7 @@ export interface MatterhornWorkspaceDataPolicyResponse {
       enabled: boolean;
       route: string;
     };
+    retention: MatterhornCapability & MatterhornWorkspaceAppendOnlyRetentionPolicy;
   };
   updatedAt?: string;
   updatedBy?: string;

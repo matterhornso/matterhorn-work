@@ -318,6 +318,7 @@ import {
   writeWorkspaceModelSelection,
 } from "./backend-models.js";
 import {
+  buildAppendOnlyRetentionPolicy,
   buildWorkspaceDataPolicyResponse,
   readWorkspaceDataPolicySync,
   workspaceDataPolicyPath,
@@ -2415,6 +2416,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const modelPreferencePath = workspaceModelSelectionPath(workspace);
   const dataPolicyPath = workspaceDataPolicyPath(workspace);
   const dataPolicy = readWorkspaceDataPolicySync(workspace);
+  const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
@@ -2633,6 +2635,11 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       redaction: capability("working", "Redaction", "Memory, workflow, and market paths reject or redact known secret-shaped wallet/API/signature inputs."),
       export: capability("preview", "Export", "Memory can export bundles and workspace files are user-controlled; the project data ledger can be read as a unified JSON contract."),
       deletion: capability("preview", "Deletion", "Notes and memory records are user-deletable; append-only audit/task logs are retained for accountability."),
+      retention: {
+        status: "working",
+        description: appendOnlyRetention.summary,
+        ...appendOnlyRetention,
+      },
     },
   };
 }
@@ -3046,6 +3053,7 @@ function buildWorkspaceDataControls(
   memoryVault: MatterhornMemoryVault,
 ): MatterhornWorkspaceDataControlsResponse {
   const dataMap = buildWorkspaceDataMap(workspace, memoryVault);
+  const appendOnlyRetention = buildAppendOnlyRetentionPolicy(workspace.id);
   const stores = Object.fromEntries(
     Object.entries(dataMap.stores).map(([key, store]) => [key, buildDataControlStore(workspace, store)]),
   ) as MatterhornWorkspaceDataControlsResponse["stores"];
@@ -3062,10 +3070,15 @@ function buildWorkspaceDataControls(
       trainingUse: dataMap.policy.trainingUse,
       feedbackUse: dataMap.policy.feedbackUse,
       redaction: dataMap.policy.redaction,
+      retention: {
+        status: "working",
+        description: appendOnlyRetention.summary,
+        ...appendOnlyRetention,
+      },
       export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
-      deletion: capability("preview", "Deletion controls", "Notes and memory support individual deletes; append-only logs remain retained for accountability."),
+      deletion: capability("preview", "Deletion controls", "Notes, memory, outputs, and feedback support scoped deletes; append-only logs remain retained for accountability."),
       limitations: [
-        "Bulk deletion is currently limited to feedback; append-only logs remain retained for accountability.",
+        "Append-only audit, task event, and workflow run rows do not have a purge endpoint in this local build.",
         "Chat/session history remains controlled by the OpenCode runtime store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],

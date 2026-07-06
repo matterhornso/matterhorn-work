@@ -1,3 +1,5 @@
+import type { MatterhornWorkspaceAppendOnlyRetentionPolicy } from "./backend-data-policy.js";
+
 export const MATTERHORN_BACKEND_CAPABILITIES_VERSION = "matterhorn.backend.capabilities.v1" as const;
 export const MATTERHORN_BACKEND_DATA_MAP_VERSION = "matterhorn.backend.data-map.v1" as const;
 
@@ -192,5 +194,6 @@ export interface MatterhornWorkspaceDataMapResponse {
     redaction: MatterhornCapability;
     export: MatterhornCapability;
     deletion: MatterhornCapability;
+    retention: MatterhornCapability & MatterhornWorkspaceAppendOnlyRetentionPolicy;
   };
 }

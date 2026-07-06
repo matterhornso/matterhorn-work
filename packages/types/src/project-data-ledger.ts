@@ -1,6 +1,6 @@
 import type { MatterhornCapability } from "./backend-capabilities.js";
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
-import type { MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
+import type { MatterhornWorkspaceAppendOnlyRetentionPolicy, MatterhornWorkspaceFeedbackUse } from "./backend-data-policy.js";
 
 export const MATTERHORN_PROJECT_DATA_LEDGER_VERSION = "matterhorn.project-data-ledger.v1" as const;
 export const MATTERHORN_PROJECT_DATA_LEDGER_EXPORT_VERSION = "matterhorn.project-data-ledger-export.v1" as const;
@@ -98,6 +98,7 @@ export interface MatterhornProjectDataLedgerPolicy {
   feedbackUse: MatterhornWorkspaceFeedbackUse;
   redaction: MatterhornCapability;
   retention: MatterhornCapability;
+  retentionPolicy: MatterhornWorkspaceAppendOnlyRetentionPolicy;
   export: MatterhornCapability;
   deletion: MatterhornCapability;
   limitations: string[];
