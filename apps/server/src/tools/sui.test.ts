@@ -5,6 +5,8 @@ import {
   SuiInputError,
   SuiPublicReadProvider,
   buildSuiAccountCard,
+  buildSuiTransferPreview,
+  buildSuiTransactionPreviewCard,
   findForbiddenSuiCredentialInput,
   formatMistToSui,
   normalizeMatterhornSuiAddress,
@@ -116,5 +118,56 @@ describe("Sui public read provider", () => {
     expect(card.kind).toBe("sui_account_snapshot");
     expect(card.items.map((item) => item.label)).toContain("Custody");
     expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("builds non-submittable Sui transfer previews", () => {
+    const preview = buildSuiTransferPreview({
+      network: "testnet",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountSui: "1.25",
+      memo: "Grant payout test",
+    }, { now: () => NOW });
+    const card = buildSuiTransactionPreviewCard(preview);
+    const serialized = JSON.stringify({ preview, card });
+
+    expect(preview).toMatchObject({
+      version: "matterhorn.sui.transaction-preview.v1",
+      family: "sui",
+      network: "testnet",
+      kind: "transfer_sui",
+      sender: NORMALIZED_ADDRESS,
+      recipient: "0x0000000000000000000000000000000000000000000000000000000000000003",
+      amountMist: "1250000000",
+      amountSui: "1.25",
+      custody: false,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      signerPolicy: "client_wallet_required",
+      requiresWalletStandard: true,
+    });
+    expect(preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(preview.handoff.action).toBe("sign_and_execute_in_wallet");
+    expect(card.kind).toBe("sui_transaction_preview");
+    expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("rejects invalid Sui transfer preview inputs", () => {
+    expect(() => buildSuiTransferPreview({
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountMist: "0",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransferPreview({
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountSui: "0.0000000001",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransferPreview({
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountSui: "1",
+      privateKey: "nope",
+    } as never)).toThrow(SuiInputError);
   });
 });
