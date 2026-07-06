@@ -72,6 +72,11 @@
       "types": "./src/backend-capabilities.ts",
       "development": "./src/backend-capabilities.ts",
       "default": "./src/backend-capabilities.ts"
+    },
+    "./backend-models": {
+      "types": "./src/backend-models.ts",
+      "development": "./src/backend-models.ts",
+      "default": "./src/backend-models.ts"
     }
   },
   "files": [

@@ -278,6 +278,7 @@ import { EnvService, EnvStoreReadError, InvalidEnvKeyError, isValidEnvKey } from
 import { MatterhornNotesStore } from "./notes.js";
 import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, scrubProjectLedgerText } from "./project-data-ledger.js";
+import { buildBackendModels } from "./backend-models.js";
 import { projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
@@ -3126,6 +3127,10 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/backend/capabilities", "client", async () => {
     return jsonResponse(await buildBackendCapabilities(config, memoryVault));
+  });
+
+  addRoute(routes, "GET", "/api/backend/models", "client", async () => {
+    return jsonResponse(buildBackendModels());
   });
 
   addRoute(routes, "GET", "/experimental/extensions/actions", "client", async (ctx) => {

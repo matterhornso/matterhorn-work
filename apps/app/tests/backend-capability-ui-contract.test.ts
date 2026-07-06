@@ -122,6 +122,8 @@ describe("backend capability UI contract", () => {
     const source = readAppSource("app/lib/matterhorn-server.ts");
     expect(source).toContain("backendCapabilities");
     expect(source).toContain('"/api/backend/capabilities"');
+    expect(source).toContain("backendModels");
+    expect(source).toContain('"/api/backend/models"');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("listProjectDataLedger");
@@ -160,6 +162,23 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
+  });
+
+  test("AI settings shows backend model routing alongside live provider counts", () => {
+    const source = readAppSource("react-app/domains/settings/pages/ai-view.tsx");
+    const routeSource = readAppSource("react-app/shell/settings-route.tsx");
+
+    expect(source).toContain("settings-backend-models");
+    expect(source).toContain("client.backendModels()");
+    expect(source).toContain("Model routing");
+    expect(source).toContain("Current model, provider list source, and selection policy.");
+    expect(source).toContain("OpenCode session prompts");
+    expect(source).toContain("OpenCode provider list");
+    expect(source).toContain("No model training by default");
+    expect(routeSource).toContain("connectedModelCount");
+    expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");
+    expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
+    expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
   });
 
   test("Wallet settings uses backend wallet family status including Sui", () => {

@@ -1,0 +1,63 @@
+import type {
+  MatterhornBackendModelsResponse,
+} from "@matterhorn-work/types/backend-models";
+import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
+
+function capability(status: MatterhornCapability["status"], label: string, description: string): MatterhornCapability {
+  return { status, label, description };
+}
+
+export function buildBackendModels(): MatterhornBackendModelsResponse {
+  return {
+    success: true,
+    version: "matterhorn.backend.models.v1",
+    generatedAt: new Date().toISOString(),
+    defaultModel: {
+      providerId: "opencode",
+      modelId: "big-pickle",
+      source: "server_default",
+    },
+    routing: {
+      answerPath: {
+        ...capability(
+          "working",
+          "OpenCode session prompts",
+          "Agent answers are sent through OpenCode/OpenWork session.promptAsync with an explicit providerID/modelID when the user has selected a model.",
+        ),
+        transport: "opencode_session_prompt_async",
+        requestModelField: "model.providerID_modelID",
+      },
+      selection: {
+        ...capability(
+          "working",
+          "User-selected model",
+          "The app stores the selected model in local preferences and sends it with each prompt request.",
+        ),
+        userSelectable: true,
+        surface: "model_picker",
+        preferenceStore: "local_preferences",
+        serverPersisted: false,
+      },
+      registry: {
+        ...capability(
+          "preview",
+          "OpenCode provider list",
+          "The live model list currently comes from the OpenCode client provider.list path. A server-owned Matterhorn model registry is planned.",
+        ),
+        source: "opencode_provider_list",
+        serverOwned: false,
+        clientTool: "opencode_client_provider_list",
+        cloudProviderImport: true,
+      },
+    },
+    privacy: {
+      trainingUse: "none_by_default",
+      feedbackUse: "eval_routing_product_quality_only",
+    },
+    limitations: [
+      "This endpoint reports the routing contract. The full live provider/model catalog is still fetched through the OpenCode provider.list client path.",
+      "Model preference is local to this browser/app profile today; it is not yet a server-owned team policy.",
+      "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training by default.",
+    ],
+  };
+}

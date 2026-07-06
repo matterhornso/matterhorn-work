@@ -26,6 +26,7 @@ import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
+import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
 import type {
   MatterhornWorkflowRun,
   MatterhornWorkflowRunListItem,
@@ -1294,6 +1295,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
     capabilities: () => requestJson<MatterhornServerCapabilities>(baseUrl, "/capabilities", { token, hostToken, timeoutMs: timeouts.capabilities }),
     backendCapabilities: () =>
       requestJson<MatterhornBackendCapabilitiesResponse>(baseUrl, "/api/backend/capabilities", {
+        token,
+        hostToken,
+        timeoutMs: timeouts.capabilities,
+      }),
+    backendModels: () =>
+      requestJson<MatterhornBackendModelsResponse>(baseUrl, "/api/backend/models", {
         token,
         hostToken,
         timeoutMs: timeouts.capabilities,

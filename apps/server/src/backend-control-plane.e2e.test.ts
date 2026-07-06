@@ -191,6 +191,35 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("Sui is not implemented yet");
   });
 
+  test("GET /api/backend/models reports the agent answer and model-selection contract", async () => {
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/api/backend/models");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.models.v1");
+    expect(result.payload.defaultModel).toMatchObject({
+      providerId: "opencode",
+      modelId: "big-pickle",
+      source: "server_default",
+    });
+    expect(result.payload.routing.answerPath.transport).toBe("opencode_session_prompt_async");
+    expect(result.payload.routing.answerPath.requestModelField).toBe("model.providerID_modelID");
+    expect(result.payload.routing.selection.userSelectable).toBe(true);
+    expect(result.payload.routing.selection.preferenceStore).toBe("local_preferences");
+    expect(result.payload.routing.selection.serverPersisted).toBe(false);
+    expect(result.payload.routing.registry.source).toBe("opencode_provider_list");
+    expect(result.payload.routing.registry.serverOwned).toBe(false);
+    expect(result.payload.routing.registry.clientTool).toBe("opencode_client_provider_list");
+    expect(result.payload.routing.registry.cloudProviderImport).toBe(true);
+    expect(result.payload.privacy.trainingUse).toBe("none_by_default");
+    expect(result.payload.privacy.feedbackUse).toBe("eval_routing_product_quality_only");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
   test("Sui public read routes reject invalid public input before provider calls", async () => {
     const { base } = await boot();
 

@@ -1,8 +1,10 @@
 /** @jsxImportSource react */
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { t } from "@/i18n";
+import type { MatterhornServerClient } from "@/app/lib/matterhorn-server";
 import { ProviderIcon } from "../../../design-system/provider-icon";
 import { SettingsNotice, SettingsStatusBadge } from "../settings-section";
 import {
@@ -23,11 +25,16 @@ type ConnectedProvider = {
   id: string;
   name: string;
   source?: "env" | "api" | "config" | "custom";
+  modelCount?: number;
 };
 
 export type AiSettingsViewProps = {
   busy: boolean;
   providerAuthBusy: boolean;
+  matterhornServerClient?: MatterhornServerClient | null;
+  defaultModelLabel: string;
+  defaultModelRef: string;
+  connectedModelCount: number;
   providerStatusLabel: string;
   providerStatusStyle: string;
   providerSummary: string;
@@ -60,9 +67,79 @@ function providerStatusTone(label: string): "ready" | "warning" | "neutral" {
   return "neutral";
 }
 
+function yesNo(value: boolean | undefined) {
+  return value ? "Yes" : "No";
+}
+
 export function AiSettingsView(props: AiSettingsViewProps) {
+  const backendModelsQuery = useQuery({
+    queryKey: ["settings-backend-models"],
+    enabled: Boolean(props.matterhornServerClient),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client) throw new Error("Matterhorn Work engine is offline.");
+      return client.backendModels();
+    },
+  });
+  const backendModels = backendModelsQuery.data;
+  const modelRouting = backendModels?.routing;
+
   return (
     <LayoutStack>
+      {/* ---- Model routing ---- */}
+      <LayoutSection>
+        <LayoutSectionHeader>
+          <LayoutSectionTitle>Model routing</LayoutSectionTitle>
+          <LayoutSectionDescription>
+            Current model, provider list source, and selection policy.
+          </LayoutSectionDescription>
+        </LayoutSectionHeader>
+
+        <LayoutSectionItem className="rounded-lg border border-dls-border/70 px-4 py-3">
+          <LayoutSectionItemHeader>
+            <LayoutSectionItemTitle>
+              {props.defaultModelLabel}
+              <SettingsStatusBadge
+                tone={backendModelsQuery.isError ? "warning" : "ready"}
+                label={backendModelsQuery.isError ? "Needs engine" : "Working"}
+              />
+            </LayoutSectionItemTitle>
+          </LayoutSectionItemHeader>
+          <div className="mt-3 grid gap-2 text-sm text-dls-secondary sm:grid-cols-2">
+            <div>
+              <span className="text-dls-text">Model</span>
+              <span className="ml-2 font-mono text-xs">{props.defaultModelRef}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Connected</span>
+              <span className="ml-2">{props.connectedProviders.length} providers · {props.connectedModelCount} models</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Answers</span>
+              <span className="ml-2">{modelRouting?.answerPath.label ?? "OpenCode session prompts"}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Model list</span>
+              <span className="ml-2">{modelRouting?.registry.label ?? "OpenCode provider list"}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">User selectable</span>
+              <span className="ml-2">{yesNo(modelRouting?.selection.userSelectable ?? true)}</span>
+            </div>
+            <div>
+              <span className="text-dls-text">Server registry</span>
+              <span className="ml-2">{modelRouting?.registry.serverOwned ? "Server-owned" : "Delegated"}</span>
+            </div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-dls-secondary">
+            {backendModels?.privacy.trainingUse === "none_by_default"
+              ? "No model training by default. Feedback is stored for eval, routing, and product quality only."
+              : "Training policy is unavailable."}
+          </p>
+        </LayoutSectionItem>
+      </LayoutSection>
+
       {/* ---- Providers ---- */}
       <LayoutSection>
         <LayoutSectionHeader>
