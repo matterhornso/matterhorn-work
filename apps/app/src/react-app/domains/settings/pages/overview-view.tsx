@@ -589,6 +589,18 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
+  const teamAccessQuery = useQuery({
+    queryKey: ["settings-team-access", props.runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to see team access.");
+      return client.workspaceTeamAccess(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+
   const exportProjectLedger = useCallback(async () => {
     const client = props.matterhornServerClient;
     const workspaceId = props.runtimeWorkspaceId?.trim();
@@ -747,7 +759,11 @@ export function SettingsOverviewView(props: {
               />
               <Row
                 label="Teams"
-                hint={summarizeCapability(backendCapabilitiesQuery.data.teams)}
+                hint={teamAccessQuery.data
+                  ? `${teamAccessQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessQuery.data.cloudTeams.status)}.`
+                  : teamAccessQuery.isLoading
+                    ? "Loading local access status."
+                    : summarizeCapability(backendCapabilitiesQuery.data.teams)}
                 value={<CapabilityBadge status={backendCapabilitiesQuery.data.teams.status} />}
               />
               <Row

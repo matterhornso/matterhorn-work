@@ -126,6 +126,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/backend/models"');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
+    expect(source).toContain("workspaceTeamAccess");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`');
     expect(source).toContain("listProjectDataLedger");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
     expect(source).toContain('query.set("desk", options.desk.trim())');
@@ -156,6 +158,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
+    expect(source).toContain("settings-team-access");
+    expect(source).toContain("client.workspaceTeamAccess(workspaceId)");
     expect(source).toContain("settings-project-data-ledger");
     expect(source).toContain("client.listProjectDataLedger(workspaceId");
     expect(source).toContain("summarizeModelRoutingPolicy");

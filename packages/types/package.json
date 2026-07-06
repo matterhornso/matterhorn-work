@@ -77,6 +77,11 @@
       "types": "./src/backend-models.ts",
       "development": "./src/backend-models.ts",
       "default": "./src/backend-models.ts"
+    },
+    "./backend-team-access": {
+      "types": "./src/backend-team-access.ts",
+      "development": "./src/backend-team-access.ts",
+      "default": "./src/backend-team-access.ts"
     }
   },
   "files": [

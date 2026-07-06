@@ -220,6 +220,42 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(HOST_TOKEN);
   });
 
+  test("GET /workspace/:id/backend/team-access reports sanitized local access status", async () => {
+    const { base } = await boot();
+
+    const createdViewer = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Review-only teammate" }),
+    });
+    expect(createdViewer.response.status).toBe(201);
+
+    const denied = await jsonFetch(base, "/workspace/ws_backend/backend/team-access");
+    expect(denied.response.status).toBe(401);
+
+    const result = await hostFetch(base, "/workspace/ws_backend/backend/team-access");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.team-access.v1");
+    expect(result.payload.localAccess.scopes).toEqual(["owner", "collaborator", "viewer"]);
+    expect(result.payload.localAccess.byScope.collaborator).toBeGreaterThanOrEqual(1);
+    expect(result.payload.localAccess.byScope.viewer).toBe(1);
+    expect(result.payload.localAccess.tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "built-in-client-token", scope: "collaborator", source: "built_in_client_token" }),
+        expect.objectContaining({ scope: "viewer", label: "Review-only teammate", source: "token_store" }),
+      ]),
+    );
+    expect(result.payload.cloudTeams.status).toBe("needs_setup");
+    expect(result.payload.policy.secretsReturned).toBe(false);
+    expect(result.payload.policy.hostProtected).toBe(true);
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(createdViewer.payload.token);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("hash");
+  });
+
   test("Sui public read routes reject invalid public input before provider calls", async () => {
     const { base } = await boot();
 
