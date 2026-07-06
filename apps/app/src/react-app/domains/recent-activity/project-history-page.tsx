@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { ErrorState } from "../shell/error-state";
 
 type ProjectHistoryFilter = MatterhornProjectDataLedgerKind | "all";
+const ALL_DESKS = "all" as const;
 
 export const PROJECT_HISTORY_FILTERS: Array<{
   id: ProjectHistoryFilter;
@@ -170,6 +171,7 @@ export function ProjectHistoryPage({
   runtimeWorkspaceId: string | null;
 }) {
   const [activeFilter, setActiveFilter] = useState<ProjectHistoryFilter>("task");
+  const [activeDesk, setActiveDesk] = useState<string>(ALL_DESKS);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const activeFilterConfig = PROJECT_HISTORY_FILTERS.find((filter) => filter.id === activeFilter) ?? PROJECT_HISTORY_FILTERS[0];
   const activeKind = activeFilterConfig.kind;
@@ -179,20 +181,21 @@ export function ProjectHistoryPage({
     enabled: Boolean(matterhornServerClient && runtimeWorkspaceId),
     queryFn: async () => {
       if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see run history.");
-      return matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, { limit: 1 });
+      return matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, { limit: 300 });
     },
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
 
   const ledgerQuery = useQuery({
-    queryKey: ["project-history-ledger", runtimeWorkspaceId, activeKind ?? "all"],
+    queryKey: ["project-history-ledger", runtimeWorkspaceId, activeKind ?? "all", activeDesk],
     enabled: Boolean(matterhornServerClient && runtimeWorkspaceId),
     queryFn: async () => {
       if (!matterhornServerClient || !runtimeWorkspaceId) throw new Error("Open a workspace to see run history.");
       return matterhornServerClient.listProjectDataLedger(runtimeWorkspaceId, {
         limit: 120,
         ...(activeKind ? { kind: activeKind } : {}),
+        ...(activeDesk !== ALL_DESKS ? { desk: activeDesk } : {}),
       });
     },
     staleTime: 30_000,
@@ -205,6 +208,17 @@ export function ProjectHistoryPage({
   const filterCounts = useMemo(() => (
     Object.fromEntries(PROJECT_HISTORY_FILTERS.map((filter) => [filter.id, kindCount(summaryQuery.data, filter.id)]))
   ), [summaryQuery.data]);
+  const deskOptions = useMemo(() => {
+    const desks = new Map<string, number>();
+    for (const entry of summaryQuery.data?.items ?? []) {
+      const desk = entry.desk?.trim();
+      if (!desk) continue;
+      desks.set(desk, (desks.get(desk) ?? 0) + 1);
+    }
+    return [...desks.entries()]
+      .sort((a, b) => deskLabel(a[0]).localeCompare(deskLabel(b[0])))
+      .map(([id, count]) => ({ id, label: deskLabel(id), count }));
+  }, [summaryQuery.data]);
 
   const exportLedger = async () => {
     if (!matterhornServerClient || !runtimeWorkspaceId) {
@@ -262,29 +276,48 @@ export function ProjectHistoryPage({
           </div>
         </header>
 
-        <section aria-label="Project history filters" className="flex flex-wrap gap-2">
-          {PROJECT_HISTORY_FILTERS.map((filter) => {
-            const selected = filter.id === activeFilter;
-            const count = filterCounts[filter.id] ?? 0;
-            return (
-              <button
-                key={filter.id}
-                type="button"
-                className={cn(
-                  "inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border",
-                  selected
-                    ? "bg-dls-text text-dls-background"
-                    : "bg-dls-surface-muted/25 text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
-                )}
-                onClick={() => setActiveFilter(filter.id)}
+        <section aria-label="Project history filters" className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {PROJECT_HISTORY_FILTERS.map((filter) => {
+              const selected = filter.id === activeFilter;
+              const count = filterCounts[filter.id] ?? 0;
+              return (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={cn(
+                    "inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-dls-border",
+                    selected
+                      ? "bg-dls-text text-dls-background"
+                      : "bg-dls-surface-muted/25 text-dls-secondary hover:bg-dls-hover hover:text-dls-text",
+                  )}
+                  onClick={() => setActiveFilter(filter.id)}
+                >
+                  <span>{filter.label}</span>
+                  <span className={cn("text-[11px]", selected ? "text-dls-background/75" : "text-dls-secondary/75")}>
+                    {summaryQuery.isLoading ? "…" : count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {deskOptions.length > 0 ? (
+            <label className="flex w-full items-center gap-2 text-xs text-dls-secondary sm:w-auto">
+              <span className="shrink-0">Desk</span>
+              <select
+                className="h-8 min-w-40 rounded-md border border-dls-border/60 bg-dls-background px-2 text-xs text-dls-text outline-none transition-colors focus:border-dls-text"
+                value={activeDesk}
+                onChange={(event) => setActiveDesk(event.currentTarget.value)}
               >
-                <span>{filter.label}</span>
-                <span className={cn("text-[11px]", selected ? "text-dls-background/75" : "text-dls-secondary/75")}>
-                  {summaryQuery.isLoading ? "…" : count}
-                </span>
-              </button>
-            );
-          })}
+                <option value={ALL_DESKS}>All desks</option>
+                {deskOptions.map((desk) => (
+                  <option key={desk.id} value={desk.id}>
+                    {desk.label} ({desk.count})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </section>
 
         {exportStatus ? (

@@ -159,6 +159,8 @@ describe("Project Activity contract tests", () => {
       expect(source).toContain('label: "Runs", kind: "task"');
       expect(source).toContain("listProjectDataLedger");
       expect(source).toContain('queryKey: ["project-history-ledger"');
+      expect(source).toContain("activeDesk");
+      expect(source).toContain("desk: activeDesk");
       expect(source).toContain("No training by default");
       expect(source).toContain("Exported");
     });
