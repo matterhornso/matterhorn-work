@@ -148,6 +148,12 @@ function protocolLabelAndDetail(
         detail: `${readLabel} markets, compliance, and liquidity. ${previewLabel} orders. ${submitLabel}.${signerNote}`,
         tone: cap.canRead ? "text-violet-300 bg-violet-500/10" : "text-gray-500 bg-gray-500/10",
       };
+    case "sui":
+      return {
+        label: "Sui",
+        detail: `${readLabel} public account data. ${previewLabel} wallet handoffs. ${submitLabel}.${signerNote}`,
+        tone: cap.canRead ? "text-cyan-300 bg-cyan-500/10" : "text-gray-500 bg-gray-500/10",
+      };
   }
 }
 
@@ -197,7 +203,9 @@ function WalletProtocolSupportMap(props: {
             ? "text-emerald-300 bg-emerald-500/10"
             : "text-sky-300 bg-sky-500/10",
     }] : []),
-    ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][]).map(
+    ...(Object.entries(props.capability.protocols) as [WalletProtocol, WalletProtocolCapability][])
+      .filter(([protocol]) => protocol !== "sui")
+      .map(
       ([protocol, cap]) => {
         const { label, detail, tone } = protocolLabelAndDetail(protocol, cap);
         const submitStatus =

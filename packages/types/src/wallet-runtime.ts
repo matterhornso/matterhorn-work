@@ -21,7 +21,7 @@ export const DESKTOP_WALLET_STRATEGIES = [
 ] as const;
 export type DesktopWalletStrategy = (typeof DESKTOP_WALLET_STRATEGIES)[number];
 
-export const WALLET_PROTOCOLS = ["bittensor", "hyperliquid", "polymarket"] as const;
+export const WALLET_PROTOCOLS = ["bittensor", "hyperliquid", "polymarket", "sui"] as const;
 export type WalletProtocol = (typeof WALLET_PROTOCOLS)[number];
 
 export interface WalletProtocolCapability {
@@ -82,12 +82,21 @@ export const WEB_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       custody: false,
       secretInputsAllowed: false,
     },
+    sui: {
+      canRead: true,
+      canPreview: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      signerRequirement: "client_signer",
+      custody: false,
+      secretInputsAllowed: false,
+    },
   },
   safetyCopy: {
     publicAddressLine:
       "Only public wallet addresses are used. Paste or connect an address to preview read-only data.",
     externalSignerLine:
-      "Bittensor submissions require your external signer. Matterhorn never creates or holds keys.",
+      "Bittensor submissions require your external signer. Sui signing stays in your connected wallet. Matterhorn never creates or holds keys.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },
@@ -127,12 +136,21 @@ export const DESKTOP_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       custody: false,
       secretInputsAllowed: false,
     },
+    sui: {
+      canRead: true,
+      canPreview: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      signerRequirement: "external_signer",
+      custody: false,
+      secretInputsAllowed: false,
+    },
   },
   safetyCopy: {
     publicAddressLine:
       "Desktop uses external-signer handoffs. Provide a public address or connect via the planned wallet strategy.",
     externalSignerLine:
-      "All on-chain writes are signed outside Matterhorn. The desktop app does not hold keys.",
+      "All on-chain writes are signed outside Matterhorn. Desktop Sui and Bittensor actions use external signer or wallet handoffs.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },
@@ -172,12 +190,21 @@ export const ELECTRON_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       custody: false,
       secretInputsAllowed: false,
     },
+    sui: {
+      canRead: true,
+      canPreview: true,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      signerRequirement: "external_signer",
+      custody: false,
+      secretInputsAllowed: false,
+    },
   },
   safetyCopy: {
     publicAddressLine:
       "Electron previews use public addresses only. Connect an external signer for writes.",
     externalSignerLine:
-      "Electron builds do not support injected wallets. Use external-signer handoffs for any on-chain action.",
+      "Electron builds do not support injected wallets. Use external-signer or wallet handoffs for any on-chain action.",
     forbiddenSecretsLine:
       "Never paste a private key, seed phrase, API secret, raw signature, signed payload, or wallet export into Matterhorn.",
   },
@@ -209,6 +236,15 @@ export const UNKNOWN_WALLET_RUNTIME_CAPABILITY: WalletRuntimeCapability = {
       secretInputsAllowed: false,
     },
     polymarket: {
+      canRead: false,
+      canPreview: false,
+      canSubmit: false,
+      liveSubmissionEnabled: false,
+      signerRequirement: "none",
+      custody: false,
+      secretInputsAllowed: false,
+    },
+    sui: {
       canRead: false,
       canPreview: false,
       canSubmit: false,
