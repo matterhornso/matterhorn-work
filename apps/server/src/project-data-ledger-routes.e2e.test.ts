@@ -194,6 +194,8 @@ describe("project data ledger routes", () => {
     expect(dataMap.payload.stores.feedback.status).toBe("working");
     expect(dataMap.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_ledger.jsonl"));
     expect(dataMap.payload.stores.feedback.containsSecrets).toBe("redacted");
+    expect(dataMap.payload.stores.feedback.retention).toBe("user_controlled");
+    expect(dataMap.payload.stores.feedback.deletable).toBe(true);
 
     const dataControls = await jsonFetch(base, "/workspace/ws_ledger/backend/data-controls");
     expect(dataControls.response.status).toBe(200);

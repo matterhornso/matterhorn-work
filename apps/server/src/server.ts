@@ -2516,9 +2516,9 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         format: "jsonl",
         containsUserContent: true,
         containsSecrets: "redacted",
-        retention: "append_only",
+        retention: "user_controlled",
         exportable: true,
-        deletable: false,
+        deletable: true,
       }),
     },
     policy: {

@@ -815,6 +815,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.feedback.scope).toBe("machine_global");
     expect(result.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_backend.jsonl"));
     expect(result.payload.stores.feedback.containsSecrets).toBe("redacted");
+    expect(result.payload.stores.feedback.retention).toBe("user_controlled");
+    expect(result.payload.stores.feedback.deletable).toBe(true);
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
 
     const serialized = JSON.stringify(result.payload);
@@ -864,6 +866,7 @@ describe("backend control plane routes", () => {
       href: "/workspace/ws_backend/memory/entities/:memoryId",
       destructive: true,
     }));
+    expect(result.payload.stores.feedback.retention.mode).toBe("user_controlled");
     expect(result.payload.stores.feedback.deletion.status).toBe("working");
     expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({
       id: "feedback.delete",
