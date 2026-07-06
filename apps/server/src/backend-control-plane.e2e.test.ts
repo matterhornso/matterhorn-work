@@ -198,6 +198,32 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.sui.status).toBe("preview");
     expect(result.payload.wallets.families.sui.directConnect).toBe(true);
     expect(result.payload.wallets.families.sui.signing).toBe("client_wallet");
+    expect(result.payload.wallets.families.sui.runtimeSupport.web).toMatchObject({
+      status: "preview",
+      label: "Web wallet-standard connect",
+      directConnect: true,
+      publicRead: true,
+      custody: false,
+      signing: "client_wallet",
+    });
+    expect(result.payload.wallets.families.sui.runtimeSupport.desktop).toMatchObject({
+      status: "preview",
+      label: "Desktop wallet handoff",
+      directConnect: false,
+      publicRead: true,
+      custody: false,
+      signing: "client_wallet",
+    });
+    expect(result.payload.wallets.families.evm.runtimeSupport.desktop).toMatchObject({
+      status: "preview",
+      directConnect: false,
+      signing: "external_signer",
+    });
+    expect(result.payload.wallets.families.bittensor.runtimeSupport.electron).toMatchObject({
+      status: "working",
+      directConnect: false,
+      signing: "external_signer",
+    });
     expect(result.payload.wallets.families.sui.details.recommendedPackages).toContain("@mysten/dapp-kit-react");
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/account/:address");
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/balance/:address");

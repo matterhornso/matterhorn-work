@@ -41,6 +41,7 @@ import type { MatterhornServerClient } from "../../../../app/lib/matterhorn-serv
 import { SuiWorkflowPanel } from "../../wallet/sui-workflow-panel";
 import {
   backendCapabilityLabel,
+  walletRuntimeSupportSummary,
   walletFamilySummary,
 } from "../backend-capability-status";
 import {
@@ -167,6 +168,9 @@ function WalletProtocolSupportMap(props: {
 }) {
   const evm = evmConnectorStatusLabel(props.capability.evmConnectorState, props.connected);
   const backendSui = props.backendWallets?.find((wallet) => wallet.family === "Sui");
+  const backendSuiRuntime =
+    props.capability.runtime === "unknown" ? undefined : backendSui?.runtimeSupport?.[props.capability.runtime];
+  const backendSuiRuntimeCopy = walletRuntimeSupportSummary(backendSuiRuntime);
   const evmDetail = props.capability.supportsInjectedEvm
     ? "Browser extension wallets such as MetaMask or Rabby can appear when installed and allowed."
     : "Desktop does not use injected browser wallets. Use public addresses and external signer handoffs; WalletConnect or deep-link bridge is planned.";
@@ -179,15 +183,17 @@ function WalletProtocolSupportMap(props: {
     },
     ...(backendSui ? [{
       label: "Sui wallet",
-      status: backendCapabilityLabel(backendSui.status),
-      detail: backendSui.status === "preview"
-        ? "Wallet-standard Sui connect is in preview. Signing stays in your Sui wallet."
-        : backendSui.label,
-      tone: backendSui.status === "unsupported"
-        ? "text-gray-400 bg-gray-500/10"
+      status: backendSuiRuntimeCopy.status ? backendSuiRuntimeCopy.label : backendCapabilityLabel(backendSui.status),
+      detail: backendSuiRuntimeCopy.status
+        ? backendSuiRuntimeCopy.detail
         : backendSui.status === "preview"
+          ? "Wallet-standard Sui connect is in preview. Signing stays in your Sui wallet."
+          : backendSui.label,
+      tone: (backendSuiRuntimeCopy.status ?? backendSui.status) === "unsupported"
+        ? "text-gray-400 bg-gray-500/10"
+        : (backendSuiRuntimeCopy.status ?? backendSui.status) === "preview"
           ? "text-amber-300 bg-amber-500/10"
-          : backendSui.status === "working"
+          : (backendSuiRuntimeCopy.status ?? backendSui.status) === "working"
             ? "text-emerald-300 bg-emerald-500/10"
             : "text-sky-300 bg-sky-500/10",
     }] : []),

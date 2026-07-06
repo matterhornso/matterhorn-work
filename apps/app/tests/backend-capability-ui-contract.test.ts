@@ -8,6 +8,7 @@ import {
   summarizeModelRoutingPolicy,
   summarizeModelSource,
   walletFamilySummary,
+  walletRuntimeSupportSummary,
   workspaceDataPolicySummary,
 } from "../src/react-app/domains/settings/backend-capability-status";
 import type {
@@ -81,6 +82,41 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
           preview: false,
           signing: "client_wallet",
           supportedChains: ["sui-testnet", "sui-mainnet"],
+          runtimeSupport: {
+            web: {
+              runtime: "web",
+              status: "preview",
+              label: "Web wallet-standard connect",
+              description: "Sui wallet-standard wallets can connect in the web app through Mysten dApp Kit.",
+              custody: false,
+              directConnect: true,
+              publicRead: true,
+              preview: true,
+              signing: "client_wallet",
+            },
+            desktop: {
+              runtime: "desktop",
+              status: "preview",
+              label: "Desktop wallet handoff",
+              description: "Desktop prepares Sui previews; signing happens outside Matterhorn.",
+              custody: false,
+              directConnect: false,
+              publicRead: true,
+              preview: true,
+              signing: "client_wallet",
+            },
+            electron: {
+              runtime: "electron",
+              status: "preview",
+              label: "Electron wallet handoff",
+              description: "Electron prepares Sui previews; signing happens outside Matterhorn.",
+              custody: false,
+              directConnect: false,
+              publicRead: true,
+              preview: true,
+              signing: "client_wallet",
+            },
+          },
         },
         bittensor: {
           status: "preview",
@@ -284,6 +320,8 @@ describe("backend capability UI contract", () => {
     expect(walletSource).toContain("connectSuiWallet");
     expect(walletSource).toContain("matterhornServerClient.suiAccount(account.address");
     expect(walletSource).toContain("SuiWorkflowPanel");
+    expect(walletSource).toContain("backendSui?.runtimeSupport?.[props.capability.runtime]");
+    expect(walletSource).toContain("walletRuntimeSupportSummary");
     expect(walletSource).toContain("runtimeWorkspaceId?: string | null");
     expect(walletSource).toContain('sourceLabel: "Matterhorn engine"');
     expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
@@ -338,11 +376,17 @@ describe("backend capability UI contract", () => {
     expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode session prompts");
     expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode provider list");
     expect(summarizeModelRoutingPolicy(result)).toContain("model picker");
-    expect(walletFamilySummary(result)).toEqual([
-      { family: "EVM", label: "EVM direct connect", status: "working" },
-      { family: "Sui", label: "Sui wallet preview", status: "preview" },
-      { family: "Bittensor", label: "Bittensor external signer", status: "preview" },
+    const walletRows = walletFamilySummary(result);
+    expect(walletRows.map((row) => [row.family, row.label, row.status])).toEqual([
+      ["EVM", "EVM direct connect", "working"],
+      ["Sui", "Sui wallet preview", "preview"],
+      ["Bittensor", "Bittensor external signer", "preview"],
     ]);
+    expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web.directConnect).toBe(true);
+    expect(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.desktop.directConnect).toBe(false);
+    const webCopy = walletRuntimeSupportSummary(walletRows.find((row) => row.family === "Sui")?.runtimeSupport?.web);
+    expect(webCopy.label).toBe("Direct connect · Preview");
+    expect(webCopy.detail).toContain("Mysten dApp Kit");
   });
 
   test("data-map helpers summarize local storage and policy", () => {

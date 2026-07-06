@@ -2306,6 +2306,35 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     preview: true,
     signing: "client_wallet",
     supportedChains: ["base", "base-sepolia"],
+    runtimeSupport: {
+      web: {
+        runtime: "web",
+        ...capability("working", "Web direct connect", "Injected EVM wallets and WalletConnect can be used from the web app."),
+        custody: false,
+        directConnect: true,
+        publicRead: true,
+        preview: true,
+        signing: "client_wallet",
+      },
+      desktop: {
+        runtime: "desktop",
+        ...capability("preview", "Desktop external handoff", "Desktop uses public addresses and external signer handoffs; injected browser wallets are not available there."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "external_signer",
+      },
+      electron: {
+        runtime: "electron",
+        ...capability("preview", "Electron external handoff", "Electron builds use public addresses and external signer handoffs; injected browser wallets are not available there."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "external_signer",
+      },
+    },
   });
   const sui = walletFamily({
     family: "sui",
@@ -2330,6 +2359,35 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     preview: true,
     signing: "client_wallet",
     supportedChains: ["sui-testnet", "sui-mainnet"],
+    runtimeSupport: {
+      web: {
+        runtime: "web",
+        ...capability("preview", "Web wallet-standard connect", "Sui wallet-standard wallets can connect in the web app through Mysten dApp Kit. Signing stays in the wallet."),
+        custody: false,
+        directConnect: true,
+        publicRead: true,
+        preview: true,
+        signing: "client_wallet",
+      },
+      desktop: {
+        runtime: "desktop",
+        ...capability("preview", "Desktop wallet handoff", "Desktop can prepare Sui reads, previews, and receipts. Signing happens in the user's Sui wallet outside Matterhorn."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "client_wallet",
+      },
+      electron: {
+        runtime: "electron",
+        ...capability("preview", "Electron wallet handoff", "Electron can prepare Sui reads, previews, and receipts. Signing happens in the user's Sui wallet outside Matterhorn."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "client_wallet",
+      },
+    },
   });
   const bittensor = walletFamily({
     family: "bittensor",
@@ -2339,6 +2397,35 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
     publicRead: true,
     preview: true,
     signing: "external_signer",
+    runtimeSupport: {
+      web: {
+        runtime: "web",
+        ...capability("working", "Web external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "external_signer",
+      },
+      desktop: {
+        runtime: "desktop",
+        ...capability("working", "Desktop external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "external_signer",
+      },
+      electron: {
+        runtime: "electron",
+        ...capability("working", "Electron external signer", "Public SS58 reads and unsigned previews are available. Signing happens in an external Bittensor-compatible signer."),
+        custody: false,
+        directConnect: false,
+        publicRead: true,
+        preview: true,
+        signing: "external_signer",
+      },
+    },
   });
 
   const memoryStatus = memoryCounts.status;

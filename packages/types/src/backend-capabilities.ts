@@ -72,6 +72,17 @@ export interface MatterhornEvidenceCapability extends MatterhornCapability {
   sources: Array<"notes" | "memory" | "task_events" | "task_runs" | "outputs" | "workflow_runs">;
 }
 
+export type MatterhornWalletRuntime = "web" | "desktop" | "electron";
+
+export interface MatterhornWalletRuntimeSupport extends MatterhornCapability {
+  runtime: MatterhornWalletRuntime;
+  directConnect: boolean;
+  publicRead: boolean;
+  preview: boolean;
+  custody: false;
+  signing: "client_wallet" | "external_signer" | "unsupported";
+}
+
 export interface MatterhornWalletFamilyCapability extends MatterhornCapability {
   family: "evm" | "sui" | "bittensor";
   custody: false;
@@ -80,6 +91,7 @@ export interface MatterhornWalletFamilyCapability extends MatterhornCapability {
   preview: boolean;
   signing: "client_wallet" | "external_signer" | "unsupported";
   supportedChains?: string[];
+  runtimeSupport?: Record<MatterhornWalletRuntime, MatterhornWalletRuntimeSupport>;
 }
 
 export interface MatterhornWalletCapability extends MatterhornCapability {
