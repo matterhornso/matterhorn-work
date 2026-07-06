@@ -208,11 +208,11 @@ describe("backend control plane routes", () => {
     });
     expect(result.payload.wallets.families.sui.runtimeSupport.desktop).toMatchObject({
       status: "preview",
-      label: "Desktop wallet handoff",
+      label: "Desktop external handoff",
       directConnect: false,
       publicRead: true,
       custody: false,
-      signing: "client_wallet",
+      signing: "external_signer",
     });
     expect(result.payload.wallets.families.evm.runtimeSupport.desktop).toMatchObject({
       status: "preview",
