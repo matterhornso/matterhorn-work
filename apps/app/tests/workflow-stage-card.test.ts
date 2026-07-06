@@ -50,6 +50,13 @@ describe("WorkflowStageCard — render contract", () => {
     expect(source).toContain("ArrowRight");
   });
 
+  test("supports disabling task actions when workspace readiness is blocked", () => {
+    const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
+    expect(source).toContain("actionDisabled?:");
+    expect(source).toContain("disabled={actionDisabled}");
+    expect(source).toContain("actionTitle?:");
+  });
+
   test("shows external signer lock indicator when required", () => {
     const source = readAppSource("domains/session/workflows/workflow-stage-card.tsx");
     expect(source).toContain("requiresExternalSigner?:");
@@ -175,6 +182,16 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
     expect(src).not.toContain("draftedPromptTitle");
     expect(src).not.toContain("Nothing has");
     expect(src).not.toContain("Draft ready");
+  });
+
+  test("focused desk task cards show readiness blockers before launch", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("protocol-desk-readiness");
+    expect(src).toContain("matterhornServerClient.workspaceReadiness(readinessWorkspaceId)");
+    expect(src).toContain("features.start_desk_task");
+    expect(src).toContain("actionDisabled={startTaskBlocked}");
+    expect(src).toContain("actionTitle={startTaskBlocker ?? undefined}");
   });
 
   test("task launcher route can send the prompt immediately", () => {

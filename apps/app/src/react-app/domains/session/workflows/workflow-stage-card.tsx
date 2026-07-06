@@ -43,6 +43,10 @@ export interface WorkflowStageCardProps {
   isCurrent?: boolean;
   /** Action button label (e.g. "Start", "Stage task"). */
   actionLabel?: string;
+  /** Disables the action button while preserving the visible task affordance. */
+  actionDisabled?: boolean;
+  /** Tooltip/title copy for the action button. */
+  actionTitle?: string;
   /** Callback when the action button is clicked. */
   onAction?: () => void;
   /** Callback when a listed output artifact is clicked. */
@@ -95,6 +99,8 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
     safetyBoundary,
     isCurrent = false,
     actionLabel,
+    actionDisabled = false,
+    actionTitle,
     onAction,
     onOutputClick,
     toneClass,
@@ -132,10 +138,13 @@ export function WorkflowStageCard(props: WorkflowStageCardProps) {
               onClick={onAction}
               variant="ghost"
               size="xs"
+              disabled={actionDisabled}
+              title={actionTitle}
               className={cn(
                 "h-6 gap-1 bg-transparent px-1.5 text-[11px] font-semibold hover:bg-transparent",
                 toneClass ?? "text-[var(--matterhorn-desk-color)]",
                 "hover:text-[var(--matterhorn-desk-color)]",
+                "disabled:cursor-not-allowed disabled:opacity-45",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--matterhorn-desk-color)]",
               )}
             >

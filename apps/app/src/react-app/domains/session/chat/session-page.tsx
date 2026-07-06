@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePanelRef } from "react-resizable-panels";
 import {
+  AlertCircle,
   BarChart3,
   BrainCircuit,
   Copy,
@@ -507,16 +508,45 @@ function WorkflowDeskHomeSurface({
 
 function ProtocolDeskEmptyState({
   panel,
+  matterhornServerClient,
+  runtimeWorkspaceId,
   onUsePrompt,
   onBackHome,
 }: {
   panel: VenueSidePanel;
+  matterhornServerClient: MatterhornServerClient | null;
+  runtimeWorkspaceId: string | null;
   onUsePrompt: (prompt: string, title?: string) => void;
   onBackHome: () => void;
 }) {
   const visual = getCustomerProtocolDeskVisual(panel);
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
+  const readinessWorkspaceId = runtimeWorkspaceId?.trim() ?? "";
+  const readinessQuery = useQuery({
+    queryKey: ["protocol-desk-readiness", readinessWorkspaceId],
+    enabled: Boolean(matterhornServerClient && readinessWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (!matterhornServerClient || !readinessWorkspaceId) throw new Error("Open a workspace to start desk tasks.");
+      return matterhornServerClient.workspaceReadiness(readinessWorkspaceId);
+    },
+  });
+  const startTaskFeature = readinessQuery.data?.features.start_desk_task;
+  const startTaskBlocked = Boolean(
+    !matterhornServerClient ||
+    !readinessWorkspaceId ||
+    (startTaskFeature && !startTaskFeature.ready),
+  );
+  const startTaskBlocker = !matterhornServerClient
+    ? "Matterhorn Work engine is offline."
+    : !readinessWorkspaceId
+      ? "Open a workspace before starting a desk task."
+      : startTaskFeature && !startTaskFeature.ready
+        ? `Start task needs ${startTaskFeature.blockingCheckIds
+          .map((checkId) => readinessQuery.data?.checks[checkId]?.label ?? checkId)
+          .join(", ")}.`
+        : null;
   const deskSafetyInfo = panel === "bittensor"
     ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : panel === "polymarket"
@@ -581,6 +611,13 @@ function ProtocolDeskEmptyState({
         </div>
       </div>
 
+      {startTaskBlocker ? (
+        <div className="mx-1 flex items-start gap-2 rounded-md bg-dls-surface-muted/35 px-3 py-2 text-xs leading-5 text-dls-secondary">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-[var(--matterhorn-desk-color)]" />
+          <span>{startTaskBlocker}</span>
+        </div>
+      ) : null}
+
       <div className="matterhorn-focused-desk-prompt-list space-y-2" aria-label="Agent tasks">
         {prompts.map((item) => {
           const evidenceHint = panel === "bittensor"
@@ -598,6 +635,8 @@ function ProtocolDeskEmptyState({
               status="idle"
               evidenceHints={[evidenceHint]}
               actionLabel={draftConfig?.confirmCtaLabel ?? "Start task"}
+              actionDisabled={startTaskBlocked}
+              actionTitle={startTaskBlocker ?? undefined}
               onAction={() => {
                 onUsePrompt(item.prompt, item.title);
               }}
@@ -1896,6 +1935,8 @@ export function SessionPage(props: SessionPageProps) {
                     >
                       <ProtocolDeskEmptyState
                         panel={focusedProtocolPanel}
+                        matterhornServerClient={props.matterhornServerClient}
+                        runtimeWorkspaceId={props.runtimeWorkspaceId}
                         onBackHome={returnToProjectHome}
                         onUsePrompt={(prompt, title) => {
                           if (typeof window !== "undefined") {
