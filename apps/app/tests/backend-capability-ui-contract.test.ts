@@ -175,6 +175,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/preview`');
     expect(source).toContain("workspaceSuiTransactionReceipt");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/sui/transactions/receipt`');
+    expect(source).toContain("deleteWorkspaceOutput");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/outputs?${query.toString()}`');
     expect(source).toContain("searchWorkspaceMemory");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/memory/search${suffix}`');
     expect(source).toContain("listWorkspaceMemory");

@@ -121,6 +121,11 @@ function walletAuditTitle(action: string): string | null {
   return null;
 }
 
+function outputAuditTitle(action: string): string | null {
+  if (action === "workspace.output.delete") return "Output deleted";
+  return null;
+}
+
 function chatAuditTitle(action: string): string | null {
   if (action === "session.create") return "Chat session created";
   if (action === "session.prompt") return "Chat prompt submitted";
@@ -137,14 +142,16 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
   const memoryTitle = memoryAuditTitle(entry.action);
   const teamAccessTitle = teamAccessAuditTitle(entry.action);
   const walletTitle = walletAuditTitle(entry.action);
+  const outputTitle = outputAuditTitle(entry.action);
   const chatTitle = chatAuditTitle(entry.action);
   const modelSelectionTitle = modelSelectionAuditTitle(entry.action);
-  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? chatTitle ?? modelSelectionTitle ?? entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? walletTitle ?? outputTitle ?? chatTitle ?? modelSelectionTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);
   const isMemoryAudit = Boolean(memoryTitle);
   const isTeamAccessAudit = Boolean(teamAccessTitle);
   const isWalletAudit = Boolean(walletTitle);
+  const isOutputAudit = Boolean(outputTitle);
   const isChatAudit = Boolean(chatTitle);
   const isModelSelectionAudit = Boolean(modelSelectionTitle);
   return {
@@ -157,9 +164,11 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
         ? "team_access"
         : isWalletAudit
           ? "wallet"
-          : isChatAudit
-            ? "chat"
-            : "audit",
+          : isOutputAudit
+            ? "output"
+            : isChatAudit
+              ? "chat"
+              : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
@@ -169,21 +178,24 @@ function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry
         ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/overview`
         : isWalletAudit
           ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/wallet`
+          : isOutputAudit
+            ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=outputs`
           : isChatAudit && target.value
             ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session/${encodeURIComponent(target.value)}`
           : undefined,
+    outputPath: isOutputAudit ? target.value : undefined,
     sessionId: isChatAudit ? target.value : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit,
-    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit ? "redacted" : "never",
+    containsUserContent: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit,
+    containsSecrets: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
     redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
-    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isChatAudit || isModelSelectionAudit
+    metadata: isMemoryAudit || isTeamAccessAudit || isWalletAudit || isOutputAudit || isChatAudit || isModelSelectionAudit
       ? {
         auditAction: entry.action,
         target: target.value ?? null,

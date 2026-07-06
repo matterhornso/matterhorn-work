@@ -707,6 +707,15 @@ export type MatterhornSuiWorkspaceEvidence = {
   source: "task_events";
 };
 
+export type MatterhornWorkspaceOutputDeleteResponse = {
+  success: true;
+  deleted: {
+    path: string;
+    size: number;
+    updatedAt: number;
+  };
+};
+
 export type MatterhornInboxItem = {
   id: string;
   name?: string;
@@ -1851,6 +1860,14 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
           timeoutMs: timeouts.status,
         },
       ),
+    deleteWorkspaceOutput: (workspaceId: string, outputPath: string) => {
+      const query = new URLSearchParams({ path: outputPath });
+      return requestJson<MatterhornWorkspaceOutputDeleteResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/outputs?${query.toString()}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.deleteWorkspace },
+      );
+    },
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
       const query = new URLSearchParams();
       if (options?.query?.trim()) query.set("query", options.query.trim());

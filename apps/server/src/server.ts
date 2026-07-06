@@ -1449,6 +1449,14 @@ function notesListOptionsFromUrl(url: URL) {
   };
 }
 
+function normalizeWorkspaceOutputPath(input: string | null): string {
+  const relativePath = normalizeWorkspaceRelativePath(input ?? "", { allowSubdirs: true });
+  if (relativePath === "outputs" || !relativePath.startsWith("outputs/")) {
+    throw new ApiError(400, "invalid_output_path", "Output path must point to a file under outputs/.");
+  }
+  return relativePath;
+}
+
 function parseProjectEvidenceSource(value: string | null): MatterhornProjectEvidenceSource | undefined {
   if (!value) return undefined;
   if (value === "notes" || value === "memory" || value === "task_events" || value === "task_runs") {
@@ -2816,19 +2824,20 @@ function buildDataControlStore(
       ],
     });
     deletionCapability = dataControlCapability({
-      status: "preview",
-      label: "Filesystem delete",
-      summary: "Outputs can be deleted manually from the outputs folder; the app does not expose bulk deletion yet.",
+      status: "working",
+      label: "Single output delete",
+      summary: "Individual output files can be deleted through the workspace outputs API. Bulk folder deletion is not exposed.",
       actions: [
         dataControlAction({
-          id: "outputs.delete-files",
-          label: "Delete output files",
-          description: "Delete selected output files from the local filesystem.",
-          kind: "filesystem",
-          status: "preview",
-          href: store.path,
+          id: "outputs.delete-file",
+          label: "Delete output file",
+          description: "Deletes one file under outputs/ and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `/workspace/${encodeURIComponent(workspace.id)}/outputs?path=:outputPath`,
           destructive: true,
-          requirements: ["filesystem_access"],
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
         }),
       ],
     });
@@ -4879,6 +4888,43 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/data-controls", "client", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(buildWorkspaceDataControls(workspace, memoryVault));
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/outputs", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const relativePath = normalizeWorkspaceOutputPath(
+      ctx.url.searchParams.get("path") ?? ctx.url.searchParams.get("outputPath") ?? ctx.url.searchParams.get("output_path"),
+    );
+    const absPath = resolveSafeChildPath(workspace.path, relativePath);
+    if (!(await exists(absPath))) {
+      throw new ApiError(404, "output_not_found", "Output file not found");
+    }
+    const info = await stat(absPath);
+    if (!info.isFile()) {
+      throw new ApiError(400, "invalid_output_path", "Output deletion only supports files.");
+    }
+
+    await rm(absPath);
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "remote" },
+      action: "workspace.output.delete",
+      target: relativePath,
+      summary: "Deleted workspace output file",
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      deleted: {
+        path: relativePath,
+        size: info.size,
+        updatedAt: info.mtimeMs,
+      },
+    });
   });
 
   addRoute(routes, "GET", "/workspace/:id/notes", "client", async (ctx) => {

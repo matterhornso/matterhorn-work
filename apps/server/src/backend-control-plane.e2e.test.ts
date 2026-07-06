@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -1018,6 +1018,13 @@ describe("backend control plane routes", () => {
       href: "/workspace/ws_backend/memory/entities/:memoryId",
       destructive: true,
     }));
+    expect(result.payload.stores.outputs.deletion.status).toBe("working");
+    expect(result.payload.stores.outputs.deletion.actions[0]).toMatchObject({
+      id: "outputs.delete-file",
+      method: "DELETE",
+      href: "/workspace/ws_backend/outputs?path=:outputPath",
+      destructive: true,
+    });
     expect(result.payload.stores.modelPreferences.export.actions[0]).toMatchObject({
       id: "model-preference.read",
       method: "GET",
@@ -1050,6 +1057,63 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
     expect(serialized).not.toMatch(/privateKey|seed phrase|mnemonic|wallet export|bearer token/i);
+  });
+
+  test("workspace output delete removes one safe output file and audits the action", async () => {
+    const { base, dir } = await boot();
+    const outputDir = join(dir, "outputs", "bittensor", "session-a");
+    mkdirSync(outputDir, { recursive: true });
+    const outputFile = join(outputDir, "report.md");
+    writeFileSync(outputFile, "# Report\n", "utf8");
+
+    const viewer = await hostFetch(base, "/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Output viewer" }),
+    });
+    const deniedViewer = await jsonFetch(base, "/workspace/ws_backend/outputs?path=outputs/bittensor/session-a/report.md", {
+      method: "DELETE",
+    }, viewer.payload.token);
+    expect(deniedViewer.response.status).toBe(403);
+
+    const deniedOutside = await jsonFetch(base, "/workspace/ws_backend/outputs?path=notes/index.json", {
+      method: "DELETE",
+    });
+    expect(deniedOutside.response.status).toBe(400);
+
+    const deniedDirectory = await jsonFetch(base, "/workspace/ws_backend/outputs?path=outputs/bittensor/session-a", {
+      method: "DELETE",
+    });
+    expect(deniedDirectory.response.status).toBe(400);
+
+    const deleted = await jsonFetch(base, "/workspace/ws_backend/outputs?path=outputs/bittensor/session-a/report.md", {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload).toMatchObject({
+      success: true,
+      deleted: {
+        path: "outputs/bittensor/session-a/report.md",
+      },
+    });
+    expect(existsSync(outputFile)).toBe(false);
+
+    const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=10");
+    expect(audit.payload.items).toContainEqual(expect.objectContaining({
+      action: "workspace.output.delete",
+      target: "outputs/bittensor/session-a/report.md",
+    }));
+    const ledger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?kind=output&limit=10");
+    expect(ledger.payload.items).toContainEqual(expect.objectContaining({
+      title: "Output deleted",
+      outputPath: "outputs/bittensor/session-a/report.md",
+      eventType: "workspace.output.delete",
+    }));
+
+    const readOnly = await boot({ readOnly: true });
+    const deniedReadOnly = await jsonFetch(readOnly.base, "/workspace/ws_backend/outputs?path=outputs/bittensor/session-a/report.md", {
+      method: "DELETE",
+    });
+    expect(deniedReadOnly.response.status).toBe(403);
   });
 
   test("memory write routes require collaborator scope and audit successful writes", async () => {
