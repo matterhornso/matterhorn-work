@@ -179,6 +179,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/account/:address");
     expect(result.payload.wallets.families.sui.details.publicReadRoutes).toContain("/api/sui/balance/:address");
     expect(result.payload.wallets.families.sui.details.transactionPreviewRoutes).toContain("/api/sui/transactions/preview");
+    expect(result.payload.wallets.families.sui.details.receiptRoutes).toContain("/api/sui/transactions/receipt");
     expect(result.payload.wallets.families.sui.actions[0].href).toBe("https://sdk.mystenlabs.com/dapp-kit/getting-started/react");
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
@@ -235,6 +236,49 @@ describe("backend control plane routes", () => {
     expect(preview.payload.preview.previewSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(preview.payload.cards[0].kind).toBe("sui_transaction_preview");
     expect(JSON.stringify(preview.payload)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("Sui receipt route accepts only public transaction metadata", async () => {
+    const { base } = await boot();
+
+    const receipt = await jsonFetch(base, "/api/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        network: "testnet",
+        previewSha256: "a".repeat(64),
+        transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+        status: "success",
+      }),
+    });
+
+    expect(receipt.response.status).toBe(200);
+    expect(receipt.payload.success).toBe(true);
+    expect(receipt.payload.receipt).toMatchObject({
+      version: "matterhorn.sui.transaction-receipt.v1",
+      family: "sui",
+      status: "success",
+      custody: false,
+      containsSignatureMaterial: false,
+      verification: {
+        kind: "public_receipt_metadata",
+        digestPresent: true,
+        previewLinked: true,
+        liveSubmissionByMatterhorn: false,
+      },
+    });
+    expect(receipt.payload.receipt.receiptSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(receipt.payload.cards[0].kind).toBe("sui_transaction_receipt");
+    expect(JSON.stringify(receipt.payload)).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+
+    const rejected = await jsonFetch(base, "/api/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+        rawSignature: "nope",
+      }),
+    });
+    expect(rejected.response.status).toBe(400);
+    expect(rejected.payload.code).toBe("sui_secret_rejected");
   });
 
   test("GET /workspace/:id/backend/data-map returns sanitized storage locations", async () => {

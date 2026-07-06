@@ -134,6 +134,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/api/sui/balance/${encodeURIComponent(address)}${suffix}`');
     expect(source).toContain("suiTransactionPreview");
     expect(source).toContain('"/api/sui/transactions/preview"');
+    expect(source).toContain("suiTransactionReceipt");
+    expect(source).toContain('"/api/sui/transactions/receipt"');
   });
 
   test("Settings overview reads backend capabilities and workspace data map", () => {
