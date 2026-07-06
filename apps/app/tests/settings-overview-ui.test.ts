@@ -12,6 +12,7 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("backendCapabilityLabel");
     expect(source).toContain("backendCapabilityTone");
     expect(source).toContain("summarizeModelSource");
+    expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("walletFamilySummary");
     expect(source).toContain("storageLocationLabel");
     expect(source).toContain("workspaceDataPolicySummary");
@@ -27,6 +28,19 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
+  });
+
+  test("renders data policy from workspace data-map instead of static copy", () => {
+    const source = readAppSource("domains/settings/pages/overview-view.tsx");
+
+    expect(source).toContain("DataPolicySection");
+    expect(source).toContain("DATA_POLICY_STORE_ORDER");
+    expect(source).toContain("storageLocationLabel(store)");
+    expect(source).toContain("retentionLabel(store.retention)");
+    expect(source).toContain("yesNo(store.exportable)");
+    expect(source).toContain("yesNo(store.deletable)");
+    expect(source).toContain("secretsLabel(store.containsSecrets)");
+    expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });
 
   test("keeps truthful wallet copy constraints", () => {

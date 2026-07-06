@@ -123,6 +123,8 @@ import {
   testRemoteWorkspaceConnection,
 } from "../domains/workspace/remote-workspace-diagnostics";
 import { ModelPickerModal } from "../domains/session/modals/model-picker-modal";
+import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
+import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import type { ModelOption, ModelRef } from "../../app/types";
 import { workspaceSwatchColor } from "../domains/session/sidebar/utils";
 import { recordInspectorEvent } from "./app-inspector";
@@ -130,7 +132,6 @@ import { ensureDesktopLocalMatterhornConnection } from "./desktop-local-matterho
 import { resolveMatterhornConnection } from "./matterhorn-connection";
 import { abortSessionSafe } from "../../app/lib/opencode-session";
 import { useReloadCoordinator } from "./reload-coordinator";
-import { buildFeedbackUrl } from "../../app/lib/feedback";
 import { getDenInferenceUrl } from "../../app/lib/den";
 import { readActiveWorkspaceId, writeActiveWorkspaceId } from "./session-memory";
 import { workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
@@ -463,6 +464,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const routeWorkspaceId = props.workspaceId?.trim() || params.workspaceId?.trim() || "";
   const local = useLocal();
   const platform = usePlatform();
+  const { showToast } = useStatusToasts();
   const checkDesktopRestriction = useCheckDesktopRestriction();
   const restrictionNotice = useRestrictionNotice();
   const desktopConfig = useDesktopConfig();
@@ -500,6 +502,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
   const [busy, setBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const workspacesRef = useRef<RouteWorkspace[]>([]);
   const refreshInFlightRef = useRef(false);
   const reconnectAttemptedWorkspaceIdRef = useRef("");
@@ -2004,7 +2007,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             developerMode={developerMode}
             runtimeWorkspaceId={runtimeWorkspaceId ?? undefined}
             matterhornServerClient={matterhornClient}
-            onSendFeedback={() => platform.openLink(buildFeedbackUrl({ entrypoint: "settings" }))}
+            onSendFeedback={() => setFeedbackDialogOpen(true)}
             onJoinDiscord={() => platform.openLink("https://discord.gg/VEhNQXxYMB")}
             onReportIssue={() => platform.openLink("https://github.com/matterhornso/matterhorn-work/issues/new?template=bug.yml")}
           />
@@ -2419,6 +2422,25 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
       >
         {settingsView}
       </SettingsShell>
+
+      <ProjectFeedbackDialog
+        open={feedbackDialogOpen}
+        onOpenChange={setFeedbackDialogOpen}
+        matterhornServerClient={selectedWorkspaceEndpoint?.client ?? matterhornClient}
+        runtimeWorkspaceId={runtimeWorkspaceId}
+        entrypoint="settings"
+        target={{
+          sourceType: "settings",
+          sourceId: route.tab,
+          href: location.pathname,
+        }}
+        onSubmitted={() => showToast({
+          title: "Feedback saved",
+          description: "Stored locally for product quality and routing. No training by default.",
+          tone: "success",
+        })}
+        onError={(message) => showToast({ title: "Feedback was not saved", description: message, tone: "error" })}
+      />
 
       <ProviderAuthModal
         open={providerAuthSnapshot.providerAuthModalOpen}

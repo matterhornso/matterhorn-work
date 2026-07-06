@@ -49,6 +49,23 @@ export function summarizeModelSource(capabilities: MatterhornBackendCapabilities
   return `${provider}/${model}`;
 }
 
+export function summarizeModelRoutingPolicy(capabilities: MatterhornBackendCapabilitiesResponse): string {
+  const routing = capabilities.models.routing;
+  if (!routing) return "Model routing policy is not reported by the backend.";
+  const answerPath = routing.answerPath === "opencode_session_prompt_async"
+    ? "OpenCode session prompts"
+    : "unknown route";
+  const modelList = routing.modelListTool === "opencode_provider_list"
+    ? "OpenCode provider list"
+    : routing.modelListTool === "matterhorn_backend_registry"
+      ? "Matterhorn registry"
+      : "unknown source";
+  const selection = routing.userSelectable
+    ? `users can choose in ${routing.selectionSurface === "model_picker" ? "the model picker" : routing.selectionSurface}`
+    : "users cannot choose models here";
+  return `Answers use ${answerPath}. Models come from ${modelList}; ${selection}.`;
+}
+
 export function walletFamilySummary(capabilities: MatterhornBackendCapabilitiesResponse): Array<{
   family: "EVM" | "Sui" | "Bittensor";
   label: string;

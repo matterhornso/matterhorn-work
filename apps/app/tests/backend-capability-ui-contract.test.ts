@@ -5,6 +5,7 @@ import {
   backendCapabilityLabel,
   backendCapabilityTone,
   storageLocationLabel,
+  summarizeModelRoutingPolicy,
   summarizeModelSource,
   walletFamilySummary,
   workspaceDataPolicySummary,
@@ -41,6 +42,14 @@ function capabilities(overrides: Partial<MatterhornBackendCapabilitiesResponse> 
       defaultModel: { providerId: "opencode", modelId: "big-pickle" },
       providerListSource: "opencode",
       selectedModelSource: "local_preferences",
+      routing: {
+        answerPath: "opencode_session_prompt_async",
+        modelListTool: "opencode_provider_list",
+        userSelectable: true,
+        selectionSurface: "model_picker",
+        preferenceStore: "local_preferences",
+        cloudProviderImport: true,
+      },
     },
     providers: { status: "working", label: "Providers", sources: ["opencode"] },
     storage: { status: "working", label: "Storage", stores: {} },
@@ -114,6 +123,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/backend/capabilities"');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
+    expect(source).toContain("listProjectDataLedger");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
+    expect(source).toContain("submitProjectFeedback");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/feedback`');
   });
 
   test("Settings overview reads backend capabilities and workspace data map", () => {
@@ -122,6 +135,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("client.backendCapabilities()");
     expect(source).toContain("settings-workspace-data-map");
     expect(source).toContain("client.workspaceDataMap(workspaceId)");
+    expect(source).toContain("settings-project-data-ledger");
+    expect(source).toContain("client.listProjectDataLedger(workspaceId");
+    expect(source).toContain("summarizeModelRoutingPolicy");
     expect(source).toContain("Backend status");
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
@@ -156,6 +172,9 @@ describe("backend capability UI contract", () => {
   test("model and wallet helpers expose Sui as unsupported instead of hidden", () => {
     const result = capabilities();
     expect(summarizeModelSource(result)).toBe("opencode/big-pickle");
+    expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode session prompts");
+    expect(summarizeModelRoutingPolicy(result)).toContain("OpenCode provider list");
+    expect(summarizeModelRoutingPolicy(result)).toContain("model picker");
     expect(walletFamilySummary(result)).toEqual([
       { family: "EVM", label: "EVM direct connect", status: "working" },
       { family: "Sui", label: "Sui not implemented", status: "unsupported" },

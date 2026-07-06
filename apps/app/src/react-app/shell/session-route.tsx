@@ -68,7 +68,6 @@ import type {
   WorkspaceDisplay,
   WorkspaceSessionGroup,
 } from "../../app/types";
-import { buildFeedbackUrl } from "../../app/lib/feedback";
 import {
   getWorkspaceTaskLoadErrorDisplay,
   isDesktopRuntime,
@@ -150,6 +149,7 @@ import { useReloadCoordinator } from "./reload-coordinator";
 import { getReactQueryClient } from "../infra/query-client";
 import { useStatusToasts } from "../domains/shell-feedback/status-toasts";
 import { useSessionControlActions } from "../domains/session/control/session-control-actions";
+import { ProjectFeedbackDialog } from "../domains/feedback/project-feedback-dialog";
 import { legacySessionRoute, workspaceNotesRoute, workspaceSessionRoute, workspaceSettingsRoute } from "./workspace-routes";
 import { WorkspaceProvider } from "./workspace-provider";
 import type { OpenTarget } from "../domains/session/artifacts/open-target";
@@ -565,6 +565,7 @@ export function SessionRoute() {
   const [errorsByWorkspaceId, setErrorsByWorkspaceId] = useState<Record<string, string | null>>({});
   const [workspaceConnectionOverrides, setWorkspaceConnectionOverrides] = useState<Record<string, WorkspaceConnectionState>>({});
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
   const [legacySelectedWorkspaceId, setLegacySelectedWorkspaceId] = useState<string>(() => readActiveWorkspaceId() ?? "");
   const selectedWorkspaceId = routeWorkspaceId || legacySelectedWorkspaceId;
   const selectedWorkspace = useMemo(
@@ -1536,6 +1537,8 @@ export function SessionRoute() {
   );
   const selectedWorkspaceServerToken = selectedWorkspaceEndpoint?.token ?? "";
   const opencodeBaseUrl = selectedWorkspaceEndpoint?.opencodeBaseUrl ?? "";
+  const feedbackClient = selectedWorkspaceEndpoint?.client ?? client;
+  const feedbackWorkspaceId = selectedWorkspaceEndpoint?.workspaceId ?? null;
   const selectedWorkspaceIsLoading = retryingWorkspaceIds.includes(selectedWorkspaceId);
   const selectedWorkspaceError = errorsByWorkspaceId[selectedWorkspaceId] ?? null;
   const selectedSessionKnown = Boolean(
@@ -2839,13 +2842,7 @@ export function SessionRoute() {
       providerConnectedIds={providerConnectedIds}
       providers={providers}
       mcpConnectedCount={0}
-      onSendFeedback={() => {
-        platform.openLink(
-          buildFeedbackUrl({
-            entrypoint: "status-bar",
-          }),
-        );
-      }}
+      onSendFeedback={() => setFeedbackDialogOpen(true)}
       onOpenSettings={() => handleOpenSettings("/settings/general")}
       providerAuthModal={sessionProviderAuthSnapshot.providerAuthModalOpen ? {
         open: true,
@@ -3161,6 +3158,24 @@ export function SessionRoute() {
       onCopyProjectPath={() => void copyTextToClipboard(selectedWorkspaceRoot, "Project path")}
       onCopyOutputsPath={() => void copyTextToClipboard(selectedWorkspaceOutputsPath, "Outputs path")}
       sessions={paletteSessionOptions}
+    />
+    <ProjectFeedbackDialog
+      open={feedbackDialogOpen}
+      onOpenChange={setFeedbackDialogOpen}
+      matterhornServerClient={feedbackClient}
+      runtimeWorkspaceId={feedbackWorkspaceId}
+      entrypoint="status-bar"
+      target={{
+        sourceType: selectedSessionId ? "chat" : "other",
+        sourceId: selectedSessionId ?? feedbackWorkspaceId ?? undefined,
+        href: location.pathname,
+      }}
+      onSubmitted={() => showToast({
+        title: "Feedback saved",
+        description: "Stored locally for product quality and routing. No training by default.",
+        tone: "success",
+      })}
+      onError={(message) => showToast({ title: "Feedback was not saved", description: message, tone: "error" })}
     />
     <ModelPickerModal
       open={modelPickerOpen}

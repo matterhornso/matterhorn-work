@@ -32,6 +32,14 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     defaultModel: { providerId: "opencode", modelId: "big-pickle" },
     providerListSource: "opencode",
     selectedModelSource: "local_preferences",
+    routing: {
+      answerPath: "opencode_session_prompt_async",
+      modelListTool: "opencode_provider_list",
+      userSelectable: true,
+      selectionSurface: "model_picker",
+      preferenceStore: "local_preferences",
+      cloudProviderImport: true,
+    },
     description: "Default model is opencode/big-pickle.",
   },
   providers: {
@@ -175,7 +183,7 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     { ...cap("working", "Outputs"), section: "outputs" },
     { ...cap("preview", "Teams"), section: "teams" },
     { ...cap("working", "Security"), section: "security" },
-    { ...cap("unsupported", "Feedback"), section: "feedback", description: "Feedback is currently a link, not structured feedback." },
+    { ...cap("working", "Feedback"), section: "feedback", description: "Structured feedback is stored locally for evaluation, routing, and product quality only." },
     { ...cap("working", "MCP"), section: "mcp" },
   ],
 };

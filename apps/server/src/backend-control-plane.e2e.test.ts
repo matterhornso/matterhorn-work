@@ -166,10 +166,15 @@ describe("backend control plane routes", () => {
     expect(result.payload.version).toBe("matterhorn.backend.capabilities.v1");
     expect(result.payload.models.defaultModel).toEqual({ providerId: "opencode", modelId: "big-pickle" });
     expect(result.payload.models.providerListSource).toBe("opencode");
+    expect(result.payload.models.routing.answerPath).toBe("opencode_session_prompt_async");
+    expect(result.payload.models.routing.modelListTool).toBe("opencode_provider_list");
+    expect(result.payload.models.routing.userSelectable).toBe(true);
     expect(result.payload.memory.scope).toBe("machine_global");
     expect(result.payload.wallets.families.evm.status).toBe("working");
     expect(result.payload.wallets.families.bittensor.signing).toBe("external_signer");
     expect(result.payload.wallets.families.sui.status).toBe("unsupported");
+    expect(result.payload.wallets.families.sui.details.recommendedPackages).toContain("@mysten/dapp-kit-react");
+    expect(result.payload.wallets.families.sui.actions[0].href).toBe("https://sdk.mystenlabs.com/dapp-kit/getting-started/react");
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
     expect(result.payload.settings.map((section: { section: string }) => section.section)).toContain("wallet");
@@ -193,6 +198,9 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.memory.paths[0]).toBe(join(dir, "memory"));
     expect(result.payload.stores.chat.scope).toBe("opencode_runtime");
     expect(result.payload.stores.outputs.path).toBe(join(dir, "outputs"));
+    expect(result.payload.stores.feedback.scope).toBe("machine_global");
+    expect(result.payload.stores.feedback.path).toBe(join(dir, "openwork-data", "feedback", "ws_backend.jsonl"));
+    expect(result.payload.stores.feedback.containsSecrets).toBe("redacted");
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
 
     const serialized = JSON.stringify(result.payload);
