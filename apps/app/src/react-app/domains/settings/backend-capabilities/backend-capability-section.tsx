@@ -218,7 +218,11 @@ export function BackendCapabilitiesSection(props: BackendCapabilitiesSectionProp
                 </span>
               }
               status={section.status}
-              hint={section.description}
+              hint={[
+                section.description,
+                section.route ? `Route: ${section.route}` : null,
+                section.backendDependencies.length ? `${section.backendDependencies.length} backend dependencies` : null,
+              ].filter(Boolean).join(" · ")}
             />
           );
         })}

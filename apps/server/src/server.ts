@@ -2211,9 +2211,94 @@ function backendSettingsSections(input: {
   walletStatus: MatterhornCapabilityStatus;
   securityStatus: MatterhornCapabilityStatus;
 }): MatterhornSettingsSectionCapability[] {
+  const metadata: Record<MatterhornSettingsSectionCapability["section"], Omit<MatterhornSettingsSectionCapability, keyof MatterhornCapability | "section">> = {
+    overview: {
+      route: "/settings/overview",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/api/backend/capabilities", "/workspace/:id/backend/control-plane"],
+    },
+    profile: {
+      route: "/settings/cloud-account",
+      workspaceScoped: false,
+      desktopOnly: false,
+      backendDependencies: ["/api/backend/capabilities", "/workspace/:id/backend/control-plane"],
+    },
+    models: {
+      route: "/settings/ai",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/api/backend/models", "/workspace/:id/backend/models", "/workspace/:id/backend/model-selection"],
+      primaryAction: { id: "settings.models.open", label: "Open model settings", kind: "route", href: "/settings/ai" },
+    },
+    providers: {
+      route: "/settings/cloud-providers",
+      workspaceScoped: false,
+      desktopOnly: false,
+      backendDependencies: ["/api/backend/models"],
+      primaryAction: { id: "settings.providers.open", label: "Open provider settings", kind: "route", href: "/settings/cloud-providers" },
+    },
+    wallet: {
+      route: "/settings/wallet",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/api/backend/capabilities", "/api/sui/account/:address", "/workspace/:id/sui/transactions/preview"],
+      primaryAction: { id: "settings.wallet.open", label: "Open wallet settings", kind: "route", href: "/settings/wallet" },
+    },
+    memory: {
+      route: "/workspace/:id/session?panel=memory",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/memory/entities", "/workspace/:id/memory/suggestions"],
+      primaryAction: { id: "settings.memory.open", label: "Open Memory review", kind: "route", href: "workspace:memory" },
+    },
+    notes: {
+      route: "/workspace/:id/session?panel=notes",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/notes"],
+      primaryAction: { id: "settings.notes.open", label: "Open Notes", kind: "route", href: "workspace:notes" },
+    },
+    outputs: {
+      route: "/workspace/:id/session?panel=outputs",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/outputs", "/workspace/:id/data-ledger?kind=output"],
+      primaryAction: { id: "settings.outputs.open", label: "Open Outputs", kind: "route", href: "workspace:outputs" },
+    },
+    teams: {
+      route: "/settings/overview#teams",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/backend/team-access/summary", "/workspace/:id/backend/team-access"],
+      primaryAction: { id: "settings.teams.manage", label: "Manage local tokens", kind: "route", href: "/settings/overview#teams" },
+    },
+    security: {
+      route: "/settings/permissions",
+      workspaceScoped: true,
+      desktopOnly: true,
+      backendDependencies: ["/api/backend/capabilities", "/workspace/:id/backend/readiness"],
+      primaryAction: { id: "settings.security.open", label: "Open permissions", kind: "route", href: "/settings/permissions" },
+    },
+    feedback: {
+      route: "/settings/overview#feedback",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/workspace/:id/feedback", "/workspace/:id/data-ledger?kind=feedback"],
+      primaryAction: { id: "settings.feedback.open", label: "Review feedback", kind: "route", href: "/settings/overview#feedback" },
+    },
+    mcp: {
+      route: "/settings/extensions/mcp",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: ["/mcp/*", "/extensions/*"],
+      primaryAction: { id: "settings.mcp.open", label: "Open MCPs", kind: "route", href: "/settings/extensions/mcp" },
+    },
+  };
   const base = (section: MatterhornSettingsSectionCapability["section"], item: MatterhornCapability): MatterhornSettingsSectionCapability => ({
     section,
     ...item,
+    ...metadata[section],
   });
   return [
     base("overview", capability("working", "Overview", "Workspace overview is available from local server state.")),

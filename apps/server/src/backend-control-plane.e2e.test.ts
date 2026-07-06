@@ -233,6 +233,22 @@ describe("backend control plane routes", () => {
     expect(result.payload.security.cors.status).toBe("needs_setup");
     expect(result.payload.security.memoryWriteGuards.status).toBe("working");
     expect(result.payload.settings.map((section: { section: string }) => section.section)).toContain("wallet");
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "wallet")).toMatchObject({
+      route: "/settings/wallet",
+      workspaceScoped: true,
+      desktopOnly: false,
+      backendDependencies: expect.arrayContaining(["/api/backend/capabilities", "/workspace/:id/sui/transactions/preview"]),
+      primaryAction: {
+        id: "settings.wallet.open",
+        kind: "route",
+        href: "/settings/wallet",
+      },
+    });
+    expect(result.payload.settings.find((section: { section: string }) => section.section === "mcp")).toMatchObject({
+      route: "/settings/extensions/mcp",
+      workspaceScoped: true,
+      backendDependencies: expect.arrayContaining(["/mcp/*", "/extensions/*"]),
+    });
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);

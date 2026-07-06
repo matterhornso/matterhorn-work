@@ -3,12 +3,49 @@ import type {
   MatterhornBackendCapabilitiesResponse,
   MatterhornCapability,
   MatterhornCapabilityStatus,
+  MatterhornSettingsSectionCapability,
 } from "@matterhorn-work/types/backend-capabilities";
 
 const MATTERHORN_BACKEND_CAPABILITIES_VERSION = "matterhorn.backend.capabilities.v1" as const;
 
 function cap(status: MatterhornCapabilityStatus, label: string, description?: string): MatterhornCapability {
   return { status, label, description };
+}
+
+function settingsCap(
+  section: MatterhornSettingsSectionCapability["section"],
+  status: MatterhornCapabilityStatus,
+  label: string,
+  description?: string,
+): MatterhornSettingsSectionCapability {
+  const routeMap: Record<MatterhornSettingsSectionCapability["section"], string> = {
+    overview: "/settings/overview",
+    profile: "/settings/cloud-account",
+    models: "/settings/ai",
+    providers: "/settings/cloud-providers",
+    wallet: "/settings/wallet",
+    memory: "/workspace/:id/session?panel=memory",
+    notes: "/workspace/:id/session?panel=notes",
+    outputs: "/workspace/:id/session?panel=outputs",
+    teams: "/settings/overview#teams",
+    security: "/settings/permissions",
+    feedback: "/settings/overview#feedback",
+    mcp: "/settings/extensions/mcp",
+  };
+  return {
+    ...cap(status, label, description),
+    section,
+    route: routeMap[section],
+    workspaceScoped: !["profile", "providers"].includes(section),
+    desktopOnly: section === "security",
+    backendDependencies: ["/api/backend/capabilities"],
+    primaryAction: {
+      id: `settings.${section}.open`,
+      label: `Open ${label}`,
+      kind: "route",
+      href: routeMap[section],
+    },
+  };
 }
 
 function baseServer() {
@@ -174,18 +211,18 @@ export const backendCapabilitiesWorkingFixture: MatterhornBackendCapabilitiesRes
     memoryWriteGuards: cap("working", "Memory write guards"),
   },
   settings: [
-    { ...cap("working", "Overview"), section: "overview" },
-    { ...cap("working", "Profile"), section: "profile" },
-    { ...cap("working", "Models"), section: "models" },
-    { ...cap("working", "Providers"), section: "providers" },
-    { ...cap("working", "Wallet"), section: "wallet" },
-    { ...cap("working", "Memory"), section: "memory" },
-    { ...cap("working", "Notes"), section: "notes" },
-    { ...cap("working", "Outputs"), section: "outputs" },
-    { ...cap("preview", "Teams"), section: "teams" },
-    { ...cap("working", "Security"), section: "security" },
-    { ...cap("working", "Feedback"), section: "feedback", description: "Structured feedback is stored locally for evaluation, routing, and product quality only." },
-    { ...cap("working", "MCP"), section: "mcp" },
+    settingsCap("overview", "working", "Overview"),
+    settingsCap("profile", "working", "Profile"),
+    settingsCap("models", "working", "Models"),
+    settingsCap("providers", "working", "Providers"),
+    settingsCap("wallet", "working", "Wallet"),
+    settingsCap("memory", "working", "Memory"),
+    settingsCap("notes", "working", "Notes"),
+    settingsCap("outputs", "working", "Outputs"),
+    settingsCap("teams", "preview", "Teams"),
+    settingsCap("security", "working", "Security"),
+    settingsCap("feedback", "working", "Feedback", "Structured feedback is stored locally for evaluation, routing, and product quality only."),
+    settingsCap("mcp", "working", "MCP"),
   ],
 };
 
