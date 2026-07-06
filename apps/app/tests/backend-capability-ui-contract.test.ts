@@ -138,6 +138,10 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-controls`');
     expect(source).toContain("workspaceTeamAccess");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`');
+    expect(source).toContain("createWorkspaceTeamAccessToken");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens`');
+    expect(source).toContain("revokeWorkspaceTeamAccessToken");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens/${encodeURIComponent(tokenId)}`');
     expect(source).toContain("listProjectDataLedger");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/data-ledger${suffix}`');
     expect(source).toContain("exportProjectDataLedger");

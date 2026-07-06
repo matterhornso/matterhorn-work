@@ -554,6 +554,81 @@ describe("backend control plane routes", () => {
     expect(serialized).not.toContain("hash");
   });
 
+  test("workspace team-token routes create one-time local access tokens and audit revokes", async () => {
+    const { base } = await boot();
+
+    const invalidOwner = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "owner", label: "Owner invite" }),
+    });
+    expect(invalidOwner.response.status).toBe(400);
+    expect(invalidOwner.payload.code).toBe("invalid_scope");
+
+    const created = await hostFetch(base, "/workspace/ws_backend/backend/team-access/tokens", {
+      method: "POST",
+      body: JSON.stringify({ scope: "viewer", label: "Read-only reviewer" }),
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.payload.success).toBe(true);
+    expect(created.payload.version).toBe("matterhorn.backend.team-access.v1");
+    expect(created.payload.token).toMatchObject({
+      scope: "viewer",
+      label: "Read-only reviewer",
+      source: "token_store",
+    });
+    expect(created.payload.token.token).toMatch(/^owt_/);
+    expect(created.payload.policy).toMatchObject({
+      secretsReturned: "one_time_token",
+      hostProtected: true,
+      auditLogged: true,
+      allowedScopes: ["collaborator", "viewer"],
+    });
+
+    const statusAfterCreate = await hostFetch(base, "/workspace/ws_backend/backend/team-access");
+    expect(statusAfterCreate.response.status).toBe(200);
+    expect(statusAfterCreate.payload.localAccess.byScope.viewer).toBe(1);
+    expect(statusAfterCreate.payload.localAccess.tokens).toContainEqual(
+      expect.objectContaining({
+        id: created.payload.token.id,
+        scope: "viewer",
+        label: "Read-only reviewer",
+        source: "token_store",
+      }),
+    );
+    expect(JSON.stringify(statusAfterCreate.payload)).not.toContain(created.payload.token.token);
+
+    const revoke = await hostFetch(base, `/workspace/ws_backend/backend/team-access/tokens/${created.payload.token.id}`, {
+      method: "DELETE",
+    });
+    expect(revoke.response.status).toBe(200);
+    expect(revoke.payload.success).toBe(true);
+    expect(revoke.payload.revoked).toMatchObject({
+      id: created.payload.token.id,
+      scope: "viewer",
+      label: "Read-only reviewer",
+    });
+    expect(revoke.payload.policy).toMatchObject({
+      secretsReturned: false,
+      hostProtected: true,
+      auditLogged: true,
+    });
+
+    const statusAfterRevoke = await hostFetch(base, "/workspace/ws_backend/backend/team-access");
+    expect(statusAfterRevoke.payload.localAccess.tokens).not.toContainEqual(
+      expect.objectContaining({ id: created.payload.token.id }),
+    );
+
+    const audit = await jsonFetch(base, "/workspace/ws_backend/audit?limit=20");
+    const actions = audit.payload.items.map((item: { action: string }) => item.action);
+    expect(actions).toContain("workspace.team_token.create");
+    expect(actions).toContain("workspace.team_token.revoke");
+
+    const serialized = JSON.stringify({ created, revoke, statusAfterCreate, statusAfterRevoke, audit });
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("hash");
+  });
+
   test("Sui public read routes reject invalid public input before provider calls", async () => {
     const { base } = await boot();
 

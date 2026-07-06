@@ -267,6 +267,10 @@ import type {
   MatterhornBackendReadinessResponse,
 } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
+import type {
+  MatterhornTeamAccessTokenDescriptor,
+  MatterhornTeamShareableTokenScope,
+} from "@matterhorn-work/types/backend-team-access";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -3809,6 +3813,105 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/backend/team-access/tokens", "host", async (ctx) => {
+    ensureWritable(config);
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const body = await readJsonBody(ctx.request);
+    const scopeRaw = typeof body.scope === "string" ? body.scope.trim() : "";
+    const scope = scopeRaw === "collaborator" || scopeRaw === "viewer" ? scopeRaw as MatterhornTeamShareableTokenScope : null;
+    if (!scope) {
+      throw new ApiError(400, "invalid_scope", "Team access tokens can be collaborator or viewer tokens.");
+    }
+    const label = typeof body.label === "string" ? body.label.trim().slice(0, 80) : undefined;
+    const issued = await tokens.create(scope, { label });
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "host" },
+      action: "workspace.team_token.create",
+      target: issued.id,
+      summary: `Created ${scope} local access token${issued.label ? ` "${issued.label}"` : ""}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.backend.team-access.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        type: workspace.workspaceType,
+      },
+      token: {
+        id: issued.id,
+        token: issued.token,
+        scope: issued.scope,
+        createdAt: issued.createdAt,
+        ...(issued.label ? { label: issued.label } : {}),
+        source: "token_store",
+      },
+      policy: {
+        secretsReturned: "one_time_token",
+        hostProtected: true,
+        auditLogged: true,
+        allowedScopes: ["collaborator", "viewer"],
+      },
+    }, 201);
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/backend/team-access/tokens/:tokenId", "host", async (ctx) => {
+    ensureWritable(config);
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    const tokenId = ctx.params.tokenId.trim();
+    const existing = (await tokens.list()).find((token) => token.id === tokenId);
+    if (!existing) {
+      throw new ApiError(404, "token_not_found", "Token not found");
+    }
+    if (existing.scope === "owner") {
+      throw new ApiError(400, "owner_token_not_supported", "Revoke owner tokens from host token settings.");
+    }
+    const ok = await tokens.revoke(tokenId);
+    if (!ok) {
+      throw new ApiError(404, "token_not_found", "Token not found");
+    }
+    const revoked: MatterhornTeamAccessTokenDescriptor = {
+      id: existing.id,
+      scope: existing.scope,
+      createdAt: existing.createdAt,
+      ...(existing.label ? { label: existing.label } : {}),
+      source: "token_store",
+    };
+
+    await recordAudit(workspace.path, {
+      id: shortId(),
+      workspaceId: workspace.id,
+      actor: ctx.actor ?? { type: "host" },
+      action: "workspace.team_token.revoke",
+      target: revoked.id,
+      summary: `Revoked ${revoked.scope} local access token${revoked.label ? ` "${revoked.label}"` : ""}`,
+      timestamp: Date.now(),
+    });
+
+    return jsonResponse({
+      success: true,
+      version: "matterhorn.backend.team-access.v1",
+      generatedAt: new Date().toISOString(),
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        type: workspace.workspaceType,
+      },
+      revoked,
+      policy: {
+        secretsReturned: false,
+        hostProtected: true,
+        auditLogged: true,
+      },
+    });
   });
 
   addRoute(routes, "GET", "/experimental/extensions/actions", "client", async (ctx) => {

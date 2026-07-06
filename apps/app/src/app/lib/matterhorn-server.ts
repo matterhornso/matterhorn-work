@@ -28,7 +28,12 @@ import type {
   MatterhornWorkspaceDataMapResponse,
 } from "@matterhorn-work/types/backend-capabilities";
 import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
-import type { MatterhornBackendTeamAccessResponse } from "@matterhorn-work/types/backend-team-access";
+import type {
+  MatterhornBackendTeamAccessResponse,
+  MatterhornTeamAccessTokenCreateRequest,
+  MatterhornTeamAccessTokenCreateResponse,
+  MatterhornTeamAccessTokenRevokeResponse,
+} from "@matterhorn-work/types/backend-team-access";
 import type { MatterhornWorkspaceDataControlsResponse } from "@matterhorn-work/types/backend-data-controls";
 import type { MatterhornBackendReadinessResponse } from "@matterhorn-work/types/backend-readiness";
 import type { MatterhornBackendControlPlaneResponse } from "@matterhorn-work/types/backend-control-plane";
@@ -1725,6 +1730,18 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    createWorkspaceTeamAccessToken: (workspaceId: string, request: MatterhornTeamAccessTokenCreateRequest) =>
+      requestJson<MatterhornTeamAccessTokenCreateResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens`,
+        { token, hostToken, method: "POST", body: request, timeoutMs: timeouts.config },
+      ),
+    revokeWorkspaceTeamAccessToken: (workspaceId: string, tokenId: string) =>
+      requestJson<MatterhornTeamAccessTokenRevokeResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/tokens/${encodeURIComponent(tokenId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
       ),
     suiAccount: (address: string, options?: { network?: MatterhornSuiNetwork }) => {
       const query = new URLSearchParams();
