@@ -1,4 +1,5 @@
 import type {
+  MatterhornBackendModelCatalogSnapshot,
   MatterhornBackendModelsResponse,
 } from "@matterhorn-work/types/backend-models";
 import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
@@ -7,7 +8,25 @@ function capability(status: MatterhornCapability["status"], label: string, descr
   return { status, label, description };
 }
 
-export function buildBackendModels(): MatterhornBackendModelsResponse {
+function fallbackCatalog(catalog?: MatterhornBackendModelCatalogSnapshot): MatterhornBackendModelCatalogSnapshot {
+  return catalog ?? {
+    ...capability(
+      "preview",
+      "Client provider list",
+      "The global backend contract is available, but a workspace must be selected before Matterhorn can ask OpenCode for the live provider catalog.",
+    ),
+    source: "opencode_provider_list",
+    serverFetched: false,
+    providerCount: 0,
+    connectedProviderCount: 0,
+    modelCount: 0,
+    connectedProviderIds: [],
+    defaultModels: {},
+    providers: [],
+  };
+}
+
+export function buildBackendModels(input: { catalog?: MatterhornBackendModelCatalogSnapshot } = {}): MatterhornBackendModelsResponse {
   return {
     success: true,
     version: "matterhorn.backend.models.v1",
@@ -17,6 +36,7 @@ export function buildBackendModels(): MatterhornBackendModelsResponse {
       modelId: "big-pickle",
       source: "server_default",
     },
+    catalog: fallbackCatalog(input.catalog),
     routing: {
       answerPath: {
         ...capability(
@@ -55,7 +75,7 @@ export function buildBackendModels(): MatterhornBackendModelsResponse {
       feedbackUse: "eval_routing_product_quality_only",
     },
     limitations: [
-      "This endpoint reports the routing contract. The full live provider/model catalog is still fetched through the OpenCode provider.list client path.",
+      "The global endpoint reports the routing contract. Use the workspace endpoint to see the server-normalized OpenCode provider catalog for a selected workspace.",
       "Model preference is local to this browser/app profile today; it is not yet a server-owned team policy.",
       "User feedback is stored for eval, routing, and product quality review only. It is not used for RL or model training by default.",
     ],

@@ -32,6 +32,7 @@ export type AiSettingsViewProps = {
   busy: boolean;
   providerAuthBusy: boolean;
   matterhornServerClient?: MatterhornServerClient | null;
+  runtimeWorkspaceId?: string | null;
   defaultModelLabel: string;
   defaultModelRef: string;
   connectedModelCount: number;
@@ -71,10 +72,35 @@ function yesNo(value: boolean | undefined) {
   return value ? "Yes" : "No";
 }
 
+function catalogStatusTone(status: string | undefined): "ready" | "warning" | "neutral" {
+  if (status === "working") return "ready";
+  if (status === "needs_setup") return "warning";
+  return "neutral";
+}
+
+function catalogStatusLabel(status: string | undefined) {
+  if (status === "working") return "Working";
+  if (status === "needs_setup") return "Needs setup";
+  if (status === "preview") return "Preview";
+  if (status === "unsupported") return "Not supported here";
+  return "Unknown";
+}
+
 export function AiSettingsView(props: AiSettingsViewProps) {
+  const runtimeWorkspaceId = props.runtimeWorkspaceId?.trim() ?? "";
+  const workspaceBackendModelsQuery = useQuery({
+    queryKey: ["settings-workspace-backend-models", runtimeWorkspaceId],
+    enabled: Boolean(props.matterhornServerClient && runtimeWorkspaceId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      if (!client || !runtimeWorkspaceId) throw new Error("Matterhorn Work engine is offline.");
+      return client.workspaceBackendModels(runtimeWorkspaceId);
+    },
+  });
   const backendModelsQuery = useQuery({
     queryKey: ["settings-backend-models"],
-    enabled: Boolean(props.matterhornServerClient),
+    enabled: Boolean(props.matterhornServerClient && !runtimeWorkspaceId),
     staleTime: 30_000,
     queryFn: async () => {
       const client = props.matterhornServerClient;
@@ -82,8 +108,15 @@ export function AiSettingsView(props: AiSettingsViewProps) {
       return client.backendModels();
     },
   });
-  const backendModels = backendModelsQuery.data;
+  const backendModels = workspaceBackendModelsQuery.data ?? backendModelsQuery.data;
   const modelRouting = backendModels?.routing;
+  const catalog = backendModels?.catalog;
+  const catalogQueryFailed = workspaceBackendModelsQuery.isError || backendModelsQuery.isError;
+  const catalogTone = catalogQueryFailed ? "warning" : catalogStatusTone(catalog?.status);
+  const catalogLabel = catalogQueryFailed ? "Needs engine" : catalogStatusLabel(catalog?.status);
+  const connectedProviderCount = catalog?.serverFetched ? catalog.connectedProviderCount : props.connectedProviders.length;
+  const connectedModelCount = catalog?.serverFetched ? catalog.modelCount : props.connectedModelCount;
+  const catalogSourceLabel = catalog?.serverFetched ? "Server snapshot" : "Delegated";
 
   return (
     <LayoutStack>
@@ -101,8 +134,8 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             <LayoutSectionItemTitle>
               {props.defaultModelLabel}
               <SettingsStatusBadge
-                tone={backendModelsQuery.isError ? "warning" : "ready"}
-                label={backendModelsQuery.isError ? "Needs engine" : "Working"}
+                tone={catalogTone}
+                label={catalogLabel}
               />
             </LayoutSectionItemTitle>
           </LayoutSectionItemHeader>
@@ -113,7 +146,7 @@ export function AiSettingsView(props: AiSettingsViewProps) {
             </div>
             <div>
               <span className="text-dls-text">Connected</span>
-              <span className="ml-2">{props.connectedProviders.length} providers · {props.connectedModelCount} models</span>
+              <span className="ml-2">{connectedProviderCount} providers · {connectedModelCount} models</span>
             </div>
             <div>
               <span className="text-dls-text">Answers</span>
@@ -131,6 +164,16 @@ export function AiSettingsView(props: AiSettingsViewProps) {
               <span className="text-dls-text">Server registry</span>
               <span className="ml-2">{modelRouting?.registry.serverOwned ? "Server-owned" : "Delegated"}</span>
             </div>
+            <div>
+              <span className="text-dls-text">Catalog</span>
+              <span className="ml-2">{catalogSourceLabel}</span>
+            </div>
+            {catalog?.connectedProviderIds.length ? (
+              <div>
+                <span className="text-dls-text">Providers</span>
+                <span className="ml-2">{catalog.connectedProviderIds.slice(0, 4).join(", ")}</span>
+              </div>
+            ) : null}
           </div>
           <p className="mt-3 text-xs leading-5 text-dls-secondary">
             {backendModels?.privacy.trainingUse === "none_by_default"

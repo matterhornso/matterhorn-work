@@ -254,6 +254,11 @@ import type {
   MatterhornDataControlStoreId,
   MatterhornWorkspaceDataControlsResponse,
 } from "@matterhorn-work/types/backend-data-controls";
+import type {
+  MatterhornBackendModelCatalogErrorCode,
+  MatterhornBackendModelCatalogSnapshot,
+  MatterhornBackendModelProviderSummary,
+} from "@matterhorn-work/types/backend-models";
 import { getMatterhornDeskAgent } from "@matterhorn-work/types/desk-agents";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm, readdir, rename, stat, appendFile, mkdir } from "node:fs/promises";
@@ -935,6 +940,121 @@ function unwrapOpencodeResult<T, E>(result: OpencodeClientResult<T, E>, path: st
     body: result.error,
     path,
   });
+}
+
+function recordLike(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => stringValue(entry)).filter((entry): entry is string => Boolean(entry));
+}
+
+function recordStringMap(value: unknown): Record<string, string> {
+  const source = recordLike(value);
+  if (!source) return {};
+  const result: Record<string, string> = {};
+  for (const [key, entryValue] of Object.entries(source)) {
+    const safeKey = stringValue(key);
+    const safeValue = stringValue(entryValue);
+    if (safeKey && safeValue) result[safeKey] = safeValue;
+  }
+  return result;
+}
+
+function providerModelIds(provider: Record<string, unknown>): string[] {
+  const models = recordLike(provider.models);
+  if (!models) return [];
+  return Object.keys(models)
+    .map((modelId) => modelId.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function providerListToBackendModelCatalog(value: unknown): MatterhornBackendModelCatalogSnapshot {
+  const payload = recordLike(value) ?? {};
+  const providers = Array.isArray(payload.all) ? payload.all : [];
+  const connectedProviderIds = Array.from(new Set(stringArray(payload.connected))).sort((a, b) => a.localeCompare(b));
+  const connected = new Set(connectedProviderIds);
+  const providerSummaries: MatterhornBackendModelProviderSummary[] = providers
+    .map((entry): MatterhornBackendModelProviderSummary | null => {
+      const provider = recordLike(entry);
+      if (!provider) return null;
+      const id = stringValue(provider.id);
+      if (!id) return null;
+      const models = providerModelIds(provider);
+      return {
+        id,
+        name: stringValue(provider.name) ?? id,
+        source: stringValue(provider.source) ?? "unknown",
+        connected: connected.has(id),
+        modelCount: models.length,
+        sampleModels: models.slice(0, 5),
+      };
+    })
+    .filter((entry): entry is MatterhornBackendModelProviderSummary => Boolean(entry))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const modelCount = providerSummaries.reduce((sum, provider) => sum + provider.modelCount, 0);
+
+  return {
+    status: "working",
+    label: "OpenCode provider catalog",
+    description: "Matterhorn asked OpenCode for the provider and model catalog for this workspace, then normalized it into safe counts and IDs.",
+    source: "opencode_provider_list",
+    serverFetched: true,
+    providerCount: providerSummaries.length,
+    connectedProviderCount: providerSummaries.filter((provider) => provider.connected).length,
+    modelCount,
+    connectedProviderIds,
+    defaultModels: recordStringMap(payload.default),
+    providers: providerSummaries,
+  };
+}
+
+function unavailableBackendModelCatalog(
+  errorCode: MatterhornBackendModelCatalogErrorCode,
+): MatterhornBackendModelCatalogSnapshot {
+  return {
+    status: "needs_setup",
+    label: "OpenCode provider catalog unavailable",
+    description: "Matterhorn could not ask OpenCode for this workspace's live provider list. Model routing can still use the selected local preference once the engine is connected.",
+    source: "opencode_provider_list",
+    serverFetched: false,
+    providerCount: 0,
+    connectedProviderCount: 0,
+    modelCount: 0,
+    connectedProviderIds: [],
+    defaultModels: {},
+    providers: [],
+    errorCode,
+  };
+}
+
+async function buildWorkspaceBackendModels(config: ServerConfig, workspace: WorkspaceInfo) {
+  try {
+    const opencode = createWorkspaceOpencodeClient(config, workspace);
+    const directory = resolveOpencodeDirectory(workspace) ?? undefined;
+    const providerList = unwrapOpencodeResult(
+      await opencode.provider.list({
+        ...(directory ? { directory } : {}),
+      }),
+      "/provider",
+    );
+    return buildBackendModels({ catalog: providerListToBackendModelCatalog(providerList) });
+  } catch (error) {
+    const errorCode: MatterhornBackendModelCatalogErrorCode =
+      error instanceof ApiError && error.code === "opencode_unconfigured"
+        ? "opencode_unconfigured"
+        : error instanceof ApiError && error.code === "opencode_request_failed"
+          ? "opencode_request_failed"
+          : "unknown";
+    return buildBackendModels({ catalog: unavailableBackendModelCatalog(errorCode) });
+  }
 }
 
 async function proxyOpencodeRequest(input: {
@@ -3440,6 +3560,11 @@ function createRoutes(
 
   addRoute(routes, "GET", "/api/backend/models", "client", async () => {
     return jsonResponse(buildBackendModels());
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/models", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildWorkspaceBackendModels(config, workspace));
   });
 
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {

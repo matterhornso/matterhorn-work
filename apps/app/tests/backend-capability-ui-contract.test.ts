@@ -124,6 +124,8 @@ describe("backend capability UI contract", () => {
     expect(source).toContain('"/api/backend/capabilities"');
     expect(source).toContain("backendModels");
     expect(source).toContain('"/api/backend/models"');
+    expect(source).toContain("workspaceBackendModels");
+    expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/models`');
     expect(source).toContain("workspaceDataMap");
     expect(source).toContain('`/workspace/${encodeURIComponent(workspaceId)}/backend/data-map`');
     expect(source).toContain("workspaceDataControls");
@@ -182,6 +184,11 @@ describe("backend capability UI contract", () => {
 
     expect(source).toContain("settings-backend-models");
     expect(source).toContain("client.backendModels()");
+    expect(source).toContain("settings-workspace-backend-models");
+    expect(source).toContain("client.workspaceBackendModels(runtimeWorkspaceId)");
+    expect(source).toContain("runtimeWorkspaceId?: string | null");
+    expect(source).toContain("backendModels?.catalog");
+    expect(source).toContain("Server snapshot");
     expect(source).toContain("Model routing");
     expect(source).toContain("Current model, provider list source, and selection policy.");
     expect(source).toContain("OpenCode session prompts");
@@ -191,6 +198,7 @@ describe("backend capability UI contract", () => {
     expect(routeSource).toContain("defaultModelLabel={defaultModelLabel}");
     expect(routeSource).toContain("defaultModelRef={defaultModelRef}");
     expect(routeSource).toContain("matterhornServerClient={matterhornClient}");
+    expect(routeSource).toContain("runtimeWorkspaceId={runtimeWorkspaceId}");
   });
 
   test("Wallet settings uses backend wallet family status including Sui", () => {

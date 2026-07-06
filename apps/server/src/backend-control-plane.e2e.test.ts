@@ -212,8 +212,42 @@ describe("backend control plane routes", () => {
     expect(result.payload.routing.registry.serverOwned).toBe(false);
     expect(result.payload.routing.registry.clientTool).toBe("opencode_client_provider_list");
     expect(result.payload.routing.registry.cloudProviderImport).toBe(true);
+    expect(result.payload.catalog).toMatchObject({
+      source: "opencode_provider_list",
+      serverFetched: false,
+      providerCount: 0,
+      connectedProviderCount: 0,
+      modelCount: 0,
+      providers: [],
+    });
     expect(result.payload.privacy.trainingUse).toBe("none_by_default");
     expect(result.payload.privacy.feedbackUse).toBe("eval_routing_product_quality_only");
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
+  test("GET /workspace/:id/backend/models reports a sanitized workspace provider catalog state", async () => {
+    const { base } = await boot();
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/models");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.success).toBe(true);
+    expect(result.payload.version).toBe("matterhorn.backend.models.v1");
+    expect(result.payload.catalog).toMatchObject({
+      status: "needs_setup",
+      source: "opencode_provider_list",
+      serverFetched: false,
+      providerCount: 0,
+      connectedProviderCount: 0,
+      modelCount: 0,
+      connectedProviderIds: [],
+      defaultModels: {},
+      providers: [],
+      errorCode: "opencode_unconfigured",
+    });
+    expect(result.payload.catalog.description).not.toContain("owt_");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);

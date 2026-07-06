@@ -12,6 +12,32 @@ export interface MatterhornBackendModelRef {
   modelId: string;
 }
 
+export type MatterhornBackendModelCatalogErrorCode =
+  | "opencode_unconfigured"
+  | "opencode_request_failed"
+  | "unknown";
+
+export interface MatterhornBackendModelProviderSummary {
+  id: string;
+  name: string;
+  source?: "env" | "api" | "config" | "custom" | "unknown" | string;
+  connected: boolean;
+  modelCount: number;
+  sampleModels: string[];
+}
+
+export interface MatterhornBackendModelCatalogSnapshot extends MatterhornCapability {
+  source: MatterhornBackendModelListSource;
+  serverFetched: boolean;
+  providerCount: number;
+  connectedProviderCount: number;
+  modelCount: number;
+  connectedProviderIds: string[];
+  defaultModels: Record<string, string>;
+  providers: MatterhornBackendModelProviderSummary[];
+  errorCode?: MatterhornBackendModelCatalogErrorCode;
+}
+
 export interface MatterhornBackendModelRouting {
   answerPath: MatterhornCapability & {
     transport: "opencode_session_prompt_async" | "unknown";
@@ -38,6 +64,7 @@ export interface MatterhornBackendModelsResponse {
   defaultModel: MatterhornBackendModelRef & {
     source: "server_default" | "local_preferences" | "unknown";
   };
+  catalog: MatterhornBackendModelCatalogSnapshot;
   routing: MatterhornBackendModelRouting;
   privacy: {
     trainingUse: "none_by_default";

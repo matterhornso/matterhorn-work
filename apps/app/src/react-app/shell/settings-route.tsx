@@ -2039,6 +2039,7 @@ function SettingsRouteContent(props: SettingsSurfaceProps = {}) {
             busy={busy}
             providerAuthBusy={providerAuthSnapshot.providerAuthBusy}
             matterhornServerClient={matterhornClient}
+            runtimeWorkspaceId={runtimeWorkspaceId}
             defaultModelLabel={defaultModelLabel}
             defaultModelRef={defaultModelRef}
             connectedModelCount={connectedModelCount}

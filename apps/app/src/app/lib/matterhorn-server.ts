@@ -1308,6 +1308,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
         hostToken,
         timeoutMs: timeouts.capabilities,
       }),
+    workspaceBackendModels: (workspaceId: string) =>
+      requestJson<MatterhornBackendModelsResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/models`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
     googleWorkspaceStatus: () => requestJson<GoogleWorkspaceAuthStatus>(baseUrl, "/experimental/google-workspace/status", { token, hostToken, timeoutMs: timeouts.status }),
     googleWorkspaceConnectStart: () => requestJson<GoogleWorkspaceConnectStart>(baseUrl, "/experimental/google-workspace/connect/start", { token, hostToken, method: "POST", timeoutMs: timeouts.status }),
     googleWorkspaceConnectStatus: (flowId: string) => requestJson<GoogleWorkspaceConnectStatus>(baseUrl, `/experimental/google-workspace/connect/status/${encodeURIComponent(flowId)}`, { token, hostToken, timeoutMs: timeouts.status }),
