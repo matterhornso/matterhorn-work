@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -490,6 +490,68 @@ describe("backend control plane routes", () => {
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.payload.code).toBe("sui_secret_rejected");
+  });
+
+  test("workspace Sui preview and receipt routes save evidence into the project ledger", async () => {
+    const { base, dir } = await boot();
+
+    const preview = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/preview", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sui wallet evidence",
+        payload: {
+          network: "testnet",
+          sender: "0x2",
+          recipient: "0x3",
+          amountSui: "1",
+          memo: "workspace evidence test",
+        },
+      }),
+    });
+    expect(preview.response.status).toBe(201);
+    expect(preview.payload.success).toBe(true);
+    expect(preview.payload.evidence).toMatchObject({
+      workspaceId: "ws_backend",
+      sessionSlug: "sui_wallet_evidence",
+      source: "task_events",
+    });
+    expect(preview.payload.preview.canSubmit).toBe(false);
+    expect(existsSync(join(dir, preview.payload.evidence.outputPath))).toBe(true);
+
+    const receipt = await jsonFetch(base, "/workspace/ws_backend/sui/transactions/receipt", {
+      method: "POST",
+      body: JSON.stringify({
+        sessionId: "sui wallet evidence",
+        payload: {
+          network: "testnet",
+          previewSha256: preview.payload.preview.previewSha256,
+          transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+          status: "success",
+          sender: "0x2",
+          recipient: "0x3",
+          amountSui: "1",
+        },
+      }),
+    });
+    expect(receipt.response.status).toBe(201);
+    expect(receipt.payload.success).toBe(true);
+    expect(receipt.payload.receipt.containsSignatureMaterial).toBe(false);
+    expect(existsSync(join(dir, receipt.payload.evidence.outputPath))).toBe(true);
+
+    const ledger = await jsonFetch(base, "/workspace/ws_backend/data-ledger?desk=sui&kind=output&limit=20");
+    expect(ledger.response.status).toBe(200);
+    expect(ledger.payload.success).toBe(true);
+    expect(ledger.payload.summary.outputs).toBeGreaterThanOrEqual(2);
+    const outputPaths = ledger.payload.items.map((item: { outputPath?: string }) => item.outputPath);
+    expect(outputPaths).toContain(preview.payload.evidence.outputPath);
+    expect(outputPaths).toContain(receipt.payload.evidence.outputPath);
+    expect(ledger.payload.items.every((item: { desk?: string }) => item.desk === "sui")).toBe(true);
+
+    const serializedItems = JSON.stringify(ledger.payload.items);
+    expect(serializedItems).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+    const serialized = JSON.stringify(ledger.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
   });
 
   test("GET /workspace/:id/backend/data-map returns sanitized storage locations", async () => {
