@@ -51,11 +51,13 @@ describe("Settings overview backend capability integration", () => {
     expect(source).toContain("controlSummary(props.controls, store, \"deletion\")");
     expect(source).toContain("retentionLabel(store.retention)");
     expect(source).toContain("secretsLabel(store.containsSecrets)");
+    expect(source).toContain("Workspace data policy");
     expect(source).toContain("Model training");
     expect(source).toContain("Workspace data is not used for RL or model training.");
     expect(source).toContain("Feedback collection");
     expect(source).toContain("Toggle workspace feedback collection");
-    expect(source).toContain("Append-only history");
+    expect(source).toContain("Export and delete");
+    expect(source).toContain("Storage locations and controls");
     expect(source).toContain("retentionPolicy.summary");
     expect(source).toContain("Where workspace data lives, what can be exported, and what can be deleted.");
   });
