@@ -164,9 +164,12 @@ import {
 } from "./tools/polymarket.js";
 import {
   buildSuiAccountCard,
+  buildSuiTransactionReceipt,
+  buildSuiTransactionReceiptCard,
   buildSuiTransferPreview,
   buildSuiTransactionPreviewCard,
   SuiInputError,
+  type SuiTransactionReceiptInput,
   type SuiTransferPreviewInput,
   suiProvider,
 } from "./tools/sui.js";
@@ -1902,6 +1905,7 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
         configuredNetworks: ["sui-testnet", "sui-mainnet"],
         publicReadRoutes: ["/api/sui/account/:address", "/api/sui/balance/:address"],
         transactionPreviewRoutes: ["/api/sui/transactions/preview"],
+        receiptRoutes: ["/api/sui/transactions/receipt"],
         signingBoundary: "client_wallet",
         docs: ["https://sdk.mystenlabs.com/dapp-kit/getting-started/react"],
       },
@@ -6716,6 +6720,16 @@ function createRoutes(
     try {
       const preview = buildSuiTransferPreview(body as SuiTransferPreviewInput);
       return jsonResponse({ success: true, preview, cards: [buildSuiTransactionPreviewCard(preview)] });
+    } catch (err) {
+      throw suiApiError(err);
+    }
+  });
+
+  addRoute(routes, "POST", "/api/sui/transactions/receipt", "client", async (ctx) => {
+    const body = await readJsonBody(ctx.request);
+    try {
+      const receipt = buildSuiTransactionReceipt(body as SuiTransactionReceiptInput);
+      return jsonResponse({ success: true, receipt, cards: [buildSuiTransactionReceiptCard(receipt)] });
     } catch (err) {
       throw suiApiError(err);
     }

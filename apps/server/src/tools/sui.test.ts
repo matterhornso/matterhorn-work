@@ -5,6 +5,8 @@ import {
   SuiInputError,
   SuiPublicReadProvider,
   buildSuiAccountCard,
+  buildSuiTransactionReceipt,
+  buildSuiTransactionReceiptCard,
   buildSuiTransferPreview,
   buildSuiTransactionPreviewCard,
   findForbiddenSuiCredentialInput,
@@ -168,6 +170,55 @@ describe("Sui public read provider", () => {
       recipient: "0x3",
       amountSui: "1",
       privateKey: "nope",
+    } as never)).toThrow(SuiInputError);
+  });
+
+  test("builds public Sui transaction receipts without signature material", () => {
+    const receipt = buildSuiTransactionReceipt({
+      network: "testnet",
+      previewSha256: "a".repeat(64),
+      transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+      status: "success",
+      sender: SHORT_ADDRESS,
+      recipient: "0x3",
+      amountMist: "1000000000",
+      explorerUrl: "https://suivision.xyz/txblock/5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+    }, { now: () => NOW });
+    const card = buildSuiTransactionReceiptCard(receipt);
+    const serialized = JSON.stringify({ receipt, card });
+
+    expect(receipt).toMatchObject({
+      version: "matterhorn.sui.transaction-receipt.v1",
+      family: "sui",
+      network: "testnet",
+      status: "success",
+      amountMist: "1000000000",
+      amountSui: "1",
+      custody: false,
+      containsSignatureMaterial: false,
+      verification: {
+        kind: "public_receipt_metadata",
+        digestPresent: true,
+        previewLinked: true,
+        liveSubmissionByMatterhorn: false,
+      },
+    });
+    expect(receipt.receiptSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(card.kind).toBe("sui_transaction_receipt");
+    expect(serialized).not.toMatch(/private[_\s-]?key|seed[_\s-]?phrase|mnemonic|wallet export|raw signature|signed payload/i);
+  });
+
+  test("rejects invalid or secret-shaped Sui receipts", () => {
+    expect(() => buildSuiTransactionReceipt({
+      transactionDigest: "not a digest",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransactionReceipt({
+      transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+      status: "pending",
+    })).toThrow(SuiInputError);
+    expect(() => buildSuiTransactionReceipt({
+      transactionDigest: "5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky",
+      rawSignature: "nope",
     } as never)).toThrow(SuiInputError);
   });
 });

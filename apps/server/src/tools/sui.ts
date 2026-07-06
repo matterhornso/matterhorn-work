@@ -18,6 +18,7 @@ type SuiRouteInputErrorCode =
   | "invalid_sui_network"
   | "invalid_sui_amount"
   | "invalid_sui_preview"
+  | "invalid_sui_receipt"
   | "sui_secret_rejected";
 
 export class SuiInputError extends Error {
@@ -127,6 +128,43 @@ export interface SuiTransactionPreview {
   warnings: string[];
 }
 
+export interface SuiTransactionReceiptInput {
+  network?: string | null;
+  previewSha256?: string | null;
+  transactionDigest?: string | null;
+  digest?: string | null;
+  status?: string | null;
+  sender?: string | null;
+  recipient?: string | null;
+  amountMist?: string | number | bigint | null;
+  explorerUrl?: string | null;
+}
+
+export interface SuiTransactionReceipt {
+  version: "matterhorn.sui.transaction-receipt.v1";
+  family: "sui";
+  network: SuiNetwork;
+  previewSha256: string | null;
+  transactionDigest: string;
+  status: "success" | "failure" | "unknown";
+  sender?: string;
+  recipient?: string;
+  amountMist?: string;
+  amountSui?: string;
+  explorerUrl?: string;
+  custody: false;
+  containsSignatureMaterial: false;
+  verification: {
+    kind: "public_receipt_metadata";
+    digestPresent: true;
+    previewLinked: boolean;
+    liveSubmissionByMatterhorn: false;
+  };
+  importedAt: string;
+  receiptSha256: string;
+  warnings: string[];
+}
+
 export type SuiTransactionPreviewCard = {
   kind: "sui_transaction_preview";
   title: string;
@@ -136,6 +174,17 @@ export type SuiTransactionPreviewCard = {
   items: Array<{ label: string; value: string; tone?: "default" | "muted" | "good" | "warning" | "danger" }>;
   warnings: string[];
   data: { preview: SuiTransactionPreview };
+};
+
+export type SuiTransactionReceiptCard = {
+  kind: "sui_transaction_receipt";
+  title: string;
+  subtitle: string;
+  summary: string;
+  tone: "default" | "warning";
+  items: Array<{ label: string; value: string; tone?: "default" | "muted" | "good" | "warning" | "danger" }>;
+  warnings: string[];
+  data: { receipt: SuiTransactionReceipt };
 };
 
 export type SuiChatCard =
@@ -149,7 +198,8 @@ export type SuiChatCard =
       warnings: string[];
       data: { account: SuiAccountSnapshot };
     }
-  | SuiTransactionPreviewCard;
+  | SuiTransactionPreviewCard
+  | SuiTransactionReceiptCard;
 
 export interface SuiPublicReadProviderOptions {
   clientFactory?: (network: SuiNetwork) => SuiReadClient;
@@ -348,6 +398,98 @@ export function buildSuiTransferPreview(
   };
 }
 
+function normalizeSuiReceiptStatus(value: string | null | undefined): SuiTransactionReceipt["status"] {
+  const normalized = (value ?? "unknown").trim().toLowerCase();
+  if (!normalized || normalized === "unknown") return "unknown";
+  if (["success", "succeeded", "executed"].includes(normalized)) return "success";
+  if (["failure", "failed", "error"].includes(normalized)) return "failure";
+  throw new SuiInputError("invalid_sui_receipt", "status must be success, failure, or unknown");
+}
+
+function normalizeSuiTransactionDigest(value: string | null | undefined): string {
+  const digest = (value ?? "").trim();
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,128}$/.test(digest)) {
+    throw new SuiInputError("invalid_sui_receipt", "transactionDigest must be a public Sui transaction digest");
+  }
+  return digest;
+}
+
+function normalizePreviewSha256(value: string | null | undefined): string | null {
+  const previewSha256 = value?.trim();
+  if (!previewSha256) return null;
+  if (!/^[a-f0-9]{64}$/i.test(previewSha256)) {
+    throw new SuiInputError("invalid_sui_receipt", "previewSha256 must be a 64-character SHA-256 hex digest");
+  }
+  return previewSha256.toLowerCase();
+}
+
+function normalizeOptionalExplorerUrl(value: string | null | undefined): string | undefined {
+  const text = value?.trim();
+  if (!text) return undefined;
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "https:") {
+      throw new Error("invalid protocol");
+    }
+    return url.toString();
+  } catch {
+    throw new SuiInputError("invalid_sui_receipt", "explorerUrl must be an https URL");
+  }
+}
+
+export function buildSuiTransactionReceipt(
+  input: SuiTransactionReceiptInput,
+  options: { now?: () => Date } = {},
+): SuiTransactionReceipt {
+  const forbidden = findForbiddenSuiCredentialInput(input);
+  if (forbidden) {
+    throw new SuiInputError(
+      "sui_secret_rejected",
+      `Sui receipts accept only public metadata. Do not provide seed phrases, private keys, mnemonics, raw signatures, signed payloads, or wallet exports (${forbidden}).`,
+    );
+  }
+
+  const network = normalizeMatterhornSuiNetwork(input.network);
+  const previewSha256 = normalizePreviewSha256(input.previewSha256);
+  const transactionDigest = normalizeSuiTransactionDigest(input.transactionDigest ?? input.digest);
+  const status = normalizeSuiReceiptStatus(input.status);
+  const sender = input.sender ? normalizeMatterhornSuiAddress(input.sender) : undefined;
+  const recipient = input.recipient ? normalizeMatterhornSuiAddress(input.recipient) : undefined;
+  const amountMist = parsePositiveMist(input.amountMist);
+  const explorerUrl = normalizeOptionalExplorerUrl(input.explorerUrl);
+  const importedAt = (options.now?.() ?? new Date()).toISOString();
+  const receiptCore = {
+    version: "matterhorn.sui.transaction-receipt.v1" as const,
+    family: "sui" as const,
+    network,
+    previewSha256,
+    transactionDigest,
+    status,
+    sender,
+    recipient,
+    amountMist: amountMist?.toString(),
+    amountSui: amountMist ? formatMistToSui(amountMist) : undefined,
+    explorerUrl,
+    custody: false as const,
+    containsSignatureMaterial: false as const,
+    verification: {
+      kind: "public_receipt_metadata" as const,
+      digestPresent: true as const,
+      previewLinked: Boolean(previewSha256),
+      liveSubmissionByMatterhorn: false as const,
+    },
+    importedAt,
+    warnings: [
+      "Receipt import stores public transaction metadata only.",
+      "Matterhorn did not sign or submit this Sui transaction.",
+    ],
+  };
+  return {
+    ...receiptCore,
+    receiptSha256: sha256(receiptCore),
+  };
+}
+
 export class SuiPublicReadProvider {
   private readonly clientFactory: (network: SuiNetwork) => SuiReadClient;
   private readonly now: () => Date;
@@ -456,6 +598,28 @@ export function buildSuiTransactionPreviewCard(preview: SuiTransactionPreview): 
     ],
     warnings: preview.warnings,
     data: { preview },
+  };
+}
+
+export function buildSuiTransactionReceiptCard(receipt: SuiTransactionReceipt): SuiTransactionReceiptCard {
+  const statusTone = receipt.status === "success" ? "good" : receipt.status === "failure" ? "danger" : "warning";
+  return {
+    kind: "sui_transaction_receipt",
+    title: "Sui receipt",
+    subtitle: `${receipt.network} · ${receipt.transactionDigest.slice(0, 10)}...${receipt.transactionDigest.slice(-6)}`,
+    summary: receipt.previewSha256
+      ? "Public receipt metadata linked to a Matterhorn preview."
+      : "Public receipt metadata imported without a local preview link.",
+    tone: receipt.status === "failure" ? "warning" : "default",
+    items: [
+      cardItem("Status", receipt.status, statusTone),
+      cardItem("Network", receipt.network),
+      cardItem("Digest", `${receipt.transactionDigest.slice(0, 10)}...${receipt.transactionDigest.slice(-6)}`, "muted"),
+      cardItem("Preview", receipt.previewSha256 ? "Linked" : "Not linked", receipt.previewSha256 ? "good" : "muted"),
+      cardItem("Submitter", "External wallet", "muted"),
+    ],
+    warnings: receipt.warnings,
+    data: { receipt },
   };
 }
 

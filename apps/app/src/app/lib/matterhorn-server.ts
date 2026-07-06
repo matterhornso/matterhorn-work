@@ -635,6 +635,49 @@ export type MatterhornSuiTransactionPreviewResponse = {
   cards: unknown[];
 };
 
+export type MatterhornSuiTransactionReceiptInput = {
+  network?: MatterhornSuiNetwork;
+  previewSha256?: string;
+  transactionDigest?: string;
+  digest?: string;
+  status?: "success" | "failure" | "unknown";
+  sender?: string;
+  recipient?: string;
+  amountMist?: string | number;
+  explorerUrl?: string;
+};
+
+export type MatterhornSuiTransactionReceipt = {
+  version: "matterhorn.sui.transaction-receipt.v1";
+  family: "sui";
+  network: MatterhornSuiNetwork;
+  previewSha256: string | null;
+  transactionDigest: string;
+  status: "success" | "failure" | "unknown";
+  sender?: string;
+  recipient?: string;
+  amountMist?: string;
+  amountSui?: string;
+  explorerUrl?: string;
+  custody: false;
+  containsSignatureMaterial: false;
+  verification: {
+    kind: "public_receipt_metadata";
+    digestPresent: true;
+    previewLinked: boolean;
+    liveSubmissionByMatterhorn: false;
+  };
+  importedAt: string;
+  receiptSha256: string;
+  warnings: string[];
+};
+
+export type MatterhornSuiTransactionReceiptResponse = {
+  success: true;
+  receipt: MatterhornSuiTransactionReceipt;
+  cards: unknown[];
+};
+
 export type MatterhornInboxItem = {
   id: string;
   name?: string;
@@ -1627,6 +1670,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornSuiTransactionPreviewResponse>(
         baseUrl,
         "/api/sui/transactions/preview",
+        { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
+      ),
+    suiTransactionReceipt: (payload: MatterhornSuiTransactionReceiptInput) =>
+      requestJson<MatterhornSuiTransactionReceiptResponse>(
+        baseUrl,
+        "/api/sui/transactions/receipt",
         { token, hostToken, method: "POST", body: payload, timeoutMs: timeouts.status },
       ),
     listNotes: (workspaceId: string, options?: MatterhornNoteListOptions) => {
