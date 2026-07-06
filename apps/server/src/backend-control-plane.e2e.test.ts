@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +31,7 @@ function restoreEnv(key: keyof typeof priorEnv, envName: string) {
   else process.env[envName] = value;
 }
 
-function baseConfig(port: number, root: string, readOnly = false): ServerConfig {
+function baseConfig(port: number, root: string, readOnly = false, opencodeBaseUrl?: string): ServerConfig {
   return {
     host: "127.0.0.1",
     port,
@@ -44,6 +45,7 @@ function baseConfig(port: number, root: string, readOnly = false): ServerConfig 
       path: root,
       preset: "default",
       workspaceType: "local",
+      ...(opencodeBaseUrl ? { baseUrl: opencodeBaseUrl } : {}),
     }],
     authorizedRoots: [root],
     readOnly,
@@ -67,7 +69,28 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-async function boot(options: { readOnly?: boolean } = {}) {
+async function startProviderCatalogServer(payload: unknown): Promise<string> {
+  const server = createHttpServer((request, response) => {
+    if (!request.url?.startsWith("/provider")) {
+      response.writeHead(404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ error: "not_found" }));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(payload));
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address() as AddressInfo;
+      resolve(address.port);
+    });
+  });
+  stops.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  return `http://127.0.0.1:${port}`;
+}
+
+async function boot(options: { readOnly?: boolean; opencodeBaseUrl?: string } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "matterhorn-backend-control-plane-"));
   dirs.push(dir);
   process.env.OPENWORK_DATA_DIR = join(dir, "openwork-data");
@@ -75,7 +98,7 @@ async function boot(options: { readOnly?: boolean } = {}) {
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
   process.env.OPENCODE_DB = join(dir, "opencode.db");
-  const server = await startServer(baseConfig(await getFreePort(), dir, options.readOnly ?? false)) as Served;
+  const server = await startServer(baseConfig(await getFreePort(), dir, options.readOnly ?? false, options.opencodeBaseUrl)) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
@@ -252,6 +275,66 @@ describe("backend control plane routes", () => {
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);
     expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
+  test("GET /workspace/:id/backend/models normalizes a live provider catalog", async () => {
+    const opencodeBaseUrl = await startProviderCatalogServer({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          source: "config",
+          models: {
+            "big-pickle": { name: "Big Pickle" },
+          },
+        },
+        {
+          id: "anthropic",
+          name: "Anthropic",
+          source: "api",
+          models: {
+            "claude-3-haiku": { name: "Claude 3 Haiku" },
+            "claude-3-opus": { name: "Claude 3 Opus" },
+            "claude-3-sonnet": { name: "Claude 3 Sonnet" },
+          },
+        },
+      ],
+      default: {
+        anthropic: "claude-3-sonnet",
+        opencode: "big-pickle",
+      },
+      connected: ["anthropic"],
+    });
+    const { base } = await boot({ opencodeBaseUrl });
+
+    const result = await jsonFetch(base, "/workspace/ws_backend/backend/models");
+    expect(result.response.status).toBe(200);
+    expect(result.payload.catalog).toMatchObject({
+      status: "working",
+      source: "opencode_provider_list",
+      serverFetched: true,
+      providerCount: 2,
+      connectedProviderCount: 1,
+      modelCount: 4,
+      connectedProviderIds: ["anthropic"],
+      defaultModels: {
+        anthropic: "claude-3-sonnet",
+        opencode: "big-pickle",
+      },
+    });
+    expect(result.payload.catalog.providers).toContainEqual({
+      id: "anthropic",
+      name: "Anthropic",
+      source: "api",
+      connected: true,
+      modelCount: 3,
+      sampleModels: ["claude-3-haiku", "claude-3-opus", "claude-3-sonnet"],
+    });
+
+    const serialized = JSON.stringify(result.payload);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+    expect(serialized).not.toContain("Basic ");
   });
 
   test("GET /workspace/:id/backend/readiness reports workspace action blockers", async () => {
