@@ -59,6 +59,18 @@ export async function buildBackendSupportReport(options: {
         errorCode: options.controlPlane.models.catalog.errorCode,
       },
     },
+    dataPolicy: {
+      dataMap: {
+        version: options.controlPlane.dataMap.version,
+        stores: options.controlPlane.dataMap.stores,
+        policy: options.controlPlane.dataMap.policy,
+      },
+      controls: {
+        version: options.controlPlane.dataControls.version,
+        summary: options.controlPlane.dataControls.summary,
+        policy: options.controlPlane.dataControls.policy,
+      },
+    },
     dataLedger: {
       version: ledgerExport.ledger.version,
       generatedAt: ledgerExport.ledger.generatedAt,
@@ -78,7 +90,7 @@ export async function buildBackendSupportReport(options: {
       secretsReturned: false,
     },
     warnings: [
-      "Support reports include backend status, readiness, and data-policy summaries only.",
+      "Support reports include backend status, readiness, sanitized storage locations, and data-policy summaries.",
       "Support reports do not include raw chat transcripts, provider credentials, bearer tokens, host tokens, or full model provider payloads.",
       "Open the project data ledger export separately when row-level redacted evidence is needed.",
     ],

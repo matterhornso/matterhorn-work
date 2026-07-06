@@ -462,6 +462,12 @@ describe("backend control plane routes", () => {
     expect(result.payload.models.catalog.source).toBe("opencode_provider_list");
     expect(result.payload.models.catalog.providerCount).toBe(0);
     expect(result.payload.models.catalog.providers).toBeUndefined();
+    expect(result.payload.dataPolicy.dataMap.version).toBe("matterhorn.backend.data-map.v1");
+    expect(result.payload.dataPolicy.dataMap.stores.memory.details.workspaceNamespaceTag).toBe("workspace:ws_backend");
+    expect(result.payload.dataPolicy.dataMap.stores.feedback.retention).toBe("user_controlled");
+    expect(result.payload.dataPolicy.controls.version).toBe("matterhorn.backend.data-controls.v1");
+    expect(result.payload.dataPolicy.controls.summary.userControlledStores).toBeGreaterThan(0);
+    expect(result.payload.dataPolicy.controls.policy.trainingUse).toBe("none_by_default");
     expect(result.payload.dataLedger.version).toBe("matterhorn.project-data-ledger.v1");
     expect(result.payload.dataLedger.summary.feedback).toBeGreaterThanOrEqual(1);
     expect(result.payload.dataLedger.export.href).toBe("/workspace/ws_backend/data-ledger/export");

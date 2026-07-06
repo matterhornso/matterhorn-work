@@ -1,6 +1,7 @@
 import type { MatterhornBackendControlPlaneResponse } from "./backend-control-plane.js";
 import type { MatterhornBackendCapabilitiesResponse } from "./backend-capabilities.js";
 import type { MatterhornBackendModelsResponse } from "./backend-models.js";
+import type { MatterhornWorkspaceDataControlsResponse } from "./backend-data-controls.js";
 import type {
   MatterhornProjectDataLedgerExportControlPlaneSnapshot,
   MatterhornProjectDataLedgerExportResponse,
@@ -35,6 +36,18 @@ export interface MatterhornBackendSupportReportResponse {
       | "connectedProviderIds"
       | "errorCode"
     >;
+  };
+  dataPolicy: {
+    dataMap: {
+      version: MatterhornBackendControlPlaneResponse["dataMap"]["version"];
+      stores: MatterhornBackendControlPlaneResponse["dataMap"]["stores"];
+      policy: MatterhornBackendControlPlaneResponse["dataMap"]["policy"];
+    };
+    controls: {
+      version: MatterhornBackendControlPlaneResponse["dataControls"]["version"];
+      summary: MatterhornWorkspaceDataControlsResponse["summary"];
+      policy: MatterhornWorkspaceDataControlsResponse["policy"];
+    };
   };
   dataLedger: {
     version: MatterhornProjectDataLedgerResponse["version"];
