@@ -348,6 +348,44 @@ describe("project data ledger routes", () => {
     expect(memoryAuditItems.every((item: { metadata: { auditAction: string } }) => item.metadata.auditAction.startsWith("memory."))).toBe(true);
   });
 
+  test("team access token changes appear as redacted access ledger rows", async () => {
+    const { base } = await boot();
+
+    const created = await hostFetch(base, "/workspace/ws_ledger/backend/team-access/tokens", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: "viewer",
+        label: `Grant reviewer access without leaking Bearer ${SECRET_HEX}`,
+      }),
+    });
+    expect(created.response.status).toBe(201);
+    expect(created.payload.token.token).toMatch(/^owt_/);
+
+    const revoked = await hostFetch(base, `/workspace/ws_ledger/backend/team-access/tokens/${created.payload.token.id}`, {
+      method: "DELETE",
+    });
+    expect(revoked.response.status).toBe(200);
+
+    const accessLedger = await jsonFetch(base, "/workspace/ws_ledger/data-ledger?kind=team_access&limit=20");
+    expect(accessLedger.response.status).toBe(200);
+    expect(accessLedger.payload.summary.teamAccess).toBe(2);
+    expect(accessLedger.payload.items.every((item: { kind: string }) => item.kind === "team_access")).toBe(true);
+    expect(accessLedger.payload.items.map((item: { title: string }) => item.title)).toEqual(
+      expect.arrayContaining(["Team access token created", "Team access token revoked"]),
+    );
+    expect(accessLedger.payload.items.every((item: { source: string }) => item.source === "audit")).toBe(true);
+    expect(accessLedger.payload.items.every((item: { href?: string }) => item.href === "/workspace/ws_ledger/settings/overview")).toBe(true);
+    expect(accessLedger.payload.items.every((item: { trainingUse: string }) => item.trainingUse === "none")).toBe(true);
+    expect(accessLedger.payload.items.every((item: { metadata: { auditAction: string } }) => item.metadata.auditAction.startsWith("workspace.team_token."))).toBe(true);
+
+    const serialized = JSON.stringify(accessLedger.payload);
+    expect(serialized).toContain("[redacted]");
+    expect(serialized).not.toContain(SECRET_HEX);
+    expect(serialized).not.toContain(created.payload.token.token);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain(HOST_TOKEN);
+  });
+
   test("data-ledger can filter run history by desk, session, task, and time window", async () => {
     const { base } = await boot();
     const firstRunAt = Date.parse("2026-07-06T08:00:00.000Z");

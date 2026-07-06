@@ -157,11 +157,13 @@ describe("Project Activity contract tests", () => {
       const source = readAppSource("domains/recent-activity/project-history-page.tsx");
       expect(source).toContain("export const PROJECT_HISTORY_FILTERS");
       expect(source).toContain('label: "Runs", kind: "task"');
+      expect(source).toContain('label: "Access", kind: "team_access"');
       expect(source).toContain("listProjectDataLedger");
       expect(source).toContain('queryKey: ["project-history-ledger"');
       expect(source).toContain("activeDesk");
       expect(source).toContain("desk: activeDesk");
       expect(source).toContain('if (entry.kind === "memory_suggestion") return entry.title || "Memory review";');
+      expect(source).toContain('team_access: { icon: Users');
       expect(source).toContain("No training by default");
       expect(source).toContain("Exported");
     });

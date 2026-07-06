@@ -109,35 +109,49 @@ function memoryAuditTitle(action: string): string | null {
   return null;
 }
 
+function teamAccessAuditTitle(action: string): string | null {
+  if (action === "workspace.team_token.create") return "Team access token created";
+  if (action === "workspace.team_token.revoke") return "Team access token revoked";
+  return null;
+}
+
 function auditToLedgerEntry(entry: AuditEntry): MatterhornProjectDataLedgerEntry {
   const memoryTitle = memoryAuditTitle(entry.action);
-  const title = scrubString(memoryTitle ?? entry.action);
+  const teamAccessTitle = teamAccessAuditTitle(entry.action);
+  const title = scrubString(memoryTitle ?? teamAccessTitle ?? entry.action);
   const summary = scrubString(entry.summary);
   const target = scrubString(entry.target);
   const isMemoryAudit = Boolean(memoryTitle);
+  const isTeamAccessAudit = Boolean(teamAccessTitle);
   return {
     id: `audit:${entry.id}`,
     workspaceId: entry.workspaceId,
     source: "audit",
-    kind: isMemoryAudit ? "memory_suggestion" : "audit",
+    kind: isMemoryAudit ? "memory_suggestion" : isTeamAccessAudit ? "team_access" : "audit",
     timestamp: new Date(entry.timestamp).toISOString(),
     title: title.value ?? "Audit event",
     summary: summary.value,
-    href: isMemoryAudit ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=memory` : undefined,
+    href: isMemoryAudit
+      ? `/workspace/${encodeURIComponent(entry.workspaceId)}/session?panel=memory`
+      : isTeamAccessAudit
+        ? `/workspace/${encodeURIComponent(entry.workspaceId)}/settings/overview`
+        : undefined,
     actor: actorFromAudit(entry),
     dataClass: "audit_metadata",
-    containsUserContent: isMemoryAudit,
-    containsSecrets: isMemoryAudit ? "redacted" : "never",
+    containsUserContent: isMemoryAudit || isTeamAccessAudit,
+    containsSecrets: isMemoryAudit || isTeamAccessAudit ? "redacted" : "never",
     retention: "append_only",
     exportable: true,
     deletable: false,
     redactionApplied: title.redacted || summary.redacted || target.redacted,
     trainingUse: "none",
     eventType: entry.action,
-    metadata: isMemoryAudit ? {
-      auditAction: entry.action,
-      target: target.value ?? null,
-    } : undefined,
+    metadata: isMemoryAudit || isTeamAccessAudit
+      ? {
+        auditAction: entry.action,
+        target: target.value ?? null,
+      }
+      : undefined,
   };
 }
 
@@ -194,6 +208,7 @@ function summarize(items: MatterhornProjectDataLedgerEntry[]): MatterhornProject
     total: items.length,
     notes: items.filter((item) => item.kind === "note").length,
     memorySuggestions: items.filter((item) => item.kind === "memory_suggestion").length,
+    teamAccess: items.filter((item) => item.kind === "team_access").length,
     tasks: items.filter((item) => item.kind === "task").length,
     outputs: items.filter((item) => item.kind === "output").length,
     audits: items.filter((item) => item.kind === "audit").length,

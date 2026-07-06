@@ -1458,10 +1458,10 @@ function parseProjectDataLedgerSource(value: string | null): MatterhornProjectDa
 
 function parseProjectDataLedgerKind(value: string | null): MatterhornProjectDataLedgerKind | undefined {
   if (!value) return undefined;
-  if (value === "note" || value === "memory_suggestion" || value === "task" || value === "output" || value === "audit" || value === "feedback") {
+  if (value === "note" || value === "memory_suggestion" || value === "team_access" || value === "task" || value === "output" || value === "audit" || value === "feedback") {
     return value;
   }
-  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, task, output, audit, or feedback");
+  throw new ApiError(400, "invalid_project_data_ledger_kind", "kind must be note, memory_suggestion, team_access, task, output, audit, or feedback");
 }
 
 function parseProjectDataLedgerTimestamp(value: string | null, name: "from" | "to"): string | undefined {
