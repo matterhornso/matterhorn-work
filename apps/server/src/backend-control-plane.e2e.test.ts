@@ -409,6 +409,8 @@ describe("backend control plane routes", () => {
     expect(result.payload.models.catalog.errorCode).toBe("opencode_unconfigured");
     expect(result.payload.readiness.features.start_desk_task.ready).toBe(false);
     expect(result.payload.dataMap.stores.notes.scope).toBe("workspace");
+    expect(result.payload.dataMap.stores.walletEvidence.details.ledgerRoute).toBe("/workspace/ws_backend/data-ledger?kind=wallet");
+    expect(result.payload.dataMap.stores.walletEvidence.containsSecrets).toBe("redacted");
     expect(result.payload.dataControls.stores.feedback.privacy.trainingUse).toBe("eval_routing_product_quality_only");
     expect(result.payload.privacy).toEqual({
       trainingUse: "none_by_default",
@@ -472,6 +474,7 @@ describe("backend control plane routes", () => {
     expect(result.payload.dataPolicy.dataMap.version).toBe("matterhorn.backend.data-map.v1");
     expect(result.payload.dataPolicy.dataMap.stores.memory.details.workspaceNamespaceTag).toBe("workspace:ws_backend");
     expect(result.payload.dataPolicy.dataMap.stores.feedback.retention).toBe("user_controlled");
+    expect(result.payload.dataPolicy.dataMap.stores.walletEvidence.exportable).toBe(true);
     expect(result.payload.dataPolicy.controls.version).toBe("matterhorn.backend.data-controls.v1");
     expect(result.payload.dataPolicy.controls.summary.userControlledStores).toBeGreaterThan(0);
     expect(result.payload.dataPolicy.controls.policy.trainingUse).toBe("none_by_default");
@@ -917,9 +920,16 @@ describe("backend control plane routes", () => {
       method: "DELETE",
       destructive: true,
     });
+    expect(result.payload.stores.walletEvidence.export.status).toBe("working");
+    expect(result.payload.stores.walletEvidence.export.actions[0]).toMatchObject({
+      id: "wallet-evidence.ledger",
+      method: "GET",
+      href: "/workspace/ws_backend/data-ledger?kind=wallet",
+    });
+    expect(result.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(result.payload.stores.audit.retention.mode).toBe("append_only");
     expect(result.payload.policy.trainingUse).toBe("none_by_default");
-    expect(result.payload.policy.limitations.join(" ")).toContain("No bulk delete-all workspace control");
+    expect(result.payload.policy.limitations.join(" ")).toContain("Bulk deletion is currently limited to feedback");
 
     const serialized = JSON.stringify(result.payload);
     expect(serialized).not.toContain(TOKEN);

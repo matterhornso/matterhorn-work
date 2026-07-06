@@ -2373,6 +2373,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const opencodeDbPath = resolveOpencodeDbPath();
   const workflowRunsPath = join(workspace.path, ".matterhorn-work", "task-logs", workspace.id);
   const outputsPath = join(workspace.path, "outputs");
+  const walletEvidencePath = join(outputsPath, "sui");
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
@@ -2383,6 +2384,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
     join(memoryRoot, "memory-suggestions.json"),
     taskEventsPath(workspace.id),
     workflowRunsPath,
+    walletEvidencePath,
     outputsPath,
     feedbackPath,
   ];
@@ -2493,6 +2495,27 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
         containsUserContent: true,
         containsSecrets: "redacted",
         retention: "append_only",
+        exportable: true,
+        deletable: false,
+      }),
+      walletEvidence: dataStore({
+        id: "walletEvidence",
+        ...capability(
+          existsSync(walletEvidencePath) ? "working" : "preview",
+          "Wallet evidence",
+          "Wallet previews and receipts are stored as user-visible output artifacts plus redacted audit-backed ledger rows.",
+          {
+            families: ["sui"],
+            outputPath: walletEvidencePath,
+            ledgerRoute: `/workspace/${workspace.id}/data-ledger?kind=wallet`,
+          },
+        ),
+        scope: "workspace",
+        paths: [walletEvidencePath, auditLogPath(workspace.id)],
+        format: "mixed",
+        containsUserContent: true,
+        containsSecrets: "redacted",
+        retention: "runtime_controlled",
         exportable: true,
         deletable: false,
       }),
@@ -2789,6 +2812,29 @@ function buildDataControlStore(
         }),
       ],
     });
+  } else if (storeId === "walletEvidence") {
+    exportCapability = dataControlCapability({
+      status: "working",
+      label: "Wallet ledger export",
+      summary: "Wallet previews and receipts are exportable through the redacted project ledger.",
+      actions: [
+        dataControlAction({
+          id: "wallet-evidence.ledger",
+          label: "Export wallet evidence",
+          description: "Returns redacted wallet preview and receipt ledger entries.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${ledgerRoute}?kind=wallet`,
+        }),
+      ],
+    });
+    deletionCapability = dataControlCapability({
+      status: "unsupported",
+      label: "Audit-backed evidence",
+      summary: "Wallet audit events are retained for accountability. Output files can be removed from the outputs folder.",
+      actions: [],
+    });
   } else if (storeId === "audit" || storeId === "taskEvents" || storeId === "workflowRuns" || storeId === "evidence") {
     exportCapability = dataControlCapability({
       status: "working",
@@ -2861,7 +2907,7 @@ function buildWorkspaceDataControls(
       export: capability("working", "Export controls", "Notes, memory, outputs, feedback, and event ledgers report their available export paths."),
       deletion: capability("preview", "Deletion controls", "Notes and memory support individual deletes; append-only logs remain retained for accountability."),
       limitations: [
-        "No bulk delete-all workspace control is exposed in this v1 contract.",
+        "Bulk deletion is currently limited to feedback; append-only logs remain retained for accountability.",
         "Chat/session history remains controlled by the OpenCode runtime store.",
         "Feedback is stored for eval, routing, and product quality only; it is not used for model training by default.",
       ],

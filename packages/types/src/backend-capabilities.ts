@@ -179,6 +179,7 @@ export interface MatterhornWorkspaceDataMapResponse {
     | "audit"
     | "taskEvents"
     | "workflowRuns"
+    | "walletEvidence"
     | "evidence"
     | "feedback",
     MatterhornDataStoreDescriptor

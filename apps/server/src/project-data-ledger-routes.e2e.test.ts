@@ -211,6 +211,9 @@ describe("project data ledger routes", () => {
         destructive: true,
       }),
     );
+    expect(dataControls.payload.stores.walletEvidence.export.status).toBe("working");
+    expect(dataControls.payload.stores.walletEvidence.export.actions[0].href).toBe("/workspace/ws_ledger/data-ledger?kind=wallet");
+    expect(dataControls.payload.stores.walletEvidence.deletion.status).toBe("unsupported");
     expect(dataControls.payload.stores.taskEvents.retention.mode).toBe("append_only");
   });
 
