@@ -118,4 +118,35 @@ describe("output descriptor", () => {
     });
     expect(descriptor.updatedAt).toBe(1_700_000_000_000);
   });
+
+  test("uses readable titles for Sui preview and receipt output filenames", () => {
+    const previewTarget: OpenTarget = {
+      id: "file:outputs/sui/sess_sui/transfer-preview-abc123def456.json",
+      kind: "file",
+      value: "outputs/sui/sess_sui/transfer-preview-abc123def456.json",
+      name: "transfer-preview-abc123def456.json",
+      preview: "json",
+      confidence: 95,
+      reason: "Sui preview evidence",
+      exists: true,
+    };
+    const receiptAttachment: NoteOutputAttachment = {
+      type: "output",
+      id: "outputs/sui/sess_sui/transaction-receipt-5xY8P6TQ4qGsGLk1qUZ9vCkD8uWnz1wQp2mgSm7Jyzky.json",
+      label: "",
+    };
+
+    expect(outputDescriptorFromOpenTarget(previewTarget)).toMatchObject({
+      title: "Sui transfer preview",
+      desk: "sui",
+      sessionSlug: "sess_sui",
+      originLabel: "Sui",
+    });
+    expect(outputDescriptorFromNoteAttachment(receiptAttachment)).toMatchObject({
+      title: "Sui transaction receipt",
+      desk: "sui",
+      sessionSlug: "sess_sui",
+      originLabel: "Project note",
+    });
+  });
 });

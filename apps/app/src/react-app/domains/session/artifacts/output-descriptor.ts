@@ -49,9 +49,16 @@ function legacyOriginLabel(kind: "opencode" | "openwork" | "outbox" | null | und
   return "Imported";
 }
 
+function friendlyTitleFromOutputPath(context: ReturnType<typeof getArtifactNoteContext>): string | null {
+  if (context.desk !== "sui") return null;
+  if (/^transfer-preview-[a-f0-9]+\.json$/i.test(context.fileName)) return "Sui transfer preview";
+  if (/^transaction-receipt-[a-z0-9]+\.json$/i.test(context.fileName)) return "Sui transaction receipt";
+  return null;
+}
+
 export function outputDescriptorFromOpenTarget(target: OpenTarget, receipt?: WorkflowOutputReceipt): OutputDescriptor {
   const context = getArtifactNoteContext(target.value);
-  const title = target.name || context.fileName || target.value;
+  const title = receipt?.title || friendlyTitleFromOutputPath(context) || target.name || context.fileName || target.value;
 
   return {
     id: target.id,
@@ -87,7 +94,7 @@ export function outputDescriptorFromNoteAttachment(attachment: NoteOutputAttachm
   return {
     id: `note-output:${attachment.id}`,
     kind: "note-attachment",
-    title: attachment.label || context.fileName || attachment.id,
+    title: attachment.label || friendlyTitleFromOutputPath(context) || context.fileName || attachment.id,
     path: context.path,
     desk: context.desk,
     sessionSlug: context.sessionSlug,
@@ -105,6 +112,7 @@ export function deskLabel(desk: string): string {
   if (desk === "bittensor") return "Bittensor";
   if (desk === "hyperliquid") return "Hyperliquid";
   if (desk === "polymarket") return "Polymarket";
+  if (desk === "sui") return "Sui";
   if (desk === "longevity" || desk === "wellness") return "Longevity";
   if (desk === "memory") return "Memory";
   if (desk === "mcp") return "MCP";
