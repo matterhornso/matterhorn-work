@@ -485,6 +485,7 @@ function FeedbackReviewSection(props: {
 }) {
   const [filter, setFilter] = useState<"all" | MatterhornProjectFeedbackKind>("all");
   const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
   const [deleteStatus, setDeleteStatus] = useState<string | null>(null);
   const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ["settings-feedback-review", props.runtimeWorkspaceId],
@@ -500,6 +501,7 @@ function FeedbackReviewSection(props: {
     const kind = feedbackKindFromEntry(entry);
     return filter === "all" || kind === filter;
   });
+  const feedbackCount = data?.summary.feedback ?? 0;
 
   const deleteFeedback = useCallback(async (entry: MatterhornProjectDataLedgerEntry) => {
     const feedbackId = feedbackIdFromEntry(entry);
@@ -517,28 +519,55 @@ function FeedbackReviewSection(props: {
     }
   }, [props.matterhornServerClient, props.runtimeWorkspaceId, refetch]);
 
+  const deleteAllFeedback = useCallback(async () => {
+    if (feedbackCount <= 0) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete all local feedback for this workspace?")) return;
+    setDeleteAllBusy(true);
+    setDeleteStatus(null);
+    try {
+      const response = await props.matterhornServerClient.deleteAllProjectFeedback(props.runtimeWorkspaceId);
+      setDeleteStatus(`Deleted ${response.deletedCount} feedback entr${response.deletedCount === 1 ? "y" : "ies"}.`);
+      await refetch();
+    } catch (deleteError) {
+      setDeleteStatus(deleteError instanceof Error ? deleteError.message : "Feedback could not be cleared.");
+    } finally {
+      setDeleteAllBusy(false);
+    }
+  }, [feedbackCount, props.matterhornServerClient, props.runtimeWorkspaceId, refetch]);
+
   return (
     <div className="px-1 py-3">
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        <Button
-          variant={filter === "all" ? "default" : "ghost"}
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={() => setFilter("all")}
-        >
-          All {data?.summary.feedback ?? 0}
-        </Button>
-        {MATTERHORN_PROJECT_FEEDBACK_KINDS.map((kind) => (
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-1.5">
           <Button
-            key={kind}
-            variant={filter === kind ? "default" : "ghost"}
+            variant={filter === "all" ? "default" : "ghost"}
             size="sm"
             className="h-7 px-2 text-xs"
-            onClick={() => setFilter(kind)}
+            onClick={() => setFilter("all")}
           >
-            {feedbackKindLabel(kind)}
+            All {feedbackCount}
           </Button>
-        ))}
+          {MATTERHORN_PROJECT_FEEDBACK_KINDS.map((kind) => (
+            <Button
+              key={kind}
+              variant={filter === kind ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setFilter(kind)}
+            >
+              {feedbackKindLabel(kind)}
+            </Button>
+          ))}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-fit px-2 text-xs text-dls-secondary hover:text-dls-text"
+          disabled={feedbackCount <= 0 || deleteAllBusy}
+          onClick={() => void deleteAllFeedback()}
+        >
+          {deleteAllBusy ? "Deleting" : "Delete all"}
+        </Button>
       </div>
 
       {isLoading ? (

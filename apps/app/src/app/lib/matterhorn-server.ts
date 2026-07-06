@@ -20,6 +20,7 @@ import type {
   MatterhornProjectDataLedgerListOptions,
   MatterhornProjectDataLedgerExportResponse,
   MatterhornProjectDataLedgerResponse,
+  MatterhornProjectFeedbackDeleteAllResponse,
   MatterhornProjectFeedbackDeleteResponse,
   MatterhornProjectFeedbackRequest,
   MatterhornProjectFeedbackResponse,
@@ -1719,6 +1720,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornProjectFeedbackDeleteResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/feedback/${encodeURIComponent(feedbackId)}`,
+        { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
+      ),
+    deleteAllProjectFeedback: (workspaceId: string) =>
+      requestJson<MatterhornProjectFeedbackDeleteAllResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/feedback`,
         { token, hostToken, method: "DELETE", timeoutMs: timeouts.config },
       ),
     workspaceDataMap: (workspaceId: string) =>

@@ -65,7 +65,9 @@ describe("project feedback UI contract", () => {
     expect(source).toContain("feedbackKindFromEntry");
     expect(source).toContain("feedbackIdFromEntry");
     expect(source).toContain("deleteProjectFeedback");
+    expect(source).toContain("deleteAllProjectFeedback");
     expect(source).toContain("Feedback deleted.");
+    expect(source).toContain("Delete all local feedback for this workspace?");
     expect(source).toContain("Local feedback stored for product quality and routing. No training by default.");
   });
 });
