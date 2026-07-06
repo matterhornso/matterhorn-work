@@ -807,6 +807,9 @@ describe("backend control plane routes", () => {
     expect(result.payload.stores.notes.paths).toContain(join(dir, "notes"));
     expect(result.payload.stores.memory.scope).toBe("machine_global");
     expect(result.payload.stores.memory.paths[0]).toBe(join(dir, "memory"));
+    expect(result.payload.stores.memory.details.workspaceNamespaceTag).toBe("workspace:ws_backend");
+    expect(result.payload.stores.memory.details.workspaceRoutes).toContain("/workspace/ws_backend/memory/capture");
+    expect(result.payload.stores.memory.details.isolation).toBe("tagged_records_in_machine_vault");
     expect(result.payload.stores.chat.scope).toBe("opencode_runtime");
     expect(result.payload.stores.outputs.path).toBe(join(dir, "outputs"));
     expect(result.payload.stores.feedback.scope).toBe("machine_global");
@@ -845,6 +848,17 @@ describe("backend control plane routes", () => {
       method: "POST",
       href: "/api/memory/export",
     });
+    expect(result.payload.stores.memory.export.actions).toContainEqual(expect.objectContaining({
+      id: "memory.workspace-list",
+      method: "GET",
+      href: "/workspace/ws_backend/memory/entities",
+    }));
+    expect(result.payload.stores.memory.deletion.actions).toContainEqual(expect.objectContaining({
+      id: "memory.workspace-delete",
+      method: "DELETE",
+      href: "/workspace/ws_backend/memory/entities/:memoryId",
+      destructive: true,
+    }));
     expect(result.payload.stores.feedback.deletion.status).toBe("working");
     expect(result.payload.stores.feedback.deletion.actions[0]).toMatchObject({
       id: "feedback.delete",

@@ -1224,6 +1224,54 @@ function normalizeMemoryLimit(value: string | null): number | undefined {
   return Math.min(Math.floor(limit), 200);
 }
 
+function workspaceMemoryTag(workspaceId: string): string {
+  return `workspace:${workspaceId}`;
+}
+
+function uniqueMemoryStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function workspaceMemoryQueryTags(workspace: WorkspaceInfo, tags?: string[]): string[] {
+  return uniqueMemoryStrings([...(tags ?? []), workspaceMemoryTag(workspace.id)]);
+}
+
+function memoryRecordBelongsToWorkspace(record: MatterhornMemoryRecord, workspace: WorkspaceInfo): boolean {
+  const tag = workspaceMemoryTag(workspace.id).toLowerCase();
+  return record.scope === "workspace" && record.tags.some((item) => item.toLowerCase() === tag);
+}
+
+function assertWorkspaceMemoryRecord(record: MatterhornMemoryRecord | null, workspace: WorkspaceInfo): MatterhornMemoryRecord {
+  if (!record || !memoryRecordBelongsToWorkspace(record, workspace)) {
+    throw new ApiError(404, "memory_not_found", "Memory record not found for this workspace");
+  }
+  return record;
+}
+
+function namespaceWorkspaceMemoryRecord(record: MatterhornMemoryRecord, workspace: WorkspaceInfo): MatterhornMemoryRecord {
+  const workspaceHref = `/workspace/${encodeURIComponent(workspace.id)}`;
+  const links = [...(record.links ?? [])];
+  if (!links.some((link) => link.rel === "workspace" && link.href === workspaceHref)) {
+    links.push({ rel: "workspace", href: workspaceHref, title: workspace.name });
+  }
+  return {
+    ...record,
+    scope: "workspace",
+    tags: workspaceMemoryQueryTags(workspace, record.tags),
+    links,
+  };
+}
+
 function normalizeNoteLimit(value: string | null): number | undefined {
   if (!value) return undefined;
   const limit = Number(value);
@@ -2137,7 +2185,15 @@ async function buildBackendCapabilities(config: ServerConfig, memoryVault: Matte
       stores: {
         memory: dataStore({
           id: "memory",
-          ...capability(memoryStatus, "Memory vault", "Default memory is machine-global unless MATTERHORN_WORK_MEMORY_ROOT points elsewhere."),
+          ...capability(
+            memoryStatus,
+            "Memory vault",
+            "Memory is stored in a machine-level vault; workspace memory routes namespace project records with a workspace tag.",
+            {
+              workspaceRoutePrefix: "/workspace/:id/memory",
+              namespace: "workspace_tag",
+            },
+          ),
           scope: "machine_global",
           path: memoryVault.rootDir,
           format: "mixed",
@@ -2196,6 +2252,7 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
   const notesIndexPath = notes.indexPath;
   const notesDir = notes.notesDir;
   const memoryRoot = memoryVault.rootDir;
+  const memoryNamespaceTag = workspaceMemoryTag(workspace.id);
   const feedbackPath = projectFeedbackLogPath(workspace.id);
   const evidencePaths = [
     notesIndexPath,
@@ -2244,7 +2301,20 @@ function buildWorkspaceDataMap(workspace: WorkspaceInfo, memoryVault: Matterhorn
       }),
       memory: dataStore({
         id: "memory",
-        ...capability("working", "Memory vault", "Default memory is a machine-level vault, not a durable team workspace store yet."),
+        ...capability(
+          "working",
+          "Memory vault",
+          "Memory is stored in a machine-level vault. Workspace memory routes force workspace scope and namespace project records with this workspace tag.",
+          {
+            workspaceNamespaceTag: memoryNamespaceTag,
+            workspaceRoutes: [
+              `/workspace/${workspace.id}/memory/search`,
+              `/workspace/${workspace.id}/memory/entities`,
+              `/workspace/${workspace.id}/memory/capture`,
+            ],
+            isolation: "tagged_records_in_machine_vault",
+          },
+        ),
         scope: "machine_global",
         paths: [memoryRoot, join(memoryRoot, "memory-index.json"), join(memoryRoot, "memory-suggestions.json"), join(memoryRoot, "memory-log.jsonl")],
         format: "mixed",
@@ -2384,6 +2454,7 @@ function buildDataControlStore(
   const storeId = store.id as MatterhornDataControlStoreId;
   const ledgerRoute = `/workspace/${encodeURIComponent(workspace.id)}/data-ledger`;
   const notesRoute = `/workspace/${encodeURIComponent(workspace.id)}/notes`;
+  const workspaceMemoryRoute = `/workspace/${encodeURIComponent(workspace.id)}/memory`;
 
   let exportCapability: MatterhornDataControlCapability = dataControlCapability({
     status: store.exportable ? "preview" : "unsupported",
@@ -2453,6 +2524,15 @@ function buildDataControlStore(
           href: "/api/memory/export",
           requirements: ["collaborator", "writable_server"],
         }),
+        dataControlAction({
+          id: "memory.workspace-list",
+          label: "List workspace memory",
+          description: "Lists memory records tagged for this workspace namespace.",
+          kind: "api_route",
+          status: "working",
+          method: "GET",
+          href: `${workspaceMemoryRoute}/entities`,
+        }),
       ],
     });
     deletionCapability = dataControlCapability({
@@ -2479,6 +2559,17 @@ function buildDataControlStore(
           status: "working",
           method: "DELETE",
           href: "/api/memory/entities/:id",
+          destructive: true,
+          requirements: ["collaborator", "writable_server", "specific_record_id"],
+        }),
+        dataControlAction({
+          id: "memory.workspace-delete",
+          label: "Delete workspace memory",
+          description: "Deletes one memory record from this workspace namespace and records an audit entry.",
+          kind: "api_route",
+          status: "working",
+          method: "DELETE",
+          href: `${workspaceMemoryRoute}/entities/:memoryId`,
           destructive: true,
           requirements: ["collaborator", "writable_server", "specific_record_id"],
         }),
@@ -6818,6 +6909,95 @@ function createRoutes(
     }
     assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
     return jsonResponse({ success: true, record });
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/search", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const records = await memoryVault.searchRecords({
+        query: ctx.url.searchParams.get("q") ?? ctx.url.searchParams.get("query") ?? undefined,
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: "workspace",
+        tags: workspaceMemoryQueryTags(workspace, normalizeMemoryTags(ctx.url.searchParams.get("tags"))),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/entities", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const records = await memoryVault.listRecords({
+        kind: ctx.url.searchParams.get("kind") as MatterhornMemoryRecord["kind"] | null ?? undefined,
+        scope: "workspace",
+        tags: workspaceMemoryQueryTags(workspace, normalizeMemoryTags(ctx.url.searchParams.get("tags"))),
+        limit: normalizeMemoryLimit(ctx.url.searchParams.get("limit")),
+        includeDeleted: ctx.url.searchParams.get("includeDeleted") === "true" || ctx.url.searchParams.get("include_deleted") === "true",
+      });
+      const filteredRecords = filterMemoryRecordsForSurface(records, memorySurface(ctx.url));
+      return jsonResponse({ success: true, records: filteredRecords, count: filteredRecords.length });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/memory/entities/:memoryId", "client", async (ctx) => {
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const record = assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
+      assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
+      return jsonResponse({ success: true, record });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "POST", "/workspace/:id/memory/capture", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      const body = await readJsonBody(ctx.request);
+      const record = namespaceWorkspaceMemoryRecord(coerceMemoryRecord(body.record ?? body), workspace);
+      assertMemoryRecordAllowedForSurface(record, memorySurface(ctx.url));
+      const result = await memoryVault.captureRecord(record);
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.capture",
+        target: result.record.id,
+        summary: `Captured workspace memory ${result.record.title}`,
+      });
+      return jsonResponse({ success: true, ...result }, 201);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
+  });
+
+  addRoute(routes, "DELETE", "/workspace/:id/memory/entities/:memoryId", "client", async (ctx) => {
+    ensureWritable(config);
+    requireClientScope(ctx, "collaborator");
+    try {
+      const workspace = await resolveWorkspace(config, ctx.params.id);
+      assertWorkspaceMemoryRecord(await memoryVault.getRecord(ctx.params.memoryId), workspace);
+      const result = await memoryVault.forgetRecord(ctx.params.memoryId, "Deleted through Matterhorn Work workspace memory API.");
+      await recordMemoryMutationAudit(workspace, ctx, {
+        action: "memory.record.forget",
+        target: ctx.params.memoryId,
+        summary: `Forgot workspace memory ${ctx.params.memoryId}`,
+      });
+      return jsonResponse({ success: true, ...result });
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw memoryApiError(error);
+    }
   });
 
   addRoute(routes, "POST", "/api/memory/capture", "client", async (ctx) => {

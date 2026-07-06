@@ -22,7 +22,7 @@ const priorEnv = {
 const stops: Array<() => void | Promise<void>> = [];
 const dirs: string[] = [];
 
-function baseConfig(port: number): ServerConfig {
+function baseConfig(port: number, root: string): ServerConfig {
   return {
     host: "127.0.0.1",
     port,
@@ -30,8 +30,23 @@ function baseConfig(port: number): ServerConfig {
     hostToken: HOST_TOKEN,
     approval: { mode: "auto", timeoutMs: 1000 },
     corsOrigins: ["*"],
-    workspaces: [],
-    authorizedRoots: [],
+    workspaces: [
+      {
+        id: "ws_memory",
+        name: "Memory route workspace",
+        path: root,
+        preset: "default",
+        workspaceType: "local",
+      },
+      {
+        id: "ws_other",
+        name: "Other memory route workspace",
+        path: join(root, "other"),
+        preset: "default",
+        workspaceType: "local",
+      },
+    ],
+    authorizedRoots: [root],
     readOnly: false,
     startedAt: Date.now(),
     tokenSource: "cli",
@@ -59,7 +74,7 @@ async function boot() {
   process.env.OPENWORK_ENV_STORE = join(dir, "env.json");
   process.env.OPENWORK_TOKEN_STORE = join(dir, "tokens.json");
   process.env.MATTERHORN_WORK_MEMORY_ROOT = join(dir, "memory");
-  const server = await startServer(baseConfig(await getFreePort())) as Served;
+  const server = await startServer(baseConfig(await getFreePort(), dir)) as Served;
   stops.push(() => server.stop(true));
   return { base: `http://127.0.0.1:${server.port}`, dir };
 }
@@ -291,6 +306,63 @@ describe("Matterhorn memory API routes", () => {
     });
     expect(rejected.response.status).toBe(400);
     expect(rejected.payload.code).toBe("memory_suggestion_secret_rejected");
+  });
+
+  test("workspace memory routes namespace records by workspace", async () => {
+    const { base } = await boot();
+
+    const captured = await jsonFetch(base, "/workspace/ws_memory/memory/capture", {
+      method: "POST",
+      body: JSON.stringify({
+        record: record({
+          id: "mem_workspace_namespace",
+          scope: "user",
+          title: "Workspace TAO wallet",
+          tags: ["bittensor"],
+        }),
+      }),
+    });
+    expect(captured.response.status).toBe(201);
+    expect(captured.payload.record.scope).toBe("workspace");
+    expect(captured.payload.record.tags).toContain("workspace:ws_memory");
+    expect(captured.payload.record.links).toContainEqual({
+      rel: "workspace",
+      href: "/workspace/ws_memory",
+      title: "Memory route workspace",
+    });
+
+    const listed = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
+    expect(listed.response.status).toBe(200);
+    expect(listed.payload.count).toBe(1);
+    expect(listed.payload.records[0].id).toBe("mem_workspace_namespace");
+
+    const otherWorkspace = await jsonFetch(base, "/workspace/ws_other/memory/search?tags=bittensor&limit=10");
+    expect(otherWorkspace.response.status).toBe(200);
+    expect(otherWorkspace.payload.count).toBe(0);
+
+    const fetched = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_workspace_namespace");
+    expect(fetched.response.status).toBe(200);
+    expect(fetched.payload.record.id).toBe("mem_workspace_namespace");
+
+    const otherFetch = await jsonFetch(base, "/workspace/ws_other/memory/entities/mem_workspace_namespace");
+    expect(otherFetch.response.status).toBe(404);
+    expect(otherFetch.payload.code).toBe("memory_not_found");
+
+    const deleted = await jsonFetch(base, "/workspace/ws_memory/memory/entities/mem_workspace_namespace", {
+      method: "DELETE",
+    });
+    expect(deleted.response.status).toBe(200);
+    expect(deleted.payload.id).toBe("mem_workspace_namespace");
+
+    const afterDelete = await jsonFetch(base, "/workspace/ws_memory/memory/search?tags=bittensor&limit=10");
+    expect(afterDelete.response.status).toBe(200);
+    expect(afterDelete.payload.count).toBe(0);
+
+    const audit = await jsonFetch(base, "/workspace/ws_memory/audit?limit=10");
+    expect(audit.response.status).toBe(200);
+    const actions = audit.payload.items.map((entry: { action: string }) => entry.action);
+    expect(actions).toContain("memory.capture");
+    expect(actions).toContain("memory.record.forget");
   });
 
   test("stores and resolves pending memory suggestions through the inbox", async () => {
