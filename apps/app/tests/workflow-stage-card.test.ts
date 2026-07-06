@@ -152,9 +152,19 @@ describe("ProtocolDeskEmptyState — uses WorkflowStageCard for task buttons", (
 
     expect(src).toContain("deskSafetyInfo");
     expect(src).toContain("desk safety info");
+    expect(src).toContain("Matterhorn never submits orders inside the app");
+    expect(src).toContain("Matterhorn never places bets inside the app");
     expect(src).toContain("<PopoverTrigger");
     expect(src).toContain("<PopoverContent");
     expect(src).not.toContain("Boundary:");
+  });
+
+  test("uses positive task copy for preview-only desks", () => {
+    const src = readAppSource("domains/session/chat/session-page.tsx");
+
+    expect(src).toContain("Summarize spread, depth, and stale-data warnings.");
+    expect(src).toContain("Draft an external-client handoff you can review outside Matterhorn.");
+    expect(src).toContain("Draft a non-custodial wallet handoff you can review externally.");
   });
 
   test("focused desk task cards launch the agent instead of hiding a draft", () => {

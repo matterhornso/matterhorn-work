@@ -295,7 +295,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
   hyperliquid: [
     {
       title: "Show market context",
-      detail: "Summarize spread, depth, and stale-data warnings without submission.",
+      detail: "Summarize spread, depth, and stale-data warnings.",
       prompt: "Show BTC orderbook context on Hyperliquid, spread, depth summary, and stale-data warnings. Explain that Matterhorn can prepare an external trade handoff, but Can submit: No and Live submission: Off.",
     },
     {
@@ -305,7 +305,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     },
     {
       title: "Prepare trade handoff",
-      detail: "Create an external-client handoff with live submission disabled.",
+      detail: "Draft an external-client handoff you can review outside Matterhorn.",
       prompt: "Prepare a Hyperliquid external trade handoff for BTC with Can submit: No, Live submission: Off, and external client required. Ask for missing public order context instead of guessing.",
     },
   ],
@@ -322,7 +322,7 @@ const PROTOCOL_DESK_SUGGESTED_PROMPTS: Record<VenueSidePanel, Array<{ title: str
     },
     {
       title: "Prepare trade handoff",
-      detail: "Build a non-custodial wallet handoff while live submission stays off.",
+      detail: "Draft a non-custodial wallet handoff you can review externally.",
       prompt: "Prepare a Polymarket compliance-gated external-wallet handoff. Keep Can submit: No and Live submission: Off. Never ask for private keys, raw signatures, signed payloads, API secrets, or wallet exports.",
     },
   ],
@@ -517,10 +517,10 @@ function ProtocolDeskEmptyState({
   const prompts = PROTOCOL_DESK_SUGGESTED_PROMPTS[panel];
   const draftConfig = getChatDraftConfig(panel);
   const deskSafetyInfo = panel === "bittensor"
-    ? "Public SS58 reads and unsigned previews only. External Bittensor-compatible signer required."
+    ? "Runs public SS58 reads and unsigned previews. Signing stays in an external Bittensor-compatible wallet."
     : panel === "polymarket"
-      ? "Compliance-gated handoff only. Can submit: No. Live submission: Off. External wallet/client required."
-    : "External handoff only. Can submit: No. Live submission: Off. External signer/client required.";
+      ? "Runs market research, compliance checks, and external-wallet handoffs. Matterhorn never places bets inside the app."
+    : "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never submits orders inside the app.";
 
   return (
     <section

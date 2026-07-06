@@ -137,7 +137,7 @@ function safetySummary(manifest: ProtocolDeskManifest): string {
     return "Public SS58 reads and unsigned previews only. External signer required; no seed phrases, private keys, or wallet exports.";
   }
   if (manifest.id === "hyperliquid" || manifest.id === "polymarket") {
-    return "Can submit: No. Live submission: Off. External trade handoff only; Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
+    return "Runs read and preview tasks with external handoff. Matterhorn never stores keys, API secrets, raw signatures, or signed payloads.";
   }
   if (manifest.id === "wellness") {
     return "Standalone business workflow. Not Web3, not markets, no medical advice, and no live payments/email/hosting.";
@@ -177,10 +177,10 @@ function sessionBoundary(manifest: ProtocolDeskManifest): string {
     return "Public SS58/coldkey/hotkey context only. External signer required for actions.";
   }
   if (manifest.id === "hyperliquid") {
-    return "External trade handoff only. Can submit: No. Live submission: Off. Matterhorn never stores API secrets or signs orders.";
+    return "Runs read-only market/account checks and prepares external-client handoffs. Matterhorn never stores API secrets or signs orders.";
   }
   if (manifest.id === "polymarket") {
-    return "Compliance-gated handoff only. Can submit: No. Live submission: Off. Blocked regions get no executable bet fields.";
+    return "Runs market research, compliance checks, and external-wallet handoffs. Blocked regions get no executable bet fields.";
   }
   if (manifest.id === "wellness") {
     return "Standalone workflow. No medical advice, diagnosis, prescription, live payments, email, hosting, or token gating.";
