@@ -274,6 +274,9 @@ describe("backend capability UI contract", () => {
     expect(source).toContain("Wallet families");
     expect(source).toContain("Training use");
     expect(source).toContain("controls={workspaceDataControls}");
+    const sectionSource = readAppSource("react-app/domains/settings/backend-capabilities/backend-capability-section.tsx");
+    expect(sectionSource).toContain("section.route");
+    expect(sectionSource).toContain("section.backendDependencies.length");
   });
 
   test("AI settings shows backend model routing alongside live provider counts", () => {

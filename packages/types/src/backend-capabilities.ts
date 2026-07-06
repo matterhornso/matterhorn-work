@@ -128,6 +128,11 @@ export interface MatterhornSettingsSectionCapability extends MatterhornCapabilit
     | "security"
     | "feedback"
     | "mcp";
+  route: string;
+  workspaceScoped: boolean;
+  desktopOnly: boolean;
+  backendDependencies: string[];
+  primaryAction?: MatterhornCapabilityAction;
 }
 
 export interface MatterhornBackendCapabilitiesResponse {

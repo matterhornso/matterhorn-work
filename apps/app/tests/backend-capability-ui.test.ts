@@ -67,6 +67,11 @@ describe("Backend capability fixtures", () => {
     expect(f.wallets.families.bittensor.custody).toBe(false);
     const feedback = f.settings.find((s) => s.section === "feedback");
     expect(feedback?.status).toBe("working");
+    const wallet = f.settings.find((s) => s.section === "wallet");
+    expect(wallet?.route).toBe("/settings/wallet");
+    expect(wallet?.workspaceScoped).toBe(true);
+    expect(wallet?.backendDependencies).toContain("/api/backend/capabilities");
+    expect(wallet?.primaryAction?.href).toBe("/settings/wallet");
   });
 
   test("needs_setup fixture marks profile and wallet", () => {
@@ -120,6 +125,8 @@ describe("Backend capabilities section renders all capability states", () => {
     expect(html).toContain("Public read / external signer");
     expect(html).toContain("Wallet-standard preview");
     expect(html).toContain("Machine / global");
+    expect(html).toContain("Route: /settings/wallet");
+    expect(html).toContain("backend dependencies");
   });
 
   test("needs_setup state", () => {
