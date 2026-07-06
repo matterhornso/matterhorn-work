@@ -73,7 +73,7 @@ import {
   type BackendCapabilityTone,
 } from "../backend-capability-status";
 import { GLOBAL_HOME_SIDE_PANEL_KEY, useUiStateStore } from "../../../shell/ui-state-store";
-import { workspaceNotesRoute, workspaceSessionRoute } from "../../../shell/workspace-routes";
+import { workspaceNotesRoute, workspaceRunHistoryRoute, workspaceSessionRoute } from "../../../shell/workspace-routes";
 import type { SettingsTab } from "../../../../app/types";
 import {
   getInitialThemeMode,
@@ -1123,6 +1123,11 @@ export function SettingsOverviewView(props: {
     navigate(workspaceSessionRoute(notesWorkspaceId));
   }, [navigate, notesWorkspaceId, setSidePanelState]);
 
+  const openRunHistory = useCallback(() => {
+    if (!backendWorkspaceId) return;
+    navigate(workspaceRunHistoryRoute(backendWorkspaceId));
+  }, [backendWorkspaceId, navigate]);
+
   const exportMemory = useCallback(async () => {
     const client = props.matterhornServerClient;
     if (!client) return;
@@ -1419,6 +1424,8 @@ export function SettingsOverviewView(props: {
                 matterhornServerClient={props.matterhornServerClient}
                 runtimeWorkspaceId={props.runtimeWorkspaceId}
                 limit={10}
+                defaultExpanded={false}
+                onOpenHistory={openRunHistory}
               />
             </div>
           </SettingsCard>

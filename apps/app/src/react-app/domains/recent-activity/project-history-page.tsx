@@ -3,11 +3,9 @@ import { useMemo, useState, type ElementType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BrainCircuit,
-  CheckCircle2,
   Clock3,
   Download,
   FileText,
-  History,
   ListFilter,
   Lock,
   MessageSquareText,
@@ -258,11 +256,7 @@ export function ProjectHistoryPage({
       <div className="mx-auto w-full max-w-5xl space-y-5">
         <header className="flex flex-col gap-3 border-b border-dls-border/30 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-medium text-dls-secondary">
-              <History className="size-3.5" aria-hidden="true" />
-              Project ledger
-            </div>
-            <h2 className="mt-1 text-xl font-semibold tracking-[-0.01em] text-dls-text">Run history</h2>
+            <h2 className="text-xl font-semibold tracking-[-0.01em] text-dls-text">Run history</h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-dls-secondary">
               Runs stay here with their outputs, notes, memory reviews, feedback, and audit events.
             </p>

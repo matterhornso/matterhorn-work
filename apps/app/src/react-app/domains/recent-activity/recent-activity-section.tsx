@@ -199,10 +199,14 @@ function LatestActivitySummary({ item, count }: { item: RecentActivityItem; coun
   const context = item.desk ? deskLabel(item.desk) : item.source.replace(/_/g, " ");
 
   return (
-    <span className="min-w-0 truncate text-xs leading-5 text-dls-secondary">
-      {count} recent {count === 1 ? "event" : "events"}
-      <span className="mx-2 text-dls-secondary/50">/</span>
-      Latest: {title} · {context} · {formatActivityTimestamp(item.timestamp)}
+    <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+      <span className="truncate text-sm font-medium leading-5 text-dls-text">{title}</span>
+      <span className="truncate text-xs leading-5 text-dls-secondary">
+        {context} · {formatActivityTimestamp(item.timestamp)}
+      </span>
+      <span className="shrink-0 text-xs leading-5 text-dls-secondary/70">
+        {count} recent
+      </span>
     </span>
   );
 }
@@ -411,10 +415,12 @@ export function RecentActivitySection({
               >
                 <History className="size-3.5" aria-hidden="true" />
                 {onOpenHistory ? "Run history" : historyOpen ? "Hide runs" : "Run history"}
-                <ChevronDown
-                  className={cn("size-3 transition-transform", !onOpenHistory && historyOpen && "rotate-180")}
-                  aria-hidden="true"
-                />
+                {!onOpenHistory ? (
+                  <ChevronDown
+                    className={cn("size-3 transition-transform", historyOpen && "rotate-180")}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </button>
             </div>
           ) : null}
