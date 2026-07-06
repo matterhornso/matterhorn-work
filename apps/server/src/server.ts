@@ -309,7 +309,7 @@ import { buildProjectEvidenceTimeline } from "./project-evidence.js";
 import { buildProjectDataLedger, buildProjectDataLedgerExport, scrubProjectLedgerText } from "./project-data-ledger.js";
 import { buildBackendModels } from "./backend-models.js";
 import { backendControlPlaneExportSnapshot, buildBackendSupportReport } from "./backend-support-report.js";
-import { buildBackendTeamAccess } from "./backend-team-access.js";
+import { buildBackendTeamAccess, buildBackendTeamAccessSummary } from "./backend-team-access.js";
 import { deleteProjectFeedbackEntry, projectFeedbackLogPath, recordProjectFeedback } from "./project-feedback.js";
 import { TOY_UI_CSS, TOY_UI_FAVICON_SVG, TOY_UI_HTML, TOY_UI_JS, cssResponse, htmlResponse, jsResponse, svgResponse } from "./toy-ui.js";
 import { FileSessionStore } from "./file-sessions.js";
@@ -4050,6 +4050,11 @@ function createRoutes(
   addRoute(routes, "GET", "/workspace/:id/backend/team-access", "host", async (ctx) => {
     const workspace = await resolveWorkspace(config, ctx.params.id);
     return jsonResponse(await buildBackendTeamAccess(config, workspace, tokens));
+  });
+
+  addRoute(routes, "GET", "/workspace/:id/backend/team-access/summary", "client", async (ctx) => {
+    const workspace = await resolveWorkspace(config, ctx.params.id);
+    return jsonResponse(await buildBackendTeamAccessSummary(config, workspace, tokens));
   });
 
   addRoute(routes, "POST", "/workspace/:id/backend/team-access/tokens", "host", async (ctx) => {

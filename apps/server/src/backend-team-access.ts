@@ -1,6 +1,7 @@
 import type { MatterhornCapability } from "@matterhorn-work/types/backend-capabilities";
 import type {
   MatterhornBackendTeamAccessResponse,
+  MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamAccessTokenDescriptor,
   MatterhornTeamTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
@@ -71,6 +72,35 @@ export async function buildBackendTeamAccess(
     policy: {
       secretsReturned: false,
       hostProtected: true,
+      durableCloudTeams: false,
+    },
+  };
+}
+
+export async function buildBackendTeamAccessSummary(
+  config: ServerConfig,
+  workspace: WorkspaceInfo,
+  tokens: TokenService,
+): Promise<MatterhornBackendTeamAccessSummaryResponse> {
+  const full = await buildBackendTeamAccess(config, workspace, tokens);
+  return {
+    success: true,
+    version: full.version,
+    generatedAt: full.generatedAt,
+    workspace: full.workspace,
+    localAccess: {
+      status: full.localAccess.status,
+      label: full.localAccess.label,
+      description: "Local sharing uses owner, collaborator, and viewer scopes. Token inventory is host-protected.",
+      scopes: full.localAccess.scopes,
+      tokenCount: full.localAccess.tokenCount,
+      byScope: full.localAccess.byScope,
+    },
+    cloudTeams: full.cloudTeams,
+    policy: {
+      secretsReturned: false,
+      hostProtected: false,
+      fullTokenListRequiresHost: true,
       durableCloudTeams: false,
     },
   };

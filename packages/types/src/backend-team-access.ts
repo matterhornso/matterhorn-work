@@ -36,6 +36,25 @@ export interface MatterhornBackendTeamAccessResponse {
   };
 }
 
+export interface MatterhornBackendTeamAccessSummaryResponse {
+  success: true;
+  version: typeof MATTERHORN_BACKEND_TEAM_ACCESS_VERSION;
+  generatedAt: string;
+  workspace: MatterhornBackendTeamAccessResponse["workspace"];
+  localAccess: MatterhornCapability & {
+    scopes: MatterhornTeamTokenScope[];
+    tokenCount: number;
+    byScope: Record<MatterhornTeamTokenScope, number>;
+  };
+  cloudTeams: MatterhornCapability;
+  policy: {
+    secretsReturned: false;
+    hostProtected: false;
+    fullTokenListRequiresHost: true;
+    durableCloudTeams: false;
+  };
+}
+
 export interface MatterhornTeamAccessTokenCreateRequest {
   scope: MatterhornTeamShareableTokenScope;
   label?: string;

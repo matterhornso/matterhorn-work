@@ -41,6 +41,7 @@ import type {
 } from "@matterhorn-work/types/backend-data-controls";
 import type {
   MatterhornBackendTeamAccessResponse,
+  MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamShareableTokenScope,
 } from "@matterhorn-work/types/backend-team-access";
 import {
@@ -592,10 +593,13 @@ function FeedbackReviewSection(props: {
 function TeamAccessControls(props: {
   client?: MatterhornServerClient | null;
   workspaceId: string;
+  summary?: MatterhornBackendTeamAccessSummaryResponse;
   data?: MatterhornBackendTeamAccessResponse;
   error: unknown;
   isError: boolean;
   isLoading: boolean;
+  isOpen: boolean;
+  onOpen: () => void;
   refetch: () => Promise<unknown>;
 }) {
   const { client, workspaceId, refetch } = props;
@@ -611,7 +615,9 @@ function TeamAccessControls(props: {
   const [busyTokenId, setBusyTokenId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const sharedTokens = props.data?.localAccess.tokens.filter((token) => token.source === "token_store") ?? [];
-  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading);
+  const tokenCount = props.summary?.localAccess.tokenCount ?? props.data?.localAccess.tokenCount ?? 0;
+  const sharedCount = Math.max(0, tokenCount - (props.summary?.localAccess.byScope.collaborator ? 1 : 0));
+  const canUseTokenControls = Boolean(client && workspaceId && !props.isLoading && props.data);
 
   const createToken = useCallback(async () => {
     if (!client || !workspaceId) {
@@ -661,6 +667,17 @@ function TeamAccessControls(props: {
     }
   }, [client, createdToken?.id, refetch, workspaceId]);
 
+  if (!props.isOpen) {
+    return (
+      <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
+        <span>{tokenCount} local access token{tokenCount === 1 ? "" : "s"}. Token details stay host-protected.</span>
+        <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={props.onOpen}>
+          Manage tokens
+        </Button>
+      </div>
+    );
+  }
+
   if (props.isLoading) {
     return <p className="px-1 py-3 text-sm leading-6 text-dls-secondary">Loading local access tokens...</p>;
   }
@@ -668,7 +685,11 @@ function TeamAccessControls(props: {
   if (props.isError) {
     return (
       <div className="flex flex-col gap-2 px-1 py-3 text-sm text-dls-secondary sm:flex-row sm:items-center sm:justify-between">
-        <span>{props.error instanceof Error ? props.error.message : "Local access tokens could not load."}</span>
+        <span>
+          {props.error instanceof Error
+            ? props.error.message
+            : "Token management requires host access on this local server."}
+        </span>
         <Button variant="ghost" size="sm" className="w-fit px-2 text-xs" onClick={() => void props.refetch()}>
           Refresh
         </Button>
@@ -686,7 +707,7 @@ function TeamAccessControls(props: {
           </p>
         </div>
         <span className="ml-auto text-xs text-dls-secondary">
-          {sharedTokens.length} shared
+          {sharedTokens.length || sharedCount} shared
         </span>
       </div>
 
@@ -902,13 +923,25 @@ export function SettingsOverviewView(props: {
     staleTime: 30_000,
   });
 
-  const teamAccessQuery = useQuery({
-    queryKey: ["settings-team-access", props.runtimeWorkspaceId],
+  const teamAccessSummaryQuery = useQuery({
+    queryKey: ["settings-team-access-summary", props.runtimeWorkspaceId],
     enabled: Boolean(props.matterhornServerClient && props.runtimeWorkspaceId),
     queryFn: async () => {
       const client = props.matterhornServerClient;
       const workspaceId = props.runtimeWorkspaceId?.trim();
       if (!client || !workspaceId) throw new Error("Open a workspace to see team access.");
+      return client.workspaceTeamAccessSummary(workspaceId);
+    },
+    staleTime: 30_000,
+  });
+  const [teamTokenManagementOpen, setTeamTokenManagementOpen] = useState(false);
+  const teamAccessQuery = useQuery({
+    queryKey: ["settings-team-access", props.runtimeWorkspaceId],
+    enabled: Boolean(teamTokenManagementOpen && props.matterhornServerClient && props.runtimeWorkspaceId),
+    queryFn: async () => {
+      const client = props.matterhornServerClient;
+      const workspaceId = props.runtimeWorkspaceId?.trim();
+      if (!client || !workspaceId) throw new Error("Open a workspace to manage local access tokens.");
       return client.workspaceTeamAccess(workspaceId);
     },
     staleTime: 30_000,
@@ -1130,9 +1163,9 @@ export function SettingsOverviewView(props: {
               />
               <Row
                 label="Teams"
-                hint={teamAccessQuery.data
-                  ? `${teamAccessQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessQuery.data.cloudTeams.status)}.`
-                  : teamAccessQuery.isLoading
+                hint={teamAccessSummaryQuery.data
+                  ? `${teamAccessSummaryQuery.data.localAccess.tokenCount} local access tokens. Owners ${teamAccessSummaryQuery.data.localAccess.byScope.owner}; collaborators ${teamAccessSummaryQuery.data.localAccess.byScope.collaborator}; viewers ${teamAccessSummaryQuery.data.localAccess.byScope.viewer}. Cloud teams: ${backendCapabilityLabel(teamAccessSummaryQuery.data.cloudTeams.status)}.`
+                  : teamAccessSummaryQuery.isLoading
                     ? "Loading local access status."
                     : summarizeCapability(backendCapabilities.teams)}
                 value={<CapabilityBadge status={backendCapabilities.teams.status} />}
@@ -1140,10 +1173,13 @@ export function SettingsOverviewView(props: {
               <TeamAccessControls
                 client={props.matterhornServerClient}
                 workspaceId={backendWorkspaceId}
+                summary={teamAccessSummaryQuery.data}
                 data={teamAccessQuery.data}
                 error={teamAccessQuery.error}
                 isError={teamAccessQuery.isError}
                 isLoading={teamAccessQuery.isLoading}
+                isOpen={teamTokenManagementOpen}
+                onOpen={() => setTeamTokenManagementOpen(true)}
                 refetch={teamAccessQuery.refetch}
               />
               <Row

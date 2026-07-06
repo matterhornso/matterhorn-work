@@ -560,6 +560,18 @@ describe("backend control plane routes", () => {
     const denied = await jsonFetch(base, "/workspace/ws_backend/backend/team-access");
     expect(denied.response.status).toBe(401);
 
+    const summary = await jsonFetch(base, "/workspace/ws_backend/backend/team-access/summary");
+    expect(summary.response.status).toBe(200);
+    expect(summary.payload.version).toBe("matterhorn.backend.team-access.v1");
+    expect(summary.payload.localAccess.byScope.viewer).toBe(1);
+    expect(summary.payload.policy).toMatchObject({
+      secretsReturned: false,
+      hostProtected: false,
+      fullTokenListRequiresHost: true,
+    });
+    expect(JSON.stringify(summary.payload)).not.toContain(createdViewer.payload.token);
+    expect(JSON.stringify(summary.payload)).not.toContain("Review-only teammate");
+
     const result = await hostFetch(base, "/workspace/ws_backend/backend/team-access");
     expect(result.response.status).toBe(200);
     expect(result.payload.success).toBe(true);

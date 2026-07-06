@@ -31,6 +31,7 @@ import type {
 import type { MatterhornBackendModelsResponse } from "@matterhorn-work/types/backend-models";
 import type {
   MatterhornBackendTeamAccessResponse,
+  MatterhornBackendTeamAccessSummaryResponse,
   MatterhornTeamAccessTokenCreateRequest,
   MatterhornTeamAccessTokenCreateResponse,
   MatterhornTeamAccessTokenRevokeResponse,
@@ -1736,6 +1737,12 @@ export function createMatterhornServerClient(options: { baseUrl: string; token?:
       requestJson<MatterhornBackendTeamAccessResponse>(
         baseUrl,
         `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access`,
+        { token, hostToken, timeoutMs: timeouts.capabilities },
+      ),
+    workspaceTeamAccessSummary: (workspaceId: string) =>
+      requestJson<MatterhornBackendTeamAccessSummaryResponse>(
+        baseUrl,
+        `/workspace/${encodeURIComponent(workspaceId)}/backend/team-access/summary`,
         { token, hostToken, timeoutMs: timeouts.capabilities },
       ),
     createWorkspaceTeamAccessToken: (workspaceId: string, request: MatterhornTeamAccessTokenCreateRequest) =>
